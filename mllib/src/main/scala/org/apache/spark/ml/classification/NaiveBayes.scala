@@ -69,7 +69,7 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
  * The input feature values must be nonnegative.
  */
 class NaiveBayes(override val uid: String)
-  extends Predictor[Vector, NaiveBayes, NaiveBayesModel]
+  extends ProbabilisticClassifier[Vector, NaiveBayes, NaiveBayesModel]
   with NaiveBayesParams {
 
   def this() = this(Identifiable.randomUID("nb"))
@@ -106,7 +106,7 @@ class NaiveBayesModel private[ml] (
     override val uid: String,
     val pi: Vector,
     val theta: Matrix)
-  extends PredictionModel[Vector, NaiveBayesModel] with NaiveBayesParams {
+  extends ProbabilisticClassificationModel[Vector, NaiveBayesModel] with NaiveBayesParams {
 
   import OldNaiveBayes.{Bernoulli, Multinomial}
 
@@ -129,26 +129,59 @@ class NaiveBayesModel private[ml] (
       throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
   }
 
-  override protected def predict(features: Vector): Double = {
+  override val numClasses: Int = pi.size
+
+  private def multinomialCalculation(features: Vector) = {
+    val prob = theta.multiply(features)
+    BLAS.axpy(1.0, pi, prob)
+    prob
+  }
+
+  private def bernoulliCalculation(features: Vector) = {
+    features.foreachActive((_, value) =>
+      if (value != 0.0 && value != 1.0) {
+        throw new SparkException(
+          s"Bernoulli naive Bayes requires 0 or 1 feature values but found $features.")
+      }
+    )
+    val prob = thetaMinusNegTheta.get.multiply(features)
+    BLAS.axpy(1.0, pi, prob)
+    BLAS.axpy(1.0, negThetaSum.get, prob)
+    prob
+  }
+
+  override protected def predictRaw(features: Vector): Vector = {
     $(modelType) match {
       case Multinomial =>
-        val prob = theta.multiply(features)
-        BLAS.axpy(1.0, pi, prob)
-        prob.argmax
+        multinomialCalculation(features)
       case Bernoulli =>
-        features.foreachActive{ (index, value) =>
-          if (value != 0.0 && value != 1.0) {
-            throw new SparkException(
-              s"Bernoulli naive Bayes requires 0 or 1 feature values but found $features")
-          }
-        }
-        val prob = thetaMinusNegTheta.get.multiply(features)
-        BLAS.axpy(1.0, pi, prob)
-        BLAS.axpy(1.0, negThetaSum.get, prob)
-        prob.argmax
+        bernoulliCalculation(features)
       case _ =>
         // This should never happen.
         throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+    }
+  }
+
+  override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
+    rawPrediction match {
+      case dv: DenseVector =>
+        var i = 0
+        val size = dv.size
+        val maxLog = dv.values.max
+        while (i < size) {
+          dv.values(i) = math.exp(dv.values(i) - maxLog)
+          i += 1
+        }
+        val probSum = dv.values.sum
+        i = 0
+        while (i < size) {
+          dv.values(i) = dv.values(i) / probSum
+          i += 1
+        }
+        dv
+      case sv: SparseVector =>
+        throw new RuntimeException("Unexpected error in NaiveBayesModel:" +
+          " raw2probabilityInPlace encountered SparseVector")
     }
   }
 

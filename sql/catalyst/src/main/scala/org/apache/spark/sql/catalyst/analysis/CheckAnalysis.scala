@@ -92,8 +92,11 @@ trait CheckAnalysis {
               case p: Predicate =>
                 p.asInstanceOf[Expression].children.foreach(checkValidJoinConditionExprs)
               case e if e.dataType.isInstanceOf[BinaryType] =>
-                failAnalysis(s"expression ${e.prettyString} in join condition " +
-                  s"'${condition.prettyString}' can't be binary type.")
+                failAnalysis(s"binary type expression ${e.prettyString} cannot be used " +
+                  "in join conditions")
+              case e if e.dataType.isInstanceOf[MapType] =>
+                failAnalysis(s"map type expression ${e.prettyString} cannot be used " +
+                  "in join conditions")
               case _ => // OK
             }
 
@@ -114,13 +117,16 @@ trait CheckAnalysis {
 
             def checkValidGroupingExprs(expr: Expression): Unit = expr.dataType match {
               case BinaryType =>
-                failAnalysis(s"grouping expression '${expr.prettyString}' in aggregate can " +
-                  s"not be binary type.")
+                failAnalysis(s"binary type expression ${expr.prettyString} cannot be used " +
+                  "in grouping expression")
+              case m: MapType =>
+                failAnalysis(s"map type expression ${expr.prettyString} cannot be used " +
+                  "in grouping expression")
               case _ => // OK
             }
 
             aggregateExprs.foreach(checkValidAggregateExpression)
-            aggregateExprs.foreach(checkValidGroupingExprs)
+            groupingExprs.foreach(checkValidGroupingExprs)
 
           case Sort(orders, _, _) =>
             orders.foreach { order =>
