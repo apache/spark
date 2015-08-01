@@ -142,13 +142,13 @@ class ExecutorRunnable(
 
     // Set the JVM memory
     val executorMemoryString = executorMemory + "m"
-    javaOpts += "-Xms" + executorMemoryString
-    javaOpts += "-Xmx" + executorMemoryString
+    javaOpts += YarnSparkHadoopUtil.escapeForShell("-Xms" + executorMemoryString)
+    javaOpts += YarnSparkHadoopUtil.escapeForShell("-Xmx" + executorMemoryString)
 
     // Set extra Java options for the executor, if defined
-    sys.props.get("spark.executor.extraJavaOptions").foreach { opts =>
-      javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
-    }
+    sys.props.get("spark.executor.extraJavaOptions").map(
+      javaOpts ++= Utils.splitCommandString(_).map(YarnSparkHadoopUtil.escapeForShell)
+    )
     sys.env.get("SPARK_JAVA_OPTS").foreach { opts =>
       javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
     }
@@ -156,11 +156,11 @@ class ExecutorRunnable(
       prefixEnv = Some(Client.getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(p))))
     }
 
-    javaOpts += "-Djava.io.tmpdir=" +
+    javaOpts += YarnSparkHadoopUtil.escapeForShell("-Djava.io.tmpdir=" +
       new Path(
         YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
         YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR
-      )
+      ))
 
     // Certain configs need to be passed here because they are needed before the Executor
     // registers with the Scheduler and transfers the spark configs. Since the Executor backend
@@ -197,7 +197,7 @@ class ExecutorRunnable(
     */
 
     // For log4j configuration to reference
-    javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
+    javaOpts += YarnSparkHadoopUtil.escapeForShell("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
     val userClassPath = Client.getUserClasspath(sparkConf).flatMap { uri =>
       val absPath =
@@ -224,11 +224,14 @@ class ExecutorRunnable(
         "--executor-id", slaveId.toString,
         "--hostname", hostname.toString,
         "--cores", executorCores.toString,
-        "--app-id", appId) ++
-      userClassPath ++
+        "--app-id", appId)
+        .map(YarnSparkHadoopUtil.escapeForShell) ++
+      userClassPath
+        .map(YarnSparkHadoopUtil.escapeForShell) ++
       Seq(
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
         "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
+        .map(YarnSparkHadoopUtil.escapeForShell)
 
     // TODO: it would be nicer to just make sure there are no null commands here
     commands.map(s => if (s == null) "null" else s).toList

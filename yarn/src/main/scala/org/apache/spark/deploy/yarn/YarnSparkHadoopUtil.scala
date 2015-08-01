@@ -219,6 +219,13 @@ object YarnSparkHadoopUtil {
     }
   }
 
+  def escapeForShell(arg: String): String = {
+    if(Utils.isWindows)
+      escapeForShellWindows(arg)
+    else
+      escapeForShellUnix(arg)
+  }
+
   /**
    * Escapes a string for inclusion in a command line executed by Yarn. Yarn executes commands
    * using `bash -c "command arg1 arg2"` and that means plain quoting doesn't really work. The
@@ -227,7 +234,7 @@ object YarnSparkHadoopUtil {
    * @param arg A single argument.
    * @return Argument quoted for execution via Yarn's generated shell script.
    */
-  def escapeForShell(arg: String): String = {
+  def escapeForShellUnix(arg: String): String = {
     if (arg != null) {
       val escaped = new StringBuilder("'")
       for (i <- 0 to arg.length() - 1) {
@@ -239,6 +246,57 @@ object YarnSparkHadoopUtil {
         }
       }
       escaped.append("'").toString()
+    } else {
+      arg
+    }
+  }
+
+  /**
+   * Escapes a string for inclusion in a command line executed by Yarn. Yarn executes commands
+   * using a batch file (.cmd) Windows escaping is neccessary. The
+   * argument is enclosed in single quotes only if there are spaces inside the string.
+   * Also some key characters are escaped that have a meaning in Windows.
+   *
+   * @param arg A single argument.
+   * @return Argument quoted for execution via Yarn's generated shell script.
+   */
+  def escapeForShellWindows(arg: String): String = {
+    if (arg != null) {
+      val escaped = new StringBuilder()
+      var needsQuotes = false;
+      for (i <- 0 to arg.length() - 1) {
+        arg.charAt(i) match {
+          case '%' => escaped.append("%%")
+          case '^' => escaped.append("^^")
+          case '&' => escaped.append("^&")
+          case '<' => escaped.append("^<")
+          case '>' => escaped.append("^>")
+          case '|' => escaped.append("^|")
+          case '\'' =>
+            escaped.append("^'")
+            needsQuotes = true
+          case '\\' =>
+            escaped.append("\\")
+            needsQuotes = true
+          case ' ' =>
+            escaped.append(" ")
+            needsQuotes = true
+          case '(' =>
+            escaped.append("(")
+            needsQuotes = true
+          case ')' =>
+            escaped.append(")")
+            needsQuotes = true
+          case '=' =>
+            escaped.append("=")
+            needsQuotes = true
+          case c => escaped.append(c)
+        }
+      }
+      if(needsQuotes)
+        "\"" + escaped.toString() + "\""
+      else
+        escaped.toString()
     } else {
       arg
     }
