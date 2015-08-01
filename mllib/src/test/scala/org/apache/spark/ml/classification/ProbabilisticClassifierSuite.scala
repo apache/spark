@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
-final class TestClassificationModel(
+final class TestProbabilisticClassificationModel(
   override val numClasses: Int)
     extends ProbabilisticClassificationModel[Vector, TestClassificationModel] {
   override val uid = null
@@ -47,7 +47,7 @@ final class TestClassificationModel(
 }
 
 
-class ClassifierSuite extends SparkFunSuite {
+class ProbabilisticClassifierSuite extends SparkFunSuite {
 
   test("test thresholding") {
     val threshold = Array(0.5, 0.2)
