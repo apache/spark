@@ -121,7 +121,7 @@ class LogisticRegression(override val uid: String)
    * p > 1 / [1 + b/a]
    * threshold = 1 / [1 + b/a]
    */
-  def getThreshold() = {
+  def getThreshold(): Double = {
     val thresholdValues = $(thresholds).toArray
     1 / (1 + thresholdValues(1) / thresholdValues(0))
   }
@@ -305,7 +305,7 @@ class LogisticRegressionModel private[ml] (
    * p > 1 / [1 + b/a]
    * threshold = 1 / [1 + b/a]
    */
-  def getThreshold() = {
+  def getThreshold(): Double = {
     val thresholdValues = $(thresholds).toArray
     1 / (1 + thresholdValues(1) / thresholdValues(0))
   }
