@@ -125,6 +125,8 @@ object UnsafeProjection {
     GenerateUnsafeProjection.generate(exprs)
   }
 
+  def create(expr: Expression): UnsafeProjection = create(Seq(expr))
+
   /**
    * Returns an UnsafeProjection for given sequence of Expressions, which will be bound to
    * `inputSchema`.
