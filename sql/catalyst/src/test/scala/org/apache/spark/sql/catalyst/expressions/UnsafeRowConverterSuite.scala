@@ -87,7 +87,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
 
     val row = new SpecificMutableRow(fieldTypes)
     row.setLong(0, 0)
-    row.setString(1, "Hello")
+    row.update(1, UTF8String.fromString("Hello"))
     row.update(2, DateTimeUtils.fromJavaDate(Date.valueOf("1970-01-01")))
     row.update(3, DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-05-08 08:10:25")))
 

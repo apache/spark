@@ -28,14 +28,10 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
 
   override def nullSafeEval(value: Any): Int = child.dataType match {
     case _: ArrayType => value.asInstanceOf[ArrayData].numElements()
-    case _: MapType => value.asInstanceOf[Map[Any, Any]].size
+    case _: MapType => value.asInstanceOf[MapData].numElements()
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val sizeCall = child.dataType match {
-      case _: ArrayType => "numElements()"
-      case _: MapType => "size()"
-    }
-    nullSafeCodeGen(ctx, ev, c => s"${ev.primitive} = ($c).$sizeCall;")
+    nullSafeCodeGen(ctx, ev, c => s"${ev.primitive} = ($c).numElements();")
   }
 }

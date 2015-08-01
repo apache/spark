@@ -88,6 +88,9 @@ test_that("create DataFrame from RDD", {
   df <- createDataFrame(sqlContext, rdd, list("a", "b"))
   expect_is(df, "DataFrame")
   expect_equal(count(df), 10)
+  expect_equal(nrow(df), 10)
+  expect_equal(ncol(df), 2)
+  expect_equal(dim(df), c(10, 2))
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
 
@@ -128,7 +131,9 @@ test_that("create DataFrame from RDD", {
   expect_equal(dtypes(df2), list(c("name", "string"), c("age", "int"), c("height", "float")))
   expect_equal(collect(where(df2, df2$name == "Bob")), c("Bob", 16, 176.5))
 
-  localDF <- data.frame(name=c("John", "Smith", "Sarah"), age=c(19, 23, 18), height=c(164.10, 181.4, 173.7))
+  localDF <- data.frame(name=c("John", "Smith", "Sarah"),
+                        age=c(19, 23, 18),
+                        height=c(164.10, 181.4, 173.7))
   df <- createDataFrame(sqlContext, localDF, schema)
   expect_is(df, "DataFrame")
   expect_equal(count(df), 3)
@@ -489,7 +494,7 @@ test_that("head() and first() return the correct data", {
   expect_equal(nrow(testFirst), 1)
 })
 
-test_that("distinct() on DataFrames", {
+test_that("distinct() and unique on DataFrames", {
   lines <- c("{\"name\":\"Michael\"}",
              "{\"name\":\"Andy\", \"age\":30}",
              "{\"name\":\"Justin\", \"age\":19}",
@@ -501,6 +506,10 @@ test_that("distinct() on DataFrames", {
   uniques <- distinct(df)
   expect_is(uniques, "DataFrame")
   expect_equal(count(uniques), 3)
+
+  uniques2 <- unique(df)
+  expect_is(uniques2, "DataFrame")
+  expect_equal(count(uniques2), 3)
 })
 
 test_that("sample on a DataFrame", {
@@ -756,7 +765,7 @@ test_that("filter() on a DataFrame", {
   expect_equal(count(filtered6), 2)
 })
 
-test_that("join() on a DataFrame", {
+test_that("join() and merge() on a DataFrame", {
   df <- jsonFile(sqlContext, jsonPath)
 
   mockLines2 <- c("{\"name\":\"Michael\", \"test\": \"yes\"}",
@@ -785,6 +794,12 @@ test_that("join() on a DataFrame", {
   expect_equal(names(joined4), c("newAge", "name", "test"))
   expect_equal(count(joined4), 4)
   expect_equal(collect(orderBy(joined4, joined4$name))$newAge[3], 24)
+
+  merged <- select(merge(df, df2, df$name == df2$name, "outer"),
+                   alias(df$age + 5, "newAge"), df$name, df2$test)
+  expect_equal(names(merged), c("newAge", "name", "test"))
+  expect_equal(count(merged), 4)
+  expect_equal(collect(orderBy(merged, joined4$name))$newAge[3], 24)
 })
 
 test_that("toJSON() returns an RDD of the correct values", {
@@ -813,7 +828,7 @@ test_that("isLocal()", {
   expect_false(isLocal(df))
 })
 
-test_that("unionAll(), except(), and intersect() on a DataFrame", {
+test_that("unionAll(), rbind(), except(), and intersect() on a DataFrame", {
   df <- jsonFile(sqlContext, jsonPath)
 
   lines <- c("{\"name\":\"Bob\", \"age\":24}",
@@ -827,6 +842,11 @@ test_that("unionAll(), except(), and intersect() on a DataFrame", {
   expect_is(unioned, "DataFrame")
   expect_equal(count(unioned), 6)
   expect_equal(first(unioned)$name, "Michael")
+
+  unioned2 <- arrange(rbind(unioned, df, df2), df$age)
+  expect_is(unioned2, "DataFrame")
+  expect_equal(count(unioned2), 12)
+  expect_equal(first(unioned2)$name, "Michael")
 
   excepted <- arrange(except(df, df2), desc(df$age))
   expect_is(unioned, "DataFrame")
@@ -851,7 +871,7 @@ test_that("withColumn() and withColumnRenamed()", {
   expect_equal(columns(newDF2)[1], "newerAge")
 })
 
-test_that("mutate() and rename()", {
+test_that("mutate(), rename() and names()", {
   df <- jsonFile(sqlContext, jsonPath)
   newDF <- mutate(df, newAge = df$age + 2)
   expect_equal(length(columns(newDF)), 3)
@@ -861,6 +881,10 @@ test_that("mutate() and rename()", {
   newDF2 <- rename(df, newerAge = df$age)
   expect_equal(length(columns(newDF2)), 2)
   expect_equal(columns(newDF2)[1], "newerAge")
+
+  names(newDF2) <- c("newerName", "evenNewerAge")
+  expect_equal(length(names(newDF2)), 2)
+  expect_equal(names(newDF2)[1], "newerName")
 })
 
 test_that("write.df() on DataFrame and works with parquetFile", {
@@ -881,7 +905,7 @@ test_that("parquetFile works with multiple input paths", {
   expect_equal(count(parquetDF), count(df) * 2)
 })
 
-test_that("describe() on a DataFrame", {
+test_that("describe() and summarize() on a DataFrame", {
   df <- jsonFile(sqlContext, jsonPath)
   stats <- describe(df, "age")
   expect_equal(collect(stats)[1, "summary"], "count")
@@ -890,6 +914,10 @@ test_that("describe() on a DataFrame", {
   stats <- describe(df)
   expect_equal(collect(stats)[4, "name"], "Andy")
   expect_equal(collect(stats)[5, "age"], "30")
+
+  stats2 <- summary(df)
+  expect_equal(collect(stats2)[4, "name"], "Andy")
+  expect_equal(collect(stats2)[5, "age"], "30")
 })
 
 test_that("dropna() on a DataFrame", {

@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, normalize, sum}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argtopk, normalize, sum}
 import breeze.numerics.{exp, lgamma}
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
@@ -217,22 +217,28 @@ class LocalLDAModel private[clustering] (
     LocalLDAModel.SaveLoadV1_0.save(sc, path, topicsMatrix, docConcentration, topicConcentration,
       gammaShape)
   }
-  // TODO
-  // override def logLikelihood(documents: RDD[(Long, Vector)]): Double = ???
+
+  // TODO: declare in LDAModel and override once implemented in DistributedLDAModel
+  /**
+   * Calculates a lower bound on the log likelihood of the entire corpus.
+   * @param documents test corpus to use for calculating log likelihood
+   * @return variational lower bound on the log likelihood of the entire corpus
+   */
+  def logLikelihood(documents: RDD[(Long, Vector)]): Double = bound(documents,
+    docConcentration, topicConcentration, topicsMatrix.toBreeze.toDenseMatrix, gammaShape, k,
+    vocabSize)
 
   /**
-   * Calculate the log variational bound on perplexity. See Equation (16) in original Online
+   * Calculate an upper bound bound on perplexity. See Equation (16) in original Online
    * LDA paper.
    * @param documents test corpus to use for calculating perplexity
-   * @return the log perplexity per word
+   * @return variational upper bound on log perplexity per word
    */
   def logPerplexity(documents: RDD[(Long, Vector)]): Double = {
     val corpusWords = documents
       .map { case (_, termCounts) => termCounts.toArray.sum }
       .sum()
-    val batchVariationalBound = bound(documents, docConcentration,
-      topicConcentration, topicsMatrix.toBreeze.toDenseMatrix, gammaShape, k, vocabSize)
-    val perWordBound = batchVariationalBound / corpusWords
+    val perWordBound = -logLikelihood(documents) / corpusWords
 
     perWordBound
   }
@@ -510,6 +516,43 @@ class DistributedLDAModel private[clustering] (
     }
   }
 
+  /**
+   * Return the top documents for each topic
+   *
+   * This is approximate; it may not return exactly the top-weighted documents for each topic.
+   * To get a more precise set of top documents, increase maxDocumentsPerTopic.
+   *
+   * @param maxDocumentsPerTopic  Maximum number of documents to collect for each topic.
+   * @return  Array over topics.  Each element represent as a pair of matching arrays:
+   *          (IDs for the documents, weights of the topic in these documents).
+   *          For each topic, documents are sorted in order of decreasing topic weights.
+   */
+  def topDocumentsPerTopic(maxDocumentsPerTopic: Int): Array[(Array[Long], Array[Double])] = {
+    val numTopics = k
+    val topicsInQueues: Array[BoundedPriorityQueue[(Double, Long)]] =
+      topicDistributions.mapPartitions { docVertices =>
+        // For this partition, collect the most common docs for each topic in queues:
+        //  queues(topic) = queue of (doc topic, doc ID).
+        val queues =
+          Array.fill(numTopics)(new BoundedPriorityQueue[(Double, Long)](maxDocumentsPerTopic))
+        for ((docId, docTopics) <- docVertices) {
+          var topic = 0
+          while (topic < numTopics) {
+            queues(topic) += (docTopics(topic) -> docId)
+            topic += 1
+          }
+        }
+        Iterator(queues)
+      }.treeReduce { (q1, q2) =>
+        q1.zip(q2).foreach { case (a, b) => a ++= b }
+        q1
+      }
+    topicsInQueues.map { q =>
+      val (docTopics, docs) = q.toArray.sortBy(-_._1).unzip
+      (docs.toArray, docTopics.toArray)
+    }
+  }
+
   // TODO
   // override def logLikelihood(documents: RDD[(Long, Vector)]): Double = ???
 
@@ -589,6 +632,23 @@ class DistributedLDAModel private[clustering] (
   /** Java-friendly version of [[topicDistributions]] */
   def javaTopicDistributions: JavaPairRDD[java.lang.Long, Vector] = {
     JavaPairRDD.fromRDD(topicDistributions.asInstanceOf[RDD[(java.lang.Long, Vector)]])
+  }
+
+  /**
+   * For each document, return the top k weighted topics for that document and their weights.
+   * @return RDD of (doc ID, topic indices, topic weights)
+   */
+  def topTopicsPerDocument(k: Int): RDD[(Long, Array[Int], Array[Double])] = {
+    graph.vertices.filter(LDA.isDocumentVertex).map { case (docID, topicCounts) =>
+      val topIndices = argtopk(topicCounts, k)
+      val sumCounts = sum(topicCounts)
+      val weights = if (sumCounts != 0) {
+        topicCounts(topIndices) / sumCounts
+      } else {
+        topicCounts(topIndices)
+      }
+      (docID.toLong, topIndices.toArray, weights.toArray)
+    }
   }
 
   // TODO:

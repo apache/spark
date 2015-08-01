@@ -95,9 +95,9 @@ case class InsertIntoHiveTable(
         .asInstanceOf[StructObjectInspector]
 
       val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
-      val wrappers = fieldOIs.map(wrapperFor)
-      val outputData = new Array[Any](fieldOIs.length)
       val dataTypes: Array[DataType] = child.output.map(_.dataType).toArray
+      val wrappers = fieldOIs.zip(dataTypes).map { case (f, dt) => wrapperFor(f, dt)}
+      val outputData = new Array[Any](fieldOIs.length)
 
       writerContainer.executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
 
