@@ -428,10 +428,10 @@ private[hive] case class HiveWindowFunction(
       // if pivotResult is false, we will get a single value for all rows in the frame.
       outputBuffer
     } else {
-      // if pivotResult is true, we will get a Seq having the same size with the size
+      // if pivotResult is true, we will get a ArrayData having the same size with the size
       // of the window frame. At here, we will return the result at the position of
       // index in the output buffer.
-      outputBuffer.asInstanceOf[ArrayData].get(index)
+      outputBuffer.asInstanceOf[ArrayData].get(index, dataType)
     }
   }
 

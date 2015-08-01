@@ -86,12 +86,12 @@ setMethod("predict", signature(object = "PipelineModel"),
 #' model <- glm(y ~ x, trainingData)
 #' summary(model)
 #'}
-setMethod("summary", signature(object = "PipelineModel"),
-          function(object) {
+setMethod("summary", signature(x = "PipelineModel"),
+          function(x, ...) {
             features <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getModelFeatures", object@model)
+                                   "getModelFeatures", x@model)
             weights <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getModelWeights", object@model)
+                                   "getModelWeights", x@model)
             coefficients <- as.matrix(unlist(weights))
             colnames(coefficients) <- c("Estimate")
             rownames(coefficients) <- unlist(features)

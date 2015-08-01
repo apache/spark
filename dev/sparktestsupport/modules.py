@@ -138,6 +138,7 @@ streaming_kinesis_asl = Module(
     dependencies=[],
     source_file_regexes=[
         "extras/kinesis-asl/",
+        "extras/kinesis-asl-assembly/",
     ],
     build_profile_flags=[
         "-Pkinesis-asl",
@@ -306,7 +307,8 @@ pyspark_streaming = Module(
         streaming,
         streaming_kafka,
         streaming_flume_assembly,
-        streaming_mqtt
+        streaming_mqtt,
+        streaming_kinesis_asl
     ],
     source_file_regexes=[
         "python/pyspark/streaming"

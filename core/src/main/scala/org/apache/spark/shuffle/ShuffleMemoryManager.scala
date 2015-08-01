@@ -85,7 +85,7 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
           return toGrant
         } else {
           logInfo(
-            s"Thread $taskAttemptId waiting for at least 1/2N of shuffle memory pool to be free")
+            s"TID $taskAttemptId waiting for at least 1/2N of shuffle memory pool to be free")
           wait()
         }
       } else {
@@ -115,6 +115,12 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
     val taskAttemptId = currentTaskAttemptId()
     taskMemory.remove(taskAttemptId)
     notifyAll()  // Notify waiters who locked "this" in tryToAcquire that memory has been freed
+  }
+
+  /** Returns the memory consumption, in bytes, for the current task */
+  def getMemoryConsumptionForThisTask(): Long = synchronized {
+    val taskAttemptId = currentTaskAttemptId()
+    taskMemory.getOrElse(taskAttemptId, 0L)
   }
 }
 

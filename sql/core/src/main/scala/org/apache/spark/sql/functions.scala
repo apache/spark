@@ -1788,8 +1788,18 @@ object functions {
   def instr(str: Column, substring: String): Column = StringInstr(str.expr, lit(substring).expr)
 
   /**
-   * Locate the position of the first occurrence of substr in a string column.
+   * Returns the substring from string str before count occurrences of the delimiter delim.
+   * If count is positive, everything the left of the final delimiter (counting from left) is
+   * returned. If count is negative, every to the right of the final delimiter (counting from the
+   * right) is returned. substring_index performs a case-sensitive match when searching for delim.
    *
+   * @group string_funcs
+   */
+  def substring_index(str: Column, delim: String, count: Int): Column =
+    SubstringIndex(str.expr, lit(delim).expr, lit(count).expr)
+
+  /**
+   * Locate the position of the first occurrence of substr.
    * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
    * could not be found in str.
    *
@@ -1901,6 +1911,14 @@ object functions {
   def repeat(str: Column, n: Int): Column = {
     StringRepeat(str.expr, lit(n).expr)
   }
+
+  /**
+   * * Return the soundex code for the specified expression.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def soundex(e: Column): Column = SoundEx(e.expr)
 
   /**
    * Splits str around pattern (pattern is a regular expression).
@@ -2180,6 +2198,25 @@ object functions {
    * @since 1.5.0
    */
   def unix_timestamp(s: Column, p: String): Column = UnixTimestamp(s.expr, Literal(p))
+
+  /*
+   * Converts the column into DateType.
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def to_date(e: Column): Column = ToDate(e.expr)
+
+  /**
+   * Returns date truncated to the unit specified by the format.
+   *
+   * @param format: 'year', 'yyyy', 'yy' for truncate by year,
+   *               or 'month', 'mon', 'mm' for truncate by month
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def trunc(date: Column, format: String): Column = TruncDate(date.expr, Literal(format))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions

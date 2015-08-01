@@ -85,6 +85,14 @@ public final class UnsafeRow extends MutableRow {
         })));
   }
 
+  public static boolean isFixedLength(DataType dt) {
+    if (dt instanceof DecimalType) {
+      return ((DecimalType) dt).precision() < Decimal.MAX_LONG_DIGITS();
+    } else {
+      return settableFieldTypes.contains(dt);
+    }
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Private fields and methods
   //////////////////////////////////////////////////////////////////////////////
@@ -108,6 +116,11 @@ public final class UnsafeRow extends MutableRow {
 
   private long getFieldOffset(int ordinal) {
     return baseOffset + bitSetWidthInBytes + ordinal * 8L;
+  }
+
+  private void assertIndexIsValid(int index) {
+    assert index >= 0 : "index (" + index + ") should >= 0";
+    assert index < numFields : "index (" + index + ") should < " + numFields;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -144,9 +157,15 @@ public final class UnsafeRow extends MutableRow {
     this.sizeInBytes = sizeInBytes;
   }
 
-  private void assertIndexIsValid(int index) {
-    assert index >= 0 : "index (" + index + ") should >= 0";
-    assert index < numFields : "index (" + index + ") should < " + numFields;
+  /**
+   * Update this UnsafeRow to point to the underlying byte array.
+   *
+   * @param buf byte array to point to
+   * @param numFields the number of fields in this row
+   * @param sizeInBytes the number of bytes valid in the byte array
+   */
+  public void pointTo(byte[] buf, int numFields, int sizeInBytes) {
+    pointTo(buf, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
   }
 
   @Override
@@ -235,7 +254,7 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
-  public Object get(int ordinal) {
+  public Object genericGet(int ordinal) {
     throw new UnsupportedOperationException();
   }
 
