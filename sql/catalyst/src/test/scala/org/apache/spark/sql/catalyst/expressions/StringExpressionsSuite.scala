@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 
 class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -365,13 +364,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("initcap unit test") {
-    checkEvaluation(InitCap(Literal(null)), null, create_row("s0"))
-    checkEvaluation(InitCap(Literal("a b")), "A B", create_row("s1"))
-    checkEvaluation(InitCap(Literal(" a")), " A", create_row("s2"))
-    checkEvaluation(InitCap(Literal("the test")), "The Test", create_row("s3"))
+    checkEvaluation(InitCap(Literal.create(null, StringType)), null)
+    checkEvaluation(InitCap(Literal("a b")), "A B")
+    checkEvaluation(InitCap(Literal(" a")), " A")
+    checkEvaluation(InitCap(Literal("the test")), "The Test")
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
-    checkEvaluation(InitCap(Literal("世界")), "世界", create_row("s4"))
+    checkEvaluation(InitCap(Literal("世界")), "世界")
     // scalastyle:on
   }
 

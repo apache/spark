@@ -1776,8 +1776,8 @@ object functions {
   }
 
   /**
-   * Returns string, with the first letter of each word in uppercase,
-   * all other letters in lowercase. Words are delimited by whitespace.
+   * Returns string, with the first letter of each word in uppercase.
+   * Words are delimited by whitespace.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2232,30 +2232,19 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns length of array or map.
-   *
+   * Returns length of array or map
    * @group collection_funcs
    * @since 1.5.0
    */
-  def size(e: Column): Column = Size(e.expr)
+  def size(columnName: String): Column = size(Column(columnName))
 
   /**
-   * Sorts the input array for the given column in ascending order,
-   * according to the natural ordering of the array elements.
-   *
+   * Returns length of array or map
    * @group collection_funcs
    * @since 1.5.0
    */
-  def sort_array(e: Column): Column = sort_array(e, true)
+  def size(column: Column): Column = Size(column.expr)
 
-  /**
-   * Sorts the input array for the given column in ascending / descending order,
-   * according to the natural ordering of the array elements.
-   *
-   * @group collection_funcs
-   * @since 1.5.0
-   */
-  def sort_array(e: Column, asc: Boolean): Column = SortArray(e.expr, lit(asc).expr)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////

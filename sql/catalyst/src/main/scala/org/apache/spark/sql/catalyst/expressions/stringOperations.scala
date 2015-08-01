@@ -609,7 +609,7 @@ case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastI
     string.asInstanceOf[UTF8String].toTitleCase
   }
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, str => s"$str.toTitleCase()")
+    defineCodeGen(ctx, ev, str => s"$str.toTitleCase()")
   }
 }
 
