@@ -931,9 +931,9 @@ def substring(str, pos, len):
     returns the slice of byte array that starts at `pos` in byte and is of length `len`
     when str is Binary type
 
-    >>> df = sqlContext.createDataFrame([('abcd', bytearray(b'abc'))], ['s', 'b'])
-    >>> df.select(substring(df.s, 1, 2).alias('s'), substring(df.b, 1, 2).alias('b')).collect()
-    [Row(s=u'ab', b=bytearray(b'ab'))]
+    >>> df = sqlContext.createDataFrame([('abcd',)], ['s',])
+    >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
+    [Row(s=u'ab')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.substring(_to_java_column(str), pos, len))
