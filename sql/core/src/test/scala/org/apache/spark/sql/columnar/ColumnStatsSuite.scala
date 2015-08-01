@@ -76,7 +76,7 @@ class ColumnStatsSuite extends SparkFunSuite {
   def testDecimalColumnStats[T <: AtomicType, U <: ColumnStats](initialStatistics: InternalRow) {
 
     val columnStatsName = classOf[FixedDecimalColumnStats].getSimpleName
-    val columnType = DECIMAL(15, 10)
+    val columnType = FIXED_DECIMAL(15, 10)
 
     test(s"$columnStatsName: empty") {
       val columnStats = new FixedDecimalColumnStats(15, 10)

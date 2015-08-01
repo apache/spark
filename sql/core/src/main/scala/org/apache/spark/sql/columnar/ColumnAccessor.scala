@@ -97,7 +97,7 @@ private[sql] class BinaryColumnAccessor(buffer: ByteBuffer)
   with NullableColumnAccessor
 
 private[sql] class FixedDecimalColumnAccessor(buffer: ByteBuffer, precision: Int, scale: Int)
-  extends NativeColumnAccessor(buffer, DECIMAL(precision, scale))
+  extends NativeColumnAccessor(buffer, FIXED_DECIMAL(precision, scale))
 
 private[sql] class GenericColumnAccessor(buffer: ByteBuffer, dataType: DataType)
   extends BasicColumnAccessor[Array[Byte]](buffer, GENERIC(dataType))

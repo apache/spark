@@ -39,7 +39,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     val checks = Map(
       BOOLEAN -> 1, BYTE -> 1, SHORT -> 2, INT -> 4, DATE -> 4,
       LONG -> 8, TIMESTAMP -> 8, FLOAT -> 4, DOUBLE -> 8,
-      STRING -> 8, BINARY -> 16, DECIMAL(15, 10) -> 8,
+      STRING -> 8, BINARY -> 16, FIXED_DECIMAL(15, 10) -> 8,
       MAP_GENERIC -> 16)
 
     checks.foreach { case (columnType, expectedSize) =>
@@ -73,7 +73,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     checkActualSize(DOUBLE, Double.MaxValue, 8)
     checkActualSize(STRING, UTF8String.fromString("hello"), 4 + "hello".getBytes("utf-8").length)
     checkActualSize(BINARY, Array.fill[Byte](4)(0.toByte), 4 + 4)
-    checkActualSize(DECIMAL(15, 10), Decimal(0, 15, 10), 8)
+    checkActualSize(FIXED_DECIMAL(15, 10), Decimal(0, 15, 10), 8)
 
     val generic = Map(1 -> "a")
     checkActualSize(MAP_GENERIC, SparkSqlSerializer.serialize(generic), 4 + 8)
@@ -103,7 +103,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
   testNativeColumnType(DOUBLE)(_.putDouble(_), _.getDouble)
 
-  testNativeColumnType(DECIMAL(15, 10))(
+  testNativeColumnType(FIXED_DECIMAL(15, 10))(
     (buffer: ByteBuffer, decimal: Decimal) => {
       buffer.putLong(decimal.toUnscaledLong)
     },
@@ -259,7 +259,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
   test("column type for decimal types with different precision") {
     (1 to 18).foreach { i =>
-      assertResult(DECIMAL(i, 0)) {
+      assertResult(FIXED_DECIMAL(i, 0)) {
         ColumnType(DecimalType(i, 0))
       }
     }

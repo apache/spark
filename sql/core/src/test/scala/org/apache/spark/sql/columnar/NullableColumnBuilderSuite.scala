@@ -39,7 +39,7 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
 
   Seq(
     BOOLEAN, BYTE, SHORT, INT, DATE, LONG, TIMESTAMP, FLOAT, DOUBLE,
-    STRING, BINARY, DECIMAL(15, 10), GENERIC(ArrayType(StringType)))
+    STRING, BINARY, FIXED_DECIMAL(15, 10), GENERIC(ArrayType(StringType)))
     .foreach {
     testNullableColumnBuilder(_)
   }

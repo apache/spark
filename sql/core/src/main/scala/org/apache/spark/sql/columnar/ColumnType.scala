@@ -377,11 +377,11 @@ private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 8) {
   }
 }
 
-private[sql] case class DECIMAL(precision: Int, scale: Int)
+private[sql] case class FIXED_DECIMAL(precision: Int, scale: Int)
   extends NativeColumnType(
     DecimalType(precision, scale),
     10,
-    DECIMAL.defaultSize) {
+    FIXED_DECIMAL.defaultSize) {
 
   override def extract(buffer: ByteBuffer): Decimal = {
     Decimal(buffer.getLong(), precision, scale)
@@ -404,7 +404,7 @@ private[sql] case class DECIMAL(precision: Int, scale: Int)
   }
 }
 
-private[sql] object DECIMAL {
+private[sql] object FIXED_DECIMAL {
   val defaultSize = 8
 }
 
@@ -470,7 +470,7 @@ private[sql] object ColumnType {
       case StringType => STRING
       case BinaryType => BINARY
       case DecimalType.Fixed(precision, scale) if precision < 19 =>
-        DECIMAL(precision, scale)
+        FIXED_DECIMAL(precision, scale)
       case other => GENERIC(other)
     }
   }
