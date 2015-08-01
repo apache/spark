@@ -37,7 +37,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
       "org.apache.spark.network.yarn.YarnShuffleService");
 
     yarnConfig.get("yarn.nodemanager.local-dirs").split(",").foreach { dir =>
-      println("making dir " + dir)
       val d = new File(dir)
       if (d.exists()) {
         FileUtils.deleteDirectory(d)
