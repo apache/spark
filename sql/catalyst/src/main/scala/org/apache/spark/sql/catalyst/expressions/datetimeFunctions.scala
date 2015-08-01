@@ -625,17 +625,18 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
-
   override def dataType: DataType = TimestampType
+  override def prettyName: String = "to_utc_timestamp"
 
   override def nullSafeEval(time: Any, timezone: Any): Any = {
-    DateTimeUtils.fromUTCTime(time.asInstanceOf[Long], timezone.asInstanceOf[UTF8String])
+    DateTimeUtils.fromUTCTime(time.asInstanceOf[Long],
+      timezone.asInstanceOf[UTF8String].toString)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (timestamp, format) => {
-      s"""$dtu.fromUTCTime($timestamp, $format)"""
+      s"""$dtu.fromUTCTime($timestamp, $format.toString())"""
     })
   }
 }
@@ -725,17 +726,18 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
-
   override def dataType: DataType = TimestampType
+  override def prettyName: String = "to_utc_timestamp"
 
   override def nullSafeEval(time: Any, timezone: Any): Any = {
-    DateTimeUtils.toUTCTime(time.asInstanceOf[Long], timezone.asInstanceOf[UTF8String])
+    DateTimeUtils.toUTCTime(time.asInstanceOf[Long],
+      timezone.asInstanceOf[UTF8String].toString)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (timestamp, format) => {
-      s"""$dtu.toUTCTime($timestamp, $format)"""
+      s"""$dtu.toUTCTime($timestamp, $format.toString())"""
     })
   }
 }
@@ -828,44 +830,21 @@ case class TruncDate(date: Expression, format: Expression)
 }
 
 /**
- * Returns the number of days from startdate to enddate. If input type is String, will be
- * considered as UTC.
+ * Returns the number of days from startDate to endDate.
  */
-case class DateDiff(left: Expression, right: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+case class DateDiff(endDate: Expression, startDate: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(
-    TypeCollection(DateType, TimestampType, StringType),
-    TypeCollection(DateType, TimestampType, StringType))
-
+  override def left: Expression = endDate
+  override def right: Expression = startDate
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
   override def dataType: DataType = IntegerType
 
-  override def nullSafeEval(l: Any, r: Any): Any = {
-    def getMillis(v: Any, e: Expression): Long = e.dataType match {
-      case TimestampType =>
-        v.asInstanceOf[Long] / 1000L
-      case DateType =>
-        DateTimeUtils.daysToMillis(v.asInstanceOf[Int])
-      case StringType =>
-        DateTimeUtils.stringUTCToMillis(v.asInstanceOf[UTF8String])
-    }
-    ((getMillis(l, left) - getMillis(r, right)) / DateTimeUtils.MILLIS_PER_DAY).toInt
+  override def nullSafeEval(end: Any, start: Any): Any = {
+    end.asInstanceOf[Int] - start.asInstanceOf[Int]
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-
-    def genMillis(v: String, dt: DataType): String = dt match {
-      case TimestampType =>
-        s"""$v / 1000L"""
-      case DateType =>
-        s"""$dtu.daysToMillis($v)"""
-      case StringType =>
-        s"""$dtu.stringUTCToMillis($v)"""
-    }
-    defineCodeGen(ctx, ev, (l, r) => {
-      s"""(int) ((${genMillis(l, left.dataType)} -
-        ${genMillis(r, right.dataType)}) / $dtu.MILLIS_PER_DAY())""".stripMargin
-    })
+    defineCodeGen(ctx, ev, (end, start) => s"$end - $start")
   }
 }

@@ -23,8 +23,8 @@ import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -435,58 +435,46 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("datediff") {
-    checkEvaluation(DateDiff(
-      Literal(Timestamp.valueOf("2015-07-21 23:59:59")),
-      Literal(Timestamp.valueOf("2015-07-24 00:00:00"))), -2)
     checkEvaluation(
       DateDiff(Literal(Date.valueOf("2015-07-24")), Literal(Date.valueOf("2015-07-21"))), 3)
-    checkEvaluation(DateDiff(Literal("2015-07-24"), Literal("2015-07-21")), 3)
-    checkEvaluation(DateDiff(Literal(Date.valueOf("2015-07-24")), Literal("2015-07-21")), 3)
-    checkEvaluation(DateDiff(Literal("2015-07-24"), Literal(Date.valueOf("2015-07-21"))), 2)
     checkEvaluation(
-      DateDiff(Literal(Timestamp.valueOf("2015-07-24 07:59:59")), Literal("2015-07-21")), 3)
+      DateDiff(Literal(Date.valueOf("2015-07-21")), Literal(Date.valueOf("2015-07-24"))), -3)
+    checkEvaluation(DateDiff(Literal.create(null, DateType), Literal(Date.valueOf("2015-07-24"))),
+      null)
+    checkEvaluation(DateDiff(Literal(Date.valueOf("2015-07-24")), Literal.create(null, DateType)),
+      null)
     checkEvaluation(
-      DateDiff(Literal("2015-07-24 07:59:59"), Literal(Date.valueOf("2015-07-21"))), 2)
-    checkEvaluation(DateDiff(
-      Literal(Timestamp.valueOf("2015-07-24 08:00:00")), Literal(Date.valueOf("2015-07-21"))), 3)
-    checkEvaluation(DateDiff(
-      Literal(Timestamp.valueOf("2015-07-24 08:00:00")), Literal(Date.valueOf("2015-07-21"))), 3)
-  }
-
-  test("from_utc_timestamp") {
-    checkEvaluation(
-      FromUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("UTC")),
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-23 17:00:00")))
-    checkEvaluation(
-      FromUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("PST")),
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 00:00:00")))
-    checkEvaluation(
-      FromUTCTimestamp(Literal(Timestamp.valueOf("2015-01-24 00:00:00")), Literal("PST")),
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-01-24 00:00:00")))
-    checkEvaluation(
-      FromUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("Asia/Shanghai")),
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-23 09:00:00")))
-    checkEvaluation(
-      FromUTCTimestamp(Literal(Timestamp.valueOf("2015-01-24 00:00:00")), Literal("Asia/Shanghai")),
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-01-23 08:00:00")))
+      DateDiff(Literal.create(null, DateType), Literal.create(null, DateType)),
+      null)
   }
 
   test("to_utc_timestamp") {
-    checkEvaluation(
-      ToUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("UTC")),
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 07:00:00")))
-    checkEvaluation(
-      ToUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("PST")),
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 00:00:00")))
-    checkEvaluation(
-      ToUTCTimestamp(Literal(Timestamp.valueOf("2015-01-24 00:00:00")), Literal("PST")),
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-01-24 00:00:00")))
-    checkEvaluation(
-      ToUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("Asia/Shanghai")),
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 15:00:00")))
-    checkEvaluation(
-      ToUTCTimestamp(Literal(Timestamp.valueOf("2015-01-24 00:00:00")), Literal("Asia/Shanghai")),
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-01-24 16:00:00")))
+    def test(t: String, tz: String, expected: String): Unit = {
+      checkEvaluation(
+        ToUTCTimestamp(
+          Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
+          Literal.create(tz, StringType)),
+        if (expected != null) Timestamp.valueOf(expected) else null)
+    }
+    test("2015-07-24 00:00:00", "PST", "2015-07-24 07:00:00")
+    test("2015-01-24 00:00:00", "PST", "2015-01-24 08:00:00")
+    test(null, "UTC", null)
+    test("2015-07-24 00:00:00", null, null)
+    test(null, null, null)
   }
 
+  test("from_utc_timestamp") {
+    def test(t: String, tz: String, expected: String): Unit = {
+      checkEvaluation(
+        FromUTCTimestamp(
+          Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
+          Literal.create(tz, StringType)),
+        if (expected != null) Timestamp.valueOf(expected) else null)
+    }
+    test("2015-07-24 00:00:00", "PST", "2015-07-23 17:00:00")
+    test("2015-01-24 00:00:00", "PST", "2015-01-23 16:00:00")
+    test(null, "UTC", null)
+    test("2015-07-24 00:00:00", null, null)
+    test(null, null, null)
+  }
 }

@@ -736,9 +736,6 @@ object HiveTypeCoercion {
         case (DateType, TimestampType) => Cast(e, TimestampType)
         case (TimestampType, DateType) => Cast(e, DateType)
 
-        // Implicit cast for functions like utc_timestamp
-        case (_: NumericType, TimestampType) => Cast(e, TimestampType)
-
         // Implicit cast from/to string
         case (StringType, DecimalType) => Cast(e, DecimalType.SYSTEM_DEFAULT)
         case (StringType, target: NumericType) => Cast(e, target)

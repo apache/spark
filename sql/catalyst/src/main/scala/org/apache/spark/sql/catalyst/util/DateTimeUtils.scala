@@ -818,35 +818,19 @@ object DateTimeUtils {
    * Returns a timestamp of given timezone from utc timestamp, with the same string
    * representation in their timezone.
    */
-  def fromUTCTime(time: Long, timeZone: UTF8String): Long = {
-    val sdf = threadLocalTimestampFormat.get()
-    sdf.setTimeZone(defaultTimeZone)
-    val timeString = sdf.format(toJavaTimestamp(time))
-    sdf.setTimeZone(TimeZone.getTimeZone(timeZone.toString))
-    val millis = sdf.parse(timeString).getTime
-    // restore
-    sdf.setTimeZone(defaultTimeZone)
-    millis * 1000L
+  def fromUTCTime(time: Long, timeZone: String): Long = {
+    val tz = TimeZone.getTimeZone(timeZone)
+    val offset = tz.getOffset(time / 1000L)
+    time + offset * 1000L
   }
 
   /**
    * Returns a utc timestamp from a given timestamp from a given timezone, with the same
    * string representation in their timezone.
    */
-  def toUTCTime(time: Long, timeZone: UTF8String): Long = {
-    val sdf = threadLocalTimestampFormat.get()
-    sdf.setTimeZone(TimeZone.getTimeZone(timeZone.toString))
-    val timeString = sdf.format(toJavaTimestamp(time))
-    sdf.setTimeZone(defaultTimeZone)
-    val millis = sdf.parse(timeString).getTime
-    millis * 1000L
-  }
-
-  def stringUTCToMillis(s: UTF8String): Long = {
-    val sdf = threadLocalDateFormat.get()
-    sdf.setTimeZone(TimeZone.getTimeZone("UTC"))
-    val millis = sdf.parse(s.toString).getTime
-    sdf.setTimeZone(defaultTimeZone)
-    millis
+  def toUTCTime(time: Long, timeZone: String): Long = {
+    val tz = TimeZone.getTimeZone(timeZone)
+    val offset = tz.getOffset(time / 1000L)
+    time - offset * 1000L
   }
 }

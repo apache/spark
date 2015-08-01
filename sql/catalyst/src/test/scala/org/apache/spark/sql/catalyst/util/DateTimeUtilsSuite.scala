@@ -400,14 +400,24 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("from UTC timestamp") {
-    assert(DateTimeUtils.fromUTCTime(0, UTF8String.fromString("UTC")) == -28800000000L)
-    assert(DateTimeUtils.fromUTCTime(0, UTF8String.fromString("PST")) == 0)
-    assert(DateTimeUtils.fromUTCTime(0, UTF8String.fromString("Asia/Shanghai")) == -57600000000L)
+    def test(utc: String, tz: String, expected: String): Unit = {
+      assert(toJavaTimestamp(fromUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
+        === expected)
+    }
+    test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
+    test("2011-12-25 09:00:00.123456", "JST", "2011-12-25 18:00:00.123456")
+    test("2011-12-25 09:00:00.123456", "PST", "2011-12-25 01:00:00.123456")
+    test("2011-12-25 09:00:00.123456", "Asia/Shanghai", "2011-12-25 17:00:00.123456")
   }
 
   test("to UTC timestamp") {
-    assert(DateTimeUtils.toUTCTime(0, UTF8String.fromString("UTC")) == 28800000000L)
-    assert(DateTimeUtils.toUTCTime(0, UTF8String.fromString("PST")) == 0)
-    assert(DateTimeUtils.toUTCTime(0, UTF8String.fromString("Asia/Shanghai")) == 57600000000L)
+    def test(utc: String, tz: String, expected: String): Unit = {
+      assert(toJavaTimestamp(toUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
+        === expected)
+    }
+    test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
+    test("2011-12-25 18:00:00.123456", "JST", "2011-12-25 09:00:00.123456")
+    test("2011-12-25 01:00:00.123456", "PST", "2011-12-25 09:00:00.123456")
+    test("2011-12-25 17:00:00.123456", "Asia/Shanghai", "2011-12-25 09:00:00.123456")
   }
 }
