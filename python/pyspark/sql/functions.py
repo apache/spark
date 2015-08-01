@@ -51,7 +51,6 @@ __all__ = [
     'sha1',
     'sha2',
     'size',
-    'sort_array',
     'sparkPartitionId',
     'struct',
     'udf',
@@ -571,10 +570,8 @@ def length(col):
 def format_number(col, d):
     """Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
        and returns the result as a string.
-
     :param col: the column name of the numeric value to be formatted
     :param d: the N decimal places
-
     >>> sqlContext.createDataFrame([(5,)], ['a']).select(format_number('a', 4).alias('v')).collect()
     [Row(v=u'5.0000')]
     """
@@ -969,23 +966,6 @@ def soundex(col):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.size(_to_java_column(col)))
-
-
-@since(1.5)
-def sort_array(col, asc=True):
-    """
-    Collection function: sorts the input array for the given column in ascending order.
-
-    :param col: name of column or expression
-
-    >>> df = sqlContext.createDataFrame([([2, 1, 3],),([1],),([],)], ['data'])
-    >>> df.select(sort_array(df.data).alias('r')).collect()
-    [Row(r=[1, 2, 3]), Row(r=[1]), Row(r=[])]
-    >>> df.select(sort_array(df.data, asc=False).alias('r')).collect()
-    [Row(r=[3, 2, 1]), Row(r=[1]), Row(r=[])]
-     """
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.sort_array(_to_java_column(col), asc))
 
 
 class UserDefinedFunction(object):
