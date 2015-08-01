@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.{PredictionModel, PredictorParams, Predictor}
-import org.apache.spark.ml.param.shared.{HasRawPredictionCol, HasThreshold, HasThresholds}
+import org.apache.spark.ml.param.shared.{HasRawPredictionCol}
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.DataFrame
@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  * (private[spark]) Params for classification.
  */
 private[spark] trait ClassifierParams
-  extends PredictorParams with HasRawPredictionCol with HasThresholds with HasThreshold {
+  extends PredictorParams with HasRawPredictionCol {
 
   override protected def validateAndTransformSchema(
       schema: StructType,
@@ -40,43 +40,6 @@ private[spark] trait ClassifierParams
       featuresDataType: DataType): StructType = {
     val parentSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     SchemaUtils.appendColumn(parentSchema, $(rawPredictionCol), new VectorUDT)
-  }
-
-  /**
-   * Customized version of getThreshold that looks at both threshold & thresholds param.
-   * The priority order is thresholds assigned param, threshold assigned param
-   * then thresholds default value.
-   * When converting from threshold to thresholds the threshold for class 0 will be 0.5
-   * and the threshold for class 1 will be the assigned threshold value.
-   */
-  override def getThresholds: Array[Double] = {
-    def thresholdToThresholds(threshold: Double): Array[Double] = {
-      Array[Double](0.5, threshold)
-    }
-    if (isDefined(thresholds) || !isDefined(threshold)) {
-      super.getThresholds
-    } else {
-      thresholdToThresholds(getThreshold)
-    }
-  }
-  /**
-   * Customized version of getThreshold that looks at both threshold & thresholds param.
-   * The priority order is threshold assigned param, thresholds assigned param
-   * then the threshold default value.
-   * When converting from thresholds to threshold the threshold will be the ratio between
-   * class 1 and class 0.
-   */
-  override def getThreshold(): Double = {
-    def thresholdsToThreshold(thresholds: Array[Double]): Double = {
-      assert(thresholds.size == 2, "Attempting to use threshold array for binary classification, " +
-        "size must be 2 instead of " + thresholds.size)
-      thresholds(1)/thresholds(0)
-    }
-    if (isDefined(threshold) || !isDefined(thresholds)) {
-      super.getThreshold
-    } else {
-      thresholdsToThreshold(getThresholds)
-    }
   }
 }
 

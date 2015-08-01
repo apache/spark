@@ -43,7 +43,7 @@ import org.apache.spark.sql.types.DoubleType
  */
 @Experimental
 final class RandomForestClassifier(override val uid: String)
-  extends Classifier[Vector, RandomForestClassifier, RandomForestClassificationModel]
+  extends ProbabilisticClassifier[Vector, RandomForestClassifier, RandomForestClassificationModel]
   with RandomForestParams with TreeClassifierParams {
 
   def this() = this(Identifiable.randomUID("rfc"))
@@ -129,7 +129,7 @@ final class RandomForestClassificationModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel],
     override val numClasses: Int)
-  extends ProbabalisticClassificationModel[Vector, RandomForestClassificationModel]
+  extends ProbabilisticClassificationModel[Vector, RandomForestClassificationModel]
   with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
@@ -164,12 +164,22 @@ final class RandomForestClassificationModel private[ml] (
     // Classifies using majority votes.
     // Ignore the weights since all are 1.0 for now.
     val votes = new Array[Double](numClasses)
-    val weight = 1.0/_.trees.view.length.toDouble // For now all trees have the same weight
     _trees.view.foreach { tree =>
       val prediction = tree.rootNode.predict(features).toInt
-      votes(prediction) = votes(prediction) + weight
+      votes(prediction) = votes(prediction) + 1.0 // weight=1.0
     }
     Vectors.dense(votes)
+  }
+
+  override def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
+    val numTrees = _trees.view.size.toDouble
+    val values = rawPrediction.toArray // Since we are a dense vector not a copy
+    var i = 0
+    while (i < values.size) {
+      values(i) = values(i) / numTrees
+      i += 1
+    }
+    rawPrediction
   }
 
   override def copy(extra: ParamMap): RandomForestClassificationModel = {

@@ -98,7 +98,9 @@ public class JavaLogisticRegressionSuite implements Serializable {
       assert(r.getDouble(0) == 0.0);
     }
     // Call transform with params, and check that the params worked.
-    model.transform(dataset, model.threshold().w(0.0), model.probabilityCol().w("myProb"))
+    double[] thresholds = {0.5, 0.0};
+    model.transform(dataset,
+                    model.thresholds().w(thresholds), model.probabilityCol().w("myProb"))
       .registerTempTable("predNotAllZero");
     DataFrame predNotAllZero = jsql.sql("SELECT prediction, myProb FROM predNotAllZero");
     boolean foundNonZero = false;
@@ -108,8 +110,9 @@ public class JavaLogisticRegressionSuite implements Serializable {
     assert(foundNonZero);
 
     // Call fit() with new params, and check as many params as we can.
+    double[] thresholds2 = {0.5, 0.4};
     LogisticRegressionModel model2 = lr.fit(dataset, lr.maxIter().w(5), lr.regParam().w(0.1),
-        lr.threshold().w(0.4), lr.probabilityCol().w("theProb"));
+        lr.thresholds().w(thresholds), lr.probabilityCol().w("theProb"));
     LogisticRegression parent2 = (LogisticRegression) model2.parent();
     assert(parent2.getMaxIter() == 5);
     assert(parent2.getRegParam() == 0.1);

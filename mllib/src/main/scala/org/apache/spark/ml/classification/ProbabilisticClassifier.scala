@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, DataType, StructType}
@@ -29,8 +29,7 @@ import org.apache.spark.sql.types.{DoubleType, DataType, StructType}
  * (private[classification])  Params for probabilistic classification.
  */
 private[classification] trait ProbabilisticClassifierParams
-  extends ClassifierParams with HasProbabilityCol {
-
+  extends ClassifierParams with HasProbabilityCol with HasThresholds {
   override protected def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean,
@@ -75,7 +74,8 @@ private[spark] abstract class ProbabilisticClassifier[
 private[spark] abstract class ProbabilisticClassificationModel[
     FeaturesType,
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
-  extends ClassificationModel[FeaturesType, M] with ProbabilisticClassifierParams {
+  extends ClassificationModel[FeaturesType, M]
+    with ProbabilisticClassifierParams {
 
   /** @group setParam */
   def setProbabilityCol(value: String): M = set(probabilityCol, value).asInstanceOf[M]
@@ -170,8 +170,17 @@ private[spark] abstract class ProbabilisticClassificationModel[
 
   /**
    * Given a vector of class conditional probabilities, select the predicted label.
-   * This may be overridden to support thresholds which favor particular labels.
+   * This supports thresholds which favor particular labels.
    * @return  predicted label
    */
-  protected def probability2prediction(probability: Vector): Double = probability.argmax
+  protected def probability2prediction(probability: Vector): Double = {
+    if (!isDefined(thresholds)) {
+      probability.argmax
+    } else {
+      val thresholds: Array[Double] = getThresholds.toArray
+      val normalizedProbability: Array[Double] = probability.toArray.zip(thresholds)
+        .map{case (x, y) => x / y}
+      Vectors.dense(normalizedProbability).argmax
+    }
+  }
 }

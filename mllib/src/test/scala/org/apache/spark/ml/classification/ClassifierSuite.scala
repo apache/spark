@@ -23,7 +23,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 final class TestClassificationModel(
   override val numClasses: Int)
-    extends ClassificationModel[Vector, TestClassificationModel] {
+    extends ProbabilisticClassificationModel[Vector, TestClassificationModel] {
   override val uid = null
   override def copy(extra: org.apache.spark.ml.param.ParamMap):
       TestClassificationModel = {
@@ -36,6 +36,11 @@ final class TestClassificationModel(
   override def predictRaw(input: Vector): Vector = {
     input
   }
+
+  override def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
+    rawPrediction
+  }
+
   def friendlyPredict(input: Vector): Double = {
     predict(input)
   }
