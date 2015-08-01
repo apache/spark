@@ -212,19 +212,20 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object CartesianProduct extends Strategy {
     def createCartesianProduct(left: LogicalPlan, right: LogicalPlan): SparkPlan = {
-      // For BroadcastCartesianProduct we will broadcast the small size plan,
-      // for CartesianProduct we will use the small size plan as cartesian left rdd.
+      // If plan can broadcast we use BroadcastNestedLoopJoin, as we know for inner join with true
+      // condition is same as Cartesian.
+      // For CartesianProduct we will use the small size plan as cartesian left rdd.
       if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
         right match {
-          case CanBroadcast(right) => execution.joins.BroadcastCartesianProduct(planLater(left),
-            planLater(right), joins.BuildRight)
+          case CanBroadcast(right) => joins.BroadcastNestedLoopJoin(planLater(left),
+              planLater(right), joins.BuildRight, null, null)
           case _ => execution.joins.CartesianProduct(planLater(left), planLater(right),
             joins.BuildLeft)
         }
       } else {
         left match {
-          case CanBroadcast(left) => execution.joins.BroadcastCartesianProduct(planLater(left),
-            planLater(right), joins.BuildLeft)
+          case CanBroadcast(left) => joins.BroadcastNestedLoopJoin(planLater(left),
+            planLater(right), joins.BuildLeft, null, null)
           case _ => execution.joins.CartesianProduct(planLater(left), planLater(right),
             joins.BuildRight)
         }
