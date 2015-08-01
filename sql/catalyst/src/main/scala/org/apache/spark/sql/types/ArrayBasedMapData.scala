@@ -38,6 +38,10 @@ class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) exte
   override def hashCode: Int = {
     keyArray.hashCode() * 37 + valueArray.hashCode()
   }
+
+  override def toString(): String = {
+    s"keys: $keyArray\nvalues: $valueArray"
+  }
 }
 
 object ArrayBasedMapData {

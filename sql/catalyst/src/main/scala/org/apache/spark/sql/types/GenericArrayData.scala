@@ -27,6 +27,8 @@ class GenericArrayData(array: Array[Any]) extends ArrayData with GenericSpeciali
 
   override def numElements(): Int = array.length
 
+  override def toString(): String = array.mkString("[", ",", "]")
+
   override def equals(o: Any): Boolean = {
     if (!o.isInstanceOf[GenericArrayData]) {
       return false
