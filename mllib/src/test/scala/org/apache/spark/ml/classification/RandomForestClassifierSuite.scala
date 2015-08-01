@@ -27,7 +27,7 @@ import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRando
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SQLContext, DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * Test suite for [[RandomForestClassifier]].
@@ -103,32 +103,6 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     compareAPIs(rdd, rf, categoricalFeatures, numClasses)
   }
 
-  test("ensure thresholding works") {
-    val arr = Array(
-      LabeledPoint(0.0, Vectors.dense(1.0, 0.0, 0.0, 3.0, 1.0)),
-      LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0, 1.0, 2.0)),
-      LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0, 6.0, 3.0)),
-      LabeledPoint(2.0, Vectors.dense(0.0, 2.0, 1.0, 3.0, 2.0))
-    )
-    val rdd = sc.parallelize(arr)
-    val categoricalFeatures = Map(0 -> 3, 2 -> 2, 4 -> 4)
-    val numClasses = 3
-
-    val thresholds = Array(1.0, 10000.0, 0.01)
-    val rf = new RandomForestClassifier()
-      .setNumTrees(2)
-      .setSeed(12345)
-      .setThresholds(thresholds)
-    val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
-    val model = rf.fit(newData)
-    assert(model.getThresholds == thresholds)
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
-    val testData = rdd.toDF
-    val results = model.transform(testData).select("prediction")
-    results.count()
-  }
-
   test("subsampling rate in RandomForest"){
     val rdd = orderedLabeledPoints5_20
     val categoricalFeatures = Map.empty[Int, Int]
@@ -145,28 +119,6 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
 
     val rf2 = rf1.setSubsamplingRate(0.5)
     compareAPIs(rdd, rf2, categoricalFeatures, numClasses)
-  }
-
-  test("simple two input training test") {
-    val trainingInput = Seq(
-      LabeledPoint(1.0, Vectors.dense(1.0)),
-      LabeledPoint(0.0, Vectors.sparse(1, Array[Int](), Array[Double]())))
-    val categoricalFeatures = Map.empty[Int, Int]
-    val numClasses = 2
-    val trainingData = TreeTests.setMetadata(sc.parallelize(trainingInput),
-      categoricalFeatures, numClasses)
-    val rf = new RandomForestClassifier()
-      .setNumTrees(3)
-      .setMaxDepth(2)
-      .setSeed(42)
-      .fit(trainingData)
-    val testInput = Seq(
-      LabeledPoint(0.0, Vectors.dense(-1.0)),
-      LabeledPoint(0.0, Vectors.sparse(1, Array(0), Array(1.0)))
-    )
-    val testData = sqlContext.createDataFrame(testInput)
-    val results = rf.transform(testData).select("prediction").map(_.getDouble(0))
-    assert(results.collect() === Array(0.0, 1.0))
   }
 
   /////////////////////////////////////////////////////////////////////////////

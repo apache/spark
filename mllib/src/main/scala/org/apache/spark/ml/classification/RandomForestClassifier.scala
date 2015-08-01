@@ -43,7 +43,7 @@ import org.apache.spark.sql.types.DoubleType
  */
 @Experimental
 final class RandomForestClassifier(override val uid: String)
-  extends ProbabilisticClassifier[Vector, RandomForestClassifier, RandomForestClassificationModel]
+  extends Classifier[Vector, RandomForestClassifier, RandomForestClassificationModel]
   with RandomForestParams with TreeClassifierParams {
 
   def this() = this(Identifiable.randomUID("rfc"))
@@ -74,8 +74,6 @@ final class RandomForestClassifier(override val uid: String)
   override def setSubsamplingRate(value: Double): this.type = super.setSubsamplingRate(value)
 
   override def setSeed(value: Long): this.type = super.setSeed(value)
-
-  override def setThresholds(value: Array[Double]): this.type = super.set(thresholds, value)
 
   // Parameters from RandomForestParams:
 
@@ -129,13 +127,10 @@ final class RandomForestClassificationModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel],
     override val numClasses: Int)
-  extends ProbabilisticClassificationModel[Vector, RandomForestClassificationModel]
+  extends ClassificationModel[Vector, RandomForestClassificationModel]
   with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
-
-  /** @group setParam */
-  def setThresholds(value: Array[Double]): this.type = set(thresholds, value)
 
   /**
    * Construct a random forest classification model, with all trees weighted equally.
@@ -169,17 +164,6 @@ final class RandomForestClassificationModel private[ml] (
       votes(prediction) = votes(prediction) + 1.0 // 1.0 = weight
     }
     Vectors.dense(votes)
-  }
-
-  override def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
-    val numTrees = _trees.view.size.toDouble
-    val values = rawPrediction.toArray // Since we are a dense vector not a copy
-    var i = 0
-    while (i < values.size) {
-      values(i) = values(i) / numTrees
-      i += 1
-    }
-    rawPrediction
   }
 
   override def copy(extra: ParamMap): RandomForestClassificationModel = {
