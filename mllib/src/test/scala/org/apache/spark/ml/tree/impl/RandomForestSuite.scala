@@ -55,7 +55,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     def testNode(node: Node, expected: Map[Int, Double]): Unit = {
       val map = new OpenHashMap[Int, Double]()
       RandomForest.computeFeatureImportance(node, map)
-      assert(map === expected)
+      assert(map.toMap ~== expected relTol 0.01)
     }
 
     // Leaf node
@@ -79,7 +79,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val totalImportance = feature0importance * 2 + feature1importance
     val expected = Map(0 -> feature0importance * 2 / totalImportance,
       1 -> feature1importance / totalImportance)
-    assert(importances === expected)
+    assert(importances ~== expected relTol 0.01)
   }
 
   test("normalizeMapValues") {
@@ -88,7 +88,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     map(2) = 2.0
     RandomForest.normalizeMapValues(map)
     val expected = Map(0 -> 1.0 / 3.0, 2 -> 2.0 / 3.0)
-    assert(map.toMap === expected)
+    assert(map.toMap ~== expected relTol 0.01)
   }
 
 }
