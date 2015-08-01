@@ -1142,7 +1142,8 @@ private[ml] object RandomForest extends Logging {
       val importances = new OpenHashMap[Int, Double]()
       computeFeatureImportance(tree.rootNode, importances)
       // Normalize importance vector for this tree, and add it to total.
-      val treeNorm = tree.rootNode.impurityStats.count
+      // TODO: In the future, also support normalizing by tree.rootNode.impurityStats.count?
+      val treeNorm = importances.map(_._2).sum
       if (treeNorm != 0) {
         importances.foreach { case (idx, impt) =>
           val normImpt = impt / treeNorm

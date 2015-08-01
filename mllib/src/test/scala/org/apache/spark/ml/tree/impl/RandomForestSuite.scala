@@ -80,9 +80,9 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       new DecisionTreeClassificationModel(root, numClasses = 3).asInstanceOf[DecisionTreeModel]
     }
     val importances = RandomForest.featureImportances(trees)
-    val totalImportance = feature0importance * 2 + feature1importance
-    val expected = Map(0 -> feature0importance * 2 / totalImportance,
-      1 -> feature1importance / totalImportance)
+    val tree2norm = feature0importance + feature1importance
+    val expected = Map(0 -> (1.0 + feature0importance / tree2norm) / 2.0,
+      1 -> (feature1importance / tree2norm) / 2.0)
     assert(mapToVec(importances) ~== mapToVec(expected) relTol 0.01)
   }
 
@@ -100,7 +100,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 object RandomForestSuite {
 
   def mapToVec(map: Map[Int, Double]): Vector = {
-    val size = map.keys.max + 1
+    val size = (map.keys.toSeq :+ 0).max + 1
     val (indices, values) = map.toSeq.sortBy(_._1).unzip
     Vectors.sparse(size, indices.toArray, values.toArray)
   }
