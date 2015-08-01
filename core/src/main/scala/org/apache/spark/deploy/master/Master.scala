@@ -45,7 +45,7 @@ import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
 
-private[master] class Master(
+private[deploy] class Master(
     override val rpcEnv: RpcEnv,
     address: RpcAddress,
     webUiPort: Int,
@@ -863,7 +863,9 @@ private[master] class Master(
         logInfo(s"Application $appId requests to kill executors: " + executorIds.mkString(", "))
         val (known, unknown) = executorIds.partition(appInfo.executors.contains)
         known.foreach { executorId =>
-          appInfo.executors.remove(executorId).foreach(killExecutor)
+          val desc = appInfo.executors(executorId)
+          appInfo.removeExecutor(desc)
+          killExecutor(desc)
         }
         if (unknown.nonEmpty) {
           logWarning(s"Application $appId attempted to kill non-existent executors: "

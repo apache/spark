@@ -121,6 +121,12 @@ private[spark] class ApplicationInfo(
     state != ApplicationState.WAITING && state != ApplicationState.RUNNING
   }
 
+  /**
+   * Return the limit on the number of executors this application can have.
+   * For testing only.
+   */
+  private[deploy] def getExecutorLimit: Int = executorLimit
+
   def duration: Long = {
     if (endTime != -1) {
       endTime - startTime
