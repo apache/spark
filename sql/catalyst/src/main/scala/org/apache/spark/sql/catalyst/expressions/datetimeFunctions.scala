@@ -778,7 +778,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
            |long ${ev.primitive} = 0;
            |if (!${ev.isNull}) {
            |  ${ev.primitive} = ${eval.primitive} -
-           |   ${tzTerm}.getOffset(${eval.primitive} / 1000) * 1000;
+           |   ${tzTerm}.getOffset(${eval.primitive} / 1000) * 1000L;
            |}
          """.stripMargin
       }
