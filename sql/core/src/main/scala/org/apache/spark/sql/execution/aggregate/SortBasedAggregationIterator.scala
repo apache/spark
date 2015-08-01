@@ -20,13 +20,16 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression2, AggregateFunction2}
+import org.apache.spark.unsafe.KVIterator
 
 /**
  * An iterator used to evaluate [[AggregateFunction2]]. It assumes the input rows are sorted
- * by values of [[groupingExpressions]].
+ * by values of [[groupingKeyAttributes]].
  */
 class SortBasedAggregationIterator(
-    groupingExpressions: Seq[NamedExpression],
+    groupingKeyAttributes: Seq[Attribute],
+    valueAttributes: Seq[Attribute],
+    inputKVIterator: KVIterator[InternalRow, InternalRow],
     nonCompleteAggregateExpressions: Seq[AggregateExpression2],
     nonCompleteAggregateAttributes: Seq[Attribute],
     completeAggregateExpressions: Seq[AggregateExpression2],
@@ -35,11 +38,11 @@ class SortBasedAggregationIterator(
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
     newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
-    newOrdering: (Seq[SortOrder], Seq[Attribute]) => Ordering[InternalRow],
-    inputAttributes: Seq[Attribute],
-    inputIter: Iterator[InternalRow])
+    newOrdering: (Seq[SortOrder], Seq[Attribute]) => Ordering[InternalRow])
   extends AggregationIterator(
-    groupingExpressions,
+    groupingKeyAttributes,
+    valueAttributes,
+    inputKVIterator,
     nonCompleteAggregateExpressions,
     nonCompleteAggregateAttributes,
     completeAggregateExpressions,
@@ -48,9 +51,35 @@ class SortBasedAggregationIterator(
     resultExpressions,
     newMutableProjection,
     newProjection,
-    newOrdering,
-    inputAttributes,
-    inputIter) {
+    newOrdering) {
+
+  def this(
+      groupingExprs: Seq[NamedExpression],
+      nonCompleteAggregateExpressions: Seq[AggregateExpression2],
+      nonCompleteAggregateAttributes: Seq[Attribute],
+      completeAggregateExpressions: Seq[AggregateExpression2],
+      completeAggregateAttributes: Seq[Attribute],
+      initialInputBufferOffset: Int,
+      resultExpressions: Seq[NamedExpression],
+      newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+      newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
+      newOrdering: (Seq[SortOrder], Seq[Attribute]) => Ordering[InternalRow],
+      inputAttributes: Seq[Attribute],
+      inputIter: Iterator[InternalRow]) = {
+    this(
+      groupingExprs.map(_.toAttribute),
+      inputAttributes,
+      AggregationIterator.kvIterator(groupingExprs, newProjection, inputAttributes, inputIter),
+      nonCompleteAggregateExpressions,
+      nonCompleteAggregateAttributes,
+      completeAggregateExpressions,
+      completeAggregateAttributes,
+      initialInputBufferOffset,
+      resultExpressions,
+      newMutableProjection,
+      newProjection,
+      newOrdering)
+  }
 
   logInfo("Using SortBasedAggregationIterator.")
 
@@ -79,9 +108,6 @@ class SortBasedAggregationIterator(
   // Indicates if we has new group of rows from the sorted input iterator
   protected var sortedInputHasNewGroup: Boolean = false
 
-  // The sorted input iterator.
-  protected var sortBasedInputIter: Iterator[InternalRow] = inputIter
-
   // The aggregation buffer used by the sort-based aggregation.
   protected var sortBasedAggregationBuffer: MutableRow = newBuffer
 
@@ -95,11 +121,10 @@ class SortBasedAggregationIterator(
     processRow(sortBasedAggregationBuffer, firstRowInNextGroup)
     // The search will stop when we see the next group or there is no
     // input row left in the iter.
-    while (sortBasedInputIter.hasNext && !findNextPartition) {
-      val currentRow = sortBasedInputIter.next()
-      // Get the grouping key based on the grouping expressions.
-      // For the below compare method, we do not need to make a copy of groupingKey.
-      val groupingKey = groupGenerator(currentRow)
+    while (inputKVIterator.next() && !findNextPartition) {
+      // Get the grouping key.
+      val groupingKey = inputKVIterator.getKey
+      val currentRow = inputKVIterator.getValue
       // Check if the current row belongs the current input row.
       if (currentGroupingKey == groupingKey) {
         processRow(sortBasedAggregationBuffer, currentRow)
@@ -140,11 +165,10 @@ class SortBasedAggregationIterator(
   }
 
   protected def initialize(): Unit = {
-    if (inputIter.hasNext) {
+    if (inputKVIterator.next()) {
       initializeBuffer(sortBasedAggregationBuffer)
-      val currentRow = inputIter.next()
-      nextGroupingKey = groupGenerator(currentRow)
-      firstRowInNextGroup = currentRow.copy()
+      nextGroupingKey = inputKVIterator.getKey()
+      firstRowInNextGroup = inputKVIterator.getValue().copy()
       sortedInputHasNewGroup = true
     } else {
       // This inputIter is empty.
@@ -154,8 +178,8 @@ class SortBasedAggregationIterator(
 
   initialize()
 
-  def generateResultForEmptyInput(): InternalRow = {
+  def outputForEmptyGroupingKeyWithoutInput(): InternalRow = {
     initializeBuffer(sortBasedAggregationBuffer)
-    generateOutput(groupGenerator(new GenericInternalRow(inputAttributes.length)), sortBasedAggregationBuffer)
+    generateOutput(new GenericInternalRow(0), sortBasedAggregationBuffer)
   }
 }

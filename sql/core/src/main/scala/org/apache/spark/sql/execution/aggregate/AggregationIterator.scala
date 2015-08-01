@@ -21,6 +21,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.unsafe.KVIterator
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -28,7 +29,9 @@ import scala.collection.mutable.ArrayBuffer
  * The base class of iterators used to evaluate [[AggregateFunction2]].
  */
 abstract class AggregationIterator(
-    groupingExpressions: Seq[NamedExpression],
+    groupingKeyAttributes: Seq[Attribute],
+    valueAttributes: Seq[Attribute],
+    inputKVIterator: KVIterator[InternalRow, InternalRow],
     nonCompleteAggregateExpressions: Seq[AggregateExpression2],
     nonCompleteAggregateAttributes: Seq[Attribute],
     completeAggregateExpressions: Seq[AggregateExpression2],
@@ -37,9 +40,7 @@ abstract class AggregationIterator(
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
     newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
-    newOrdering: (Seq[SortOrder], Seq[Attribute]) => Ordering[InternalRow],
-    inputAttributes: Seq[Attribute],
-    inputIter: Iterator[InternalRow])
+    newOrdering: (Seq[SortOrder], Seq[Attribute]) => Ordering[InternalRow])
   extends Iterator[InternalRow] with Logging {
 
   ///////////////////////////////////////////////////////////////////////////
@@ -87,7 +88,7 @@ abstract class AggregationIterator(
           // this function is Partial or Complete because we will call eval of this
           // function's children in the update method of this aggregate function.
           // Those eval calls require BoundReferences to work.
-          BindReferences.bindReference(func, inputAttributes)
+          BindReferences.bindReference(func, valueAttributes)
         case _ =>
           // We only need to set inputBufferOffset for aggregate functions with mode
           // PartialMerge and Final.
@@ -162,7 +163,7 @@ abstract class AggregationIterator(
           case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
         }
         val algebraicUpdateProjection =
-          newMutableProjection(updateExpressions, aggregationBufferSchema ++ inputAttributes)()
+          newMutableProjection(updateExpressions, aggregationBufferSchema ++ valueAttributes)()
 
         (currentBuffer: MutableRow, row: InternalRow) => {
           algebraicUpdateProjection.target(currentBuffer)
@@ -179,7 +180,7 @@ abstract class AggregationIterator(
       // PartialMerge-only or Final-only
       case (Some(PartialMerge), None) | (Some(Final), None) =>
         val inputAggregationBufferSchema =
-          groupingExpressions.map(_.toAttribute) ++
+          groupingKeyAttributes ++
             allAggregateFunctions.flatMap(_.cloneBufferAttributes)
         val mergeExpressions = nonCompleteAggregateFunctions.flatMap {
           case ae: AlgebraicAggregate => ae.mergeExpressions
@@ -214,7 +215,7 @@ abstract class AggregationIterator(
 
         // The first initialInputBufferOffset values of the input aggregation buffer is
         // for grouping expressions and distinct columns.
-        val groupingAttributesAndDistinctColumns = inputAttributes.take(initialInputBufferOffset)
+        val groupingAttributesAndDistinctColumns = valueAttributes.take(initialInputBufferOffset)
 
         val completeOffsetExpressions =
           Seq.fill(completeAggregateFunctions.map(_.bufferAttributes.length).sum)(NoOp)
@@ -240,7 +241,7 @@ abstract class AggregationIterator(
             case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
           }
         val completeAlgebraicUpdateProjection =
-          newMutableProjection(updateExpressions, aggregationBufferSchema ++ inputAttributes)()
+          newMutableProjection(updateExpressions, aggregationBufferSchema ++ valueAttributes)()
 
         (currentBuffer: MutableRow, row: InternalRow) => {
           val input = rowToBeProcessed(currentBuffer, row)
@@ -277,7 +278,7 @@ abstract class AggregationIterator(
             case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
           }
         val completeAlgebraicUpdateProjection =
-          newMutableProjection(updateExpressions, aggregationBufferSchema ++ inputAttributes)()
+          newMutableProjection(updateExpressions, aggregationBufferSchema ++ valueAttributes)()
 
         (currentBuffer: MutableRow, row: InternalRow) => {
           val input = rowToBeProcessed(currentBuffer, row)
@@ -314,8 +315,8 @@ abstract class AggregationIterator(
         val bufferSchema = nonCompleteAggregateFunctions.flatMap(_.bufferAttributes)
         val resultProjection =
           newMutableProjection(
-            groupingExpressions.map(_.toAttribute) ++ bufferSchema,
-            groupingExpressions.map(_.toAttribute) ++ bufferSchema)()
+            groupingKeyAttributes ++ bufferSchema,
+            groupingKeyAttributes ++ bufferSchema)()
 
         (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
           resultProjection(rowToBeEvaluated(currentGroupingKey, currentBuffer))
@@ -336,7 +337,7 @@ abstract class AggregationIterator(
         val aggregateResult: MutableRow = new GenericMutableRow(aggregateResultSchema.length)
         val resultProjection =
           newMutableProjection(
-            resultExpressions, groupingExpressions.map(_.toAttribute) ++ aggregateResultSchema)()
+            resultExpressions, groupingKeyAttributes ++ aggregateResultSchema)()
 
         (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
           // Generate results for all algebraic aggregate functions.
@@ -355,7 +356,7 @@ abstract class AggregationIterator(
       // Grouping-only: we only output values of grouping expressions.
       case (None, None) =>
         val resultProjection =
-          newMutableProjection(resultExpressions, groupingExpressions.map(_.toAttribute))()
+          newMutableProjection(resultExpressions, groupingKeyAttributes)()
 
         (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
           resultProjection(currentGroupingKey)
@@ -367,9 +368,6 @@ abstract class AggregationIterator(
             s"support evaluate modes $other in this iterator.")
     }
   }
-
-  // This is used to project expressions for the grouping expressions.
-  protected val groupGenerator = newProjection(groupingExpressions, inputAttributes)
 
   /** Initializes buffer values for all aggregate functions. */
   protected def initializeBuffer(buffer: MutableRow): Unit = {
@@ -386,4 +384,46 @@ abstract class AggregationIterator(
    * for all aggregate functions.
    */
   protected def newBuffer: MutableRow
+}
+
+object AggregationIterator {
+  def kvIterator(
+    groupingExpressions: Seq[NamedExpression],
+    newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
+    inputAttributes: Seq[Attribute],
+    inputIter: Iterator[InternalRow]): KVIterator[InternalRow, InternalRow] = {
+    new KVIterator[InternalRow, InternalRow] {
+      private[this] val groupingKeyGenerator = newProjection(groupingExpressions, inputAttributes)
+
+      private[this] var groupingKey: InternalRow = _
+
+      private[this] var value: InternalRow = _
+
+      override def next(): Boolean = {
+        if (inputIter.hasNext) {
+          // Read the next input row.
+          val inputRow = inputIter.next()
+          // Get groupingKey based on groupingExpressions.
+          groupingKey = groupingKeyGenerator(inputRow)
+          // The value is the inputRow.
+          value = inputRow
+          true
+        } else {
+          false
+        }
+      }
+
+      override def getKey(): InternalRow = {
+        groupingKey
+      }
+
+      override def getValue(): InternalRow = {
+        value
+      }
+
+      override def close(): Unit = {
+        // Do nothing
+      }
+    }
+  }
 }

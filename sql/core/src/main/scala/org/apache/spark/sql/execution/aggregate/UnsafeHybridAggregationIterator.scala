@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.sql.execution.UnsafeFixedWidthAggregationMap
+import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,7 +32,9 @@ import org.apache.spark.sql.types.StructType
  * switch to sort-based aggregation.
  */
 class UnsafeHybridAggregationIterator(
-    groupingExpressions: Seq[NamedExpression],
+    groupingKeyAttributes: Seq[Attribute],
+    valueAttributes: Seq[Attribute],
+    inputKVIterator: KVIterator[InternalRow, InternalRow],
     nonCompleteAggregateExpressions: Seq[AggregateExpression2],
     nonCompleteAggregateAttributes: Seq[Attribute],
     completeAggregateExpressions: Seq[AggregateExpression2],
@@ -38,13 +42,13 @@ class UnsafeHybridAggregationIterator(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-    newProjection: (Seq[Expression], Seq[Attribute]) => Projection, // It's UnsafeProjection.
+    newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
     newOrdering: (Seq[SortOrder], Seq[Attribute]) => Ordering[InternalRow],
-    inputAttributes: Seq[Attribute],
-    inputIter: Iterator[InternalRow],
     unsafeInput: Boolean)
   extends AggregationIterator(
-    groupingExpressions,
+    groupingKeyAttributes,
+    valueAttributes,
+    inputKVIterator,
     nonCompleteAggregateExpressions,
     nonCompleteAggregateAttributes,
     completeAggregateExpressions,
@@ -53,11 +57,39 @@ class UnsafeHybridAggregationIterator(
     resultExpressions,
     newMutableProjection,
     newProjection,
-    newOrdering,
-    inputAttributes,
-    inputIter) {
+    newOrdering) {
 
-  require(groupingExpressions.nonEmpty)
+  def this(
+      groupingExprs: Seq[NamedExpression],
+      nonCompleteAggregateExpressions: Seq[AggregateExpression2],
+      nonCompleteAggregateAttributes: Seq[Attribute],
+      completeAggregateExpressions: Seq[AggregateExpression2],
+      completeAggregateAttributes: Seq[Attribute],
+      initialInputBufferOffset: Int,
+      resultExpressions: Seq[NamedExpression],
+      newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+      newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
+      newOrdering: (Seq[SortOrder], Seq[Attribute]) => Ordering[InternalRow],
+      inputAttributes: Seq[Attribute],
+      inputIter: Iterator[InternalRow],
+      unsafeInput: Boolean) = {
+    this(
+      groupingExprs.map(_.toAttribute),
+      inputAttributes,
+      AggregationIterator.kvIterator(groupingExprs, newProjection, inputAttributes, inputIter),
+      nonCompleteAggregateExpressions,
+      nonCompleteAggregateAttributes,
+      completeAggregateExpressions,
+      completeAggregateAttributes,
+      initialInputBufferOffset,
+      resultExpressions,
+      newMutableProjection,
+      newProjection,
+      newOrdering,
+      unsafeInput)
+  }
+
+  require(groupingKeyAttributes.nonEmpty)
 
   logInfo("Using UnsafeHybridAggregationIterator.")
 
@@ -69,8 +101,9 @@ class UnsafeHybridAggregationIterator(
   private[this] val buffers = new UnsafeFixedWidthAggregationMap(
     newBuffer,
     StructType.fromAttributes(allAggregateFunctions.flatMap(_.bufferAttributes)),
-    StructType.fromAttributes(groupingExpressions.map(_.toAttribute)),
+    StructType.fromAttributes(groupingKeyAttributes),
     TaskContext.get.taskMemoryManager(),
+    SparkEnv.get.shuffleMemoryManager,
     1024 * 16, // initial capacity
     SparkEnv.get.conf.getSizeAsBytes("spark.buffer.pageSize", "64m"),
     false // disable tracking of performance metrics
@@ -132,6 +165,7 @@ class UnsafeHybridAggregationIterator(
   private def switchToSortBasedAggregation(currentRow: InternalRow): Unit = {
     logInfo("falling back to sort based aggregation.")
     // TODO: Step 1: Sort the map entries.
+
     // val sortedAggregationBufferMapIterator = MapSorter.doSort(aggregationBufferMapIterator)
 
     // TODO: Step 2: Spill the sorted map entries.
@@ -224,9 +258,9 @@ class UnsafeHybridAggregationIterator(
 
   /** Starts to read input rows and falls back to sort-based aggregation if necessary. */
   private def initialize(): Unit = {
-    while (inputIter.hasNext && !sortBased) {
-      val currentRow = inputIter.next()
-      val groupingKey = groupGenerator(currentRow)
+    while (inputKVIterator.next() && !sortBased) {
+      val groupingKey = inputKVIterator.getKey()
+      val currentRow = inputKVIterator.getValue()
       val buffer = buffers.getAggregationBuffer(groupingKey)
       if (buffer == null) {
         // buffer == null means that we could not allocate more memory.
@@ -245,33 +279,49 @@ class UnsafeHybridAggregationIterator(
   // contents of that map.
   private[this] val aggregationBufferMapIterator = buffers.iterator()
 
+  private[this] var _mapIteratorHasNext = false
+
+  // Pre-load the first key-value pair from the map to make hasNext idempotent.
+  if (!sortBased) {
+    _mapIteratorHasNext = aggregationBufferMapIterator.next()
+    // If the map is empty, we just free it.
+    if (!_mapIteratorHasNext) {
+      println("free !!!")
+      buffers.free()
+    }
+  }
 
   ///////////////////////////////////////////////////////////////////////////
   // Iterator's public methods
   ///////////////////////////////////////////////////////////////////////////
 
-  override final def hasNext: Boolean =
-    (sortBased && sortBasedAggregationIterator.hasNext) || (!sortBased && aggregationBufferMapIterator.hasNext)
+  override final def hasNext: Boolean = {
+    println("_mapIteratorHasNext " + _mapIteratorHasNext + " " + ((sortBased && sortBasedAggregationIterator.hasNext) || (!sortBased && _mapIteratorHasNext)))
+    (sortBased && sortBasedAggregationIterator.hasNext) || (!sortBased && _mapIteratorHasNext)
+  }
 
-  // This can be abstract
   override final def next(): InternalRow = {
     if (hasNext) {
-      val result = if (sortBased) {
+      if (sortBased) {
         sortBasedAggregationIterator.next()
       } else {
         // We did not fall back to the sort-based aggregation.
-        val currentGroup = aggregationBufferMapIterator.next()
-        generateOutput(currentGroup.key, currentGroup.value)
-      }
+        val result =
+          generateOutput(
+            aggregationBufferMapIterator.getKey,
+            aggregationBufferMapIterator.getValue)
 
-      if (hasNext) {
-        result
-      } else {
-        val resultCopy = result.copy()
-        // free is idempotent. So, we can just call it even if we have called it
-        // once when we fall back to the sort-based aggregation.
-        buffers.free()
-        resultCopy
+        // Pre-load next key-value pair form aggregationBufferMapIterator.
+        _mapIteratorHasNext = aggregationBufferMapIterator.next()
+
+        if (!_mapIteratorHasNext) {
+          val resultCopy = result.copy()
+          println("free in next !!!")
+          buffers.free()
+          resultCopy
+        } else {
+          result
+        }
       }
     } else {
       // no more result

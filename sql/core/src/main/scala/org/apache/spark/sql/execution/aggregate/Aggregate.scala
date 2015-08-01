@@ -137,15 +137,15 @@ case class Aggregate(
             completeAggregateAttributes,
             initialInputBufferOffset,
             resultExpressions,
-            newMutableProjection,
-            newProjection,
-            newOrdering,
+            newMutableProjection _ ,
+            newProjection _,
+            newOrdering _,
             child.output,
             iter)
           if (!hasInput && groupingExpressions.isEmpty) {
             // There is no input and there is no grouping expressions.
             // We need to output a single row as the output.
-            Iterator[InternalRow](outputIter.generateResultForEmptyInput())
+            Iterator[InternalRow](outputIter.outputForEmptyGroupingKeyWithoutInput())
           } else {
             outputIter
           }
