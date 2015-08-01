@@ -2000,12 +2000,11 @@ object functions {
   def date_sub(start: Column, days: Int): Column = DateSub(start.expr, Literal(days))
 
   /**
-   * Returns the number of days from startdate to enddate. If input type is String, will be
-   * considered as UTC.
+   * Returns the number of days from `start` to `end`.
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def datediff(l: Column, r: Column): Column = DateDiff(l.expr, r.expr)
+  def datediff(ende: Column, start: Column): Column = DateDiff(end.expr, start.expr)
 
   /**
    * Extracts the year as an integer from a given date/timestamp/string.
