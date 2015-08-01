@@ -105,8 +105,10 @@ private[mllib] object TreeModelUtils {
         }
       }
     }
-    else
+    else {
       None
+    }
+
   }
 
   /** Create equivalent PMML node for given mlLib node. */
@@ -168,7 +170,7 @@ private[mllib] object TreeModelUtils {
 
       Some(miningField)
     }
-    else{
+    else {
       None
     }
 
@@ -187,7 +189,7 @@ private[mllib] object TreeModelUtils {
         case nd :: ls if (nd.isLeaf) => miningFlds
         case nd :: ls if (!nd.isLeaf && nd.split.isDefined) => {
           val ndList = MutableList[Node]()
-          if (nd.leftNode.isDefined){
+          if (nd.leftNode.isDefined) {
             ndList += nd.leftNode.get
           }
 
