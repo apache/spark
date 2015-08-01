@@ -198,7 +198,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    */
   public UTF8String substring(final int start, final int until) {
     if (until <= start || start >= numBytes) {
-      return UTF8String.EMPTY_UTF8;
+      return EMPTY_UTF8;
     }
 
     int i = 0;
@@ -214,9 +214,13 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       c += 1;
     }
 
-    byte[] bytes = new byte[i - j];
-    copyMemory(base, offset + j, bytes, BYTE_ARRAY_OFFSET, i - j);
-    return fromBytes(bytes);
+    if (i > j) {
+      byte[] bytes = new byte[i - j];
+      copyMemory(base, offset + j, bytes, BYTE_ARRAY_OFFSET, i - j);
+      return fromBytes(bytes);
+    } else {
+      return EMPTY_UTF8;
+    }
   }
 
   public UTF8String substringSQL(int pos, int length) {
@@ -226,8 +230,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
     // to the -ith element before the end of the sequence. If a start index i is 0, it
     // refers to the first element.
-    int start = (pos > 0) ? pos -1 : ((pos < 0) ? numChars() + pos : 0);
-    int end = (length == Integer.MAX_VALUE) ? Integer.MAX_VALUE : start + length;
+    int len = numChars();
+    int start = (pos > 0) ? pos -1 : ((pos < 0) ? len + pos : 0);
+    int end = (length == Integer.MAX_VALUE) ? len : start + length;
     return substring(start, end);
   }
 

@@ -64,7 +64,7 @@ __all__ += [
     'year', 'quarter', 'month', 'hour', 'minute', 'second',
     'dayofmonth', 'dayofyear', 'weekofyear']
 
-__all__ += ['soundex']
+__all__ += ['soundex', 'substring', 'substring_index']
 
 
 def _create_function(name, doc=""):
@@ -921,6 +921,22 @@ def trunc(date, format):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.trunc(_to_java_column(date), format))
+
+
+@since(1.5)
+@ignore_unicode_prefix
+def substring(str, pos, len):
+    """
+    Substring starts at `pos` and is of length `len` when str is String type or
+    returns the slice of byte array that starts at `pos` in byte and is of length `len`
+    when str is Binary type
+
+    >>> df = sqlContext.createDataFrame([('abcd',)], ['s',])
+    >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
+    [Row(s=u'ab')]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.substring(_to_java_column(str), pos, len))
 
 
 @since(1.5)

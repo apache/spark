@@ -1726,6 +1726,17 @@ object functions {
   def format_number(x: Column, d: Int): Column = FormatNumber(x.expr, lit(d).expr)
 
   /**
+   * Substring starts at `pos` and is of length `len` when str is String type or
+   * returns the slice of byte array that starts at `pos` in byte and is of length `len`
+   * when str is Binary type
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def substring(str: Column, pos: Int, len: Int): Column =
+    Substring(str.expr, lit(pos).expr, lit(len).expr)
+
+  /**
    * Computes the Levenshtein distance of the two given string columns.
    * @group string_funcs
    * @since 1.5.0

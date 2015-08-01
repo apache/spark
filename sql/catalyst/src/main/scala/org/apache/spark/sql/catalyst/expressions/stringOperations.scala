@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.DecimalFormat
+import java.util.Arrays
 import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
@@ -679,6 +680,34 @@ case class StringSplit(str: Expression, pattern: Expression)
   override def prettyName: String = "split"
 }
 
+object Substring {
+  def subStringBinarySQL(bytes: Array[Byte], pos: Int, len: Int): Array[Byte] = {
+    if (pos > bytes.length) {
+      return Array[Byte]()
+    }
+
+    var start = if (pos > 0) {
+      pos - 1
+    } else if (pos < 0) {
+      bytes.length + pos
+    } else {
+      0
+    }
+
+    val end = if ((bytes.length - start) < len) {
+      bytes.length
+    } else {
+      start + len
+    }
+
+    start = Math.max(start, 0)  // underflow
+    if (start < end) {
+      Arrays.copyOfRange(bytes, start, end)
+    } else {
+      Array[Byte]()
+    }
+  }
+}
 /**
  * A function that takes a substring of its first argument starting at a given position.
  * Defined for String and Binary types.
@@ -690,18 +719,31 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     this(str, pos, Literal(Integer.MAX_VALUE))
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = str.dataType
 
-  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
 
   override def children: Seq[Expression] = str :: pos :: len :: Nil
 
   override def nullSafeEval(string: Any, pos: Any, len: Any): Any = {
-    string.asInstanceOf[UTF8String].substringSQL(pos.asInstanceOf[Int], len.asInstanceOf[Int])
+    str.dataType match {
+      case StringType => string.asInstanceOf[UTF8String]
+        .substringSQL(pos.asInstanceOf[Int], len.asInstanceOf[Int])
+      case BinaryType => Substring.subStringBinarySQL(string.asInstanceOf[Array[Byte]],
+        pos.asInstanceOf[Int], len.asInstanceOf[Int])
+    }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, (str, pos, len) => s"$str.substringSQL($pos, $len)")
+
+    val cls = classOf[Substring].getName
+    defineCodeGen(ctx, ev, (string, pos, len) => {
+      str.dataType match {
+        case StringType => s"$string.substringSQL($pos, $len)"
+        case BinaryType => s"$cls.subStringBinarySQL($string, $pos, $len)"
+      }
+    })
   }
 }
 
@@ -1161,4 +1203,3 @@ case class FormatNumber(x: Expression, d: Expression)
 
   override def prettyName: String = "format_number"
 }
-
