@@ -86,10 +86,6 @@ abstract class LDAModel private[clustering] extends Saveable {
   /**
    * Return the topics described by weighted terms.
    *
-   * This limits the number of terms per topic.
-   * This is approximate; it may not return exactly the top-weighted terms for each topic.
-   * To get a more precise set of top terms, increase maxTermsPerTopic.
-   *
    * @param maxTermsPerTopic  Maximum number of terms to collect for each topic.
    * @return  Array over topics.  Each topic is represented as a pair of matching arrays:
    *          (term indices, term weights in topic).
@@ -518,9 +514,6 @@ class DistributedLDAModel private[clustering] (
 
   /**
    * Return the top documents for each topic
-   *
-   * This is approximate; it may not return exactly the top-weighted documents for each topic.
-   * To get a more precise set of top documents, increase maxDocumentsPerTopic.
    *
    * @param maxDocumentsPerTopic  Maximum number of documents to collect for each topic.
    * @return  Array over topics.  Each element represent as a pair of matching arrays:
