@@ -15,11 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions;
+package org.apache.spark.sql.execution;
 
+import java.io.IOException;
 import java.util.Iterator;
 
+import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.DecimalType;
 import org.apache.spark.sql.types.StructField;
@@ -87,7 +91,9 @@ public final class UnsafeFixedWidthAggregationMap {
    * @param emptyAggregationBuffer the default value for new keys (a "zero" of the agg. function)
    * @param aggregationBufferSchema the schema of the aggregation buffer, used for row conversion.
    * @param groupingKeySchema the schema of the grouping key, used for row conversion.
-   * @param memoryManager the memory manager used to allocate our Unsafe memory structures.
+   * @param taskMemoryManager the memory manager used to allocate our Unsafe memory structures.
+   * @param shuffleMemoryManager the shuffle memory manager, for coordinating our memory usage with
+   *                             other tasks.
    * @param initialCapacity the initial capacity of the map (a sizing hint to avoid re-hashing).
    * @param pageSizeBytes the data page size, in bytes; limits the maximum record size.
    * @param enablePerfMetrics if true, performance metrics will be recorded (has minor perf impact)
@@ -96,15 +102,16 @@ public final class UnsafeFixedWidthAggregationMap {
       InternalRow emptyAggregationBuffer,
       StructType aggregationBufferSchema,
       StructType groupingKeySchema,
-      TaskMemoryManager memoryManager,
+      TaskMemoryManager taskMemoryManager,
+      ShuffleMemoryManager shuffleMemoryManager,
       int initialCapacity,
       long pageSizeBytes,
       boolean enablePerfMetrics) {
     this.aggregationBufferSchema = aggregationBufferSchema;
     this.groupingKeyProjection = UnsafeProjection.create(groupingKeySchema);
     this.groupingKeySchema = groupingKeySchema;
-    this.map =
-      new BytesToBytesMap(memoryManager, initialCapacity, pageSizeBytes, enablePerfMetrics);
+    this.map = new BytesToBytesMap(
+      taskMemoryManager, shuffleMemoryManager, initialCapacity, pageSizeBytes, enablePerfMetrics);
     this.enablePerfMetrics = enablePerfMetrics;
 
     // Initialize the buffer for aggregation value
@@ -116,7 +123,8 @@ public final class UnsafeFixedWidthAggregationMap {
 
   /**
    * Return the aggregation buffer for the current group. For efficiency, all calls to this method
-   * return the same object.
+   * return the same object. If additional memory could not be allocated, then this method will
+   * signal an error by returning null.
    */
   public UnsafeRow getAggregationBuffer(InternalRow groupingKey) {
     final UnsafeRow unsafeGroupingKeyRow = this.groupingKeyProjection.apply(groupingKey);
@@ -129,7 +137,7 @@ public final class UnsafeFixedWidthAggregationMap {
     if (!loc.isDefined()) {
       // This is the first time that we've seen this grouping key, so we'll insert a copy of the
       // empty aggregation buffer into the map:
-      loc.putNewKey(
+      boolean putSucceeded = loc.putNewKey(
         unsafeGroupingKeyRow.getBaseObject(),
         unsafeGroupingKeyRow.getBaseOffset(),
         unsafeGroupingKeyRow.getSizeInBytes(),
@@ -137,6 +145,9 @@ public final class UnsafeFixedWidthAggregationMap {
         PlatformDependent.BYTE_ARRAY_OFFSET,
         emptyAggregationBuffer.length
       );
+      if (!putSucceeded) {
+        return null;
+      }
     }
 
     // Reset the pointer to point to the value that we just stored or looked up:

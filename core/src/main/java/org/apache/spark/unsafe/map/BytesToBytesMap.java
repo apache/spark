@@ -17,6 +17,7 @@
 
 package org.apache.spark.unsafe.map;
 
+import java.io.IOException;
 import java.lang.Override;
 import java.lang.UnsupportedOperationException;
 import java.util.Iterator;
@@ -24,7 +25,10 @@ import java.util.LinkedList;
 import java.util.List;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.unsafe.*;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.array.LongArray;
@@ -45,6 +49,8 @@ import org.apache.spark.unsafe.memory.*;
  */
 public final class BytesToBytesMap {
 
+  private final Logger logger = LoggerFactory.getLogger(BytesToBytesMap.class);
+
   private static final Murmur3_x86_32 HASHER = new Murmur3_x86_32(0);
 
   private static final HashMapGrowthStrategy growthStrategy = HashMapGrowthStrategy.DOUBLING;
@@ -54,7 +60,9 @@ public final class BytesToBytesMap {
    */
   private static final int END_OF_PAGE_MARKER = -1;
 
-  private final TaskMemoryManager memoryManager;
+  private final TaskMemoryManager taskMemoryManager;
+
+  private final ShuffleMemoryManager shuffleMemoryManager;
 
   /**
    * A linked list for tracking all allocated data pages so that we can free all of our memory.
@@ -120,7 +128,7 @@ public final class BytesToBytesMap {
   /**
    * Number of keys defined in the map.
    */
-  private int size;
+  private int numElements;
 
   /**
    * The map will be expanded once the number of keys exceeds this threshold.
@@ -150,12 +158,14 @@ public final class BytesToBytesMap {
   private long numHashCollisions = 0;
 
   public BytesToBytesMap(
-      TaskMemoryManager memoryManager,
+      TaskMemoryManager taskMemoryManager,
+      ShuffleMemoryManager shuffleMemoryManager,
       int initialCapacity,
       double loadFactor,
       long pageSizeBytes,
       boolean enablePerfMetrics) {
-    this.memoryManager = memoryManager;
+    this.taskMemoryManager = taskMemoryManager;
+    this.shuffleMemoryManager = shuffleMemoryManager;
     this.loadFactor = loadFactor;
     this.loc = new Location();
     this.pageSizeBytes = pageSizeBytes;
@@ -175,24 +185,32 @@ public final class BytesToBytesMap {
   }
 
   public BytesToBytesMap(
-      TaskMemoryManager memoryManager,
+      TaskMemoryManager taskMemoryManager,
+      ShuffleMemoryManager shuffleMemoryManager,
       int initialCapacity,
       long pageSizeBytes) {
-    this(memoryManager, initialCapacity, 0.70, pageSizeBytes, false);
+    this(taskMemoryManager, shuffleMemoryManager, initialCapacity, 0.70, pageSizeBytes, false);
   }
 
   public BytesToBytesMap(
-      TaskMemoryManager memoryManager,
+      TaskMemoryManager taskMemoryManager,
+      ShuffleMemoryManager shuffleMemoryManager,
       int initialCapacity,
       long pageSizeBytes,
       boolean enablePerfMetrics) {
-    this(memoryManager, initialCapacity, 0.70, pageSizeBytes, enablePerfMetrics);
+    this(
+      taskMemoryManager,
+      shuffleMemoryManager,
+      initialCapacity,
+      0.70,
+      pageSizeBytes,
+      enablePerfMetrics);
   }
 
   /**
    * Returns the number of keys defined in the map.
    */
-  public int size() { return size; }
+  public int numElements() { return numElements; }
 
   private static final class BytesToBytesMapIterator implements Iterator<Location> {
 
@@ -252,7 +270,7 @@ public final class BytesToBytesMap {
    * `lookup()`, the behavior of the returned iterator is undefined.
    */
   public Iterator<Location> iterator() {
-    return new BytesToBytesMapIterator(size, dataPages.iterator(), loc);
+    return new BytesToBytesMapIterator(numElements, dataPages.iterator(), loc);
   }
 
   /**
@@ -330,7 +348,8 @@ public final class BytesToBytesMap {
 
     private void updateAddressesAndSizes(long fullKeyAddress) {
       updateAddressesAndSizes(
-        memoryManager.getPage(fullKeyAddress), memoryManager.getOffsetInPage(fullKeyAddress));
+        taskMemoryManager.getPage(fullKeyAddress),
+        taskMemoryManager.getOffsetInPage(fullKeyAddress));
     }
 
     private void updateAddressesAndSizes(Object page, long keyOffsetInPage) {
@@ -411,7 +430,8 @@ public final class BytesToBytesMap {
     /**
      * Store a new key and value. This method may only be called once for a given key; if you want
      * to update the value associated with a key, then you can directly manipulate the bytes stored
-     * at the value address.
+     * at the value address. The return value indicates whether the put succeeded or whether it
+     * failed because additional memory could not be acquired.
      * <p>
      * It is only valid to call this method immediately after calling `lookup()` using the same key.
      * </p>
@@ -428,14 +448,19 @@ public final class BytesToBytesMap {
      * <pre>
      *   Location loc = map.lookup(keyBaseObject, keyBaseOffset, keyLengthInBytes);
      *   if (!loc.isDefined()) {
-     *     loc.putNewKey(keyBaseObject, keyBaseOffset, keyLengthInBytes, ...)
+     *     if (!loc.putNewKey(keyBaseObject, keyBaseOffset, keyLengthInBytes, ...)) {
+     *       // handle failure to grow map (by spilling, for example)
+     *     }
      *   }
      * </pre>
      * <p>
      * Unspecified behavior if the key is not defined.
      * </p>
+     *
+     * @return true if the put() was successful and false if the put() failed because memory could
+     *         not be acquired.
      */
-    public void putNewKey(
+    public boolean putNewKey(
         Object keyBaseObject,
         long keyBaseOffset,
         int keyLengthBytes,
@@ -445,63 +470,110 @@ public final class BytesToBytesMap {
       assert (!isDefined) : "Can only set value once for a key";
       assert (keyLengthBytes % 8 == 0);
       assert (valueLengthBytes % 8 == 0);
-      if (size == MAX_CAPACITY) {
+      if (numElements == MAX_CAPACITY) {
         throw new IllegalStateException("BytesToBytesMap has reached maximum capacity");
       }
+
       // Here, we'll copy the data into our data pages. Because we only store a relative offset from
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
       // (8 byte key length) (key) (8 byte value length) (value)
       final long requiredSize = 8 + keyLengthBytes + 8 + valueLengthBytes;
-      assert (requiredSize <= pageSizeBytes - 8); // Reserve 8 bytes for the end-of-page marker.
-      size++;
-      bitset.set(pos);
 
-      // If there's not enough space in the current page, allocate a new page (8 bytes are reserved
-      // for the end-of-page marker).
-      if (currentDataPage == null || pageSizeBytes - 8 - pageCursor < requiredSize) {
+      // --- Figure out where to insert the new record ---------------------------------------------
+
+      final MemoryBlock dataPage;
+      final Object dataPageBaseObject;
+      final long dataPageInsertOffset;
+      boolean useOverflowPage = requiredSize > pageSizeBytes - 8;
+      if (useOverflowPage) {
+        // The record is larger than the page size, so allocate a special overflow page just to hold
+        // that record.
+        final long memoryRequested = requiredSize + 8;
+        final long memoryGranted = shuffleMemoryManager.tryToAcquire(memoryRequested);
+        if (memoryGranted != memoryRequested) {
+          shuffleMemoryManager.release(memoryGranted);
+          logger.debug("Failed to acquire {} bytes of memory", memoryRequested);
+          return false;
+        }
+        MemoryBlock overflowPage = taskMemoryManager.allocatePage(memoryRequested);
+        dataPages.add(overflowPage);
+        dataPage = overflowPage;
+        dataPageBaseObject = overflowPage.getBaseObject();
+        dataPageInsertOffset = overflowPage.getBaseOffset();
+      } else if (currentDataPage == null || pageSizeBytes - 8 - pageCursor < requiredSize) {
+        // The record can fit in a data page, but either we have not allocated any pages yet or
+        // the current page does not have enough space.
         if (currentDataPage != null) {
           // There wasn't enough space in the current page, so write an end-of-page marker:
           final Object pageBaseObject = currentDataPage.getBaseObject();
           final long lengthOffsetInPage = currentDataPage.getBaseOffset() + pageCursor;
           PlatformDependent.UNSAFE.putLong(pageBaseObject, lengthOffsetInPage, END_OF_PAGE_MARKER);
         }
-        MemoryBlock newPage = memoryManager.allocatePage(pageSizeBytes);
+        final long memoryGranted = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
+        if (memoryGranted != pageSizeBytes) {
+          shuffleMemoryManager.release(memoryGranted);
+          logger.debug("Failed to acquire {} bytes of memory", pageSizeBytes);
+          return false;
+        }
+        MemoryBlock newPage = taskMemoryManager.allocatePage(pageSizeBytes);
         dataPages.add(newPage);
         pageCursor = 0;
         currentDataPage = newPage;
+        dataPage = currentDataPage;
+        dataPageBaseObject = currentDataPage.getBaseObject();
+        dataPageInsertOffset = currentDataPage.getBaseOffset();
+      } else {
+        // There is enough space in the current data page.
+        dataPage = currentDataPage;
+        dataPageBaseObject = currentDataPage.getBaseObject();
+        dataPageInsertOffset = currentDataPage.getBaseOffset() + pageCursor;
       }
 
+      // --- Append the key and value data to the current data page --------------------------------
+
+      long insertCursor = dataPageInsertOffset;
+
       // Compute all of our offsets up-front:
-      final Object pageBaseObject = currentDataPage.getBaseObject();
-      final long pageBaseOffset = currentDataPage.getBaseOffset();
-      final long keySizeOffsetInPage = pageBaseOffset + pageCursor;
-      pageCursor += 8; // word used to store the key size
-      final long keyDataOffsetInPage = pageBaseOffset + pageCursor;
-      pageCursor += keyLengthBytes;
-      final long valueSizeOffsetInPage = pageBaseOffset + pageCursor;
-      pageCursor += 8; // word used to store the value size
-      final long valueDataOffsetInPage = pageBaseOffset + pageCursor;
-      pageCursor += valueLengthBytes;
+      final long keySizeOffsetInPage = insertCursor;
+      insertCursor += 8; // word used to store the key size
+      final long keyDataOffsetInPage = insertCursor;
+      insertCursor += keyLengthBytes;
+      final long valueSizeOffsetInPage = insertCursor;
+      insertCursor += 8; // word used to store the value size
+      final long valueDataOffsetInPage = insertCursor;
+      insertCursor += valueLengthBytes; // word used to store the value size
 
       // Copy the key
-      PlatformDependent.UNSAFE.putLong(pageBaseObject, keySizeOffsetInPage, keyLengthBytes);
+      PlatformDependent.UNSAFE.putLong(dataPageBaseObject, keySizeOffsetInPage, keyLengthBytes);
       PlatformDependent.copyMemory(
-        keyBaseObject, keyBaseOffset, pageBaseObject, keyDataOffsetInPage, keyLengthBytes);
+        keyBaseObject, keyBaseOffset, dataPageBaseObject, keyDataOffsetInPage, keyLengthBytes);
       // Copy the value
-      PlatformDependent.UNSAFE.putLong(pageBaseObject, valueSizeOffsetInPage, valueLengthBytes);
-      PlatformDependent.copyMemory(
-        valueBaseObject, valueBaseOffset, pageBaseObject, valueDataOffsetInPage, valueLengthBytes);
+      PlatformDependent.UNSAFE.putLong(dataPageBaseObject, valueSizeOffsetInPage, valueLengthBytes);
+      PlatformDependent.copyMemory(valueBaseObject, valueBaseOffset, dataPageBaseObject,
+        valueDataOffsetInPage, valueLengthBytes);
 
-      final long storedKeyAddress = memoryManager.encodePageNumberAndOffset(
-        currentDataPage, keySizeOffsetInPage);
+      // --- Update bookeeping data structures -----------------------------------------------------
+
+      if (useOverflowPage) {
+        // Store the end-of-page marker at the end of the data page
+        PlatformDependent.UNSAFE.putLong(dataPageBaseObject, insertCursor, END_OF_PAGE_MARKER);
+      } else {
+        pageCursor += requiredSize;
+      }
+
+      numElements++;
+      bitset.set(pos);
+      final long storedKeyAddress = taskMemoryManager.encodePageNumberAndOffset(
+        dataPage, keySizeOffsetInPage);
       longArray.set(pos * 2, storedKeyAddress);
       longArray.set(pos * 2 + 1, keyHashcode);
       updateAddressesAndSizes(storedKeyAddress);
       isDefined = true;
-      if (size > growthThreshold && longArray.size() < MAX_CAPACITY) {
+      if (numElements > growthThreshold && longArray.size() < MAX_CAPACITY) {
         growAndRehash();
       }
+      return true;
     }
   }
 
@@ -516,7 +588,7 @@ public final class BytesToBytesMap {
     // The capacity needs to be divisible by 64 so that our bit set can be sized properly
     capacity = Math.max((int) Math.min(MAX_CAPACITY, nextPowerOf2(capacity)), 64);
     assert (capacity <= MAX_CAPACITY);
-    longArray = new LongArray(memoryManager.allocate(capacity * 8L * 2));
+    longArray = new LongArray(MemoryBlock.fromLongArray(new long[capacity * 2]));
     bitset = new BitSet(MemoryBlock.fromLongArray(new long[capacity / 64]));
 
     this.growthThreshold = (int) (capacity * loadFactor);
@@ -530,18 +602,14 @@ public final class BytesToBytesMap {
    * This method is idempotent.
    */
   public void free() {
-    if (longArray != null) {
-      memoryManager.free(longArray.memoryBlock());
-      longArray = null;
-    }
-    if (bitset != null) {
-      // The bitset's heap memory isn't managed by a memory manager, so no need to free it here.
-      bitset = null;
-    }
+    longArray = null;
+    bitset = null;
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
     while (dataPagesIterator.hasNext()) {
-      memoryManager.freePage(dataPagesIterator.next());
+      MemoryBlock dataPage = dataPagesIterator.next();
       dataPagesIterator.remove();
+      taskMemoryManager.freePage(dataPage);
+      shuffleMemoryManager.release(dataPage.size());
     }
     assert(dataPages.isEmpty());
   }
@@ -628,8 +696,6 @@ public final class BytesToBytesMap {
       }
     }
 
-    // Deallocate the old data structures.
-    memoryManager.free(oldLongArray.memoryBlock());
     if (enablePerfMetrics) {
       timeSpentResizingNs += System.nanoTime() - resizeStartTime;
     }
