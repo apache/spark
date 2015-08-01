@@ -1776,6 +1776,24 @@ object functions {
   }
 
   /**
+   * Returns string, with the first letter of each word in uppercase,
+   * all other letters in lowercase. Words are delimited by whitespace.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def initcap(e: Column): Column = InitCap(e.expr)
+
+  /**
+   * Returns string, with the first letter of each word in uppercase,
+   * all other letters in lowercase. Words are delimited by whitespace.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def initcap(columnName: String): Column = initcap(Column(columnName))
+
+  /**
    * Locate the position of the first occurrence of substr column in the given string.
    * Returns null if either of the arguments are null.
    *

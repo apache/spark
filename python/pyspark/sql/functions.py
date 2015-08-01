@@ -567,6 +567,18 @@ def length(col):
 
 @ignore_unicode_prefix
 @since(1.5)
+def initcap(col):
+    """Translate the first letter of each word to upper case in the sentence.
+    
+    >>> sqlContext.createDataFrame([('a b',)], ['a']).select(initcap('a b').alias('v')).collect()
+    [Row(v='A B')]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.initcap(_to_java_column(col)))
+
+
+@ignore_unicode_prefix
+@since(1.5)
 def format_number(col, d):
     """Formats the number X to a format like '#,###,###.##', rounded to d decimal places,
        and returns the result as a string.

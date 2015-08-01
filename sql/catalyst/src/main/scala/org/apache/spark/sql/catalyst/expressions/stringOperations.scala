@@ -597,6 +597,54 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 }
 
 /**
+ * Returns string, with the first letter of each word in uppercase,
+ * all other letters in lowercase. Words are delimited by whitespace.
+ */
+case class InitCap(child: Expression) extends UnaryExpression
+  with ImplicitCastInputTypes {
+  override def dataType: DataType = StringType
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+
+  override def nullSafeEval(string: Any): Any = {
+    if (string.asInstanceOf[UTF8String].numBytes() == 0) {
+      return string
+    } else {
+      val sb = new StringBuffer()
+      sb.append(string)
+      sb.setCharAt(0, sb.charAt(0).toUpper)
+      for (i <- 1 until sb.length) {
+        if (sb.charAt(i - 1).equals(' ')) {
+          sb.setCharAt(i, sb.charAt(i).toUpper)
+        }
+      }
+      UTF8String.fromString(sb.toString)
+    }
+  }
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (child) => {
+      val idx = ctx.freshName("idx")
+      val sb = ctx.freshName("sb")
+      val stringBuffer = classOf[StringBuffer].getName
+      val character = classOf[Character].getName
+      s"""
+        $stringBuffer $sb = new $stringBuffer();
+        $sb.append($child);
+        if($sb.length()>0) {
+        $sb.setCharAt(0,$character.toTitleCase($sb.charAt(0)));
+        for (int $idx = 1; $idx<$sb.length(); $idx++) {
+           if ($sb.charAt($idx - 1)==' ') {
+             $sb.setCharAt($idx,$character.toTitleCase($sb.charAt($idx)));
+           }
+        }
+        ${ev.primitive} = UTF8String.fromString($sb.toString());
+        }
+       """
+    })
+  }
+}
+
+/**
  * Returns the string which repeat the given string value n times.
  */
 case class StringRepeat(str: Expression, times: Expression)

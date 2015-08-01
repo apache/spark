@@ -305,6 +305,15 @@ class StringFunctionsSuite extends QueryTest {
     }
   }
 
+  test("initcap function") {
+    val df = Seq(("ab", "a B")).toDF("l", "r")
+    checkAnswer(
+      df.select(initcap($"l"), initcap("r")), Row("Ab", "A B"))
+
+    checkAnswer(
+      df.selectExpr("InitCap(l)", "InitCap(r)"), Row("Ab", "A B"))
+  }
+
   test("number format function") {
     val tuple =
       ("aa", 1.asInstanceOf[Byte], 2.asInstanceOf[Short],
