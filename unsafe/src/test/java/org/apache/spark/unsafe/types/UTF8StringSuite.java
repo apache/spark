@@ -21,10 +21,12 @@ import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 import static junit.framework.Assert.*;
 
 import static org.apache.spark.unsafe.types.UTF8String.*;
+import static org.apache.spark.unsafe.types.UTF8String.fromString;
 
 public class UTF8StringSuite {
 
@@ -203,6 +205,57 @@ public class UTF8StringSuite {
     assertEquals(fromString("据砖"), fromString("数据砖头").substring(1, 3));
     assertEquals(fromString("头"), fromString("数据砖头").substring(3, 5));
     assertEquals(fromString("ߵ梷"), fromString("ߵ梷").substring(0, 2));
+
+    assertEquals(fromString("hello"), fromString("hello").substring(0));
+    assertEquals(fromString("ello"), fromString("hello").substring(1));
+    assertEquals(fromString("砖头"), fromString("数据砖头").substring(2));
+    assertEquals(fromString("头"), fromString("数据砖头").substring(3));
+    ExpectedException exception = ExpectedException.none();
+    fromString("数据砖头").substring(4);
+    exception.expect(java.lang.StringIndexOutOfBoundsException.class);
+    assertEquals(fromString("ߵ梷"), fromString("ߵ梷").substring(0));
+  }
+
+  @Test
+  public void ordinalIndexOf() {
+    assertEquals(-1,
+      fromString("www.apache.org").ordinalIndexOf(fromString("."), 0));
+    assertEquals(0,
+            fromString("www.apache.org").ordinalIndexOf(fromString("w"), 1));
+    assertEquals(3,
+      fromString("www.apache.org").ordinalIndexOf(fromString("."), 1));
+    assertEquals(10,
+      fromString("www.apache.org").ordinalIndexOf(fromString("."), 2));
+    assertEquals(-1,
+      fromString("www.apache.org").ordinalIndexOf(fromString("."), 3));
+    assertEquals(-1,
+      fromString("www.apache.org").ordinalIndexOf(fromString("#"), 0));
+    assertEquals(12,
+      fromString("www|||apache|||org").ordinalIndexOf(fromString("|||"), 2));
+    assertEquals(2,
+      fromString("数据砖砖头").ordinalIndexOf(fromString("砖"), 1));
+    assertEquals(-1,
+      fromString("砖头数据砖头").ordinalIndexOf(fromString("砖"), -2));
+  }
+
+  @Test
+  public void lastOrdinalIndexOf() {
+    assertEquals(-1,
+      fromString("www.apache.org").lastOrdinalIndexOf(fromString("."), 0));
+    assertEquals(10,
+      fromString("www.apache.org").lastOrdinalIndexOf(fromString("."), 1));
+    assertEquals(3,
+      fromString("www.apache.org").lastOrdinalIndexOf(fromString("."), 2));
+    assertEquals(-1,
+      fromString("www.apache.org").lastOrdinalIndexOf(fromString("."), 3));
+    assertEquals(-1,
+      fromString("www.apache.org").lastOrdinalIndexOf(fromString("#"), 0));
+    assertEquals(3,
+      fromString("www|||apache|||org").lastOrdinalIndexOf(fromString("|||"), 2));
+    assertEquals(3,
+      fromString("数据砖砖头").lastOrdinalIndexOf(fromString("砖"), 1));
+    assertEquals(-1,
+      fromString("砖头数据砖头").lastOrdinalIndexOf(fromString("砖"), -2));
   }
 
   @Test
@@ -238,6 +291,58 @@ public class UTF8StringSuite {
     assertEquals(-1, fromString("数据砖头").indexOf(fromString("数"), 3));
     assertEquals(0, fromString("数据砖头").indexOf(fromString("数"), 0));
     assertEquals(3, fromString("数据砖头").indexOf(fromString("头"), 0));
+  }
+
+  @Test
+  public void lastIndexOf() {
+    assertEquals(1, fromString("hello").lastIndexOf(fromString(""), 1));
+    assertEquals(-1, fromString("").lastIndexOf(fromString("l"), 0));
+    assertEquals(0, fromString("hello").lastIndexOf(fromString(""), 0));
+    assertEquals(0, fromString("hello").lastIndexOf(fromString("h"), 4));
+    assertEquals(-1, fromString("hello").lastIndexOf(fromString("l"), 0));
+    assertEquals(3, fromString("hello").lastIndexOf(fromString("l"), 3));
+    assertEquals(-1, fromString("hello").lastIndexOf(fromString("a"), 4));
+    assertEquals(2, fromString("hello").lastIndexOf(fromString("ll"), 4));
+    assertEquals(-1, fromString("hello").lastIndexOf(fromString("ll"), 0));
+    assertEquals(5, fromString("数据砖头数据砖头").lastIndexOf(fromString("据砖"), 7));
+    assertEquals(0, fromString("数据砖头").lastIndexOf(fromString("数"), 3));
+    assertEquals(0, fromString("数据砖头").lastIndexOf(fromString("数"), 0));
+    assertEquals(3, fromString("数据砖头").lastIndexOf(fromString("头"), 3));
+  }
+
+  @Test
+  public void substring_index() {
+    assertEquals(fromString("www.apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), 3));
+    assertEquals(fromString("www.apache"),
+      fromString("www.apache.org").subStringIndex(fromString("."), 2));
+    assertEquals(fromString("www"),
+      fromString("www.apache.org").subStringIndex(fromString("."), 1));
+    assertEquals(fromString(""),
+      fromString("www.apache.org").subStringIndex(fromString("."), 0));
+    assertEquals(fromString("org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), -1));
+    assertEquals(fromString("apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), -2));
+    assertEquals(fromString("www.apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), -3));
+    // str is empty string
+    assertEquals(fromString(""),
+      fromString("").subStringIndex(fromString("."), 1));
+    // empty string delim
+    assertEquals(fromString(""),
+      fromString("www.apache.org").subStringIndex(fromString(""), 1));
+    // delim does not exist in str
+    assertEquals(fromString("www.apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("#"), 2));
+    // delim is 2 chars
+    assertEquals(fromString("www||apache"),
+      fromString("www||apache||org").subStringIndex(fromString("||"), 2));
+    assertEquals(fromString("apache||org"),
+      fromString("www||apache||org").subStringIndex(fromString("||"), -2));
+    // non ascii chars
+    assertEquals(fromString("大千世界大"),
+      fromString("大千世界大千世界").subStringIndex(fromString("千"), 2));
   }
 
   @Test

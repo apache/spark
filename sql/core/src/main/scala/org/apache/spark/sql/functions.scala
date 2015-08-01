@@ -1788,8 +1788,18 @@ object functions {
   def instr(str: Column, substring: String): Column = StringInstr(str.expr, lit(substring).expr)
 
   /**
-   * Locate the position of the first occurrence of substr in a string column.
+   * Returns the substring from string str before count occurrences of the delimiter delim.
+   * If count is positive, everything the left of the final delimiter (counting from left) is
+   * returned. If count is negative, every to the right of the final delimiter (counting from the
+   * right) is returned. substring_index performs a case-sensitive match when searching for delim.
    *
+   * @group string_funcs
+   */
+  def substring_index(str: Column, delim: String, count: Int): Column =
+    Substring_index(str.expr, lit(delim).expr, lit(count).expr)
+
+  /**
+   * Locate the position of the first occurrence of substr.
    * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
    * could not be found in str.
    *
