@@ -91,8 +91,12 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   File registeredExecutorFile;
 
+  // just for testing when you want to find an open port
+  @VisibleForTesting
+  static int boundPort = -1;
+
   private Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> recoveredExecutorRegistrations =
-    new HashMap<String, List<Entry<AppExecId, ExecutorShuffleInfo>>>();
+    new HashMap<>();
 
   public YarnShuffleService() {
     super("spark_shuffle");
@@ -142,6 +146,9 @@ public class YarnShuffleService extends AuxiliaryService {
       SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
     TransportContext transportContext = new TransportContext(transportConf, blockHandler);
     shuffleServer = transportContext.createServer(port, bootstraps);
+    // the port should normally be fixed, but for tests its useful to find an open port
+    port = shuffleServer.getPort();
+    boundPort = port;
     String authEnabledString = authEnabled ? "enabled" : "not enabled";
     logger.info("Started YARN shuffle service for Spark on port {}. " +
       "Authentication is {}.  Registered executor file is {}", port, authEnabledString,

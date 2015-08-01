@@ -25,6 +25,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
 
 import org.apache.spark._
+import org.apache.spark.network.yarn.YarnTestAccessor
 
 /**
  * Integration test for the external shuffle service with a yarn mini-cluster
@@ -36,16 +37,22 @@ class YarnExternalShuffleSuite extends BaseYarnClusterSuite {
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
       "org.apache.spark.network.yarn.YarnShuffleService")
+    yarnConfig.set("spark.shuffle.service.port", "0")
     yarnConfig
   }
 
   test("external shuffle service") {
+    val shuffleServicePort = YarnTestAccessor.getShuffleServicePort
+    logInfo("Shuffle service port = " + shuffleServicePort)
     val result = File.createTempFile("result", null, tempDir)
     runSpark(
       false,
       mainClassName(YarnExternalShuffleDriver.getClass),
       appArgs = Seq(result.getAbsolutePath()),
-      extraConf = Map("spark.shuffle.service.enabled" -> "true")
+      extraConf = Map(
+        "spark.shuffle.service.enabled" -> "true",
+        "spark.shuffle.service.port" -> shuffleServicePort.toString
+      )
     )
     checkResult(result)
   }

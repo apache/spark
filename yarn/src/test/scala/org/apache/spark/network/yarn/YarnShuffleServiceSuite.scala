@@ -25,7 +25,7 @@ import org.apache.hadoop.yarn.server.api.ApplicationInitializationContext
 import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.network.shuffle.TestUtil
+import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 
 class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
@@ -61,11 +61,11 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     {
       val blockHandler = service.blockHandler
-      val blockResolver = TestUtil.getBlockResolver(blockHandler)
-      TestUtil.registeredExecutorFile(blockResolver) should be (execStateFile)
+      val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
+      ShuffleTestAccessor.registeredExecutorFile(blockResolver) should be (execStateFile)
 
       blockResolver.registerExecutor(appId.toString, "exec-1", shuffleInfo)
-      val executor = TestUtil.getExecutorInfo(appId.toString, "exec-1", blockResolver)
+      val executor = ShuffleTestAccessor.getExecutorInfo(appId.toString, "exec-1", blockResolver)
       executor should be (Some(shuffleInfo))
 
       execStateFile.exists() should be (true)
@@ -79,16 +79,16 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     service.registeredExecutorFile should be (execStateFile)
 
     val handler2 = s2.blockHandler
-    val resolver2 = TestUtil.getBlockResolver(handler2)
+    val resolver2 = ShuffleTestAccessor.getBlockResolver(handler2)
 
     // until we initialize the application, don't know about any executors
     // that is so that if the application gets removed while the NM was down, it still eventually
     // gets purged from our list of apps.
 
-    TestUtil.getExecutorInfo(appId.toString, "exec-1", resolver2) should be (None)
+    ShuffleTestAccessor.getExecutorInfo(appId.toString, "exec-1", resolver2) should be (None)
 
     s2.initializeApplication(appData)
-    val ex2 = TestUtil.getExecutorInfo(appId.toString, "exec-1", resolver2)
+    val ex2 = ShuffleTestAccessor.getExecutorInfo(appId.toString, "exec-1", resolver2)
     ex2 should be (Some(shuffleInfo))
   }
 

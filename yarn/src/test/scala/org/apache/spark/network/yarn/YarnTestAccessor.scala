@@ -14,33 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.network.shuffle
-
-import java.io.File
-
-import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId
-import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
+package org.apache.spark.network.yarn
 
 /**
  * just a cheat to get package-visible members in tests
  */
-object TestUtil {
-
-  def getBlockResolver(handler: ExternalShuffleBlockHandler): ExternalShuffleBlockResolver = {
-    handler.blockManager
+object YarnTestAccessor {
+  def getShuffleServicePort: Int = {
+    YarnShuffleService.boundPort
   }
-
-  def getExecutorInfo(
-      appId: String,
-      execId: String,
-      resolver: ExternalShuffleBlockResolver
-  ): Option[ExecutorShuffleInfo] = {
-    val id = new AppExecId(appId, execId)
-    Option(resolver.executors.get(id))
-  }
-
-  def registeredExecutorFile(resolver: ExternalShuffleBlockResolver): File = {
-    resolver.registeredExecutorFile
-  }
-
 }
