@@ -123,7 +123,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       s" ${predAllZero.count(_ === 0)} of ${dataset.count()} were 0.")
     // Call transform with params, and check that the params worked.
     val predNotAllZero =
-      model.transform(dataset, model.thresholds -> Array(0.5, 0.0), model.probabilityCol -> "myProb")
+      model.transform(dataset, model.thresholds -> Array(0.5, 0.0),
+        model.probabilityCol -> "myProb")
         .select("prediction", "myProb")
         .collect()
         .map { case Row(pred: Double, prob: Vector) => pred }
