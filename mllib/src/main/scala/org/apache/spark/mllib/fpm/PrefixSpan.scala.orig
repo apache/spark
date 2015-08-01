@@ -17,9 +17,14 @@
 
 package org.apache.spark.mllib.fpm
 
+<<<<<<< HEAD
 import scala.collection.mutable.ArrayBuilder
+
+||||||| parent of 8de29df... modify to support generic item type
+=======
 import scala.reflect.ClassTag
 
+>>>>>>> 8de29df... modify to support generic item type
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
@@ -91,44 +96,15 @@ class PrefixSpan private (
   }
 
   /**
-   * Find the complete set of sequential patterns in the input sequences of itemsets.
-   * @param data ordered sequences of itemsets.
-   * @return (sequential itemset pattern, count) tuples
-   */
-  def run[Item: ClassTag](data: RDD[Array[Array[Item]]]): RDD[(Array[Array[Item]], Long)] = {
-    val itemToInt = data.aggregate(Set[Item]())(
-      seqOp = { (uniqItems, item) => uniqItems ++ item.flatten.toSet },
-      combOp = { _ ++ _ }
-    ).zipWithIndex.toMap
-    val intToItem = Map() ++ (itemToInt.map { case (k, v) => (v, k) })
-
-    val dataInternalRepr = data.map { seq =>
-      seq.map(itemset => itemset.map(itemToInt)).reduce((a, b) => a ++ (DELIMITER +: b))
-    }
-    val results = run(dataInternalRepr)
-
-    def toPublicRepr(pattern: Iterable[Int]): List[Array[Item]] = {
-      pattern.span(_ != DELIMITER) match {
-        case (x, xs) if xs.size > 1 => x.map(intToItem).toArray :: toPublicRepr(xs.tail)
-        case (x, xs) => List(x.map(intToItem).toArray)
-      }
-    }
-    results.map { case (seq: Array[Int], count: Long) =>
-      (toPublicRepr(seq).toArray, count)
-    }
-  }
-
-  /**
-   * Find the complete set of sequential patterns in the input sequences. This method utilizes
-   * the internal representation of itemsets as Array[Int] where each itemset is represented by
-   * a contiguous sequence of non-negative integers and delimiters represented by [[DELIMITER]].
+   * Find the complete set of sequential patterns in the input sequences.
    * @param data ordered sequences of itemsets. Items are represented by non-negative integers.
-   *             Each itemset has one or more items and is delimited by [[DELIMITER]].
+   *                  Each itemset has one or more items and is delimited by [[DELIMITER]].
    * @return a set of sequential pattern pairs,
    *         the key of pair is pattern (a list of elements),
    *         the value of pair is the pattern's count.
    */
-  private[fpm] def run(data: RDD[Array[Int]]): RDD[(Array[Int], Long)] = {
+  // TODO: generalize to arbitrary item-types and use mapping to Ints for internal algorithm
+  def run(data: RDD[Array[Int]]): RDD[(Array[Int], Long)] = {
     val sc = data.sparkContext
 
     if (data.getStorageLevel == StorageLevel.NONE) {
@@ -277,7 +253,7 @@ class PrefixSpan private (
    * @param data prefixes and projected sequences data data
    * @return patterns
    */
-  private def getPatternsInLocal(
+  private def getPatternsInLocal[Item: ClassTag](
       minCount: Long,
       data: RDD[(List[Set[Int]], Iterable[List[Set[Int]]])]): RDD[(List[Set[Int]], Long)] = {
     data.flatMap {
@@ -290,7 +266,7 @@ class PrefixSpan private (
 private[fpm] object PrefixSpan {
   private[fpm] val DELIMITER = -1
 
-  /** Splits an array of itemsets delimited by [[DELIMITER]]. */
+  /** Splits a sequence of itemsets delimited by [[DELIMITER]]. */
   private[fpm] def splitSequence(sequence: List[Int]): List[Set[Int]] = {
     sequence.span(_ != DELIMITER) match {
       case (x, xs) if xs.length > 1 => x.toSet :: splitSequence(xs.tail)
