@@ -18,6 +18,8 @@ package org.apache.spark.network.shuffle
 
 import java.io.File
 
+import org.apache.hadoop.yarn.api.records.ApplicationId
+
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 
@@ -31,11 +33,11 @@ object ShuffleTestAccessor {
   }
 
   def getExecutorInfo(
-      appId: String,
+      appId: ApplicationId,
       execId: String,
       resolver: ExternalShuffleBlockResolver
   ): Option[ExecutorShuffleInfo] = {
-    val id = new AppExecId(appId, execId)
+    val id = new AppExecId(appId.toString, execId)
     Option(resolver.executors.get(id))
   }
 

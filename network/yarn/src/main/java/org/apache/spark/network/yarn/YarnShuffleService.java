@@ -88,6 +88,7 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   ExternalShuffleBlockHandler blockHandler;
 
+  // Where to store & reload executor info for recovering state after an NM restart
   @VisibleForTesting
   File registeredExecutorFile;
 
@@ -95,7 +96,8 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   static int boundPort = -1;
 
-  private Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> recoveredExecutorRegistrations =
+  @VisibleForTesting
+  Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> recoveredExecutorRegistrations =
     new HashMap<>();
 
   public YarnShuffleService() {
@@ -118,6 +120,15 @@ public class YarnShuffleService extends AuxiliaryService {
   @Override
   protected void serviceInit(Configuration conf) {
 
+    // In case this NM was killed while there were running spark applications, we need to restore
+    // lost state for the existing executors.  We look for an existing file in the NM's local dirs.
+    // If we don't find one, then we choose a file to use to save the state next time.  However, we
+    // do *not* immediately register all the executors in that file, just in case the application
+    // was terminated while the NM was restarting.  We wait until yarn tells the service about the
+    // app again via #initializeApplication, so we know its still running.  That is important
+    // for preventing a leak where the app data would stick around *forever*.  This does leave
+    // a small race -- if the NM restarts *again*, after only some of the existing apps have been
+    // re-registered, their info will be lost.
     registeredExecutorFile =
       findRegisteredExecutorFile(conf.get("yarn.nodemanager.local-dirs").split(","));
     try {
@@ -167,6 +178,8 @@ public class YarnShuffleService extends AuxiliaryService {
     } catch (Exception e) {
       logger.error("Exception when initializing application {}", appId, e);
     }
+    // See if we already have data for this app from before the restart -- if so, re-register
+    // those executors
     List<Entry<AppExecId, ExecutorShuffleInfo>> executorsForApp =
       recoveredExecutorRegistrations.get(appId);
     if (executorsForApp != null) {
