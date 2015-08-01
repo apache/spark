@@ -30,25 +30,43 @@ import org.apache.spark.sql.catalyst.util.StringKeyHashMap
 /** A catalog for looking up user defined functions, used by an [[Analyzer]]. */
 trait FunctionRegistry {
 
-  def registerFunction(name: String, builder: FunctionBuilder): Unit
+  final def registerFunction(name: String, builder: FunctionBuilder): Unit = {
+    registerFunction(name, new ExpressionInfo(builder.getClass.getCanonicalName, name), builder)
+  }
+
+  def registerFunction(name: String, info: ExpressionInfo, builder: FunctionBuilder): Unit
 
   @throws[AnalysisException]("If function does not exist")
   def lookupFunction(name: String, children: Seq[Expression]): Expression
+
+  /* List all of the registered function names. */
+  def listFunction(): Seq[String]
+
+  /* Get the class of the registered function by specified name. */
+  def lookupFunction(name: String): Option[ExpressionInfo]
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
 
-  private val functionBuilders = StringKeyHashMap[FunctionBuilder](caseSensitive = false)
+  private val functionBuilders =
+    StringKeyHashMap[(ExpressionInfo, FunctionBuilder)](caseSensitive = false)
 
-  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
-    functionBuilders.put(name, builder)
+  override def registerFunction(name: String, info: ExpressionInfo, builder: FunctionBuilder)
+  : Unit = {
+    functionBuilders.put(name, (info, builder))
   }
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    val func = functionBuilders.get(name).getOrElse {
+    val func = functionBuilders.get(name).map(_._2).getOrElse {
       throw new AnalysisException(s"undefined function $name")
     }
     func(children)
+  }
+
+  override def listFunction(): Seq[String] = functionBuilders.iterator.map(_._1).toList.sorted
+
+  override def lookupFunction(name: String): Option[ExpressionInfo] = {
+    functionBuilders.get(name).map(_._1)
   }
 }
 
@@ -57,11 +75,20 @@ class SimpleFunctionRegistry extends FunctionRegistry {
  * functions are already filled in and the analyzer needs only to resolve attribute references.
  */
 object EmptyFunctionRegistry extends FunctionRegistry {
-  override def registerFunction(name: String, builder: FunctionBuilder): Unit = {
+  override def registerFunction(name: String, info: ExpressionInfo, builder: FunctionBuilder)
+  : Unit = {
     throw new UnsupportedOperationException
   }
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    throw new UnsupportedOperationException
+  }
+
+  override def listFunction(): Seq[String] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def lookupFunction(name: String): Option[ExpressionInfo] = {
     throw new UnsupportedOperationException
   }
 }
@@ -71,7 +98,7 @@ object FunctionRegistry {
 
   type FunctionBuilder = Seq[Expression] => Expression
 
-  val expressions: Map[String, FunctionBuilder] = Map(
+  val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Map(
     // misc non-aggregate functions
     expression[Abs]("abs"),
     expression[CreateArray]("array"),
@@ -134,13 +161,6 @@ object FunctionRegistry {
     expression[ToDegrees]("degrees"),
     expression[ToRadians]("radians"),
 
-    // misc functions
-    expression[Md5]("md5"),
-    expression[Sha2]("sha2"),
-    expression[Sha1]("sha1"),
-    expression[Sha1]("sha"),
-    expression[Crc32]("crc32"),
-
     // aggregate functions
     expression[Average]("avg"),
     expression[Count]("count"),
@@ -174,10 +194,12 @@ object FunctionRegistry {
     expression[StringRepeat]("repeat"),
     expression[StringReverse]("reverse"),
     expression[StringTrimRight]("rtrim"),
+    expression[SoundEx]("soundex"),
     expression[StringSpace]("space"),
     expression[StringSplit]("split"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
+    expression[SubstringIndex]("substring_index"),
     expression[StringTrim]("trim"),
     expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),
@@ -185,33 +207,53 @@ object FunctionRegistry {
     expression[Upper]("upper"),
 
     // datetime functions
+    expression[AddMonths]("add_months"),
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
+    expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
+    expression[DateSub]("date_sub"),
     expression[DayOfMonth]("day"),
     expression[DayOfYear]("dayofyear"),
     expression[DayOfMonth]("dayofmonth"),
+    expression[FromUnixTime]("from_unixtime"),
     expression[Hour]("hour"),
-    expression[Month]("month"),
+    expression[LastDay]("last_day"),
     expression[Minute]("minute"),
+    expression[Month]("month"),
+    expression[MonthsBetween]("months_between"),
+    expression[NextDay]("next_day"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
+    expression[ToDate]("to_date"),
+    expression[TruncDate]("trunc"),
+    expression[UnixTimestamp]("unix_timestamp"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
 
     // collection functions
-    expression[Size]("size")
+    expression[Size]("size"),
+    expression[SortArray]("sort_array"),
+
+    // misc functions
+    expression[Crc32]("crc32"),
+    expression[Md5]("md5"),
+    expression[Sha1]("sha"),
+    expression[Sha1]("sha1"),
+    expression[Sha2]("sha2"),
+    expression[SparkPartitionID]("spark_partition_id"),
+    expression[InputFileName]("input_file_name")
   )
 
   val builtin: FunctionRegistry = {
     val fr = new SimpleFunctionRegistry
-    expressions.foreach { case (name, builder) => fr.registerFunction(name, builder) }
+    expressions.foreach { case (name, (info, builder)) => fr.registerFunction(name, info, builder) }
     fr
   }
 
   /** See usage above. */
-  private def expression[T <: Expression](name: String)
-      (implicit tag: ClassTag[T]): (String, FunctionBuilder) = {
+  def expression[T <: Expression](name: String)
+      (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
 
     // See if we can find a constructor that accepts Seq[Expression]
     val varargCtor = Try(tag.runtimeClass.getDeclaredConstructor(classOf[Seq[_]])).toOption
@@ -237,6 +279,15 @@ object FunctionRegistry {
         }
       }
     }
-    (name, builder)
+
+    val clazz = tag.runtimeClass
+    val df = clazz.getAnnotation(classOf[ExpressionDescription])
+    if (df != null) {
+      (name,
+        (new ExpressionInfo(clazz.getCanonicalName, name, df.usage(), df.extended()),
+        builder))
+    } else {
+      (name, (new ExpressionInfo(clazz.getCanonicalName, name), builder))
+    }
   }
 }

@@ -57,19 +57,27 @@ class StringFunctionsSuite extends QueryTest {
   }
 
   test("string regex_replace / regex_extract") {
-    val df = Seq(("100-200", "")).toDF("a", "b")
+    val df = Seq(
+      ("100-200", "(\\d+)-(\\d+)", "300"),
+      ("100-200", "(\\d+)-(\\d+)", "400"),
+      ("100-200", "(\\d+)", "400")).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(
         regexp_replace($"a", "(\\d+)", "num"),
         regexp_extract($"a", "(\\d+)-(\\d+)", 1)),
-      Row("num-num", "100"))
+      Row("num-num", "100") :: Row("num-num", "100") :: Row("num-num", "100") :: Nil)
 
+    // for testing the mutable state of the expression in code gen.
+    // This is a hack way to enable the codegen, thus the codegen is enable by default,
+    // it will still use the interpretProjection if projection followed by a LocalRelation,
+    // hence we add a filter operator.
+    // See the optimizer rule `ConvertToLocalRelation`
     checkAnswer(
-      df.selectExpr(
-        "regexp_replace(a, '(\\d+)', 'num')",
-        "regexp_extract(a, '(\\d+)-(\\d+)', 2)"),
-      Row("num-num", "200"))
+      df.filter("isnotnull(a)").selectExpr(
+        "regexp_replace(a, b, c)",
+        "regexp_extract(a, b, 1)"),
+      Row("300", "100") :: Row("400", "100") :: Row("400-400", "100") :: Nil)
   }
 
   test("string ascii function") {
@@ -144,6 +152,15 @@ class StringFunctionsSuite extends QueryTest {
       Row("aa123cc"))
   }
 
+  test("soundex function") {
+    val df = Seq(("MARY", "SU")).toDF("l", "r")
+    checkAnswer(
+      df.select(soundex($"l"), soundex($"r")), Row("M600", "S000"))
+
+    checkAnswer(
+      df.selectExpr("SoundEx(l)", "SoundEx(r)"), Row("M600", "S000"))
+  }
+
   test("string instr function") {
     val df = Seq(("aaads", "aa", "zz")).toDF("a", "b", "c")
 
@@ -154,6 +171,63 @@ class StringFunctionsSuite extends QueryTest {
     checkAnswer(
       df.selectExpr("instr(a, b)"),
       Row(1))
+  }
+
+  test("string substring_index function") {
+    val df = Seq(("www.apache.org", ".", "zz")).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(substring_index($"a", ".", 3)),
+      Row("www.apache.org"))
+    checkAnswer(
+      df.select(substring_index($"a", ".", 2)),
+      Row("www.apache"))
+    checkAnswer(
+      df.select(substring_index($"a", ".", 1)),
+      Row("www"))
+    checkAnswer(
+      df.select(substring_index($"a", ".", 0)),
+      Row(""))
+    checkAnswer(
+      df.select(substring_index(lit("www.apache.org"), ".", -1)),
+      Row("org"))
+    checkAnswer(
+      df.select(substring_index(lit("www.apache.org"), ".", -2)),
+      Row("apache.org"))
+    checkAnswer(
+      df.select(substring_index(lit("www.apache.org"), ".", -3)),
+      Row("www.apache.org"))
+    // str is empty string
+    checkAnswer(
+      df.select(substring_index(lit(""), ".", 1)),
+      Row(""))
+    // empty string delim
+    checkAnswer(
+      df.select(substring_index(lit("www.apache.org"), "", 1)),
+      Row(""))
+    // delim does not exist in str
+    checkAnswer(
+      df.select(substring_index(lit("www.apache.org"), "#", 1)),
+      Row("www.apache.org"))
+    // delim is 2 chars
+    checkAnswer(
+      df.select(substring_index(lit("www||apache||org"), "||", 2)),
+      Row("www||apache"))
+    checkAnswer(
+      df.select(substring_index(lit("www||apache||org"), "||", -2)),
+      Row("apache||org"))
+    // null
+    checkAnswer(
+      df.select(substring_index(lit(null), "||", 2)),
+      Row(null))
+    checkAnswer(
+      df.select(substring_index(lit("www.apache.org"), null, 2)),
+      Row(null))
+    // non ascii chars
+    // scalastyle:off
+    checkAnswer(
+      df.selectExpr("""substring_index("大千世界大千世界", "千", 2)"""),
+      Row("大千世界大"))
+    // scalastyle:on
   }
 
   test("string locate function") {
@@ -300,5 +374,15 @@ class StringFunctionsSuite extends QueryTest {
         df.selectExpr("format_number(e, g)"), // decimal type of the 2nd argument is unacceptable
         Row("5.0000"))
     }
+
+    // for testing the mutable state of the expression in code gen.
+    // This is a hack way to enable the codegen, thus the codegen is enable by default,
+    // it will still use the interpretProjection if projection follows by a LocalRelation,
+    // hence we add a filter operator.
+    // See the optimizer rule `ConvertToLocalRelation`
+    val df2 = Seq((5L, 4), (4L, 3), (3L, 2)).toDF("a", "b")
+    checkAnswer(
+      df2.filter("b>0").selectExpr("format_number(a, b)"),
+      Row("5.0000") :: Row("4.000") :: Row("3.00") :: Nil)
   }
 }

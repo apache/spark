@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.{DataType, StructType, AtomicType}
+import org.apache.spark.sql.types.{Decimal, DataType, StructType, AtomicType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -39,14 +39,16 @@ abstract class MutableRow extends InternalRow {
   def setShort(i: Int, value: Short): Unit = { update(i, value) }
   def setByte(i: Int, value: Byte): Unit = { update(i, value) }
   def setFloat(i: Int, value: Float): Unit = { update(i, value) }
+  def setDecimal(i: Int, value: Decimal, precision: Int) { update(i, value) }
   def setString(i: Int, value: String): Unit = {
     update(i, UTF8String.fromString(value))
   }
 
   override def copy(): InternalRow = {
-    val arr = new Array[Any](length)
+    val n = numFields
+    val arr = new Array[Any](n)
     var i = 0
-    while (i < length) {
+    while (i < n) {
       arr(i) = get(i)
       i += 1
     }
@@ -55,34 +57,21 @@ abstract class MutableRow extends InternalRow {
 }
 
 /**
- * A row implementation that uses an array of objects as the underlying storage.
- */
-trait ArrayBackedRow {
-  self: Row =>
-
-  protected val values: Array[Any]
-
-  override def toSeq: Seq[Any] = values.toSeq
-
-  def length: Int = values.length
-
-  override def get(i: Int): Any = values(i)
-
-  def setNullAt(i: Int): Unit = { values(i) = null}
-
-  def update(i: Int, value: Any): Unit = { values(i) = value }
-}
-
-/**
  * A row implementation that uses an array of objects as the underlying storage.  Note that, while
  * the array is not copied, and thus could technically be mutated after creation, this is not
  * allowed.
  */
-class GenericRow(protected[sql] val values: Array[Any]) extends Row with ArrayBackedRow {
+class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
 
   def this(size: Int) = this(new Array[Any](size))
+
+  override def length: Int = values.length
+
+  override def get(i: Int): Any = values(i)
+
+  override def toSeq: Seq[Any] = values.toSeq
 
   override def copy(): Row = this
 }
@@ -101,12 +90,21 @@ class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
  * Note that, while the array is not copied, and thus could technically be mutated after creation,
  * this is not allowed.
  */
-class GenericInternalRow(protected[sql] val values: Array[Any])
-    extends InternalRow with ArrayBackedRow {
+class GenericInternalRow(protected[sql] val values: Array[Any]) extends InternalRow {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
 
   def this(size: Int) = this(new Array[Any](size))
+
+  override def toSeq: Seq[Any] = values.toSeq
+
+  override def numFields: Int = values.length
+
+  override def get(i: Int, dataType: DataType): Any = values(i)
+
+  override def getStruct(ordinal: Int, numFields: Int): InternalRow = {
+    values(ordinal).asInstanceOf[InternalRow]
+  }
 
   override def copy(): InternalRow = this
 }
@@ -114,20 +112,34 @@ class GenericInternalRow(protected[sql] val values: Array[Any])
 /**
  * This is used for serialization of Python DataFrame
  */
-class GenericInternalRowWithSchema(values: Array[Any], override val schema: StructType)
+class GenericInternalRowWithSchema(values: Array[Any], val schema: StructType)
   extends GenericInternalRow(values) {
 
   /** No-arg constructor for serialization. */
   protected def this() = this(null, null)
 
-  override def fieldIndex(name: String): Int = schema.fieldIndex(name)
+  def fieldIndex(name: String): Int = schema.fieldIndex(name)
 }
 
-class GenericMutableRow(val values: Array[Any]) extends MutableRow with ArrayBackedRow {
+class GenericMutableRow(val values: Array[Any]) extends MutableRow {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
 
   def this(size: Int) = this(new Array[Any](size))
+
+  override def toSeq: Seq[Any] = values.toSeq
+
+  override def numFields: Int = values.length
+
+  override def get(i: Int, dataType: DataType): Any = values(i)
+
+  override def getStruct(ordinal: Int, numFields: Int): InternalRow = {
+    values(ordinal).asInstanceOf[InternalRow]
+  }
+
+  override def setNullAt(i: Int): Unit = { values(i) = null}
+
+  override def update(i: Int, value: Any): Unit = { values(i) = value }
 
   override def copy(): InternalRow = new GenericInternalRow(values.clone())
 }

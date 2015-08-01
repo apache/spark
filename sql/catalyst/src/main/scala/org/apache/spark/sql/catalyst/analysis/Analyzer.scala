@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, AggregateExpression2, AggregateFunction2}
-import org.apache.spark.sql.catalyst.{SimpleCatalystConf, CatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.{SimpleCatalystConf, CatalystConf}
 import org.apache.spark.sql.types._
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -77,8 +79,11 @@ class Analyzer(
       ExtractWindowExpressions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
+      RemoveEvaluationFromSort ::
       HiveTypeCoercion.typeCoercionRules ++
-      extendedResolutionRules : _*)
+      extendedResolutionRules : _*),
+    Batch("Nondeterministic", Once,
+      PullOutNondeterministic)
   )
 
   /**
@@ -342,7 +347,7 @@ class Analyzer(
             val newOutput = oldVersion.generatorOutput.map(_.newInstance())
             (oldVersion, oldVersion.copy(generatorOutput = newOutput))
 
-          case oldVersion @ Window(_, windowExpressions, _, child)
+          case oldVersion @ Window(_, windowExpressions, _, _, child)
               if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
                 .nonEmpty =>
             (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
@@ -533,7 +538,7 @@ class Analyzer(
                 case min: Min if isDistinct => min
                 // For other aggregate functions, DISTINCT keyword is not supported for now.
                 // Once we converted to the new code path, we will allow using DISTINCT keyword.
-                case other if isDistinct =>
+                case other: AggregateExpression1 if isDistinct =>
                   failAnalysis(s"$name does not support DISTINCT keyword.")
                 // If it does not have DISTINCT keyword, we will return it as is.
                 case other => other
@@ -820,7 +825,7 @@ class Analyzer(
         }.asInstanceOf[NamedExpression]
       }
 
-      // Second, we group extractedWindowExprBuffer based on their Window Spec.
+      // Second, we group extractedWindowExprBuffer based on their Partition and Order Specs.
       val groupedWindowExpressions = extractedWindowExprBuffer.groupBy { expr =>
         val distinctWindowSpec = expr.collect {
           case window: WindowExpression => window.windowSpec
@@ -836,7 +841,8 @@ class Analyzer(
           failAnalysis(s"$expr has multiple Window Specifications ($distinctWindowSpec)." +
             s"Please file a bug report with this error message, stack trace, and the query.")
         } else {
-          distinctWindowSpec.head
+          val spec = distinctWindowSpec.head
+          (spec.partitionSpec, spec.orderSpec)
         }
       }.toSeq
 
@@ -845,9 +851,15 @@ class Analyzer(
       var currentChild = child
       var i = 0
       while (i < groupedWindowExpressions.size) {
-        val (windowSpec, windowExpressions) = groupedWindowExpressions(i)
+        val ((partitionSpec, orderSpec), windowExpressions) = groupedWindowExpressions(i)
         // Set currentChild to the newly created Window operator.
-        currentChild = Window(currentChild.output, windowExpressions, windowSpec, currentChild)
+        currentChild =
+          Window(
+            currentChild.output,
+            windowExpressions,
+            partitionSpec,
+            orderSpec,
+            currentChild)
 
         // Move to next Window Spec.
         i += 1
@@ -908,6 +920,96 @@ class Analyzer(
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = projectList.map (_.toAttribute)
         Project(finalProjectList, withWindow)
+    }
+  }
+
+  /**
+   * Pulls out nondeterministic expressions from LogicalPlan which is not Project or Filter,
+   * put them into an inner Project and finally project them away at the outer Project.
+   */
+  object PullOutNondeterministic extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p: Project => p
+      case f: Filter => f
+
+      // todo: It's hard to write a general rule to pull out nondeterministic expressions
+      // from LogicalPlan, currently we only do it for UnaryNode which has same output
+      // schema with its child.
+      case p: UnaryNode if p.output == p.child.output && p.expressions.exists(!_.deterministic) =>
+        val nondeterministicExprs = p.expressions.filterNot(_.deterministic).flatMap { expr =>
+          val leafNondeterministic = expr.collect {
+            case n: Nondeterministic => n
+          }
+          leafNondeterministic.map { e =>
+            val ne = e match {
+              case n: NamedExpression => n
+              case _ => Alias(e, "_nondeterministic")()
+            }
+            new TreeNodeRef(e) -> ne
+          }
+        }.toMap
+        val newPlan = p.transformExpressions { case e =>
+          nondeterministicExprs.get(new TreeNodeRef(e)).map(_.toAttribute).getOrElse(e)
+        }
+        val newChild = Project(p.child.output ++ nondeterministicExprs.values, p.child)
+        Project(p.output, newPlan.withNewChildren(newChild :: Nil))
+    }
+  }
+
+  /**
+   * Removes all still-need-evaluate ordering expressions from sort and use an inner project to
+   * materialize them, finally use a outer project to project them away to keep the result same.
+   * Then we can make sure we only sort by [[AttributeReference]]s.
+   *
+   * As an example,
+   * {{{
+   *   Sort('a, 'b + 1,
+   *     Relation('a, 'b))
+   * }}}
+   * will be turned into:
+   * {{{
+   *   Project('a, 'b,
+   *     Sort('a, '_sortCondition,
+   *       Project('a, 'b, ('b + 1).as("_sortCondition"),
+   *         Relation('a, 'b))))
+   * }}}
+   */
+  object RemoveEvaluationFromSort extends Rule[LogicalPlan] {
+    private def hasAlias(expr: Expression) = {
+      expr.find {
+        case a: Alias => true
+        case _ => false
+      }.isDefined
+    }
+
+    override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      // The ordering expressions have no effect to the output schema of `Sort`,
+      // so `Alias`s in ordering expressions are unnecessary and we should remove them.
+      case s @ Sort(ordering, _, _) if ordering.exists(hasAlias) =>
+        val newOrdering = ordering.map(_.transformUp {
+          case Alias(child, _) => child
+        }.asInstanceOf[SortOrder])
+        s.copy(order = newOrdering)
+
+      case s @ Sort(ordering, global, child)
+        if s.expressions.forall(_.resolved) && s.childrenResolved && !s.hasNoEvaluation =>
+
+        val (ref, needEval) = ordering.partition(_.child.isInstanceOf[AttributeReference])
+
+        val namedExpr = needEval.map(_.child match {
+          case n: NamedExpression => n
+          case e => Alias(e, "_sortCondition")()
+        })
+
+        val newOrdering = ref ++ needEval.zip(namedExpr).map { case (order, ne) =>
+          order.copy(child = ne.toAttribute)
+        }
+
+        // Add still-need-evaluate ordering expressions into inner project and then project
+        // them away after the sort.
+        Project(child.output,
+          Sort(newOrdering, global,
+            Project(child.output ++ namedExpr, child)))
     }
   }
 }

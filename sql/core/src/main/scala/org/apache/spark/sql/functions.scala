@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.{TypeTag, typeTag}
 import scala.util.Try
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
@@ -634,7 +634,7 @@ object functions {
    * @group normal_funcs
    * @since 1.4.0
    */
-  def monotonicallyIncreasingId(): Column = execution.expressions.MonotonicallyIncreasingID()
+  def monotonicallyIncreasingId(): Column = MonotonicallyIncreasingID()
 
   /**
    * Return an alternative value `r` if `l` is NaN.
@@ -741,7 +741,16 @@ object functions {
    * @group normal_funcs
    * @since 1.4.0
    */
-  def sparkPartitionId(): Column = execution.expressions.SparkPartitionID
+  def sparkPartitionId(): Column = SparkPartitionID()
+
+  /**
+   * The file name of the current Spark task
+   *
+   * Note that this is indeterministic becuase it depends on what is currently being read in.
+   *
+   * @group normal_funcs
+   */
+  def inputFileName(): Column = InputFileName()
 
   /**
    * Computes the square root of the specified float value.
@@ -791,6 +800,18 @@ object functions {
    * @since 1.4.0
    */
   def bitwiseNOT(e: Column): Column = BitwiseNot(e.expr)
+
+  /**
+   * Parses the expression string into the column that it represents, similar to
+   * DataFrame.selectExpr
+   * {{{
+   *   // get the number of words of each length
+   *   df.groupBy(expr("length(word)")).count()
+   * }}}
+   *
+   * @group normal_funcs
+   */
+  def expr(expr: String): Column = Column(new SqlParser().parseExpression(expr))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions
@@ -1411,7 +1432,8 @@ object functions {
   def round(columnName: String): Column = round(Column(columnName), 0)
 
   /**
-   * Returns the value of `e` rounded to `scale` decimal places.
+   * Round the value of `e` to `scale` decimal places if `scale` >= 0
+   * or at integral part when `scale` < 0.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1419,7 +1441,8 @@ object functions {
   def round(e: Column, scale: Int): Column = Round(e.expr, Literal(scale))
 
   /**
-   * Returns the value of the given column rounded to `scale` decimal places.
+   * Round the value of the given column to `scale` decimal places if `scale` >= 0
+   * or at integral part when `scale` < 0.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1776,8 +1799,18 @@ object functions {
   def instr(str: Column, substring: String): Column = StringInstr(str.expr, lit(substring).expr)
 
   /**
-   * Locate the position of the first occurrence of substr in a string column.
+   * Returns the substring from string str before count occurrences of the delimiter delim.
+   * If count is positive, everything the left of the final delimiter (counting from left) is
+   * returned. If count is negative, every to the right of the final delimiter (counting from the
+   * right) is returned. substring_index performs a case-sensitive match when searching for delim.
    *
+   * @group string_funcs
+   */
+  def substring_index(str: Column, delim: String, count: Int): Column =
+    SubstringIndex(str.expr, lit(delim).expr, lit(count).expr)
+
+  /**
+   * Locate the position of the first occurrence of substr.
    * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
    * could not be found in str.
    *
@@ -1891,6 +1924,14 @@ object functions {
   }
 
   /**
+   * * Return the soundex code for the specified expression.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def soundex(e: Column): Column = SoundEx(e.expr)
+
+  /**
    * Splits str around pattern (pattern is a regular expression).
    * NOTE: pattern is a string represent the regular expression.
    *
@@ -1914,6 +1955,14 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns the date that is numMonths after startDate.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def add_months(startDate: Column, numMonths: Int): Column =
+    AddMonths(startDate.expr, Literal(numMonths))
 
   /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
@@ -1946,6 +1995,20 @@ object functions {
    */
   def date_format(dateColumnName: String, format: String): Column =
     date_format(Column(dateColumnName), format)
+
+  /**
+   * Returns the date that is `days` days after `start`
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def date_add(start: Column, days: Int): Column = DateAdd(start.expr, Literal(days))
+
+  /**
+   * Returns the date that is `days` days before `start`
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def date_sub(start: Column, days: Int): Column = DateSub(start.expr, Literal(days))
 
   /**
    * Extracts the year as an integer from a given date/timestamp/string.
@@ -2032,6 +2095,16 @@ object functions {
   def hour(columnName: String): Column = hour(Column(columnName))
 
   /**
+   * Given a date column, returns the last day of the month which the given date belongs to.
+   * For example, input "2015-07-27" returns "2015-07-31" since July 31 is the last day of the
+   * month in July 2015.
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def last_day(e: Column): Column = LastDay(e.expr)
+
+  /**
    * Extracts the minutes as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
@@ -2044,6 +2117,28 @@ object functions {
    * @since 1.5.0
    */
   def minute(columnName: String): Column = minute(Column(columnName))
+
+  /*
+   * Returns number of months between dates `date1` and `date2`.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def months_between(date1: Column, date2: Column): Column = MonthsBetween(date1.expr, date2.expr)
+
+  /**
+   * Given a date column, returns the first date which is later than the value of the date column
+   * that is on the specified day of the week.
+   *
+   * For example, `next_day('2015-07-27', "Sunday")` returns 2015-08-02 because that is the first
+   * Sunday after 2015-07-27.
+   *
+   * Day of the week parameter is case insensitive, and accepts:
+   * "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def next_day(date: Column, dayOfWeek: String): Column = NextDay(date.expr, lit(dayOfWeek).expr)
 
   /**
    * Extracts the seconds as an integer from a given date/timestamp/string.
@@ -2073,24 +2168,96 @@ object functions {
    */
   def weekofyear(columnName: String): Column = weekofyear(Column(columnName))
 
+  /**
+   * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
+   * representing the timestamp of that moment in the current system time zone in the given
+   * format.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def from_unixtime(ut: Column): Column = FromUnixTime(ut.expr, Literal("yyyy-MM-dd HH:mm:ss"))
+
+  /**
+   * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
+   * representing the timestamp of that moment in the current system time zone in the given
+   * format.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def from_unixtime(ut: Column, f: String): Column = FromUnixTime(ut.expr, Literal(f))
+
+  /**
+   * Gets current Unix timestamp in seconds.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def unix_timestamp(): Column = UnixTimestamp(CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss"))
+
+  /**
+   * Converts time string in format yyyy-MM-dd HH:mm:ss to Unix timestamp (in seconds),
+   * using the default timezone and the default locale, return null if fail.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def unix_timestamp(s: Column): Column = UnixTimestamp(s.expr, Literal("yyyy-MM-dd HH:mm:ss"))
+
+  /**
+   * Convert time string with given pattern
+   * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
+   * to Unix time stamp (in seconds), return null if fail.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def unix_timestamp(s: Column, p: String): Column = UnixTimestamp(s.expr, Literal(p))
+
+  /*
+   * Converts the column into DateType.
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def to_date(e: Column): Column = ToDate(e.expr)
+
+  /**
+   * Returns date truncated to the unit specified by the format.
+   *
+   * @param format: 'year', 'yyyy', 'yy' for truncate by year,
+   *               or 'month', 'mon', 'mm' for truncate by month
+   *
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def trunc(date: Column, format: String): Column = TruncDate(date.expr, Literal(format))
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns length of array or map
+   * Returns length of array or map.
+   *
    * @group collection_funcs
    * @since 1.5.0
    */
-  def size(columnName: String): Column = size(Column(columnName))
+  def size(e: Column): Column = Size(e.expr)
 
   /**
-   * Returns length of array or map
+   * Sorts the input array for the given column in ascending order,
+   * according to the natural ordering of the array elements.
+   *
    * @group collection_funcs
    * @since 1.5.0
    */
-  def size(column: Column): Column = Size(column.expr)
+  def sort_array(e: Column): Column = sort_array(e, true)
 
+  /**
+   * Sorts the input array for the given column in ascending / descending order,
+   * according to the natural ordering of the array elements.
+   *
+   * @group collection_funcs
+   * @since 1.5.0
+   */
+  def sort_array(e: Column, asc: Boolean): Column = SortArray(e.expr, lit(asc).expr)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -2462,5 +2629,4 @@ object functions {
     }
     UnresolvedFunction(udfName, exprs, isDistinct = false)
   }
-
 }

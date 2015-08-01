@@ -116,9 +116,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   test("Abs") {
     testNumericDataTypes { convert =>
+      val input = Literal(convert(1))
+      val dataType = input.dataType
       checkEvaluation(Abs(Literal(convert(0))), convert(0))
       checkEvaluation(Abs(Literal(convert(1))), convert(1))
       checkEvaluation(Abs(Literal(convert(-1))), convert(1))
+      checkEvaluation(Abs(Literal.create(null, dataType)), null)
     }
   }
 
@@ -170,6 +173,6 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Pmod(-7, 3), 2)
     checkEvaluation(Pmod(7.2D, 4.1D), 3.1000000000000005)
     checkEvaluation(Pmod(Decimal(0.7), Decimal(0.2)), Decimal(0.1))
-    checkEvaluation(Pmod(2L, Long.MaxValue), 2)
+    checkEvaluation(Pmod(2L, Long.MaxValue), 2L)
   }
 }

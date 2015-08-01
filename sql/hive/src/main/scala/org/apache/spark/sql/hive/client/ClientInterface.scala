@@ -72,12 +72,10 @@ private[hive] case class HiveTable(
 
   def isPartitioned: Boolean = partitionColumns.nonEmpty
 
-  def getPartitions(predicates: Seq[Expression]): Seq[HivePartition] = {
-    predicates match {
-      case Nil => client.getAllPartitions(this)
-      case _ => client.getPartitionsByFilter(this, predicates)
-    }
-  }
+  def getAllPartitions: Seq[HivePartition] = client.getAllPartitions(this)
+
+  def getPartitions(predicates: Seq[Expression]): Seq[HivePartition] =
+    client.getPartitionsByFilter(this, predicates)
 
   // Hive does not support backticks when passing names to the client.
   def qualifiedName: String = s"$database.$name"

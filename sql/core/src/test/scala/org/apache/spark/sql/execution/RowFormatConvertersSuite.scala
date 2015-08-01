@@ -18,8 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.IsNull
+import org.apache.spark.sql.catalyst.expressions.{Literal, IsNull}
 import org.apache.spark.sql.test.TestSQLContext
 
 class RowFormatConvertersSuite extends SparkPlanTest {
@@ -31,7 +30,7 @@ class RowFormatConvertersSuite extends SparkPlanTest {
 
   private val outputsSafe = ExternalSort(Nil, false, PhysicalRDD(Seq.empty, null))
   assert(!outputsSafe.outputsUnsafeRows)
-  private val outputsUnsafe = UnsafeExternalSort(Nil, false, PhysicalRDD(Seq.empty, null))
+  private val outputsUnsafe = TungstenSort(Nil, false, PhysicalRDD(Seq.empty, null))
   assert(outputsUnsafe.outputsUnsafeRows)
 
   test("planner should insert unsafe->safe conversions when required") {
@@ -41,14 +40,14 @@ class RowFormatConvertersSuite extends SparkPlanTest {
   }
 
   test("filter can process unsafe rows") {
-    val plan = Filter(IsNull(null), outputsUnsafe)
+    val plan = Filter(IsNull(IsNull(Literal(1))), outputsUnsafe)
     val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
-    assert(getConverters(preparedPlan).isEmpty)
+    assert(getConverters(preparedPlan).size === 1)
     assert(preparedPlan.outputsUnsafeRows)
   }
 
   test("filter can process safe rows") {
-    val plan = Filter(IsNull(null), outputsSafe)
+    val plan = Filter(IsNull(IsNull(Literal(1))), outputsSafe)
     val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
     assert(getConverters(preparedPlan).isEmpty)
     assert(!preparedPlan.outputsUnsafeRows)

@@ -65,7 +65,7 @@ functions <- c("min", "max", "sum", "avg", "mean", "count", "abs", "sqrt",
                "acos", "asin", "atan", "cbrt", "ceiling", "cos", "cosh", "exp",
                "expm1", "floor", "log", "log10", "log1p", "rint", "sign",
                "sin", "sinh", "tan", "tanh", "toDegrees", "toRadians")
-binary_mathfunctions<- c("atan2", "hypot")
+binary_mathfunctions <- c("atan2", "hypot")
 
 createOperator <- function(op) {
   setMethod(op,

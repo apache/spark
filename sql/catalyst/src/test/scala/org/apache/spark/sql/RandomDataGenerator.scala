@@ -66,11 +66,23 @@ object RandomDataGenerator {
   }
 
   /**
+   * Returns a randomly generated schema, based on the given accepted types.
+   *
+   * @param numFields the number of fields in this schema
+   * @param acceptedTypes types to draw from.
+   */
+  def randomSchema(numFields: Int, acceptedTypes: Seq[DataType]): StructType = {
+    StructType(Seq.tabulate(numFields) { i =>
+      val dt = acceptedTypes(Random.nextInt(acceptedTypes.size))
+      StructField("col_" + i, dt, nullable = true)
+    })
+  }
+
+  /**
    * Returns a function which generates random values for the given [[DataType]], or `None` if no
    * random data generator is defined for that data type. The generated values will use an external
    * representation of the data type; for example, the random generator for [[DateType]] will return
-   * instances of [[java.sql.Date]] and the generator for [[StructType]] will return a
-   * [[org.apache.spark.Row]].
+   * instances of [[java.sql.Date]] and the generator for [[StructType]] will return a [[Row]].
    *
    * @param dataType the type to generate values for
    * @param nullable whether null values should be generated
@@ -94,8 +106,8 @@ object RandomDataGenerator {
       case BooleanType => Some(() => rand.nextBoolean())
       case DateType => Some(() => new java.sql.Date(rand.nextInt()))
       case TimestampType => Some(() => new java.sql.Timestamp(rand.nextLong()))
-      case DecimalType.Unlimited => Some(
-        () => BigDecimal.apply(rand.nextLong, rand.nextInt, MathContext.UNLIMITED))
+      case DecimalType.Fixed(precision, scale) => Some(
+        () => BigDecimal.apply(rand.nextLong(), rand.nextInt(), new MathContext(precision)))
       case DoubleType => randomNumeric[Double](
         rand, r => longBitsToDouble(r.nextLong()), Seq(Double.MinValue, Double.MinPositiveValue,
           Double.MaxValue, Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN, 0.0))
