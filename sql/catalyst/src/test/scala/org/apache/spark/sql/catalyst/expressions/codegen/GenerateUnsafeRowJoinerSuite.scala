@@ -26,12 +26,12 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.types._
 
 /**
- * Test suite for [[GenerateRowConcat]].
+ * Test suite for [[GenerateUnsafeRowJoiner]].
  *
- * There is also a separate [[GenerateRowConcatBitsetSuite]] that tests specifically concatenation
- * for the bitset portion, since that is the hardest one to get right.
+ * There is also a separate [[GenerateUnsafeRowJoinerBitsetSuite]] that tests specifically
+ * concatenation for the bitset portion, since that is the hardest one to get right.
  */
-class GenerateRowConcatSuite extends SparkFunSuite {
+class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
 
   private val fixed = Seq(IntegerType)
   private val variable = Seq(IntegerType, StringType)
@@ -89,10 +89,10 @@ class GenerateRowConcatSuite extends SparkFunSuite {
     val row1 = converter1.apply(internalConverter1.apply(extRow1).asInstanceOf[InternalRow])
     val row2 = converter2.apply(internalConverter2.apply(extRow2).asInstanceOf[InternalRow])
 
-    // Run the concater.
+    // Run the joiner.
     val mergedSchema = StructType(schema1 ++ schema2)
-    val concater = GenerateRowConcat.create(schema1, schema2)
-    val output = concater.concat(row1, row2)
+    val concater = GenerateUnsafeRowJoiner.create(schema1, schema2)
+    val output = concater.join(row1, row2)
 
     // Test everything equals ...
     for (i <- mergedSchema.indices) {

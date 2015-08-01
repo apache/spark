@@ -26,7 +26,7 @@ import org.apache.spark.sql.types._
 /**
  * A test suite for the bitset portion of the row concatenation.
  */
-class GenerateRowConcatBitsetSuite extends SparkFunSuite {
+class GenerateUnsafeRowJoinerBitsetSuite extends SparkFunSuite {
 
   test("bitset concat: boundary size 0, 0") {
     testBitsets(0, 0)
@@ -121,8 +121,8 @@ class GenerateRowConcatBitsetSuite extends SparkFunSuite {
       }
     }
 
-    val concater = GenerateRowConcat.create(schema1, schema2)
-    val output = concater.concat(row1, row2)
+    val concater = GenerateUnsafeRowJoiner.create(schema1, schema2)
+    val output = concater.join(row1, row2)
 
     def dumpDebug(): String = {
       val set1 = Seq.tabulate(numFields1) { i => if (row1.isNullAt(i)) "1" else "0" }

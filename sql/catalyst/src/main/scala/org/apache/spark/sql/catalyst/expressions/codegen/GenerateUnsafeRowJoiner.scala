@@ -22,8 +22,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.PlatformDependent
 
 
-abstract class UnsafeRowConcat {
-  def concat(row1: UnsafeRow, row2: UnsafeRow): UnsafeRow
+abstract class UnsafeRowJoiner {
+  def join(row1: UnsafeRow, row2: UnsafeRow): UnsafeRow
 }
 
 
@@ -38,13 +38,13 @@ abstract class UnsafeRowConcat {
  * 4. Update the offset position (i.e. the upper 32 bits in the fixed length part) for all
  *    variable-length data.
  */
-object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeRowConcat] {
+object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), UnsafeRowJoiner] {
 
   def dump(word: Long): String = {
     Seq.tabulate(64) { i => if ((word >> i) % 2 == 0) "0" else "1" }.reverse.mkString
   }
 
-  override protected def create(in: (StructType, StructType)): UnsafeRowConcat = {
+  override protected def create(in: (StructType, StructType)): UnsafeRowJoiner = {
     create(in._1, in._2)
   }
 
@@ -55,7 +55,7 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
     in
   }
 
-  def create(schema1: StructType, schema2: StructType): UnsafeRowConcat = {
+  def create(schema1: StructType, schema2: StructType): UnsafeRowJoiner = {
     val ctx = newCodeGenContext()
     val offset = PlatformDependent.BYTE_ARRAY_OFFSET
 
@@ -136,9 +136,9 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
        |  buf, $cursor,
        |  ${schema1.size * 8});
      """.stripMargin
+    cursor += schema1.size * 8
 
     // --------------------- copy fixed length portion from row 2 ----------------------- //
-    cursor += schema1.size * 8
     val copyFixedLengthRow2 = s"""
        |// Copy fixed length data for row2
        |PlatformDependent.copyMemory(
@@ -146,9 +146,9 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
        |  buf, $cursor,
        |  ${schema2.size * 8});
      """.stripMargin
+    cursor += schema2.size * 8
 
     // --------------------- copy variable length portion from row 1 ----------------------- //
-    cursor += schema2.size * 8
     val copyVariableLengthRow1 = s"""
        |// Copy variable length data for row1
        |long numBytesBitsetAndFixedRow1 = ${(bitset1Words + schema1.size) * 8};
@@ -196,14 +196,14 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
     // ------------------------ Finally, put everything together  --------------------------- //
     val code = s"""
        |public Object generate($exprType[] exprs) {
-       |  return new SpecificRowConat();
+       |  return new SpecificUnsafeRowJoiner();
        |}
        |
-       |class SpecificRowConat extends ${classOf[UnsafeRowConcat].getName} {
+       |class SpecificUnsafeRowJoiner extends ${classOf[UnsafeRowJoiner].getName} {
        |  private byte[] buf = new byte[64];
        |  private UnsafeRow out = new UnsafeRow();
        |
-       |  public UnsafeRow concat(UnsafeRow row1, UnsafeRow row2) {
+       |  public UnsafeRow join(UnsafeRow row1, UnsafeRow row2) {
        |    // row1: ${schema1.size} fields, $bitset1Words words in bitset
        |    // row2: ${schema2.size}, $bitset2Words words in bitset
        |    // output: ${schema1.size + schema2.size} fields, $outputBitsetWords words in bitset
@@ -232,10 +232,10 @@ object GenerateRowConcat extends CodeGenerator[(StructType, StructType), UnsafeR
        |}
      """.stripMargin
 
-    logDebug(s"code for GenerateRowConcat($schema1, $schema2):\n${CodeFormatter.format(code)}")
+    logDebug(s"SpecificUnsafeRowJoiner($schema1, $schema2):\n${CodeFormatter.format(code)}")
     // println(CodeFormatter.format(code))
 
     val c = compile(code)
-    c.generate(Array.empty).asInstanceOf[UnsafeRowConcat]
+    c.generate(Array.empty).asInstanceOf[UnsafeRowJoiner]
   }
 }
