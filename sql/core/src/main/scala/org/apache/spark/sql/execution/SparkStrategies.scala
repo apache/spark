@@ -218,14 +218,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
         right match {
           case CanBroadcast(right) => joins.BroadcastNestedLoopJoin(planLater(left),
-              planLater(right), joins.BuildRight, null, null)
+              planLater(right), joins.BuildRight, Inner, None)
           case _ => execution.joins.CartesianProduct(planLater(left), planLater(right),
             joins.BuildLeft)
         }
       } else {
         left match {
           case CanBroadcast(left) => joins.BroadcastNestedLoopJoin(planLater(left),
-            planLater(right), joins.BuildLeft, null, null)
+            planLater(right), joins.BuildLeft, Inner, None)
           case _ => execution.joins.CartesianProduct(planLater(left), planLater(right),
             joins.BuildRight)
         }
