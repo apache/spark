@@ -147,6 +147,8 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
       case (r1: Array[Byte], r2: Array[Byte])
         if r1 != null && r2 != null && r1.length == r2.length =>
         r1.zip(r2).foreach { case (b1, b2) => assert(b1 === b2) }
+      // We don't support equality & ordering for map type, so skip it.
+      case (r1: MapData, r2: MapData) =>
       case (r1, r2) => assert(r1 === r2)
     }
   }
