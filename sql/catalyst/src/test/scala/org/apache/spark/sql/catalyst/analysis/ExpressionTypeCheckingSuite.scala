@@ -145,8 +145,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertSuccess(SumDistinct('stringField))
     assertSuccess(Average('stringField))
 
-    assertError(Min('complexField), "function min accepts non-complex type")
-    assertError(Max('complexField), "function max accepts non-complex type")
+    assertError(Min('complexField), "doesn't support ordering on function min")
+    assertError(Max('complexField), "doesn't support ordering on function max")
     assertError(Sum('booleanField), "function sum accepts numeric type")
     assertError(SumDistinct('booleanField), "function sumDistinct accepts numeric type")
     assertError(Average('booleanField), "function average accepts numeric type")

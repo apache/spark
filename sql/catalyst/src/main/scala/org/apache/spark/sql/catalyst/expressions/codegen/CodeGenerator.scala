@@ -80,6 +80,16 @@ class CodeGenContext {
     mutableStates += ((javaType, variableName, initCode))
   }
 
+  /**
+   * Holding all the functions those will be added into generated class.
+   */
+  val addedFuntions: mutable.Map[String, String] =
+    mutable.Map.empty[String, String]
+
+  def addNewFunction(funcName: String, funcCode: String): Unit = {
+    addedFuntions += ((funcName, funcCode))
+  }
+
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
   final val JAVA_SHORT = "short"
@@ -219,6 +229,22 @@ class CodeGenContext {
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
     case NullType => "0"
+    case s: StructType if s.supportOrdering(s) =>
+      val ordering = s.fields.map(_.dataType).zipWithIndex.map {
+        case(dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+      }
+      val comparisons = GenerateOrdering.genComparisons(ordering, this)
+      val funId = curId.getAndIncrement
+      val funcCode: String =
+        s"""
+          public int compareStruct${funId}(InternalRow a, InternalRow b) {
+            InternalRow i = null;
+            $comparisons
+            return 0;
+          }
+        """
+      addNewFunction(s"compareStruct${funId}", funcCode)
+      s"this.compareStruct${funId}($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case _ => throw new IllegalArgumentException(
       "cannot generate compare code for un-comparable type")
@@ -265,6 +291,12 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
   protected def initMutableStates(ctx: CodeGenContext): String = {
     ctx.mutableStates.map(_._3).mkString("\n        ")
+  }
+
+  protected def declareAddedFunctions(ctx: CodeGenContext): String = {
+    ctx.addedFuntions.map { case (funcName, funcCode) =>
+      s"$funcCode"
+    }.mkString("\n      ")
   }
 
   /**
