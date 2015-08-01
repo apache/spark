@@ -349,8 +349,10 @@ public final class BytesToBytesMap {
     private int keyLength;
     private int valueLength;
 
-    @Nullable
-    private MemoryBlock memoryPage;
+    /**
+     * Memory page containing the record. Only set if created by {@link BytesToBytesMap#iterator()}.
+     */
+    @Nullable private MemoryBlock memoryPage;
 
     private void updateAddressesAndSizes(long fullKeyAddress) {
       updateAddressesAndSizes(
@@ -390,6 +392,10 @@ public final class BytesToBytesMap {
       return this;
     }
 
+    /**
+     * Returns the memory page that contains the current record.
+     * This is only valid if this is returned by {@link BytesToBytesMap#iterator()}.
+     */
     public MemoryBlock getMemoryPage() {
       return this.memoryPage;
     }

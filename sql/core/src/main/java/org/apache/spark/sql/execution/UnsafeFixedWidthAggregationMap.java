@@ -215,7 +215,7 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
-   * Free the unsafe memory associated with this map.sp
+   * Free the unsafe memory associated with this map.
    */
   public void free() {
     map.free();
