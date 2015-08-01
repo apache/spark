@@ -105,6 +105,7 @@
     <module>external/flume-assembly</module>
     <module>external/mqtt</module>
     <module>external/zeromq</module>
+    <module>external/eventhubs</module>
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
