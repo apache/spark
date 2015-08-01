@@ -197,6 +197,22 @@ private[spark] class AppClient(
         sendToMaster(UnregisterApplication(appId))
         context.reply(true)
         stop()
+
+      case r: RequestExecutors =>
+        master match {
+          case Some(m) => context.reply(m.askWithRetry[Boolean](r))
+          case None =>
+            logWarning("Attempted to request executors before registering with Master.")
+            context.reply(false)
+        }
+
+      case k: KillExecutors =>
+        master match {
+          case Some(m) => context.reply(m.askWithRetry[Boolean](k))
+          case None =>
+            logWarning("Attempted to kill executors before registering with Master.")
+            context.reply(false)
+        }
     }
 
     override def onDisconnected(address: RpcAddress): Unit = {
@@ -257,4 +273,33 @@ private[spark] class AppClient(
       endpoint = null
     }
   }
+
+  /**
+   * Request executors from the Master by specifying the total number desired,
+   * including existing pending and running executors.
+   *
+   * @return whether the request is acknowledged.
+   */
+  def requestTotalExecutors(requestedTotal: Int): Boolean = {
+    if (endpoint != null && appId != null) {
+      endpoint.askWithRetry[Boolean](RequestExecutors(appId, requestedTotal))
+    } else {
+      logWarning("Attempted to request executors before driver fully initialized.")
+      false
+    }
+  }
+
+  /**
+   * Kill the given list of executors through the Master.
+   * @return whether the kill request is acknowledged.
+   */
+  def killExecutors(executorIds: Seq[String]): Boolean = {
+    if (endpoint != null && appId != null) {
+      endpoint.askWithRetry[Boolean](KillExecutors(appId, executorIds))
+    } else {
+      logWarning("Attempted to kill executors before driver fully initialized.")
+      false
+    }
+  }
+
 }
