@@ -1161,7 +1161,9 @@ private[ml] object RandomForest extends Logging {
    * @param node  Current node in recursion
    * @param importances  Aggregate feature importances, modified by this method
    */
-  private def computeFeatureImportance(node: Node, importances: OpenHashMap[Int, Double]): Unit = {
+  private[impl] def computeFeatureImportance(
+      node: Node,
+      importances: OpenHashMap[Int, Double]): Unit = {
     node match {
       case n: InternalNode =>
         val feature = n.split.featureIndex
@@ -1179,7 +1181,7 @@ private[ml] object RandomForest extends Logging {
    * If all values are 0, this method does nothing.
    * @param map  Map with non-negative values.
    */
-  private def normalizeMapValues(map: OpenHashMap[Int, Double]): Unit = {
+  private[impl] def normalizeMapValues(map: OpenHashMap[Int, Double]): Unit = {
     val total = map.map(_._2).sum
     if (total != 0) {
       val keys = map.iterator.map(_._1).toArray

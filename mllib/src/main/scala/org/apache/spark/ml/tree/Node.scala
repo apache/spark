@@ -44,7 +44,7 @@ sealed abstract class Node extends Serializable {
    * and probabilities.
    * For classification, the array of class counts must be normalized to a probability distribution.
    */
-  private[tree] def impurityStats: ImpurityCalculator
+  private[ml] def impurityStats: ImpurityCalculator
 
   /** Recursive prediction helper method */
   private[ml] def predictImpl(features: Vector): LeafNode
@@ -109,7 +109,7 @@ private[ml] object Node {
 final class LeafNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
-    override val impurityStats: ImpurityCalculator) extends Node {
+    override private[ml] val impurityStats: ImpurityCalculator) extends Node {
 
   override def toString: String =
     s"LeafNode(prediction = $prediction, impurity = $impurity)"
@@ -150,7 +150,7 @@ final class InternalNode private[ml] (
     val leftChild: Node,
     val rightChild: Node,
     val split: Split,
-    override val impurityStats: ImpurityCalculator) extends Node {
+    override private[ml] val impurityStats: ImpurityCalculator) extends Node {
 
   override def toString: String = {
     s"InternalNode(prediction = $prediction, impurity = $impurity, split = $split)"
