@@ -361,30 +361,29 @@ case class Cast(child: Expression, dataType: DataType)
       b => x.numeric.asInstanceOf[Numeric[Any]].toFloat(b)
   }
 
-  private[this] def castArray(from: ArrayType, to: ArrayType): Any => Any = {
-    val elementCast = cast(from.elementType, to.elementType)
+  private[this] def castArray(fromType: DataType, toType: DataType): Any => Any = {
+    val elementCast = cast(fromType, toType)
     // TODO: Could be faster?
     buildCast[ArrayData](_, array => {
-      val length = array.numElements()
-      val values = new Array[Any](length)
-      var i = 0
-      while (i < length) {
-        if (array.isNullAt(i)) {
+      val values = new Array[Any](array.numElements())
+      array.foreach(fromType, (i, e) => {
+        if (e == null) {
           values(i) = null
         } else {
-          values(i) = elementCast(array.get(i))
+          values(i) = elementCast(e)
         }
-        i += 1
-      }
+      })
       new GenericArrayData(values)
     })
   }
 
   private[this] def castMap(from: MapType, to: MapType): Any => Any = {
-    val keyCast = cast(from.keyType, to.keyType)
-    val valueCast = cast(from.valueType, to.valueType)
-    buildCast[Map[Any, Any]](_, _.map {
-      case (key, value) => (keyCast(key), if (value == null) null else valueCast(value))
+    val keyCast = castArray(from.keyType, to.keyType)
+    val valueCast = castArray(from.valueType, to.valueType)
+    buildCast[MapData](_, map => {
+      val keys = keyCast(map.keyArray()).asInstanceOf[ArrayData]
+      val values = valueCast(map.valueArray()).asInstanceOf[ArrayData]
+      new ArrayBasedMapData(keys, values)
     })
   }
 
@@ -420,7 +419,7 @@ case class Cast(child: Expression, dataType: DataType)
     case FloatType => castToFloat(from)
     case LongType => castToLong(from)
     case DoubleType => castToDouble(from)
-    case array: ArrayType => castArray(from.asInstanceOf[ArrayType], array)
+    case array: ArrayType => castArray(from.asInstanceOf[ArrayType].elementType, array.elementType)
     case map: MapType => castMap(from.asInstanceOf[MapType], map)
     case struct: StructType => castStruct(from.asInstanceOf[StructType], struct)
   }
@@ -461,7 +460,8 @@ case class Cast(child: Expression, dataType: DataType)
     case LongType => castToLongCode(from)
     case DoubleType => castToDoubleCode(from)
 
-    case array: ArrayType => castArrayCode(from.asInstanceOf[ArrayType], array, ctx)
+    case array: ArrayType =>
+      castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx)
     case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
     case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
   }
@@ -801,8 +801,8 @@ case class Cast(child: Expression, dataType: DataType)
   }
 
   private[this] def castArrayCode(
-      from: ArrayType, to: ArrayType, ctx: CodeGenContext): CastFunction = {
-    val elementCast = nullSafeCastFunction(from.elementType, to.elementType, ctx)
+      fromType: DataType, toType: DataType, ctx: CodeGenContext): CastFunction = {
+    val elementCast = nullSafeCastFunction(fromType, toType, ctx)
     val arrayClass = classOf[GenericArrayData].getName
     val fromElementNull = ctx.freshName("feNull")
     val fromElementPrim = ctx.freshName("fePrim")
@@ -821,10 +821,10 @@ case class Cast(child: Expression, dataType: DataType)
             $values[$j] = null;
           } else {
             boolean $fromElementNull = false;
-            ${ctx.javaType(from.elementType)} $fromElementPrim =
-              ${ctx.getValue(c, from.elementType, j)};
+            ${ctx.javaType(fromType)} $fromElementPrim =
+              ${ctx.getValue(c, fromType, j)};
             ${castCode(ctx, fromElementPrim,
-              fromElementNull, toElementPrim, toElementNull, to.elementType, elementCast)}
+              fromElementNull, toElementPrim, toElementNull, toType, elementCast)}
             if ($toElementNull) {
               $values[$j] = null;
             } else {
@@ -837,48 +837,29 @@ case class Cast(child: Expression, dataType: DataType)
   }
 
   private[this] def castMapCode(from: MapType, to: MapType, ctx: CodeGenContext): CastFunction = {
-    val keyCast = nullSafeCastFunction(from.keyType, to.keyType, ctx)
-    val valueCast = nullSafeCastFunction(from.valueType, to.valueType, ctx)
+    val keysCast = castArrayCode(from.keyType, to.keyType, ctx)
+    val valuesCast = castArrayCode(from.valueType, to.valueType, ctx)
 
-    val hashMapClass = classOf[mutable.HashMap[Any, Any]].getName
-    val fromKeyPrim = ctx.freshName("fkp")
-    val fromKeyNull = ctx.freshName("fkn")
-    val fromValuePrim = ctx.freshName("fvp")
-    val fromValueNull = ctx.freshName("fvn")
-    val toKeyPrim = ctx.freshName("tkp")
-    val toKeyNull = ctx.freshName("tkn")
-    val toValuePrim = ctx.freshName("tvp")
-    val toValueNull = ctx.freshName("tvn")
-    val result = ctx.freshName("result")
+    val mapClass = classOf[ArrayBasedMapData].getName
+
+    val keys = ctx.freshName("keys")
+    val convertedKeys = ctx.freshName("convertedKeys")
+    val convertedKeysNull = ctx.freshName("convertedKeysNull")
+
+    val values = ctx.freshName("values")
+    val convertedValues = ctx.freshName("convertedValues")
+    val convertedValuesNull = ctx.freshName("convertedValuesNull")
 
     (c, evPrim, evNull) =>
       s"""
-        final $hashMapClass $result = new $hashMapClass();
-        scala.collection.Iterator iter = $c.iterator();
-        while (iter.hasNext()) {
-          scala.Tuple2 kv = (scala.Tuple2) iter.next();
-          boolean $fromKeyNull = false;
-          ${ctx.javaType(from.keyType)} $fromKeyPrim =
-            (${ctx.boxedType(from.keyType)}) kv._1();
-          ${castCode(ctx, fromKeyPrim,
-            fromKeyNull, toKeyPrim, toKeyNull, to.keyType, keyCast)}
+        final ArrayData $keys = $c.keyArray();
+        final ArrayData $values = $c.valueArray();
+        ${castCode(ctx, keys, "false",
+          convertedKeys, convertedKeysNull, ArrayType(to.keyType), keysCast)}
+        ${castCode(ctx, values, "false",
+          convertedValues, convertedValuesNull, ArrayType(to.valueType), valuesCast)}
 
-          boolean $fromValueNull = kv._2() == null;
-          if ($fromValueNull) {
-            $result.put($toKeyPrim, null);
-          } else {
-            ${ctx.javaType(from.valueType)} $fromValuePrim =
-              (${ctx.boxedType(from.valueType)}) kv._2();
-            ${castCode(ctx, fromValuePrim,
-              fromValueNull, toValuePrim, toValueNull, to.valueType, valueCast)}
-            if ($toValueNull) {
-              $result.put($toKeyPrim, null);
-            } else {
-              $result.put($toKeyPrim, $toValuePrim);
-            }
-          }
-        }
-        $evPrim = $result;
+        $evPrim = new $mapClass($convertedKeys, $convertedValues);
       """
   }
 

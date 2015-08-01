@@ -181,7 +181,71 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
     val error = intercept[AnalysisException] {
       SimpleAnalyzer.checkAnalysis(join)
     }
-    error.message.contains("Failure when resolving conflicting references in Join")
-    error.message.contains("Conflicting attributes")
+    assert(error.message.contains("Failure when resolving conflicting references in Join"))
+    assert(error.message.contains("Conflicting attributes"))
+  }
+
+  test("aggregation can't work on binary and map types") {
+    val plan =
+      Aggregate(
+        AttributeReference("a", BinaryType)(exprId = ExprId(2)) :: Nil,
+        Alias(Sum(AttributeReference("b", IntegerType)(exprId = ExprId(1))), "c")() :: Nil,
+        LocalRelation(
+          AttributeReference("a", BinaryType)(exprId = ExprId(2)),
+          AttributeReference("b", IntegerType)(exprId = ExprId(1))))
+
+    val error = intercept[AnalysisException] {
+      caseSensitiveAnalyze(plan)
+    }
+    assert(error.message.contains("binary type expression a cannot be used in grouping expression"))
+
+    val plan2 =
+      Aggregate(
+        AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)) :: Nil,
+        Alias(Sum(AttributeReference("b", IntegerType)(exprId = ExprId(1))), "c")() :: Nil,
+        LocalRelation(
+          AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
+          AttributeReference("b", IntegerType)(exprId = ExprId(1))))
+
+    val error2 = intercept[AnalysisException] {
+      caseSensitiveAnalyze(plan2)
+    }
+    assert(error2.message.contains("map type expression a cannot be used in grouping expression"))
+  }
+
+  test("Join can't work on binary and map types") {
+    val plan =
+      Join(
+        LocalRelation(
+          AttributeReference("a", BinaryType)(exprId = ExprId(2)),
+          AttributeReference("b", IntegerType)(exprId = ExprId(1))),
+        LocalRelation(
+          AttributeReference("c", BinaryType)(exprId = ExprId(4)),
+          AttributeReference("d", IntegerType)(exprId = ExprId(3))),
+        Inner,
+        Some(EqualTo(AttributeReference("a", BinaryType)(exprId = ExprId(2)),
+          AttributeReference("c", BinaryType)(exprId = ExprId(4)))))
+
+    val error = intercept[AnalysisException] {
+      caseSensitiveAnalyze(plan)
+    }
+    assert(error.message.contains("binary type expression a cannot be used in join conditions"))
+
+    val plan2 =
+      Join(
+        LocalRelation(
+          AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
+          AttributeReference("b", IntegerType)(exprId = ExprId(1))),
+        LocalRelation(
+          AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)),
+          AttributeReference("d", IntegerType)(exprId = ExprId(3))),
+        Inner,
+        Some(EqualTo(AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
+          AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)))))
+
+    val error2 = intercept[AnalysisException] {
+      caseSensitiveAnalyze(plan2)
+    }
+    assert(error2.message.contains("map type expression a cannot be used in join conditions"))
   }
 }

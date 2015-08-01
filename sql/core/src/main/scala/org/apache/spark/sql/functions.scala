@@ -1788,8 +1788,18 @@ object functions {
   def instr(str: Column, substring: String): Column = StringInstr(str.expr, lit(substring).expr)
 
   /**
-   * Locate the position of the first occurrence of substr in a string column.
+   * Returns the substring from string str before count occurrences of the delimiter delim.
+   * If count is positive, everything the left of the final delimiter (counting from left) is
+   * returned. If count is negative, every to the right of the final delimiter (counting from the
+   * right) is returned. substring_index performs a case-sensitive match when searching for delim.
    *
+   * @group string_funcs
+   */
+  def substring_index(str: Column, delim: String, count: Int): Column =
+    SubstringIndex(str.expr, lit(delim).expr, lit(count).expr)
+
+  /**
+   * Locate the position of the first occurrence of substr.
    * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
    * could not be found in str.
    *
@@ -1901,6 +1911,14 @@ object functions {
   def repeat(str: Column, n: Int): Column = {
     StringRepeat(str.expr, lit(n).expr)
   }
+
+  /**
+   * * Return the soundex code for the specified expression.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def soundex(e: Column): Column = SoundEx(e.expr)
 
   /**
    * Splits str around pattern (pattern is a regular expression).
@@ -2205,19 +2223,30 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns length of array or map
+   * Returns length of array or map.
+   *
    * @group collection_funcs
    * @since 1.5.0
    */
-  def size(columnName: String): Column = size(Column(columnName))
+  def size(e: Column): Column = Size(e.expr)
 
   /**
-   * Returns length of array or map
+   * Sorts the input array for the given column in ascending order,
+   * according to the natural ordering of the array elements.
+   *
    * @group collection_funcs
    * @since 1.5.0
    */
-  def size(column: Column): Column = Size(column.expr)
+  def sort_array(e: Column): Column = sort_array(e, true)
 
+  /**
+   * Sorts the input array for the given column in ascending / descending order,
+   * according to the natural ordering of the array elements.
+   *
+   * @group collection_funcs
+   * @since 1.5.0
+   */
+  def sort_array(e: Column, asc: Boolean): Column = SortArray(e.expr, lit(asc).expr)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
