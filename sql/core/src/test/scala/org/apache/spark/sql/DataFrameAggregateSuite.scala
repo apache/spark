@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.types.{BinaryType, DecimalType}
 
 
 class DataFrameAggregateSuite extends QueryTest {
@@ -190,5 +190,4 @@ class DataFrameAggregateSuite extends QueryTest {
       emptyTableData.agg(sumDistinct('a)),
       Row(null))
   }
-
 }

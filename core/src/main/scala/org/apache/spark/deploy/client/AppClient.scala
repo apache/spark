@@ -27,7 +27,7 @@ import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.rpc._
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 
 /**
  * Interface allowing applications to speak with a Spark deploy cluster. Takes a master URL,
@@ -248,7 +248,8 @@ private[spark] class AppClient(
   def stop() {
     if (endpoint != null) {
       try {
-        endpoint.askWithRetry[Boolean](StopAppClient)
+        val timeout = RpcUtils.askRpcTimeout(conf)
+        timeout.awaitResult(endpoint.ask[Boolean](StopAppClient))
       } catch {
         case e: TimeoutException =>
           logInfo("Stop request to Master timed out; it may already be shut down.")

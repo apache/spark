@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
+import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
 
 import scala.collection.JavaConversions._
@@ -28,7 +29,7 @@ import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveCo
 import org.apache.parquet.schema.Type.Repetition
 import org.apache.parquet.schema.{GroupType, PrimitiveType, Type}
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -55,8 +56,8 @@ private[parquet] trait ParentContainerUpdater {
 private[parquet] object NoopUpdater extends ParentContainerUpdater
 
 /**
- * A [[CatalystRowConverter]] is used to convert Parquet "structs" into Spark SQL [[Row]]s.  Since
- * any Parquet record is also a struct, this converter can also be used as root converter.
+ * A [[CatalystRowConverter]] is used to convert Parquet "structs" into Spark SQL [[InternalRow]]s.
+ * Since any Parquet record is also a struct, this converter can also be used as root converter.
  *
  * When used as a root converter, [[NoopUpdater]] should be used since root converters don't have
  * any "parent" container.
@@ -108,7 +109,7 @@ private[parquet] class CatalystRowConverter(
 
   override def start(): Unit = {
     var i = 0
-    while (i < currentRow.length) {
+    while (i < currentRow.numFields) {
       currentRow.setNullAt(i)
       i += 1
     }
@@ -178,7 +179,7 @@ private[parquet] class CatalystRowConverter(
 
       case t: StructType =>
         new CatalystRowConverter(parquetType.asGroupType(), t, new ParentContainerUpdater {
-          override def set(value: Any): Unit = updater.set(value.asInstanceOf[Row].copy())
+          override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
         })
 
       case t: UserDefinedType[_] =>
@@ -263,17 +264,23 @@ private[parquet] class CatalystRowConverter(
       val scale = decimalType.scale
       val bytes = value.getBytes
 
-      var unscaled = 0L
-      var i = 0
+      if (precision <= 8) {
+        // Constructs a `Decimal` with an unscaled `Long` value if possible.
+        var unscaled = 0L
+        var i = 0
 
-      while (i < bytes.length) {
-        unscaled = (unscaled << 8) | (bytes(i) & 0xff)
-        i += 1
+        while (i < bytes.length) {
+          unscaled = (unscaled << 8) | (bytes(i) & 0xff)
+          i += 1
+        }
+
+        val bits = 8 * bytes.length
+        unscaled = (unscaled << (64 - bits)) >> (64 - bits)
+        Decimal(unscaled, precision, scale)
+      } else {
+        // Otherwise, resorts to an unscaled `BigInteger` instead.
+        Decimal(new BigDecimal(new BigInteger(bytes), scale), precision, scale)
       }
-
-      val bits = 8 * bytes.length
-      unscaled = (unscaled << (64 - bits)) >> (64 - bits)
-      Decimal(unscaled, precision, scale)
     }
   }
 
@@ -318,7 +325,7 @@ private[parquet] class CatalystRowConverter(
 
     override def getConverter(fieldIndex: Int): Converter = elementConverter
 
-    override def end(): Unit = updater.set(currentArray)
+    override def end(): Unit = updater.set(new GenericArrayData(currentArray.toArray))
 
     // NOTE: We can't reuse the mutable `ArrayBuffer` here and must instantiate a new buffer for the
     // next value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored
@@ -378,7 +385,8 @@ private[parquet] class CatalystRowConverter(
       updater: ParentContainerUpdater)
     extends GroupConverter {
 
-    private var currentMap: mutable.Map[Any, Any] = _
+    private var currentKeys: ArrayBuffer[Any] = _
+    private var currentValues: ArrayBuffer[Any] = _
 
     private val keyValueConverter = {
       val repeatedType = parquetType.getType(0).asGroupType()
@@ -391,12 +399,16 @@ private[parquet] class CatalystRowConverter(
 
     override def getConverter(fieldIndex: Int): Converter = keyValueConverter
 
-    override def end(): Unit = updater.set(currentMap)
+    override def end(): Unit =
+      updater.set(ArrayBasedMapData(currentKeys.toArray, currentValues.toArray))
 
     // NOTE: We can't reuse the mutable Map here and must instantiate a new `Map` for the next
     // value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored in row
     // cells.
-    override def start(): Unit = currentMap = mutable.Map.empty[Any, Any]
+    override def start(): Unit = {
+      currentKeys = ArrayBuffer.empty[Any]
+      currentValues = ArrayBuffer.empty[Any]
+    }
 
     /** Parquet converter for key-value pairs within the map. */
     private final class KeyValueConverter(
@@ -423,7 +435,10 @@ private[parquet] class CatalystRowConverter(
 
       override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
 
-      override def end(): Unit = currentMap(currentKey) = currentValue
+      override def end(): Unit = {
+        currentKeys += currentKey
+        currentValues += currentValue
+      }
 
       override def start(): Unit = {
         currentKey = null
