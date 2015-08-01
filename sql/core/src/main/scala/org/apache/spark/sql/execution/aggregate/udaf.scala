@@ -24,7 +24,154 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjecti
 import org.apache.spark.sql.catalyst.expressions.{MutableRow, InterpretedMutableProjection, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction2
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
-import org.apache.spark.sql.types.{Metadata, StructField, StructType, DataType}
+import org.apache.spark.sql.types._
+
+/**
+ * A helper trait used to create specialized setter and getter for types supported by
+ * [[org.apache.spark.sql.execution.UnsafeFixedWidthAggregationMap]]'s buffer.
+ * (see UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema).
+ */
+sealed trait BufferSetterGetterUtils {
+
+  def createGetters(schema: StructType): Array[(InternalRow, Int) => Any] = {
+    val dataTypes = schema.fields.map(_.dataType)
+    val getters = new Array[(InternalRow, Int) => Any](dataTypes.length)
+
+    var i = 0
+    while (i < getters.length) {
+      getters(i) = dataTypes(i) match {
+        case BooleanType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getBoolean(ordinal)
+
+        case ByteType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getByte(ordinal)
+
+        case ShortType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getShort(ordinal)
+
+        case IntegerType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getInt(ordinal)
+
+        case LongType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getLong(ordinal)
+
+        case FloatType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getFloat(ordinal)
+
+        case DoubleType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getDouble(ordinal)
+
+        case dt: DecimalType =>
+          val precision = dt.precision
+          val scale = dt.scale
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getDecimal(ordinal, precision, scale)
+
+        case other =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.get(ordinal, other)
+      }
+
+      i += 1
+    }
+
+    getters
+  }
+
+  def createSetters(schema: StructType): Array[((MutableRow, Int, Any) => Unit)] = {
+    val dataTypes = schema.fields.map(_.dataType)
+    val setters = new Array[(MutableRow, Int, Any) => Unit](dataTypes.length)
+
+    var i = 0
+    while (i < setters.length) {
+      setters(i) = dataTypes(i) match {
+        case b: BooleanType =>
+          (row: MutableRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setBoolean(ordinal, value.asInstanceOf[Boolean])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case ByteType =>
+          (row: MutableRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setByte(ordinal, value.asInstanceOf[Byte])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case ShortType =>
+          (row: MutableRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setShort(ordinal, value.asInstanceOf[Short])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case IntegerType =>
+          (row: MutableRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setInt(ordinal, value.asInstanceOf[Int])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case LongType =>
+          (row: MutableRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setLong(ordinal, value.asInstanceOf[Long])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case FloatType =>
+          (row: MutableRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setFloat(ordinal, value.asInstanceOf[Float])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case DoubleType =>
+          (row: MutableRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setDouble(ordinal, value.asInstanceOf[Double])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case dt: DecimalType =>
+          val precision = dt.precision
+          (row: MutableRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setDecimal(ordinal, value.asInstanceOf[Decimal], precision)
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case other =>
+          (row: MutableRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.update(ordinal, value)
+            } else {
+              row.setNullAt(ordinal)
+            }
+      }
+
+      i += 1
+    }
+
+    setters
+  }
+}
 
 /**
  * A Mutable [[Row]] representing an mutable aggregation buffer.
@@ -35,7 +182,7 @@ private[sql] class MutableAggregationBufferImpl (
     toScalaConverters: Array[Any => Any],
     bufferOffset: Int,
     var underlyingBuffer: MutableRow)
-  extends MutableAggregationBuffer {
+  extends MutableAggregationBuffer with BufferSetterGetterUtils {
 
   private[this] val offsets: Array[Int] = {
     val newOffsets = new Array[Int](length)
@@ -47,6 +194,10 @@ private[sql] class MutableAggregationBufferImpl (
     newOffsets
   }
 
+  private[this] val bufferValueGetters = createGetters(schema)
+
+  private[this] val bufferValueSetters = createSetters(schema)
+
   override def length: Int = toCatalystConverters.length
 
   override def get(i: Int): Any = {
@@ -54,7 +205,8 @@ private[sql] class MutableAggregationBufferImpl (
       throw new IllegalArgumentException(
         s"Could not access ${i}th value in this buffer because it only has $length values.")
     }
-    toScalaConverters(i)(underlyingBuffer.get(offsets(i), schema(i).dataType))
+    toScalaConverters(i)(bufferValueGetters(i)(underlyingBuffer, offsets(i)))
+    // toScalaConverters(i)(underlyingBuffer.get(offsets(i), schema(i).dataType))
   }
 
   def update(i: Int, value: Any): Unit = {
@@ -62,7 +214,9 @@ private[sql] class MutableAggregationBufferImpl (
       throw new IllegalArgumentException(
         s"Could not update ${i}th value in this buffer because it only has $length values.")
     }
-    underlyingBuffer.update(offsets(i), toCatalystConverters(i)(value))
+
+    bufferValueSetters(i)(underlyingBuffer, offsets(i), toCatalystConverters(i)(value))
+    // underlyingBuffer.update(offsets(i), toCatalystConverters(i)(value))
   }
 
   override def copy(): MutableAggregationBufferImpl = {
@@ -84,7 +238,7 @@ private[sql] class InputAggregationBuffer private[sql] (
     toScalaConverters: Array[Any => Any],
     bufferOffset: Int,
     var underlyingInputBuffer: InternalRow)
-  extends Row {
+  extends Row with BufferSetterGetterUtils {
 
   private[this] val offsets: Array[Int] = {
     val newOffsets = new Array[Int](length)
@@ -96,6 +250,8 @@ private[sql] class InputAggregationBuffer private[sql] (
     newOffsets
   }
 
+  private[this] val bufferValueGetters = createGetters(schema)
+
   override def length: Int = toCatalystConverters.length
 
   override def get(i: Int): Any = {
@@ -103,8 +259,8 @@ private[sql] class InputAggregationBuffer private[sql] (
       throw new IllegalArgumentException(
         s"Could not access ${i}th value in this buffer because it only has $length values.")
     }
-    // TODO: Use buffer schema to avoid using generic getter.
-    toScalaConverters(i)(underlyingInputBuffer.get(offsets(i), schema(i).dataType))
+    // toScalaConverters(i)(underlyingInputBuffer.get(offsets(i), schema(i).dataType))
+    toScalaConverters(i)(bufferValueGetters(i)(underlyingInputBuffer, offsets(i)))
   }
 
   override def copy(): InputAggregationBuffer = {

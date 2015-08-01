@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical.{UnspecifiedDistribution, ClusteredDistribution, AllTuples, Distribution}
-import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
+import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, SparkPlan, UnaryNode}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -61,10 +61,7 @@ case class Aggregate(
       UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema) &&
         UnsafeProjection.canSupport(groupKeySchema)
 
-    val allAlgebraicAggregates =
-      allAggregateExpressions.forall(_.aggregateFunction.isInstanceOf[AlgebraicAggregate])
-
-    unsafeEnabled && schemaSupportsUnsafe && allAlgebraicAggregates
+    unsafeEnabled && schemaSupportsUnsafe
   }
 
   // We need to use sorted input if we have grouping expressions and
