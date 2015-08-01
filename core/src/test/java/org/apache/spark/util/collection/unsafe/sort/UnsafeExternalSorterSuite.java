@@ -26,6 +26,7 @@ import scala.Tuple2;
 import scala.Tuple2$;
 import scala.runtime.AbstractFunction1;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
@@ -75,7 +76,7 @@ public class UnsafeExternalSorterSuite {
     }
   };
 
-  @Mock(answer = RETURNS_SMART_NULLS) ShuffleMemoryManager shuffleMemoryManager;
+  ShuffleMemoryManager shuffleMemoryManager;
   @Mock(answer = RETURNS_SMART_NULLS) BlockManager blockManager;
   @Mock(answer = RETURNS_SMART_NULLS) DiskBlockManager diskBlockManager;
   @Mock(answer = RETURNS_SMART_NULLS) TaskContext taskContext;
@@ -93,9 +94,9 @@ public class UnsafeExternalSorterSuite {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     tempDir = new File(Utils.createTempDir$default$1());
+    shuffleMemoryManager = new ShuffleMemoryManager(Long.MAX_VALUE);
     taskContext = mock(TaskContext.class);
     when(taskContext.taskMetrics()).thenReturn(new TaskMetrics());
-    when(shuffleMemoryManager.tryToAcquire(anyLong())).then(returnsFirstArg());
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
     when(diskBlockManager.createTempLocalBlock()).thenAnswer(new Answer<Tuple2<TempLocalBlockId, File>>() {
       @Override
@@ -130,6 +131,11 @@ public class UnsafeExternalSorterSuite {
       .then(returnsSecondArg());
   }
 
+  @After
+  public void tearDown() {
+    assertEquals(0L, shuffleMemoryManager.getMemoryConsumptionForThisTask());
+  }
+
   private static void insertNumber(UnsafeExternalSorter sorter, int value) throws Exception {
     final int[] arr = new int[] { value };
     sorter.insertRecord(arr, PlatformDependent.INT_ARRAY_OFFSET, 4, value);
@@ -145,7 +151,7 @@ public class UnsafeExternalSorterSuite {
       taskContext,
       recordComparator,
       prefixComparator,
-      1024,
+      1024, // initial size
       new SparkConf());
 
     insertNumber(sorter, 5);
@@ -165,6 +171,7 @@ public class UnsafeExternalSorterSuite {
       // TODO: read rest of value.
     }
 
+    sorter.freeMemory();
     // TODO: test for cleanup:
     // assert(tempDir.isEmpty)
   }
@@ -179,7 +186,7 @@ public class UnsafeExternalSorterSuite {
       taskContext,
       recordComparator,
       prefixComparator,
-      1024,
+      1024, // initial size
       new SparkConf());
 
     sorter.insertRecord(null, 0, 0, 0);
@@ -197,6 +204,8 @@ public class UnsafeExternalSorterSuite {
       assertEquals(0, iter.getKeyPrefix());
       assertEquals(0, iter.getRecordLength());
     }
+
+    sorter.freeMemory();
   }
 
   @Test
@@ -208,7 +217,7 @@ public class UnsafeExternalSorterSuite {
       taskContext,
       recordComparator,
       prefixComparator,
-      1024,
+      1024, // initial size
       new SparkConf());
 
     byte[] record = new byte[16];
