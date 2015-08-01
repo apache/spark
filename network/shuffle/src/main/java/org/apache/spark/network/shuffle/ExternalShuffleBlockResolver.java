@@ -78,7 +78,6 @@ public class ExternalShuffleBlockResolver {
     this.registeredExecutorFile = registeredExecutorFile;
     this.executors = Maps.newConcurrentMap();
     this.directoryCleaner = directoryCleaner;
-    reloadRegisteredExecutors();
   }
 
   /** Registers a new Executor with all the configuration we need to find its shuffle files. */
@@ -235,12 +234,11 @@ public class ExternalShuffleBlockResolver {
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */
-  @VisibleForTesting
-  static class AppExecId implements Serializable {
-    final String appId;
+  public static class AppExecId implements Serializable {
+    public final String appId;
     final String execId;
 
-    AppExecId(String appId, String execId) {
+    public AppExecId(String appId, String execId) {
       this.appId = appId;
       this.execId = execId;
     }
@@ -265,23 +263,6 @@ public class ExternalShuffleBlockResolver {
         .add("appId", appId)
         .add("execId", execId)
         .toString();
-    }
-  }
-
-  private void reloadRegisteredExecutors() throws IOException, ClassNotFoundException {
-    if (registeredExecutorFile != null && registeredExecutorFile.exists()) {
-      ObjectInputStream in = new ObjectInputStream(new FileInputStream(registeredExecutorFile));
-      int nExecutors = in.readInt();
-      logger.info("Reloading executors from {}", registeredExecutorFile);
-      for (int i = 0; i < nExecutors; i++) {
-        AppExecId appExecId = (AppExecId) in.readObject();
-        ExecutorShuffleInfo shuffleInfo = (ExecutorShuffleInfo) in.readObject();
-        logger.info("Reregistering executor {} with {}", appExecId, shuffleInfo);
-        executors.put(appExecId, shuffleInfo);
-      }
-      in.close();
-    } else {
-      logger.info("No executor info to reload");
     }
   }
 

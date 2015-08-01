@@ -57,34 +57,40 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val execStateFile = service.registeredExecutorFile
     execStateFile should not be (null)
     execStateFile.exists() should be (false)
-
-    val blockHandler = service.blockHandler
-    val blockResolver = TestUtil.getBlockResolver(blockHandler)
-    TestUtil.registeredExecutorFile(blockResolver) should be (execStateFile)
-
     val shuffleInfo = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, "sort")
-    blockResolver.registerExecutor(appId.toString, "exec-1", shuffleInfo)
-    val executor = TestUtil.getExecutorInfo(appId.toString, "exec-1", blockResolver)
-    executor should be (Some(shuffleInfo))
 
-    execStateFile.exists() should be (true)
 
-    // now we pretend the shuffle service goes down, and comes back up
-    service.stop()
+    {
+      val blockHandler = service.blockHandler
+      val blockResolver = TestUtil.getBlockResolver(blockHandler)
+      TestUtil.registeredExecutorFile(blockResolver) should be (execStateFile)
+
+      blockResolver.registerExecutor(appId.toString, "exec-1", shuffleInfo)
+      val executor = TestUtil.getExecutorInfo(appId.toString, "exec-1", blockResolver)
+      executor should be (Some(shuffleInfo))
+
+      execStateFile.exists() should be (true)
+
+      // now we pretend the shuffle service goes down, and comes back up
+      service.stop()
+    }
 
     val s2: YarnShuffleService = new YarnShuffleService
     s2.init(yarnConfig)
     service.registeredExecutorFile should be (execStateFile)
 
-    val handler2 = service.blockHandler
+    val handler2 = s2.blockHandler
     val resolver2 = TestUtil.getBlockResolver(handler2)
 
-    // until we initial the application, don't know about any executors
+    // until we initialize the application, don't know about any executors
+    // that is so that if the application gets removed while the NM was down, it still eventually
+    // gets purged from our list of apps.
 
-//    TestUtil.getExecutorInfo(appId.toString, "exec-1", blockResolver) should be (None)
+    TestUtil.getExecutorInfo(appId.toString, "exec-1", resolver2) should be (None)
 
     s2.initializeApplication(appData)
     val ex2 = TestUtil.getExecutorInfo(appId.toString, "exec-1", resolver2)
     ex2 should be (Some(shuffleInfo))
   }
+
 }

@@ -18,9 +18,12 @@
 package org.apache.spark.network.yarn;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.nio.ByteBuffer;
-import java.util.List;
+import java.util.*;
+import java.util.Map.Entry;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
@@ -31,6 +34,8 @@ import org.apache.hadoop.yarn.server.api.ApplicationInitializationContext;
 import org.apache.hadoop.yarn.server.api.ApplicationTerminationContext;
 import org.apache.hadoop.yarn.server.api.ContainerInitializationContext;
 import org.apache.hadoop.yarn.server.api.ContainerTerminationContext;
+import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -86,6 +91,9 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   File registeredExecutorFile;
 
+  private Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> recoveredExecutorRegistrations =
+    new HashMap<String, List<Entry<AppExecId, ExecutorShuffleInfo>>>();
+
   public YarnShuffleService() {
     super("spark_shuffle");
     logger.info("Initializing YARN shuffle service for Spark");
@@ -108,6 +116,11 @@ public class YarnShuffleService extends AuxiliaryService {
 
     registeredExecutorFile =
       findRegisteredExecutorFile(conf.get("yarn.nodemanager.local-dirs").split(","));
+    try {
+      reloadRegisteredExecutors();
+    } catch (Exception e) {
+      logger.error("Failed to load previously registered executors", e);
+    }
 
     TransportConf transportConf = new TransportConf(new HadoopConfigProvider(conf));
     // If authentication is enabled, set up the shuffle server to use a
@@ -146,6 +159,14 @@ public class YarnShuffleService extends AuxiliaryService {
       }
     } catch (Exception e) {
       logger.error("Exception when initializing application {}", appId, e);
+    }
+    List<Entry<AppExecId, ExecutorShuffleInfo>> executorsForApp =
+      recoveredExecutorRegistrations.get(appId);
+    if (executorsForApp != null) {
+      for (Entry<AppExecId, ExecutorShuffleInfo> entry: executorsForApp) {
+        logger.info("re-registering {} with {}", entry.getKey(), entry.getValue());
+        blockHandler.reregisterExecutor(entry.getKey(), entry.getValue());
+      }
     }
   }
 
@@ -204,5 +225,29 @@ public class YarnShuffleService extends AuxiliaryService {
   public ByteBuffer getMetaData() {
     return ByteBuffer.allocate(0);
   }
+
+  private void reloadRegisteredExecutors() throws IOException, ClassNotFoundException {
+    if (registeredExecutorFile != null && registeredExecutorFile.exists()) {
+      ObjectInputStream in = new ObjectInputStream(new FileInputStream(registeredExecutorFile));
+      int nExecutors = in.readInt();
+      logger.info("Reloading executors from {}", registeredExecutorFile);
+      for (int i = 0; i < nExecutors; i++) {
+        AppExecId appExecId = (AppExecId) in.readObject();
+        ExecutorShuffleInfo shuffleInfo = (ExecutorShuffleInfo) in.readObject();
+        logger.info("Recovered executor {} with {}", appExecId, shuffleInfo);
+        List<Map.Entry<AppExecId, ExecutorShuffleInfo>> executorsForApp =
+          recoveredExecutorRegistrations.get(appExecId.appId);
+        if (executorsForApp == null) {
+          executorsForApp = new ArrayList<>();
+          recoveredExecutorRegistrations.put(appExecId.appId, executorsForApp);
+        }
+        executorsForApp.add(new AbstractMap.SimpleImmutableEntry<>(appExecId, shuffleInfo));
+      }
+      in.close();
+    } else {
+      logger.info("No executor info to reload");
+    }
+  }
+
 
 }
