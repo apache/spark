@@ -39,7 +39,7 @@ import org.apache.spark.sql.types._
 
 private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] with Logging {
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to the record consumer
-  type ValueWriter = (InternalRow, Int) => Unit
+  private type ValueWriter = (InternalRow, Int) => Unit
 
   // Schema of the `InternalRow`s to be written
   private var schema: StructType = _
@@ -270,7 +270,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
             while (i < array.numElements()) {
               consumeGroup {
                 if (!array.isNullAt(i)) {
-                  mutableRow.update(0, array.get(i))
+                  mutableRow.update(0, array.get(i, elementType))
                   consumeField(elementFieldName, 0)(elementWriter.apply(mutableRow, 0))
                 }
               }
@@ -294,7 +294,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
           consumeField(repeatedFieldName, 0) {
             var i = 0
             while (i < array.numElements()) {
-              mutableRow.update(0, array.get(i))
+              mutableRow.update(0, array.get(i, elementType))
               elementWriter.apply(mutableRow, 0)
               i += 1
             }
@@ -305,24 +305,28 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   }
 
   private def makeMapWriter(mapType: MapType, repeatedGroupName: String): ValueWriter = {
-    val keyWriter = makeWriter(mapType.keyType)
-    val valueWriter = makeWriter(mapType.valueType)
-    val mutableRow = new SpecificMutableRow(mapType.keyType :: mapType.valueType :: Nil)
+    val keyType = mapType.keyType
+    val valueType = mapType.valueType
+    val keyWriter = makeWriter(keyType)
+    val valueWriter = makeWriter(valueType)
+    val mutableRow = new SpecificMutableRow(keyType :: valueType :: Nil)
 
     (row: InternalRow, ordinal: Int) => {
       consumeGroup {
-        val map = row.get(ordinal, mapType).asInstanceOf[Map[_, _]]
-        if (map.nonEmpty) {
+        val map = row.getMap(ordinal)
+        if (map.numElements() > 0) {
           consumeField(repeatedGroupName, 0) {
-            for ((key, value) <- map) {
+            var i = 0
+            while (i < map.numElements()) {
               consumeGroup {
-                mutableRow.update(0, key)
+                mutableRow.update(0, map.keyArray().get(i, keyType))
                 consumeField("key", 0)(keyWriter.apply(mutableRow, 0))
-                if (value != null) {
-                  mutableRow.update(1, value)
+                if (!map.valueArray().isNullAt(i)) {
+                  mutableRow.update(1, map.valueArray().get(i, valueType))
                   consumeField("value", 1)(valueWriter.apply(mutableRow, 1))
                 }
               }
+              i += 1
             }
           }
         }
