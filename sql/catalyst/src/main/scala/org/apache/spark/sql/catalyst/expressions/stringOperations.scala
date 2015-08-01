@@ -22,7 +22,6 @@ import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -602,40 +601,10 @@ case class InitCap(child: Expression) extends UnaryExpression
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
   override def nullSafeEval(string: Any): Any = {
-    if (string.asInstanceOf[UTF8String].numBytes() == 0) {
-      return string
-    } else {
-      val sb = new StringBuffer()
-      sb.append(string)
-      sb.setCharAt(0, sb.charAt(0).toUpper)
-      for (i <- 1 until sb.length) {
-        if (sb.charAt(i - 1).equals(' ')) {
-          sb.setCharAt(i, sb.charAt(i).toUpper)
-        }
-      }
-      UTF8String.fromString(sb.toString)
-    }
+    string.asInstanceOf[UTF8String].toTitleCase
   }
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, (child) => {
-      val idx = ctx.freshName("idx")
-      val sb = ctx.freshName("sb")
-      val stringBuffer = classOf[StringBuffer].getName
-      val character = classOf[Character].getName
-      s"""
-        $stringBuffer $sb = new $stringBuffer();
-        $sb.append($child);
-        if($sb.length()>0) {
-        $sb.setCharAt(0,$character.toTitleCase($sb.charAt(0)));
-        for (int $idx = 1; $idx<$sb.length(); $idx++) {
-           if ($sb.charAt($idx - 1)==' ') {
-             $sb.setCharAt($idx,$character.toTitleCase($sb.charAt($idx)));
-           }
-        }
-        ${ev.primitive} = UTF8String.fromString($sb.toString());
-        }
-       """
-    })
+    nullSafeCodeGen(ctx, ev, str => s"$str.toTitleCase()")
   }
 }
 
