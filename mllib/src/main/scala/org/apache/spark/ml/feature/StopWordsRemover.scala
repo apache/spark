@@ -29,7 +29,7 @@ import org.apache.spark.sql.functions.{col, udf}
 /**
  * stop words list
  */
-private object StopWords{
+private object StopWords {
 
   /**
    * Use the same default stopwords list as scikit-learn.
@@ -80,7 +80,8 @@ private object StopWords{
 
 /**
  * :: Experimental ::
- * A feature transformer that filters out stop words from input
+ * A feature transformer that filters out stop words from input.
+ * Note: null values from input array are preserved unless adding null to stopWords explicitly.
  * @see [[http://en.wikipedia.org/wiki/Stop_words]]
  */
 @Experimental
@@ -124,15 +125,19 @@ class StopWordsRemover(override val uid: String)
 
   override def transform(dataset: DataFrame): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    val stopwordsSet = $(stopWords).toSet
-    val lowerStopWords = stopwordsSet.map(_.toLowerCase)
-    val t = udf { terms: Seq[String] =>
-      if ($(caseSensitive)) {
-        terms.filter(s => s == null || !stopwordsSet.contains(s))
+    val t = if ($(caseSensitive)) {
+        val stopWordsSet = $(stopWords).toSet
+        udf { terms: Seq[String] =>
+          terms.filter(s => !stopWordsSet.contains(s))
+        }
       } else {
-        terms.filter(s => s == null || !lowerStopWords.contains(s.toLowerCase))
-      }
+        val toLower = (s: String) => if (s != null) s.toLowerCase else s
+        val lowerStopWords = $(stopWords).map(toLower(_)).toSet
+        udf { terms: Seq[String] =>
+          terms.filter(s => !lowerStopWords.contains(toLower(s)))
+        }
     }
+
     val metadata = outputSchema($(outputCol)).metadata
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
   }
@@ -146,5 +151,5 @@ class StopWordsRemover(override val uid: String)
     StructType(outputFields)
   }
 
-  override def copy(extra: ParamMap): RegexTokenizer = defaultCopy(extra)
+  override def copy(extra: ParamMap): StopWordsRemover = defaultCopy(extra)
 }

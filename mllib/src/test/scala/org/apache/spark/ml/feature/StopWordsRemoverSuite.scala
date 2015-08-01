@@ -33,7 +33,7 @@ object StopWordsRemoverSuite extends SparkFunSuite {
 }
 
 class StopWordsRemoverSuite extends SparkFunSuite with MLlibTestSparkContext {
-  import org.apache.spark.ml.feature.StopWordsRemoverSuite._
+  import StopWordsRemoverSuite._
 
   test("StopWordsRemover default") {
     val remover = new StopWordsRemover()
