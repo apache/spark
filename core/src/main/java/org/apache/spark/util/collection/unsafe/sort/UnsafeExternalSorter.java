@@ -282,6 +282,21 @@ public final class UnsafeExternalSorter {
     sorter.insertRecord(recordAddress, prefix);
   }
 
+  /**
+   * Write a record to the sorter. The record is broken down into two different parts, and
+   *
+   */
+  public void insertRecord(
+      Object recordBaseObject1,
+      long recordBaseOffset1,
+      int lengthInBytes1,
+      Object recordBaseObject2,
+      long recordBaseOffset2,
+      int lengthInBytes2,
+      long prefix) throws IOException {
+
+  }
+
   public UnsafeSorterIterator getSortedIterator() throws IOException {
     final UnsafeSorterIterator inMemoryIterator = sorter.getSortedIterator();
     int numIteratorsToMerge = spillWriters.size() + (inMemoryIterator.hasNext() ? 1 : 0);
