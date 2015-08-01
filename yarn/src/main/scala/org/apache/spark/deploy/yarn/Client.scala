@@ -316,7 +316,9 @@ private[spark] class Client(
         destName: Option[String] = None,
         targetDir: Option[String] = None,
         appMasterOnly: Boolean = false): (Boolean, String) = {
+      logDebug("Current Path=" + path)
       val localURI = new URI(path.trim())
+      logDebug("Current Path as URI=" + localURI)
       if (localURI.getScheme != LOCAL_SCHEME) {
         if (addDistributedUri(localURI)) {
           val localPath = getQualifiedLocalPath(localURI, hadoopConf)
@@ -412,7 +414,7 @@ private[spark] class Client(
     }
 
     // Distribute an archive with Hadoop and Spark configuration for the AM.
-    val (_, confLocalizedPath) = distribute(createConfArchive().getAbsolutePath(),
+    val (_, confLocalizedPath) = distribute(createConfArchive().toURI.toString,
       resType = LocalResourceType.ARCHIVE,
       destName = Some(LOCALIZED_CONF_DIR),
       appMasterOnly = true)
