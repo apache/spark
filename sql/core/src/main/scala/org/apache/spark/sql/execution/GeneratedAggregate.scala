@@ -293,7 +293,7 @@ case class GeneratedAggregate(
 
           def next(): InternalRow = {
             if (_hasNext) {
-              val result = resultProjection(joinedRow(mapIterator.getKey, mapIterator.getKey))
+              val result = resultProjection(joinedRow(mapIterator.getKey, mapIterator.getValue))
               _hasNext = mapIterator.next()
               if (_hasNext) {
                 result
