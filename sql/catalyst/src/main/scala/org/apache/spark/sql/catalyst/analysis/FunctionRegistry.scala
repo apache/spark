@@ -233,6 +233,7 @@ object FunctionRegistry {
 
     // collection functions
     expression[Size]("size"),
+    expression[SortArray]("sort_array"),
 
     // misc functions
     expression[Crc32]("crc32"),
