@@ -241,6 +241,44 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void substring_index() {
+    assertEquals(fromString("www.apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), 3));
+    assertEquals(fromString("www.apache"),
+      fromString("www.apache.org").subStringIndex(fromString("."), 2));
+    assertEquals(fromString("www"),
+      fromString("www.apache.org").subStringIndex(fromString("."), 1));
+    assertEquals(fromString(""),
+      fromString("www.apache.org").subStringIndex(fromString("."), 0));
+    assertEquals(fromString("org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), -1));
+    assertEquals(fromString("apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), -2));
+    assertEquals(fromString("www.apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), -3));
+    // str is empty string
+    assertEquals(fromString(""),
+      fromString("").subStringIndex(fromString("."), 1));
+    // empty string delim
+    assertEquals(fromString(""),
+      fromString("www.apache.org").subStringIndex(fromString(""), 1));
+    // delim does not exist in str
+    assertEquals(fromString("www.apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("#"), 2));
+    // delim is 2 chars
+    assertEquals(fromString("www||apache"),
+      fromString("www||apache||org").subStringIndex(fromString("||"), 2));
+    assertEquals(fromString("apache||org"),
+      fromString("www||apache||org").subStringIndex(fromString("||"), -2));
+    // non ascii chars
+    assertEquals(fromString("大千世界大"),
+      fromString("大千世界大千世界").subStringIndex(fromString("千"), 2));
+    // overlapped delim
+    assertEquals(fromString("||"), fromString("||||||").subStringIndex(fromString("|||"), 3));
+    assertEquals(fromString("|||"), fromString("||||||").subStringIndex(fromString("|||"), -4));
+  }
+
+  @Test
   public void reverse() {
     assertEquals(fromString("olleh"), fromString("hello").reverse());
     assertEquals(EMPTY_UTF8, EMPTY_UTF8.reverse());
