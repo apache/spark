@@ -1223,7 +1223,9 @@
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-exec</artifactId>
+<!--
         <classifier>core</classifier>
+-->
         <version>${hive.version}</version>
         <scope>${hive.deps.scope}</scope>
         <exclusions>
@@ -1240,6 +1242,11 @@
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-ant</artifactId>
+          </exclusion>
+          <!-- break the loop -->
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>spark-client</artifactId>
           </exclusion>
 
           <!-- excluded dependencies & transitive.
@@ -1320,6 +1327,10 @@
         <artifactId>hive-jdbc</artifactId>
         <version>${hive.version}</version>
         <exclusions>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-common</artifactId>
+          </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-common</artifactId>
