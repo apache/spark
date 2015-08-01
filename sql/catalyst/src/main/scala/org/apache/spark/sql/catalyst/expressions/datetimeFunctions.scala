@@ -626,7 +626,7 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
   override def dataType: DataType = TimestampType
-  override def prettyName: String = "to_utc_timestamp"
+  override def prettyName: String = "from_utc_timestamp"
 
   override def nullSafeEval(time: Any, timezone: Any): Any = {
     DateTimeUtils.fromUTCTime(time.asInstanceOf[Long],
@@ -635,9 +635,33 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (timestamp, format) => {
-      s"""$dtu.fromUTCTime($timestamp, $format.toString())"""
-    })
+    if (right.foldable) {
+      val tz = right.eval()
+      if (tz == null) {
+        s"""
+           |boolean ${ev.isNull} = true;
+           |long ${ev.primitive} = 0;
+         """.stripMargin
+      } else {
+        val tzTerm = ctx.freshName("tz")
+        val tzClass = classOf[TimeZone].getName
+        ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $tzClass.getTimeZone("$tz");""")
+        val eval = left.gen(ctx)
+        s"""
+           |${eval.code}
+           |boolean ${ev.isNull} = ${eval.isNull};
+           |long ${ev.primitive} = 0;
+           |if (!${ev.isNull}) {
+           |  ${ev.primitive} = ${eval.primitive} +
+           |   ${tzTerm}.getOffset(${eval.primitive} / 1000) * 1000L;
+           |}
+         """.stripMargin
+      }
+    } else {
+      defineCodeGen(ctx, ev, (timestamp, format) => {
+        s"""$dtu.fromUTCTime($timestamp, $format.toString())"""
+      })
+    }
   }
 }
 
@@ -736,9 +760,33 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (timestamp, format) => {
-      s"""$dtu.toUTCTime($timestamp, $format.toString())"""
-    })
+    if (right.foldable) {
+      val tz = right.eval()
+      if (tz == null) {
+        s"""
+           |boolean ${ev.isNull} = true;
+           |long ${ev.primitive} = 0;
+         """.stripMargin
+      } else {
+        val tzTerm = ctx.freshName("tz")
+        val tzClass = classOf[TimeZone].getName
+        ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $tzClass.getTimeZone("$tz");""")
+        val eval = left.gen(ctx)
+        s"""
+           |${eval.code}
+           |boolean ${ev.isNull} = ${eval.isNull};
+           |long ${ev.primitive} = 0;
+           |if (!${ev.isNull}) {
+           |  ${ev.primitive} = ${eval.primitive} -
+           |   ${tzTerm}.getOffset(${eval.primitive} / 1000) * 1000;
+           |}
+         """.stripMargin
+      }
+    } else {
+      defineCodeGen(ctx, ev, (timestamp, format) => {
+        s"""$dtu.toUTCTime($timestamp, $format.toString())"""
+      })
+    }
   }
 }
 

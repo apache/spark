@@ -48,15 +48,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("DayOfYear") {
     val sdfDay = new SimpleDateFormat("D")
-    (1998 to 2002).foreach { y =>
-      (0 to 3).foreach { m =>
-        (0 to 5).foreach { i =>
-          val c = Calendar.getInstance()
-          c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, i)
-          checkEvaluation(DayOfYear(Literal(new Date(c.getTimeInMillis))),
-            sdfDay.format(c.getTime).toInt)
-        }
+    (0 to 3).foreach { m =>
+      (0 to 5).foreach { i =>
+        val c = Calendar.getInstance()
+        c.set(2000, m, 28, 0, 0, 0)
+        c.add(Calendar.DATE, i)
+        checkEvaluation(DayOfYear(Literal(new Date(c.getTimeInMillis))),
+          sdfDay.format(c.getTime).toInt)
       }
     }
     checkEvaluation(DayOfYear(Literal.create(null, DateType)), null)
@@ -455,6 +453,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
           Literal.create(tz, StringType)),
         if (expected != null) Timestamp.valueOf(expected) else null)
+      checkEvaluation(
+        ToUTCTimestamp(
+          Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
+          NonFoldableLiteral.create(tz, StringType)),
+        if (expected != null) Timestamp.valueOf(expected) else null)
     }
     test("2015-07-24 00:00:00", "PST", "2015-07-24 07:00:00")
     test("2015-01-24 00:00:00", "PST", "2015-01-24 08:00:00")
@@ -469,6 +472,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         FromUTCTimestamp(
           Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
           Literal.create(tz, StringType)),
+        if (expected != null) Timestamp.valueOf(expected) else null)
+      checkEvaluation(
+        FromUTCTimestamp(
+          Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
+          NonFoldableLiteral.create(tz, StringType)),
         if (expected != null) Timestamp.valueOf(expected) else null)
     }
     test("2015-07-24 00:00:00", "PST", "2015-07-23 17:00:00")

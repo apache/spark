@@ -2004,7 +2004,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def datediff(ende: Column, start: Column): Column = DateDiff(end.expr, start.expr)
+  def datediff(end: Column, start: Column): Column = DateDiff(end.expr, start.expr)
 
   /**
    * Extracts the year as an integer from a given date/timestamp/string.
