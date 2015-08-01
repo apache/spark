@@ -63,6 +63,8 @@ __all__ += [
     'year', 'quarter', 'month', 'hour', 'minute', 'second',
     'dayofmonth', 'dayofyear', 'weekofyear']
 
+__all__ += ['soundex']
+
 
 def _create_function(name, doc=""):
     """ Create a function for aggregator by name"""
@@ -922,11 +924,26 @@ def trunc(date, format):
 def size(col):
     """
     Collection function: returns the length of the array or map stored in the column.
+
     :param col: name of column or expression
 
     >>> df = sqlContext.createDataFrame([([1, 2, 3],),([1],),([],)], ['data'])
     >>> df.select(size(df.data)).collect()
     [Row(size(data)=3), Row(size(data)=1), Row(size(data)=0)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.size(_to_java_column(col)))
+
+
+@since
+@ignore_unicode_prefix
+def soundex(col):
+    """
+    Returns the SoundEx encoding for a string
+
+    >>> df = sqlContext.createDataFrame([("Peters",),("Uhrbach",)], ['name'])
+    >>> df.select(soundex(df.name).alias("soundex")).collect()
+    [Row(soundex=u'P362'), Row(soundex=u'U612')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.size(_to_java_column(col)))

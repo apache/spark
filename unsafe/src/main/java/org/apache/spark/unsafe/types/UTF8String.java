@@ -680,4 +680,57 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     }
     return result;
   }
+
+  /**
+   * Soundex mapping table
+   */
+  private static final byte[] US_ENGLISH_MAPPING = {'0', '1', '2', '3', '0', '1', '2', '7',
+    '0', '2', '2', '4', '5', '5', '0', '1', '2', '6', '2', '3', '0', '1', '7', '2', '0', '2'};
+
+  /**
+   * Encodes a string into a Soundex value. Soundex is an encoding used to relate similar names,
+   * but can also be used as a general purpose scheme to find word with similar phonemes.
+   * https://en.wikipedia.org/wiki/Soundex
+   */
+  public UTF8String soundex() {
+    if (numBytes == 0) {
+      return EMPTY_UTF8;
+    }
+
+    byte b = getByte(0);
+    if ('a' <= b && b <= 'z') {
+      b -= 32;
+    } else if (b < 'A' || 'Z' < b) {
+      // first character must be a letter
+      return this;
+    }
+    byte sx[] = {'0', '0', '0', '0'};
+    sx[0] = b;
+    int sxi = 1;
+    int idx = b - 'A';
+    byte lastCode = US_ENGLISH_MAPPING[idx];
+
+    for (int i = 1; i < numBytes; i++) {
+      b = getByte(i);
+      if ('a' <= b && b <= 'z') {
+        b -= 32;
+      } else if (b < 'A' || 'Z' < b) {
+        // not a letter, skip it
+        lastCode = '0';
+        continue;
+      }
+      idx = b - 'A';
+      byte code = US_ENGLISH_MAPPING[idx];
+      if (code == '7') {
+        // ignore it
+      } else {
+        if (code != '0' && code != lastCode) {
+          sx[sxi++] = code;
+          if (sxi > 3) break;
+        }
+        lastCode = code;
+      }
+    }
+    return UTF8String.fromBytes(sx);
+  }
 }

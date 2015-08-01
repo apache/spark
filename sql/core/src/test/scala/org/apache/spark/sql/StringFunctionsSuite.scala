@@ -142,6 +142,15 @@ class StringFunctionsSuite extends QueryTest {
       Row("aa123cc"))
   }
 
+  test("soundex function") {
+    val df = Seq(("MARY", "SU")).toDF("l", "r")
+    checkAnswer(
+      df.select(soundex($"l"), soundex($"r")), Row("M600", "S000"))
+
+    checkAnswer(
+      df.selectExpr("SoundEx(l)", "SoundEx(r)"), Row("M600", "S000"))
+  }
+
   test("string instr function") {
     val df = Seq(("aaads", "aa", "zz")).toDF("a", "b", "c")
 
