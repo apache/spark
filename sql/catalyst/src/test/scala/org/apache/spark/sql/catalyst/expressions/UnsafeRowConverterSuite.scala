@@ -172,6 +172,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       r
     }
 
+    // todo: we reuse the UnsafeRow in projection, so these tests are meaningless.
     val setToNullAfterCreation = converter.apply(rowWithNoNullColumns)
     assert(setToNullAfterCreation.isNullAt(0) === rowWithNoNullColumns.isNullAt(0))
     assert(setToNullAfterCreation.getBoolean(1) === rowWithNoNullColumns.getBoolean(1))

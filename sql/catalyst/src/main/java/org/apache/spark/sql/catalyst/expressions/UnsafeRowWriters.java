@@ -185,4 +185,34 @@ public class UnsafeRowWriters {
       return 16;
     }
   }
+
+  public static class ArrayWriter {
+
+    public static int getSize(UnsafeArrayData input) {
+      // we need extra 4 bytes the store the number of elements in this array.
+      return ByteArrayMethods.roundNumberOfBytesToNearestWord(input.getSizeInBytes() + 4);
+    }
+
+    public static int write(UnsafeRow target, int ordinal, int cursor, UnsafeArrayData input) {
+      final int numBytes = input.getSizeInBytes() + 4;
+      final long offset = target.getBaseOffset() + cursor;
+
+      // write the number of elements into first 4 bytes.
+      PlatformDependent.UNSAFE.putInt(target.getBaseObject(), offset, input.numElements());
+
+      // zero-out the padding bytes
+      if ((numBytes & 0x07) > 0) {
+        PlatformDependent.UNSAFE.putLong(
+          target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
+      }
+
+      // Write the bytes to the variable length portion.
+      input.writeToMemory(target.getBaseObject(), offset + 4);
+
+      // Set the fixed length portion.
+      target.setLong(ordinal, (((long) cursor) << 32) | ((long) numBytes));
+
+      return ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
+    }
+  }
 }

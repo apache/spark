@@ -291,6 +291,10 @@ public final class UnsafeRow extends MutableRow {
       return getInterval(ordinal);
     } else if (dataType instanceof StructType) {
       return getStruct(ordinal, ((StructType) dataType).size());
+    } else if (dataType instanceof ArrayType) {
+      return getArray(ordinal);
+    } else if (dataType instanceof MapType) {
+      return getMap(ordinal);
     } else {
       throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
     }
@@ -417,6 +421,23 @@ public final class UnsafeRow extends MutableRow {
       final UnsafeRow row = new UnsafeRow();
       row.pointTo(baseObject, baseOffset + offset, numFields, size);
       return row;
+    }
+  }
+
+  @Override
+  public ArrayData getArray(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      assertIndexIsValid(ordinal);
+      final long offsetAndSize = getLong(ordinal);
+      final int offset = (int) (offsetAndSize >> 32);
+      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      final int numElements = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + offset);
+      final UnsafeArrayData array = new UnsafeArrayData();
+      // Skip the first 4 bytes.
+      array.pointTo(baseObject, baseOffset + offset + 4, numElements, size - 4);
+      return array;
     }
   }
 
