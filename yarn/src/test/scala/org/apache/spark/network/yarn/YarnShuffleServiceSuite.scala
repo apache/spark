@@ -59,20 +59,18 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val shuffleInfo = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, "sort")
 
 
-    {
-      val blockHandler = service.blockHandler
-      val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
-      ShuffleTestAccessor.registeredExecutorFile(blockResolver) should be (execStateFile)
+    val blockHandler = service.blockHandler
+    val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
+    ShuffleTestAccessor.registeredExecutorFile(blockResolver) should be (execStateFile)
 
-      blockResolver.registerExecutor(appId.toString, "exec-1", shuffleInfo)
-      val executor = ShuffleTestAccessor.getExecutorInfo(appId.toString, "exec-1", blockResolver)
-      executor should be (Some(shuffleInfo))
+    blockResolver.registerExecutor(appId.toString, "exec-1", shuffleInfo)
+    val executor = ShuffleTestAccessor.getExecutorInfo(appId.toString, "exec-1", blockResolver)
+    executor should be (Some(shuffleInfo))
 
-      execStateFile.exists() should be (true)
+    execStateFile.exists() should be (true)
 
-      // now we pretend the shuffle service goes down, and comes back up
-      service.stop()
-    }
+    // now we pretend the shuffle service goes down, and comes back up
+    service.stop()
 
     val s2: YarnShuffleService = new YarnShuffleService
     s2.init(yarnConfig)
