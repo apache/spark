@@ -30,7 +30,6 @@ import org.apache.spark.sql.types._
 
 /**
  * Trait for a local matrix.
- * @since 1.2.0
  */
 @SQLUserDefinedType(udt = classOf[MatrixUDT])
 sealed trait Matrix extends Serializable {
@@ -41,14 +40,10 @@ sealed trait Matrix extends Serializable {
   /** Number of columns. */
   def numCols: Int
 
-  /** Flag that keeps track whether the matrix is transposed or not. False by default.
-    * @since 1.3.0
-    */
+  /** Flag that keeps track whether the matrix is transposed or not. False by default. */
   val isTransposed: Boolean = false
 
-  /** Converts to a dense array in column major.
-    * @since 1.2.0
-    */
+  /** Converts to a dense array in column major. */
   def toArray: Array[Double] = {
     val newArray = new Array[Double](numRows * numCols)
     foreachActive { (i, j, v) =>
@@ -75,39 +70,29 @@ sealed trait Matrix extends Serializable {
   /** Transpose the Matrix. Returns a new `Matrix` instance sharing the same underlying data. */
   def transpose: Matrix
 
-  /** Convenience method for `Matrix`-`DenseMatrix` multiplication.
-    * @since 1.2.0
-    */
+  /** Convenience method for `Matrix`-`DenseMatrix` multiplication. */
   def multiply(y: DenseMatrix): DenseMatrix = {
     val C: DenseMatrix = DenseMatrix.zeros(numRows, y.numCols)
     BLAS.gemm(1.0, this, y, 0.0, C)
     C
   }
 
-  /** Convenience method for `Matrix`-`DenseVector` multiplication. For binary compatibility.
-    * @since 1.2.0
-    */
+  /** Convenience method for `Matrix`-`DenseVector` multiplication. For binary compatibility. */
   def multiply(y: DenseVector): DenseVector = {
     multiply(y.asInstanceOf[Vector])
   }
 
-  /** Convenience method for `Matrix`-`Vector` multiplication.
-    * @since 1.4.0
-    */
+  /** Convenience method for `Matrix`-`Vector` multiplication. */
   def multiply(y: Vector): DenseVector = {
     val output = new DenseVector(new Array[Double](numRows))
     BLAS.gemv(1.0, this, y, 0.0, output)
     output
   }
 
-  /** A human readable representation of the matrix
-    * @since 1.0.0
-    */
+  /** A human readable representation of the matrix */
   override def toString: String = toBreeze.toString()
 
-  /** A human readable representation of the matrix with maximum lines and width
-    * @since 1.4.0
-    */
+  /** A human readable representation of the matrix with maximum lines and width */
   def toString(maxLines: Int, maxLineWidth: Int): String = toBreeze.toString(maxLines, maxLineWidth)
 
   /** Map the values of this matrix using a function. Generates a new matrix. Performs the

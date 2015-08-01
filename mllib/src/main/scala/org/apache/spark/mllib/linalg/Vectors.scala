@@ -36,7 +36,6 @@ import org.apache.spark.sql.types._
  * Represents a numeric vector, whose index type is Int and value type is Double.
  *
  * Note: Users should not implement this interface.
- * @since 1.2.0
  */
 @SQLUserDefinedType(udt = classOf[VectorUDT])
 sealed trait Vector extends Serializable {
@@ -51,9 +50,6 @@ sealed trait Vector extends Serializable {
    */
   def toArray: Array[Double]
 
-  /**
-   * @since 1.0.0
-   */
   override def equals(other: Any): Boolean = {
     other match {
       case v2: Vector =>
@@ -74,7 +70,6 @@ sealed trait Vector extends Serializable {
   /**
    * Returns a hash code value for the vector. The hash code is based on its size and its nonzeros
    * in the first 16 entries, using a hash algorithm similar to [[java.util.Arrays.hashCode]].
-   * @since 1.2.2
    */
   override def hashCode(): Int = {
     // This is a reference implementation. It calls return in foreachActive, which is slow.
@@ -103,13 +98,11 @@ sealed trait Vector extends Serializable {
   /**
    * Gets the value of the ith element.
    * @param i index
-   * @since 1.0.0
    */
   def apply(i: Int): Double = toBreeze(i)
 
   /**
    * Makes a deep copy of this vector.
-   * @since 1.1.0
    */
   def copy: Vector = {
     throw new NotImplementedError(s"copy is not implemented for ${this.getClass}.")
@@ -147,7 +140,6 @@ sealed trait Vector extends Serializable {
 
   /**
    * Returns a vector in either dense or sparse format, whichever uses less storage.
-   * @since 1.4.0
    */
   def compressed: Vector = {
     val nnz = numNonzeros
