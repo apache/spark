@@ -26,7 +26,10 @@ import org.scalatest.{FunSuite, Matchers}
 
 import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 
-class UTF8StringPropertyChecks extends FunSuite with GeneratorDrivenPropertyChecks with Matchers {
+/**
+ * This TestSuite utilize ScalaCheck to generate randomized inputs for UTF8String testing.
+ */
+class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenPropertyChecks with Matchers {
 // scalastyle:on
 
   test("toString") {

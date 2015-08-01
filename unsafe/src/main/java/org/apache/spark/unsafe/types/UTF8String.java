@@ -413,7 +413,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    */
   public UTF8String rpad(int len, UTF8String pad) {
     int spaces = len - this.numChars(); // number of char need to pad
-    if (spaces <= 0 || pad.numChars() == 0) {
+    if (spaces <= 0 || pad.numBytes() == 0) {
       // no padding at all, return the substring of the current string
       return substring(0, len);
     } else {
@@ -445,7 +445,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    */
   public UTF8String lpad(int len, UTF8String pad) {
     int spaces = len - this.numChars(); // number of char need to pad
-    if (spaces <= 0 || pad.numChars() == 0) {
+    if (spaces <= 0 || pad.numBytes() == 0) {
       // no padding at all, return the substring of the current string
       return substring(0, len);
     } else {
