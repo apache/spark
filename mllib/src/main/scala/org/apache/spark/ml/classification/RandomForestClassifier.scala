@@ -40,7 +40,7 @@ import org.apache.spark.sql.functions._
  */
 @Experimental
 final class RandomForestClassifier(override val uid: String)
-  extends ProbabilisticClassifier[Vector, RandomForestClassifier, RandomForestClassificationModel]
+  extends Classifier[Vector, RandomForestClassifier, RandomForestClassificationModel]
   with RandomForestParams with TreeClassifierParams {
 
   def this() = this(Identifiable.randomUID("rfc"))
@@ -71,8 +71,6 @@ final class RandomForestClassifier(override val uid: String)
   override def setSubsamplingRate(value: Double): this.type = super.setSubsamplingRate(value)
 
   override def setSeed(value: Long): this.type = super.setSeed(value)
-
-  override def setThresholds(value: Array[Double]): this.type = super.set(thresholds, value)
 
   // Parameters from RandomForestParams:
 
