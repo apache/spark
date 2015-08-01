@@ -38,7 +38,7 @@ public class ExternalShuffleCleanupSuite {
   TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
 
   @Test
-  public void noCleanupAndCleanup() throws IOException, ClassNotFoundException {
+  public void noCleanupAndCleanup() throws IOException {
     TestShuffleDataContext dataContext = createSomeData();
 
     ExternalShuffleBlockResolver resolver =
@@ -55,7 +55,7 @@ public class ExternalShuffleCleanupSuite {
   }
 
   @Test
-  public void cleanupUsesExecutor() throws IOException, ClassNotFoundException {
+  public void cleanupUsesExecutor() throws IOException {
     TestShuffleDataContext dataContext = createSomeData();
 
     final AtomicBoolean cleanupCalled = new AtomicBoolean(false);
@@ -79,7 +79,7 @@ public class ExternalShuffleCleanupSuite {
   }
 
   @Test
-  public void cleanupMultipleExecutors() throws IOException, ClassNotFoundException {
+  public void cleanupMultipleExecutors() throws IOException {
     TestShuffleDataContext dataContext0 = createSomeData();
     TestShuffleDataContext dataContext1 = createSomeData();
 
@@ -95,7 +95,7 @@ public class ExternalShuffleCleanupSuite {
   }
 
   @Test
-  public void cleanupOnlyRemovedApp() throws IOException, ClassNotFoundException {
+  public void cleanupOnlyRemovedApp() throws IOException {
     TestShuffleDataContext dataContext0 = createSomeData();
     TestShuffleDataContext dataContext1 = createSomeData();
 

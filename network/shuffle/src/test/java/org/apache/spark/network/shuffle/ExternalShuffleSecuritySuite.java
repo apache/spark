@@ -43,7 +43,7 @@ public class ExternalShuffleSecuritySuite {
   TransportServer server;
 
   @Before
-  public void beforeEach() throws IOException, ClassNotFoundException {
+  public void beforeEach() {
     TransportContext context =
       new TransportContext(conf, new ExternalShuffleBlockHandler(conf, null));
     TransportServerBootstrap bootstrap = new SaslServerBootstrap(conf,

@@ -61,8 +61,7 @@ public class ExternalShuffleBlockResolver {
   @VisibleForTesting
   final File registeredExecutorFile;
 
-  public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
-      throws IOException, ClassNotFoundException {
+  public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile) {
     this(conf, registeredExecutorFile, Executors.newSingleThreadExecutor(
         // Add `spark` prefix because it will run in NM in Yarn mode.
         NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
@@ -73,7 +72,7 @@ public class ExternalShuffleBlockResolver {
   ExternalShuffleBlockResolver(
       TransportConf conf,
       File registeredExecutorFile,
-      Executor directoryCleaner) throws IOException, ClassNotFoundException {
+      Executor directoryCleaner) {
     this.conf = conf;
     this.registeredExecutorFile = registeredExecutorFile;
     this.executors = Maps.newConcurrentMap();

@@ -73,7 +73,7 @@ public class ExternalShuffleIntegrationSuite {
   };
 
   @BeforeClass
-  public static void beforeAll() throws IOException, ClassNotFoundException {
+  public static void beforeAll() throws IOException {
     Random rand = new Random();
 
     for (byte[] block : exec0Blocks) {

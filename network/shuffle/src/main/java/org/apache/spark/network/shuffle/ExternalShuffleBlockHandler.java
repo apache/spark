@@ -51,8 +51,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   final ExternalShuffleBlockResolver blockManager;
   private final OneForOneStreamManager streamManager;
 
-  public ExternalShuffleBlockHandler(TransportConf conf, File registeredExecutorFile)
-      throws IOException, ClassNotFoundException {
+  public ExternalShuffleBlockHandler(TransportConf conf, File registeredExecutorFile) {
     this(new OneForOneStreamManager(),
       new ExternalShuffleBlockResolver(conf, registeredExecutorFile));
   }
@@ -104,6 +103,16 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     blockManager.applicationRemoved(appId, cleanupLocalDirs);
   }
 
+  /**
+   * Register an (application, executor) with the given shuffle info.
+   *
+   * The "re-" is meant to highlight the intended use of this method -- when this service is
+   * restarted, this is used to restore the state of executors from before the restart.  Normal
+   * registration will happen via a message handled in receive()
+   *
+   * @param appExecId
+   * @param executorInfo
+   */
   public void reregisterExecutor(AppExecId appExecId, ExecutorShuffleInfo executorInfo) {
     blockManager.registerExecutor(appExecId.appId, appExecId.execId, executorInfo);
   }
