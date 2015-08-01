@@ -37,9 +37,11 @@ object SortPrefixUtils {
     sortOrder.dataType match {
       case StringType if sortOrder.isAscending => PrefixComparators.STRING
       case StringType if !sortOrder.isAscending => PrefixComparators.STRING_DESC
-      case BooleanType | ByteType | ShortType | IntegerType | LongType if sortOrder.isAscending =>
+      case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType
+          if sortOrder.isAscending =>
         PrefixComparators.LONG
-      case BooleanType | ByteType | ShortType | IntegerType | LongType if !sortOrder.isAscending =>
+      case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType
+        if !sortOrder.isAscending =>
         PrefixComparators.LONG_DESC
       case FloatType | DoubleType if sortOrder.isAscending => PrefixComparators.DOUBLE
       case FloatType | DoubleType if !sortOrder.isAscending => PrefixComparators.DOUBLE_DESC
