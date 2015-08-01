@@ -211,32 +211,21 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   object CartesianProduct extends Strategy {
-    def canBroadCast(plan: LogicalPlan): Boolean = {
-      if (sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
-        plan.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold) {
-        true
-      } else {
-        false
-      }
-    }
-
     def createCartesianProduct(left: LogicalPlan, right: LogicalPlan): SparkPlan = {
       // For BroadcastCartesianProduct we will broadcast the small size plan,
       // for CartesianProduct we will use the small size plan as cartesian left rdd.
       if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
-        if (canBroadCast(right)) {
-          execution.joins.BroadcastCartesianProduct(planLater(left), planLater(right),
-            joins.BuildRight)
-        } else {
-          execution.joins.CartesianProduct(planLater(left), planLater(right),
+        right match {
+          case CanBroadcast(right) => execution.joins.BroadcastCartesianProduct(planLater(left),
+            planLater(right), joins.BuildRight)
+          case _ => execution.joins.CartesianProduct(planLater(left), planLater(right),
             joins.BuildLeft)
         }
       } else {
-        if (canBroadCast(left)) {
-          execution.joins.BroadcastCartesianProduct(planLater(left), planLater(right),
-            joins.BuildLeft)
-        } else {
-          execution.joins.CartesianProduct(planLater(left), planLater(right),
+        left match {
+          case CanBroadcast(left) => execution.joins.BroadcastCartesianProduct(planLater(left),
+            planLater(right), joins.BuildLeft)
+          case _ => execution.joins.CartesianProduct(planLater(left), planLater(right),
             joins.BuildRight)
         }
       }
