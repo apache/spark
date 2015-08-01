@@ -723,6 +723,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("statistics on training data") {
+    // Test that loss is monotonically decreasing.
     val lr = new LogisticRegression()
       .setMaxIter(10)
       .setRegParam(1.0)

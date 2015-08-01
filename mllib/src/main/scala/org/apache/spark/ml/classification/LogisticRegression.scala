@@ -321,7 +321,7 @@ class LogisticRegressionModel private[ml] (
    * @param dataset Test dataset to evaluate model on.
    */
   // TODO: decide on a good name before exposing to public API
-  def evaluate(dataset: DataFrame): LogisticRegressionSummary = {
+  private[classification] def evaluate(dataset: DataFrame): LogisticRegressionSummary = {
     val t = udf { features: Vector => raw2probabilityInPlace(predictRaw(features)) }
     val labelsAndScores = dataset.
       select(col($(labelCol)), t(col($(featuresCol))).as($(probabilityCol)))
@@ -490,10 +490,12 @@ class LogisticRegressionSummary private[classification] (
 
   /** Returns a BinaryClassificationMetrics object.
   */
+  // TODO: Allow the user to vary the number of bins using a setBins method in
+  // BinaryClassificationMetrics. For now the default is set to 100.
   @transient private val metrics = new BinaryClassificationMetrics(
     predictions.select(probabilityCol, labelCol).map {
       case Row(score: Vector, label: Double) => (score(1), label)
-    }
+    }, 100
   )
 
   /**
@@ -518,7 +520,8 @@ class LogisticRegressionSummary private[classification] (
    */
   def pr(): DataFrame = metrics.pr().toDF("recall", "precision")
 
-  /** Returns a dataframe with two fields (threshold, F-Measure) curve with beta = 1.0.
+  /**
+   * Returns a dataframe with two fields (threshold, F-Measure) curve with beta = 1.0.
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the F-measure.
    */
@@ -526,7 +529,8 @@ class LogisticRegressionSummary private[classification] (
     metrics.fMeasureByThreshold().toDF("threshold", "F-Measure")
   }
 
-  /** Returns a dataframe with two fields (threshold, precision) curve.
+  /**
+   * Returns a dataframe with two fields (threshold, precision) curve.
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the precision.
    */
@@ -534,7 +538,8 @@ class LogisticRegressionSummary private[classification] (
     metrics.precisionByThreshold().toDF("threshold", "precision")
   }
 
-  /** Returns a dataframe with two fields (threshold, recall) curve.
+  /**
+   * Returns a dataframe with two fields (threshold, recall) curve.
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the recall.
    */
