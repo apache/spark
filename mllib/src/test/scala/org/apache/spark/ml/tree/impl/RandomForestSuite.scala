@@ -21,14 +21,18 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.tree.{ContinuousSplit, DecisionTreeModel, LeafNode, Node}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.tree.impurity.GiniCalculator
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Test suite for [[RandomForest]].
  */
 class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  import RandomForestSuite.mapToVec
 
   test("computeFeatureImportance, featureImportances") {
     /* Build tree for testing, with this structure:
@@ -55,7 +59,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     def testNode(node: Node, expected: Map[Int, Double]): Unit = {
       val map = new OpenHashMap[Int, Double]()
       RandomForest.computeFeatureImportance(node, map)
-      assert(map.toMap ~== expected relTol 0.01)
+      assert(mapToVec(map.toMap) ~== mapToVec(expected) relTol 0.01)
     }
 
     // Leaf node
@@ -79,7 +83,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val totalImportance = feature0importance * 2 + feature1importance
     val expected = Map(0 -> feature0importance * 2 / totalImportance,
       1 -> feature1importance / totalImportance)
-    assert(importances ~== expected relTol 0.01)
+    assert(mapToVec(importances) ~== mapToVec(expected) relTol 0.01)
   }
 
   test("normalizeMapValues") {
@@ -88,7 +92,16 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     map(2) = 2.0
     RandomForest.normalizeMapValues(map)
     val expected = Map(0 -> 1.0 / 3.0, 2 -> 2.0 / 3.0)
-    assert(map.toMap ~== expected relTol 0.01)
+    assert(mapToVec(map.toMap) ~== mapToVec(expected) relTol 0.01)
   }
 
+}
+
+object RandomForestSuite {
+
+  def mapToVec(map: Map[Int, Double]): Vector = {
+    val size = map.keys.max + 1
+    val (indices, values) = map.toSeq.sortBy(_._1).unzip
+    Vectors.sparse(size, indices.toArray, values.toArray)
+  }
 }
