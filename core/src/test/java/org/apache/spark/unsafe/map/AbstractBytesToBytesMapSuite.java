@@ -243,17 +243,17 @@ public abstract class AbstractBytesToBytesMapSuite {
   @Test
   public void iteratingOverDataPagesWithWastedSpace() throws Exception {
     final int NUM_ENTRIES = 1000 * 1000;
-    final int KEY_LENGTH = 16;
+    final int KEY_LENGTH = 24;
     final int VALUE_LENGTH = 40;
     final BytesToBytesMap map = new BytesToBytesMap(
       taskMemoryManager, shuffleMemoryManager, NUM_ENTRIES, PAGE_SIZE_BYTES);
-    // Each record will take 8 + 8 + 16 + 40 = 72 bytes of space in the data page. Our 64-megabyte
+    // Each record will take 8 + 24 + 40 = 72 bytes of space in the data page. Our 64-megabyte
     // pages won't be evenly-divisible by records of this size, which will cause us to waste some
     // space at the end of the page. This is necessary in order for us to take the end-of-record
     // handling branch in iterator().
     try {
       for (int i = 0; i < NUM_ENTRIES; i++) {
-        final long[] key = new long[] { i, i };  // 2 * 8 = 16 bytes
+        final long[] key = new long[] { i, i, i };  // 3 * 8 = 24 bytes
         final long[] value = new long[] { i, i, i, i, i }; // 5 * 8 = 40 bytes
         final BytesToBytesMap.Location loc = map.lookup(
           key,

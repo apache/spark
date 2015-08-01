@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.execution;
 
-import java.io.IOException;
-import java.util.Iterator;
-
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
@@ -28,6 +25,7 @@ import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.DecimalType;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryLocation;
@@ -157,53 +155,54 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
-   * Mutable pair object returned by {@link UnsafeFixedWidthAggregationMap#iterator()}.
-   */
-  public static class MapEntry {
-    private MapEntry() { };
-    public final UnsafeRow key = new UnsafeRow();
-    public final UnsafeRow value = new UnsafeRow();
-  }
-
-  /**
    * Returns an iterator over the keys and values in this map.
    *
    * For efficiency, each call returns the same object.
    */
-  public Iterator<MapEntry> iterator() {
-    return new Iterator<MapEntry>() {
+  public KVIterator<UnsafeRow, UnsafeRow> iterator() {
+    return new KVIterator<UnsafeRow, UnsafeRow>() {
 
-      private final MapEntry entry = new MapEntry();
-      private final Iterator<BytesToBytesMap.Location> mapLocationIterator = map.iterator();
+      private final BytesToBytesMap.BytesToBytesMapIterator mapLocationIterator = map.iterator();
+      private final UnsafeRow key = new UnsafeRow();
+      private final UnsafeRow value = new UnsafeRow();
 
       @Override
-      public boolean hasNext() {
-        return mapLocationIterator.hasNext();
+      public boolean next() {
+        if (mapLocationIterator.hasNext()) {
+          final BytesToBytesMap.Location loc = mapLocationIterator.next();
+          final MemoryLocation keyAddress = loc.getKeyAddress();
+          final MemoryLocation valueAddress = loc.getValueAddress();
+          key.pointTo(
+            keyAddress.getBaseObject(),
+            keyAddress.getBaseOffset(),
+            groupingKeySchema.length(),
+            loc.getKeyLength()
+          );
+          value.pointTo(
+            valueAddress.getBaseObject(),
+            valueAddress.getBaseOffset(),
+            aggregationBufferSchema.length(),
+            loc.getValueLength()
+          );
+          return true;
+        } else {
+          return false;
+        }
       }
 
       @Override
-      public MapEntry next() {
-        final BytesToBytesMap.Location loc = mapLocationIterator.next();
-        final MemoryLocation keyAddress = loc.getKeyAddress();
-        final MemoryLocation valueAddress = loc.getValueAddress();
-        entry.key.pointTo(
-          keyAddress.getBaseObject(),
-          keyAddress.getBaseOffset(),
-          groupingKeySchema.length(),
-          loc.getKeyLength()
-        );
-        entry.value.pointTo(
-          valueAddress.getBaseObject(),
-          valueAddress.getBaseOffset(),
-          aggregationBufferSchema.length(),
-          loc.getValueLength()
-        );
-        return entry;
+      public UnsafeRow getKey() {
+        return key;
       }
 
       @Override
-      public void remove() {
-        throw new UnsupportedOperationException();
+      public UnsafeRow getValue() {
+        return value;
+      }
+
+      @Override
+      public void close() {
+        // Do nothing.
       }
     };
   }

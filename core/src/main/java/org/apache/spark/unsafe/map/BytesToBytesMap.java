@@ -17,7 +17,6 @@
 
 package org.apache.spark.unsafe.map;
 
-import java.io.IOException;
 import java.lang.Override;
 import java.lang.UnsupportedOperationException;
 import java.util.Iterator;
@@ -212,7 +211,7 @@ public final class BytesToBytesMap {
    */
   public int numElements() { return numElements; }
 
-  private static final class BytesToBytesMapIterator implements Iterator<Location> {
+  public static final class BytesToBytesMapIterator implements Iterator<Location> {
 
     private final int numRecords;
     private final Iterator<MemoryBlock> dataPagesIterator;
@@ -222,7 +221,8 @@ public final class BytesToBytesMap {
     private Object pageBaseObject;
     private long offsetInPage;
 
-    BytesToBytesMapIterator(int numRecords, Iterator<MemoryBlock> dataPagesIterator, Location loc) {
+    private BytesToBytesMapIterator(
+        int numRecords, Iterator<MemoryBlock> dataPagesIterator, Location loc) {
       this.numRecords = numRecords;
       this.dataPagesIterator = dataPagesIterator;
       this.loc = loc;
@@ -244,13 +244,13 @@ public final class BytesToBytesMap {
 
     @Override
     public Location next() {
-      int keyLength = (int) PlatformDependent.UNSAFE.getLong(pageBaseObject, offsetInPage);
-      if (keyLength == END_OF_PAGE_MARKER) {
+      int totalLength = PlatformDependent.UNSAFE.getInt(pageBaseObject, offsetInPage);
+      if (totalLength == END_OF_PAGE_MARKER) {
         advanceToNextPage();
-        keyLength = (int) PlatformDependent.UNSAFE.getLong(pageBaseObject, offsetInPage);
+        totalLength = PlatformDependent.UNSAFE.getInt(pageBaseObject, offsetInPage);
       }
       loc.with(pageBaseObject, offsetInPage);
-      offsetInPage += 8 + 8 + keyLength + loc.getValueLength();
+      offsetInPage += 8 + totalLength;
       currentRecordNumber++;
       return loc;
     }
@@ -269,7 +269,7 @@ public final class BytesToBytesMap {
    * If any other lookups or operations are performed on this map while iterating over it, including
    * `lookup()`, the behavior of the returned iterator is undefined.
    */
-  public Iterator<Location> iterator() {
+  public BytesToBytesMapIterator iterator() {
     return new BytesToBytesMapIterator(numElements, dataPages.iterator(), loc);
   }
 
@@ -352,15 +352,18 @@ public final class BytesToBytesMap {
         taskMemoryManager.getOffsetInPage(fullKeyAddress));
     }
 
-    private void updateAddressesAndSizes(Object page, long keyOffsetInPage) {
-        long position = keyOffsetInPage;
-        keyLength = (int) PlatformDependent.UNSAFE.getLong(page, position);
-        position += 8; // word used to store the key size
-        keyMemoryLocation.setObjAndOffset(page, position);
-        position += keyLength;
-        valueLength = (int) PlatformDependent.UNSAFE.getLong(page, position);
-        position += 8; // word used to store the key size
-        valueMemoryLocation.setObjAndOffset(page, position);
+    private void updateAddressesAndSizes(final Object page, final long keyOffsetInPage) {
+      long position = keyOffsetInPage;
+      final int totalLength = PlatformDependent.UNSAFE.getInt(page, position);
+      position += 4;
+      keyLength = PlatformDependent.UNSAFE.getInt(page, position);
+      position += 4;
+      valueLength = totalLength - keyLength;
+
+      keyMemoryLocation.setObjAndOffset(page, position);
+
+      position += keyLength;
+      valueMemoryLocation.setObjAndOffset(page, position);
     }
 
     Location with(int pos, int keyHashcode, boolean isDefined) {
@@ -478,7 +481,7 @@ public final class BytesToBytesMap {
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
       // (8 byte key length) (key) (8 byte value length) (value)
-      final long requiredSize = 8 + keyLengthBytes + 8 + valueLengthBytes;
+      final long requiredSize = 8 + keyLengthBytes + valueLengthBytes;
 
       // --- Figure out where to insert the new record ---------------------------------------------
 
@@ -508,7 +511,7 @@ public final class BytesToBytesMap {
           // There wasn't enough space in the current page, so write an end-of-page marker:
           final Object pageBaseObject = currentDataPage.getBaseObject();
           final long lengthOffsetInPage = currentDataPage.getBaseOffset() + pageCursor;
-          PlatformDependent.UNSAFE.putLong(pageBaseObject, lengthOffsetInPage, END_OF_PAGE_MARKER);
+          PlatformDependent.UNSAFE.putInt(pageBaseObject, lengthOffsetInPage, END_OF_PAGE_MARKER);
         }
         final long memoryGranted = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
         if (memoryGranted != pageSizeBytes) {
@@ -535,21 +538,22 @@ public final class BytesToBytesMap {
       long insertCursor = dataPageInsertOffset;
 
       // Compute all of our offsets up-front:
-      final long keySizeOffsetInPage = insertCursor;
-      insertCursor += 8; // word used to store the key size
+      final long totalLengthOffset = insertCursor;
+      insertCursor += 4;
+      final long keyLengthOffset = insertCursor;
+      insertCursor += 4;
       final long keyDataOffsetInPage = insertCursor;
       insertCursor += keyLengthBytes;
-      final long valueSizeOffsetInPage = insertCursor;
-      insertCursor += 8; // word used to store the value size
       final long valueDataOffsetInPage = insertCursor;
       insertCursor += valueLengthBytes; // word used to store the value size
 
+      PlatformDependent.UNSAFE.putInt(dataPageBaseObject, totalLengthOffset,
+        keyLengthBytes + valueLengthBytes);
+      PlatformDependent.UNSAFE.putInt(dataPageBaseObject, keyLengthOffset, keyLengthBytes);
       // Copy the key
-      PlatformDependent.UNSAFE.putLong(dataPageBaseObject, keySizeOffsetInPage, keyLengthBytes);
       PlatformDependent.copyMemory(
         keyBaseObject, keyBaseOffset, dataPageBaseObject, keyDataOffsetInPage, keyLengthBytes);
       // Copy the value
-      PlatformDependent.UNSAFE.putLong(dataPageBaseObject, valueSizeOffsetInPage, valueLengthBytes);
       PlatformDependent.copyMemory(valueBaseObject, valueBaseOffset, dataPageBaseObject,
         valueDataOffsetInPage, valueLengthBytes);
 
@@ -557,7 +561,7 @@ public final class BytesToBytesMap {
 
       if (useOverflowPage) {
         // Store the end-of-page marker at the end of the data page
-        PlatformDependent.UNSAFE.putLong(dataPageBaseObject, insertCursor, END_OF_PAGE_MARKER);
+        PlatformDependent.UNSAFE.putInt(dataPageBaseObject, insertCursor, END_OF_PAGE_MARKER);
       } else {
         pageCursor += requiredSize;
       }
@@ -565,7 +569,7 @@ public final class BytesToBytesMap {
       numElements++;
       bitset.set(pos);
       final long storedKeyAddress = taskMemoryManager.encodePageNumberAndOffset(
-        dataPage, keySizeOffsetInPage);
+        dataPage, totalLengthOffset);
       longArray.set(pos * 2, storedKeyAddress);
       longArray.set(pos * 2 + 1, keyHashcode);
       updateAddressesAndSizes(storedKeyAddress);

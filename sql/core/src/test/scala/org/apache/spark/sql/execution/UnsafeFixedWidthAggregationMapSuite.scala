@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
@@ -52,7 +53,7 @@ class UnsafeFixedWidthAggregationMapSuite
 
   override def afterEach(): Unit = {
     if (taskMemoryManager != null) {
-      val leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask
+      val leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask()
       assert(taskMemoryManager.cleanUpAllAllocatedMemory() === 0)
       assert(leakedShuffleMemory === 0)
       taskMemoryManager = null
@@ -80,7 +81,7 @@ class UnsafeFixedWidthAggregationMapSuite
       PAGE_SIZE_BYTES,
       false // disable perf metrics
     )
-    assert(!map.iterator().hasNext)
+    assert(!map.iterator().next())
     map.free()
   }
 
@@ -100,13 +101,13 @@ class UnsafeFixedWidthAggregationMapSuite
     // Looking up a key stores a zero-entry in the map (like Python Counters or DefaultDicts)
     assert(map.getAggregationBuffer(groupKey) != null)
     val iter = map.iterator()
-    val entry = iter.next()
-    assert(!iter.hasNext)
-    entry.key.getString(0) should be ("cats")
-    entry.value.getInt(0) should be (0)
+    assert(iter.next())
+    iter.getKey.getString(0) should be ("cats")
+    iter.getValue.getInt(0) should be (0)
+    assert(!iter.next())
 
     // Modifications to rows retrieved from the map should update the values in the map
-    entry.value.setInt(0, 42)
+    iter.getValue.setInt(0, 42)
     map.getAggregationBuffer(groupKey).getInt(0) should be (42)
 
     map.free()
@@ -128,12 +129,14 @@ class UnsafeFixedWidthAggregationMapSuite
     groupKeys.foreach { keyString =>
       assert(map.getAggregationBuffer(InternalRow(UTF8String.fromString(keyString))) != null)
     }
-    val seenKeys: Set[String] = map.iterator().asScala.map { entry =>
-      entry.key.getString(0)
-    }.toSet
-    seenKeys.size should be (groupKeys.size)
-    seenKeys should be (groupKeys)
 
+    val seenKeys = new mutable.HashSet[String]
+    val iter = map.iterator()
+    while (iter.next()) {
+      seenKeys += iter.getKey.getString(0)
+    }
+    assert(seenKeys.size === groupKeys.size)
+    assert(seenKeys === groupKeys)
     map.free()
   }
 
