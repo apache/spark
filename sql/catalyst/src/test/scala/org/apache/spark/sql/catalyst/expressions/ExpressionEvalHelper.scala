@@ -24,11 +24,12 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.types.DataType
 
 /**
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
  */
-trait ExpressionEvalHelper {
+trait ExpressionEvalHelper extends PropertyGenerator {
   self: SparkFunSuite =>
 
   protected def create_row(values: Any*): InternalRow = {
@@ -210,5 +211,71 @@ trait ExpressionEvalHelper {
     actual = FromUnsafeProjection(expression.dataType :: Nil)(
       plan(inputRow)).get(0, expression.dataType)
     assert(checkResult(actual, expected))
+  }
+
+  def checkConsistency(dt: DataType, clazz: Class[_]): Unit = {
+    val ctor = clazz.getDeclaredConstructor(classOf[Expression])
+    forAll (randomGen(dt)) { (l: Literal) =>
+      val expr = ctor.newInstance(l).asInstanceOf[Expression]
+      cmpInterpretWithCodegen(EmptyRow, expr)
+    }
+  }
+
+  def checkConsistency(dt1: DataType, dt2: DataType, clazz: Class[_]): Unit = {
+    val ctor = clazz.getDeclaredConstructor(classOf[Expression], classOf[Expression])
+    forAll (
+        randomGen(dt1),
+        randomGen(dt2)
+    ) { (l1: Literal, l2: Literal) =>
+      val expr = ctor.newInstance(l1, l2).asInstanceOf[Expression]
+      cmpInterpretWithCodegen(EmptyRow, expr)
+    }
+  }
+
+  def checkConsistency(dt1: DataType, dt2: DataType, dt3: DataType,
+      clazz: Class[_]): Unit = {
+    val ctor = clazz.getDeclaredConstructor(
+      classOf[Expression], classOf[Expression], classOf[Expression])
+    forAll (
+        randomGen(dt1),
+        randomGen(dt2),
+        randomGen(dt3)
+    ) { (l1: Literal, l2: Literal, l3: Literal) =>
+      val expr = ctor.newInstance(l1, l2, l3).asInstanceOf[Expression]
+      cmpInterpretWithCodegen(EmptyRow, expr)
+    }
+  }
+
+  private def cmpInterpretWithCodegen(inputRow: InternalRow, expr: Expression): Unit = {
+    val interpret = try evaluate(expr, inputRow) catch {
+      case e: Exception => fail(s"Exception evaluating $expr", e)
+    }
+
+    val plan = generateProject(
+      GenerateMutableProjection.generate(Alias(expr, s"Optimized($expr)")() :: Nil)(),
+      expr)
+    val codegen = plan(inputRow).get(0, expr.dataType)
+
+    if (!checkResultRegardingNaN(interpret, codegen)) {
+      fail(s"Incorrect evaluation: $expr, interpret: $interpret, codegen: $codegen")
+    }
+  }
+
+  /**
+   * Check the equality between result of expression and expected value, it will handle
+   * Array[Byte] and Spread[Double].
+   */
+  private[this] def checkResultRegardingNaN(result: Any, expected: Any): Boolean = {
+    (result, expected) match {
+      case (result: Array[Byte], expected: Array[Byte]) =>
+        java.util.Arrays.equals(result, expected)
+      case (result: Double, expected: Spread[Double]) =>
+        expected.isWithin(result)
+      case (result: Double, expected: Double) if result.isNaN && expected.isNaN =>
+        true
+      case (result: Float, expected: Float) if result.isNaN && expected.isNaN =>
+        true
+      case _ => result == expected
+    }
   }
 }

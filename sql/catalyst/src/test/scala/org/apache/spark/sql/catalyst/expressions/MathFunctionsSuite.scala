@@ -200,8 +200,11 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("acos") {
-    testUnary(Acos, math.acos, (-10 to 10).map(_ * 0.1))
-    testUnary(Acos, math.acos, (11 to 20).map(_ * 0.1), expectNaN = true)
+    for (i <- 0 to 100) {
+      testUnary(Acos, math.acos, (-10 to 10).map(_ * 0.1))
+      testUnary(Acos, math.acos, (11 to 20).map(_ * 0.1), expectNaN = true)
+      checkConsistency(DoubleType, classOf[Acos])
+    }
   }
 
   test("cosh") {
