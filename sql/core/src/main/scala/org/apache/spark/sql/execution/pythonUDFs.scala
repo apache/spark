@@ -137,7 +137,7 @@ object EvaluatePython {
     case (a: ArrayData, array: ArrayType) =>
       val values = new java.util.ArrayList[Any](a.numElements())
       a.foreach(array.elementType, (_, e) => {
-        values.add(e)
+        values.add(toJava(e, array.elementType))
       })
       values
 
