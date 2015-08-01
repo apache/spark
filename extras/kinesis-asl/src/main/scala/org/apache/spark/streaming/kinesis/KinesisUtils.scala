@@ -86,19 +86,19 @@ object KinesisUtils {
    * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
    * @param regionName   Name of region used by the Kinesis Client Library (KCL) to update
    *                     DynamoDB (lease coordination and checkpointing) and CloudWatch (metrics)
-   * @param awsAccessKeyId  AWS AccessKeyId (if null, will use DefaultAWSCredentialsProviderChain)
-   * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
-   * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
-   *                            See the Kinesis Spark Streaming documentation for more
-   *                            details on the different types of checkpoints.
    * @param initialPositionInStream  In the absence of Kinesis checkpoint info, this is the
    *                                 worker's initial starting position in the stream.
    *                                 The values are either the beginning of the stream
    *                                 per Kinesis' limit of 24 hours
    *                                 (InitialPositionInStream.TRIM_HORIZON) or
    *                                 the tip of the stream (InitialPositionInStream.LATEST).
+   * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
+   *                            See the Kinesis Spark Streaming documentation for more
+   *                            details on the different types of checkpoints.
    * @param storageLevel Storage level to use for storing the received objects.
    *                     StorageLevel.MEMORY_AND_DISK_2 is recommended.
+   * @param awsAccessKeyId  AWS AccessKeyId (if null, will use DefaultAWSCredentialsProviderChain)
+   * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
    */
   def createStream(
       ssc: StreamingContext,
@@ -130,7 +130,7 @@ object KinesisUtils {
    * - The Kinesis application name used by the Kinesis Client Library (KCL) will be the app name in
    *   [[org.apache.spark.SparkConf]].
    *
-   * @param ssc Java StreamingContext object
+   * @param ssc StreamingContext object
    * @param streamName   Kinesis stream name
    * @param endpointUrl  Endpoint url of Kinesis service
    *                     (e.g., https://kinesis.us-east-1.amazonaws.com)
@@ -175,15 +175,15 @@ object KinesisUtils {
    * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
    * @param regionName   Name of region used by the Kinesis Client Library (KCL) to update
    *                     DynamoDB (lease coordination and checkpointing) and CloudWatch (metrics)
-   * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
-   *                            See the Kinesis Spark Streaming documentation for more
-   *                            details on the different types of checkpoints.
    * @param initialPositionInStream  In the absence of Kinesis checkpoint info, this is the
    *                                 worker's initial starting position in the stream.
    *                                 The values are either the beginning of the stream
    *                                 per Kinesis' limit of 24 hours
    *                                 (InitialPositionInStream.TRIM_HORIZON) or
    *                                 the tip of the stream (InitialPositionInStream.LATEST).
+   * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
+   *                            See the Kinesis Spark Streaming documentation for more
+   *                            details on the different types of checkpoints.
    * @param storageLevel Storage level to use for storing the received objects.
    *                     StorageLevel.MEMORY_AND_DISK_2 is recommended.
    */
@@ -206,8 +206,8 @@ object KinesisUtils {
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
    * Note:
-   *  The given AWS credentials will get saved in DStream checkpoints if checkpointing
-   *  is enabled. Make sure that your checkpoint directory is secure.
+   * The given AWS credentials will get saved in DStream checkpoints if checkpointing
+   * is enabled. Make sure that your checkpoint directory is secure.
    *
    * @param jssc Java StreamingContext object
    * @param kinesisAppName  Kinesis application name used by the Kinesis Client Library
@@ -216,19 +216,19 @@ object KinesisUtils {
    * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
    * @param regionName   Name of region used by the Kinesis Client Library (KCL) to update
    *                     DynamoDB (lease coordination and checkpointing) and CloudWatch (metrics)
-   * @param awsAccessKeyId  AWS AccessKeyId (if null, will use DefaultAWSCredentialsProviderChain)
-   * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
-   * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
-   *                            See the Kinesis Spark Streaming documentation for more
-   *                            details on the different types of checkpoints.
    * @param initialPositionInStream  In the absence of Kinesis checkpoint info, this is the
    *                                 worker's initial starting position in the stream.
    *                                 The values are either the beginning of the stream
    *                                 per Kinesis' limit of 24 hours
    *                                 (InitialPositionInStream.TRIM_HORIZON) or
    *                                 the tip of the stream (InitialPositionInStream.LATEST).
+   * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
+   *                            See the Kinesis Spark Streaming documentation for more
+   *                            details on the different types of checkpoints.
    * @param storageLevel Storage level to use for storing the received objects.
    *                     StorageLevel.MEMORY_AND_DISK_2 is recommended.
+   * @param awsAccessKeyId  AWS AccessKeyId (if null, will use DefaultAWSCredentialsProviderChain)
+   * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
    */
   def createStream(
       jssc: JavaStreamingContext,
@@ -296,4 +296,50 @@ object KinesisUtils {
       throw new IllegalArgumentException(s"Region name '$regionName' is not valid")
     }
   }
+}
+
+/**
+ * This is a helper class that wraps the methods in KinesisUtils into more Python-friendly class and
+ * function so that it can be easily instantiated and called from Python's KinesisUtils.
+ */
+private class KinesisUtilsPythonHelper {
+
+  def getInitialPositionInStream(initialPositionInStream: Int): InitialPositionInStream = {
+    initialPositionInStream match {
+      case 0 => InitialPositionInStream.LATEST
+      case 1 => InitialPositionInStream.TRIM_HORIZON
+      case _ => throw new IllegalArgumentException(
+        "Illegal InitialPositionInStream. Please use " +
+          "InitialPositionInStream.LATEST or InitialPositionInStream.TRIM_HORIZON")
+    }
+  }
+
+  def createStream(
+      jssc: JavaStreamingContext,
+      kinesisAppName: String,
+      streamName: String,
+      endpointUrl: String,
+      regionName: String,
+      initialPositionInStream: Int,
+      checkpointInterval: Duration,
+      storageLevel: StorageLevel,
+      awsAccessKeyId: String,
+      awsSecretKey: String
+      ): JavaReceiverInputDStream[Array[Byte]] = {
+    if (awsAccessKeyId == null && awsSecretKey != null) {
+      throw new IllegalArgumentException("awsSecretKey is set but awsAccessKeyId is null")
+    }
+    if (awsAccessKeyId != null && awsSecretKey == null) {
+      throw new IllegalArgumentException("awsAccessKeyId is set but awsSecretKey is null")
+    }
+    if (awsAccessKeyId == null && awsSecretKey == null) {
+      KinesisUtils.createStream(jssc, kinesisAppName, streamName, endpointUrl, regionName,
+        getInitialPositionInStream(initialPositionInStream), checkpointInterval, storageLevel)
+    } else {
+      KinesisUtils.createStream(jssc, kinesisAppName, streamName, endpointUrl, regionName,
+        getInitialPositionInStream(initialPositionInStream), checkpointInterval, storageLevel,
+        awsAccessKeyId, awsSecretKey)
+    }
+  }
+
 }

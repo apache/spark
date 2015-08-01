@@ -45,6 +45,7 @@ object DateTimeUtils {
   final val to2001 = -11323
 
   // this is year -17999, calculation: 50 * daysIn400Year
+  final val YearZero = -17999
   final val toYearZero = to2001 + 7304850
 
   @transient lazy val defaultTimeZone = TimeZone.getDefault
@@ -571,6 +572,246 @@ object DateTimeUtils {
       dayInYear - 304
     } else {
       dayInYear - 334
+    }
+  }
+
+  /**
+   * The number of days for each month (not leap year)
+   */
+  private val monthDays = Array(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+  /**
+   * Returns the date value for the first day of the given month.
+   * The month is expressed in months since year zero (17999 BC), starting from 0.
+   */
+  private def firstDayOfMonth(absoluteMonth: Int): Int = {
+    val absoluteYear = absoluteMonth / 12
+    var monthInYear = absoluteMonth - absoluteYear * 12
+    var date = getDateFromYear(absoluteYear)
+    if (monthInYear >= 2 && isLeapYear(absoluteYear + YearZero)) {
+      date += 1
+    }
+    while (monthInYear > 0) {
+      date += monthDays(monthInYear - 1)
+      monthInYear -= 1
+    }
+    date
+  }
+
+  /**
+   * Returns the date value for January 1 of the given year.
+   * The year is expressed in years since year zero (17999 BC), starting from 0.
+   */
+  private def getDateFromYear(absoluteYear: Int): Int = {
+    val absoluteDays = (absoluteYear * 365 + absoluteYear / 400 - absoluteYear / 100
+      + absoluteYear / 4)
+    absoluteDays - toYearZero
+  }
+
+  /**
+   * Add date and year-month interval.
+   * Returns a date value, expressed in days since 1.1.1970.
+   */
+  def dateAddMonths(days: Int, months: Int): Int = {
+    val absoluteMonth = (getYear(days) - YearZero) * 12 + getMonth(days) - 1 + months
+    val currentMonthInYear = absoluteMonth % 12
+    val currentYear = absoluteMonth / 12
+    val leapDay = if (currentMonthInYear == 1 && isLeapYear(currentYear + YearZero)) 1 else 0
+    val lastDayOfMonth = monthDays(currentMonthInYear) + leapDay
+
+    val dayOfMonth = getDayOfMonth(days)
+    val currentDayInMonth = if (getDayOfMonth(days + 1) == 1 || dayOfMonth >= lastDayOfMonth) {
+      // last day of the month
+      lastDayOfMonth
+    } else {
+      dayOfMonth
+    }
+    firstDayOfMonth(absoluteMonth) + currentDayInMonth - 1
+  }
+
+  /**
+   * Add timestamp and full interval.
+   * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
+   */
+  def timestampAddInterval(start: Long, months: Int, microseconds: Long): Long = {
+    val days = millisToDays(start / 1000L)
+    val newDays = dateAddMonths(days, months)
+    daysToMillis(newDays) * 1000L + start - daysToMillis(days) * 1000L + microseconds
+  }
+
+  /**
+   * Returns the last dayInMonth in the month it belongs to. The date is expressed
+   * in days since 1.1.1970. the return value starts from 1.
+   */
+  private def getLastDayInMonthOfMonth(date: Int): Int = {
+    var (year, dayInYear) = getYearAndDayInYear(date)
+    if (isLeapYear(year)) {
+      if (dayInYear > 31 && dayInYear <= 60) {
+        return 29
+      } else if (dayInYear > 60) {
+        dayInYear = dayInYear - 1
+      }
+    }
+    if (dayInYear <= 31) {
+      31
+    } else if (dayInYear <= 59) {
+      28
+    } else if (dayInYear <= 90) {
+      31
+    } else if (dayInYear <= 120) {
+      30
+    } else if (dayInYear <= 151) {
+      31
+    } else if (dayInYear <= 181) {
+      30
+    } else if (dayInYear <= 212) {
+      31
+    } else if (dayInYear <= 243) {
+      31
+    } else if (dayInYear <= 273) {
+      30
+    } else if (dayInYear <= 304) {
+      31
+    } else if (dayInYear <= 334) {
+      30
+    } else {
+      31
+    }
+  }
+
+  /**
+   * Returns number of months between time1 and time2. time1 and time2 are expressed in
+   * microseconds since 1.1.1970.
+   *
+   * If time1 and time2 having the same day of month, or both are the last day of month,
+   * it returns an integer (time under a day will be ignored).
+   *
+   * Otherwise, the difference is calculated based on 31 days per month, and rounding to
+   * 8 digits.
+   */
+  def monthsBetween(time1: Long, time2: Long): Double = {
+    val millis1 = time1 / 1000L
+    val millis2 = time2 / 1000L
+    val date1 = millisToDays(millis1)
+    val date2 = millisToDays(millis2)
+    // TODO(davies): get year, month, dayOfMonth from single function
+    val dayInMonth1 = getDayOfMonth(date1)
+    val dayInMonth2 = getDayOfMonth(date2)
+    val months1 = getYear(date1) * 12 + getMonth(date1)
+    val months2 = getYear(date2) * 12 + getMonth(date2)
+
+    if (dayInMonth1 == dayInMonth2 || (dayInMonth1 == getLastDayInMonthOfMonth(date1)
+      && dayInMonth2 == getLastDayInMonthOfMonth(date2))) {
+      return (months1 - months2).toDouble
+    }
+    // milliseconds is enough for 8 digits precision on the right side
+    val timeInDay1 = millis1 - daysToMillis(date1)
+    val timeInDay2 = millis2 - daysToMillis(date2)
+    val timesBetween = (timeInDay1 - timeInDay2).toDouble / MILLIS_PER_DAY
+    val diff = (months1 - months2).toDouble + (dayInMonth1 - dayInMonth2 + timesBetween) / 31.0
+    // rounding to 8 digits
+    math.round(diff * 1e8) / 1e8
+  }
+
+  /*
+   * Returns day of week from String. Starting from Thursday, marked as 0.
+   * (Because 1970-01-01 is Thursday).
+   */
+  def getDayOfWeekFromString(string: UTF8String): Int = {
+    val dowString = string.toString.toUpperCase
+    dowString match {
+      case "SU" | "SUN" | "SUNDAY" => 3
+      case "MO" | "MON" | "MONDAY" => 4
+      case "TU" | "TUE" | "TUESDAY" => 5
+      case "WE" | "WED" | "WEDNESDAY" => 6
+      case "TH" | "THU" | "THURSDAY" => 0
+      case "FR" | "FRI" | "FRIDAY" => 1
+      case "SA" | "SAT" | "SATURDAY" => 2
+      case _ => -1
+    }
+  }
+
+  /**
+   * Returns the first date which is later than startDate and is of the given dayOfWeek.
+   * dayOfWeek is an integer ranges in [0, 6], and 0 is Thu, 1 is Fri, etc,.
+   */
+  def getNextDateForDayOfWeek(startDate: Int, dayOfWeek: Int): Int = {
+    startDate + 1 + ((dayOfWeek - 1 - startDate) % 7 + 7) % 7
+  }
+
+  /**
+   * Returns last day of the month for the given date. The date is expressed in days
+   * since 1.1.1970.
+   */
+  def getLastDayOfMonth(date: Int): Int = {
+    var (year, dayInYear) = getYearAndDayInYear(date)
+    if (isLeapYear(year)) {
+      if (dayInYear > 31 && dayInYear <= 60) {
+        return date + (60 - dayInYear)
+      } else if (dayInYear > 60) {
+        dayInYear = dayInYear - 1
+      }
+    }
+    val lastDayOfMonthInYear = if (dayInYear <= 31) {
+      31
+    } else if (dayInYear <= 59) {
+      59
+    } else if (dayInYear <= 90) {
+      90
+    } else if (dayInYear <= 120) {
+      120
+    } else if (dayInYear <= 151) {
+      151
+    } else if (dayInYear <= 181) {
+      181
+    } else if (dayInYear <= 212) {
+      212
+    } else if (dayInYear <= 243) {
+      243
+    } else if (dayInYear <= 273) {
+      273
+    } else if (dayInYear <= 304) {
+      304
+    } else if (dayInYear <= 334) {
+      334
+    } else {
+      365
+    }
+    date + (lastDayOfMonthInYear - dayInYear)
+  }
+
+  private val TRUNC_TO_YEAR = 1
+  private val TRUNC_TO_MONTH = 2
+  private val TRUNC_INVALID = -1
+
+  /**
+   * Returns the trunc date from original date and trunc level.
+   * Trunc level should be generated using `parseTruncLevel()`, should only be 1 or 2.
+   */
+  def truncDate(d: Int, level: Int): Int = {
+    if (level == TRUNC_TO_YEAR) {
+      d - DateTimeUtils.getDayInYear(d) + 1
+    } else if (level == TRUNC_TO_MONTH) {
+      d - DateTimeUtils.getDayOfMonth(d) + 1
+    } else {
+      // caller make sure that this should never be reached
+      sys.error(s"Invalid trunc level: $level")
+    }
+  }
+
+  /**
+   * Returns the truncate level, could be TRUNC_YEAR, TRUNC_MONTH, or TRUNC_INVALID,
+   * TRUNC_INVALID means unsupported truncate level.
+   */
+  def parseTruncLevel(format: UTF8String): Int = {
+    if (format == null) {
+      TRUNC_INVALID
+    } else {
+      format.toString.toUpperCase match {
+        case "YEAR" | "YYYY" | "YY" => TRUNC_TO_YEAR
+        case "MON" | "MONTH" | "MM" => TRUNC_TO_MONTH
+        case _ => TRUNC_INVALID
+      }
     }
   }
 }

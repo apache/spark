@@ -278,7 +278,7 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeByte(NULL)
               } else {
                 out.writeByte(NOT_NULL)
-                val bytes = row.getAs[UTF8String](i).getBytes
+                val bytes = row.getUTF8String(i).getBytes
                 out.writeInt(bytes.length)
                 out.write(bytes)
               }
@@ -288,7 +288,7 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeByte(NULL)
               } else {
                 out.writeByte(NOT_NULL)
-                val bytes = row.getAs[Array[Byte]](i)
+                val bytes = row.getBinary(i)
                 out.writeInt(bytes.length)
                 out.write(bytes)
               }
@@ -298,7 +298,7 @@ private[sql] object SparkSqlSerializer2 {
                 out.writeByte(NULL)
               } else {
                 out.writeByte(NOT_NULL)
-                val value = row.apply(i).asInstanceOf[Decimal]
+                val value = row.getDecimal(i, decimal.precision, decimal.scale)
                 val javaBigDecimal = value.toJavaBigDecimal
                 // First, write out the unscaled value.
                 val bytes: Array[Byte] = javaBigDecimal.unscaledValue().toByteArray

@@ -255,6 +255,16 @@ setMethod("names",
             columns(x)
           })
 
+#' @rdname columns
+setMethod("names<-",
+          signature(x = "DataFrame"),
+          function(x, value) {
+            if (!is.null(value)) {
+              sdf <- callJMethod(x@sdf, "toDF", listToSeq(as.list(value)))
+              dataFrame(sdf)
+            }
+          })
+
 #' Register Temporary Table
 #'
 #' Registers a DataFrame as a Temporary Table in the SQLContext
@@ -473,6 +483,18 @@ setMethod("distinct",
             dataFrame(sdf)
           })
 
+#' @title Distinct rows in a DataFrame
+#
+#' @description Returns a new DataFrame containing distinct rows in this DataFrame
+#'
+#' @rdname unique
+#' @aliases unique
+setMethod("unique",
+          signature(x = "DataFrame"),
+          function(x) {
+            distinct(x)
+          })
+
 #' Sample
 #'
 #' Return a sampled subset of this DataFrame using a random seed.
@@ -532,6 +554,58 @@ setMethod("count",
           signature(x = "DataFrame"),
           function(x) {
             callJMethod(x@sdf, "count")
+          })
+
+#' @title Number of rows for a DataFrame
+#' @description Returns number of rows in a DataFrames
+#'
+#' @name nrow
+#'
+#' @rdname nrow
+#' @aliases count
+setMethod("nrow",
+          signature(x = "DataFrame"),
+          function(x) {
+            count(x)
+          })
+
+#' Returns the number of columns in a DataFrame
+#'
+#' @param x a SparkSQL DataFrame
+#'
+#' @rdname ncol
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlContext, path)
+#' ncol(df)
+#' }
+setMethod("ncol",
+          signature(x = "DataFrame"),
+          function(x) {
+            length(columns(x))
+          })
+
+#' Returns the dimentions (number of rows and columns) of a DataFrame
+#' @param x a SparkSQL DataFrame
+#'
+#' @rdname dim
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlContext, path)
+#' dim(df)
+#' }
+setMethod("dim",
+          signature(x = "DataFrame"),
+          function(x) {
+            c(count(x), ncol(x))
           })
 
 #' Collects all the elements of a Spark DataFrame and coerces them into an R data.frame.
@@ -1231,6 +1305,22 @@ setMethod("unionAll",
             dataFrame(unioned)
           })
 
+#' @title Union two or more DataFrames
+#
+#' @description Returns a new DataFrame containing rows of all parameters.
+#
+#' @rdname rbind
+#' @aliases unionAll
+setMethod("rbind",
+          signature(... = "DataFrame"),
+          function(x, ..., deparse.level = 1) {
+            if (nargs() == 3) {
+              unionAll(x, ...)
+            } else {
+              unionAll(x, Recall(..., deparse.level = 1))
+            }
+          })
+
 #' Intersect
 #'
 #' Return a new DataFrame containing rows only in both this DataFrame
@@ -1322,9 +1412,11 @@ setMethod("write.df",
                                     "org.apache.spark.sql.parquet")
             }
             allModes <- c("append", "overwrite", "error", "ignore")
+            # nolint start
             if (!(mode %in% allModes)) {
               stop('mode should be one of "append", "overwrite", "error", "ignore"')
             }
+            # nolint end
             jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
             options <- varargsToEnv(...)
             if (!is.null(path)) {
@@ -1384,9 +1476,11 @@ setMethod("saveAsTable",
                                     "org.apache.spark.sql.parquet")
             }
             allModes <- c("append", "overwrite", "error", "ignore")
+            # nolint start
             if (!(mode %in% allModes)) {
               stop('mode should be one of "append", "overwrite", "error", "ignore"')
             }
+            # nolint end
             jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
             options <- varargsToEnv(...)
             callJMethod(df@sdf, "saveAsTable", tableName, source, jmode, options)

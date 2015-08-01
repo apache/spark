@@ -18,7 +18,9 @@
 package org.apache.spark.sql.parquet
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types.ArrayData
 
+// TODO Removes this while fixing SPARK-8848
 private[sql] object CatalystConverter {
   // This is mostly Parquet convention (see, e.g., `ConversionPatterns`).
   // Note that "array" for the array elements is chosen by ParquetAvro.
@@ -31,7 +33,7 @@ private[sql] object CatalystConverter {
   val MAP_SCHEMA_NAME = "map"
 
   // TODO: consider using Array[T] for arrays to avoid boxing of primitive types
-  type ArrayScalaType[T] = Seq[T]
+  type ArrayScalaType[T] = ArrayData
   type StructScalaType[T] = InternalRow
   type MapScalaType[K, V] = Map[K, V]
 }
