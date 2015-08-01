@@ -244,7 +244,7 @@ private[sql] class FixedDecimalColumnStats(precision: Int, scale: Int) extends C
       val value = row.getDecimal(ordinal, precision, scale)
       if (upper == null || value.compareTo(upper) > 0) upper = value
       if (lower == null || value.compareTo(lower) < 0) lower = value
-      sizeInBytes += FIXED_DECIMAL.defaultSize
+      sizeInBytes += DECIMAL.defaultSize
     }
   }
 

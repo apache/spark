@@ -115,7 +115,7 @@ private[sql] class FixedDecimalColumnBuilder(
     scale: Int)
   extends NativeColumnBuilder(
     new FixedDecimalColumnStats(precision, scale),
-    FIXED_DECIMAL(precision, scale))
+    DECIMAL(precision, scale))
 
 // TODO (lian) Add support for array, struct and map
 private[sql] class GenericColumnBuilder(dataType: DataType)

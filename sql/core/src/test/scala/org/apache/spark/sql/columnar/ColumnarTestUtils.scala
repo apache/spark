@@ -50,7 +50,7 @@ object ColumnarTestUtils {
       case DOUBLE => Random.nextDouble()
       case STRING => UTF8String.fromString(Random.nextString(Random.nextInt(32)))
       case BINARY => randomBytes(Random.nextInt(32))
-      case FIXED_DECIMAL(precision, scale) => Decimal(Random.nextLong() % 100, precision, scale)
+      case DECIMAL(precision, scale) => Decimal(Random.nextLong() % 100, precision, scale)
       case _ =>
         // Using a random one-element map instead of an arbitrary object
         Map(Random.nextInt() -> Random.nextString(Random.nextInt(32)))

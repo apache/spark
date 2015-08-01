@@ -329,7 +329,7 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: UTF8String): Unit = {
-    row.update(ordinal, value)
+    row.update(ordinal, value.clone())
   }
 
   override def getField(row: InternalRow, ordinal: Int): UTF8String = {
@@ -337,7 +337,7 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   }
 
   override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
-    to.update(toOrdinal, from.getUTF8String(fromOrdinal))
+    setField(to, toOrdinal, getField(from, fromOrdinal))
   }
 }
 
@@ -377,11 +377,11 @@ private[sql] object TIMESTAMP extends NativeColumnType(TimestampType, 9, 8) {
   }
 }
 
-private[sql] case class FIXED_DECIMAL(precision: Int, scale: Int)
+private[sql] case class DECIMAL(precision: Int, scale: Int)
   extends NativeColumnType(
     DecimalType(precision, scale),
     10,
-    FIXED_DECIMAL.defaultSize) {
+    DECIMAL.defaultSize) {
 
   override def extract(buffer: ByteBuffer): Decimal = {
     Decimal(buffer.getLong(), precision, scale)
@@ -396,11 +396,15 @@ private[sql] case class FIXED_DECIMAL(precision: Int, scale: Int)
   }
 
   override def setField(row: MutableRow, ordinal: Int, value: Decimal): Unit = {
-    row(ordinal) = value
+    row.setDecimal(ordinal, value, precision)
+  }
+
+  override def copyField(from: InternalRow, fromOrdinal: Int, to: MutableRow, toOrdinal: Int) {
+    setField(to, toOrdinal, getField(from, fromOrdinal))
   }
 }
 
-private[sql] object FIXED_DECIMAL {
+private[sql] object DECIMAL {
   val defaultSize = 8
 }
 
@@ -466,7 +470,7 @@ private[sql] object ColumnType {
       case StringType => STRING
       case BinaryType => BINARY
       case DecimalType.Fixed(precision, scale) if precision < 19 =>
-        FIXED_DECIMAL(precision, scale)
+        DECIMAL(precision, scale)
       case other => GENERIC(other)
     }
   }
