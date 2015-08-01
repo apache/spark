@@ -32,14 +32,16 @@ import org.apache.parquet.io.api.{Binary, RecordConsumer}
 import org.apache.spark.Logging
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificMutableRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.parquet.CatalystSchemaConverter.{MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64, minBytesForPrecision}
 import org.apache.spark.sql.types._
 
 private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] with Logging {
-  // A `ValueWriter` is responsible for writing a field of an `InternalRow` to the record consumer
-  private type ValueWriter = (InternalRow, Int) => Unit
+  // A `ValueWriter` is responsible for writing a field of an `InternalRow` to the record consumer.
+  // Here we are using `SpecializedGetters` rather than `InternalRow` so that we can directly access
+  // data in `ArrayData` without the help of `SpecificMutableRow`.
+  private type ValueWriter = (SpecializedGetters, Int) => Unit
 
   // Schema of the `InternalRow`s to be written
   private var schema: StructType = _
@@ -94,14 +96,12 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   private def writeFields(
       row: InternalRow, schema: StructType, fieldWriters: Seq[ValueWriter]): Unit = {
     var i = 0
-
     while (i < row.numFields) {
       if (!row.isNullAt(i)) {
         consumeField(schema(i).name, i) {
           fieldWriters(i).apply(row, i)
         }
       }
-
       i += 1
     }
   }
@@ -109,40 +109,40 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   private def makeWriter(dataType: DataType): ValueWriter = {
     dataType match {
       case BooleanType =>
-        (row: InternalRow, ordinal: Int) =>
+        (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addBoolean(row.getBoolean(ordinal))
 
       case ByteType =>
-        (row: InternalRow, ordinal: Int) =>
+        (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addInteger(row.getByte(ordinal))
 
       case ShortType =>
-        (row: InternalRow, ordinal: Int) =>
+        (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addInteger(row.getShort(ordinal))
 
       case IntegerType | DateType =>
-        (row: InternalRow, ordinal: Int) =>
+        (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addInteger(row.getInt(ordinal))
 
       case LongType =>
-        (row: InternalRow, ordinal: Int) =>
+        (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addLong(row.getLong(ordinal))
 
       case FloatType =>
-        (row: InternalRow, ordinal: Int) =>
+        (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addFloat(row.getFloat(ordinal))
 
       case DoubleType =>
-        (row: InternalRow, ordinal: Int) =>
+        (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addDouble(row.getDouble(ordinal))
 
       case StringType =>
-        (row: InternalRow, ordinal: Int) =>
+        (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addBinary(Binary.fromByteArray(row.getUTF8String(ordinal).getBytes))
 
       case TimestampType =>
         // TODO Writes `TimestampType` values as `TIMESTAMP_MICROS` once parquet-mr implements it
-        (row: InternalRow, ordinal: Int) => {
+        (row: SpecializedGetters, ordinal: Int) => {
           // Actually Spark SQL `TimestampType` only has microsecond precision.
           val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(row.getLong(ordinal))
           val buf = ByteBuffer.wrap(timestampBuffer)
@@ -151,7 +151,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
         }
 
       case BinaryType =>
-        (row: InternalRow, ordinal: Int) =>
+        (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addBinary(Binary.fromByteArray(row.getBinary(ordinal)))
 
       case DecimalType.Fixed(precision, scale) =>
@@ -159,7 +159,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
 
       case t: StructType =>
         val fieldWriters = t.map(_.dataType).map(makeWriter)
-        (row: InternalRow, ordinal: Int) =>
+        (row: SpecializedGetters, ordinal: Int) =>
           consumeGroup(writeFields(row.getStruct(ordinal, t.length), t, fieldWriters))
 
       case ArrayType(elementType, _) if followParquetFormatSpec =>
@@ -193,15 +193,15 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     val numBytes = minBytesForPrecision(precision)
 
     val int32Writer =
-      (row: InternalRow, ordinal: Int) =>
+      (row: SpecializedGetters, ordinal: Int) =>
         recordConsumer.addInteger(row.getDecimal(ordinal, precision, scale).toUnscaledLong.toInt)
 
     val int64Writer =
-      (row: InternalRow, ordinal: Int) =>
+      (row: SpecializedGetters, ordinal: Int) =>
         recordConsumer.addLong(row.getDecimal(ordinal, precision, scale).toUnscaledLong)
 
     val binaryWriterUsingUnscaledLong =
-      (row: InternalRow, ordinal: Int) => {
+      (row: SpecializedGetters, ordinal: Int) => {
         // When the precision is low enough (<= 18) to squeeze the decimal value into a `Long`, we
         // can build a fixed-length byte array with length `numBytes` using the unscaled `Long`
         // value and the `decimalBuffer` for better performance.
@@ -219,7 +219,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
       }
 
     val binaryWriterUsingUnscaledBytes =
-      (row: InternalRow, ordinal: Int) => {
+      (row: SpecializedGetters, ordinal: Int) => {
         val decimal = row.getDecimal(ordinal, precision, scale)
         val bytes = decimal.toJavaBigDecimal.unscaledValue().toByteArray
         val fixedLengthBytes = if (bytes.length == numBytes) {
@@ -259,9 +259,8 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   private def makeThreeLevelArrayWriter(
       elementType: DataType, repeatedGroupName: String, elementFieldName: String): ValueWriter = {
     val elementWriter = makeWriter(elementType)
-    val mutableRow = new SpecificMutableRow(elementType :: Nil)
 
-    (row: InternalRow, ordinal: Int) => {
+    (row: SpecializedGetters, ordinal: Int) => {
       consumeGroup {
         val array = row.getArray(ordinal)
         if (array.numElements() > 0) {
@@ -270,8 +269,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
             while (i < array.numElements()) {
               consumeGroup {
                 if (!array.isNullAt(i)) {
-                  mutableRow.update(0, array.get(i, elementType))
-                  consumeField(elementFieldName, 0)(elementWriter.apply(mutableRow, 0))
+                  consumeField(elementFieldName, 0)(elementWriter.apply(array, i))
                 }
               }
               i += 1
@@ -285,17 +283,15 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   private def makeTwoLevelArrayWriter(
       elementType: DataType, repeatedFieldName: String): ValueWriter = {
     val elementWriter = makeWriter(elementType)
-    val mutableRow = new SpecificMutableRow(elementType :: Nil)
 
-    (row: InternalRow, ordinal: Int) => {
+    (row: SpecializedGetters, ordinal: Int) => {
       consumeGroup {
         val array = row.getArray(ordinal)
         if (array.numElements() > 0) {
           consumeField(repeatedFieldName, 0) {
             var i = 0
             while (i < array.numElements()) {
-              mutableRow.update(0, array.get(i, elementType))
-              elementWriter.apply(mutableRow, 0)
+              elementWriter.apply(array, i)
               i += 1
             }
           }
@@ -311,7 +307,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     val valueWriter = makeWriter(valueType)
     val mutableRow = new SpecificMutableRow(keyType :: valueType :: Nil)
 
-    (row: InternalRow, ordinal: Int) => {
+    (row: SpecializedGetters, ordinal: Int) => {
       consumeGroup {
         val map = row.getMap(ordinal)
         if (map.numElements() > 0) {
