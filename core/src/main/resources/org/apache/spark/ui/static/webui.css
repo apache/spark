@@ -226,9 +226,9 @@ a.expandbutton {
 }
 
 .executor_thread {
-  background: #C7BCCD;
+  background: #E6E6E6;
 }
 
 .non-executor_thread {
-  background: #F8EEF0;
+  background: #FAFAFA;
 }
