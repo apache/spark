@@ -29,7 +29,7 @@ object TestUtil {
   def getBlockResolver(handler: ExternalShuffleBlockHandler): ExternalShuffleBlockResolver = {
     handler.blockManager
   }
-  
+
   def getExecutorInfo(
       appId: String,
       execId: String,
@@ -42,6 +42,5 @@ object TestUtil {
   def registeredExecutorFile(resolver: ExternalShuffleBlockResolver): File = {
     resolver.registeredExecutorFile
   }
-
 
 }
