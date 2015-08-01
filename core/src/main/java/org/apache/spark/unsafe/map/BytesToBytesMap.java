@@ -17,7 +17,6 @@
 
 package org.apache.spark.unsafe.map;
 
-import java.io.IOException;
 import java.lang.Override;
 import java.lang.UnsupportedOperationException;
 import java.util.Iterator;
@@ -212,7 +211,7 @@ public final class BytesToBytesMap {
    */
   public int numElements() { return numElements; }
 
-  private static final class BytesToBytesMapIterator implements Iterator<Location> {
+  public static final class BytesToBytesMapIterator implements Iterator<Location> {
 
     private final int numRecords;
     private final Iterator<MemoryBlock> dataPagesIterator;
@@ -222,7 +221,8 @@ public final class BytesToBytesMap {
     private Object pageBaseObject;
     private long offsetInPage;
 
-    BytesToBytesMapIterator(int numRecords, Iterator<MemoryBlock> dataPagesIterator, Location loc) {
+    private BytesToBytesMapIterator(
+        int numRecords, Iterator<MemoryBlock> dataPagesIterator, Location loc) {
       this.numRecords = numRecords;
       this.dataPagesIterator = dataPagesIterator;
       this.loc = loc;
@@ -269,7 +269,7 @@ public final class BytesToBytesMap {
    * If any other lookups or operations are performed on this map while iterating over it, including
    * `lookup()`, the behavior of the returned iterator is undefined.
    */
-  public Iterator<Location> iterator() {
+  public BytesToBytesMapIterator iterator() {
     return new BytesToBytesMapIterator(numElements, dataPages.iterator(), loc);
   }
 

@@ -287,21 +287,26 @@ case class GeneratedAggregate(
         new Iterator[InternalRow] {
           private[this] val mapIterator = aggregationMap.iterator()
           private[this] val resultProjection = resultProjectionBuilder()
+          private[this] var _hasNext = mapIterator.next()
 
-          def hasNext: Boolean = mapIterator.hasNext
+          def hasNext: Boolean = _hasNext
 
           def next(): InternalRow = {
-            val entry = mapIterator.next()
-            val result = resultProjection(joinedRow(entry.key, entry.value))
-            if (hasNext) {
-              result
+            if (_hasNext) {
+              val result = resultProjection(joinedRow(mapIterator.getKey, mapIterator.getKey))
+              _hasNext = mapIterator.next()
+              if (_hasNext) {
+                result
+              } else {
+                // This is the last element in the iterator, so let's free the buffer. Before we do,
+                // though, we need to make a defensive copy of the result so that we don't return an
+                // object that might contain dangling pointers to the freed memory
+                val resultCopy = result.copy()
+                aggregationMap.free()
+                resultCopy
+              }
             } else {
-              // This is the last element in the iterator, so let's free the buffer. Before we do,
-              // though, we need to make a defensive copy of the result so that we don't return an
-              // object that might contain dangling pointers to the freed memory
-              val resultCopy = result.copy()
-              aggregationMap.free()
-              resultCopy
+              throw new java.util.NoSuchElementException
             }
           }
         }
