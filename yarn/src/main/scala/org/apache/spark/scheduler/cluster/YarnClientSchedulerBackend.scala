@@ -34,6 +34,7 @@ private[spark] class YarnClientSchedulerBackend(
   private var client: Client = null
   private var appId: ApplicationId = null
   private var monitorThread: Thread = null
+  @transient private var interruptLater = false
 
   /**
    * Create a Yarn client to submit an application to the ResourceManager.
@@ -143,7 +144,10 @@ private[spark] class YarnClientSchedulerBackend(
         try {
           val (state, _) = client.monitorApplication(appId, logApplicationReport = false)
           logError(s"Yarn application has already exited with state $state!")
+          interruptLater = true
           sc.stop()
+          // After we have stop SparkContext successfully, we interrupt this thread.
+          Thread.currentThread().interrupt()
         } catch {
           case e: InterruptedException => logInfo("Interrupting monitor thread")
         }
@@ -159,7 +163,7 @@ private[spark] class YarnClientSchedulerBackend(
    */
   override def stop() {
     assert(client != null, "Attempted to stop this scheduler before starting it!")
-    if (monitorThread != null) {
+    if (monitorThread != null && !interruptLater) {
       monitorThread.interrupt()
     }
     super.stop()
