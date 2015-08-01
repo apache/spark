@@ -151,6 +151,10 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.PartitionSpec$"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DescribeCommand"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DDLException")
+          ) ++ Seq(
+            // SPARK-4751 Dynamic allocation for standalone mode
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.SparkContext.supportDynamicAllocation")
           )
 
         case v if v.startsWith("1.4") =>

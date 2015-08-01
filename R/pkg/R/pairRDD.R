@@ -879,7 +879,7 @@ setMethod("sampleByKey",
                   if (withReplacement) {
                     count <- rpois(1, frac)
                     if (count > 0) {
-                      res[(len + 1):(len + count)] <- rep(list(elem), count)
+                      res[ (len + 1) : (len + count) ] <- rep(list(elem), count)
                       len <- len + count
                     }
                   } else {

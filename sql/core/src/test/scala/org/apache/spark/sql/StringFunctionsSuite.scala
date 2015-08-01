@@ -103,6 +103,16 @@ class StringFunctionsSuite extends QueryTest {
       Row("AQIDBA==", bytes))
   }
 
+  test("string / binary substring function") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("1世3", Array[Byte](1, 2, 3, 4))).toDF("a", "b")
+    checkAnswer(df.select(substring($"a", 1, 2)), Row("1世"))
+    checkAnswer(df.select(substring($"b", 2, 2)), Row(Array[Byte](2,3)))
+    checkAnswer(df.selectExpr("substring(a, 1, 2)"), Row("1世"))
+    // scalastyle:on
+  }
+
   test("string encode/decode function") {
     val bytes = Array[Byte](-27, -92, -89, -27, -115, -125, -28, -72, -106, -25, -107, -116)
     // scalastyle:off
@@ -142,6 +152,15 @@ class StringFunctionsSuite extends QueryTest {
       Row("aa123cc"))
   }
 
+  test("soundex function") {
+    val df = Seq(("MARY", "SU")).toDF("l", "r")
+    checkAnswer(
+      df.select(soundex($"l"), soundex($"r")), Row("M600", "S000"))
+
+    checkAnswer(
+      df.selectExpr("SoundEx(l)", "SoundEx(r)"), Row("M600", "S000"))
+  }
+
   test("string instr function") {
     val df = Seq(("aaads", "aa", "zz")).toDF("a", "b", "c")
 
@@ -152,6 +171,63 @@ class StringFunctionsSuite extends QueryTest {
     checkAnswer(
       df.selectExpr("instr(a, b)"),
       Row(1))
+  }
+
+  test("string substring_index function") {
+    val df = Seq(("www.apache.org", ".", "zz")).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(substring_index($"a", ".", 3)),
+      Row("www.apache.org"))
+    checkAnswer(
+      df.select(substring_index($"a", ".", 2)),
+      Row("www.apache"))
+    checkAnswer(
+      df.select(substring_index($"a", ".", 1)),
+      Row("www"))
+    checkAnswer(
+      df.select(substring_index($"a", ".", 0)),
+      Row(""))
+    checkAnswer(
+      df.select(substring_index(lit("www.apache.org"), ".", -1)),
+      Row("org"))
+    checkAnswer(
+      df.select(substring_index(lit("www.apache.org"), ".", -2)),
+      Row("apache.org"))
+    checkAnswer(
+      df.select(substring_index(lit("www.apache.org"), ".", -3)),
+      Row("www.apache.org"))
+    // str is empty string
+    checkAnswer(
+      df.select(substring_index(lit(""), ".", 1)),
+      Row(""))
+    // empty string delim
+    checkAnswer(
+      df.select(substring_index(lit("www.apache.org"), "", 1)),
+      Row(""))
+    // delim does not exist in str
+    checkAnswer(
+      df.select(substring_index(lit("www.apache.org"), "#", 1)),
+      Row("www.apache.org"))
+    // delim is 2 chars
+    checkAnswer(
+      df.select(substring_index(lit("www||apache||org"), "||", 2)),
+      Row("www||apache"))
+    checkAnswer(
+      df.select(substring_index(lit("www||apache||org"), "||", -2)),
+      Row("apache||org"))
+    // null
+    checkAnswer(
+      df.select(substring_index(lit(null), "||", 2)),
+      Row(null))
+    checkAnswer(
+      df.select(substring_index(lit("www.apache.org"), null, 2)),
+      Row(null))
+    // non ascii chars
+    // scalastyle:off
+    checkAnswer(
+      df.selectExpr("""substring_index("大千世界大千世界", "千", 2)"""),
+      Row("大千世界大"))
+    // scalastyle:on
   }
 
   test("string locate function") {

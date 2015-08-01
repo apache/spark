@@ -95,9 +95,9 @@ mat = ... # an RDD of Vectors
 
 # Compute column summary statistics.
 summary = Statistics.colStats(mat)
-print summary.mean()
-print summary.variance()
-print summary.numNonzeros()
+print(summary.mean())
+print(summary.variance())
+print(summary.numNonzeros())
 
 {% endhighlight %}
 </div>
@@ -183,12 +183,12 @@ seriesY = ... # must have the same number of partitions and cardinality as serie
 
 # Compute the correlation using Pearson's method. Enter "spearman" for Spearman's method. If a 
 # method is not specified, Pearson's method will be used by default. 
-print Statistics.corr(seriesX, seriesY, method="pearson")
+print(Statistics.corr(seriesX, seriesY, method="pearson"))
 
 data = ... # an RDD of Vectors
 # calculate the correlation matrix using Pearson's method. Use "spearman" for Spearman's method.
 # If a method is not specified, Pearson's method will be used by default. 
-print Statistics.corr(data, method="pearson")
+print(Statistics.corr(data, method="pearson"))
 
 {% endhighlight %}
 </div>
@@ -398,14 +398,14 @@ vec = Vectors.dense(...) # a vector composed of the frequencies of events
 # compute the goodness of fit. If a second vector to test against is not supplied as a parameter,
 # the test runs against a uniform distribution.
 goodnessOfFitTestResult = Statistics.chiSqTest(vec)
-print goodnessOfFitTestResult # summary of the test including the p-value, degrees of freedom,
-                              # test statistic, the method used, and the null hypothesis.
+print(goodnessOfFitTestResult) # summary of the test including the p-value, degrees of freedom,
+                               # test statistic, the method used, and the null hypothesis.
 
 mat = Matrices.dense(...) # a contingency matrix
 
 # conduct Pearson's independence test on the input contingency matrix
 independenceTestResult = Statistics.chiSqTest(mat)
-print independenceTestResult  # summary of the test including the p-value, degrees of freedom...
+print(independenceTestResult)  # summary of the test including the p-value, degrees of freedom...
 
 obs = sc.parallelize(...)  # LabeledPoint(feature, label) .
 
@@ -415,8 +415,8 @@ obs = sc.parallelize(...)  # LabeledPoint(feature, label) .
 featureTestResults = Statistics.chiSqTest(obs)
 
 for i, result in enumerate(featureTestResults):
-    print "Column $d:" % (i + 1)
-    print result
+    print("Column $d:" % (i + 1))
+    print(result)
 {% endhighlight %}
 </div>
 

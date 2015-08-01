@@ -198,7 +198,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    */
   public UTF8String substring(final int start, final int until) {
     if (until <= start || start >= numBytes) {
-      return fromBytes(new byte[0]);
+      return EMPTY_UTF8;
     }
 
     int i = 0;
@@ -214,9 +214,13 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       c += 1;
     }
 
-    byte[] bytes = new byte[i - j];
-    copyMemory(base, offset + j, bytes, BYTE_ARRAY_OFFSET, i - j);
-    return fromBytes(bytes);
+    if (i > j) {
+      byte[] bytes = new byte[i - j];
+      copyMemory(base, offset + j, bytes, BYTE_ARRAY_OFFSET, i - j);
+      return fromBytes(bytes);
+    } else {
+      return EMPTY_UTF8;
+    }
   }
 
   public UTF8String substringSQL(int pos, int length) {
@@ -226,8 +230,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
     // to the -ith element before the end of the sequence. If a start index i is 0, it
     // refers to the first element.
-    int start = (pos > 0) ? pos -1 : ((pos < 0) ? numChars() + pos : 0);
-    int end = (length == Integer.MAX_VALUE) ? Integer.MAX_VALUE : start + length;
+    int len = numChars();
+    int start = (pos > 0) ? pos -1 : ((pos < 0) ? len + pos : 0);
+    int end = (length == Integer.MAX_VALUE) ? len : start + length;
     return substring(start, end);
   }
 
@@ -301,10 +306,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     int s = 0;
     int e = this.numBytes - 1;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) == 0x20) s++;
+    while (s < this.numBytes && getByte(s) <= 0x20 && getByte(s) >= 0x00) s++;
     // skip all of the space (0x20) in the right side
-    while (e >= 0 && getByte(e) == 0x20) e--;
-
+    while (e >= 0 && getByte(e) <= 0x20 && getByte(e) >= 0x00) e--;
     if (s > e) {
       // empty string
       return UTF8String.fromBytes(new byte[0]);
@@ -316,7 +320,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   public UTF8String trimLeft() {
     int s = 0;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) == 0x20) s++;
+    while (s < this.numBytes && getByte(s) <= 0x20 && getByte(s) >= 0x00) s++;
     if (s == this.numBytes) {
       // empty string
       return UTF8String.fromBytes(new byte[0]);
@@ -328,7 +332,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   public UTF8String trimRight() {
     int e = numBytes - 1;
     // skip all of the space (0x20) in the right side
-    while (e >= 0 && getByte(e) == 0x20) e--;
+    while (e >= 0 && getByte(e) <= 0x20 && getByte(e) >= 0x00) e--;
 
     if (e < 0) {
       // empty string
@@ -354,7 +358,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   public UTF8String repeat(int times) {
-    if (times <=0) {
+    if (times <= 0) {
       return EMPTY_UTF8;
     }
 
@@ -407,6 +411,84 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   /**
+   * Find the `str` from left to right.
+   */
+  private int find(UTF8String str, int start) {
+    assert (str.numBytes > 0);
+    while (start <= numBytes - str.numBytes) {
+      if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {
+        return start;
+      }
+      start += 1;
+    }
+    return -1;
+  }
+
+  /**
+   * Find the `str` from right to left.
+   */
+  private int rfind(UTF8String str, int start) {
+    assert (str.numBytes > 0);
+    while (start >= 0) {
+      if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {
+        return start;
+      }
+      start -= 1;
+    }
+    return -1;
+  }
+
+  /**
+   * Returns the substring from string str before count occurrences of the delimiter delim.
+   * If count is positive, everything the left of the final delimiter (counting from left) is
+   * returned. If count is negative, every to the right of the final delimiter (counting from the
+   * right) is returned. subStringIndex performs a case-sensitive match when searching for delim.
+   */
+  public UTF8String subStringIndex(UTF8String delim, int count) {
+    if (delim.numBytes == 0 || count == 0) {
+      return EMPTY_UTF8;
+    }
+    if (count > 0) {
+      int idx = -1;
+      while (count > 0) {
+        idx = find(delim, idx + 1);
+        if (idx >= 0) {
+          count --;
+        } else {
+          // can not find enough delim
+          return this;
+        }
+      }
+      if (idx == 0) {
+        return EMPTY_UTF8;
+      }
+      byte[] bytes = new byte[idx];
+      copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, idx);
+      return fromBytes(bytes);
+
+    } else {
+      int idx = numBytes - delim.numBytes + 1;
+      count = -count;
+      while (count > 0) {
+        idx = rfind(delim, idx - 1);
+        if (idx >= 0) {
+          count --;
+        } else {
+          // can not find enough delim
+          return this;
+        }
+      }
+      if (idx + delim.numBytes == numBytes) {
+        return EMPTY_UTF8;
+      }
+      int size = numBytes - delim.numBytes - idx;
+      byte[] bytes = new byte[size];
+      copyMemory(base, offset + idx + delim.numBytes, bytes, BYTE_ARRAY_OFFSET, size);
+      return fromBytes(bytes);
+    }
+  }
+
+  /**
    * Returns str, right-padded with pad to a length of len
    * For example:
    *   ('hi', 5, '??') =&gt; 'hi???'
@@ -414,7 +496,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    */
   public UTF8String rpad(int len, UTF8String pad) {
     int spaces = len - this.numChars(); // number of char need to pad
-    if (spaces <= 0) {
+    if (spaces <= 0 || pad.numBytes() == 0) {
       // no padding at all, return the substring of the current string
       return substring(0, len);
     } else {
@@ -429,7 +511,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       int idx = 0;
       while (idx < count) {
         copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
-        ++idx;
+        ++ idx;
         offset += pad.numBytes;
       }
       copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
@@ -446,7 +528,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    */
   public UTF8String lpad(int len, UTF8String pad) {
     int spaces = len - this.numChars(); // number of char need to pad
-    if (spaces <= 0) {
+    if (spaces <= 0 || pad.numBytes() == 0) {
       // no padding at all, return the substring of the current string
       return substring(0, len);
     } else {
@@ -461,7 +543,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       int idx = 0;
       while (idx < count) {
         copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
-        ++idx;
+        ++ idx;
         offset += pad.numBytes;
       }
       copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
@@ -679,5 +761,58 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       result = 31 * result + getByte(i);
     }
     return result;
+  }
+
+  /**
+   * Soundex mapping table
+   */
+  private static final byte[] US_ENGLISH_MAPPING = {'0', '1', '2', '3', '0', '1', '2', '7',
+    '0', '2', '2', '4', '5', '5', '0', '1', '2', '6', '2', '3', '0', '1', '7', '2', '0', '2'};
+
+  /**
+   * Encodes a string into a Soundex value. Soundex is an encoding used to relate similar names,
+   * but can also be used as a general purpose scheme to find word with similar phonemes.
+   * https://en.wikipedia.org/wiki/Soundex
+   */
+  public UTF8String soundex() {
+    if (numBytes == 0) {
+      return EMPTY_UTF8;
+    }
+
+    byte b = getByte(0);
+    if ('a' <= b && b <= 'z') {
+      b -= 32;
+    } else if (b < 'A' || 'Z' < b) {
+      // first character must be a letter
+      return this;
+    }
+    byte sx[] = {'0', '0', '0', '0'};
+    sx[0] = b;
+    int sxi = 1;
+    int idx = b - 'A';
+    byte lastCode = US_ENGLISH_MAPPING[idx];
+
+    for (int i = 1; i < numBytes; i++) {
+      b = getByte(i);
+      if ('a' <= b && b <= 'z') {
+        b -= 32;
+      } else if (b < 'A' || 'Z' < b) {
+        // not a letter, skip it
+        lastCode = '0';
+        continue;
+      }
+      idx = b - 'A';
+      byte code = US_ENGLISH_MAPPING[idx];
+      if (code == '7') {
+        // ignore it
+      } else {
+        if (code != '0' && code != lastCode) {
+          sx[sxi++] = code;
+          if (sxi > 3) break;
+        }
+        lastCode = code;
+      }
+    }
+    return UTF8String.fromBytes(sx);
   }
 }

@@ -21,6 +21,7 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.Private
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.StructType
 
 /**
  * Inherits some default implementation for Java from `Ordering[Row]`
@@ -43,7 +44,16 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
   protected def bind(in: Seq[SortOrder], inputSchema: Seq[Attribute]): Seq[SortOrder] =
     in.map(BindReferences.bindReference(_, inputSchema))
 
-  protected def create(ordering: Seq[SortOrder]): Ordering[InternalRow] = {
+  /**
+   * Creates a code gen ordering for sorting this schema, in ascending order.
+   */
+  def create(schema: StructType): BaseOrdering = {
+    create(schema.zipWithIndex.map { case (field, ordinal) =>
+      SortOrder(BoundReference(ordinal, field.dataType, nullable = true), Ascending)
+    })
+  }
+
+  protected def create(ordering: Seq[SortOrder]): BaseOrdering = {
     val ctx = newCodeGenContext()
 
     val comparisons = ordering.map { order =>

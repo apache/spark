@@ -165,69 +165,29 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
  * @param toBaseExpr to which base
  */
 case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
-  extends Expression with ImplicitCastInputTypes {
-
-  override def foldable: Boolean = numExpr.foldable && fromBaseExpr.foldable && toBaseExpr.foldable
-
-  override def nullable: Boolean = numExpr.nullable || fromBaseExpr.nullable || toBaseExpr.nullable
+  extends TernaryExpression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(numExpr, fromBaseExpr, toBaseExpr)
-
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType)
-
   override def dataType: DataType = StringType
 
-  /** Returns the result of evaluating this expression on a given input Row */
-  override def eval(input: InternalRow): Any = {
-    val num = numExpr.eval(input)
-    if (num != null) {
-      val fromBase = fromBaseExpr.eval(input)
-      if (fromBase != null) {
-        val toBase = toBaseExpr.eval(input)
-        if (toBase != null) {
-          NumberConverter.convert(
-            num.asInstanceOf[UTF8String].getBytes,
-            fromBase.asInstanceOf[Int],
-            toBase.asInstanceOf[Int])
-        } else {
-          null
-        }
-      } else {
-        null
-      }
-    } else {
-      null
-    }
+  override def nullSafeEval(num: Any, fromBase: Any, toBase: Any): Any = {
+    NumberConverter.convert(
+      num.asInstanceOf[UTF8String].getBytes,
+      fromBase.asInstanceOf[Int],
+      toBase.asInstanceOf[Int])
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val numGen = numExpr.gen(ctx)
-    val from = fromBaseExpr.gen(ctx)
-    val to = toBaseExpr.gen(ctx)
-
     val numconv = NumberConverter.getClass.getName.stripSuffix("$")
-    s"""
-       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-       ${numGen.code}
-       boolean ${ev.isNull} = ${numGen.isNull};
-       if (!${ev.isNull}) {
-         ${from.code}
-         if (!${from.isNull}) {
-           ${to.code}
-           if (!${to.isNull}) {
-             ${ev.primitive} = $numconv.convert(${numGen.primitive}.getBytes(),
-               ${from.primitive}, ${to.primitive});
-             if (${ev.primitive} == null) {
-               ${ev.isNull} = true;
-             }
-           } else {
-             ${ev.isNull} = true;
-           }
-         } else {
-           ${ev.isNull} = true;
-         }
+    nullSafeCodeGen(ctx, ev, (num, from, to) =>
+      s"""
+       ${ev.primitive} = $numconv.convert($num.getBytes(), $from, $to);
+       if (${ev.primitive} == null) {
+         ${ev.isNull} = true;
        }
-     """
+       """
+    )
   }
 }
 

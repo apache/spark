@@ -209,11 +209,11 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
         tpe match {
           case 0 =>
             val size = row.getInt(1)
-            val indices = row.getArray(2).toArray().map(_.asInstanceOf[Int])
-            val values = row.getArray(3).toArray().map(_.asInstanceOf[Double])
+            val indices = row.getArray(2).toIntArray()
+            val values = row.getArray(3).toDoubleArray()
             new SparseVector(size, indices, values)
           case 1 =>
-            val values = row.getArray(3).toArray().map(_.asInstanceOf[Double])
+            val values = row.getArray(3).toDoubleArray()
             new DenseVector(values)
         }
     }

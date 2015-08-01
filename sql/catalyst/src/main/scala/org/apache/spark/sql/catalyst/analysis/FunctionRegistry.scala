@@ -194,10 +194,12 @@ object FunctionRegistry {
     expression[StringRepeat]("repeat"),
     expression[StringReverse]("reverse"),
     expression[StringTrimRight]("rtrim"),
+    expression[SoundEx]("soundex"),
     expression[StringSpace]("space"),
     expression[StringSplit]("split"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
+    expression[SubstringIndex]("substring_index"),
     expression[StringTrim]("trim"),
     expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),
@@ -231,6 +233,7 @@ object FunctionRegistry {
 
     // collection functions
     expression[Size]("size"),
+    expression[SortArray]("sort_array"),
 
     // misc functions
     expression[Crc32]("crc32"),
