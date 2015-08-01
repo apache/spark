@@ -72,7 +72,7 @@ class ClasspathDependenciesSuite extends SparkFunSuite {
   val KRYO = "com.esotericsoftware.kryo.Kryo"
 
   val SPARK_HIVE = "org.apache.hive."
-  val SPARK_SHADED = SPARK_HIVE + "shaded."
+  val SPARK_SHADED = "org.spark-project.hive.shaded."
 
 
   test("shaded Protobuf") {
