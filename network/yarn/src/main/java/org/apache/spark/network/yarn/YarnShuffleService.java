@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -79,9 +80,11 @@ public class YarnShuffleService extends AuxiliaryService {
   private TransportServer shuffleServer = null;
 
   // Handles registering executors and opening shuffle blocks
-  private ExternalShuffleBlockHandler blockHandler;
+  @VisibleForTesting
+  ExternalShuffleBlockHandler blockHandler;
 
-  private File registeredExecutorFile;
+  @VisibleForTesting
+  File registeredExecutorFile;
 
   public YarnShuffleService() {
     super("spark_shuffle");

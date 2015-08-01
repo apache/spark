@@ -48,7 +48,8 @@ import org.apache.spark.network.shuffle.protocol.StreamHandle;
 public class ExternalShuffleBlockHandler extends RpcHandler {
   private final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockHandler.class);
 
-  private final ExternalShuffleBlockResolver blockManager;
+  @VisibleForTesting
+  final ExternalShuffleBlockResolver blockManager;
   private final OneForOneStreamManager streamManager;
 
   public ExternalShuffleBlockHandler(TransportConf conf, File registeredExecutorFile)

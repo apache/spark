@@ -50,14 +50,16 @@ public class ExternalShuffleBlockResolver {
   private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockResolver.class);
 
   // Map containing all registered executors' metadata.
-  private final ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors;
+  @VisibleForTesting
+  final ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors;
 
   // Single-threaded Java executor used to perform expensive recursive directory deletion.
   private final Executor directoryCleaner;
 
   private final TransportConf conf;
 
-  private final File registeredExecutorFile;
+  @VisibleForTesting
+  final File registeredExecutorFile;
 
   public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
       throws IOException, ClassNotFoundException {
@@ -233,11 +235,12 @@ public class ExternalShuffleBlockResolver {
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */
-  private static class AppExecId implements Serializable {
+  @VisibleForTesting
+  static class AppExecId implements Serializable {
     final String appId;
     final String execId;
 
-    private AppExecId(String appId, String execId) {
+    AppExecId(String appId, String execId) {
       this.appId = appId;
       this.execId = execId;
     }
