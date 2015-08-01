@@ -18,7 +18,7 @@
 package org.apache.spark.sql.parquet
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.ArrayData
+import org.apache.spark.sql.types.{MapData, ArrayData}
 
 // TODO Removes this while fixing SPARK-8848
 private[sql] object CatalystConverter {
@@ -33,7 +33,7 @@ private[sql] object CatalystConverter {
   val MAP_SCHEMA_NAME = "map"
 
   // TODO: consider using Array[T] for arrays to avoid boxing of primitive types
-  type ArrayScalaType[T] = ArrayData
-  type StructScalaType[T] = InternalRow
-  type MapScalaType[K, V] = Map[K, V]
+  type ArrayScalaType = ArrayData
+  type StructScalaType = InternalRow
+  type MapScalaType = MapData
 }

@@ -57,7 +57,7 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
   override def deserialize(datum: Any): MyDenseVector = {
     datum match {
       case data: ArrayData =>
-        new MyDenseVector(data.toArray.map(_.asInstanceOf[Double]))
+        new MyDenseVector(data.toDoubleArray())
     }
   }
 

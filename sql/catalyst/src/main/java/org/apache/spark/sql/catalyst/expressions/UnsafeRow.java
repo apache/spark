@@ -118,6 +118,11 @@ public final class UnsafeRow extends MutableRow {
     return baseOffset + bitSetWidthInBytes + ordinal * 8L;
   }
 
+  private void assertIndexIsValid(int index) {
+    assert index >= 0 : "index (" + index + ") should >= 0";
+    assert index < numFields : "index (" + index + ") should < " + numFields;
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Public methods
   //////////////////////////////////////////////////////////////////////////////
@@ -161,11 +166,6 @@ public final class UnsafeRow extends MutableRow {
    */
   public void pointTo(byte[] buf, int numFields, int sizeInBytes) {
     pointTo(buf, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
-  }
-
-  private void assertIndexIsValid(int index) {
-    assert index >= 0 : "index (" + index + ") should >= 0";
-    assert index < numFields : "index (" + index + ") should < " + numFields;
   }
 
   @Override
@@ -254,7 +254,7 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
-  public Object get(int ordinal) {
+  public Object genericGet(int ordinal) {
     throw new UnsupportedOperationException();
   }
 

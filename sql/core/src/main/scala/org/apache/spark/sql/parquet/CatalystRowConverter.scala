@@ -385,7 +385,8 @@ private[parquet] class CatalystRowConverter(
       updater: ParentContainerUpdater)
     extends GroupConverter {
 
-    private var currentMap: mutable.Map[Any, Any] = _
+    private var currentKeys: ArrayBuffer[Any] = _
+    private var currentValues: ArrayBuffer[Any] = _
 
     private val keyValueConverter = {
       val repeatedType = parquetType.getType(0).asGroupType()
@@ -398,12 +399,16 @@ private[parquet] class CatalystRowConverter(
 
     override def getConverter(fieldIndex: Int): Converter = keyValueConverter
 
-    override def end(): Unit = updater.set(currentMap)
+    override def end(): Unit =
+      updater.set(ArrayBasedMapData(currentKeys.toArray, currentValues.toArray))
 
     // NOTE: We can't reuse the mutable Map here and must instantiate a new `Map` for the next
     // value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored in row
     // cells.
-    override def start(): Unit = currentMap = mutable.Map.empty[Any, Any]
+    override def start(): Unit = {
+      currentKeys = ArrayBuffer.empty[Any]
+      currentValues = ArrayBuffer.empty[Any]
+    }
 
     /** Parquet converter for key-value pairs within the map. */
     private final class KeyValueConverter(
@@ -430,7 +435,10 @@ private[parquet] class CatalystRowConverter(
 
       override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
 
-      override def end(): Unit = currentMap(currentKey) = currentValue
+      override def end(): Unit = {
+        currentKeys += currentKey
+        currentValues += currentValue
+      }
 
       override def start(): Unit = {
         currentKey = null
