@@ -79,6 +79,10 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.numActives")
           ) ++ Seq(
+            // SPARK-8464 Separating aggregator and non-aggregator paths in ExternalSorter
+            ProblemFilters.exclude[AbstractClassProblem](
+              "org.apache.spark.util.collection.ExternalSorter")
+          ) ++ Seq(
             // SPARK-8914 Remove RDDApi
             ProblemFilters.exclude[MissingClassProblem](
             "org.apache.spark.sql.RDDApi")

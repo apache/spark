@@ -21,9 +21,9 @@ import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleWriter, BaseShuffleHandle}
+import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleWriter}
 import org.apache.spark.storage.ShuffleBlockId
-import org.apache.spark.util.collection.ExternalSorter
+import org.apache.spark.util.collection.{ExternalSorterAgg, ExternalSorterNoAgg}
 
 private[spark] class SortShuffleWriter[K, V, C](
     shuffleBlockResolver: IndexShuffleBlockResolver,
@@ -52,8 +52,8 @@ private[spark] class SortShuffleWriter[K, V, C](
   override def write(records: Iterator[Product2[K, V]]): Unit = {
     sorter = if (dep.mapSideCombine) {
       require(dep.aggregator.isDefined, "Map-side combine without Aggregator specified!")
-      new ExternalSorter[K, V, C](
-        dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
+      new ExternalSorterAgg[K, V, C](
+        dep.aggregator.get, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
     } else if (SortShuffleWriter.shouldBypassMergeSort(
         SparkEnv.get.conf, dep.partitioner.numPartitions, aggregator = None, keyOrdering = None)) {
       // If there are fewer than spark.shuffle.sort.bypassMergeThreshold partitions and we don't
@@ -67,8 +67,7 @@ private[spark] class SortShuffleWriter[K, V, C](
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't
       // care whether the keys get sorted in each partition; that will be done on the reduce side
       // if the operation being run is sortByKey.
-      new ExternalSorter[K, V, V](
-        aggregator = None, Some(dep.partitioner), ordering = None, dep.serializer)
+      new ExternalSorterNoAgg[K, V, V](Some(dep.partitioner), ordering = None, dep.serializer)
     }
     sorter.insertAll(records)
 
