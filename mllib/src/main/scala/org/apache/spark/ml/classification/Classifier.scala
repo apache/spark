@@ -193,13 +193,5 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * This may be overridden to support custom thresholds which favor particular labels.
    * @return  predicted label
    */
-  protected def raw2prediction(rawPrediction: Vector): Double = {
-    val modelScores = rawPrediction.toArray.zipWithIndex
-    // Apply thresholding, or use votes if no thresholding
-    val scores = Option(getThresholds).map{thresholds =>
-      modelScores.map{case (score, index) =>
-        (score/thresholds(index), index)
-      }}.getOrElse(modelScores)
-    scores.maxBy(_._1)._2
-  }
+  protected def raw2prediction(rawPrediction: Vector): Double = rawPrediction.argmax
 }

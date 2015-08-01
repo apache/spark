@@ -33,37 +33,26 @@ case class BroadcastLeftSemiJoinHash(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryNode with HashJoin {
-
-  override val buildSide: BuildSide = BuildRight
-
-  override def output: Seq[Attribute] = left.output
+    right: SparkPlan,
+    condition: Option[Expression]) extends BinaryNode with HashSemiJoin {
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val buildIter = buildPlan.execute().map(_.copy()).collect().toIterator
-    val hashSet = new java.util.HashSet[InternalRow]()
-    var currentRow: InternalRow = null
+    val input = right.execute().map(_.copy()).collect()
 
-    // Create a Hash set of buildKeys
-    while (buildIter.hasNext) {
-      currentRow = buildIter.next()
-      val rowKey = buildSideKeyGenerator(currentRow)
-      if (!rowKey.anyNull) {
-        val keyExists = hashSet.contains(rowKey)
-        if (!keyExists) {
-          // rowKey may be not serializable (from codegen)
-          hashSet.add(rowKey.copy())
-        }
+    if (condition.isEmpty) {
+      val hashSet = buildKeyHashSet(input.toIterator)
+      val broadcastedRelation = sparkContext.broadcast(hashSet)
+
+      left.execute().mapPartitions { streamIter =>
+        hashSemiJoin(streamIter, broadcastedRelation.value)
       }
-    }
+    } else {
+      val hashRelation = HashedRelation(input.toIterator, rightKeyGenerator, input.size)
+      val broadcastedRelation = sparkContext.broadcast(hashRelation)
 
-    val broadcastedRelation = sparkContext.broadcast(hashSet)
-
-    streamedPlan.execute().mapPartitions { streamIter =>
-      val joinKeys = streamSideKeyGenerator()
-      streamIter.filter(current => {
-        !joinKeys(current).anyNull && broadcastedRelation.value.contains(joinKeys.currentValue)
-      })
+      left.execute().mapPartitions { streamIter =>
+        hashSemiJoin(streamIter, broadcastedRelation.value)
+      }
     }
   }
 }

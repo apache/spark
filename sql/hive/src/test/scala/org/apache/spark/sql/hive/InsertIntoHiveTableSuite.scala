@@ -86,8 +86,6 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
     val message = intercept[QueryExecutionException] {
       sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
     }.getMessage
-
-    println("message!!!!" + message)
   }
 
   test("Double create does not fail when allowExisting = true") {

@@ -123,6 +123,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       throw new SparkException("Executor cores must not be less than " +
         "spark.task.cpus.")
     }
+    // scalastyle:off println
     if (isClusterMode) {
       for (key <- Seq(amMemKey, amMemOverheadKey, amCoresKey)) {
         if (sparkConf.contains(key)) {
@@ -144,11 +145,13 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
         .map(_.toInt)
         .foreach { cores => amCores = cores }
     }
+    // scalastyle:on println
   }
 
   private def parseArgs(inputArgs: List[String]): Unit = {
     var args = inputArgs
 
+    // scalastyle:off println
     while (!args.isEmpty) {
       args match {
         case ("--jar") :: value :: tail =>
@@ -253,6 +256,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           throw new IllegalArgumentException(getUsageMessage(args))
       }
     }
+    // scalastyle:on println
 
     if (primaryPyFile != null && primaryRFile != null) {
       throw new IllegalArgumentException("Cannot have primary-py-file and primary-r-file" +

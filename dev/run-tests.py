@@ -85,6 +85,13 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
     return [f for f in raw_output.split('\n') if f]
 
 
+def setup_test_environ(environ):
+    print("[info] Setup the following environment variables for tests: ")
+    for (k, v) in environ.items():
+        print("%s=%s" % (k, v))
+        os.environ[k] = v
+
+
 def determine_modules_to_test(changed_modules):
     """
     Given a set of modules that have changed, compute the transitive closure of those modules'
@@ -454,6 +461,15 @@ def main():
         changed_modules = [modules.root]
     print("[info] Found the following changed modules:",
           ", ".join(x.name for x in changed_modules))
+
+    # setup environment variables
+    # note - the 'root' module doesn't collect environment variables for all modules. Because the
+    # environment variables should not be set if a module is not changed, even if running the 'root'
+    # module. So here we should use changed_modules rather than test_modules.
+    test_environ = {}
+    for m in changed_modules:
+        test_environ.update(m.environ)
+    setup_test_environ(test_environ)
 
     test_modules = determine_modules_to_test(changed_modules)
 

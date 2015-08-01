@@ -150,6 +150,12 @@ sealed trait Vector extends Serializable {
       toDense
     }
   }
+
+  /**
+   * Find the index of a maximal element.  Returns the first maximal element in case of a tie.
+   * Returns -1 if vector has length 0.
+   */
+  def argmax: Int
 }
 
 /**
@@ -181,15 +187,15 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
         val row = new GenericMutableRow(4)
         row.setByte(0, 0)
         row.setInt(1, size)
-        row.update(2, indices.toSeq)
-        row.update(3, values.toSeq)
+        row.update(2, new GenericArrayData(indices.map(_.asInstanceOf[Any])))
+        row.update(3, new GenericArrayData(values.map(_.asInstanceOf[Any])))
         row
       case DenseVector(values) =>
         val row = new GenericMutableRow(4)
         row.setByte(0, 1)
         row.setNullAt(1)
         row.setNullAt(2)
-        row.update(3, values.toSeq)
+        row.update(3, new GenericArrayData(values.map(_.asInstanceOf[Any])))
         row
     }
   }
@@ -197,17 +203,17 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
   override def deserialize(datum: Any): Vector = {
     datum match {
       case row: InternalRow =>
-        require(row.length == 4,
-          s"VectorUDT.deserialize given row with length ${row.length} but requires length == 4")
+        require(row.numFields == 4,
+          s"VectorUDT.deserialize given row with length ${row.numFields} but requires length == 4")
         val tpe = row.getByte(0)
         tpe match {
           case 0 =>
             val size = row.getInt(1)
-            val indices = row.getAs[Iterable[Int]](2).toArray
-            val values = row.getAs[Iterable[Double]](3).toArray
+            val indices = row.getArray(2).toArray().map(_.asInstanceOf[Int])
+            val values = row.getArray(3).toArray().map(_.asInstanceOf[Double])
             new SparseVector(size, indices, values)
           case 1 =>
-            val values = row.getAs[Iterable[Double]](3).toArray
+            val values = row.getArray(3).toArray().map(_.asInstanceOf[Double])
             new DenseVector(values)
         }
     }
@@ -588,11 +594,7 @@ class DenseVector(val values: Array[Double]) extends Vector {
     new SparseVector(size, ii, vv)
   }
 
-  /**
-   * Find the index of a maximal element.  Returns the first maximal element in case of a tie.
-   * Returns -1 if vector has length 0.
-   */
-  private[spark] def argmax: Int = {
+  override def argmax: Int = {
     if (size == 0) {
       -1
     } else {
@@ -632,6 +634,8 @@ class SparseVector(
   require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
     s" indices match the dimension of the values. You provided ${indices.length} indices and " +
     s" ${values.length} values.")
+  require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
+    s"which exceeds the specified vector size ${size}.")
 
   override def toString: String =
     s"($size,${indices.mkString("[", ",", "]")},${values.mkString("[", ",", "]")})"
@@ -715,6 +719,51 @@ class SparseVector(
         }
       }
       new SparseVector(size, ii, vv)
+    }
+  }
+
+  override def argmax: Int = {
+    if (size == 0) {
+      -1
+    } else {
+      // Find the max active entry.
+      var maxIdx = indices(0)
+      var maxValue = values(0)
+      var maxJ = 0
+      var j = 1
+      val na = numActives
+      while (j < na) {
+        val v = values(j)
+        if (v > maxValue) {
+          maxValue = v
+          maxIdx = indices(j)
+          maxJ = j
+        }
+        j += 1
+      }
+
+      // If the max active entry is nonpositive and there exists inactive ones, find the first zero.
+      if (maxValue <= 0.0 && na < size) {
+        if (maxValue == 0.0) {
+          // If there exists an inactive entry before maxIdx, find it and return its index.
+          if (maxJ < maxIdx) {
+            var k = 0
+            while (k < maxJ && indices(k) == k) {
+              k += 1
+            }
+            maxIdx = k
+          }
+        } else {
+          // If the max active value is negative, find and return the first inactive index.
+          var k = 0
+          while (k < na && indices(k) == k) {
+            k += 1
+          }
+          maxIdx = k
+        }
+      }
+
+      maxIdx
     }
   }
 }

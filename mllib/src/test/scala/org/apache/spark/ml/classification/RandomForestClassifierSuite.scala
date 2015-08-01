@@ -21,13 +21,13 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.LeafNode
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SQLContext, DataFrame}
+import org.apache.spark.sql.{SQLContext, DataFrame, Row}
 
 /**
  * Test suite for [[RandomForestClassifier]].
@@ -66,7 +66,7 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
   test("params") {
     ParamsSuite.checkParams(new RandomForestClassifier)
     val model = new RandomForestClassificationModel("rfc",
-      Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0))), 1)
+      Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0))), 2)
     ParamsSuite.checkParams(model)
   }
 
@@ -220,5 +220,14 @@ private object RandomForestClassifierSuite {
     TreeTests.checkEqual(oldModelAsNew, newModel)
     assert(newModel.hasParent)
     assert(!newModel.trees.head.asInstanceOf[DecisionTreeClassificationModel].hasParent)
+    assert(newModel.numClasses == numClasses)
+    val results = newModel.transform(newData)
+    results.select("rawPrediction", "prediction").collect().foreach {
+      case Row(raw: Vector, prediction: Double) => {
+        assert(raw.size == numClasses)
+        val predFromRaw = raw.toArray.zipWithIndex.maxBy(_._1)._2
+        assert(predFromRaw == prediction)
+      }
+    }
   }
 }

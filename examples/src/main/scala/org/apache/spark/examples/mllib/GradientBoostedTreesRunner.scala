@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import scopt.OptionParser
@@ -145,3 +146,4 @@ object GradientBoostedTreesRunner {
     sc.stop()
   }
 }
+// scalastyle:on println

@@ -17,30 +17,26 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.{BufferedReader, InputStreamReader, File, PrintStream}
-import java.net.URI
-import java.util.{ArrayList => JArrayList, Map => JMap, List => JList, Set => JSet}
+import java.io.{File, PrintStream}
+import java.util.{Map => JMap}
 import javax.annotation.concurrent.GuardedBy
-
-import org.apache.spark.util.CircularBuffer
 
 import scala.collection.JavaConversions._
 import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.metastore.api.Database
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.metastore.api.{Database, FieldSchema}
 import org.apache.hadoop.hive.metastore.{TableType => HTableType}
-import org.apache.hadoop.hive.metastore.api
-import org.apache.hadoop.hive.metastore.api.FieldSchema
-import org.apache.hadoop.hive.ql.metadata
 import org.apache.hadoop.hive.ql.metadata.Hive
-import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.ql.processors._
-import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.ql.{Driver, metadata}
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.util.{CircularBuffer, Utils}
 
 
 /**
@@ -252,10 +248,10 @@ private[hive] class ClientWrapper(
   }
 
   private def toInputFormat(name: String) =
-    Class.forName(name).asInstanceOf[Class[_ <: org.apache.hadoop.mapred.InputFormat[_, _]]]
+    Utils.classForName(name).asInstanceOf[Class[_ <: org.apache.hadoop.mapred.InputFormat[_, _]]]
 
   private def toOutputFormat(name: String) =
-    Class.forName(name)
+    Utils.classForName(name)
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
   private def toQlTable(table: HiveTable): metadata.Table = {
@@ -316,6 +312,13 @@ private[hive] class ClientWrapper(
     shim.getAllPartitions(client, qlTable).map(toHivePartition)
   }
 
+  override def getPartitionsByFilter(
+      hTable: HiveTable,
+      predicates: Seq[Expression]): Seq[HivePartition] = withHiveState {
+    val qlTable = toQlTable(hTable)
+    shim.getPartitionsByFilter(client, qlTable, predicates).map(toHivePartition)
+  }
+
   override def listTables(dbName: String): Seq[String] = withHiveState {
     client.getAllTables(dbName)
   }
@@ -360,7 +363,9 @@ private[hive] class ClientWrapper(
 
         case _ =>
           if (state.out != null) {
+            // scalastyle:off println
             state.out.println(tokens(0) + " " + cmd_1)
+            // scalastyle:on println
           }
           Seq(proc.run(cmd_1).getResponseCode.toString)
       }

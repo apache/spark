@@ -24,7 +24,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 import scala.collection.mutable.HashSet
 
-import org.apache.spark.{AccumulatorParam, Accumulator}
+import org.apache.spark.{AccumulatorParam, Accumulator, Logging}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
@@ -57,7 +57,7 @@ package object debug {
    * Augments [[DataFrame]]s with debug methods.
    */
   @DeveloperApi
-  implicit class DebugQuery(query: DataFrame) {
+  implicit class DebugQuery(query: DataFrame) extends Logging {
     def debug(): Unit = {
       val plan = query.queryExecution.executedPlan
       val visited = new collection.mutable.HashSet[TreeNodeRef]()
@@ -66,7 +66,7 @@ package object debug {
           visited += new TreeNodeRef(s)
           DebugNode(s)
       }
-      println(s"Results returned: ${debugPlan.execute().count()}")
+      logDebug(s"Results returned: ${debugPlan.execute().count()}")
       debugPlan.foreach {
         case d: DebugNode => d.dumpStats()
         case _ =>
@@ -82,11 +82,11 @@ package object debug {
           TypeCheck(s)
       }
       try {
-        println(s"Results returned: ${debugPlan.execute().count()}")
+        logDebug(s"Results returned: ${debugPlan.execute().count()}")
       } catch {
         case e: Exception =>
           def unwrap(e: Throwable): Throwable = if (e.getCause == null) e else unwrap(e.getCause)
-          println(s"Deepest Error: ${unwrap(e)}")
+          logDebug(s"Deepest Error: ${unwrap(e)}")
       }
     }
   }
@@ -119,11 +119,11 @@ package object debug {
     val columnStats: Array[ColumnMetrics] = Array.fill(child.output.size)(new ColumnMetrics())
 
     def dumpStats(): Unit = {
-      println(s"== ${child.simpleString} ==")
-      println(s"Tuples output: ${tupleCount.value}")
+      logDebug(s"== ${child.simpleString} ==")
+      logDebug(s"Tuples output: ${tupleCount.value}")
       child.output.zip(columnStats).foreach { case(attr, metric) =>
         val actualDataTypes = metric.elementTypes.value.mkString("{", ",", "}")
-        println(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
+        logDebug(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
       }
     }
 
@@ -136,7 +136,7 @@ package object debug {
             tupleCount += 1
             var i = 0
             while (i < numColumns) {
-              val value = currentRow(i)
+              val value = currentRow.get(i, output(i).dataType)
               if (value != null) {
                 columnStats(i).elementTypes += HashSet(value.getClass.getName)
               }
@@ -158,8 +158,8 @@ package object debug {
 
       case (row: InternalRow, StructType(fields)) =>
         row.toSeq.zip(fields.map(_.dataType)).foreach { case(d, t) => typeCheck(d, t) }
-      case (s: Seq[_], ArrayType(elemType, _)) =>
-        s.foreach(typeCheck(_, elemType))
+      case (a: ArrayData, ArrayType(elemType, _)) =>
+        a.toArray().foreach(typeCheck(_, elemType))
       case (m: Map[_, _], MapType(keyType, valueType, _)) =>
         m.keys.foreach(typeCheck(_, keyType))
         m.values.foreach(typeCheck(_, valueType))

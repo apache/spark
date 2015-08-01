@@ -41,9 +41,11 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
   /** Simple PrintStream that reads data into a buffer */
   private class BufferPrintStream extends PrintStream(noOpOutputStream) {
     var lineBuffer = ArrayBuffer[String]()
+    // scalastyle:off println
     override def println(line: String) {
       lineBuffer += line
     }
+    // scalastyle:on println
   }
 
   override def beforeAll() {

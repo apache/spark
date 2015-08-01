@@ -46,30 +46,44 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
   protected def create(ordering: Seq[SortOrder]): Ordering[InternalRow] = {
     val ctx = newCodeGenContext()
 
-    val comparisons = ordering.zipWithIndex.map { case (order, i) =>
-      val evalA = order.child.gen(ctx)
-      val evalB = order.child.gen(ctx)
+    val comparisons = ordering.map { order =>
+      val eval = order.child.gen(ctx)
       val asc = order.direction == Ascending
+      val isNullA = ctx.freshName("isNullA")
+      val primitiveA = ctx.freshName("primitiveA")
+      val isNullB = ctx.freshName("isNullB")
+      val primitiveB = ctx.freshName("primitiveB")
       s"""
           i = a;
-          ${evalA.code}
+          boolean $isNullA;
+          ${ctx.javaType(order.child.dataType)} $primitiveA;
+          {
+            ${eval.code}
+            $isNullA = ${eval.isNull};
+            $primitiveA = ${eval.primitive};
+          }
           i = b;
-          ${evalB.code}
-          if (${evalA.isNull} && ${evalB.isNull}) {
+          boolean $isNullB;
+          ${ctx.javaType(order.child.dataType)} $primitiveB;
+          {
+            ${eval.code}
+            $isNullB = ${eval.isNull};
+            $primitiveB = ${eval.primitive};
+          }
+          if ($isNullA && $isNullB) {
             // Nothing
-          } else if (${evalA.isNull}) {
+          } else if ($isNullA) {
             return ${if (order.direction == Ascending) "-1" else "1"};
-          } else if (${evalB.isNull}) {
+          } else if ($isNullB) {
             return ${if (order.direction == Ascending) "1" else "-1"};
           } else {
-            int comp = ${ctx.genComp(order.child.dataType, evalA.primitive, evalB.primitive)};
+            int comp = ${ctx.genComp(order.child.dataType, primitiveA, primitiveB)};
             if (comp != 0) {
               return ${if (asc) "comp" else "-comp"};
             }
           }
       """
     }.mkString("\n")
-
     val code = s"""
       public SpecificOrdering generate($exprType[] expr) {
         return new SpecificOrdering(expr);
@@ -77,10 +91,12 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
 
       class SpecificOrdering extends ${classOf[BaseOrdering].getName} {
 
-        private $exprType[] expressions = null;
+        private $exprType[] expressions;
+        ${declareMutableStates(ctx)}
 
         public SpecificOrdering($exprType[] expr) {
           expressions = expr;
+          ${initMutableStates(ctx)}
         }
 
         @Override
@@ -91,7 +107,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
         }
       }"""
 
-    logDebug(s"Generated Ordering: $code")
+    logDebug(s"Generated Ordering: ${CodeFormatter.format(code)}")
 
     compile(code).generate(ctx.references.toArray).asInstanceOf[BaseOrdering]
   }

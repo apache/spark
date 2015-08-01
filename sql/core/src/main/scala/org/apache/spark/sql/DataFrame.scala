@@ -20,6 +20,8 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 import java.util.Properties
 
+import org.apache.spark.unsafe.types.UTF8String
+
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -30,7 +32,6 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -39,8 +40,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
-import org.apache.spark.sql.json.JacksonGenerator
-import org.apache.spark.sql.sources.CreateTableUsingAsSelect
+import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
+import org.apache.spark.sql.json.{JacksonGenerator, JSONRelation}
+import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -138,8 +140,7 @@ class DataFrame private[sql](
     // happen right away to let these side effects take place eagerly.
     case _: Command |
          _: InsertIntoTable |
-         _: CreateTableUsingAsSelect |
-         _: WriteToFile =>
+         _: CreateTableUsingAsSelect =>
       LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
     case _ =>
       queryExecution.analyzed
@@ -309,7 +310,9 @@ class DataFrame private[sql](
    * @group basic
    * @since 1.3.0
    */
+  // scalastyle:off println
   def printSchema(): Unit = println(schema.treeString)
+  // scalastyle:on println
 
   /**
    * Prints the plans (logical and physical) to the console for debugging purposes.
@@ -320,7 +323,9 @@ class DataFrame private[sql](
     ExplainCommand(
       queryExecution.logical,
       extended = extended).queryExecution.executedPlan.executeCollect().map {
+      // scalastyle:off println
       r => println(r.getString(0))
+      // scalastyle:on println
     }
   }
 
@@ -393,7 +398,9 @@ class DataFrame private[sql](
    * @group action
    * @since 1.5.0
    */
+  // scalastyle:off println
   def show(numRows: Int, truncate: Boolean): Unit = println(showString(numRows, truncate))
+  // scalastyle:on println
 
   /**
    * Returns a [[DataFrameNaFunctions]] for working with missing data.
@@ -1277,7 +1284,7 @@ class DataFrame private[sql](
 
     val outputCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
 
-    val ret: Seq[InternalRow] = if (outputCols.nonEmpty) {
+    val ret: Seq[Row] = if (outputCols.nonEmpty) {
       val aggExprs = statistics.flatMap { case (_, colToAgg) =>
         outputCols.map(c => Column(Cast(colToAgg(Column(c).expr), StringType)).as(c))
       }
@@ -1285,19 +1292,18 @@ class DataFrame private[sql](
       val row = agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
 
       // Pivot the data so each summary is one row
-      row.grouped(outputCols.size).toSeq.zip(statistics).map {
-        case (aggregation, (statistic, _)) =>
-          InternalRow(statistic :: aggregation.toList: _*)
+      row.grouped(outputCols.size).toSeq.zip(statistics).map { case (aggregation, (statistic, _)) =>
+        Row(statistic :: aggregation.toList: _*)
       }
     } else {
       // If there are no output columns, just output a single column that contains the stats.
-      statistics.map { case (name, _) => InternalRow(name) }
+      statistics.map { case (name, _) => Row(name) }
     }
 
     // All columns are string type
     val schema = StructType(
       StructField("summary", StringType) :: outputCols.map(StructField(_, StringType))).toAttributes
-    LocalRelation(schema, ret)
+    LocalRelation.fromExternalRows(schema, ret)
   }
 
   /**
@@ -1541,6 +1547,21 @@ class DataFrame private[sql](
     }
   }
 
+  /**
+   * Returns a best-effort snapshot of the files that compose this DataFrame. This method simply
+   * asks each constituent BaseRelation for its respective files and takes the union of all results.
+   * Depending on the source relations, this may not find all input files. Duplicates are removed.
+   */
+  def inputFiles: Array[String] = {
+    val files: Seq[String] = logicalPlan.collect {
+      case LogicalRelation(fsBasedRelation: HadoopFsRelation) =>
+        fsBasedRelation.paths.toSeq
+      case LogicalRelation(jsonRelation: JSONRelation) =>
+        jsonRelation.path.toSeq
+    }.flatten
+    files.toSet.toArray
+  }
+
   ////////////////////////////////////////////////////////////////////////////
   // for Python API
   ////////////////////////////////////////////////////////////////////////////
@@ -1550,8 +1571,8 @@ class DataFrame private[sql](
    */
   protected[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val structType = schema  // capture it for closure
-    val jrdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType)).toJavaRDD()
-    SerDeUtil.javaToPython(jrdd)
+    val rdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType))
+    EvaluatePython.javaToPython(rdd)
   }
 
   ////////////////////////////////////////////////////////////////////////////
@@ -1609,11 +1630,7 @@ class DataFrame private[sql](
    */
   @deprecated("Use write.parquet(path)", "1.4.0")
   def saveAsParquetFile(path: String): Unit = {
-    if (sqlContext.conf.parquetUseDataSourceApi) {
-      write.format("parquet").mode(SaveMode.ErrorIfExists).save(path)
-    } else {
-      sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
-    }
+    write.format("parquet").mode(SaveMode.ErrorIfExists).save(path)
   }
 
   /**
