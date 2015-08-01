@@ -64,6 +64,8 @@ __all__ += [
     'year', 'quarter', 'month', 'hour', 'minute', 'second',
     'dayofmonth', 'dayofyear', 'weekofyear']
 
+__all__ += ['soundex']
+
 
 def _create_function(name, doc=""):
     """ Create a function for aggregator by name"""
@@ -892,9 +894,59 @@ def months_between(date1, date2):
 
 
 @since(1.5)
+def to_date(col):
+    """
+    Converts the column of StringType or TimestampType into DateType.
+
+    >>> df = sqlContext.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
+    >>> df.select(to_date(df.t).alias('date')).collect()
+    [Row(date=datetime.date(1997, 2, 28))]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.to_date(_to_java_column(col)))
+
+
+@since(1.5)
+def trunc(date, format):
+    """
+    Returns date truncated to the unit specified by the format.
+
+    :param format: 'year', 'YYYY', 'yy' or 'month', 'mon', 'mm'
+
+    >>> df = sqlContext.createDataFrame([('1997-02-28',)], ['d'])
+    >>> df.select(trunc(df.d, 'year').alias('year')).collect()
+    [Row(year=datetime.date(1997, 1, 1))]
+    >>> df.select(trunc(df.d, 'mon').alias('month')).collect()
+    [Row(month=datetime.date(1997, 2, 1))]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.trunc(_to_java_column(date), format))
+
+
+@since(1.5)
+@ignore_unicode_prefix
+def substring_index(str, delim, count):
+    """
+    Returns the substring from string str before count occurrences of the delimiter delim.
+    If count is positive, everything the left of the final delimiter (counting from left) is
+    returned. If count is negative, every to the right of the final delimiter (counting from the
+    right) is returned. substring_index performs a case-sensitive match when searching for delim.
+
+    >>> df = sqlContext.createDataFrame([('a.b.c.d',)], ['s'])
+    >>> df.select(substring_index(df.s, '.', 2).alias('s')).collect()
+    [Row(s=u'a.b')]
+    >>> df.select(substring_index(df.s, '.', -3).alias('s')).collect()
+    [Row(s=u'b.c.d')]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.substring_index(_to_java_column(str), delim, count))
+
+
+@since(1.5)
 def size(col):
     """
     Collection function: returns the length of the array or map stored in the column.
+
     :param col: name of column or expression
 
     >>> df = sqlContext.createDataFrame([([1, 2, 3],),([1],),([],)], ['data'])
@@ -920,6 +972,20 @@ def sort_array(col, asc=True):
      """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.sort_array(_to_java_column(col), asc))
+
+
+@since
+@ignore_unicode_prefix
+def soundex(col):
+    """
+    Returns the SoundEx encoding for a string
+
+    >>> df = sqlContext.createDataFrame([("Peters",),("Uhrbach",)], ['name'])
+    >>> df.select(soundex(df.name).alias("soundex")).collect()
+    [Row(soundex=u'P362'), Row(soundex=u'U612')]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.size(_to_java_column(col)))
 
 
 class UserDefinedFunction(object):

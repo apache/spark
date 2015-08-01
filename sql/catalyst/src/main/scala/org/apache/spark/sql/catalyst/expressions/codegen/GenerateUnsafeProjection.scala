@@ -266,16 +266,16 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val code = s"""
       public Object generate($exprType[] exprs) {
-        return new SpecificProjection(exprs);
+        return new SpecificUnsafeProjection(exprs);
       }
 
-      class SpecificProjection extends ${classOf[UnsafeProjection].getName} {
+      class SpecificUnsafeProjection extends ${classOf[UnsafeProjection].getName} {
 
         private $exprType[] expressions;
 
         ${declareMutableStates(ctx)}
 
-        public SpecificProjection($exprType[] expressions) {
+        public SpecificUnsafeProjection($exprType[] expressions) {
           this.expressions = expressions;
           ${initMutableStates(ctx)}
         }

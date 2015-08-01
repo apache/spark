@@ -301,7 +301,8 @@ def build_spark_sbt(hadoop_version):
     sbt_goals = ["package",
                  "assembly/assembly",
                  "streaming-kafka-assembly/assembly",
-                 "streaming-flume-assembly/assembly"]
+                 "streaming-flume-assembly/assembly",
+                 "streaming-kinesis-asl-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
     print("[info] Building Spark (w/Hive 0.13.1) using SBT with these arguments: ",

@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateMutableProjection}
-import org.apache.spark.sql.types.{Decimal, StructType, DataType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
@@ -190,19 +190,20 @@ class JoinedRow extends InternalRow {
 
   override def numFields: Int = row1.numFields + row2.numFields
 
-  override def getUTF8String(i: Int): UTF8String = {
-    if (i < row1.numFields) row1.getUTF8String(i) else row2.getUTF8String(i - row1.numFields)
-  }
-
-  override def getBinary(i: Int): Array[Byte] = {
-    if (i < row1.numFields) row1.getBinary(i) else row2.getBinary(i - row1.numFields)
-  }
-
-  override def get(i: Int, dataType: DataType): Any =
-    if (i < row1.numFields) row1.get(i) else row2.get(i - row1.numFields)
+  override def genericGet(i: Int): Any =
+    if (i < row1.numFields) row1.genericGet(i) else row2.genericGet(i - row1.numFields)
 
   override def isNullAt(i: Int): Boolean =
     if (i < row1.numFields) row1.isNullAt(i) else row2.isNullAt(i - row1.numFields)
+
+  override def getBoolean(i: Int): Boolean =
+    if (i < row1.numFields) row1.getBoolean(i) else row2.getBoolean(i - row1.numFields)
+
+  override def getByte(i: Int): Byte =
+    if (i < row1.numFields) row1.getByte(i) else row2.getByte(i - row1.numFields)
+
+  override def getShort(i: Int): Short =
+    if (i < row1.numFields) row1.getShort(i) else row2.getShort(i - row1.numFields)
 
   override def getInt(i: Int): Int =
     if (i < row1.numFields) row1.getInt(i) else row2.getInt(i - row1.numFields)
@@ -210,25 +211,34 @@ class JoinedRow extends InternalRow {
   override def getLong(i: Int): Long =
     if (i < row1.numFields) row1.getLong(i) else row2.getLong(i - row1.numFields)
 
-  override def getDouble(i: Int): Double =
-    if (i < row1.numFields) row1.getDouble(i) else row2.getDouble(i - row1.numFields)
-
-  override def getBoolean(i: Int): Boolean =
-    if (i < row1.numFields) row1.getBoolean(i) else row2.getBoolean(i - row1.numFields)
-
-  override def getShort(i: Int): Short =
-    if (i < row1.numFields) row1.getShort(i) else row2.getShort(i - row1.numFields)
-
-  override def getByte(i: Int): Byte =
-    if (i < row1.numFields) row1.getByte(i) else row2.getByte(i - row1.numFields)
-
   override def getFloat(i: Int): Float =
     if (i < row1.numFields) row1.getFloat(i) else row2.getFloat(i - row1.numFields)
 
+  override def getDouble(i: Int): Double =
+    if (i < row1.numFields) row1.getDouble(i) else row2.getDouble(i - row1.numFields)
+
   override def getDecimal(i: Int, precision: Int, scale: Int): Decimal = {
-    if (i < row1.numFields) row1.getDecimal(i, precision, scale)
-    else row2.getDecimal(i - row1.numFields, precision, scale)
+    if (i < row1.numFields) {
+      row1.getDecimal(i, precision, scale)
+    } else {
+      row2.getDecimal(i - row1.numFields, precision, scale)
+    }
   }
+
+  override def getUTF8String(i: Int): UTF8String =
+    if (i < row1.numFields) row1.getUTF8String(i) else row2.getUTF8String(i - row1.numFields)
+
+  override def getBinary(i: Int): Array[Byte] =
+    if (i < row1.numFields) row1.getBinary(i) else row2.getBinary(i - row1.numFields)
+
+  override def getArray(i: Int): ArrayData =
+    if (i < row1.numFields) row1.getArray(i) else row2.getArray(i - row1.numFields)
+
+  override def getInterval(i: Int): CalendarInterval =
+    if (i < row1.numFields) row1.getInterval(i) else row2.getInterval(i - row1.numFields)
+
+  override def getMap(i: Int): MapData =
+    if (i < row1.numFields) row1.getMap(i) else row2.getMap(i - row1.numFields)
 
   override def getStruct(i: Int, numFields: Int): InternalRow = {
     if (i < row1.numFields) {
@@ -239,14 +249,9 @@ class JoinedRow extends InternalRow {
   }
 
   override def copy(): InternalRow = {
-    val totalSize = row1.numFields + row2.numFields
-    val copiedValues = new Array[Any](totalSize)
-    var i = 0
-    while(i < totalSize) {
-      copiedValues(i) = get(i)
-      i += 1
-    }
-    new GenericInternalRow(copiedValues)
+    val copy1 = row1.copy()
+    val copy2 = row2.copy()
+    new JoinedRow(copy1, copy2)
   }
 
   override def toString: String = {

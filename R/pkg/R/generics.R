@@ -461,6 +461,10 @@ setGeneric("isLocal", function(x) { standardGeneric("isLocal") })
 #' @export
 setGeneric("limit", function(x, num) {standardGeneric("limit") })
 
+#' rdname merge
+#' @export
+setGeneric("merge")
+
 #' @rdname withColumn
 #' @export
 setGeneric("mutate", function(x, ...) {standardGeneric("mutate") })
@@ -530,6 +534,10 @@ setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
 #' @rdname agg
 #' @export
 setGeneric("summarize", function(x,...) { standardGeneric("summarize") })
+
+##' rdname summary
+##' @export
+setGeneric("summary", function(x, ...) { standardGeneric("summary") })
 
 # @rdname tojson
 # @export
@@ -669,3 +677,7 @@ setGeneric("upper", function(x) { standardGeneric("upper") })
 #' @rdname glm
 #' @export
 setGeneric("glm")
+
+#' @rdname rbind
+#' @export
+setGeneric("rbind", signature = "...")

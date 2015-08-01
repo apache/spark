@@ -15,17 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
-
-import scala.collection.JavaConverters._
-import scala.util.Random
+package org.apache.spark.sql.execution
 
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.shuffle.ShuffleMemoryManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, TaskMemoryManager, MemoryAllocator}
+import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -41,16 +43,20 @@ class UnsafeFixedWidthAggregationMapSuite
   private def emptyAggregationBuffer: InternalRow = InternalRow(0)
   private val PAGE_SIZE_BYTES: Long = 1L << 26; // 64 megabytes
 
-  private var memoryManager: TaskMemoryManager = null
+  private var taskMemoryManager: TaskMemoryManager = null
+  private var shuffleMemoryManager: ShuffleMemoryManager = null
 
   override def beforeEach(): Unit = {
-    memoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
+    taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
+    shuffleMemoryManager = new ShuffleMemoryManager(Long.MaxValue)
   }
 
   override def afterEach(): Unit = {
-    if (memoryManager != null) {
-      memoryManager.cleanUpAllAllocatedMemory()
-      memoryManager = null
+    if (taskMemoryManager != null) {
+      val leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask()
+      assert(taskMemoryManager.cleanUpAllAllocatedMemory() === 0)
+      assert(leakedShuffleMemory === 0)
+      taskMemoryManager = null
     }
   }
 
@@ -69,12 +75,13 @@ class UnsafeFixedWidthAggregationMapSuite
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
-      memoryManager,
+      taskMemoryManager,
+      shuffleMemoryManager,
       1024, // initial capacity,
       PAGE_SIZE_BYTES,
       false // disable perf metrics
     )
-    assert(!map.iterator().hasNext)
+    assert(!map.iterator().next())
     map.free()
   }
 
@@ -83,7 +90,8 @@ class UnsafeFixedWidthAggregationMapSuite
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
-      memoryManager,
+      taskMemoryManager,
+      shuffleMemoryManager,
       1024, // initial capacity
       PAGE_SIZE_BYTES,
       false // disable perf metrics
@@ -91,15 +99,15 @@ class UnsafeFixedWidthAggregationMapSuite
     val groupKey = InternalRow(UTF8String.fromString("cats"))
 
     // Looking up a key stores a zero-entry in the map (like Python Counters or DefaultDicts)
-    map.getAggregationBuffer(groupKey)
+    assert(map.getAggregationBuffer(groupKey) != null)
     val iter = map.iterator()
-    val entry = iter.next()
-    assert(!iter.hasNext)
-    entry.key.getString(0) should be ("cats")
-    entry.value.getInt(0) should be (0)
+    assert(iter.next())
+    iter.getKey.getString(0) should be ("cats")
+    iter.getValue.getInt(0) should be (0)
+    assert(!iter.next())
 
     // Modifications to rows retrieved from the map should update the values in the map
-    entry.value.setInt(0, 42)
+    iter.getValue.setInt(0, 42)
     map.getAggregationBuffer(groupKey).getInt(0) should be (42)
 
     map.free()
@@ -110,7 +118,8 @@ class UnsafeFixedWidthAggregationMapSuite
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
-      memoryManager,
+      taskMemoryManager,
+      shuffleMemoryManager,
       128, // initial capacity
       PAGE_SIZE_BYTES,
       false // disable perf metrics
@@ -118,14 +127,16 @@ class UnsafeFixedWidthAggregationMapSuite
     val rand = new Random(42)
     val groupKeys: Set[String] = Seq.fill(512)(rand.nextString(1024)).toSet
     groupKeys.foreach { keyString =>
-      map.getAggregationBuffer(InternalRow(UTF8String.fromString(keyString)))
+      assert(map.getAggregationBuffer(InternalRow(UTF8String.fromString(keyString))) != null)
     }
-    val seenKeys: Set[String] = map.iterator().asScala.map { entry =>
-      entry.key.getString(0)
-    }.toSet
-    seenKeys.size should be (groupKeys.size)
-    seenKeys should be (groupKeys)
 
+    val seenKeys = new mutable.HashSet[String]
+    val iter = map.iterator()
+    while (iter.next()) {
+      seenKeys += iter.getKey.getString(0)
+    }
+    assert(seenKeys.size === groupKeys.size)
+    assert(seenKeys === groupKeys)
     map.free()
   }
 
