@@ -37,31 +37,30 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     in.map(BindReferences.bindReference(_, inputSchema))
 
   private def genUpdater(
-    ctx: CodeGenContext,
-    setter: String,
-    dataType: DataType,
-    ordinal: Int,
-    value: String): String = {
+      ctx: CodeGenContext,
+      setter: String,
+      dataType: DataType,
+      ordinal: Int,
+      value: String): String = {
     dataType match {
-      case StringType => s"$setter.update($ordinal, $value.clone())"
       case struct: StructType =>
         val rowTerm = ctx.freshName("row")
         val updates = struct.map(_.dataType).zipWithIndex.map { case (dt, i) =>
           val colTerm = ctx.freshName("col")
           s"""
-             if ($value.isNullAt($i)) {
-               $rowTerm.setNullAt($i);
-             } else {
-               ${ctx.javaType(dt)} $colTerm = ${ctx.getValue(value, dt, s"$i")};
-               ${genUpdater(ctx, rowTerm, dt, i, colTerm)};
-             }
+            if ($value.isNullAt($i)) {
+              $rowTerm.setNullAt($i);
+            } else {
+              ${ctx.javaType(dt)} $colTerm = ${ctx.getValue(value, dt, s"$i")};
+              ${genUpdater(ctx, rowTerm, dt, i, colTerm)};
+            }
            """
         }.mkString("\n")
         s"""
-           $genericMutableRowType $rowTerm = new $genericMutableRowType(${struct.fields.length});
-           $updates
-           $setter.update($ordinal, $rowTerm.copy());
-         """
+          $genericMutableRowType $rowTerm = new $genericMutableRowType(${struct.fields.length});
+          $updates
+          $setter.update($ordinal, $rowTerm.copy());
+        """
       case _ =>
         ctx.setColumn(setter, dataType, ordinal, value)
     }
@@ -114,16 +113,16 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
     val code = s"""
       public Object generate($exprType[] expr) {
-        return new SpecificProjection(expr);
+        return new SpecificSafeProjection(expr);
       }
 
-      class SpecificProjection extends ${classOf[BaseProjection].getName} {
+      class SpecificSafeProjection extends ${classOf[BaseProjection].getName} {
 
         private $exprType[] expressions;
         private $mutableRowType mutableRow;
         ${declareMutableStates(ctx)}
 
-        public SpecificProjection($exprType[] expr) {
+        public SpecificSafeProjection($exprType[] expr) {
           expressions = expr;
           mutableRow = new $genericMutableRowType(${expressions.size});
           ${initMutableStates(ctx)}
