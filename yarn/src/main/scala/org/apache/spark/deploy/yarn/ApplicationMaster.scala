@@ -440,7 +440,8 @@ private[spark] class ApplicationMaster(
     logInfo("Waiting for Spark driver to be reachable.")
     var driverUp = false
     val hostport = args.userArgs(0)
-    val (driverHost, driverPort) = Utils.parseHostPort(hostport)
+    logDebug("Current Arguments='" + args.args.reduce( (a,b) => a + ", " +  b) + "'.")
+    val (driverHost, driverPort) = Utils.parseHostPort(hostport.stripPrefix("'").stripSuffix("'"))
 
     // Spark driver should already be up since it launched us, but we don't want to
     // wait forever, so wait 100 seconds max to match the cluster mode setting.
@@ -614,6 +615,7 @@ object ApplicationMaster extends Logging {
 
   def main(args: Array[String]): Unit = {
     SignalLogger.register(log)
+    logInfo("ApplicationMaster Arguments='" + args.reduce( (a,b) => a + ", " + b) + "'.")
     val amArgs = new ApplicationMasterArguments(args)
     SparkHadoopUtil.get.runAsSparkUser { () =>
       master = new ApplicationMaster(amArgs, new YarnRMClient(amArgs))
