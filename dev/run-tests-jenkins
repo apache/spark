@@ -164,8 +164,9 @@ pr_message=""
 current_pr_head="`git rev-parse HEAD`"
 
 echo "HEAD:  `git rev-parse HEAD`"
-echo "GHPRB: $ghprbActualCommit"
-echo "SHA1:  $sha1"
+echo "\$ghprbActualCommit: $ghprbActualCommit"
+echo "\$sha1:  $sha1"
+echo "\$ghprbPullTitle: $ghprbPullTitle"
 
 # Run pull request tests
 for t in "${PR_TESTS[@]}"; do
@@ -189,6 +190,9 @@ done
 {
   # Marks this build is a pull request build.
   export AMP_JENKINS_PRB=true
+  if [[ $ghprbPullTitle == *"maven-test"* ]]; then
+    export AMPLAB_JENKINS_BUILD_TOOL="maven"
+  fi
   timeout "${TESTS_TIMEOUT}" ./dev/run-tests
   test_result="$?"
 

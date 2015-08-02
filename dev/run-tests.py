@@ -231,7 +231,7 @@ def exec_maven(mvn_args=()):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
-    run_cmd([os.path.join(SPARK_HOME, "build", "mvn")] + mvn_args)
+    run_cmd([os.path.join(SPARK_HOME, "build", "mvn")] + ["--force"] + mvn_args)
 
 
 def exec_sbt(sbt_args=()):
