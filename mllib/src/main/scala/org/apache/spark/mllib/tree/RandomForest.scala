@@ -239,7 +239,8 @@ private class RandomForest (
       // Choose node splits, and enqueue new nodes as needed.
       multiTimer("findBestSplits").start()
       DecisionTree.findBestSplits(baggedInput, metadata, topNodes, nodesForGroup,
-        treeToNodeToIndexInfo, splits, bins, nodeQueue, multiTimer("chooseSplits"), nodeIdCache = nodeIdCache)
+        treeToNodeToIndexInfo, splits, bins, nodeQueue, multiTimer("chooseSplits"),
+        nodeIdCache = nodeIdCache)
       multiTimer("findBestSplits").stop()
     }
 
