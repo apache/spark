@@ -283,20 +283,25 @@ def get_hadoop_profiles(hadoop_version):
               " are", sbt_maven_hadoop_profiles.keys())
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
+
 def get_zinc_port():
-  """
-  Get a randomized port on which to start Zinc
-  """
-  return random.randrange(3030, 4030)
+    """
+    Get a randomized port on which to start Zinc
+    """
+
+    return random.randrange(3030, 4030)
+
 
 def kill_zinc_on_port(zinc_port):
-  """
-  Kill the Zinc process running on the given port, if one exists.
-  """
-  cmd = ("/usr/sbin/lsof -P |grep %s | grep LISTEN "
-    "| awk '{ print $2; }' | xargs kill") % zinc_port
-  # TODO: Not sure what happens here if no process exists
-  run_cmd(cmd)
+    """
+    Kill the Zinc process running on the given port, if one exists.
+    """
+
+    cmd = ("/usr/sbin/lsof -P |grep %s | grep LISTEN "
+           "| awk '{ print $2; }' | xargs kill") % zinc_port
+    # TODO: Not sure what happens here if no process exists
+    run_cmd(cmd)
+
 
 def build_spark_maven(hadoop_version):
     # Enable all of the profiles for the build:
