@@ -190,7 +190,7 @@ done
 {
   # Marks this build is a pull request build.
   export AMP_JENKINS_PRB=true
-  if [[ $ghprbPullTitle == *"maven-test"* ]]; then
+  if [[ $ghprbPullTitle == *"test-maven"* ]]; then
     export AMPLAB_JENKINS_BUILD_TOOL="maven"
   fi
   timeout "${TESTS_TIMEOUT}" ./dev/run-tests
