@@ -19,13 +19,13 @@ package org.apache.spark.sql.execution
 
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.shuffle.ShuffleMemoryManager
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.{TaskContextImpl, TaskContext, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
 import org.apache.spark.unsafe.types.UTF8String
@@ -44,11 +44,11 @@ class UnsafeFixedWidthAggregationMapSuite
   private val PAGE_SIZE_BYTES: Long = 1L << 26; // 64 megabytes
 
   private var taskMemoryManager: TaskMemoryManager = null
-  private var shuffleMemoryManager: ShuffleMemoryManager = null
+  private var shuffleMemoryManager: TestShuffleMemoryManager = null
 
   override def beforeEach(): Unit = {
     taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
-    shuffleMemoryManager = new ShuffleMemoryManager(Long.MaxValue)
+    shuffleMemoryManager = new TestShuffleMemoryManager
   }
 
   override def afterEach(): Unit = {
@@ -58,6 +58,13 @@ class UnsafeFixedWidthAggregationMapSuite
       assert(leakedShuffleMemory === 0)
       taskMemoryManager = null
     }
+  }
+
+  private def randomStrings(n: Int): Seq[String] = {
+    val rand = new Random(42)
+    Seq.fill(512) {
+      Seq.fill(rand.nextInt(100))(rand.nextPrintableChar()).mkString
+    }.distinct
   }
 
   test("supported schemas") {
@@ -140,7 +147,18 @@ class UnsafeFixedWidthAggregationMapSuite
     map.free()
   }
 
-  test("test sorting") {
+  test("test external sorting") {
+    // Calling this make sure we have block manager and everything else setup.
+    TestSQLContext
+
+    TaskContext.setTaskContext(new TaskContextImpl(
+      stageId = 0,
+      partitionId = 0,
+      taskAttemptId = 0,
+      attemptNumber = 0,
+      taskMemoryManager = taskMemoryManager,
+      metricsSystem = null))
+
     val map = new UnsafeFixedWidthAggregationMap(
       emptyAggregationBuffer,
       aggBufferSchema,
@@ -152,26 +170,39 @@ class UnsafeFixedWidthAggregationMapSuite
       false // disable perf metrics
     )
 
-    val rand = new Random(42)
-    val groupKeys: Set[String] = Seq.fill(512) {
-      Seq.fill(rand.nextInt(100))(rand.nextPrintableChar()).mkString
-    }.toSet
-    groupKeys.foreach { keyString =>
+    val keys = randomStrings(1024)
+    keys.foreach { keyString =>
       val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(keyString)))
       buf.setInt(0, keyString.length)
       assert(buf != null)
     }
 
+    val sorter = map.destructAndCreateExternalSorter()
+    val additionalKeys = randomStrings(1024)
+
+    val keyConverter = UnsafeProjection.create(groupKeySchema)
+    val valueConverter = UnsafeProjection.create(aggBufferSchema)
+
+    additionalKeys.zipWithIndex.foreach { case (str, i) =>
+      val k = InternalRow(UTF8String.fromString(str))
+      val v = InternalRow(str.length)
+      sorter.insertKV(keyConverter.apply(k), valueConverter.apply(v))
+
+      if ((i % 10) == 0) {
+        shuffleMemoryManager.markAsOutOfMemory()
+        sorter.closeCurrentPage()
+      }
+    }
+
     val out = new scala.collection.mutable.ArrayBuffer[String]
-    val iter = map.sortedIterator()
+    val iter = sorter.sortedIterator()
     while (iter.next()) {
       assert(iter.getKey.getString(0).length === iter.getValue.getInt(0))
       out += iter.getKey.getString(0)
     }
 
-    assert(out === groupKeys.toSeq.sorted)
+    assert(out === (keys ++ additionalKeys).toSeq.sorted)
 
     map.free()
   }
-
 }

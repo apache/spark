@@ -82,6 +82,8 @@ public class UnsafeExternalSorterSuite {
 
   File tempDir;
 
+  private final long pageSizeBytes = new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "64m");
+
   private static final class CompressStream extends AbstractFunction1<OutputStream, OutputStream> {
     @Override
     public OutputStream apply(OutputStream stream) {
@@ -138,15 +140,15 @@ public class UnsafeExternalSorterSuite {
   @Test
   public void testSortingOnlyByPrefix() throws Exception {
 
-    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
+    final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
       memoryManager,
       shuffleMemoryManager,
       blockManager,
       taskContext,
       recordComparator,
       prefixComparator,
-      1024,
-      new SparkConf());
+      /* initialSize */ 1024,
+      pageSizeBytes);
 
     insertNumber(sorter, 5);
     insertNumber(sorter, 1);
@@ -172,15 +174,15 @@ public class UnsafeExternalSorterSuite {
   @Test
   public void testSortingEmptyArrays() throws Exception {
 
-    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
+    final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
       memoryManager,
       shuffleMemoryManager,
       blockManager,
       taskContext,
       recordComparator,
       prefixComparator,
-      1024,
-      new SparkConf());
+      /* initialSize */ 1024,
+      pageSizeBytes);
 
     sorter.insertRecord(null, 0, 0, 0);
     sorter.insertRecord(null, 0, 0, 0);
@@ -201,15 +203,15 @@ public class UnsafeExternalSorterSuite {
 
   @Test
   public void testFillingPage() throws Exception {
-    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
+    final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
       memoryManager,
       shuffleMemoryManager,
       blockManager,
       taskContext,
       recordComparator,
       prefixComparator,
-      1024,
-      new SparkConf());
+      /* initialSize */ 1024,
+      pageSizeBytes);
 
     byte[] record = new byte[16];
     while (sorter.getNumberOfAllocatedPages() < 2) {

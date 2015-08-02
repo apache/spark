@@ -19,24 +19,18 @@ package org.apache.spark.sql.execution;
 
 import java.io.IOException;
 
+import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.codegen.BaseOrdering;
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
-import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.MemoryLocation;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
-import org.apache.spark.util.collection.unsafe.sort.PrefixComparator;
-import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
-import org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter;
-import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterIterator;
 
 /**
  * Unsafe-based HashMap for performing aggregations where the aggregated values are fixed-width.
@@ -233,92 +227,17 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
-   * Sorts the key, value data in this map in place, and return them as an iterator.
+   * Sorts the map's records in place, spill them to disk, and returns an [[UnsafeKVExternalSorter]]
+   * that can be used to insert more records to do external sorting.
    *
    * The only memory that is allocated is the address/prefix array, 16 bytes per record.
+   *
+   * Note that this destroys the map, and as a result, the map cannot be used anymore after this.
    */
-  public KVIterator<UnsafeRow, UnsafeRow> sortedIterator() {
-    int numElements = map.numElements();
-    final int numKeyFields = groupingKeySchema.size();
-    TaskMemoryManager memoryManager = map.getTaskMemoryManager();
-
-    UnsafeExternalRowSorter.PrefixComputer prefixComp =
-      SortPrefixUtils.createPrefixGenerator(groupingKeySchema);
-    PrefixComparator prefixComparator = SortPrefixUtils.getPrefixComparator(groupingKeySchema);
-
-    final BaseOrdering ordering = GenerateOrdering.create(groupingKeySchema);
-    RecordComparator recordComparator = new RecordComparator() {
-      private final UnsafeRow row1 = new UnsafeRow();
-      private final UnsafeRow row2 = new UnsafeRow();
-
-      @Override
-      public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
-        row1.pointTo(baseObj1, baseOff1 + 4, numKeyFields, -1);
-        row2.pointTo(baseObj2, baseOff2 + 4, numKeyFields, -1);
-        return ordering.compare(row1, row2);
-      }
-    };
-
-    // Insert the records into the in-memory sorter.
-    final UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(
-      memoryManager, recordComparator, prefixComparator, numElements);
-
-    BytesToBytesMap.BytesToBytesMapIterator iter = map.iterator();
-    UnsafeRow row = new UnsafeRow();
-    while (iter.hasNext()) {
-      final BytesToBytesMap.Location loc = iter.next();
-      final Object baseObject = loc.getKeyAddress().getBaseObject();
-      final long baseOffset = loc.getKeyAddress().getBaseOffset();
-
-      // Get encoded memory address
-      MemoryBlock page = loc.getMemoryPage();
-      long address = memoryManager.encodePageNumberAndOffset(page, baseOffset - 8);
-
-      // Compute prefix
-      row.pointTo(baseObject, baseOffset, numKeyFields, loc.getKeyLength());
-      final long prefix = prefixComp.computePrefix(row);
-
-      sorter.insertRecord(address, prefix);
-    }
-
-    // Return the sorted result as an iterator.
-    return new KVIterator<UnsafeRow, UnsafeRow>() {
-
-      private UnsafeSorterIterator sortedIterator = sorter.getSortedIterator();
-      private final UnsafeRow key = new UnsafeRow();
-      private final UnsafeRow value = new UnsafeRow();
-      private int numValueFields = aggregationBufferSchema.size();
-
-      @Override
-      public boolean next() throws IOException {
-        if (sortedIterator.hasNext()) {
-          sortedIterator.loadNext();
-          Object baseObj = sortedIterator.getBaseObject();
-          long recordOffset = sortedIterator.getBaseOffset();
-          int recordLen = sortedIterator.getRecordLength();
-          int keyLen = PlatformDependent.UNSAFE.getInt(baseObj, recordOffset);
-          key.pointTo(baseObj, recordOffset + 4, numKeyFields, keyLen);
-          value.pointTo(baseObj, recordOffset + 4 + keyLen, numValueFields, recordLen - keyLen);
-          return true;
-        } else {
-          return false;
-        }
-      }
-
-      @Override
-      public UnsafeRow getKey() {
-        return key;
-      }
-
-      @Override
-      public UnsafeRow getValue() {
-        return value;
-      }
-
-      @Override
-      public void close() {
-        // Do nothing
-      }
-    };
+  public UnsafeKVExternalSorter destructAndCreateExternalSorter() throws IOException {
+    UnsafeKVExternalSorter sorter = new UnsafeKVExternalSorter(
+      groupingKeySchema, aggregationBufferSchema,
+      SparkEnv.get().blockManager(), map.getShuffleMemoryManager(), map.getPageSizeBytes(), map);
+    return sorter;
   }
 }

@@ -253,7 +253,7 @@ public final class BytesToBytesMap {
         totalLength = PlatformDependent.UNSAFE.getInt(pageBaseObject, offsetInPage);
       }
       loc.with(currentPage, offsetInPage);
-      offsetInPage += 8 + totalLength;
+      offsetInPage += 4 + totalLength;
       currentRecordNumber++;
       return loc;
     }
@@ -366,7 +366,7 @@ public final class BytesToBytesMap {
       position += 4;
       keyLength = PlatformDependent.UNSAFE.getInt(page, position);
       position += 4;
-      valueLength = totalLength - keyLength;
+      valueLength = totalLength - keyLength - 4;
 
       keyMemoryLocation.setObjAndOffset(page, position);
 
@@ -565,7 +565,7 @@ public final class BytesToBytesMap {
       insertCursor += valueLengthBytes; // word used to store the value size
 
       PlatformDependent.UNSAFE.putInt(dataPageBaseObject, recordOffset,
-        keyLengthBytes + valueLengthBytes);
+        keyLengthBytes + valueLengthBytes + 4);
       PlatformDependent.UNSAFE.putInt(dataPageBaseObject, keyLengthOffset, keyLengthBytes);
       // Copy the key
       PlatformDependent.copyMemory(
@@ -637,6 +637,14 @@ public final class BytesToBytesMap {
 
   public TaskMemoryManager getTaskMemoryManager() {
     return taskMemoryManager;
+  }
+
+  public ShuffleMemoryManager getShuffleMemoryManager() {
+    return shuffleMemoryManager;
+  }
+
+  public long getPageSizeBytes() {
+    return pageSizeBytes;
   }
 
   /** Returns the total amount of memory, in bytes, consumed by this map's managed structures. */
