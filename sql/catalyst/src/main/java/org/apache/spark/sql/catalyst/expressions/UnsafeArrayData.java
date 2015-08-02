@@ -277,17 +277,17 @@ public class UnsafeArrayData extends ArrayData {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;
-    final int numElements = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + offset);
     final int size = getElementSize(offset, ordinal);
-    final UnsafeArrayData array = new UnsafeArrayData();
-    // Skip the first 4 bytes.
-    array.pointTo(baseObject, baseOffset + offset + 4, numElements, size - 4);
-    return array;
+    return UnsafeReaders.readArray(baseObject, baseOffset + offset, size);
   }
 
   @Override
   public MapData getMap(int ordinal) {
-    return null;
+    assertIndexIsValid(ordinal);
+    final int offset = getElementOffset(ordinal);
+    if (offset < 0) return null;
+    final int size = getElementSize(offset, ordinal);
+    return UnsafeReaders.readMap(baseObject, baseOffset + offset, size);
   }
 
   @Override

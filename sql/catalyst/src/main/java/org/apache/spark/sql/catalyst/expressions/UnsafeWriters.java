@@ -35,9 +35,9 @@ public class UnsafeWriters {
       int numBytes) {
 
     // zero-out the padding bytes
-    if ((numBytes & 0x07) > 0) {
-      PlatformDependent.UNSAFE.putLong(targetObject, targetOffset + ((numBytes >> 3) << 3), 0L);
-    }
+//    if ((numBytes & 0x07) > 0) {
+//      PlatformDependent.UNSAFE.putLong(targetObject, targetOffset + ((numBytes >> 3) << 3), 0L);
+//    }
 
     // Write the UnsafeData to the target memory.
     PlatformDependent.copyMemory(
@@ -171,7 +171,39 @@ public class UnsafeWriters {
       writeToMemory(input.getBaseObject(), input.getBaseOffset(),
         targetObject, targetOffset + 4, numBytes);
 
-      return getRoundedSize(numBytes) + 4;
+      return getRoundedSize(numBytes + 4);
+    }
+  }
+
+  public static class MapWriter {
+
+    public static int getSize(UnsafeMapData input) {
+      // we need extra 8 bytes to store number of elements and numBytes of key array.
+      final int sizeInBytes = 4 + 4 + input.keys.getSizeInBytes() + input.values.getSizeInBytes();
+      return getRoundedSize(sizeInBytes);
+    }
+
+    public static int write(Object targetObject, long targetOffset, UnsafeMapData input) {
+      final UnsafeArrayData keyArray = input.keys;
+      final UnsafeArrayData valueArray = input.values;
+      final int keysNumBytes = keyArray.getSizeInBytes();
+      final int valuesNumBytes = valueArray.getSizeInBytes();
+      final int numBytes = 4 + 4 + keysNumBytes + valuesNumBytes;
+
+      // write the number of elements into first 4 bytes.
+      PlatformDependent.UNSAFE.putInt(targetObject, targetOffset, input.numElements());
+      // write the numBytes of key array into second 4 bytes.
+      PlatformDependent.UNSAFE.putInt(targetObject, targetOffset + 4, keysNumBytes);
+
+      // Write the bytes of key array to the variable length portion.
+      writeToMemory(keyArray.getBaseObject(), keyArray.getBaseOffset(),
+        targetObject, targetOffset + 8, keysNumBytes);
+
+      // Write the bytes of value array to the variable length portion.
+      writeToMemory(valueArray.getBaseObject(), valueArray.getBaseOffset(),
+        targetObject, targetOffset + 8 + keysNumBytes, valuesNumBytes);
+
+      return getRoundedSize(numBytes);
     }
   }
 }

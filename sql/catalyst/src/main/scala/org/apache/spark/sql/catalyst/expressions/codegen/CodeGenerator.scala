@@ -306,7 +306,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       classOf[CalendarInterval].getName,
       classOf[ArrayData].getName,
       classOf[UnsafeArrayData].getName,
-      classOf[MapData].getName
+      classOf[MapData].getName,
+      classOf[UnsafeMapData].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
     try {

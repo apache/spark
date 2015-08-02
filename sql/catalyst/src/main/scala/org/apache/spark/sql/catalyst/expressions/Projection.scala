@@ -156,7 +156,7 @@ object FromUnsafeProjection {
       // todo: this is quite slow, maybe remove this whole projection after remove generic getter of
       // InternalRow?
       b.dataType match {
-        case _: StructType | _: ArrayType => FromUnsafe(b)
+        case _: StructType | _: ArrayType | _: MapType => FromUnsafe(b)
         case _ => b
       }
     }))

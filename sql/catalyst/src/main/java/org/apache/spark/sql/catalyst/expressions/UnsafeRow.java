@@ -365,7 +365,6 @@ public final class UnsafeRow extends MutableRow {
 
   @Override
   public UTF8String getUTF8String(int ordinal) {
-    assertIndexIsValid(ordinal);
     if (isNullAt(ordinal)) return null;
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
@@ -375,7 +374,6 @@ public final class UnsafeRow extends MutableRow {
 
   @Override
   public byte[] getBinary(int ordinal) {
-    assertIndexIsValid(ordinal);
     if (isNullAt(ordinal)) {
       return null;
     } else {
@@ -430,19 +428,25 @@ public final class UnsafeRow extends MutableRow {
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) (offsetAndSize & ((1L << 32) - 1));
-      final int numElements = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + offset);
-      final UnsafeArrayData array = new UnsafeArrayData();
-      // Skip the first 4 bytes.
-      array.pointTo(baseObject, baseOffset + offset + 4, numElements, size - 4);
-      return array;
+      return UnsafeReaders.readArray(baseObject, baseOffset + offset, size);
+    }
+  }
+
+  @Override
+  public MapData getMap(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      final long offsetAndSize = getLong(ordinal);
+      final int offset = (int) (offsetAndSize >> 32);
+      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      return UnsafeReaders.readMap(baseObject, baseOffset + offset, size);
     }
   }
 
   /**
    * Copies this row, returning a self-contained UnsafeRow that stores its data in an internal
    * byte array rather than referencing data stored in a data page.
-   * <p>
-   * This method is only supported on UnsafeRows that do not use ObjectPools.
    */
   @Override
   public UnsafeRow copy() {

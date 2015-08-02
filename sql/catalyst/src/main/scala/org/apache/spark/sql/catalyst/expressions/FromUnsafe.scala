@@ -23,7 +23,8 @@ import org.apache.spark.sql.types._
 case class FromUnsafe(child: Expression) extends UnaryExpression
   with ExpectsInputTypes with CodegenFallback {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, StructType))
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(ArrayType, StructType, MapType))
 
   override def dataType: DataType = child.dataType
 
@@ -38,18 +39,24 @@ case class FromUnsafe(child: Expression) extends UnaryExpression
       }
       new GenericInternalRow(result)
 
-    case ArrayType(elemnentType, _) =>
+    case ArrayType(elementType, _) =>
       val array = value.asInstanceOf[UnsafeArrayData]
       val length = array.numElements()
       val result = new Array[Any](length)
       var i = 0
       while (i < length) {
         if (!array.isNullAt(i)) {
-          result(i) = convert(array.get(i, elemnentType), elemnentType)
+          result(i) = convert(array.get(i, elementType), elementType)
         }
         i += 1
       }
       new GenericArrayData(result)
+
+    case MapType(kt, vt, _) =>
+      val map = value.asInstanceOf[UnsafeMapData]
+      val safeKeyArray = convert(map.keys, ArrayType(kt)).asInstanceOf[GenericArrayData]
+      val safeValueArray = convert(map.values, ArrayType(vt)).asInstanceOf[GenericArrayData]
+      new ArrayBasedMapData(safeKeyArray, safeValueArray)
 
     case _ => value
   }

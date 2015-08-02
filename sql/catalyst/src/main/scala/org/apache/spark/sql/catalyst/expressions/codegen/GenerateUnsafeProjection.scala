@@ -39,6 +39,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   private val CompactDecimalWriter = classOf[UnsafeRowWriters.CompactDecimalWriter].getName
   private val DecimalWriter = classOf[UnsafeRowWriters.DecimalWriter].getName
   private val ArrayWriter = classOf[UnsafeRowWriters.ArrayWriter].getName
+  private val MapWriter = classOf[UnsafeRowWriters.MapWriter].getName
 
   private val PlatformDependent = classOf[PlatformDependent].getName
 
@@ -49,6 +50,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case t: StructType => t.toSeq.forall(field => canSupport(field.dataType))
     case NullType => true
     case t: ArrayType if canSupport(t.elementType) => true
+    case MapType(kt, vt, _) if canSupport(kt) && canSupport(vt) => true
     case _ => false
   }
 
@@ -65,6 +67,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       s" + (${ev.isNull} ? 0 : $StructWriter.getSize(${ev.primitive}))"
     case _: ArrayType =>
       s" + (${ev.isNull} ? 0 : $ArrayWriter.getSize(${ev.primitive}))"
+    case _: MapType =>
+      s" + (${ev.isNull} ? 0 : $MapWriter.getSize(${ev.primitive}))"
     case _ => ""
   }
 
@@ -105,6 +109,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       s"$cursor += $StructWriter.write($primitive, $index, $cursor, ${ev.primitive})"
     case _: ArrayType =>
       s"$cursor += $ArrayWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+    case _: MapType =>
+      s"$cursor += $MapWriter.write($primitive, $index, $cursor, ${ev.primitive})"
     case NullType => ""
     case _ =>
       throw new UnsupportedOperationException(s"Not supported DataType: $fieldType")
@@ -324,6 +330,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case CalendarIntervalType => classOf[UnsafeWriters.IntervalWriter].getName
     case _: StructType => classOf[UnsafeWriters.StructWriter].getName
     case _: ArrayType => classOf[UnsafeWriters.ArrayWriter].getName
+    case _: MapType => classOf[UnsafeWriters.MapWriter].getName
     case _: DecimalType => classOf[UnsafeWriters.DecimalWriter].getName
   }
 
@@ -369,6 +376,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         val unsafeType = elementType match {
           case _: StructType => "UnsafeRow"
           case _: ArrayType => "UnsafeArrayData"
+          case _: MapType => "UnsafeMapData"
           case _ => ctx.javaType(elementType)
         }
 
@@ -467,6 +475,46 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     GeneratedExpressionCode(code, outputIsNull, output)
   }
 
+  private def createCodeForMap(
+      ctx: CodeGenContext,
+      input: GeneratedExpressionCode,
+      keyType: DataType,
+      valueType: DataType): GeneratedExpressionCode = {
+    val output = ctx.freshName("convertedMap")
+    val outputIsNull = ctx.freshName("isNull")
+    val tmp = ctx.freshName("tmp")
+
+    val keyArray = GeneratedExpressionCode(
+      code = "",
+      isNull = "false",
+      primitive = s"$tmp.keyArray()"
+    )
+    val valueArray = GeneratedExpressionCode(
+      code = "",
+      isNull = "false",
+      primitive = s"$tmp.valueArray()"
+    )
+    val convertedKeys: GeneratedExpressionCode = createCodeForArray(ctx, keyArray, keyType)
+    val convertedValues: GeneratedExpressionCode = createCodeForArray(ctx, valueArray, valueType)
+
+    val code = s"""
+      ${input.code}
+      final boolean $outputIsNull = ${input.isNull};
+      UnsafeMapData $output = null;
+      if (!$outputIsNull) {
+        final MapData $tmp = ${input.primitive};
+        if ($tmp instanceof UnsafeMapData) {
+          $output = (UnsafeMapData) $tmp;
+        } else {
+          ${convertedKeys.code}
+          ${convertedValues.code}
+          $output = new UnsafeMapData(${convertedKeys.primitive}, ${convertedValues.primitive});
+        }
+      }
+      """
+    GeneratedExpressionCode(code, outputIsNull, output)
+  }
+
   /**
    * Generates the java code to convert a data to its unsafe version.
    */
@@ -500,7 +548,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
          }
         """
       GeneratedExpressionCode(code, outputIsNull, output)
+
     case ArrayType(elementType, _) => createCodeForArray(ctx, input, elementType)
+
+    case MapType(kt, vt, _) => createCodeForMap(ctx, input, kt, vt)
+
     case _ => input
   }
 
