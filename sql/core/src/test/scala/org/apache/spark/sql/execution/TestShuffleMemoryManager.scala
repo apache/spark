@@ -30,11 +30,15 @@ class TestShuffleMemoryManager extends ShuffleMemoryManager(Long.MaxValue) {
       oom = false
       0
     } else {
-      numBytes
+      val acquired = super.tryToAcquire(numBytes)
+      acquired
     }
   }
 
-  override def release(numBytes: Long): Unit = {}
+  override def release(numBytes: Long): Unit = {
+    println(s"releasing $numBytes in " + Thread.currentThread().getStackTrace.mkString("", "\n  -", ""))
+    super.release(numBytes)
+  }
 
   def markAsOutOfMemory(): Unit = {
     oom = true

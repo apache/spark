@@ -52,16 +52,31 @@ object SortPrefixUtils {
    * Creates the prefix comparator for the first field in the given schema, in ascending order.
    */
   def getPrefixComparator(schema: StructType): PrefixComparator = {
-    val field = schema.head
-    getPrefixComparator(SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
+    if (schema.nonEmpty) {
+      val field = schema.head
+      getPrefixComparator(SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
+    } else {
+      new PrefixComparator {
+        override def compare(prefix1: Long, prefix2: Long): Int = 0
+      }
+    }
   }
 
+  /**
+   * Creates the prefix computer for the first field in the given schema, in ascending order.
+   */
   def createPrefixGenerator(schema: StructType): UnsafeExternalRowSorter.PrefixComputer = {
-    val boundReference = BoundReference(0, schema.head.dataType, nullable = true)
-    val prefixProjection = UnsafeProjection.create(SortPrefix(SortOrder(boundReference, Ascending)))
-    new UnsafeExternalRowSorter.PrefixComputer {
-      override def computePrefix(row: InternalRow): Long = {
-        prefixProjection.apply(row).getLong(0)
+    if (schema.nonEmpty) {
+      val boundReference = BoundReference(0, schema.head.dataType, nullable = true)
+      val prefixProjection = UnsafeProjection.create(SortPrefix(SortOrder(boundReference, Ascending)))
+      new UnsafeExternalRowSorter.PrefixComputer {
+        override def computePrefix(row: InternalRow): Long = {
+          prefixProjection.apply(row).getLong(0)
+        }
+      }
+    } else {
+      new UnsafeExternalRowSorter.PrefixComputer {
+        override def computePrefix(row: InternalRow): Long = 0
       }
     }
   }

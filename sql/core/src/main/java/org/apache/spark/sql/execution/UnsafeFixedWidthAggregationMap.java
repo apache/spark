@@ -209,7 +209,7 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
-   * Free the unsafe memory associated with this map.
+   * Free the memory associated with this map. This is idempotent and can be called multiple times.
    */
   public void free() {
     map.free();

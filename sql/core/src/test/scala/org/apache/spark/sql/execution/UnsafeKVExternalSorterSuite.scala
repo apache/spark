@@ -65,7 +65,7 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite {
       val v = InternalRow(str.length)
       sorter.insertKV(keyConverter.apply(k), valueConverter.apply(v))
 
-      if ((i % 10) == 0) {
+      if ((i % 100) == 0) {
         shuffleMemMgr.markAsOutOfMemory()
         sorter.closeCurrentPage()
       }

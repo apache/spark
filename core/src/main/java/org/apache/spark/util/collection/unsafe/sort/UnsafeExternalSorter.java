@@ -282,7 +282,9 @@ public final class UnsafeExternalSorter {
       } else {
         final long memoryAcquired = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
         if (memoryAcquired < pageSizeBytes) {
-          shuffleMemoryManager.release(memoryAcquired);
+          if (memoryAcquired > 0) {
+            shuffleMemoryManager.release(memoryAcquired);
+          }
           spill();
           final long memoryAcquiredAfterSpilling = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
           if (memoryAcquiredAfterSpilling != pageSizeBytes) {
