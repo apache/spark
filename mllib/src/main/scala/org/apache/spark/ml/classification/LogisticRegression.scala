@@ -111,19 +111,23 @@ class LogisticRegression(override val uid: String)
   setDefault(standardization -> true)
 
   /** @group setParam */
-  def setThreshold(value: Double): this.type = set(thresholds, Array(0.5, value))
+  def setThreshold(value: Double): this.type = set(thresholds, Array(value, 1-value))
   setDefault(thresholds -> Array(0.5, 0.5))
 
   /**
-   * Convert the thresholds to a threshold
+   * Convert the thresholds to a threshold, default of 0.5
    * p/a > (1-p)/b
    * p*(b/a) + p > 1
    * p > 1 / [1 + b/a]
    * threshold = 1 / [1 + b/a]
    */
   def getThreshold(): Double = {
-    val thresholdValues = $(thresholds).toArray
-    1 / (1 + thresholdValues(1) / thresholdValues(0))
+    if (isDefined(thresholds)) {
+      val thresholdValues = $(thresholds)
+      1 / (1 + thresholdValues(1) / thresholdValues(0))
+    } else {
+      0.5
+    }
   }
 
   override protected def train(dataset: DataFrame): LogisticRegressionModel = {
@@ -283,7 +287,8 @@ class LogisticRegressionModel private[ml] (
   with LogisticRegressionParams {
 
   /** @group setParam */
-  def setThreshold(value: Double): this.type = set(thresholds, Array(0.5, value))
+  def setThreshold(value: Double): this.type = set(thresholds, Array(value, 1-value))
+  setDefault(thresholds -> Array(0.5, 0.5))
 
   /** Margin (rawPrediction) for class label 1.  For binary classification only. */
   private val margin: Vector => Double = (features) => {
@@ -299,15 +304,20 @@ class LogisticRegressionModel private[ml] (
   override val numClasses: Int = 2
 
   /**
-   * Convert the thresholds to a threshold
+   * Convert the thresholds to a threshold, default of 0.5
    * p/a > (1-p)/b
    * p*(b/a) + p > 1
    * p > 1 / [1 + b/a]
    * threshold = 1 / [1 + b/a]
    */
   def getThreshold(): Double = {
-    val thresholdValues = $(thresholds).toArray
-    1 / (1 + thresholdValues(1) / thresholdValues(0))
+    if (isDefined(thresholds)) {
+      val thresholdValues = $(thresholds)
+      val ret = 1 / (1 + thresholdValues(1) / thresholdValues(0))
+      ret
+    } else {
+      0.5
+    }
   }
 
   /**
