@@ -30,13 +30,18 @@ class TestShuffleMemoryManager extends ShuffleMemoryManager(Long.MaxValue) {
       oom = false
       0
     } else {
+      // Uncomment the following to trace memory allocations.
+      // println(s"tryToAcquire $numBytes in " +
+      //   Thread.currentThread().getStackTrace.mkString("", "\n  -", ""))
       val acquired = super.tryToAcquire(numBytes)
       acquired
     }
   }
 
   override def release(numBytes: Long): Unit = {
-    println(s"releasing $numBytes in " + Thread.currentThread().getStackTrace.mkString("", "\n  -", ""))
+    // Uncomment the following to trace memory releases.
+    // println(s"release $numBytes in " +
+    //   Thread.currentThread().getStackTrace.mkString("", "\n  -", ""))
     super.release(numBytes)
   }
 

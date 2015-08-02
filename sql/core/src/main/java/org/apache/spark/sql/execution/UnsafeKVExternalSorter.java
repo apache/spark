@@ -37,7 +37,12 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 import org.apache.spark.util.collection.unsafe.sort.*;
 
-
+/**
+ * A class for performing external sorting on key-value records. Both key and value are UnsafeRows.
+ *
+ * Note that this class allows optionally passing in a {@link BytesToBytesMap} directly in order
+ * to perform in-place sorting of records in the map.
+ */
 public final class UnsafeKVExternalSorter {
 
   private final StructType keySchema;
@@ -54,7 +59,6 @@ public final class UnsafeKVExternalSorter {
   public UnsafeKVExternalSorter(StructType keySchema, StructType valueSchema,
       BlockManager blockManager, ShuffleMemoryManager shuffleMemoryManager, long pageSizeBytes,
       @Nullable BytesToBytesMap map) throws IOException {
-
     this.keySchema = keySchema;
     this.valueSchema = valueSchema;
     final TaskContext taskContext = TaskContext.get();
@@ -102,7 +106,7 @@ public final class UnsafeKVExternalSorter {
         inMemSorter.insertRecord(address, prefix);
       }
 
-      sorter = UnsafeExternalSorter.createWithExistinInMemorySorter(
+      sorter = UnsafeExternalSorter.createWithExistingInMemorySorter(
         taskContext.taskMemoryManager(),
         shuffleMemoryManager,
         blockManager,
@@ -112,11 +116,17 @@ public final class UnsafeKVExternalSorter {
         /* initialSize */ 4096,
         pageSizeBytes,
         inMemSorter);
-      spill();
+
+      sorter.spill();
       map.free();
     }
   }
 
+  /**
+   * Inserts a key-value record into the sorter. If the sorter no longer has enough memory to hold
+   * the record, the sorter sorts the existing records in-memory, writes them out as partially
+   * sorted runs, and then reallocates memory to hold the new record.
+   */
   public void insertKV(UnsafeRow key, UnsafeRow value) throws IOException {
     final long prefix = prefixComputer.computePrefix(key);
     sorter.insertKVRecord(
@@ -190,11 +200,6 @@ public final class UnsafeKVExternalSorter {
     }
   }
 
-  @VisibleForTesting
-  void spill() throws IOException {
-    sorter.spill();
-  }
-
   /**
    * Marks the current page as no-more-space-available, and as a result, either allocate a
    * new page or spill when we see the next record.
@@ -227,5 +232,5 @@ public final class UnsafeKVExternalSorter {
       row2.pointTo(baseObj2, baseOff2 + 4, numKeyFields, -1);
       return ordering.compare(row1, row2);
     }
-  };
+  }
 }

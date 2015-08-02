@@ -31,7 +31,11 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
 import org.apache.spark.unsafe.types.UTF8String
 
-
+/**
+ * Test suite for [[UnsafeFixedWidthAggregationMap]].
+ *
+ * Use [[testWithMemoryLeakDetection]] rather than [[test]] to construct test cases.
+ */
 class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
 
   import UnsafeFixedWidthAggregationMap._
@@ -75,7 +79,7 @@ class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
     }.distinct
   }
 
-  ignore("supported schemas") {
+  testWithMemoryLeakDetection("supported schemas") {
     assert(supportsAggregationBufferSchema(
       StructType(StructField("x", DecimalType.USER_DEFAULT) :: Nil)))
     assert(!supportsAggregationBufferSchema(
@@ -85,7 +89,7 @@ class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
       !supportsAggregationBufferSchema(StructType(StructField("x", ArrayType(IntegerType)) :: Nil)))
   }
 
-  ignore("empty map") {
+  testWithMemoryLeakDetection("empty map") {
     val map = new UnsafeFixedWidthAggregationMap(
       emptyAggregationBuffer,
       aggBufferSchema,
@@ -100,7 +104,7 @@ class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
     map.free()
   }
 
-  ignore("updating values for a single key") {
+  testWithMemoryLeakDetection("updating values for a single key") {
     val map = new UnsafeFixedWidthAggregationMap(
       emptyAggregationBuffer,
       aggBufferSchema,
@@ -128,7 +132,7 @@ class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
     map.free()
   }
 
-  ignore("inserting large random keys") {
+  testWithMemoryLeakDetection("inserting large random keys") {
     val map = new UnsafeFixedWidthAggregationMap(
       emptyAggregationBuffer,
       aggBufferSchema,
@@ -168,7 +172,7 @@ class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
       metricsSystem = null))
 
     // Memory consumption in the beginning of the task.
-    val memoryConsumption = shuffleMemoryManager.getMemoryConsumptionForThisTask()
+    val initialMemoryConsumption = shuffleMemoryManager.getMemoryConsumptionForThisTask()
 
     val map = new UnsafeFixedWidthAggregationMap(
       emptyAggregationBuffer,
@@ -181,7 +185,6 @@ class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
       false // disable perf metrics
     )
 
-    val preMapMemoryConsumption = shuffleMemoryManager.getMemoryConsumptionForThisTask()
     val keys = randomStrings(1024).take(512)
     keys.foreach { keyString =>
       val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(keyString)))
@@ -189,14 +192,13 @@ class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
       assert(buf != null)
     }
 
-    val postMapMemoryConsumption = shuffleMemoryManager.getMemoryConsumptionForThisTask()
-
     // Convert the map into a sorter
     val sorter = map.destructAndCreateExternalSorter()
 
     withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
-      // TODO: This is failing on accounting issues
-      //assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() === memoryConsumption)
+      // 4096 * 16 is the initial size allocated for the pointer/prefix array in the in-mem sorter.
+      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() ===
+        initialMemoryConsumption + 4096 * 16)
     }
 
     // Add more keys to the sorter and make sure the results come out sorted.

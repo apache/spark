@@ -65,17 +65,20 @@ public final class UnsafeExternalSorter {
    * this might not be necessary if we maintained a pool of re-usable pages in the TaskMemoryManager
    * itself).
    */
-  private final LinkedList<MemoryBlock> allocatedPages = new LinkedList<MemoryBlock>();
+  private final LinkedList<MemoryBlock> allocatedPages = new LinkedList<>();
+
+  private final LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
 
   // These variables are reset after spilling:
   private UnsafeInMemorySorter inMemSorter;
+  // Whether the in-mem sorter is created internally, or passed in from outside.
+  // If it is passed in from outside, we shouldn't release the in-mem sorter's memory.
+  private boolean isInMemSorterExternal = false;
   private MemoryBlock currentPage = null;
   private long currentPagePosition = -1;
   private long freeSpaceInCurrentPage = 0;
 
-  private final LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
-
-  public static UnsafeExternalSorter createWithExistinInMemorySorter(
+  public static UnsafeExternalSorter createWithExistingInMemorySorter(
       TaskMemoryManager taskMemoryManager,
       ShuffleMemoryManager shuffleMemoryManager,
       BlockManager blockManager,
@@ -102,7 +105,7 @@ public final class UnsafeExternalSorter {
       taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes, null);
   }
 
-  public UnsafeExternalSorter(
+  private UnsafeExternalSorter(
       TaskMemoryManager taskMemoryManager,
       ShuffleMemoryManager shuffleMemoryManager,
       BlockManager blockManager,
@@ -129,6 +132,7 @@ public final class UnsafeExternalSorter {
     if (existingInMemorySorter == null) {
       initializeForWriting();
     } else {
+      this.isInMemSorterExternal = true;
       this.inMemSorter = existingInMemorySorter;
     }
 
@@ -163,6 +167,7 @@ public final class UnsafeExternalSorter {
 
     this.inMemSorter =
       new UnsafeInMemorySorter(taskMemoryManager, recordComparator, prefixComparator, initialSize);
+    this.isInMemSorterExternal = false;
   }
 
   /**
@@ -177,7 +182,6 @@ public final class UnsafeExternalSorter {
   /**
    * Sort and spill the current records in response to memory pressure.
    */
-  @VisibleForTesting
   public void spill() throws IOException {
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
@@ -236,10 +240,12 @@ public final class UnsafeExternalSorter {
       memoryFreed += block.size();
     }
     if (inMemSorter != null) {
-      long sorterMemoryUsage = inMemSorter.getMemoryUsage();
+      if (!isInMemSorterExternal) {
+        long sorterMemoryUsage = inMemSorter.getMemoryUsage();
+        memoryFreed += sorterMemoryUsage;
+        shuffleMemoryManager.release(sorterMemoryUsage);
+      }
       inMemSorter = null;
-      memoryFreed += sorterMemoryUsage;
-      shuffleMemoryManager.release(sorterMemoryUsage);
     }
     allocatedPages.clear();
     currentPage = null;
