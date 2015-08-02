@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Logging, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.util.Utils
 
 /**
  * An implementation of checkpointing implemented on top of Spark's caching layer.
@@ -42,10 +43,15 @@ private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
     // Assume storage level uses disk; otherwise memory eviction may cause data loss
     assume(level.useDisk, s"Storage level $level is not appropriate for local checkpointing")
 
-    // Not all RDD actions compute all partitions of the RDD (e.g. take)
-    // We must compute and cache any missing partitions for correctness reasons
-    // TODO: avoid running another job here (SPARK-8582)
-    rdd.count()
+    // Not all actions compute all partitions of the RDD (e.g. take). For correctness, we
+    // must cache any missing partitions. TODO: avoid running another job here (SPARK-8582).
+    val action = (tc: TaskContext, iterator: Iterator[T]) => Utils.getIteratorSize(iterator)
+    val missingPartitionIndices = rdd.partitions.map(_.index).filter { i =>
+      SparkEnv.get.blockManager.master.contains(RDDBlockId(rdd.id, i))
+    }
+    if (missingPartitionIndices.nonEmpty) {
+      rdd.sparkContext.runJob(rdd, action, missingPartitionIndices)
+    }
 
     new LocalCheckpointRDD[T](rdd)
   }
