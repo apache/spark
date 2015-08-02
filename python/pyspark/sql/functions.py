@@ -958,6 +958,18 @@ def substring_index(str, delim, count):
     return Column(sc._jvm.functions.substring_index(_to_java_column(str), delim, count))
 
 
+@ignore_unicode_prefix
+@since(1.5)
+def initcap(col):
+    """Translate the first letter of each word to upper case in the sentence.
+
+    >>> sqlContext.createDataFrame([('ab cd',)], ['a']).select(initcap("a").alias('v')).collect()
+    [Row(v=u'Ab Cd')]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.initcap(_to_java_column(col)))
+
+
 @since(1.5)
 def size(col):
     """

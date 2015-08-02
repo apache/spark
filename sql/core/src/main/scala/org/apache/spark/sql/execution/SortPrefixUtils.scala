@@ -18,7 +18,8 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, PrefixComparator}
 
@@ -37,7 +38,7 @@ object SortPrefixUtils {
     sortOrder.dataType match {
       case StringType =>
         if (sortOrder.isAscending) PrefixComparators.STRING else PrefixComparators.STRING_DESC
-      case BooleanType | ByteType | ShortType | IntegerType | LongType =>
+      case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType =>
         if (sortOrder.isAscending) PrefixComparators.LONG else PrefixComparators.LONG_DESC
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
         if (sortOrder.isAscending) PrefixComparators.LONG else PrefixComparators.LONG_DESC
@@ -46,6 +47,21 @@ object SortPrefixUtils {
       case dt: DecimalType =>
         if (sortOrder.isAscending) PrefixComparators.DOUBLE else PrefixComparators.DOUBLE_DESC
       case _ => NoOpPrefixComparator
+    }
+  }
+
+  def getPrefixComparator(schema: StructType): PrefixComparator = {
+    val field = schema.head
+    getPrefixComparator(SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
+  }
+
+  def createPrefixGenerator(schema: StructType): UnsafeExternalRowSorter.PrefixComputer = {
+    val boundReference = BoundReference(0, schema.head.dataType, nullable = true)
+    val prefixProjection = UnsafeProjection.create(SortPrefix(SortOrder(boundReference, Ascending)))
+    new UnsafeExternalRowSorter.PrefixComputer {
+      override def computePrefix(row: InternalRow): Long = {
+        prefixProjection.apply(row).getLong(0)
+      }
     }
   }
 }

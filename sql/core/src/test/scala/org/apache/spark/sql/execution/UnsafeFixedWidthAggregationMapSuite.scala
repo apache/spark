@@ -140,4 +140,38 @@ class UnsafeFixedWidthAggregationMapSuite
     map.free()
   }
 
+  test("test sorting") {
+    val map = new UnsafeFixedWidthAggregationMap(
+      emptyAggregationBuffer,
+      aggBufferSchema,
+      groupKeySchema,
+      taskMemoryManager,
+      shuffleMemoryManager,
+      128, // initial capacity
+      PAGE_SIZE_BYTES,
+      false // disable perf metrics
+    )
+
+    val rand = new Random(42)
+    val groupKeys: Set[String] = Seq.fill(512) {
+      Seq.fill(rand.nextInt(100))(rand.nextPrintableChar()).mkString
+    }.toSet
+    groupKeys.foreach { keyString =>
+      val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(keyString)))
+      buf.setInt(0, keyString.length)
+      assert(buf != null)
+    }
+
+    val out = new scala.collection.mutable.ArrayBuffer[String]
+    val iter = map.sortedIterator()
+    while (iter.next()) {
+      assert(iter.getKey.getString(0).length === iter.getValue.getInt(0))
+      out += iter.getKey.getString(0)
+    }
+
+    assert(out === groupKeys.toSeq.sorted)
+
+    map.free()
+  }
+
 }

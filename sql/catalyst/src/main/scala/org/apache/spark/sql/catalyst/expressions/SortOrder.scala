@@ -61,6 +61,8 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
         (Long.MinValue, s"$input ? 1L : 0L")
       case _: IntegralType =>
         (Long.MinValue, s"(long) $input")
+      case DateType | TimestampType =>
+        (Long.MinValue, s"(long) $input")
       case FloatType | DoubleType =>
         (DoublePrefixComparator.computePrefix(Double.NegativeInfinity),
           s"$DoublePrefixCmp.computePrefix((double)$input)")

@@ -598,6 +598,23 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 }
 
 /**
+ * Returns string, with the first letter of each word in uppercase.
+ * Words are delimited by whitespace.
+ */
+case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def dataType: DataType = StringType
+
+  override def nullSafeEval(string: Any): Any = {
+    string.asInstanceOf[UTF8String].toTitleCase
+  }
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, str => s"$str.toTitleCase()")
+  }
+}
+
+/**
  * Returns the string which repeat the given string value n times.
  */
 case class StringRepeat(str: Expression, times: Expression)

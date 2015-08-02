@@ -445,4 +445,51 @@ class DateFunctionsSuite extends QueryTest {
       Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
   }
 
+  test("datediff") {
+    val df = Seq(
+      (Date.valueOf("2015-07-24"), Timestamp.valueOf("2015-07-24 01:00:00"),
+        "2015-07-23", "2015-07-23 03:00:00"),
+      (Date.valueOf("2015-07-25"), Timestamp.valueOf("2015-07-25 02:00:00"),
+        "2015-07-24", "2015-07-24 04:00:00")
+    ).toDF("a", "b", "c", "d")
+    checkAnswer(df.select(datediff(col("a"), col("b"))), Seq(Row(0), Row(0)))
+    checkAnswer(df.select(datediff(col("a"), col("c"))), Seq(Row(1), Row(1)))
+    checkAnswer(df.select(datediff(col("d"), col("b"))), Seq(Row(-1), Row(-1)))
+    checkAnswer(df.selectExpr("datediff(a, d)"), Seq(Row(1), Row(1)))
+  }
+
+  test("from_utc_timestamp") {
+    val df = Seq(
+      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
+      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(from_utc_timestamp(col("a"), "PST")),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-23 17:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+    checkAnswer(
+      df.select(from_utc_timestamp(col("b"), "PST")),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-23 17:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+  }
+
+  test("to_utc_timestamp") {
+    val df = Seq(
+      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
+      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(to_utc_timestamp(col("a"), "PST")),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+        Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
+    checkAnswer(
+      df.select(to_utc_timestamp(col("b"), "PST")),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+        Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
+  }
+
 }
