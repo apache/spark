@@ -21,7 +21,8 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.expressions.GenericSpecializedGetters
 
-class GenericArrayData(array: Array[Any]) extends ArrayData with GenericSpecializedGetters {
+class GenericArrayData(private[sql] val array: Array[Any])
+  extends ArrayData with GenericSpecializedGetters {
 
   override def genericGet(ordinal: Int): Any = array(ordinal)
 

@@ -179,8 +179,7 @@ public class UnsafeWriters {
 
     public static int getSize(UnsafeMapData input) {
       // we need extra 8 bytes to store number of elements and numBytes of key array.
-      final int sizeInBytes = 4 + 4 + input.keys.getSizeInBytes() + input.values.getSizeInBytes();
-      return getRoundedSize(sizeInBytes);
+      return getRoundedSize(4 + 4 + input.getSizeInBytes());
     }
 
     public static int write(Object targetObject, long targetOffset, UnsafeMapData input) {

@@ -31,9 +31,14 @@ public class UnsafeMapData extends MapData {
   public final UnsafeArrayData values;
   // The number of elements in this array
   private int numElements;
+  // The size of this array's backing data, in bytes
+  private int sizeInBytes;
+
+  public int getSizeInBytes() { return sizeInBytes; }
 
   public UnsafeMapData(UnsafeArrayData keys, UnsafeArrayData values) {
     assert keys.numElements() == values.numElements();
+    this.sizeInBytes = keys.getSizeInBytes() + values.getSizeInBytes();
     this.numElements = keys.numElements();
     this.keys = keys;
     this.values = values;
