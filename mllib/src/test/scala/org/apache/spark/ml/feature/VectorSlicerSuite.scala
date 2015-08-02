@@ -17,8 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -26,7 +25,7 @@ import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext}
 
-class VectorSlicerSuite extends FunSuite with MLlibTestSparkContext {
+class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Test vector slicer") {
     val sqlContext = new SQLContext(sc)

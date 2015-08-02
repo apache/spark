@@ -68,7 +68,7 @@ final class VectorSlicer(override val uid: String)
   def getSelectedNames: Array[String] = getOrDefault(selectedNames)
 
   /** @group setParam */
-  def setSelectedNames(value: Array[String]) = set(selectedNames, value)
+  def setSelectedNames(value: Array[String]): this.type = set(selectedNames, value)
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
