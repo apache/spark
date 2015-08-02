@@ -814,4 +814,24 @@ object DateTimeUtils {
       }
     }
   }
+
+  /**
+   * Returns a timestamp of given timezone from utc timestamp, with the same string
+   * representation in their timezone.
+   */
+  def fromUTCTime(time: Long, timeZone: String): Long = {
+    val tz = TimeZone.getTimeZone(timeZone)
+    val offset = tz.getOffset(time / 1000L)
+    time + offset * 1000L
+  }
+
+  /**
+   * Returns a utc timestamp from a given timestamp from a given timezone, with the same
+   * string representation in their timezone.
+   */
+  def toUTCTime(time: Long, timeZone: String): Long = {
+    val tz = TimeZone.getTimeZone(timeZone)
+    val offset = tz.getOffset(time / 1000L)
+    time - offset * 1000L
+  }
 }

@@ -2020,6 +2020,13 @@ object functions {
   def date_sub(start: Column, days: Int): Column = DateSub(start.expr, Literal(days))
 
   /**
+   * Returns the number of days from `start` to `end`.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def datediff(end: Column, start: Column): Column = DateDiff(end.expr, start.expr)
+
+  /**
    * Extracts the year as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0
@@ -2237,6 +2244,21 @@ object functions {
    * @since 1.5.0
    */
   def trunc(date: Column, format: String): Column = TruncDate(date.expr, Literal(format))
+
+  /**
+   * Assumes given timestamp is UTC and converts to given timezone.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def from_utc_timestamp(ts: Column, tz: String): Column =
+    FromUTCTimestamp(ts.expr, Literal(tz).expr)
+
+  /**
+   * Assumes given timestamp is in given timezone and converts to UTC.
+   * @group datetime_funcs
+   * @since 1.5.0
+   */
+  def to_utc_timestamp(ts: Column, tz: String): Column = ToUTCTimestamp(ts.expr, Literal(tz).expr)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
