@@ -1508,7 +1508,8 @@ abstract class RDD[T: ClassTag](
       logWarning("Local checkpointing is NOT safe to use with dynamic allocation, " +
         "which removes executors along with their cached blocks. If you must use both " +
         "features, you are advised to set `spark.dynamicAllocation.cachedExecutorIdleTimeout` " +
-        "to a high value.")
+        "to a high value. E.g. If you plan to use the RDD for 1 hour, set the timeout to " +
+        "at least 1 hour.")
     }
 
     // Note: At this point we do not actually know whether the user will call persist() on
@@ -1523,6 +1524,12 @@ abstract class RDD[T: ClassTag](
       persist(LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL)
     } else {
       persist(LocalRDDCheckpointData.transformStorageLevel(storageLevel), allowOverride = true)
+    }
+
+    checkpointData match {
+      case Some(reliable: ReliableRDDCheckpointData[_]) => logWarning(
+        "RDD was already marked for reliable checkpointing: overriding with local checkpoint.")
+      case _ =>
     }
     checkpointData = Some(new LocalRDDCheckpointData(this))
     this

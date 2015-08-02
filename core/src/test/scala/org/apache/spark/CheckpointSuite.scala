@@ -27,7 +27,7 @@ import org.apache.spark.util.Utils
 
 /**
  * Test suite for end-to-end checkpointing functionality.
- * This tests both normal checkpoints and local checkpoints.
+ * This tests both reliable checkpoints and local checkpoints.
  */
 class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging {
   private var checkpointDir: File = _
@@ -46,35 +46,36 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
     Utils.deleteRecursively(checkpointDir)
   }
 
-  runTest("basic checkpointing") { normal: Boolean =>
+  runTest("basic checkpointing") { reliableCheckpoint: Boolean =>
     val parCollection = sc.makeRDD(1 to 4)
     val flatMappedRDD = parCollection.flatMap(x => 1 to x)
-    checkpoint(flatMappedRDD, normal)
+    checkpoint(flatMappedRDD, reliableCheckpoint)
     assert(flatMappedRDD.dependencies.head.rdd === parCollection)
     val result = flatMappedRDD.collect()
     assert(flatMappedRDD.dependencies.head.rdd != parCollection)
     assert(flatMappedRDD.collect() === result)
   }
 
-  runTest("RDDs with one-to-one dependencies") { normal: Boolean =>
-    testRDD(_.map(x => x.toString), normal)
-    testRDD(_.flatMap(x => 1 to x), normal)
-    testRDD(_.filter(_ % 2 == 0), normal)
-    testRDD(_.sample(false, 0.5, 0), normal)
-    testRDD(_.glom(), normal)
-    testRDD(_.mapPartitions(_.map(_.toString)), normal)
-    testRDD(_.map(x => (x % 2, 1)).reduceByKey(_ + _).mapValues(_.toString), normal)
-    testRDD(_.map(x => (x % 2, 1)).reduceByKey(_ + _).flatMapValues(x => 1 to x), normal)
-    testRDD(_.pipe(Seq("cat")), normal)
+  runTest("RDDs with one-to-one dependencies") { reliableCheckpoint: Boolean =>
+    testRDD(_.map(x => x.toString), reliableCheckpoint)
+    testRDD(_.flatMap(x => 1 to x), reliableCheckpoint)
+    testRDD(_.filter(_ % 2 == 0), reliableCheckpoint)
+    testRDD(_.sample(false, 0.5, 0), reliableCheckpoint)
+    testRDD(_.glom(), reliableCheckpoint)
+    testRDD(_.mapPartitions(_.map(_.toString)), reliableCheckpoint)
+    testRDD(_.map(x => (x % 2, 1)).reduceByKey(_ + _).mapValues(_.toString), reliableCheckpoint)
+    testRDD(_.map(x => (x % 2, 1)).reduceByKey(_ + _).flatMapValues(x => 1 to x),
+      reliableCheckpoint)
+    testRDD(_.pipe(Seq("cat")), reliableCheckpoint)
   }
 
-  runTest("ParallelCollectionRDD") { normal: Boolean =>
+  runTest("ParallelCollectionRDD") { reliableCheckpoint: Boolean =>
     val parCollection = sc.makeRDD(1 to 4, 2)
     val numPartitions = parCollection.partitions.size
-    checkpoint(parCollection, normal)
+    checkpoint(parCollection, reliableCheckpoint)
     assert(parCollection.dependencies === Nil)
     val result = parCollection.collect()
-    if (normal) {
+    if (reliableCheckpoint) {
       assert(sc.checkpointFile[Int](parCollection.getCheckpointFile.get).collect() === result)
     }
     assert(parCollection.dependencies != Nil)
@@ -84,15 +85,15 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
     assert(parCollection.collect() === result)
   }
 
-  runTest("BlockRDD") { normal: Boolean =>
+  runTest("BlockRDD") { reliableCheckpoint: Boolean =>
     val blockId = TestBlockId("id")
     val blockManager = SparkEnv.get.blockManager
     blockManager.putSingle(blockId, "test", StorageLevel.MEMORY_ONLY)
     val blockRDD = new BlockRDD[String](sc, Array(blockId))
     val numPartitions = blockRDD.partitions.size
-    checkpoint(blockRDD, normal)
+    checkpoint(blockRDD, reliableCheckpoint)
     val result = blockRDD.collect()
-    if (normal) {
+    if (reliableCheckpoint) {
       assert(sc.checkpointFile[String](blockRDD.getCheckpointFile.get).collect() === result)
     }
     assert(blockRDD.dependencies != Nil)
@@ -101,29 +102,29 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
     assert(blockRDD.collect() === result)
   }
 
-  runTest("ShuffleRDD") { normal: Boolean =>
+  runTest("ShuffleRDD") { reliableCheckpoint: Boolean =>
     testRDD(rdd => {
       // Creating ShuffledRDD directly as PairRDDFunctions.combineByKey produces a MapPartitionedRDD
       new ShuffledRDD[Int, Int, Int](rdd.map(x => (x % 2, 1)), partitioner)
-    }, normal)
+    }, reliableCheckpoint)
   }
 
-  runTest("UnionRDD") { normal: Boolean =>
+  runTest("UnionRDD") { reliableCheckpoint: Boolean =>
     def otherRDD: RDD[Int] = sc.makeRDD(1 to 10, 1)
-    testRDD(_.union(otherRDD), normal)
-    testRDDPartitions(_.union(otherRDD), normal)
+    testRDD(_.union(otherRDD), reliableCheckpoint)
+    testRDDPartitions(_.union(otherRDD), reliableCheckpoint)
   }
 
-  runTest("CartesianRDD") { normal: Boolean =>
+  runTest("CartesianRDD") { reliableCheckpoint: Boolean =>
     def otherRDD: RDD[Int] = sc.makeRDD(1 to 10, 1)
-    testRDD(new CartesianRDD(sc, _, otherRDD), normal)
-    testRDDPartitions(new CartesianRDD(sc, _, otherRDD), normal)
+    testRDD(new CartesianRDD(sc, _, otherRDD), reliableCheckpoint)
+    testRDDPartitions(new CartesianRDD(sc, _, otherRDD), reliableCheckpoint)
 
     // Test that the CartesianRDD updates parent partitions (CartesianRDD.s1/s2) after
     // the parent RDD has been checkpointed and parent partitions have been changed.
     // Note that this test is very specific to the current implementation of CartesianRDD.
     val ones = sc.makeRDD(1 to 100, 10).map(x => x)
-    checkpoint(ones, normal) // checkpoint that MappedRDD
+    checkpoint(ones, reliableCheckpoint) // checkpoint that MappedRDD
     val cartesian = new CartesianRDD(sc, ones, ones)
     val splitBeforeCheckpoint =
       serializeDeserialize(cartesian.partitions.head.asInstanceOf[CartesianPartition])
@@ -137,16 +138,16 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
     )
   }
 
-  runTest("CoalescedRDD") { normal: Boolean =>
-    testRDD(_.coalesce(2), normal)
-    testRDDPartitions(_.coalesce(2), normal)
+  runTest("CoalescedRDD") { reliableCheckpoint: Boolean =>
+    testRDD(_.coalesce(2), reliableCheckpoint)
+    testRDDPartitions(_.coalesce(2), reliableCheckpoint)
 
     // Test that the CoalescedRDDPartition updates parent partitions (CoalescedRDDPartition.parents)
     // after the parent RDD has been checkpointed and parent partitions have been changed.
     // Note that this test is very specific to the current implementation of
     // CoalescedRDDPartitions.
     val ones = sc.makeRDD(1 to 100, 10).map(x => x)
-    checkpoint(ones, normal) // checkpoint that MappedRDD
+    checkpoint(ones, reliableCheckpoint) // checkpoint that MappedRDD
     val coalesced = new CoalescedRDD(ones, 2)
     val splitBeforeCheckpoint =
       serializeDeserialize(coalesced.partitions.head.asInstanceOf[CoalescedRDDPartition])
@@ -159,7 +160,7 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
     )
   }
 
-  runTest("CoGroupedRDD") { normal: Boolean =>
+  runTest("CoGroupedRDD") { reliableCheckpoint: Boolean =>
     val longLineageRDD1 = generateFatPairRDD()
 
     // Collect the RDD as sequences instead of arrays to enable equality tests in testRDD
@@ -168,26 +169,26 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
 
     testRDD(rdd => {
       CheckpointSuite.cogroup(longLineageRDD1, rdd.map(x => (x % 2, 1)), partitioner)
-    }, normal, seqCollectFunc)
+    }, reliableCheckpoint, seqCollectFunc)
 
     val longLineageRDD2 = generateFatPairRDD()
     testRDDPartitions(rdd => {
       CheckpointSuite.cogroup(
         longLineageRDD2, sc.makeRDD(1 to 2, 2).map(x => (x % 2, 1)), partitioner)
-    }, normal, seqCollectFunc)
+    }, reliableCheckpoint, seqCollectFunc)
   }
 
-  runTest("ZippedPartitionsRDD") { normal: Boolean =>
-    testRDD(rdd => rdd.zip(rdd.map(x => x)), normal)
-    testRDDPartitions(rdd => rdd.zip(rdd.map(x => x)), normal)
+  runTest("ZippedPartitionsRDD") { reliableCheckpoint: Boolean =>
+    testRDD(rdd => rdd.zip(rdd.map(x => x)), reliableCheckpoint)
+    testRDDPartitions(rdd => rdd.zip(rdd.map(x => x)), reliableCheckpoint)
 
     // Test that ZippedPartitionsRDD updates parent partitions after parent RDDs have
     // been checkpointed and parent partitions have been changed.
     // Note that this test is very specific to the implementation of ZippedPartitionsRDD.
     val rdd = generateFatRDD()
     val zippedRDD = rdd.zip(rdd.map(x => x)).asInstanceOf[ZippedPartitionsRDD2[_, _, _]]
-    checkpoint(zippedRDD.rdd1, normal)
-    checkpoint(zippedRDD.rdd2, normal)
+    checkpoint(zippedRDD.rdd1, reliableCheckpoint)
+    checkpoint(zippedRDD.rdd2, reliableCheckpoint)
     val partitionBeforeCheckpoint =
       serializeDeserialize(zippedRDD.partitions.head.asInstanceOf[ZippedPartitionsPartition])
     zippedRDD.count()
@@ -202,27 +203,27 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
     )
   }
 
-  runTest("PartitionerAwareUnionRDD") { normal: Boolean =>
+  runTest("PartitionerAwareUnionRDD") { reliableCheckpoint: Boolean =>
     testRDD(rdd => {
       new PartitionerAwareUnionRDD[(Int, Int)](sc, Array(
         generateFatPairRDD(),
         rdd.map(x => (x % 2, 1)).reduceByKey(partitioner, _ + _)
       ))
-    }, normal)
+    }, reliableCheckpoint)
 
     testRDDPartitions(rdd => {
       new PartitionerAwareUnionRDD[(Int, Int)](sc, Array(
         generateFatPairRDD(),
         rdd.map(x => (x % 2, 1)).reduceByKey(partitioner, _ + _)
       ))
-    }, normal)
+    }, reliableCheckpoint)
 
     // Test that the PartitionerAwareUnionRDD updates parent partitions
     // (PartitionerAwareUnionRDD.parents) after the parent RDD has been checkpointed and parent
     // partitions have been changed. Note that this test is very specific to the current
     // implementation of PartitionerAwareUnionRDD.
     val pairRDD = generateFatPairRDD()
-    checkpoint(pairRDD, normal)
+    checkpoint(pairRDD, reliableCheckpoint)
     val unionRDD = new PartitionerAwareUnionRDD(sc, Array(pairRDD))
     val partitionBeforeCheckpoint = serializeDeserialize(
       unionRDD.partitions.head.asInstanceOf[PartitionerAwareUnionRDDPartition])
@@ -236,11 +237,11 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
     )
   }
 
-  runTest("CheckpointRDD with zero partitions") { normal: Boolean =>
+  runTest("CheckpointRDD with zero partitions") { reliableCheckpoint: Boolean =>
     val rdd = new BlockRDD[Int](sc, Array[BlockId]())
     assert(rdd.partitions.size === 0)
     assert(rdd.isCheckpointed === false)
-    checkpoint(rdd, normal)
+    checkpoint(rdd, reliableCheckpoint)
     assert(rdd.count() === 0)
     assert(rdd.isCheckpointed === true)
     assert(rdd.partitions.size === 0)
@@ -248,19 +249,19 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
 
   // Utility test methods
 
-  /** Checkpoint the RDD either locally or normally. */
-  private def checkpoint(rdd: RDD[_], normal: Boolean): Unit = {
-    if (normal) {
+  /** Checkpoint the RDD either locally or reliably. */
+  private def checkpoint(rdd: RDD[_], reliableCheckpoint: Boolean): Unit = {
+    if (reliableCheckpoint) {
       rdd.checkpoint()
     } else {
       rdd.localCheckpoint()
     }
   }
 
-  /** Run a test twice, once for local checkpointing and once for normal checkpointing. */
+  /** Run a test twice, once for local checkpointing and once for reliable checkpointing. */
   private def runTest(name: String)(body: Boolean => Unit): Unit = {
-    test(name + " [normal checkpointing]")(body(true))
-    test(name + " [local checkpointing]")(body(false))
+    test(name + " [reliable checkpoint]")(body(true))
+    test(name + " [local checkpoint]")(body(false))
   }
 
   private def defaultCollectFunc[T](rdd: RDD[T]): Any = rdd.collect()
@@ -271,13 +272,13 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
    * on all RDDs that have a parent RDD (i.e., do not call on ParallelCollection, BlockRDD, etc.).
    *
    * @param op an operation to run on the RDD
+   * @param reliableCheckpoint if true, use reliable checkpoints, otherwise use local checkpoints
    * @param collectFunc a function for collecting the values in the RDD, in case there are
    *   non-comparable types like arrays that we want to convert to something that supports ==
-   * @param normal if true, use normal checkpoints, otherwise use local checkpoints
    */
   private def testRDD[U: ClassTag](
       op: (RDD[Int]) => RDD[U],
-      normal: Boolean,
+      reliableCheckpoint: Boolean,
       collectFunc: RDD[U] => Any = defaultCollectFunc[U] _): Unit = {
     // Generate the final RDD using given RDD operation
     val baseRDD = generateFatRDD()
@@ -295,14 +296,14 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
     // Find serialized sizes before and after the checkpoint
     logInfo("RDD after checkpoint: " + operatedRDD + "\n" + operatedRDD.toDebugString)
     val (rddSizeBeforeCheckpoint, partitionSizeBeforeCheckpoint) = getSerializedSizes(operatedRDD)
-    checkpoint(operatedRDD, normal)
+    checkpoint(operatedRDD, reliableCheckpoint)
     val result = collectFunc(operatedRDD)
     operatedRDD.collect() // force re-initialization of post-checkpoint lazy variables
     val (rddSizeAfterCheckpoint, partitionSizeAfterCheckpoint) = getSerializedSizes(operatedRDD)
     logInfo("RDD after checkpoint: " + operatedRDD + "\n" + operatedRDD.toDebugString)
 
     // Test whether the checkpoint file has been created
-    if (normal) {
+    if (reliableCheckpoint) {
       assert(collectFunc(sc.checkpointFile[U](operatedRDD.getCheckpointFile.get)) === result)
     }
 
@@ -340,12 +341,13 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
    * partitions (i.e., do not call it on simple RDD like MappedRDD).
    *
    * @param op an operation to run on the RDD
+   * @param reliableCheckpoint if true, use reliable checkpoints, otherwise use local checkpoints
    * @param collectFunc a function for collecting the values in the RDD, in case there are
    *   non-comparable types like arrays that we want to convert to something that supports ==
    */
   private def testRDDPartitions[U: ClassTag](
       op: (RDD[Int]) => RDD[U],
-      normal: Boolean,
+      reliableCheckpoint: Boolean,
       collectFunc: RDD[U] => Any = defaultCollectFunc[U] _): Unit = {
     // Generate the final RDD using given RDD operation
     val baseRDD = generateFatRDD()
@@ -362,7 +364,7 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
     val (rddSizeBeforeCheckpoint, partitionSizeBeforeCheckpoint) = getSerializedSizes(operatedRDD)
     // checkpoint the parent RDD, not the generated one
     parentRDDs.foreach { rdd =>
-      checkpoint(rdd, normal)
+      checkpoint(rdd, reliableCheckpoint)
     }
     val result = collectFunc(operatedRDD)  // force checkpointing
     operatedRDD.collect() // force re-initialization of post-checkpoint lazy variables

@@ -37,8 +37,6 @@ private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
    * Ensure the RDD is fully cached so the partitions can be recovered later.
    */
   protected override def doCheckpoint(): CheckpointRDD[T] = {
-    val cm = SparkEnv.get.cacheManager
-    val bmm = SparkEnv.get.blockManager.master
     val level = rdd.getStorageLevel
 
     // Assume storage level uses disk; otherwise memory eviction may cause data loss
@@ -46,12 +44,8 @@ private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
 
     // Not all RDD actions compute all partitions of the RDD (e.g. take)
     // We must compute and cache any missing partitions for correctness reasons
-    rdd.partitions.foreach { p =>
-      val blockId = RDDBlockId(rdd.id, p.index)
-      if (!bmm.contains(blockId)) {
-        cm.getOrCompute(rdd, p, TaskContext.empty(), level)
-      }
-    }
+    // TODO: avoid running another job here (SPARK-8582)
+    rdd.count()
 
     new LocalCheckpointRDD[T](rdd)
   }
