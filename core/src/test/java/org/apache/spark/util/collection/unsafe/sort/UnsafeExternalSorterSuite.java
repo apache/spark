@@ -20,6 +20,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.LinkedList;
 import java.util.UUID;
 
 import scala.Tuple2;
@@ -34,7 +35,6 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import static org.junit.Assert.*;
-import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.AdditionalAnswers.returnsSecondArg;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.*;
@@ -54,6 +54,7 @@ import org.apache.spark.util.Utils;
 
 public class UnsafeExternalSorterSuite {
 
+  final LinkedList<File> spillFilesCreated = new LinkedList<File>();
   final TaskMemoryManager taskMemoryManager =
     new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP));
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
@@ -95,6 +96,7 @@ public class UnsafeExternalSorterSuite {
     MockitoAnnotations.initMocks(this);
     tempDir = new File(Utils.createTempDir$default$1());
     shuffleMemoryManager = new ShuffleMemoryManager(Long.MAX_VALUE);
+    spillFilesCreated.clear();
     taskContext = mock(TaskContext.class);
     when(taskContext.taskMetrics()).thenReturn(new TaskMetrics());
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
@@ -103,6 +105,7 @@ public class UnsafeExternalSorterSuite {
       public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock) throws Throwable {
         TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
         File file = File.createTempFile("spillFile", ".spill", tempDir);
+        spillFilesCreated.add(file);
         return Tuple2$.MODULE$.apply(blockId, file);
       }
     });
@@ -142,6 +145,13 @@ public class UnsafeExternalSorterSuite {
     assertEquals(0, leakedUnsafeMemory);
   }
 
+  private void assertSpillFilesWereCleanedUp() {
+    for (File spillFile : spillFilesCreated) {
+      assertFalse("Spill file " + spillFile.getPath() + " was not cleaned up",
+        spillFile.exists());
+    }
+  }
+
   private static void insertNumber(UnsafeExternalSorter sorter, int value) throws Exception {
     final int[] arr = new int[] { value };
     sorter.insertRecord(arr, PlatformDependent.INT_ARRAY_OFFSET, 4, value);
@@ -178,8 +188,7 @@ public class UnsafeExternalSorterSuite {
     }
 
     sorter.freeMemory();
-    // TODO: test for cleanup:
-    // assert(tempDir.isEmpty)
+    assertSpillFilesWereCleanedUp();
   }
 
   @Test
@@ -212,6 +221,7 @@ public class UnsafeExternalSorterSuite {
     }
 
     sorter.freeMemory();
+    assertSpillFilesWereCleanedUp();
   }
 
   @Test
@@ -231,6 +241,7 @@ public class UnsafeExternalSorterSuite {
       sorter.insertRecord(record, PlatformDependent.BYTE_ARRAY_OFFSET, record.length, 0);
     }
     sorter.freeMemory();
+    assertSpillFilesWereCleanedUp();
   }
 
 }

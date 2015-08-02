@@ -17,6 +17,7 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
 
@@ -100,6 +101,7 @@ public final class UnsafeExternalSorter {
     taskContext.addOnCompleteCallback(new AbstractFunction0<BoxedUnit>() {
       @Override
       public BoxedUnit apply() {
+        deleteSpillFiles();
         freeMemory();
         return null;
       }
@@ -201,6 +203,20 @@ public final class UnsafeExternalSorter {
   }
 
   /**
+   * Deletes any spill files created by this sorter.
+   */
+  public void deleteSpillFiles() {
+    for (UnsafeSorterSpillWriter spill : spillWriters) {
+      File file = spill.getFile();
+      if (file != null && file.exists()) {
+        if (!file.delete()) {
+          logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
+        };
+      }
+    }
+  }
+
+  /**
    * Checks whether there is enough space to insert a new record into the sorter.
    *
    * @param requiredSpace the required space in the data page, in bytes, including space for storing
@@ -295,21 +311,6 @@ public final class UnsafeExternalSorter {
     currentPagePosition += lengthInBytes;
     freeSpaceInCurrentPage -= totalSpaceRequired;
     sorter.insertRecord(recordAddress, prefix);
-  }
-
-  /**
-   * Write a record to the sorter. The record is broken down into two different parts, and
-   *
-   */
-  public void insertRecord(
-      Object recordBaseObject1,
-      long recordBaseOffset1,
-      int lengthInBytes1,
-      Object recordBaseObject2,
-      long recordBaseOffset2,
-      int lengthInBytes2,
-      long prefix) throws IOException {
-
   }
 
   public UnsafeSorterIterator getSortedIterator() throws IOException {
