@@ -121,7 +121,9 @@ private[parquet] class ParquetReadSupport extends ReadSupport[InternalRow] with 
             if (fileFieldNames.contains(field.name)) {
               // If the field exists in the target Parquet file, extracts the field type from the
               // full file schema and makes a single-field Parquet schema
-              new MessageType("root", fileSchema.getType(field.name))
+              new MessageType(
+                ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME,
+                fileSchema.getType(field.name))
             } else {
               // Otherwise, just resorts to `CatalystSchemaConverter`
               toParquet.convert(StructType(Array(field)))
@@ -131,7 +133,7 @@ private[parquet] class ParquetReadSupport extends ReadSupport[InternalRow] with 
           // columns.  Note that it's possible that no columns are requested at all (e.g., count
           // some partition column of a partitioned Parquet table). That's why `fold` is used here
           // and always fallback to an empty Parquet schema.
-          .fold(new MessageType("root")) {
+          .fold(new MessageType(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)) {
             _ union _
           }
       }
