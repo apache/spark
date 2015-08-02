@@ -182,7 +182,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
 /**
  * Parameters for Decision Tree-based classification algorithms.
  */
-private[ml] trait TreeClassifierParams extends ClassifierParams {
+private[ml] trait TreeClassifierParams extends Params {
 
   /**
    * Criterion used for information gain calculation (case-insensitive).
@@ -267,7 +267,7 @@ private[ml] object TreeRegressorParams {
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed with HasThresholds {
+private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
 
   /**
    * Fraction of the training data used for learning each decision tree, in range (0, 1].
@@ -279,9 +279,6 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed wit
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
 
   setDefault(subsamplingRate -> 1.0)
-
-  /** @group setParam */
-  def setThresholds(value: Array[Double]): this.type = set(thresholds, value)
 
   /** @group setParam */
   def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
