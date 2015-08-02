@@ -21,7 +21,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  test("PrefixSpan using Integer type, singleton itemsets") {
+  test("PrefixSpan internal (integer seq, -1 delim) run, singleton itemsets") {
 
     /*
       library("arulesSequences")
@@ -69,7 +69,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Array(4, -1, 5), 2L),
       (Array(5), 3L)
     )
-    compareResults(expectedValue1, result1.collect())
+    compareInternalResults(expectedValue1, result1.collect())
 
     prefixspan.setMinSupport(0.5).setMaxPatternLength(50)
     val result2 = prefixspan.run(rdd)
@@ -80,7 +80,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Array(4), 4L),
       (Array(5), 3L)
     )
-    compareResults(expectedValue2, result2.collect())
+    compareInternalResults(expectedValue2, result2.collect())
 
     prefixspan.setMinSupport(0.33).setMaxPatternLength(2)
     val result3 = prefixspan.run(rdd)
@@ -100,10 +100,10 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Array(4, -1, 5), 2L),
       (Array(5), 3L)
     )
-    compareResults(expectedValue3, result3.collect())
+    compareInternalResults(expectedValue3, result3.collect())
   }
 
-  test("PrefixSpan using Integer type, variable-size itemsets") {
+  test("PrefixSpan internal (integer seq, -1 delim) run, variable-size itemsets") {
     val sequences = Array(
       Array(1, -1, 1, 2, 3, -1, 1, 3, -1, 4, -1, 3, 6),
       Array(1, 4, -1, 3, -1, 2, 3, -1, 1, 5),
@@ -254,10 +254,100 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Array(1, -1, 2, 3, -1, 1), 2L),
       (Array(1, -1, 2, -1, 1), 2L))
 
-    compareResults(expectedValue, result.collect())
+    compareInternalResults(expectedValue, result.collect())
   }
 
-  private def compareResults(
+  test("PrefixSpan Integer type, variable-size itemsets") {
+    val sequences = Seq(
+      Array(Array(1, 2), Array(3)),
+      Array(Array(1), Array(3, 2), Array(1, 2)),
+      Array(Array(1, 2), Array(5)),
+      Array(Array(6)))
+    val rdd = sc.parallelize(sequences, 2).cache()
+
+    val prefixspan = new PrefixSpan()
+      .setMinSupport(0.5)
+      .setMaxPatternLength(5)
+
+    /*
+      To verify results, create file "prefixSpanSeqs2" with content
+      (format = (transactionID, idxInTransaction, numItemsinItemset, itemset)):
+        1 1 2 1 2
+        1 2 1 3
+        2 1 1 1
+        2 2 2 3 2
+        2 3 2 1 2
+        3 1 2 1 2
+        3 2 1 5
+        4 1 1 6
+      In R, run:
+        library("arulesSequences")
+        prefixSpanSeqs = read_baskets("prefixSpanSeqs", info = c("sequenceID","eventID","SIZE"))
+        freqItemSeq = cspade(prefixSpanSeqs,
+                             parameter = 0.5, maxlen = 5 ))
+        resSeq = as(freqItemSeq, "data.frame")
+        resSeq
+
+           sequence support
+        1     <{1}>    0.75
+        2     <{2}>    0.75
+        3     <{3}>    0.50
+        4 <{1},{3}>    0.50
+        5   <{1,2}>    0.75
+     */
+
+    val model = prefixspan.run(rdd)
+    val expected = Array(
+      (Array(Array(1)), 3L),
+      (Array(Array(2)), 3L),
+      (Array(Array(3)), 2L),
+      (Array(Array(1), Array(3)), 2L),
+      (Array(Array(1, 2)), 3L)
+    )
+    compareResults(expected, model.freqSequences.collect().map(x => (x.sequence, x.freq)))
+  }
+
+  test("PrefixSpan String type, variable-size itemsets") {
+    // This is the same test as "PrefixSpan Int type, variable-size itemsets" except
+    // mapped to Strings
+    val intToString = (1 to 6).zip(Seq("a", "b", "c", "d", "e", "f")).toMap
+    val sequences = Seq(
+      Array(Array(1, 2), Array(3)),
+      Array(Array(1), Array(3, 2), Array(1, 2)),
+      Array(Array(1, 2), Array(5)),
+      Array(Array(6))).map(seq => seq.map(itemSet => itemSet.map(intToString)))
+    val rdd = sc.parallelize(sequences, 2).cache()
+
+    val prefixspan = new PrefixSpan()
+      .setMinSupport(0.5)
+      .setMaxPatternLength(5)
+
+    val model = prefixspan.run(rdd)
+    val expected = Array(
+      (Array(Array(1)), 3L),
+      (Array(Array(2)), 3L),
+      (Array(Array(3)), 2L),
+      (Array(Array(1), Array(3)), 2L),
+      (Array(Array(1, 2)), 3L)
+    ).map { case (pattern, count) =>
+      (pattern.map(itemSet => itemSet.map(intToString)), count)
+    }
+    compareResults(expected, model.freqSequences.collect().map(x => (x.sequence, x.freq)))
+  }
+
+  private def compareResults[Item](
+      expectedValue: Array[(Array[Array[Item]], Long)],
+      actualValue: Array[(Array[Array[Item]], Long)]): Unit = {
+    val expectedSet = expectedValue.map { case (pattern: Array[Array[Item]], count: Long) =>
+      (pattern.map(itemSet => itemSet.toSet).toSeq, count)
+    }.toSet
+    val actualSet = actualValue.map { case (pattern: Array[Array[Item]], count: Long) =>
+      (pattern.map(itemSet => itemSet.toSet).toSeq, count)
+    }.toSet
+    assert(expectedSet === actualSet)
+  }
+
+  private def compareInternalResults(
       expectedValue: Array[(Array[Int], Long)],
       actualValue: Array[(Array[Int], Long)]): Unit = {
     val expectedSet = expectedValue.map(x => (x._1.toSeq, x._2)).toSet

@@ -31,6 +31,7 @@ import org.apache.spark.unsafe.PlatformDependent;
  */
 final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
 
+  private final File file;
   private InputStream in;
   private DataInputStream din;
 
@@ -48,6 +49,7 @@ final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
       File file,
       BlockId blockId) throws IOException {
     assert (file.length() > 0);
+    this.file = file;
     final BufferedInputStream bs = new BufferedInputStream(new FileInputStream(file));
     this.in = blockManager.wrapForCompression(blockId, bs);
     this.din = new DataInputStream(this.in);
@@ -71,6 +73,7 @@ final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
     numRecordsRemaining--;
     if (numRecordsRemaining == 0) {
       in.close();
+      file.delete();
       in = null;
       din = null;
     }

@@ -39,14 +39,22 @@ import org.apache.spark.unsafe.memory.*;
 
 /**
  * An append-only hash map where keys and values are contiguous regions of bytes.
- * <p>
+ *
  * This is backed by a power-of-2-sized hash table, using quadratic probing with triangular numbers,
  * which is guaranteed to exhaust the space.
- * <p>
+ *
  * The map can support up to 2^29 keys. If the key cardinality is higher than this, you should
  * probably be using sorting instead of hashing for better cache locality.
- * <p>
- * This class is not thread safe.
+ *
+ * The key and values under the hood are stored together, in the following format:
+ *   Bytes 0 to 4: len(k) (key length in bytes) + len(v) (value length in bytes) + 4
+ *   Bytes 4 to 8: len(k)
+ *   Bytes 8 to 8 + len(k): key data
+ *   Bytes 8 + len(k) to 8 + len(k) + len(v): value data
+ *
+ * This means that the first four bytes store the entire record (key + value) length. This format
+ * is consistent with {@link org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter},
+ * so we can pass records from this map directly into the sorter to sort records in place.
  */
 public final class BytesToBytesMap {
 
@@ -253,7 +261,7 @@ public final class BytesToBytesMap {
         totalLength = PlatformDependent.UNSAFE.getInt(pageBaseObject, offsetInPage);
       }
       loc.with(currentPage, offsetInPage);
-      offsetInPage += 8 + totalLength;
+      offsetInPage += 4 + totalLength;
       currentRecordNumber++;
       return loc;
     }
@@ -366,7 +374,7 @@ public final class BytesToBytesMap {
       position += 4;
       keyLength = PlatformDependent.UNSAFE.getInt(page, position);
       position += 4;
-      valueLength = totalLength - keyLength;
+      valueLength = totalLength - keyLength - 4;
 
       keyMemoryLocation.setObjAndOffset(page, position);
 
@@ -565,7 +573,7 @@ public final class BytesToBytesMap {
       insertCursor += valueLengthBytes; // word used to store the value size
 
       PlatformDependent.UNSAFE.putInt(dataPageBaseObject, recordOffset,
-        keyLengthBytes + valueLengthBytes);
+        keyLengthBytes + valueLengthBytes + 4);
       PlatformDependent.UNSAFE.putInt(dataPageBaseObject, keyLengthOffset, keyLengthBytes);
       // Copy the key
       PlatformDependent.copyMemory(
@@ -620,7 +628,7 @@ public final class BytesToBytesMap {
    * Free all allocated memory associated with this map, including the storage for keys and values
    * as well as the hash map array itself.
    *
-   * This method is idempotent.
+   * This method is idempotent and can be called multiple times.
    */
   public void free() {
     longArray = null;
@@ -637,6 +645,14 @@ public final class BytesToBytesMap {
 
   public TaskMemoryManager getTaskMemoryManager() {
     return taskMemoryManager;
+  }
+
+  public ShuffleMemoryManager getShuffleMemoryManager() {
+    return shuffleMemoryManager;
+  }
+
+  public long getPageSizeBytes() {
+    return pageSizeBytes;
   }
 
   /** Returns the total amount of memory, in bytes, consumed by this map's managed structures. */
