@@ -220,7 +220,11 @@ class CodeGenContext {
   }
 
   /**
-   * Generates code for compare expression in Java.
+   * Generates code for comparing two expressions.
+   *
+   * @param dataType data type of the expressions
+   * @param c1 name of the variable of expression 1's output
+   * @param c2 name of the variable of expression 2's output
    */
   def genComp(dataType: DataType, c1: String, c2: String): String = dataType match {
     // java boolean doesn't support > or < operator
@@ -231,7 +235,7 @@ class CodeGenContext {
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
     case NullType => "0"
-    case schema: StructType if schema.supportOrdering(schema) =>
+    case schema: StructType =>
       val comparisons = GenerateOrdering.genComparisons(this, schema)
       val compareFunc = freshName("compareStruct")
       val funcCode: String =
@@ -245,8 +249,8 @@ class CodeGenContext {
       addNewFunction(compareFunc, funcCode)
       s"this.$compareFunc($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
-    case _ => throw new IllegalArgumentException(
-      "cannot generate compare code for un-comparable type")
+    case _ =>
+      throw new IllegalArgumentException("cannot generate compare code for un-comparable type")
   }
 
   /**
