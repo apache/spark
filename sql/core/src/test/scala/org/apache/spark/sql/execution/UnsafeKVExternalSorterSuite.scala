@@ -35,15 +35,15 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite {
   private val keyTypes = Seq(IntegerType, FloatType, DoubleType, StringType)
   private val valueTypes = Seq(IntegerType, FloatType, DoubleType, StringType)
 
-  testKVSorter(new StructType, new StructType, true)
-  testKVSorter(new StructType().add("c1", IntegerType), new StructType, true)
-  testKVSorter(new StructType, new StructType().add("c1", IntegerType), true)
+  testKVSorter(new StructType, new StructType, spill = true)
+  testKVSorter(new StructType().add("c1", IntegerType), new StructType, spill = true)
+  testKVSorter(new StructType, new StructType().add("c1", IntegerType), spill = true)
 
   private val rand = new Random(42)
   for (i <- 0 until 6) {
     val keySchema = RandomDataGenerator.randomSchema(rand.nextInt(10) + 1, keyTypes)
     val valueSchema = RandomDataGenerator.randomSchema(rand.nextInt(10) + 1, valueTypes)
-    testKVSorter(keySchema, valueSchema, i > 3)
+    testKVSorter(keySchema, valueSchema, spill = i > 3)
   }
 
   /**
@@ -140,6 +140,15 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite {
 
       // Testing to make sure the key/value in output matches input
       assert(out.sorted(kvOrdering) === input.sorted(kvOrdering))
+
+      // Make sure there is no memory leak
+      val leakedUnsafeMemory: Long = taskMemMgr.cleanUpAllAllocatedMemory
+      if (shuffleMemMgr != null) {
+        val leakedShuffleMemory: Long = shuffleMemMgr.getMemoryConsumptionForThisTask()
+        assert(0L === leakedShuffleMemory)
+      }
+      assert(0 === leakedUnsafeMemory)
+      TaskContext.unset()
     }
   }
 }
