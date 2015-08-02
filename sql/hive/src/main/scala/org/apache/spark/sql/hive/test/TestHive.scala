@@ -90,11 +90,14 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   private lazy val temporaryConfig = newTemporaryConfiguration()
 
   /** Sets up the system initially or after a RESET command */
-  protected override def configure(): Map[String, String] =
-    temporaryConfig ++ Map(
+  protected override def configure(): Map[String, String] = {
+    super.configure() ++ temporaryConfig ++ Map(
       ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toURI.toString,
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
-      ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString)
+      ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,
+      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1"
+    )
+  }
 
   val testTempDir = Utils.createTempDir()
 
