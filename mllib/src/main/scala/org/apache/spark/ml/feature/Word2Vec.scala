@@ -162,7 +162,7 @@ class Word2VecModel private[ml] (
   }
 
   /**
-   * Find "num" no. words closest in similarity to the given word.
+   * Find "num" number of words closest in similarity to the given word.
    * Returns a dataframe with the words and the cosine similarities between the
    * synonyms and the given word.
    */
@@ -171,9 +171,9 @@ class Word2VecModel private[ml] (
   }
 
   /**
-   * Find "num" no. words closest to similarity to the vector representation of the word.
-   * Returns a dataframe with the words and the cosine similarities between the
-   * synonyms and the given word.
+   * Find "num" number of words closest to similarity to the given vector representation
+   * of the word. Returns a dataframe with the words and the cosine similarities between the
+   * synonyms and the given word vector.
    */
   def findSynonyms(word: Vector, num: Int): DataFrame = {
     val sc = SparkContext.getOrCreate()
