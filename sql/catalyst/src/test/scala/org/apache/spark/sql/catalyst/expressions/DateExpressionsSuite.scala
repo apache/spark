@@ -433,4 +433,60 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       UnixTimestamp(Literal("2015-07-24"), Literal("not a valid format")), null)
   }
+
+  test("datediff") {
+    checkEvaluation(DateDiff(
+      Literal(Timestamp.valueOf("2015-07-21 23:59:59")),
+      Literal(Timestamp.valueOf("2015-07-24 00:00:00"))), -2)
+    checkEvaluation(
+      DateDiff(Literal(Date.valueOf("2015-07-24")), Literal(Date.valueOf("2015-07-21"))), 3)
+    checkEvaluation(DateDiff(Literal("2015-07-24"), Literal("2015-07-21")), 3)
+    checkEvaluation(DateDiff(Literal(Date.valueOf("2015-07-24")), Literal("2015-07-21")), 3)
+    checkEvaluation(DateDiff(Literal("2015-07-24"), Literal(Date.valueOf("2015-07-21"))), 2)
+    checkEvaluation(
+      DateDiff(Literal(Timestamp.valueOf("2015-07-24 07:59:59")), Literal("2015-07-21")), 3)
+    checkEvaluation(
+      DateDiff(Literal("2015-07-24 07:59:59"), Literal(Date.valueOf("2015-07-21"))), 2)
+    checkEvaluation(DateDiff(
+      Literal(Timestamp.valueOf("2015-07-24 08:00:00")), Literal(Date.valueOf("2015-07-21"))), 3)
+    checkEvaluation(DateDiff(
+      Literal(Timestamp.valueOf("2015-07-24 08:00:00")), Literal(Date.valueOf("2015-07-21"))), 3)
+  }
+
+  test("from_utc_timestamp") {
+    checkEvaluation(
+      FromUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("UTC")),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-23 17:00:00")))
+    checkEvaluation(
+      FromUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("PST")),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 00:00:00")))
+    checkEvaluation(
+      FromUTCTimestamp(Literal(Timestamp.valueOf("2015-01-24 00:00:00")), Literal("PST")),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-01-24 00:00:00")))
+    checkEvaluation(
+      FromUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("Asia/Shanghai")),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-23 09:00:00")))
+    checkEvaluation(
+      FromUTCTimestamp(Literal(Timestamp.valueOf("2015-01-24 00:00:00")), Literal("Asia/Shanghai")),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-01-23 08:00:00")))
+  }
+
+  test("to_utc_timestamp") {
+    checkEvaluation(
+      ToUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("UTC")),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 07:00:00")))
+    checkEvaluation(
+      ToUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("PST")),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 00:00:00")))
+    checkEvaluation(
+      ToUTCTimestamp(Literal(Timestamp.valueOf("2015-01-24 00:00:00")), Literal("PST")),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-01-24 00:00:00")))
+    checkEvaluation(
+      ToUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("Asia/Shanghai")),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 15:00:00")))
+    checkEvaluation(
+      ToUTCTimestamp(Literal(Timestamp.valueOf("2015-01-24 00:00:00")), Literal("Asia/Shanghai")),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-01-24 16:00:00")))
+  }
+
 }

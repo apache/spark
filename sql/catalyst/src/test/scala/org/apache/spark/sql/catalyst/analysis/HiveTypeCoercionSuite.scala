@@ -107,13 +107,8 @@ class HiveTypeCoercionSuite extends PlanTest {
     }
 
     shouldNotCast(IntegerType, DateType)
-    shouldNotCast(IntegerType, TimestampType)
     shouldNotCast(LongType, DateType)
-    shouldNotCast(LongType, TimestampType)
     shouldNotCast(DecimalType.SYSTEM_DEFAULT, DateType)
-    shouldNotCast(DecimalType.SYSTEM_DEFAULT, TimestampType)
-
-    shouldNotCast(IntegerType, TypeCollection(DateType, TimestampType))
 
     shouldNotCast(IntegerType, ArrayType)
     shouldNotCast(IntegerType, MapType)
