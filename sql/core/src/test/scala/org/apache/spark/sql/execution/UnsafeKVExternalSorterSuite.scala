@@ -43,7 +43,8 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite {
       taskAttemptId = 0,
       attemptNumber = 0,
       taskMemoryManager = taskMemMgr,
-      metricsSystem = null))
+      metricsSystem = null,
+      internalAccumulators = Seq.empty))
 
     val keySchema = new StructType().add("a", StringType)
     val valueSchema = new StructType().add("b", IntegerType).add("c", IntegerType)
@@ -117,7 +118,8 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite {
       taskAttemptId = 0,
       attemptNumber = 0,
       taskMemoryManager = taskMemMgr,
-      metricsSystem = null))
+      metricsSystem = null,
+      internalAccumulators = Seq.empty))
 
     val keySchema = new StructType().add("a", StringType)
     val valueSchema = new StructType().add("b", IntegerType)

@@ -224,9 +224,12 @@ public final class UnsafeExternalSorter {
   }
 
   private void updatePeakMemoryUsed() {
-    long mem = getMemoryUsage();
-    if (mem > peakMemoryUsedBytes) {
-      peakMemoryUsedBytes = mem;
+    // This is null after freeing memory
+    if (inMemSorter != null) {
+      long mem = getMemoryUsage();
+      if (mem > peakMemoryUsedBytes) {
+        peakMemoryUsedBytes = mem;
+      }
     }
   }
 

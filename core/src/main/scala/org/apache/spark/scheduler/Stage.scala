@@ -75,7 +75,10 @@ private[spark] abstract class Stage(
 
   /**
    * Re-initialize the internal accumulators associated with this stage.
-   * This is called every time the stage is submitted.
+   *
+   * This is called every time the stage is submitted, *except* when a subset of tasks
+   * belonging to this stage has already finished. Otherwise, reinitializing the internal
+   * accumulators here again will override partial values from the finished tasks.
    */
   def resetInternalAccumulators(): Unit = {
     _internalAccumulators = InternalAccumulator.create()

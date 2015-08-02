@@ -502,7 +502,8 @@ public abstract class AbstractBytesToBytesMapSuite {
     final long recordLengthBytes = 32;
     final long pageSizeBytes = 256 + 8; // 8 bytes for end-of-page marker
     final long numRecordsPerPage = pageSizeBytes / recordLengthBytes;
-    final BytesToBytesMap map = new BytesToBytesMap(memoryManager, 1024, pageSizeBytes);
+    final BytesToBytesMap map = new BytesToBytesMap(
+      taskMemoryManager, shuffleMemoryManager, 1024, pageSizeBytes);
 
     // Since BytesToBytesMap is append-only, we expect the total memory consumption to be
     // monotonically increasing. More specifically, every time we allocate a new page it

@@ -169,7 +169,8 @@ class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
       taskAttemptId = 0,
       attemptNumber = 0,
       taskMemoryManager = taskMemoryManager,
-      metricsSystem = null))
+      metricsSystem = null,
+      internalAccumulators = Seq.empty))
 
     // Memory consumption in the beginning of the task.
     val initialMemoryConsumption = shuffleMemoryManager.getMemoryConsumptionForThisTask()

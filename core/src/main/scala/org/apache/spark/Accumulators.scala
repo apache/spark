@@ -152,11 +152,12 @@ class Accumulable[R, T] private[spark] (
     in.defaultReadObject()
     value_ = zero
     deserialized = true
-    // If a user defined accumulator is used in a task closure, automatically register it with
-    // the TaskContext when we deserialize it. Note that internal accumulators are deserialized
-    // before the TaskContext is created so we must register them ourselves separately.
-    val taskContext = TaskContext.get()
-    if (taskContext != null) {
+    // Automatically register the accumulator when it is deserialized with the task closure.
+    // Note that internal accumulators are deserialized before the TaskContext is created and
+    // are registered in the TaskContext constructor.
+    if (!isInternal) {
+      val taskContext = TaskContext.get()
+      assume(taskContext != null, "Task context was null when deserializing user accumulators")
       taskContext.registerAccumulator(this)
     }
   }

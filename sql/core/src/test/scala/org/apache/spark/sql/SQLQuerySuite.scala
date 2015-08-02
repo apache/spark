@@ -1604,30 +1604,22 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("aggregation with codegen updates peak execution memory") {
-    val originalValue = sqlContext.conf.codegenEnabled
-    val sc = sqlContext.sparkContext
-    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
-    try {
+    withSQLConf((SQLConf.CODEGEN_ENABLED.key, "true")) {
+      val sc = sqlContext.sparkContext
       AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "aggregation with codegen") {
         testCodeGen(
           "SELECT key, count(value) FROM testData GROUP BY key",
           (1 to 100).map(i => Row(i, 1)))
       }
-    } finally {
-      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
     }
   }
 
   test("external sorting updates peak execution memory") {
-    val originalValue = sqlContext.conf.externalSortEnabled
-    val sc = sqlContext.sparkContext
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, true)
-    try {
+    withSQLConf((SQLConf.EXTERNAL_SORT.key, "true")) {
+      val sc = sqlContext.sparkContext
       AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "external sort") {
         sortTest()
       }
-    } finally {
-      sqlContext.setConf(SQLConf.EXTERNAL_SORT, originalValue)
     }
   }
 

@@ -252,16 +252,15 @@ public class UnsafeExternalSorterSuite {
     final long recordLengthBytes = 8;
     final long pageSizeBytes = 256;
     final long numRecordsPerPage = pageSizeBytes / recordLengthBytes;
-    final SparkConf conf = new SparkConf().set("spark.buffer.pageSize", pageSizeBytes + "b");
-    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
-      memoryManager,
+    final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
+      taskMemoryManager,
       shuffleMemoryManager,
       blockManager,
       taskContext,
       recordComparator,
       prefixComparator,
       1024,
-      conf);
+      pageSizeBytes);
 
     // Peak memory should be monotonically increasing. More specifically, every time
     // we allocate a new page it should increase by exactly the size of the page.
