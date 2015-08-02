@@ -101,9 +101,9 @@ class LogisticRegression(override val uid: String)
   /**
    * Whether to standardize the training features before fitting the model.
    * The coefficients of models will be always returned on the original scale,
-   * so it will be transparent for users. Note that when no regularization,
-   * with or without standardization, the models should be always converged to
-   * the same solution.
+   * so it will be transparent for users. Note that with/without standardization,
+   * the models should be always converged to the same solution when no regularization
+   * is applied.
    * Default is true.
    * @group setParam
    * */
