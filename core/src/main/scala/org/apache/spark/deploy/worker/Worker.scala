@@ -40,7 +40,7 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
 
-private[worker] class Worker(
+private[deploy] class Worker(
     override val rpcEnv: RpcEnv,
     webUiPort: Int,
     cores: Int,
@@ -553,6 +553,7 @@ private[worker] class Worker(
           Utils.deleteRecursively(new File(dir))
         }
       }
+      shuffleService.applicationRemoved(id)
     }
   }
 
@@ -660,6 +661,9 @@ private[worker] class Worker(
 }
 
 private[deploy] object Worker extends Logging {
+  val SYSTEM_NAME = "sparkWorker"
+  val ENDPOINT_NAME = "Worker"
+
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
     val conf = new SparkConf
@@ -681,13 +685,12 @@ private[deploy] object Worker extends Logging {
       conf: SparkConf = new SparkConf): RpcEnv = {
 
     // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
-    val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
-    val actorName = "Worker"
+    val systemName = SYSTEM_NAME + workerNumber.map(_.toString).getOrElse("")
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create(systemName, host, port, conf, securityMgr)
     val masterAddresses = masterUrls.map(RpcAddress.fromSparkURL(_))
-    rpcEnv.setupEndpoint(actorName, new Worker(rpcEnv, webUiPort, cores, memory, masterAddresses,
-      systemName, actorName, workDir, conf, securityMgr))
+    rpcEnv.setupEndpoint(ENDPOINT_NAME, new Worker(rpcEnv, webUiPort, cores, memory,
+      masterAddresses, systemName, ENDPOINT_NAME, workDir, conf, securityMgr))
     rpcEnv
   }
 

@@ -27,6 +27,9 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 
+/**
+ * A test suite that generates randomized data to test the [[TungstenSort]] operator.
+ */
 class TungstenSortSuite extends SparkPlanTest with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
@@ -70,8 +73,7 @@ class TungstenSortSuite extends SparkPlanTest with BeforeAndAfterAll {
 
   // Test sorting on different data types
   for (
-    dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType)
-    if !dataType.isInstanceOf[DecimalType]; // We don't have an unsafe representation for decimals
+    dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType);
     nullable <- Seq(true, false);
     sortOrder <- Seq('a.asc :: Nil, 'a.desc :: Nil);
     randomDataGenerator <- RandomDataGenerator.forType(dataType, nullable)

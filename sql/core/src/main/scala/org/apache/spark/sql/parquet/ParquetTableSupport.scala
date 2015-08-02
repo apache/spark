@@ -88,13 +88,13 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
         case t: UserDefinedType[_] => writeValue(t.sqlType, value)
         case t @ ArrayType(_, _) => writeArray(
           t,
-          value.asInstanceOf[CatalystConverter.ArrayScalaType[_]])
+          value.asInstanceOf[CatalystConverter.ArrayScalaType])
         case t @ MapType(_, _, _) => writeMap(
           t,
-          value.asInstanceOf[CatalystConverter.MapScalaType[_, _]])
+          value.asInstanceOf[CatalystConverter.MapScalaType])
         case t @ StructType(_) => writeStruct(
           t,
-          value.asInstanceOf[CatalystConverter.StructScalaType[_]])
+          value.asInstanceOf[CatalystConverter.StructScalaType])
         case _ => writePrimitive(schema.asInstanceOf[AtomicType], value)
       }
     }
@@ -124,7 +124,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
 
   private[parquet] def writeStruct(
       schema: StructType,
-      struct: CatalystConverter.StructScalaType[_]): Unit = {
+      struct: CatalystConverter.StructScalaType): Unit = {
     if (struct != null) {
       val fields = schema.fields.toArray
       writer.startGroup()
@@ -143,7 +143,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
 
   private[parquet] def writeArray(
       schema: ArrayType,
-      array: CatalystConverter.ArrayScalaType[_]): Unit = {
+      array: CatalystConverter.ArrayScalaType): Unit = {
     val elementType = schema.elementType
     writer.startGroup()
     if (array.numElements() > 0) {
@@ -154,7 +154,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
           writer.startGroup()
           if (!array.isNullAt(i)) {
             writer.startField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
-            writeValue(elementType, array.get(i))
+            writeValue(elementType, array.get(i, elementType))
             writer.endField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
           }
           writer.endGroup()
@@ -165,7 +165,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
         writer.startField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
         var i = 0
         while (i < array.numElements()) {
-          writeValue(elementType, array.get(i))
+          writeValue(elementType, array.get(i, elementType))
           i = i + 1
         }
         writer.endField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
@@ -176,11 +176,12 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
 
   private[parquet] def writeMap(
       schema: MapType,
-      map: CatalystConverter.MapScalaType[_, _]): Unit = {
+      map: CatalystConverter.MapScalaType): Unit = {
     writer.startGroup()
-    if (map.size > 0) {
+    val length = map.numElements()
+    if (length > 0) {
       writer.startField(CatalystConverter.MAP_SCHEMA_NAME, 0)
-      for ((key, value) <- map) {
+      map.foreach(schema.keyType, schema.valueType, (key, value) => {
         writer.startGroup()
         writer.startField(CatalystConverter.MAP_KEY_SCHEMA_NAME, 0)
         writeValue(schema.keyType, key)
@@ -191,7 +192,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
           writer.endField(CatalystConverter.MAP_VALUE_SCHEMA_NAME, 1)
         }
         writer.endGroup()
-      }
+      })
       writer.endField(CatalystConverter.MAP_SCHEMA_NAME, 0)
     }
     writer.endGroup()

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.IOException
+
 import org.apache.spark.{InternalAccumulator, SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
@@ -267,6 +269,7 @@ case class GeneratedAggregate(
           aggregationBufferSchema,
           groupKeySchema,
           taskContext.taskMemoryManager(),
+          SparkEnv.get.shuffleMemoryManager,
           1024 * 16, // initial capacity
           pageSizeBytes,
           false // disable tracking of performance metrics
@@ -276,30 +279,38 @@ case class GeneratedAggregate(
           val currentRow: InternalRow = iter.next()
           val groupKey: InternalRow = groupProjection(currentRow)
           val aggregationBuffer = aggregationMap.getAggregationBuffer(groupKey)
+          if (aggregationBuffer == null) {
+            throw new IOException("Could not allocate memory to grow aggregation buffer")
+          }
           updateProjection.target(aggregationBuffer)(joinedRow(aggregationBuffer, currentRow))
         }
 
         new Iterator[InternalRow] {
           private[this] val mapIterator = aggregationMap.iterator()
           private[this] val resultProjection = resultProjectionBuilder()
+          private[this] var _hasNext = mapIterator.next()
 
-          def hasNext: Boolean = mapIterator.hasNext
+          def hasNext: Boolean = _hasNext
 
           def next(): InternalRow = {
-            val entry = mapIterator.next()
-            val result = resultProjection(joinedRow(entry.key, entry.value))
-            if (hasNext) {
-              result
+            if (_hasNext) {
+              val result = resultProjection(joinedRow(mapIterator.getKey, mapIterator.getValue))
+              _hasNext = mapIterator.next()
+              if (_hasNext) {
+                result
+              } else {
+                // This is the last element in the iterator, so let's free the buffer. Before we do,
+                // though, we need to make a defensive copy of the result so that we don't return an
+                // object that might contain dangling pointers to the freed memory. Also record the
+                // memory used in the process.
+                taskContext.internalMetricsToAccumulators(
+                  InternalAccumulator.PEAK_EXECUTION_MEMORY).add(aggregationMap.getMemoryUsage)
+                val resultCopy = result.copy()
+                aggregationMap.free()
+                resultCopy
+              }
             } else {
-              // This is the last element in the iterator, so let's free the buffer. Before we do,
-              // though, we need to make a defensive copy of the result so that we don't return an
-              // object that might contain dangling pointers to the freed memory. Also record the
-              // memory used in the process.
-              taskContext.internalMetricsToAccumulators(
-                InternalAccumulator.PEAK_EXECUTION_MEMORY).add(aggregationMap.getMemoryUsage)
-              val resultCopy = result.copy()
-              aggregationMap.free()
-              resultCopy
+              throw new java.util.NoSuchElementException
             }
           }
         }

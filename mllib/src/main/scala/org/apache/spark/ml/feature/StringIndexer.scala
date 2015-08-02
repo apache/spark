@@ -20,13 +20,14 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.attribute.NominalAttribute
+import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.Transformer
+import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{NumericType, StringType, StructType}
+import org.apache.spark.sql.types.{DoubleType, NumericType, StringType, StructType}
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
@@ -150,5 +151,106 @@ class StringIndexerModel private[ml] (
   override def copy(extra: ParamMap): StringIndexerModel = {
     val copied = new StringIndexerModel(uid, labels)
     copyValues(copied, extra)
+  }
+
+  /**
+   * Return a model to perform the inverse transformation.
+   * Note: By default we keep the original columns during this transformation, so the inverse
+   * should only be used on new columns such as predicted labels.
+   */
+  def invert(inputCol: String, outputCol: String): StringIndexerInverse = {
+    new StringIndexerInverse()
+      .setInputCol(inputCol)
+      .setOutputCol(outputCol)
+      .setLabels(labels)
+  }
+}
+
+/**
+ * :: Experimental ::
+ * Transform a provided column back to the original input types using either the metadata
+ * on the input column, or if provided using the labels supplied by the user.
+ * Note: By default we keep the original columns during this transformation,
+ * so the inverse should only be used on new columns such as predicted labels.
+ */
+@Experimental
+class StringIndexerInverse private[ml] (
+  override val uid: String) extends Transformer
+    with HasInputCol with HasOutputCol {
+
+  def this() =
+    this(Identifiable.randomUID("strIdxInv"))
+
+  /** @group setParam */
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
+  def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  /**
+   * Optional labels to be provided by the user, if not supplied column
+   * metadata is read for labels. The default value is an empty array,
+   * but the empty array is ignored and column metadata used instead.
+   * @group setParam
+   */
+  def setLabels(value: Array[String]): this.type = set(labels, value)
+
+  /**
+   * Param for array of labels.
+   * Optional labels to be provided by the user, if not supplied column
+   * metadata is read for labels.
+   * @group param
+   */
+  final val labels: StringArrayParam = new StringArrayParam(this, "labels",
+    "array of labels, if not provided metadata from inputCol is used instead.")
+  setDefault(labels, Array.empty[String])
+
+  /**
+   * Optional labels to be provided by the user, if not supplied column
+   * metadata is read for labels.
+   * @group getParam
+   */
+  final def getLabels: Array[String] = $(labels)
+
+  /** Transform the schema for the inverse transformation */
+  override def transformSchema(schema: StructType): StructType = {
+    val inputColName = $(inputCol)
+    val inputDataType = schema(inputColName).dataType
+    require(inputDataType.isInstanceOf[NumericType],
+      s"The input column $inputColName must be a numeric type, " +
+        s"but got $inputDataType.")
+    val inputFields = schema.fields
+    val outputColName = $(outputCol)
+    require(inputFields.forall(_.name != outputColName),
+      s"Output column $outputColName already exists.")
+    val attr = NominalAttribute.defaultAttr.withName($(outputCol))
+    val outputFields = inputFields :+ attr.toStructField()
+    StructType(outputFields)
+  }
+
+  override def transform(dataset: DataFrame): DataFrame = {
+    val inputColSchema = dataset.schema($(inputCol))
+    // If the labels array is empty use column metadata
+    val values = if ($(labels).isEmpty) {
+      Attribute.fromStructField(inputColSchema)
+        .asInstanceOf[NominalAttribute].values.get
+    } else {
+      $(labels)
+    }
+    val indexer = udf { index: Double =>
+      val idx = index.toInt
+      if (0 <= idx && idx < values.size) {
+        values(idx)
+      } else {
+        throw new SparkException(s"Unseen index: $index ??")
+      }
+    }
+    val outputColName = $(outputCol)
+    dataset.select(col("*"),
+      indexer(dataset($(inputCol)).cast(DoubleType)).as(outputColName))
+  }
+
+  override def copy(extra: ParamMap): StringIndexerInverse = {
+    defaultCopy(extra)
   }
 }
