@@ -19,7 +19,9 @@ package org.apache.spark.mllib.tree
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Since
+import org.apache.spark.ml.util.{Stopwatch, LocalStopwatch}
+import org.apache.spark.Logging
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.regression.LabeledPoint
