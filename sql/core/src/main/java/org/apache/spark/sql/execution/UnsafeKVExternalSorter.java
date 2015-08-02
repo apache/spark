@@ -90,6 +90,8 @@ public final class UnsafeKVExternalSorter {
         final long baseOffset = loc.getKeyAddress().getBaseOffset();
 
         // Get encoded memory address
+        // baseObject + baseOffset point to the beginning of the key data in the map, but that
+        // the KV-pair's length data is stored in the word immediately before that address
         MemoryBlock page = loc.getMemoryPage();
         long address = taskMemoryManager.encodePageNumberAndOffset(page, baseOffset - 8);
 
@@ -146,6 +148,8 @@ public final class UnsafeKVExternalSorter {
               Object baseObj = underlying.getBaseObject();
               long recordOffset = underlying.getBaseOffset();
               int recordLen = underlying.getRecordLength();
+
+              // Note that recordLen = keyLen + valueLen + 4 bytes (for the keyLen itself)
               int keyLen = PlatformDependent.UNSAFE.getInt(baseObj, recordOffset);
               int valueLen = recordLen - keyLen - 4;
 
@@ -217,6 +221,8 @@ public final class UnsafeKVExternalSorter {
 
     @Override
     public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
+      // Note that since ordering doesn't need the total length of the record, we just pass -1
+      // into the row.
       row1.pointTo(baseObj1, baseOff1 + 4, numKeyFields, -1);
       row2.pointTo(baseObj2, baseOff2 + 4, numKeyFields, -1);
       return ordering.compare(row1, row2);

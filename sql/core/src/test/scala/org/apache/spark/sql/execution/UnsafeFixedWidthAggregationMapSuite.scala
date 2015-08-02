@@ -201,7 +201,7 @@ class UnsafeFixedWidthAggregationMapSuite
       out += iter.getKey.getString(0)
     }
 
-    assert(out === (keys ++ additionalKeys).toSeq.sorted)
+    assert(out === (keys ++ additionalKeys).sorted)
 
     map.free()
   }

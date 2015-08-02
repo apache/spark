@@ -48,6 +48,9 @@ object SortPrefixUtils {
     }
   }
 
+  /**
+   * Creates the prefix comparator for the first field in the given schema, in ascending order.
+   */
   def getPrefixComparator(schema: StructType): PrefixComparator = {
     val field = schema.head
     getPrefixComparator(SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
