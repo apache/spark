@@ -36,6 +36,11 @@
   </properties>
 
   <dependencies>
+    <!-- Added for Hive Parquet SerDe -->
+    <dependency>
+      <groupId>com.twitter</groupId>
+      <artifactId>parquet-hadoop-bundle</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>

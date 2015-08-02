@@ -138,6 +138,7 @@
     <hive.version.short>1.2.1</hive.version.short>
     <derby.version>10.10.1.1</derby.version>
     <parquet.version>1.7.0</parquet.version>
+    <hive.parquet.version>1.6.0</hive.parquet.version>
     <jblas.version>1.2.4</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
     <orbit.version>3.0.0.v201112011016</orbit.version>
@@ -1593,6 +1594,12 @@
         <artifactId>parquet-avro</artifactId>
         <version>${parquet.version}</version>
         <scope>${parquet.test.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.twitter</groupId>
+        <artifactId>parquet-hadoop-bundle</artifactId>
+        <version>${hive.parquet.version}</version>
+        <scope>runtime</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.flume</groupId>
