@@ -74,7 +74,7 @@ case class Aggregate(
     groupingExpressions.nonEmpty && (!supportsHybridIterator || !hybridAggregateEnabled)
   }
 
-  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = false // true
 
   override def outputsUnsafeRows: Boolean = supportsHybridIterator
 

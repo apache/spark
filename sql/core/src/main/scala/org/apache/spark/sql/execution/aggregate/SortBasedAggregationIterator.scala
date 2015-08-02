@@ -39,7 +39,6 @@ class SortBasedAggregationIterator(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-    newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
     outputsUnsafeRows: Boolean)
   extends AggregationIterator(
     groupingKeyAttributes,
@@ -89,7 +88,7 @@ class SortBasedAggregationIterator(
   protected var sortedInputHasNewGroup: Boolean = false
 
   // The aggregation buffer used by the sort-based aggregation.
-  protected var sortBasedAggregationBuffer: MutableRow = newBuffer
+  protected val sortBasedAggregationBuffer: MutableRow = newBuffer
 
   /** Processes rows in the current group. It will stop when it find a new group. */
   protected def processCurrentSortedGroup(): Unit = {
@@ -97,8 +96,11 @@ class SortBasedAggregationIterator(
     // Now, we will start to find all rows belonging to this group.
     // We create a variable to track if we see the next group.
     var findNextPartition = false
+    println("sort key first in group " + toSafeKey(nextGroupingKey) + " value " + toSafeValue(firstRowInNextGroup) + " buffer " + toSafeBuffer(sortBasedAggregationBuffer))
+
     // firstRowInNextGroup is the first row of this group. We first process it.
     processRow(sortBasedAggregationBuffer, firstRowInNextGroup)
+
     // The search will stop when we see the next group or there is no
     // input row left in the iter.
     var hasNext = inputKVIterator.next()
@@ -106,9 +108,12 @@ class SortBasedAggregationIterator(
       // Get the grouping key.
       val groupingKey = inputKVIterator.getKey
       val currentRow = inputKVIterator.getValue
+
       // Check if the current row belongs the current input row.
       if (currentGroupingKey == groupingKey) {
         processRow(sortBasedAggregationBuffer, currentRow)
+        println("sort key " + toSafeKey(groupingKey) + " value " + toSafeValue(currentRow) + " buffer " + toSafeBuffer(sortBasedAggregationBuffer))
+
         hasNext = inputKVIterator.next()
       } else {
         // We find a new group.
@@ -130,12 +135,15 @@ class SortBasedAggregationIterator(
 
   override final def hasNext: Boolean = sortedInputHasNewGroup
 
+  val toSafeResult = FromUnsafeProjection(resultExpressions.map(_.dataType).toArray)
+
   override final def next(): InternalRow = {
     if (hasNext) {
       // Process the current group.
       processCurrentSortedGroup()
       // Generate output row for the current group.
       val outputRow = generateOutput(currentGroupingKey, sortBasedAggregationBuffer)
+      println("sort result " + toSafeResult(outputRow))
       // Initialize buffer values for the next group.
       initializeBuffer(sortBasedAggregationBuffer)
 
@@ -146,11 +154,19 @@ class SortBasedAggregationIterator(
     }
   }
 
+  val toSafeKey = FromUnsafeProjection(groupingKeyAttributes.map(_.dataType).toArray)
+  val toSafeValue = FromUnsafeProjection(valueAttributes.map(_.dataType).toArray)
+  val toSafeBuffer = FromUnsafeProjection(allAggregateFunctions.flatMap(_.bufferAttributes).map(_.dataType).toArray)
+
   protected def initialize(): Unit = {
     if (inputKVIterator.next()) {
       initializeBuffer(sortBasedAggregationBuffer)
+      println("first " + toSafeKey(inputKVIterator.getKey()) + " value " + toSafeValue(inputKVIterator.getValue()) + " buffer " + toSafeBuffer(sortBasedAggregationBuffer))
+
       nextGroupingKey = inputKVIterator.getKey().copy()
       firstRowInNextGroup = inputKVIterator.getValue().copy()
+      println("first " + toSafeKey(nextGroupingKey) + " value " + toSafeValue(firstRowInNextGroup) + " buffer " + toSafeBuffer(sortBasedAggregationBuffer))
+
       sortedInputHasNewGroup = true
     } else {
       // This inputIter is empty.
@@ -200,7 +216,6 @@ object SortBasedAggregationIterator {
       initialInputBufferOffset,
       resultExpressions,
       newMutableProjection,
-      newProjection,
       outputsUnsafeRows)
   }
 
@@ -215,7 +230,6 @@ object SortBasedAggregationIterator {
       initialInputBufferOffset: Int,
       resultExpressions: Seq[NamedExpression],
       newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-      newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
       outputsUnsafeRows: Boolean): SortBasedAggregationIterator = {
     new SortBasedAggregationIterator(
       groupingKeyAttributes,
@@ -228,7 +242,6 @@ object SortBasedAggregationIterator {
       initialInputBufferOffset,
       resultExpressions,
       newMutableProjection,
-      newProjection,
       outputsUnsafeRows)
   }
 }

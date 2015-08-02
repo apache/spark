@@ -94,25 +94,37 @@ class UnsafeHybridAggregationIterator(
 
   private[this] var sortBasedAggregationIterator: SortBasedAggregationIterator = _
 
-  private def processOriginalInput(firstKey: InternalRow, firstValue: InternalRow): KVIterator[InternalRow, InternalRow] = {
-    new KVIterator[InternalRow, InternalRow] {
+  private def processOriginalInput(
+      firstKey: UnsafeRow,
+      firstValue: InternalRow): KVIterator[UnsafeRow, UnsafeRow] = {
+    new KVIterator[UnsafeRow, UnsafeRow] {
       private[this] var isFirstRow = true
 
-      private[this] var groupingKey: InternalRow = _
+      private[this] var groupingKey: UnsafeRow = _
 
-      private[this] val buffer = newBuffer
+      private[this] val buffer: UnsafeRow = newBuffer
+
+      private[this] val toSafeKey = FromUnsafeProjection(groupingKeyAttributes.map(_.dataType))
+
+      private[this] val toSafeBuffer = FromUnsafeProjection(allAggregateFunctions.flatMap(_.bufferAttributes).map(_.dataType))
 
       override def next(): Boolean = {
         initializeBuffer(buffer)
         if (isFirstRow) {
           isFirstRow = false
-          groupingKey = firstKey.copy()
+          groupingKey = firstKey
           processRow(buffer, firstValue)
+
+          // println("first key " + toSafeKey(groupingKey) + "first value " + firstValue + " first buffer " + toSafeBuffer(buffer))
 
           true
         } else if (inputKVIterator.next()) {
           groupingKey = inputKVIterator.getKey()
-          processRow(buffer, inputKVIterator.getValue())
+          val value = inputKVIterator.getValue()
+          processRow(buffer, value)
+
+          // println("key " + toSafeKey(groupingKey) + " value " + value + " buffer " + toSafeBuffer(buffer))
+
 
           true
         } else {
@@ -120,11 +132,11 @@ class UnsafeHybridAggregationIterator(
         }
       }
 
-      override def getKey(): InternalRow = {
+      override def getKey(): UnsafeRow = {
         groupingKey
       }
 
-      override def getValue(): InternalRow = {
+      override def getValue(): UnsafeRow = {
         buffer
       }
 
@@ -134,19 +146,106 @@ class UnsafeHybridAggregationIterator(
     }
   }
 
+  private def convertValueToUnsafe(
+      firstKey: UnsafeRow,
+      firstValue: InternalRow): KVIterator[UnsafeRow, UnsafeRow] = {
+    new KVIterator[UnsafeRow, UnsafeRow] {
+      private[this] var isFirstRow = true
+
+      private[this] var groupingKey: UnsafeRow = _
+
+      private[this] var value: UnsafeRow = _
+
+      private[this] val toUnsafe =
+        UnsafeProjection.create(valueAttributes.map(_.dataType).toArray)
+
+      override def next(): Boolean = {
+        if (isFirstRow) {
+          isFirstRow = false
+          groupingKey = firstKey
+          println("value before " + firstValue)
+          value = toUnsafe.apply(firstValue)
+
+          true
+        } else if (inputKVIterator.next()) {
+          groupingKey = inputKVIterator.getKey()
+          val v = inputKVIterator.getValue()
+          println("value before " + v)
+          value = toUnsafe.apply(v)
+
+          true
+        } else {
+          false
+        }
+      }
+
+      override def getKey(): UnsafeRow = {
+        groupingKey
+      }
+
+      override def getValue(): UnsafeRow = {
+        value
+      }
+
+      override def close(): Unit = {
+        // Do nothing.
+      }
+    }
+  }
+
+  private def withFirstKeyValue(
+      firstKey: UnsafeRow,
+      firstValue: UnsafeRow): KVIterator[UnsafeRow, UnsafeRow] = {
+    new KVIterator[UnsafeRow, UnsafeRow] {
+      private[this] var isFirstRow = true
+
+      private[this] var groupingKey: UnsafeRow = _
+
+      private[this] var value: UnsafeRow = _
+
+      override def next(): Boolean = {
+        if (isFirstRow) {
+          isFirstRow = false
+          groupingKey = firstKey
+          value = firstValue
+
+          true
+        } else if (inputKVIterator.next()) {
+          groupingKey = inputKVIterator.getKey()
+          value = inputKVIterator.getValue().asInstanceOf[UnsafeRow]
+
+          true
+        } else {
+          false
+        }
+      }
+
+      override def getKey(): UnsafeRow = {
+        groupingKey
+      }
+
+      override def getValue(): UnsafeRow = {
+        value
+      }
+
+      override def close(): Unit = {
+        // Do nothing.
+      }
+    }
+  }
+
   // we find we cannot alloate memory when processing currentRow, we need to also put it into the sorter.
-  private def switchToSortBasedAggregation(groupingKey: UnsafeRow, currentRow: InternalRow): Unit = {
+  private def switchToSortBasedAggregation(currentGroupingKey: UnsafeRow, currentRow: InternalRow): Unit = {
     logInfo("falling back to sort based aggregation.")
-    // TODO: Step 1: Sort the map entries.
-    val externalSorter: UnsafeKeyValueSorter = null // buffers.externalSorter
+    println("falling back to sort based aggregation.")
 
-    // TODO: Step 2: Spill the sorted map entries.
-    // val spillHandle = sortedAggregationBufferMapIterator.spill()
+    // Step 1: Get the ExternalSorter containing entries of the map.
+    val externalSorter = buffers.destructAndCreateExternalSorter()
 
-    // Step3: Free the memory used by the map.
+    // Step 2: Free the memory used by the map.
     buffers.free()
 
-    // TODO: Step 4: If we have aggregate function with mode Partial or Complete,
+    // Step 3: If we have aggregate function with mode Partial or Complete,
     // we need to process them to get aggregation buffer.
     // So, later in the sort-based aggregation iterator, we can do merge.
     // Also, when we do not need to process input rows but input rows are not
@@ -159,18 +258,30 @@ class UnsafeHybridAggregationIterator(
     }
 
     val processedIterator = if (needsProcess) {
-      // Rows returned by this
-      processOriginalInput(groupingKey, currentRow)
+      println("processOriginalInput")
+      processOriginalInput(currentGroupingKey, currentRow)
+    } else if (!unsafeInputRows) {
+      println("convertValueToUnsafe")
+      convertValueToUnsafe(currentGroupingKey, currentRow)
     } else {
-      inputKVIterator
+      println("withFirstKeyValue")
+      withFirstKeyValue(currentGroupingKey, currentRow.asInstanceOf[UnsafeRow])
     }
 
-    // TODO: Step 8: Direct processedIterator to sortBasedInputIter.
+    // Step 4: Redirect processedIterator to sortBasedInputIter.
     while (processedIterator.next()) {
-      // externalSorter.insert(processedIterator.getKey(), processedIterator.getValue())
+      val key = processedIterator.getKey()
+      val value = processedIterator.getValue()
+      if (needsProcess) {
+        println("insert into sorter " + toSafeKey(key) + " " + toSafeBuffer(value))
+      } else {
+        println("insert into sorter " + toSafeKey(key) + " " + toSafeInput(value))
+      }
+
+      externalSorter.insertKV(key, value)
     }
 
-    // Step 9: sortBasedAggregationIterator.
+    // Step 5: sortBasedAggregationIterator.
 
     val newNonCompleteAggregateExpressions = allAggregateExpressions.map {
         case AggregateExpression2(func, Partial, isDistinct) =>
@@ -182,46 +293,61 @@ class UnsafeHybridAggregationIterator(
     val newNonCompleteAggregateAttributes =
       nonCompleteAggregateAttributes ++ completeAggregateAttributes
 
-    val newResultExpressions =
-      groupingKeyAttributes ++
-        allAggregateExpressions.flatMap(_.aggregateFunction.bufferAttributes)
+    val newValueAttributes = if (needsProcess) {
+      allAggregateExpressions.flatMap(_.aggregateFunction.cloneBufferAttributes)
+    } else {
+      valueAttributes
+    }
 
-    sortBased = true
+    val newInitialInputBufferOffset = if (needsProcess) {
+      0
+    } else {
+      initialInputBufferOffset
+    }
 
-    // externalSorter.kvIterator
-    val sortedKVIterator: KVIterator[UnsafeRow, UnsafeRow] = null
+    val sortedKVIterator: KVIterator[UnsafeRow, UnsafeRow] = externalSorter.sortedIterator()
     sortBasedAggregationIterator = SortBasedAggregationIterator.createFromKVIterator(
       groupingKeyAttributes = groupingKeyAttributes,
-      valueAttributes = newResultExpressions,
-      inputKVIterator = null,
+      valueAttributes = newValueAttributes,
+      inputKVIterator = sortedKVIterator.asInstanceOf[KVIterator[InternalRow, InternalRow]],
       nonCompleteAggregateExpressions = newNonCompleteAggregateExpressions,
       nonCompleteAggregateAttributes = newNonCompleteAggregateAttributes,
       completeAggregateExpressions = Nil,
       completeAggregateAttributes = Nil,
-      initialInputBufferOffset = 0,
-      resultExpressions = newResultExpressions,
-      newMutableProjection,
-      UnsafeProjection.create(_, _),
-      true)
+      initialInputBufferOffset = newInitialInputBufferOffset,
+      resultExpressions = resultExpressions,
+      newMutableProjection = newMutableProjection,
+      outputsUnsafeRows = true)
   }
 
   ///////////////////////////////////////////////////////////////////////////
   // Methods used to initialize this iterator.
   ///////////////////////////////////////////////////////////////////////////
 
+  val toSafeKey = FromUnsafeProjection(groupingKeyAttributes.map(_.dataType).toArray)
+  val toSafeBuffer = FromUnsafeProjection(allAggregateFunctions.flatMap(_.bufferAttributes).map(_.dataType).toArray)
+  val toSafeInput = FromUnsafeProjection(valueAttributes.map(_.dataType).toArray)
+
   /** Starts to read input rows and falls back to sort-based aggregation if necessary. */
   private def initialize(): Unit = {
-    while (inputKVIterator.next() && !sortBased) {
+    var i = 0
+    var hasNext = inputKVIterator.next()
+    while (!sortBased && hasNext) {
       val groupingKey = inputKVIterator.getKey()
       val currentRow = inputKVIterator.getValue()
-      val buffer = buffers.getAggregationBuffer(groupingKey)
+      val buffer = if (i < 1) buffers.getAggregationBuffer(groupingKey) else null
       if (buffer == null) {
+        println("fall back groupingKey " + toSafeKey(groupingKey) + " currentRow " + currentRow)
         // buffer == null means that we could not allocate more memory.
         // Now, we need to spill the map and switch to sort-based aggregation.
         switchToSortBasedAggregation(groupingKey, currentRow)
+        sortBased = true
       } else {
         processRow(buffer, currentRow)
+        println("groupingKey " + toSafeKey(groupingKey) + " currentRow " + currentRow + " buffer in map " + toSafeBuffer(buffer))
+        hasNext = inputKVIterator.next()
       }
+      i += 1
     }
   }
 

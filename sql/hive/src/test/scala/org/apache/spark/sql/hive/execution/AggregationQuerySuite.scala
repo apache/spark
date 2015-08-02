@@ -82,7 +82,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
     sqlContext.sql("DROP TABLE IF EXISTS agg2")
     sqlContext.dropTempTable("emptyTable")
     sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2.key, originalUseAggregate2.toString)
-  }
+  }/*
 
   test("empty table") {
     // If there is no GROUP BY clause and the table is empty, we will generate a single row.
@@ -185,7 +185,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
         Row(100, null) ::
         Row(null, 3) ::
         Row(null, null) :: Nil)
-  }
+  }*/
 
   test("case in-sensitive resolution") {
     checkAnswer(
@@ -219,7 +219,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
         Row(-100) ::
         Row(-102) ::
         Row(null) :: Nil)
-  }
+  }/*
 
   test("test average no key in output") {
     checkAnswer(
@@ -503,7 +503,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
           "there is any aggregate function that cannot be converted to the new interface."
       assert(newAggregateOperators.isEmpty, message)
     }
-  }
+  }*/
 }
 
 class SortBasedAggregationQuerySuite extends AggregationQuerySuite {

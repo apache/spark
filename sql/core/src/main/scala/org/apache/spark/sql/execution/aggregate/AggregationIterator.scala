@@ -177,9 +177,17 @@ abstract class AggregationIterator(
 
       // PartialMerge-only or Final-only
       case (Some(PartialMerge), None) | (Some(Final), None) =>
-        val inputAggregationBufferSchema =
-          groupingKeyAttributes ++
-            allAggregateFunctions.flatMap(_.cloneBufferAttributes)
+        val inputAggregationBufferSchema = if (initialInputBufferOffset == 0) {
+          // If initialInputBufferOffset, the input value does not contain
+          // grouping keys.
+          // This part is pretty hacky.
+          allAggregateFunctions.flatMap(_.cloneBufferAttributes).toSeq
+        } else {
+          groupingKeyAttributes ++ allAggregateFunctions.flatMap(_.cloneBufferAttributes)
+        }
+        // val inputAggregationBufferSchema =
+        //  groupingKeyAttributes ++
+        //    allAggregateFunctions.flatMap(_.cloneBufferAttributes)
         val mergeExpressions = nonCompleteAggregateFunctions.flatMap {
           case ae: AlgebraicAggregate => ae.mergeExpressions
           case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
