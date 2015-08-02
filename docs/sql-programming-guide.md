@@ -1889,7 +1889,6 @@ that these options will be deprecated in future release as more optimizations ar
     <td>
       When true, code will be dynamically generated at runtime for expression evaluation in a specific
       query. For some queries with complicated expression this option can lead to significant speed-ups.
-      However, for simple queries this can actually slow down query execution.
     </td>
   </tr>
   <tr>
