@@ -232,7 +232,12 @@ def exec_maven(mvn_args=()):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
-    run_cmd([os.path.join(SPARK_HOME, "build", "mvn"), "--force"] + mvn_args)
+    zinc_port = get_zinc_port()
+    os.environ["ZINC_PORT"] = "%s" % zinc_port
+    zinc_flag = "-DzincPort=%s" % zinc_port
+    flags = [os.path.join(SPARK_HOME, "build", "mvn"), "--force", zinc_flag]
+    run_cmd(flags + mvn_args)
+    kill_zinc_on_port(zinc_port)
 
 
 def exec_sbt(sbt_args=()):
@@ -288,7 +293,6 @@ def get_zinc_port():
     """
     Get a randomized port on which to start Zinc
     """
-
     return random.randrange(3030, 4030)
 
 
@@ -296,7 +300,6 @@ def kill_zinc_on_port(zinc_port):
     """
     Kill the Zinc process running on the given port, if one exists.
     """
-
     cmd = ("/usr/sbin/lsof -P |grep %s | grep LISTEN "
            "| awk '{ print $2; }' | xargs kill") % zinc_port
     # TODO: Not sure what happens here if no process exists
@@ -306,7 +309,6 @@ def kill_zinc_on_port(zinc_port):
 def build_spark_maven(hadoop_version):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
-    zinc_port = get_zinc_port()
     mvn_goals = ["clean", "package", "-DskipTests", "-DzincPort=%s" % zinc_port]
     profiles_and_goals = build_profiles + mvn_goals
     print("[info] Building Spark (w/Hive 0.13.1) using Maven with these arguments: ",
@@ -351,15 +353,13 @@ def detect_binary_inop_with_mima():
 
 
 def run_scala_tests_maven(test_profiles):
-    zinc_port = get_zinc_port()
-    mvn_test_goals = ["test", "--fail-at-end", "-DzincPort=%s" % zinc_port]
+    mvn_test_goals = ["test", "--fail-at-end"]
     profiles_and_goals = test_profiles + mvn_test_goals
 
     print("[info] Running Spark tests using Maven with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_maven(profiles_and_goals)
-    kill_zinc_on_port(zinc_port)
 
 
 def run_scala_tests_sbt(test_modules, test_profiles):
