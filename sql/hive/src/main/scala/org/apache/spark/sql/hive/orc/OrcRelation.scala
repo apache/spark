@@ -35,7 +35,9 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.{HadoopRDD, RDD}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveMetastoreTypes, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
@@ -64,7 +66,7 @@ private[orc] class OrcOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
-  extends OutputWriter with SparkHadoopMapRedUtil with HiveInspectors {
+  extends OutputWriterInternal with SparkHadoopMapRedUtil with HiveInspectors {
 
   private val serializer = {
     val table = new Properties()
@@ -93,9 +95,10 @@ private[orc] class OrcOutputWriter(
   private val reusableOutputBuffer = new Array[Any](dataSchema.length)
 
   // Used to convert Catalyst values into Hadoop `Writable`s.
-  private val wrappers = structOI.getAllStructFieldRefs.map { ref =>
-    wrapperFor(ref.getFieldObjectInspector)
-  }.toArray
+  private val wrappers = structOI.getAllStructFieldRefs.zip(dataSchema.fields.map(_.dataType))
+    .map { case (ref, dt) =>
+      wrapperFor(ref.getFieldObjectInspector, dt)
+    }.toArray
 
   // `OrcRecordWriter.close()` creates an empty file if no rows are written at all.  We use this
   // flag to decide whether `OrcRecordWriter.close()` needs to be called.
@@ -117,10 +120,10 @@ private[orc] class OrcOutputWriter(
     ).asInstanceOf[RecordWriter[NullWritable, Writable]]
   }
 
-  override def write(row: Row): Unit = {
+  override def writeInternal(row: InternalRow): Unit = {
     var i = 0
-    while (i < row.length) {
-      reusableOutputBuffer(i) = wrappers(i)(row(i))
+    while (i < row.numFields) {
+      reusableOutputBuffer(i) = wrappers(i)(row.get(i, dataSchema(i).dataType))
       i += 1
     }
 
@@ -190,7 +193,7 @@ private[sql] class OrcRelation(
       filters: Array[Filter],
       inputPaths: Array[FileStatus]): RDD[Row] = {
     val output = StructType(requiredColumns.map(dataSchema(_))).toAttributes
-    OrcTableScan(output, this, filters, inputPaths).execute().map(_.asInstanceOf[Row])
+    OrcTableScan(output, this, filters, inputPaths).execute().asInstanceOf[RDD[Row]]
   }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {

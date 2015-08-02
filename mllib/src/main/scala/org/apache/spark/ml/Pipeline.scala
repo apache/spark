@@ -95,6 +95,8 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] {
   /** @group setParam */
   def setStages(value: Array[PipelineStage]): this.type = { set(stages, value); this }
 
+  // Below, we clone stages so that modifications to the list of stages will not change
+  // the Param value in the Pipeline.
   /** @group getParam */
   def getStages: Array[PipelineStage] = $(stages).clone()
 

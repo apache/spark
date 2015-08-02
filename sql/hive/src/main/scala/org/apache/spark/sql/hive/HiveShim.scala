@@ -27,6 +27,7 @@ import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.{Input, Output}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}

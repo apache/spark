@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -65,3 +66,4 @@ object DenseGaussianMixture {
     println()
   }
 }
+// scalastyle:on println

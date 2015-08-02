@@ -19,15 +19,18 @@ package org.apache.spark.sql
 
 import org.scalatest.Matchers._
 
-import org.apache.spark.sql.execution.Project
+import org.apache.spark.sql.execution.{Project, TungstenProject}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.test.SQLTestUtils
 
-class ColumnExpressionSuite extends QueryTest {
+class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
   import org.apache.spark.sql.TestData._
 
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
+
+  override def sqlContext(): SQLContext = ctx
 
   test("alias") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
@@ -199,6 +202,46 @@ class ColumnExpressionSuite extends QueryTest {
     checkAnswer(
       ctx.sql("select isnotnull(null), isnotnull('a')"),
       Row(false, true))
+  }
+
+  test("isNaN") {
+    val testData = ctx.createDataFrame(ctx.sparkContext.parallelize(
+      Row(Double.NaN, Float.NaN) ::
+      Row(math.log(-1), math.log(-3).toFloat) ::
+      Row(null, null) ::
+      Row(Double.MaxValue, Float.MinValue):: Nil),
+      StructType(Seq(StructField("a", DoubleType), StructField("b", FloatType))))
+
+    checkAnswer(
+      testData.select($"a".isNaN, $"b".isNaN),
+      Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
+
+    checkAnswer(
+      testData.select(isNaN($"a"), isNaN($"b")),
+      Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
+
+    checkAnswer(
+      ctx.sql("select isnan(15), isnan('invalid')"),
+      Row(false, false))
+  }
+
+  test("nanvl") {
+    val testData = ctx.createDataFrame(ctx.sparkContext.parallelize(
+      Row(null, 3.0, Double.NaN, Double.PositiveInfinity) :: Nil),
+      StructType(Seq(StructField("a", DoubleType), StructField("b", DoubleType),
+        StructField("c", DoubleType), StructField("d", DoubleType))))
+
+    checkAnswer(
+      testData.select(
+        nanvl($"a", lit(5)), nanvl($"b", lit(10)),
+        nanvl($"c", lit(null).cast(DoubleType)), nanvl($"d", lit(10))),
+      Row(null, 3.0, null, Double.PositiveInfinity)
+    )
+    testData.registerTempTable("t")
+    checkAnswer(
+      ctx.sql("select nanvl(a, 5), nanvl(b, 10), nanvl(c, null), nanvl(d, 10) from t"),
+      Row(null, 3.0, null, Double.PositiveInfinity)
+    )
   }
 
   test("===") {
@@ -429,7 +472,7 @@ class ColumnExpressionSuite extends QueryTest {
 
   test("monotonicallyIncreasingId") {
     // Make sure we have 2 partitions, each with 2 records.
-    val df = ctx.sparkContext.parallelize(1 to 2, 2).mapPartitions { iter =>
+    val df = ctx.sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
       Iterator(Tuple1(1), Tuple1(2))
     }.toDF("a")
     checkAnswer(
@@ -439,11 +482,26 @@ class ColumnExpressionSuite extends QueryTest {
   }
 
   test("sparkPartitionId") {
-    val df = ctx.sparkContext.parallelize(1 to 1, 1).map(i => (i, i)).toDF("a", "b")
+    // Make sure we have 2 partitions, each with 2 records.
+    val df = ctx.sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
+      Iterator(Tuple1(1), Tuple1(2))
+    }.toDF("a")
     checkAnswer(
       df.select(sparkPartitionId()),
-      Row(0)
+      Row(0) :: Row(0) :: Row(1) :: Row(1) :: Nil
     )
+  }
+
+  test("InputFileName") {
+    withTempPath { dir =>
+      val data = sqlContext.sparkContext.parallelize(0 to 10).toDF("id")
+      data.write.parquet(dir.getCanonicalPath)
+      val answer = sqlContext.read.parquet(dir.getCanonicalPath).select(inputFileName())
+        .head.getString(0)
+      assert(answer.contains(dir.getCanonicalPath))
+
+      checkAnswer(data.select(inputFileName()).limit(1), Row(""))
+    }
   }
 
   test("lift alias out of cast") {
@@ -480,6 +538,7 @@ class ColumnExpressionSuite extends QueryTest {
     def checkNumProjects(df: DataFrame, expectedNumProjects: Int): Unit = {
       val projects = df.queryExecution.executedPlan.collect {
         case project: Project => project
+        case tungstenProject: TungstenProject => tungstenProject
       }
       assert(projects.size === expectedNumProjects)
     }

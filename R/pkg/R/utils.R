@@ -32,7 +32,7 @@ convertJListToRList <- function(jList, flatten, logicalUpperBound = NULL,
   }
 
   results <- if (arrSize > 0) {
-    lapply(0:(arrSize - 1),
+    lapply(0 : (arrSize - 1),
           function(index) {
             obj <- callJMethod(jList, "get", as.integer(index))
 
@@ -41,8 +41,8 @@ convertJListToRList <- function(jList, flatten, logicalUpperBound = NULL,
               if (isInstanceOf(obj, "scala.Tuple2")) {
                 # JavaPairRDD[Array[Byte], Array[Byte]].
 
-                keyBytes = callJMethod(obj, "_1")
-                valBytes = callJMethod(obj, "_2")
+                keyBytes <- callJMethod(obj, "_1")
+                valBytes <- callJMethod(obj, "_2")
                 res <- list(unserialize(keyBytes),
                   unserialize(valBytes))
               } else {
@@ -334,18 +334,21 @@ getStorageLevel <- function(newLevel = c("DISK_ONLY",
                                          "MEMORY_ONLY_SER_2",
                                          "OFF_HEAP")) {
   match.arg(newLevel)
+  storageLevelClass <- "org.apache.spark.storage.StorageLevel"
   storageLevel <- switch(newLevel,
-                         "DISK_ONLY" = callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY"),
-                         "DISK_ONLY_2" = callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY_2"),
-                         "MEMORY_AND_DISK" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK"),
-                         "MEMORY_AND_DISK_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_2"),
-                         "MEMORY_AND_DISK_SER" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER"),
-                         "MEMORY_AND_DISK_SER_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER_2"),
-                         "MEMORY_ONLY" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY"),
-                         "MEMORY_ONLY_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_2"),
-                         "MEMORY_ONLY_SER" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER"),
-                         "MEMORY_ONLY_SER_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER_2"),
-                         "OFF_HEAP" = callJStatic("org.apache.spark.storage.StorageLevel", "OFF_HEAP"))
+                         "DISK_ONLY" = callJStatic(storageLevelClass, "DISK_ONLY"),
+                         "DISK_ONLY_2" = callJStatic(storageLevelClass, "DISK_ONLY_2"),
+                         "MEMORY_AND_DISK" = callJStatic(storageLevelClass, "MEMORY_AND_DISK"),
+                         "MEMORY_AND_DISK_2" = callJStatic(storageLevelClass, "MEMORY_AND_DISK_2"),
+                         "MEMORY_AND_DISK_SER" = callJStatic(storageLevelClass,
+                                                             "MEMORY_AND_DISK_SER"),
+                         "MEMORY_AND_DISK_SER_2" = callJStatic(storageLevelClass,
+                                                               "MEMORY_AND_DISK_SER_2"),
+                         "MEMORY_ONLY" = callJStatic(storageLevelClass, "MEMORY_ONLY"),
+                         "MEMORY_ONLY_2" = callJStatic(storageLevelClass, "MEMORY_ONLY_2"),
+                         "MEMORY_ONLY_SER" = callJStatic(storageLevelClass, "MEMORY_ONLY_SER"),
+                         "MEMORY_ONLY_SER_2" = callJStatic(storageLevelClass, "MEMORY_ONLY_SER_2"),
+                         "OFF_HEAP" = callJStatic(storageLevelClass, "OFF_HEAP"))
 }
 
 # Utility function for functions where an argument needs to be integer but we want to allow
@@ -387,14 +390,17 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
       for (i in 1:nodeLen) {
         processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
       }
-    } else {  # if node[[1]] is length of 1, check for some R special functions.
+    } else {
+      # if node[[1]] is length of 1, check for some R special functions.
       nodeChar <- as.character(node[[1]])
-      if (nodeChar == "{" || nodeChar == "(") {  # Skip start symbol.
+      if (nodeChar == "{" || nodeChar == "(") {
+        # Skip start symbol.
         for (i in 2:nodeLen) {
           processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
         }
       } else if (nodeChar == "<-" || nodeChar == "=" ||
-                   nodeChar == "<<-") { # Assignment Ops.
+                   nodeChar == "<<-") {
+        # Assignment Ops.
         defVar <- node[[2]]
         if (length(defVar) == 1 && typeof(defVar) == "symbol") {
           # Add the defined variable name into defVars.
@@ -405,14 +411,16 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
         for (i in 3:nodeLen) {
           processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
         }
-      } else if (nodeChar == "function") {  # Function definition.
+      } else if (nodeChar == "function") {
+        # Function definition.
         # Add parameter names.
         newArgs <- names(node[[2]])
         lapply(newArgs, function(arg) { addItemToAccumulator(defVars, arg) })
         for (i in 3:nodeLen) {
           processClosure(node[[i]], oldEnv, defVars, checkedFuncs, newEnv)
         }
-      } else if (nodeChar == "$") {  # Skip the field.
+      } else if (nodeChar == "$") {
+        # Skip the field.
         processClosure(node[[2]], oldEnv, defVars, checkedFuncs, newEnv)
       } else if (nodeChar == "::" || nodeChar == ":::") {
         processClosure(node[[3]], oldEnv, defVars, checkedFuncs, newEnv)
@@ -426,7 +434,8 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
                (typeof(node) == "symbol" || typeof(node) == "language")) {
     # Base case: current AST node is a leaf node and a symbol or a function call.
     nodeChar <- as.character(node)
-    if (!nodeChar %in% defVars$data) {  # Not a function parameter or local variable.
+    if (!nodeChar %in% defVars$data) {
+      # Not a function parameter or local variable.
       func.env <- oldEnv
       topEnv <- parent.env(.GlobalEnv)
       # Search in function environment, and function's enclosing environments
@@ -436,20 +445,24 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
       while (!identical(func.env, topEnv)) {
         # Namespaces other than "SparkR" will not be searched.
         if (!isNamespace(func.env) ||
-              (getNamespaceName(func.env) == "SparkR" &&
-              !(nodeChar %in% getNamespaceExports("SparkR")))) {  # Only include SparkR internals.
+            (getNamespaceName(func.env) == "SparkR" &&
+               !(nodeChar %in% getNamespaceExports("SparkR")))) {
+          # Only include SparkR internals.
+
           # Set parameter 'inherits' to FALSE since we do not need to search in
           # attached package environments.
           if (tryCatch(exists(nodeChar, envir = func.env, inherits = FALSE),
                        error = function(e) { FALSE })) {
             obj <- get(nodeChar, envir = func.env, inherits = FALSE)
-            if (is.function(obj)) {  # If the node is a function call.
+            if (is.function(obj)) {
+              # If the node is a function call.
               funcList <- mget(nodeChar, envir = checkedFuncs, inherits = F,
                                ifnotfound = list(list(NULL)))[[1]]
               found <- sapply(funcList, function(func) {
                 ifelse(identical(func, obj), TRUE, FALSE)
               })
-              if (sum(found) > 0) {  # If function has been examined, ignore.
+              if (sum(found) > 0) {
+                # If function has been examined, ignore.
                 break
               }
               # Function has not been examined, record it and recursively clean its closure.
@@ -492,7 +505,8 @@ cleanClosure <- function(func, checkedFuncs = new.env()) {
     # environment. First, function's arguments are added to defVars.
     defVars <- initAccumulator()
     argNames <- names(as.list(args(func)))
-    for (i in 1:(length(argNames) - 1)) {  # Remove the ending NULL in pairlist.
+    for (i in 1:(length(argNames) - 1)) {
+      # Remove the ending NULL in pairlist.
       addItemToAccumulator(defVars, argNames[i])
     }
     # Recursively examine variables in the function body.
@@ -545,9 +559,11 @@ mergePartitions <- function(rdd, zip) {
         lengthOfKeys <- part[[len - lengthOfValues]]
         stopifnot(len == lengthOfKeys + lengthOfValues)
 
-        # For zip operation, check if corresponding partitions of both RDDs have the same number of elements.
+        # For zip operation, check if corresponding partitions
+        # of both RDDs have the same number of elements.
         if (zip && lengthOfKeys != lengthOfValues) {
-          stop("Can only zip RDDs with same number of elements in each pair of corresponding partitions.")
+          stop(paste("Can only zip RDDs with same number of elements",
+                     "in each pair of corresponding partitions."))
         }
 
         if (lengthOfKeys > 1) {
@@ -556,7 +572,7 @@ mergePartitions <- function(rdd, zip) {
           keys <- list()
         }
         if (lengthOfValues > 1) {
-          values <- part[(lengthOfKeys + 1) : (len - 1)]
+          values <- part[ (lengthOfKeys + 1) : (len - 1) ]
         } else {
           values <- list()
         }

@@ -67,17 +67,11 @@ class MQTTStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter 
       }
     }
 
-    MQTTTestUtils.registerStreamingListener(ssc)
-
     ssc.start()
 
-    // wait for the receiver to start before publishing data, or we risk failing
-    // the test nondeterministically. See SPARK-4631
-    MQTTTestUtils.waitForReceiverToStart(ssc)
-
-    MQTTTestUtils.publishData(topic, sendMessage)
-
+    // Retry it because we don't know when the receiver will start.
     eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
+      MQTTTestUtils.publishData(topic, sendMessage)
       assert(sendMessage.equals(receiveMessage(0)))
     }
     ssc.stop()

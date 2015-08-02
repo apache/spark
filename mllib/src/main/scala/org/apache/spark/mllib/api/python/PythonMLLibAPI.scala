@@ -43,7 +43,7 @@ import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
-import org.apache.spark.mllib.stat.test.ChiSqTestResult
+import org.apache.spark.mllib.stat.test.{ChiSqTestResult, KolmogorovSmirnovTestResult}
 import org.apache.spark.mllib.stat.{
   KernelDensity, MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.tree.configuration.{Algo, BoostingStrategy, Strategy}
@@ -364,7 +364,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       seed: java.lang.Long,
       initialModelWeights: java.util.ArrayList[Double],
       initialModelMu: java.util.ArrayList[Vector],
-      initialModelSigma: java.util.ArrayList[Matrix]): JList[Object] = {
+      initialModelSigma: java.util.ArrayList[Matrix]): GaussianMixtureModelWrapper = {
     val gmmAlg = new GaussianMixture()
       .setK(k)
       .setConvergenceTol(convergenceTol)
@@ -382,16 +382,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     if (seed != null) gmmAlg.setSeed(seed)
 
     try {
-      val model = gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
-      var wt = ArrayBuffer.empty[Double]
-      var mu = ArrayBuffer.empty[Vector]
-      var sigma = ArrayBuffer.empty[Matrix]
-      for (i <- 0 until model.k) {
-          wt += model.weights(i)
-          mu += model.gaussians(i).mu
-          sigma += model.gaussians(i).sigma
-      }
-      List(Vectors.dense(wt.toArray), mu.toArray, sigma.toArray).map(_.asInstanceOf[Object]).asJava
+      new GaussianMixtureModelWrapper(gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK)))
     } finally {
       data.rdd.unpersist(blocking = false)
     }
@@ -501,6 +492,39 @@ private[python] class PythonMLLibAPI extends Serializable {
     val model = als.run(ratingsJRDD.rdd)
     new MatrixFactorizationModelWrapper(model)
   }
+
+  /**
+   * Java stub for Python mllib LDA.run()
+   */
+  def trainLDAModel(
+      data: JavaRDD[java.util.List[Any]],
+      k: Int,
+      maxIterations: Int,
+      docConcentration: Double,
+      topicConcentration: Double,
+      seed: java.lang.Long,
+      checkpointInterval: Int,
+      optimizer: String): LDAModel = {
+    val algo = new LDA()
+      .setK(k)
+      .setMaxIterations(maxIterations)
+      .setDocConcentration(docConcentration)
+      .setTopicConcentration(topicConcentration)
+      .setCheckpointInterval(checkpointInterval)
+      .setOptimizer(optimizer)
+
+    if (seed != null) algo.setSeed(seed)
+
+    val documents = data.rdd.map(_.asScala.toArray).map { r =>
+      r(0) match {
+        case i: java.lang.Integer => (i.toLong, r(1).asInstanceOf[Vector])
+        case i: java.lang.Long => (i.toLong, r(1).asInstanceOf[Vector])
+        case _ => throw new IllegalArgumentException("input values contains invalid type value.")
+      }
+    }
+    algo.run(documents)
+  }
+
 
   /**
    * Java stub for Python mllib FPGrowth.train().  This stub returns a handle
@@ -1060,6 +1084,18 @@ private[python] class PythonMLLibAPI extends Serializable {
     LinearDataGenerator.generateLinearRDD(
       sc, nexamples, nfeatures, eps, nparts, intercept)
   }
+
+  /**
+   * Java stub for Statistics.kolmogorovSmirnovTest()
+   */
+  def kolmogorovSmirnovTest(
+      data: JavaRDD[Double],
+      distName: String,
+      params: JList[Double]): KolmogorovSmirnovTestResult = {
+    val paramsSeq = params.asScala.toSeq
+    Statistics.kolmogorovSmirnovTest(data, distName, paramsSeq: _*)
+  }
+
 }
 
 /**
