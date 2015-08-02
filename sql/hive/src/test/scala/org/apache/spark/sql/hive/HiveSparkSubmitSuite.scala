@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import scala.collection.mutable.ArrayBuffer
 import scala.sys.process.{ProcessLogger, Process}
 
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
@@ -86,7 +87,7 @@ class HiveSparkSubmitSuite
   // This is copied from org.apache.spark.deploy.SparkSubmitSuite
   private def runSparkSubmit(args: Seq[String]): Unit = {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    var history: List[String] = Nil
+    val history = ArrayBuffer.empty[String]
     val commands = Seq("./bin/spark-submit") ++ args
     val commandLine = commands.mkString("'", "' '", "'")
     val process = Process(
@@ -96,13 +97,13 @@ class HiveSparkSubmitSuite
       "SPARK_HOME" -> sparkHome
     ).run(ProcessLogger(
       // scalastyle:off println
-      (line: String) => { println(s"out> $line"); history :+ s"out> $line"},
-      (line: String) => { println(s"err> $line"); history :+ s"err> $line" }
+      (line: String) => { println(s"stdout> $line"); history += s"out> $line"},
+      (line: String) => { println(s"stderr> $line"); history += s"err> $line" }
       // scalastyle:on println
     ))
 
     try {
-      val exitCode = failAfter(180 seconds) { process.exitValue() }
+      val exitCode = failAfter(180.seconds) { process.exitValue() }
       if (exitCode != 0) {
         // include logs in output. Note that logging is async and may not have completed
         // at the time this exception is raised
