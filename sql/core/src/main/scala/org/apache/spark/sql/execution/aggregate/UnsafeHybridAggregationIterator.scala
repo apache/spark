@@ -42,8 +42,7 @@ class UnsafeHybridAggregationIterator(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-    unsafeInputRows: Boolean,
-    outputsUnsafeRows: Boolean)
+    unsafeInputRows: Boolean)
   extends AggregationIterator(
     groupingKeyAttributes,
     valueAttributes,
@@ -54,11 +53,11 @@ class UnsafeHybridAggregationIterator(
     initialInputBufferOffset,
     resultExpressions,
     newMutableProjection,
-    outputsUnsafeRows) {
+    outputsUnsafeRows = true) {
 
   require(groupingKeyAttributes.nonEmpty)
 
-  logInfo("Using UnsafeHybridAggregationIterator.")
+  logInfo(s"Using UnsafeHybridAggregationIterator (output UnsafeRow: true).")
 
   ///////////////////////////////////////////////////////////////////////////
   // Unsafe Aggregation buffers
@@ -293,8 +292,7 @@ object UnsafeHybridAggregationIterator {
       newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
       inputAttributes: Seq[Attribute],
       inputIter: Iterator[InternalRow],
-      unsafeInputRows: Boolean,
-      outputsUnsafeRows: Boolean): UnsafeHybridAggregationIterator = {
+      unsafeInputRows: Boolean): UnsafeHybridAggregationIterator = {
     new UnsafeHybridAggregationIterator(
       groupingExprs.map(_.toAttribute),
       inputAttributes,
@@ -306,8 +304,7 @@ object UnsafeHybridAggregationIterator {
       initialInputBufferOffset,
       resultExpressions,
       newMutableProjection,
-      unsafeInputRows,
-      outputsUnsafeRows)
+      unsafeInputRows)
   }
 
   def createFromKVIterator(
@@ -321,8 +318,7 @@ object UnsafeHybridAggregationIterator {
       initialInputBufferOffset: Int,
       resultExpressions: Seq[NamedExpression],
       newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-      unsafeInputRows: Boolean,
-      outputsUnsafeRows: Boolean): UnsafeHybridAggregationIterator = {
+      unsafeInputRows: Boolean): UnsafeHybridAggregationIterator = {
     new UnsafeHybridAggregationIterator(
       groupingKeyAttributes,
       valueAttributes,
@@ -334,7 +330,6 @@ object UnsafeHybridAggregationIterator {
       initialInputBufferOffset,
       resultExpressions,
       newMutableProjection,
-      unsafeInputRows,
-      outputsUnsafeRows)
+      unsafeInputRows)
   }
 }

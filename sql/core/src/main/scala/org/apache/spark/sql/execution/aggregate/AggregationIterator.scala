@@ -309,7 +309,6 @@ abstract class AggregationIterator(
       safeOutoutRow
     }
 
-
     aggregationMode match {
       // Partial-only or PartialMerge-only: every output row is basically the values of
       // the grouping expressions and the corresponding aggregation buffer.

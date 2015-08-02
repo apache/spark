@@ -53,18 +53,14 @@ class SortBasedAggregationIterator(
     newMutableProjection,
     outputsUnsafeRows) {
 
-  logInfo("Using SortBasedAggregationIterator.")
+  logInfo(s"Using SortBasedAggregationIterator (output UnsafeRow: $outputsUnsafeRows).")
 
   override protected def newBuffer: MutableRow = {
     val bufferSchema = allAggregateFunctions.flatMap(_.bufferAttributes)
     val bufferRowSize: Int = bufferSchema.length
 
-    val useUnsafeBuffer =
-      UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(
-        StructType.fromAttributes(bufferSchema))
-
     val genericMutableBuffer = new GenericMutableRow(bufferRowSize)
-    val buffer = if (useUnsafeBuffer) {
+    val buffer = if (outputsUnsafeRows) {
       val unsafeProjection =
         UnsafeProjection.create(bufferSchema.map(_.dataType))
       unsafeProjection.apply(genericMutableBuffer)
@@ -184,10 +180,19 @@ object SortBasedAggregationIterator {
       inputAttributes: Seq[Attribute],
       inputIter: Iterator[InternalRow],
       outputsUnsafeRows: Boolean): SortBasedAggregationIterator = {
+    val kvIterator = if (outputsUnsafeRows) {
+      AggregationIterator.unsafeKVIterator(
+        groupingExprs,
+        inputAttributes,
+        inputIter).asInstanceOf[KVIterator[InternalRow, InternalRow]]
+    } else {
+      AggregationIterator.kvIterator(groupingExprs, newProjection, inputAttributes, inputIter)
+    }
+
     new SortBasedAggregationIterator(
       groupingExprs.map(_.toAttribute),
       inputAttributes,
-      AggregationIterator.kvIterator(groupingExprs, newProjection, inputAttributes, inputIter),
+      kvIterator,
       nonCompleteAggregateExpressions,
       nonCompleteAggregateAttributes,
       completeAggregateExpressions,

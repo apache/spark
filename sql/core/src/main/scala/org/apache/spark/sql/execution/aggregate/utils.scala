@@ -57,7 +57,6 @@ object Utils {
         completeAggregateAttributes = Nil,
         initialInputBufferOffset = 0,
         resultExpressions = namedGroupingAttributes ++ partialAggregateAttributes,
-        unsafeEnabled = child.sqlContext.conf.unsafeEnabled,
         child = child)
 
     // 2. Create an Aggregate Operator for final aggregations.
@@ -88,7 +87,6 @@ object Utils {
         completeAggregateAttributes = Nil,
         initialInputBufferOffset = namedGroupingAttributes.length,
         resultExpressions = rewrittenResultExpressions,
-        unsafeEnabled = child.sqlContext.conf.unsafeEnabled,
         child = partialAggregate)
 
     finalAggregate :: Nil
@@ -152,7 +150,6 @@ object Utils {
         completeAggregateAttributes = Nil,
         initialInputBufferOffset = 0,
         resultExpressions = partialAggregateResult,
-        unsafeEnabled = child.sqlContext.conf.unsafeEnabled,
         child = child)
 
     // 2. Create an Aggregate Operator for partial merge aggregations.
@@ -176,7 +173,6 @@ object Utils {
         completeAggregateAttributes = Nil,
         initialInputBufferOffset = (namedGroupingAttributes ++ distinctColumnAttributes).length,
         resultExpressions = partialMergeAggregateResult,
-        unsafeEnabled = child.sqlContext.conf.unsafeEnabled,
         child = partialAggregate)
 
     // 3. Create an Aggregate Operator for partial merge aggregations.
@@ -228,7 +224,6 @@ object Utils {
         completeAggregateAttributes = completeAggregateAttributes,
         initialInputBufferOffset = (namedGroupingAttributes ++ distinctColumnAttributes).length,
         resultExpressions = rewrittenResultExpressions,
-        unsafeEnabled = child.sqlContext.conf.unsafeEnabled,
         child = partialMergeAggregate)
 
     finalAndCompleteAggregate :: Nil

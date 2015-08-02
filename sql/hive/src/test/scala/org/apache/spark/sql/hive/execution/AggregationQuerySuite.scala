@@ -21,11 +21,11 @@ import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{SQLConf, AnalysisException, QueryTest, Row}
 import org.scalatest.BeforeAndAfterAll
 import test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 
-class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
+abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
 
   override val sqlContext = TestHive
   import sqlContext.implicits._
@@ -34,7 +34,7 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
 
   override def beforeAll(): Unit = {
     originalUseAggregate2 = sqlContext.conf.useSqlAggregate2
-    sqlContext.sql("set spark.sql.useAggregate2=true")
+    sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2.key, "true")
     val data1 = Seq[(Integer, Integer)](
       (1, 10),
       (null, -60),
@@ -81,7 +81,7 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
     sqlContext.sql("DROP TABLE IF EXISTS agg1")
     sqlContext.sql("DROP TABLE IF EXISTS agg2")
     sqlContext.dropTempTable("emptyTable")
-    sqlContext.sql(s"set spark.sql.useAggregate2=$originalUseAggregate2")
+    sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2.key, originalUseAggregate2.toString)
   }
 
   test("empty table") {
@@ -503,5 +503,37 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
           "there is any aggregate function that cannot be converted to the new interface."
       assert(newAggregateOperators.isEmpty, message)
     }
+  }
+}
+
+class SortBasedAggregationQuerySuite extends AggregationQuerySuite {
+
+  var originalUseTungstenAggregate: Boolean = _
+
+  override def beforeAll(): Unit = {
+    originalUseTungstenAggregate = sqlContext.conf.useHybridAggregate
+    sqlContext.setConf(SQLConf.USE_HYBRID_AGGREGATE.key, "false")
+    super.beforeAll()
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    sqlContext.setConf(SQLConf.USE_HYBRID_AGGREGATE.key, originalUseTungstenAggregate.toString)
+  }
+}
+
+class TungstenAggregationQuerySuite extends AggregationQuerySuite {
+
+  var originalUseTungstenAggregate: Boolean = _
+
+  override def beforeAll(): Unit = {
+    originalUseTungstenAggregate = sqlContext.conf.useHybridAggregate
+    sqlContext.setConf(SQLConf.USE_HYBRID_AGGREGATE.key, "true")
+    super.beforeAll()
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    sqlContext.setConf(SQLConf.USE_HYBRID_AGGREGATE.key, originalUseTungstenAggregate.toString)
   }
 }

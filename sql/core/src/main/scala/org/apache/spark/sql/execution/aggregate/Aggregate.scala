@@ -41,7 +41,6 @@ case class Aggregate(
     completeAggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    unsafeEnabled: Boolean,
     child: SparkPlan)
   extends UnaryNode {
 
@@ -51,28 +50,33 @@ case class Aggregate(
   // Use the hybrid iterator if (1) unsafe is enabled, (2) the schemata of
   // grouping key and aggregation buffer is supported; and (3) all
   // aggregate functions are algebraic.
-  private[this] val useHybridIterator: Boolean = {
+  private[this] val supportsHybridIterator: Boolean = {
     val aggregationBufferSchema: StructType =
       StructType.fromAttributes(
         allAggregateExpressions.flatMap(_.aggregateFunction.bufferAttributes))
     val groupKeySchema: StructType =
       StructType.fromAttributes(groupingExpressions.map(_.toAttribute))
+    val resultSchema: StructType =
+      StructType.fromAttributes(resultExpressions.map(_.toAttribute))
     val schemaSupportsUnsafe: Boolean =
       UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema) &&
-        UnsafeProjection.canSupport(groupKeySchema)
+        UnsafeProjection.canSupport(groupKeySchema) &&
+        UnsafeProjection.canSupport(resultSchema)
 
-    unsafeEnabled && schemaSupportsUnsafe
+    sqlContext.conf.unsafeEnabled && schemaSupportsUnsafe
   }
 
-  // We need to use sorted input if we have grouping expressions and
-  // we cannot use the hybrid iterator.
-  private[this] val requireSortedInput: Boolean = {
-    groupingExpressions.nonEmpty && !useHybridIterator
+  private[this] val hybridAggregateEnabled = sqlContext.conf.useHybridAggregate
+
+  // We need to use sorted input if we have grouping expressions, and
+  // we cannot use the hybrid iterator or the hybrid is disabled.
+  private[this] val requiresSortedInput: Boolean = {
+    groupingExpressions.nonEmpty && (!supportsHybridIterator || !hybridAggregateEnabled)
   }
 
   override def canProcessUnsafeRows: Boolean = true
 
-  override def outputsUnsafeRows: Boolean = useHybridIterator
+  override def outputsUnsafeRows: Boolean = supportsHybridIterator
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -85,7 +89,7 @@ case class Aggregate(
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
-    if (requireSortedInput) {
+    if (requiresSortedInput) {
       // TODO: We should not sort the input rows if they are just in reversed order.
       groupingExpressions.map(SortOrder(_, Ascending)) :: Nil
     } else {
@@ -94,7 +98,7 @@ case class Aggregate(
   }
 
   override def outputOrdering: Seq[SortOrder] = {
-    if (requireSortedInput) {
+    if (requiresSortedInput) {
       // It is possible that the child.outputOrdering starts with the required
       // ordering expressions (e.g. we require [a] as the sort expression and the
       // child's outputOrdering is [a, b]). We can only guarantee the output rows
@@ -110,7 +114,12 @@ case class Aggregate(
       // Because the constructor of an aggregation iterator will read at least the first row,
       // we need to get the value of iter.hasNext first.
       val hasInput = iter.hasNext
-      if (hasInput && useHybridIterator && groupingExpressions.nonEmpty) {
+      val useHybridIterator =
+        hasInput &&
+          supportsHybridIterator &&
+          groupingExpressions.nonEmpty &&
+          hybridAggregateEnabled
+      if (useHybridIterator) {
         UnsafeHybridAggregationIterator.createFromInputIterator(
           groupingExpressions,
           nonCompleteAggregateExpressions,
@@ -122,8 +131,7 @@ case class Aggregate(
           newMutableProjection _,
           child.output,
           iter,
-          child.outputsUnsafeRows,
-          outputsUnsafeRows)
+          child.outputsUnsafeRows)
       } else {
         if (!hasInput && groupingExpressions.nonEmpty) {
           // This is a grouped aggregate and the input iterator is empty,
@@ -156,7 +164,7 @@ case class Aggregate(
   }
 
   override def simpleString: String = {
-    val iterator = if (useHybridIterator && groupingExpressions.nonEmpty) {
+    val iterator = if (supportsHybridIterator && groupingExpressions.nonEmpty) {
       classOf[UnsafeHybridAggregationIterator].getSimpleName
     } else {
       classOf[SortBasedAggregationIterator].getSimpleName
