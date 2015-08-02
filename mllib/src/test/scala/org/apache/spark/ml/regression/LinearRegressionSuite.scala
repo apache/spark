@@ -151,7 +151,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        Then again with the data with no intercept:
        > weightsWithoutIntercept
        3 x 1 sparse Matrix of class "dgCMatrix"
-                                   s0
+                                 s0
        (Intercept)           .
        as.numeric.data3.V2. 4.70011
        as.numeric.data3.V3. 7.19943
@@ -505,5 +505,4 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .zip(testSummary.residuals.select("residuals").collect())
       .forall { case (Row(r1: Double), Row(r2: Double)) => r1 ~== r2 relTol 1E-5 }
   }
-
 }

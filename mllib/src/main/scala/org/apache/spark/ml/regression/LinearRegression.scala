@@ -85,7 +85,11 @@ class LinearRegression(override val uid: String)
   setDefault(fitIntercept -> true)
 
   /**
-   * Set to enable scaling (standardization).
+   * Whether to standardize the training features before fitting the model.
+   * The coefficients of models will be always returned on the original scale,
+   * so it will be transparent for users. Note that when no regularization,
+   * with or without standardization, the models should be always converged to
+   * the same solution.
    * Default is true.
    * @group setParam
    */
@@ -178,7 +182,19 @@ class LinearRegression(override val uid: String)
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
       new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
     } else {
-      new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, effectiveL1RegParam, $(tol))
+      def regParamL1Fun = (index: Int) => {
+        if ($(standardization)) {
+          effectiveL1RegParam
+        } else {
+          // If `standardization` is false, we still standardize the data
+          // to improve the rate of convergence; as a result, we have to
+          // perform this reverse standardization by penalizing each component
+          // differently to get effectively the same objective function when
+          // the training dataset is not standardized.
+          if (featuresStd(index) != 0.0) effectiveL1RegParam / featuresStd(index) else 0.0
+        }
+      }
+      new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
     }
 
     val initialWeights = Vectors.zeros(numFeatures)
@@ -464,6 +480,7 @@ class LinearRegressionSummary private[regression] (
  * @param weights The weights/coefficients corresponding to the features.
  * @param labelStd The standard deviation value of the label.
  * @param labelMean The mean value of the label.
+ * @param fitIntercept Whether to fit an intercept term.
  * @param featuresStd The standard deviation values of the features.
  * @param featuresMean The mean values of the features.
  */
@@ -472,7 +489,6 @@ private class LeastSquaresAggregator(
     labelStd: Double,
     labelMean: Double,
     fitIntercept: Boolean,
-    standardization: Boolean,
     featuresStd: Array[Double],
     featuresMean: Array[Double]) extends Serializable {
 
@@ -519,11 +535,7 @@ private class LeastSquaresAggregator(
       val localGradientSumArray = gradientSumArray
       data.foreachActive { (index, value) =>
         if (featuresStd(index) != 0.0 && value != 0.0) {
-          if (standardization) {
-            localGradientSumArray(index) += diff * value / featuresStd(index)
-          } else {
-            localGradientSumArray(index) += diff * value
-          }
+          localGradientSumArray(index) += diff * value / featuresStd(index)
         }
       }
       lossSum += diff * diff / 2.0
@@ -590,7 +602,7 @@ private class LeastSquaresCostFun(
     val w = Vectors.fromBreeze(weights)
 
     val leastSquaresAggregator = data.treeAggregate(new LeastSquaresAggregator(w, labelStd,
-      labelMean, fitIntercept, standardization, featuresStd, featuresMean))(
+      labelMean, fitIntercept, featuresStd, featuresMean))(
         seqOp = (c, v) => (c, v) match {
           case (aggregator, (label, features)) => aggregator.add(label, features)
         },
@@ -598,35 +610,38 @@ private class LeastSquaresCostFun(
           case (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
         })
 
-    // If we are not doing standardization go back to unscaled weights
-    if (standardization) {
-      // regVal is the sum of weight squares for L2 regularization
-      val norm = brzNorm(weights, 2.0)
-      val regVal = 0.5 * effectiveL2regParam * norm * norm
+    val totalGradientArray = leastSquaresAggregator.gradient.toArray
 
-      val loss = leastSquaresAggregator.loss + regVal
-      val gradient = leastSquaresAggregator.gradient
-      axpy(effectiveL2regParam, w, gradient)
-
-      (loss, gradient.toBreeze.asInstanceOf[BDV[Double]])
+    val regVal = if (effectiveL2regParam == 0.0) {
+      0.0
     } else {
-      val unscaledWeights = weights.copy
-      val len = unscaledWeights.length
-      var i = 0
-      while (i < len) {
-        unscaledWeights(i) /= featuresStd(i)
-        i += 1
+      var sum = 0.0
+      w.foreachActive { (index, value) =>
+        // The following code will compute the loss of the regularization; also
+        // the gradient of the regularization, and add back to totalGradientArray.
+        sum += {
+          if (standardization) {
+            totalGradientArray(index) += effectiveL2regParam * value
+            value * value
+          } else {
+            if (featuresStd(index) != 0.0) {
+              // If `standardization` is false, we still standardize the data
+              // to improve the rate of convergence; as a result, we have to
+              // perform this reverse standardization by penalizing each component
+              // differently to get effectively the same objective function when
+              // the training dataset is not standardized.
+              val temp = value / (featuresStd(index) * featuresStd(index))
+              totalGradientArray(index) += effectiveL2regParam * temp
+              value * temp
+            } else {
+              0.0
+            }
+          }
+        }
       }
-      val norm = brzNorm(unscaledWeights, 2.0)
-
-      val regVal = 0.5 * effectiveL2regParam * norm * norm
-
-      val loss = leastSquaresAggregator.loss + regVal
-      val gradient = leastSquaresAggregator.gradient
-      val mw = Vectors.dense(unscaledWeights.toArray)
-      axpy(effectiveL2regParam, mw, gradient)
-
-      (loss, gradient.toBreeze.asInstanceOf[BDV[Double]])
+      0.5 * effectiveL2regParam * sum
     }
+
+    (leastSquaresAggregator.loss + regVal, new BDV(totalGradientArray))
   }
 }
