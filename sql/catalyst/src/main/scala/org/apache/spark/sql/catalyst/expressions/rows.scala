@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.{DataType, StructType, AtomicType}
+import org.apache.spark.sql.types.{Decimal, DataType, StructType, AtomicType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -32,27 +32,14 @@ abstract class MutableRow extends InternalRow {
   def update(i: Int, value: Any)
 
   // default implementation (slow)
+  def setBoolean(i: Int, value: Boolean): Unit = { update(i, value) }
+  def setByte(i: Int, value: Byte): Unit = { update(i, value) }
+  def setShort(i: Int, value: Short): Unit = { update(i, value) }
   def setInt(i: Int, value: Int): Unit = { update(i, value) }
   def setLong(i: Int, value: Long): Unit = { update(i, value) }
-  def setDouble(i: Int, value: Double): Unit = { update(i, value) }
-  def setBoolean(i: Int, value: Boolean): Unit = { update(i, value) }
-  def setShort(i: Int, value: Short): Unit = { update(i, value) }
-  def setByte(i: Int, value: Byte): Unit = { update(i, value) }
   def setFloat(i: Int, value: Float): Unit = { update(i, value) }
-  def setString(i: Int, value: String): Unit = {
-    update(i, UTF8String.fromString(value))
-  }
-
-  override def copy(): InternalRow = {
-    val n = numFields
-    val arr = new Array[Any](n)
-    var i = 0
-    while (i < n) {
-      arr(i) = get(i)
-      i += 1
-    }
-    new GenericInternalRow(arr)
-  }
+  def setDouble(i: Int, value: Double): Unit = { update(i, value) }
+  def setDecimal(i: Int, value: Decimal, precision: Int) { update(i, value) }
 }
 
 /**
@@ -95,17 +82,13 @@ class GenericInternalRow(protected[sql] val values: Array[Any]) extends Internal
 
   def this(size: Int) = this(new Array[Any](size))
 
-  override def toSeq: Seq[Any] = values.toSeq
+  override def genericGet(ordinal: Int): Any = values(ordinal)
+
+  override def toSeq: Seq[Any] = values
 
   override def numFields: Int = values.length
 
-  override def get(i: Int, dataType: DataType): Any = values(i)
-
-  override def getStruct(ordinal: Int, numFields: Int): InternalRow = {
-    values(ordinal).asInstanceOf[InternalRow]
-  }
-
-  override def copy(): InternalRow = this
+  override def copy(): InternalRow = new GenericInternalRow(values.clone())
 }
 
 /**
@@ -126,15 +109,11 @@ class GenericMutableRow(val values: Array[Any]) extends MutableRow {
 
   def this(size: Int) = this(new Array[Any](size))
 
-  override def toSeq: Seq[Any] = values.toSeq
+  override def genericGet(ordinal: Int): Any = values(ordinal)
+
+  override def toSeq: Seq[Any] = values
 
   override def numFields: Int = values.length
-
-  override def get(i: Int, dataType: DataType): Any = values(i)
-
-  override def getStruct(ordinal: Int, numFields: Int): InternalRow = {
-    values(ordinal).asInstanceOf[InternalRow]
-  }
 
   override def setNullAt(i: Int): Unit = { values(i) = null}
 

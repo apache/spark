@@ -50,8 +50,8 @@ case class ShuffledHashOuterJoin(
       // TODO this probably can be replaced by external sort (sort merged join?)
       joinType match {
         case LeftOuter =>
-          val hashed = buildHashRelation(rightIter)
-          val keyGenerator = streamedKeyGenerator()
+          val hashed = HashedRelation(rightIter, buildKeyGenerator)
+          val keyGenerator = streamedKeyGenerator
           leftIter.flatMap( currentRow => {
             val rowKey = keyGenerator(currentRow)
             joinedRow.withLeft(currentRow)
@@ -59,8 +59,8 @@ case class ShuffledHashOuterJoin(
           })
 
         case RightOuter =>
-          val hashed = buildHashRelation(leftIter)
-          val keyGenerator = streamedKeyGenerator()
+          val hashed = HashedRelation(leftIter, buildKeyGenerator)
+          val keyGenerator = streamedKeyGenerator
           rightIter.flatMap ( currentRow => {
             val rowKey = keyGenerator(currentRow)
             joinedRow.withRight(currentRow)

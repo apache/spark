@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.TaskContext
+import java.io.IOException
+
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -108,50 +110,11 @@ case class GeneratedAggregate(
           Add(
             Coalesce(currentSum :: zero :: Nil),
             Cast(expr, calcType)
-          ) :: currentSum :: zero :: Nil)
+          ) :: currentSum :: Nil)
         val result =
           expr.dataType match {
             case DecimalType.Fixed(_, _) =>
               Cast(currentSum, s.dataType)
-            case _ => currentSum
-          }
-
-        AggregateEvaluation(currentSum :: Nil, initialValue :: Nil, updateFunction :: Nil, result)
-
-      case cs @ CombineSum(expr) =>
-        val calcType =
-          expr.dataType match {
-            case DecimalType.Fixed(p, s) =>
-              DecimalType.bounded(p + 10, s)
-            case _ =>
-              expr.dataType
-          }
-
-        val currentSum = AttributeReference("currentSum", calcType, nullable = true)()
-        val initialValue = Literal.create(null, calcType)
-
-        // Coalesce avoids double calculation...
-        // but really, common sub expression elimination would be better....
-        val zero = Cast(Literal(0), calcType)
-        // If we're evaluating UnscaledValue(x), we can do Count on x directly, since its
-        // UnscaledValue will be null if and only if x is null; helps with Average on decimals
-        val actualExpr = expr match {
-          case UnscaledValue(e) => e
-          case _ => expr
-        }
-        // partial sum result can be null only when no input rows present
-        val updateFunction = If(
-          IsNotNull(actualExpr),
-          Coalesce(
-            Add(
-              Coalesce(currentSum :: zero :: Nil),
-              Cast(expr, calcType)) :: currentSum :: zero :: Nil),
-          currentSum)
-
-        val result =
-          expr.dataType match {
-            case DecimalType.Fixed(_, _) =>
-              Cast(currentSum, cs.dataType)
             case _ => currentSum
           }
 
@@ -241,7 +204,7 @@ case class GeneratedAggregate(
 
     val schemaSupportsUnsafe: Boolean = {
       UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema) &&
-        UnsafeFixedWidthAggregationMap.supportsGroupKeySchema(groupKeySchema)
+        UnsafeProjection.canSupport(groupKeySchema)
     }
 
     child.execute().mapPartitions { iter =>
@@ -299,12 +262,15 @@ case class GeneratedAggregate(
       } else if (unsafeEnabled && schemaSupportsUnsafe) {
         assert(iter.hasNext, "There should be at least one row for this path")
         log.info("Using Unsafe-based aggregator")
+        val pageSizeBytes = SparkEnv.get.conf.getSizeAsBytes("spark.buffer.pageSize", "64m")
         val aggregationMap = new UnsafeFixedWidthAggregationMap(
           newAggregationBuffer(EmptyRow),
           aggregationBufferSchema,
           groupKeySchema,
           TaskContext.get.taskMemoryManager(),
+          SparkEnv.get.shuffleMemoryManager,
           1024 * 16, // initial capacity
+          pageSizeBytes,
           false // disable tracking of performance metrics
         )
 
@@ -312,27 +278,35 @@ case class GeneratedAggregate(
           val currentRow: InternalRow = iter.next()
           val groupKey: InternalRow = groupProjection(currentRow)
           val aggregationBuffer = aggregationMap.getAggregationBuffer(groupKey)
+          if (aggregationBuffer == null) {
+            throw new IOException("Could not allocate memory to grow aggregation buffer")
+          }
           updateProjection.target(aggregationBuffer)(joinedRow(aggregationBuffer, currentRow))
         }
 
         new Iterator[InternalRow] {
           private[this] val mapIterator = aggregationMap.iterator()
           private[this] val resultProjection = resultProjectionBuilder()
+          private[this] var _hasNext = mapIterator.next()
 
-          def hasNext: Boolean = mapIterator.hasNext
+          def hasNext: Boolean = _hasNext
 
           def next(): InternalRow = {
-            val entry = mapIterator.next()
-            val result = resultProjection(joinedRow(entry.key, entry.value))
-            if (hasNext) {
-              result
+            if (_hasNext) {
+              val result = resultProjection(joinedRow(mapIterator.getKey, mapIterator.getValue))
+              _hasNext = mapIterator.next()
+              if (_hasNext) {
+                result
+              } else {
+                // This is the last element in the iterator, so let's free the buffer. Before we do,
+                // though, we need to make a defensive copy of the result so that we don't return an
+                // object that might contain dangling pointers to the freed memory
+                val resultCopy = result.copy()
+                aggregationMap.free()
+                resultCopy
+              }
             } else {
-              // This is the last element in the iterator, so let's free the buffer. Before we do,
-              // though, we need to make a defensive copy of the result so that we don't return an
-              // object that might contain dangling pointers to the freed memory
-              val resultCopy = result.copy()
-              aggregationMap.free()
-              resultCopy
+              throw new java.util.NoSuchElementException
             }
           }
         }

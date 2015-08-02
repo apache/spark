@@ -118,7 +118,7 @@ private[tree] class EntropyAggregator(numClasses: Int)
  * (node, feature, bin).
  * @param stats  Array of sufficient statistics for a (node, feature, bin).
  */
-private[tree] class EntropyCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
+private[spark] class EntropyCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
 
   /**
    * Make a deep copy of this [[ImpurityCalculator]].

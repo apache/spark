@@ -267,6 +267,53 @@ class DataFrameFunctionsSuite extends QueryTest {
     )
   }
 
+  test("sort_array function") {
+    val df = Seq(
+      (Array[Int](2, 1, 3), Array("b", "c", "a")),
+      (Array[Int](), Array[String]()),
+      (null, null)
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(sort_array($"a"), sort_array($"b")),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq[Int](), Seq[String]()),
+        Row(null, null))
+    )
+    checkAnswer(
+      df.select(sort_array($"a", false), sort_array($"b", false)),
+      Seq(
+        Row(Seq(3, 2, 1), Seq("c", "b", "a")),
+        Row(Seq[Int](), Seq[String]()),
+        Row(null, null))
+    )
+    checkAnswer(
+      df.selectExpr("sort_array(a)", "sort_array(b)"),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq[Int](), Seq[String]()),
+        Row(null, null))
+    )
+    checkAnswer(
+      df.selectExpr("sort_array(a, true)", "sort_array(b, false)"),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("c", "b", "a")),
+        Row(Seq[Int](), Seq[String]()),
+        Row(null, null))
+    )
+
+    val df2 = Seq((Array[Array[Int]](Array(2)), "x")).toDF("a", "b")
+    assert(intercept[AnalysisException] {
+      df2.selectExpr("sort_array(a)").collect()
+    }.getMessage().contains("Type ArrayType(IntegerType,false) is not the AtomicType, " +
+      "we can not perform the ordering operations"))
+
+    val df3 = Seq(("xxx", "x")).toDF("a", "b")
+    assert(intercept[AnalysisException] {
+      df3.selectExpr("sort_array(a)").collect()
+    }.getMessage().contains("ArrayType(AtomicType) is expected, but we got StringType"))
+  }
+
   test("array size function") {
     val df = Seq(
       (Array[Int](1, 2), "x"),
@@ -274,7 +321,7 @@ class DataFrameFunctionsSuite extends QueryTest {
       (Array[Int](1, 2, 3), "z")
     ).toDF("a", "b")
     checkAnswer(
-      df.select(size("a")),
+      df.select(size($"a")),
       Seq(Row(2), Row(0), Row(3))
     )
     checkAnswer(
@@ -290,7 +337,7 @@ class DataFrameFunctionsSuite extends QueryTest {
       (Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3), "z")
     ).toDF("a", "b")
     checkAnswer(
-      df.select(size("a")),
+      df.select(size($"a")),
       Seq(Row(2), Row(0), Row(3))
     )
     checkAnswer(
