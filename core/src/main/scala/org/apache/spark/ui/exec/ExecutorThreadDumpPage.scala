@@ -68,36 +68,35 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
             "non-executor-thread"
           }
         }
-        <div class="accordion-group">
-          <div class={className} onclick="$(this).next().toggleClass('hidden')">
-            <a class="accordion-toggle">
-              Thread {thread.threadId}: {threadName} ({thread.threadState})
-            </a>
-          </div>
-          <div class="accordion-body hidden">
-            <div class="accordion-inner">
-              <pre>{thread.stackTrace}</pre>
-            </div>
-          </div>
-        </div>
+        <tr class={className} onclick="$(this).next().toggleClass('hidden')">
+          <td>{thread.threadId}</td><td>{threadName}</td><td>{thread.threadState}</td>
+        </tr>
+        <tr class="accordion-body hidden"><td colspan="3"><pre>{thread.stackTrace}</pre></td></tr>
       }
 
-      <div class="row-fluid">
-        <p>Updated at {UIUtils.formatDate(time)}</p>
-        {
-          // scalastyle:off
-          <p><a class="expandbutton"
-                onClick="$('.accordion-body').removeClass('hidden'); $('.expandbutton').toggleClass('hidden')">
-            Expand All
-          </a></p>
-          <p><a class="expandbutton hidden"
-                onClick="$('.accordion-body').addClass('hidden'); $('.expandbutton').toggleClass('hidden')">
-            Collapse All
-          </a></p>
-          // scalastyle:on
-        }
-        <div class="accordion">{dumpRows}</div>
-      </div>
+    <div class="row-fluid">
+      <p>Updated at {UIUtils.formatDate(time)}</p>
+      {
+        // scalastyle:off
+        <p><a class="expandbutton"
+              onClick="$('.accordion-body').removeClass('hidden'); $('.expandbutton').toggleClass('hidden')">
+          Expand All
+        </a></p>
+        <p><a class="expandbutton hidden"
+              onClick="$('.accordion-body').addClass('hidden'); $('.expandbutton').toggleClass('hidden')">
+          Collapse All
+        </a></p>
+        // scalastyle:on
+      }
+      <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group"}>
+        <thead>
+          <th>Thread ID</th>
+          <th>Thread Name</th>
+          <th>Thread State</th>
+        </thead>
+        <tbody>{dumpRows}</tbody>
+      </table>
+    </div>
     }.getOrElse(Text("Error fetching thread dump"))
     UIUtils.headerSparkPage(s"Thread dump for executor $executorId", content, parent)
   }
