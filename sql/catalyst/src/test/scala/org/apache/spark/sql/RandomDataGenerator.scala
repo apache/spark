@@ -107,7 +107,10 @@ object RandomDataGenerator {
       case DateType => Some(() => new java.sql.Date(rand.nextInt()))
       case TimestampType => Some(() => new java.sql.Timestamp(rand.nextLong()))
       case DecimalType.Fixed(precision, scale) => Some(
-        () => BigDecimal.apply(rand.nextLong(), rand.nextInt(), new MathContext(precision)))
+        () => BigDecimal.apply(
+          rand.nextLong() % math.pow(10, precision).toLong,
+          scale,
+          new MathContext(precision)))
       case DoubleType => randomNumeric[Double](
         rand, r => longBitsToDouble(r.nextLong()), Seq(Double.MinValue, Double.MinPositiveValue,
           Double.MaxValue, Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN, 0.0))
