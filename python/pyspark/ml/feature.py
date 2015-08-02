@@ -1155,7 +1155,7 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol):
     @keyword_only
     def setParams(self, formula=None, featuresCol="features", labelCol="label"):
         """
-        setParams(self, formula=None, featuresCol="features", labelCol="label"):
+        setParams(self, formula=None, featuresCol="features", labelCol="label")
         Sets params for RFormula.
         """
         kwargs = self.setParams._input_kwargs
