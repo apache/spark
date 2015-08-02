@@ -24,7 +24,6 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
@@ -93,7 +92,7 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0)
 
     val importances = rf.fit(df).featureImportances
-    val mostImportantFeature = importances.maxBy(_._2)._1
+    val mostImportantFeature = importances.argmax
     assert(mostImportantFeature === 1)
   }
 

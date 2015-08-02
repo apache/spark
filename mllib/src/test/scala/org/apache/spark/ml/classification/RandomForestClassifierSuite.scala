@@ -26,7 +26,6 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -67,7 +66,7 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
   test("params") {
     ParamsSuite.checkParams(new RandomForestClassifier)
     val model = new RandomForestClassificationModel("rfc",
-      Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 2)), 2)
+      Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 2)), 2, 2)
     ParamsSuite.checkParams(model)
   }
 
@@ -174,7 +173,7 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
 
     val importances = rf.fit(df).featureImportances
-    val mostImportantFeature = importances.maxBy(_._2)._1
+    val mostImportantFeature = importances.argmax
     assert(mostImportantFeature === 1)
   }
 

@@ -72,6 +72,12 @@ sealed abstract class Node extends Serializable {
    * @param id  Node ID using old format IDs
    */
   private[ml] def toOld(id: Int): OldNode
+
+  /**
+   * Trace down the tree, and return the largest feature index used in any split.
+   * @return  Max feature index used in a split, or -1 if there are no splits (single leaf node).
+   */
+  private[ml] def maxSplitFeatureIndex(): Int
 }
 
 private[ml] object Node {
@@ -129,6 +135,8 @@ final class LeafNode private[ml] (
     new OldNode(id, new OldPredict(prediction, prob = impurityStats.prob(prediction)),
       impurity, isLeaf = true, None, None, None, None)
   }
+
+  override private[ml] def maxSplitFeatureIndex(): Int = -1
 }
 
 /**
@@ -189,6 +197,11 @@ final class InternalNode private[ml] (
       Some(new OldInformationGainStats(gain, impurity, leftChild.impurity, rightChild.impurity,
         new OldPredict(leftChild.prediction, prob = 0.0),
         new OldPredict(rightChild.prediction, prob = 0.0))))
+  }
+
+  override private[ml] def maxSplitFeatureIndex(): Int = {
+    math.max(split.featureIndex,
+      math.max(leftChild.maxSplitFeatureIndex(), rightChild.maxSplitFeatureIndex()))
   }
 }
 
