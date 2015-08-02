@@ -118,9 +118,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Can be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
    * from a list of input files or InputFormats for the application.
    */
+  @deprecated("Passing in preferred locations has no effect at all, see SPARK-8949", "1.5.0")
   @DeveloperApi
   def this(config: SparkConf, preferredNodeLocationData: Map[String, Set[SplitInfo]]) = {
     this(config)
+    logWarning("Passing in preferred locations has no effect at all, see SPARK-8949")
     this.preferredNodeLocationData = preferredNodeLocationData
   }
 
@@ -153,6 +155,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()) =
   {
     this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment))
+    if (preferredNodeLocationData.nonEmpty) {
+      logWarning("Passing in preferred locations has no effect at all, see SPARK-8949")
+    }
     this.preferredNodeLocationData = preferredNodeLocationData
   }
 
