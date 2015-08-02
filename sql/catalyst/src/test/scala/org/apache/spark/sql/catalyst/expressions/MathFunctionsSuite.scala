@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.types._
 
-
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   import IntegralLiteralTestUtils._
@@ -184,63 +183,74 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("sin") {
     testUnary(Sin, math.sin)
+    checkConsistency(DoubleType, classOf[Sin])
   }
 
   test("asin") {
     testUnary(Asin, math.asin, (-10 to 10).map(_ * 0.1))
     testUnary(Asin, math.asin, (11 to 20).map(_ * 0.1), expectNaN = true)
+    checkConsistency(DoubleType, classOf[Asin])
   }
 
   test("sinh") {
     testUnary(Sinh, math.sinh)
+    checkConsistency(DoubleType, classOf[Sinh])
   }
 
   test("cos") {
     testUnary(Cos, math.cos)
+    checkConsistency(DoubleType, classOf[Cos])
   }
 
   test("acos") {
-    for (i <- 0 to 100) {
-      testUnary(Acos, math.acos, (-10 to 10).map(_ * 0.1))
-      testUnary(Acos, math.acos, (11 to 20).map(_ * 0.1), expectNaN = true)
-      checkConsistency(DoubleType, classOf[Acos])
-    }
+    testUnary(Acos, math.acos, (-10 to 10).map(_ * 0.1))
+    testUnary(Acos, math.acos, (11 to 20).map(_ * 0.1), expectNaN = true)
+    checkConsistency(DoubleType, classOf[Acos])
   }
 
   test("cosh") {
     testUnary(Cosh, math.cosh)
+    checkConsistency(DoubleType, classOf[Cosh])
   }
 
   test("tan") {
     testUnary(Tan, math.tan)
+    checkConsistency(DoubleType, classOf[Tan])
   }
 
   test("atan") {
     testUnary(Atan, math.atan)
+    checkConsistency(DoubleType, classOf[Atan])
   }
 
   test("tanh") {
     testUnary(Tanh, math.tanh)
+    checkConsistency(DoubleType, classOf[Tanh])
   }
 
   test("toDegrees") {
     testUnary(ToDegrees, math.toDegrees)
+    checkConsistency(DoubleType, classOf[Acos])
   }
 
   test("toRadians") {
     testUnary(ToRadians, math.toRadians)
+    checkConsistency(DoubleType, classOf[ToRadians])
   }
 
   test("cbrt") {
     testUnary(Cbrt, math.cbrt)
+    checkConsistency(DoubleType, classOf[Cbrt])
   }
 
   test("ceil") {
     testUnary(Ceil, math.ceil)
+    checkConsistency(DoubleType, classOf[Ceil])
   }
 
   test("floor") {
     testUnary(Floor, math.floor)
+    checkConsistency(DoubleType, classOf[Floor])
   }
 
   test("factorial") {
@@ -250,37 +260,45 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, IntegerType), null, create_row(null))
     checkEvaluation(Factorial(Literal(20)), 2432902008176640000L, EmptyRow)
     checkEvaluation(Factorial(Literal(21)), null, EmptyRow)
+    checkConsistency(IntegerType, classOf[Factorial])
   }
 
   test("rint") {
     testUnary(Rint, math.rint)
+    checkConsistency(DoubleType, classOf[Rint])
   }
 
   test("exp") {
     testUnary(Exp, math.exp)
+    checkConsistency(DoubleType, classOf[Exp])
   }
 
   test("expm1") {
     testUnary(Expm1, math.expm1)
+    checkConsistency(DoubleType, classOf[Expm1])
   }
 
   test("signum") {
     testUnary[Double, Double](Signum, math.signum)
+    checkConsistency(DoubleType, classOf[Signum])
   }
 
   test("log") {
     testUnary(Log, math.log, (1 to 20).map(_ * 0.1))
     testUnary(Log, math.log, (-5 to 0).map(_ * 0.1), expectNull = true)
+    checkConsistency(DoubleType, classOf[Log])
   }
 
   test("log10") {
     testUnary(Log10, math.log10, (1 to 20).map(_ * 0.1))
     testUnary(Log10, math.log10, (-5 to 0).map(_ * 0.1), expectNull = true)
+    checkConsistency(DoubleType, classOf[Log10])
   }
 
   test("log1p") {
     testUnary(Log1p, math.log1p, (0 to 20).map(_ * 0.1))
     testUnary(Log1p, math.log1p, (-10 to -1).map(_ * 1.0), expectNull = true)
+    checkConsistency(DoubleType, classOf[Log1p])
   }
 
   test("bin") {
@@ -301,12 +319,15 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(Bin(positiveLongLit), java.lang.Long.toBinaryString(positiveLong))
     checkEvaluation(Bin(negativeLongLit), java.lang.Long.toBinaryString(negativeLong))
+
+    checkConsistency(LongType, classOf[Bin])
   }
 
   test("log2") {
     def f: (Double) => Double = (x: Double) => math.log(x) / math.log(2)
     testUnary(Log2, f, (1 to 20).map(_ * 0.1))
     testUnary(Log2, f, (-5 to 0).map(_ * 1.0), expectNull = true)
+    checkConsistency(DoubleType, classOf[Log2])
   }
 
   test("sqrt") {
@@ -316,11 +337,13 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Sqrt(Literal.create(null, DoubleType)), null, create_row(null))
     checkNaN(Sqrt(Literal(-1.0)), EmptyRow)
     checkNaN(Sqrt(Literal(-1.5)), EmptyRow)
+    checkConsistency(DoubleType, classOf[Sqrt])
   }
 
   test("pow") {
     testBinary(Pow, math.pow, (-5 to 5).map(v => (v * 1.0, v * 1.0)))
     testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNaN = true)
+    checkConsistency(DoubleType, DoubleType, classOf[Pow])
   }
 
   test("shift left") {
@@ -341,6 +364,9 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ShiftLeft(positiveLongLit, negativeIntLit), positiveLong << negativeInt)
     checkEvaluation(ShiftLeft(negativeLongLit, positiveIntLit), negativeLong << positiveInt)
     checkEvaluation(ShiftLeft(negativeLongLit, negativeIntLit), negativeLong << negativeInt)
+
+    checkConsistency(IntegerType, IntegerType, classOf[ShiftLeft])
+    checkConsistency(LongType, IntegerType, classOf[ShiftLeft])
   }
 
   test("shift right") {
@@ -361,6 +387,9 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ShiftRight(positiveLongLit, negativeIntLit), positiveLong >> negativeInt)
     checkEvaluation(ShiftRight(negativeLongLit, positiveIntLit), negativeLong >> positiveInt)
     checkEvaluation(ShiftRight(negativeLongLit, negativeIntLit), negativeLong >> negativeInt)
+
+    checkConsistency(IntegerType, IntegerType, classOf[ShiftRight])
+    checkConsistency(LongType, IntegerType, classOf[ShiftRight])
   }
 
   test("shift right unsigned") {
@@ -389,6 +418,9 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       negativeLong >>> positiveInt)
     checkEvaluation(ShiftRightUnsigned(negativeLongLit, negativeIntLit),
       negativeLong >>> negativeInt)
+
+    checkConsistency(IntegerType, IntegerType, classOf[ShiftRightUnsigned])
+    checkConsistency(LongType, IntegerType, classOf[ShiftRightUnsigned])
   }
 
   test("hex") {
@@ -403,6 +435,9 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Turn off scala style for non-ascii chars
     checkEvaluation(Hex(Literal("三重的".getBytes("UTF8"))), "E4B889E9878DE79A84")
     // scalastyle:on
+    Seq(LongType, BinaryType, StringType).foreach { dt =>
+      checkConsistency(dt, classOf[Hex])
+    }
   }
 
   test("unhex") {
@@ -416,16 +451,18 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Turn off scala style for non-ascii chars
     checkEvaluation(Unhex(Literal("E4B889E9878DE79A84")), "三重的".getBytes("UTF-8"))
     checkEvaluation(Unhex(Literal("三重的")), null)
-
     // scalastyle:on
+    checkConsistency(StringType, classOf[Unhex])
   }
 
   test("hypot") {
     testBinary(Hypot, math.hypot)
+    checkConsistency(DoubleType, DoubleType, classOf[Hypot])
   }
 
   test("atan2") {
     testBinary(Atan2, math.atan2)
+    checkConsistency(DoubleType, DoubleType, classOf[Atan2])
   }
 
   test("binary log") {
@@ -457,6 +494,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Logarithm(Literal(1.0), Literal(-1.0)),
       null,
       create_row(null))
+    checkConsistency(DoubleType, DoubleType, classOf[Logarithm])
   }
 
   test("round") {

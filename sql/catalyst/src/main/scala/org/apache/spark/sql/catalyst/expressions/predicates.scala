@@ -280,7 +280,8 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
     if (ctx.isPrimitiveType(left.dataType)
         && left.dataType != BooleanType // java boolean doesn't support > or < operator
         && left.dataType != FloatType
-        && left.dataType != DoubleType) {
+        && left.dataType != DoubleType
+        && left.dataType != BooleanType) {
       // faster version
       defineCodeGen(ctx, ev, (c1, c2) => s"$c1 $symbol $c2")
     } else {
