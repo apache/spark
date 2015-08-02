@@ -296,7 +296,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
         5   <{1,2}>    0.75
      */
 
-    val result = prefixspan.run(rdd)
+    val model = prefixspan.run(rdd)
     val expected = Array(
       (Array(Array(1)), 3L),
       (Array(Array(2)), 3L),
@@ -304,7 +304,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Array(Array(1), Array(3)), 2L),
       (Array(Array(1, 2)), 3L)
     )
-    compareResults(expected, result.collect())
+    compareResults(expected, model.freqSequences.collect().map(x => (x.sequence, x.freq)))
   }
 
   test("PrefixSpan String type, variable-size itemsets") {
@@ -322,7 +322,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setMinSupport(0.5)
       .setMaxPatternLength(5)
 
-    val result = prefixspan.run(rdd)
+    val model = prefixspan.run(rdd)
     val expected = Array(
       (Array(Array(1)), 3L),
       (Array(Array(2)), 3L),
@@ -332,7 +332,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     ).map { case (pattern, count) =>
       (pattern.map(itemSet => itemSet.map(intToString)), count)
     }
-    compareResults(expected, result.collect())
+    compareResults(expected, model.freqSequences.collect().map(x => (x.sequence, x.freq)))
   }
 
   private def compareResults[Item](
