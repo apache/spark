@@ -33,11 +33,18 @@ object TypeUtils {
   }
 
   def checkForOrderingExpr(t: DataType, caller: String): TypeCheckResult = {
-    if (t.isInstanceOf[AtomicType] || t == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"$caller accepts non-complex types, not $t")
+    t match {
+      case i: AtomicType => TypeCheckResult.TypeCheckSuccess
+      case n: NullType => TypeCheckResult.TypeCheckSuccess
+      case s: StructType =>
+        if (s.supportOrdering(s)) {
+          TypeCheckResult.TypeCheckSuccess
+        } else {
+          TypeCheckResult.TypeCheckFailure(s"Fields in $s do not support ordering")
+        }
+      case other => TypeCheckResult.TypeCheckFailure(s"$t doesn't support ordering on $caller")
     }
+
   }
 
   def checkForSameTypeInputExpr(types: Seq[DataType], caller: String): TypeCheckResult = {
@@ -52,8 +59,12 @@ object TypeUtils {
   def getNumeric(t: DataType): Numeric[Any] =
     t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
 
-  def getOrdering(t: DataType): Ordering[Any] =
-    t.asInstanceOf[AtomicType].ordering.asInstanceOf[Ordering[Any]]
+  def getOrdering(t: DataType): Ordering[Any] = {
+    t match {
+      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
+      case s: StructType => s.ordering.asInstanceOf[Ordering[Any]]
+    }
+  }
 
   def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
     for (i <- 0 until x.length; if i < y.length) {

@@ -274,6 +274,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         private $exprType[] expressions;
 
         ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
 
         public SpecificUnsafeProjection($exprType[] expressions) {
           this.expressions = expressions;
