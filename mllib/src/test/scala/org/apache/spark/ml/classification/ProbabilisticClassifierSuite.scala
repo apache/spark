@@ -23,10 +23,10 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 final class TestProbabilisticClassificationModel(
   override val numClasses: Int)
-    extends ProbabilisticClassificationModel[Vector, TestClassificationModel] {
+    extends ProbabilisticClassificationModel[Vector, TestProbabilisticClassificationModel] {
   override val uid = null
   override def copy(extra: org.apache.spark.ml.param.ParamMap):
-      TestClassificationModel = {
+      TestProbabilisticClassificationModel = {
     defaultCopy(extra)
   }
 
@@ -51,13 +51,13 @@ class ProbabilisticClassifierSuite extends SparkFunSuite {
 
   test("test thresholding") {
     val threshold = Array(0.5, 0.2)
-    val testModel = (new TestClassificationModel(2)).setThresholds(threshold)
+    val testModel = (new TestProbabilisticClassificationModel(2)).setThresholds(threshold)
     assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 1.0))) == 1.0)
     assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 0.2))) == 0.0)
   }
 
   test("test thresholding not required") {
-    val testModel = new TestClassificationModel(2)
+    val testModel = new TestProbabilisticClassificationModel(2)
     assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 2.0))) == 1.0)
   }
 }

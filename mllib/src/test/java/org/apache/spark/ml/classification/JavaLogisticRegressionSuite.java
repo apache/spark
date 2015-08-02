@@ -99,8 +99,8 @@ public class JavaLogisticRegressionSuite implements Serializable {
     }
     // Call transform with params, and check that the params worked.
     double[] thresholds = {0.5, 0.0};
-    model.transform(dataset,
-                    model.thresholds().w(thresholds), model.probabilityCol().w("myProb"))
+    model.transform(
+      dataset, model.thresholds().w(thresholds), model.probabilityCol().w("myProb"))
       .registerTempTable("predNotAllZero");
     DataFrame predNotAllZero = jsql.sql("SELECT prediction, myProb FROM predNotAllZero");
     boolean foundNonZero = false;
