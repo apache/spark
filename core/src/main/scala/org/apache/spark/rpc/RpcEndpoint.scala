@@ -44,10 +44,10 @@ private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint
 
 /**
  * An end point for the RPC that defines what functions to trigger given a message.
- *M
+ *
  * It is guaranteed that `onStart`, `receive` and `onStop` will be called in sequence.
  *
- * The life-cycle of an end point is:
+ * The life-cycle of an endpoint is:
  *
  * constructor -> onStart -> receive* -> onStop
  *

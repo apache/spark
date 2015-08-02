@@ -17,9 +17,11 @@
 # limitations under the License.
 #
 
-# Starts the external shuffle server on the machine this script is executed on.
+# Starts the Mesos external shuffle server on the machine this script is executed on.
+# The Mesos external shuffle server detects when an application exits and automatically
+# cleans up its shuffle files.
 #
-# Usage: start-shuffle-server.sh
+# Usage: start-mesos-shuffle-server.sh
 #
 # Use the SPARK_SHUFFLE_OPTS environment variable to set shuffle server configuration.
 #

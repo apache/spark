@@ -19,6 +19,8 @@ package org.apache.spark.deploy
 
 import java.util.concurrent.CountDownLatch
 
+import org.apache.spark.network.util.TransportConf
+
 import scala.collection.JavaConversions._
 
 import org.apache.spark.{Logging, SparkConf, SecurityManager}
@@ -37,15 +39,17 @@ import org.apache.spark.util.Utils
  * Optionally requires SASL authentication in order to read. See [[SecurityManager]].
  */
 private[deploy]
-class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityManager)
+class ExternalShuffleService(
+    sparkConf: SparkConf,
+    securityManager: SecurityManager,
+    transportConf: TransportConf,
+    blockHandler: ExternalShuffleBlockHandler)
   extends Logging {
 
   private val enabled = sparkConf.getBoolean("spark.shuffle.service.enabled", false)
   private val port = sparkConf.getInt("spark.shuffle.service.port", 7337)
   private val useSasl: Boolean = securityManager.isAuthenticationEnabled()
 
-  private val transportConf = SparkTransportConf.fromSparkConf(sparkConf, numUsableCores = 0)
-  protected val blockHandler = new ExternalShuffleBlockHandler(transportConf)
   private val transportContext: TransportContext = new TransportContext(transportConf, blockHandler)
 
   private var server: TransportServer = _
@@ -100,7 +104,9 @@ object ExternalShuffleService extends Logging {
     // we override this value since this service is started from the command line
     // and we assume the user really wants it to be running
     sparkConf.set("spark.shuffle.service.enabled", "true")
-    server = new ExternalShuffleService(sparkConf, securityManager)
+    val transportConf = SparkTransportConf.fromSparkConf(sparkConf, numUsableCores = 0)
+    val blockHandler = new ExternalShuffleBlockHandler(transportConf)
+    server = new ExternalShuffleService(sparkConf, securityManager, transportConf, blockHandler)
     server.start()
 
     installShutdownHook()

@@ -17,76 +17,89 @@
 
 package org.apache.spark.deploy.mesos
 
+import java.net.SocketAddress
 import java.util.concurrent.CountDownLatch
 
-import scala.collection.mutable
-
 import org.apache.spark.deploy.ExternalShuffleService
-import org.apache.spark.rpc.{RpcAddress, RpcEnv, ThreadSafeRpcEndpoint}
+import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
+import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
+import org.apache.spark.network.shuffle.protocol.BlockTransferMessage
+import org.apache.spark.network.shuffle.protocol.mesos.RegisterDriver
+import org.apache.spark.network.util.TransportConf
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
-private[mesos] class MesosExternalShuffleService(conf: SparkConf, securityManager: SecurityManager)
-  extends ExternalShuffleService(conf, securityManager) {
+import scala.collection.mutable
 
-  private var rpcEnv: RpcEnv = _
 
-  override def start(): Unit = {
-    super.start()
-    val port = conf.getInt("spark.mesos.shuffle.service.port", 7327)
-    logInfo(s"Starting Mesos external shuffle service endpoint on port $port")
-    rpcEnv = RpcEnv.create(
-      MesosExternalShuffleService.SYSTEM_NAME,
-      Utils.localHostName(),
-      port,
-      conf,
-      securityManager)
-    val endpoint = new MesosExternalShuffleServiceEndpoint(rpcEnv)
-    rpcEnv.setupEndpoint(MesosExternalShuffleService.ENDPOINT_NAME, endpoint)
-  }
+/**
+ * MesosExternalShuffleServiceEndpoint is a RPC endpoint that receives
+ * registration requests from Spark drivers launched with Mesos.
+ * It detects driver termination and calls the cleanup callback to [[ExternalShuffleService]]
+ */
+private[mesos] class MesosExternalShuffleBlockHandler(transportConf: TransportConf)
+  extends ExternalShuffleBlockHandler(transportConf) with Logging {
 
-  override def stop(): Unit = {
-    rpcEnv.shutdown()
-    rpcEnv.awaitTermination()
-    super.stop()
-  }
+  // Stores a map of driver socket addresses to app ids
+  private val connectedApps = new mutable.HashMap[SocketAddress, String]
 
-  private class MesosExternalShuffleServiceEndpoint(override val rpcEnv: RpcEnv)
-    extends ThreadSafeRpcEndpoint with Logging {
-
-    // Stores a map of driver rpc addresses to app ids
-    private val connectedApps = new mutable.HashMap[RpcAddress, String]
-
-    override def receive: PartialFunction[Any, Unit] = {
-      case RegisterMesosDriver(appId, address) =>
+  protected override def handleMessage(
+      message: BlockTransferMessage,
+      client: TransportClient,
+      callback: RpcResponseCallback): Unit = {
+    message match {
+      case RegisterDriverParam(appId) =>
+        val address = client.getSocketAddress()
         logDebug(s"Received registration request from app $appId, address $address")
         if (connectedApps.contains(address)) {
           val existingAppId: String = connectedApps(address)
           if (!existingAppId.equals(appId)) {
             logError(s"A new app id $appId has connected to existing address $address" +
-                     s", removing registered app $existingAppId")
-            blockHandler.applicationRemoved(existingAppId, true)
+              s", removing registered app $existingAppId")
+            applicationRemoved(existingAppId, true)
           }
-        } else {
-          connectedApps(address) = appId
         }
+        connectedApps(address) = appId
+        callback.onSuccess(new Array[Byte](0))
+      case _ => super.handleMessage(message, client, callback)
     }
+  }
 
-    override def onDisconnected(remoteAddress: RpcAddress): Unit = {
-      logDebug(s"Received disconnect from $remoteAddress")
-      if (connectedApps.contains(remoteAddress)) {
-        blockHandler.applicationRemoved(connectedApps(remoteAddress), true)
-        connectedApps.remove(remoteAddress)
-      } else {
-        logWarning(s"Address $remoteAddress not found in mesos shuffle service")
-      }
+  override def connectionTerminated(client: TransportClient): Unit = {
+    val address = client.getSocketAddress()
+    if (connectedApps.contains(address)) {
+      val appId = connectedApps(address)
+      logInfo(s"Application $appId disconnected (address was $address)")
+      applicationRemoved(appId, true)
+      connectedApps.remove(address)
+    } else {
+      logWarning(s"Address $address not found in mesos shuffle service")
     }
   }
 }
 
-case class RegisterMesosDriver(appId: String, address: RpcAddress)
+/**
+ * An extractor object for matching RegisterDriver message.
+ */
+private[mesos] object RegisterDriverParam {
+  def unapply(r: RegisterDriver): Option[String] = Some(r.getAppId())
+}
 
-object MesosExternalShuffleService extends Logging {
+/**
+ * MesosExternalShuffleService wraps [[ExternalShuffleService]] which provides an additional
+ * endpoint for drivers to associate with. This allows the shuffle service to detect when
+ * a driver is terminated and can further clean up the cached shuffle data.
+ */
+private[mesos] class MesosExternalShuffleService(
+    conf: SparkConf,
+    securityManager: SecurityManager,
+    transportConf: TransportConf)
+  extends ExternalShuffleService(
+    conf, securityManager, transportConf, new MesosExternalShuffleBlockHandler(transportConf)) {
+}
+
+private[spark] object MesosExternalShuffleService extends Logging {
   val SYSTEM_NAME = "mesosExternalShuffleService"
   val ENDPOINT_NAME = "mesosExternalShuffleServiceEndpoint"
 
@@ -103,7 +116,9 @@ object MesosExternalShuffleService extends Logging {
     // we override this value since this service is started from the command line
     // and we assume the user really wants it to be running
     sparkConf.set("spark.shuffle.service.enabled", "true")
-    server = new MesosExternalShuffleService(sparkConf, securityManager)
+    val transportConf = SparkTransportConf.fromSparkConf(sparkConf, numUsableCores = 0)
+    server = new MesosExternalShuffleService(
+      sparkConf, securityManager, transportConf)
     server.start()
 
     installShutdownHook()

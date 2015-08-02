@@ -17,28 +17,26 @@
 
 package org.apache.spark.deploy.worker
 
-import java.io.File
-import java.io.IOException
+import java.io.{File, IOException}
 import java.text.SimpleDateFormat
-import java.util.{UUID, Date}
-import java.util.concurrent._
-import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
+import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture, _}
+import java.util.{Date, UUID}
 
-import scala.collection.JavaConversions._
+import org.apache.spark.deploy.DeployMessages._
+import org.apache.spark.deploy.master.{DriverState, Master}
+import org.apache.spark.deploy.worker.ui.WorkerWebUI
+import org.apache.spark.deploy.{Command, ExecutorDescription, ExecutorState, ExternalShuffleService}
+import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
+import org.apache.spark.rpc._
+import org.apache.spark.util.{SignalLogger, ThreadUtils, Utils}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
+
 import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
 import scala.util.Random
 import scala.util.control.NonFatal
-
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
-import org.apache.spark.deploy.{Command, ExecutorDescription, ExecutorState}
-import org.apache.spark.deploy.DeployMessages._
-import org.apache.spark.deploy.ExternalShuffleService
-import org.apache.spark.deploy.master.{DriverState, Master}
-import org.apache.spark.deploy.worker.ui.WorkerWebUI
-import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.rpc._
-import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
 
 private[deploy] class Worker(
     override val rpcEnv: RpcEnv,
@@ -127,8 +125,11 @@ private[deploy] class Worker(
   val retainedDrivers = conf.getInt("spark.worker.ui.retainedDrivers",
     WorkerWebUI.DEFAULT_RETAINED_DRIVERS)
 
+  private val transportConf = SparkTransportConf.fromSparkConf(conf, numUsableCores = 0)
+
   // The shuffle service is not actually started unless configured.
-  private val shuffleService = new ExternalShuffleService(conf, securityMgr)
+  private val shuffleService = new ExternalShuffleService(
+    conf, securityMgr, transportConf, new ExternalShuffleBlockHandler(transportConf))
 
   private val publicAddress = {
     val envVar = conf.getenv("SPARK_PUBLIC_DNS")
