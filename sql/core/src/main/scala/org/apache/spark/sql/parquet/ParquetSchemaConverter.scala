@@ -134,7 +134,7 @@ private[parquet] class ParquetSchemaConverter(
       val precision = field.getDecimalMetadata.getPrecision
       val scale = field.getDecimalMetadata.getScale
 
-      ParquetSchemaConverter.analysisRequire(
+      ParquetSchemaConverter.checkConversionRequirement(
         maxPrecision == -1 || 1 <= precision && precision <= maxPrecision,
         s"Invalid decimal precision: $typeName cannot store $precision digits (max $maxPrecision)")
 
@@ -168,7 +168,7 @@ private[parquet] class ParquetSchemaConverter(
         }
 
       case INT96 =>
-        ParquetSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.checkConversionRequirement(
           assumeInt96IsTimestamp,
           "INT96 is not supported unless it's interpreted as timestamp. " +
             s"Please try to set ${SQLConf.PARQUET_INT96_AS_TIMESTAMP.key} to true.")
@@ -210,11 +210,11 @@ private[parquet] class ParquetSchemaConverter(
       //
       // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
       case LIST =>
-        ParquetSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.checkConversionRequirement(
           field.getFieldCount == 1, s"Invalid list type $field")
 
         val repeatedType = field.getType(0)
-        ParquetSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.checkConversionRequirement(
           repeatedType.isRepetition(REPEATED), s"Invalid list type $field")
 
         if (isElementType(repeatedType, field.getName)) {
@@ -230,17 +230,17 @@ private[parquet] class ParquetSchemaConverter(
       // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules-1
       // scalastyle:on
       case MAP | MAP_KEY_VALUE =>
-        ParquetSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.checkConversionRequirement(
           field.getFieldCount == 1 && !field.getType(0).isPrimitive,
           s"Invalid map type: $field")
 
         val keyValueType = field.getType(0).asGroupType()
-        ParquetSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.checkConversionRequirement(
           keyValueType.isRepetition(REPEATED) && keyValueType.getFieldCount == 2,
           s"Invalid map type: $field")
 
         val keyType = keyValueType.getType(0)
-        ParquetSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.checkConversionRequirement(
           keyType.isPrimitive,
           s"Map key type is expected to be a primitive type, but found: $keyType")
 
@@ -546,7 +546,7 @@ private[parquet] object ParquetSchemaConverter {
 
   def checkFieldName(name: String): Unit = {
     // ,;{}()\n\t= and space are special characters in Parquet schema
-    analysisRequire(
+    checkConversionRequirement(
       !name.matches(".*[ ,;{}()\n\t=].*"),
       s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\\n\\t=".
          |Please use alias to rename it.
@@ -558,7 +558,7 @@ private[parquet] object ParquetSchemaConverter {
     schema
   }
 
-  def analysisRequire(f: => Boolean, message: String): Unit = {
+  def checkConversionRequirement(f: => Boolean, message: String): Unit = {
     if (!f) {
       throw new AnalysisException(message)
     }
