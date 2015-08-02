@@ -64,17 +64,17 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
               "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
               "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
     fitIntercept = Param(Params._dummy(), "fitIntercept", "whether to fit an intercept term.")
-    threshold = Param(Params._dummy(), "threshold",
-                      "threshold in binary classification prediction, in range [0, 1].")
+    thresholds = Param(Params._dummy(), "thresholds",
+                      "array of thresholds in classification")
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                 threshold=0.5, probabilityCol="probability"):
+                 threshold=None, thresholds=None, probabilityCol="probability"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                 threshold=0.5, probabilityCol="probability")
+                 threshold=None, thresholds=None, probabilityCol="probability")
         """
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -88,23 +88,26 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         #: param for whether to fit an intercept term.
         self.fitIntercept = Param(self, "fitIntercept", "whether to fit an intercept term.")
         #: param for threshold in binary classification prediction, in range [0, 1].
-        self.threshold = Param(self, "threshold",
-                               "threshold in binary classification prediction, in range [0, 1].")
+        self.thresholds = Param(self, "thresholds",
+                               "thresholds in classification")
         self._setDefault(maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1E-6,
-                         fitIntercept=True, threshold=0.5)
+                         fitIntercept=True, thresholds=[0.5, 0.5])
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                  threshold=0.5, probabilityCol="probability"):
+                  threshold=None, thresholds=None, probabilityCol="probability"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                 threshold=0.5, probabilityCol="probability")
+                 threshold=None, probabilityCol="probability")
         Sets params for logistic regression.
         """
+        # Under the hood we use thresholds so translate threshold to thresholds if applicable
+        if thresholds is None and threshold is not None:
+            kwargs[thresholds] = [threshold, 1-threshold]
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
@@ -139,16 +142,23 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     def setThreshold(self, value):
         """
-        Sets the value of :py:attr:`threshold`.
+        Sets the value of :py:attr:`thresholds` using [value, 1-value].
         """
-        self._paramMap[self.threshold] = value
+        return self.setThresholds([value, 1-value])
+
+    def setThresholds(self, value):
+        """
+        Sets the value of :py:attr:`thresholds`.
+        """
+        self._paramMap[self.thresholds] = value
         return self
 
-    def getThreshold(self):
+
+    def getThresholds(self):
         """
-        Gets the value of threshold or its default value.
+        Gets the value of thresholds or its default value.
         """
-        return self.getOrDefault(self.threshold)
+        return self.getOrDefault(self.thresholds)
 
 
 class LogisticRegressionModel(JavaModel):
