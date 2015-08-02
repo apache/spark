@@ -107,8 +107,8 @@ private[sql] trait ParquetTest extends SQLTestUtils { this: SparkFunSuite =>
   }
 
   def writeMetadata(schema: StructType, path: Path, configuration: Configuration): Unit = {
-    val parquetSchema = new CatalystSchemaConverter(configuration).convert(schema)
-    val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> schema.json).asJava
+    val parquetSchema = new ParquetSchemaConverter(configuration).convert(schema)
+    val extraMetadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> schema.json).asJava
     val createdBy = s"Apache Spark ${org.apache.spark.SPARK_VERSION}"
     val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, createdBy)
     val parquetMetadata = new ParquetMetadata(fileMetadata, Seq.empty[BlockMetaData].asJava)

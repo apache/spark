@@ -25,7 +25,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition._
 import org.apache.parquet.schema._
 
-import org.apache.spark.sql.parquet.CatalystSchemaConverter.{MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64, maxPrecisionForBytes, minBytesForPrecision}
+import org.apache.spark.sql.parquet.ParquetSchemaConverter.{MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64, maxPrecisionForBytes, minBytesForPrecision}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, SQLConf}
 
@@ -54,7 +54,7 @@ import org.apache.spark.sql.{AnalysisException, SQLConf}
  *        backwards-compatible with these settings.  If this argument is set to `false`, we fallback
  *        to old style non-standard behaviors.
  */
-private[parquet] class CatalystSchemaConverter(
+private[parquet] class ParquetSchemaConverter(
     private val assumeBinaryIsString: Boolean,
     private val assumeInt96IsTimestamp: Boolean,
     private val followParquetFormatSpec: Boolean) {
@@ -136,7 +136,7 @@ private[parquet] class CatalystSchemaConverter(
       val precision = field.getDecimalMetadata.getPrecision
       val scale = field.getDecimalMetadata.getScale
 
-      CatalystSchemaConverter.analysisRequire(
+      ParquetSchemaConverter.analysisRequire(
         maxPrecision == -1 || 1 <= precision && precision <= maxPrecision,
         s"Invalid decimal precision: $typeName cannot store $precision digits (max $maxPrecision)")
 
@@ -170,7 +170,7 @@ private[parquet] class CatalystSchemaConverter(
         }
 
       case INT96 =>
-        CatalystSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.analysisRequire(
           assumeInt96IsTimestamp,
           "INT96 is not supported unless it's interpreted as timestamp. " +
             s"Please try to set ${SQLConf.PARQUET_INT96_AS_TIMESTAMP.key} to true.")
@@ -212,11 +212,11 @@ private[parquet] class CatalystSchemaConverter(
       //
       // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
       case LIST =>
-        CatalystSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.analysisRequire(
           field.getFieldCount == 1, s"Invalid list type $field")
 
         val repeatedType = field.getType(0)
-        CatalystSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.analysisRequire(
           repeatedType.isRepetition(REPEATED), s"Invalid list type $field")
 
         if (isElementType(repeatedType, field.getName)) {
@@ -232,17 +232,17 @@ private[parquet] class CatalystSchemaConverter(
       // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules-1
       // scalastyle:on
       case MAP | MAP_KEY_VALUE =>
-        CatalystSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.analysisRequire(
           field.getFieldCount == 1 && !field.getType(0).isPrimitive,
           s"Invalid map type: $field")
 
         val keyValueType = field.getType(0).asGroupType()
-        CatalystSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.analysisRequire(
           keyValueType.isRepetition(REPEATED) && keyValueType.getFieldCount == 2,
           s"Invalid map type: $field")
 
         val keyType = keyValueType.getType(0)
-        CatalystSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.analysisRequire(
           keyType.isPrimitive,
           s"Map key type is expected to be a primitive type, but found: $keyType")
 
@@ -325,7 +325,7 @@ private[parquet] class CatalystSchemaConverter(
   }
 
   private def convertField(field: StructField, repetition: Type.Repetition): Type = {
-    CatalystSchemaConverter.checkFieldName(field.name)
+    ParquetSchemaConverter.checkFieldName(field.name)
 
     field.dataType match {
       // ===================
@@ -540,7 +540,7 @@ private[parquet] class CatalystSchemaConverter(
 }
 
 
-private[parquet] object CatalystSchemaConverter {
+private[parquet] object ParquetSchemaConverter {
   def checkFieldName(name: String): Unit = {
     // ,;{}()\n\t= and space are special characters in Parquet schema
     analysisRequire(

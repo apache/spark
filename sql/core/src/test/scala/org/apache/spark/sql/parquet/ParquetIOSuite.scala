@@ -282,7 +282,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)))
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)))
 
-      val expectedSchema = new CatalystSchemaConverter(configuration).convert(schema)
+      val expectedSchema = new ParquetSchemaConverter(configuration).convert(schema)
       val actualSchema = readFooter(path, configuration).getFileMetaData.getSchema
 
       actualSchema.checkContains(expectedSchema)
@@ -346,7 +346,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
       """.stripMargin)
 
     withTempPath { location =>
-      val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
+      val extraMetadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
       val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, "Spark")
       val path = new Path(location.getCanonicalPath)
 

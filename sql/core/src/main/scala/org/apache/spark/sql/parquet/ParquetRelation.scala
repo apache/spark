@@ -228,8 +228,8 @@ private[sql] class ParquetRelation(
     // bundled with `ParquetOutputFormat[Row]`.
     job.setOutputFormatClass(classOf[ParquetOutputFormat[Row]])
 
-    ParquetOutputFormat.setWriteSupportClass(job, classOf[CatalystWriteSupport])
-    CatalystWriteSupport.setSchema(dataSchema, conf)
+    ParquetOutputFormat.setWriteSupportClass(job, classOf[ParquetWriteSupport])
+    ParquetWriteSupport.setSchema(dataSchema, conf)
 
     // Sets flag for Parquet schema converter (converting Catalyst schema to Parquet schema)
     conf.set(
@@ -474,7 +474,7 @@ private[sql] object ParquetRelation extends Logging {
       assumeBinaryIsString: Boolean,
       assumeInt96IsTimestamp: Boolean)(job: Job): Unit = {
     val conf = job.getConfiguration
-    conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[CatalystReadSupport].getName)
+    conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
 
     // Try to push down filters when filter push-down is enabled.
     if (parquetFilterPushDown) {
@@ -487,14 +487,14 @@ private[sql] object ParquetRelation extends Logging {
         .foreach(ParquetInputFormat.setFilterPredicate(conf, _))
     }
 
-    conf.set(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA, {
+    conf.set(ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA, {
       val requestedSchema = StructType(requiredColumns.map(dataSchema(_)))
-      CatalystSchemaConverter.checkFieldNames(requestedSchema).json
+      ParquetSchemaConverter.checkFieldNames(requestedSchema).json
     })
 
     conf.set(
-      CatalystWriteSupport.SPARK_ROW_SCHEMA,
-      CatalystSchemaConverter.checkFieldNames(dataSchema).json)
+      ParquetWriteSupport.SPARK_ROW_SCHEMA,
+      ParquetSchemaConverter.checkFieldNames(dataSchema).json)
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
     conf.setBoolean(SQLConf.PARQUET_CACHE_METADATA.key, useMetadataCache)
@@ -518,7 +518,7 @@ private[sql] object ParquetRelation extends Logging {
       footers: Seq[Footer], sqlContext: SQLContext): Option[StructType] = {
 
     def parseParquetSchema(schema: MessageType): StructType = {
-      val converter = new CatalystSchemaConverter(
+      val converter = new ParquetSchemaConverter(
         sqlContext.conf.isParquetBinaryAsString,
         sqlContext.conf.isParquetBinaryAsString,
         sqlContext.conf.followParquetFormatSpec)
@@ -532,7 +532,7 @@ private[sql] object ParquetRelation extends Logging {
       val serializedSchema = metadata
         .getKeyValueMetaData
         .toMap
-        .get(CatalystReadSupport.SPARK_METADATA_KEY)
+        .get(ParquetReadSupport.SPARK_METADATA_KEY)
       if (serializedSchema.isEmpty) {
         // Falls back to Parquet schema if no Spark SQL schema found.
         Some(parseParquetSchema(metadata.getSchema))
@@ -692,7 +692,7 @@ private[sql] object ParquetRelation extends Logging {
 
           // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
           val converter =
-            new CatalystSchemaConverter(
+            new ParquetSchemaConverter(
               assumeBinaryIsString = assumeBinaryIsString,
               assumeInt96IsTimestamp = assumeInt96IsTimestamp,
               followParquetFormatSpec = followParquetFormatSpec)
@@ -711,12 +711,12 @@ private[sql] object ParquetRelation extends Logging {
    * a [[StructType]] converted from the [[MessageType]] stored in this footer.
    */
   def readSchemaFromFooter(
-      footer: Footer, converter: CatalystSchemaConverter): StructType = {
+      footer: Footer, converter: ParquetSchemaConverter): StructType = {
     val fileMetaData = footer.getParquetMetadata.getFileMetaData
     fileMetaData
       .getKeyValueMetaData
       .toMap
-      .get(CatalystReadSupport.SPARK_METADATA_KEY)
+      .get(ParquetReadSupport.SPARK_METADATA_KEY)
       .flatMap(deserializeSchemaString)
       .getOrElse(converter.convert(fileMetaData.getSchema))
   }

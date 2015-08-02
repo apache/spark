@@ -34,10 +34,10 @@ import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificMutableRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.parquet.CatalystSchemaConverter.{MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64, minBytesForPrecision}
+import org.apache.spark.sql.parquet.ParquetSchemaConverter.{MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64, minBytesForPrecision}
 import org.apache.spark.sql.types._
 
-private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] with Logging {
+private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to the record consumer.
   // Here we are using `SpecializedGetters` rather than `InternalRow` so that we can directly access
   // data in `ArrayData` without the help of `SpecificMutableRow`.
@@ -62,7 +62,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   private val decimalBuffer = new Array[Byte](minBytesForPrecision(DecimalType.MAX_PRECISION))
 
   override def init(configuration: Configuration): WriteContext = {
-    val schemaString = configuration.get(CatalystWriteSupport.SPARK_ROW_SCHEMA)
+    val schemaString = configuration.get(ParquetWriteSupport.SPARK_ROW_SCHEMA)
     schema = StructType.fromString(schemaString)
     rootFieldWriters = schema.map(_.dataType).map(makeWriter)
 
@@ -72,8 +72,8 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
         SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key,
         SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.defaultValue.get)
 
-    val messageType = new CatalystSchemaConverter(configuration).convert(schema)
-    val metadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> schemaString).asJava
+    val messageType = new ParquetSchemaConverter(configuration).convert(schema)
+    val metadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> schemaString).asJava
 
     logDebug(
       s"""Initialized Parquet WriteSupport with Catalyst schema:
@@ -261,13 +261,15 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     val elementWriter = makeWriter(elementType)
 
     (row: SpecializedGetters, ordinal: Int) => {
+      val array = row.getArray(ordinal)
       consumeGroup {
-        val array = row.getArray(ordinal)
+        // Only creates the repeated field if the array is non-empty.
         if (array.numElements() > 0) {
           consumeField(repeatedGroupName, 0) {
             var i = 0
             while (i < array.numElements()) {
               consumeGroup {
+                // Only creates the element field if the current array element is not null.
                 if (!array.isNullAt(i)) {
                   consumeField(elementFieldName, 0)(elementWriter.apply(array, i))
                 }
@@ -285,8 +287,9 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     val elementWriter = makeWriter(elementType)
 
     (row: SpecializedGetters, ordinal: Int) => {
+      val array = row.getArray(ordinal)
       consumeGroup {
-        val array = row.getArray(ordinal)
+        // Only creates the repeated field if the array is non-empty.
         if (array.numElements() > 0) {
           consumeField(repeatedFieldName, 0) {
             var i = 0
@@ -308,8 +311,9 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     val mutableRow = new SpecificMutableRow(keyType :: valueType :: Nil)
 
     (row: SpecializedGetters, ordinal: Int) => {
+      val map = row.getMap(ordinal)
       consumeGroup {
-        val map = row.getMap(ordinal)
+        // Only creates the repeated field if the map is non-empty.
         if (map.numElements() > 0) {
           consumeField(repeatedGroupName, 0) {
             var i = 0
@@ -317,6 +321,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
               consumeGroup {
                 mutableRow.update(0, map.keyArray().get(i, keyType))
                 consumeField("key", 0)(keyWriter.apply(mutableRow, 0))
+                // Only creates the "value" field if the value if non-empty
                 if (!map.valueArray().isNullAt(i)) {
                   mutableRow.update(1, map.valueArray().get(i, valueType))
                   consumeField("value", 1)(valueWriter.apply(mutableRow, 1))
@@ -349,11 +354,11 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   }
 }
 
-private[parquet] object CatalystWriteSupport {
+private[parquet] object ParquetWriteSupport {
   val SPARK_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.attributes"
 
   def setSchema(schema: StructType, configuration: Configuration): Unit = {
-    schema.map(_.name).foreach(CatalystSchemaConverter.checkFieldName)
+    schema.map(_.name).foreach(ParquetSchemaConverter.checkFieldName)
     configuration.set(SPARK_ROW_SCHEMA, schema.json)
     configuration.set(
       ParquetOutputFormat.WRITER_VERSION,

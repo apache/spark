@@ -58,7 +58,7 @@ abstract class ParquetSchemaTest extends SparkFunSuite with ParquetTest {
       int96AsTimestamp: Boolean = true,
       followParquetFormatSpec: Boolean = false,
       isThriftDerived: Boolean = false): Unit = {
-    val converter = new CatalystSchemaConverter(
+    val converter = new ParquetSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
       followParquetFormatSpec = followParquetFormatSpec)
@@ -83,7 +83,7 @@ abstract class ParquetSchemaTest extends SparkFunSuite with ParquetTest {
       int96AsTimestamp: Boolean = true,
       followParquetFormatSpec: Boolean = false,
       isThriftDerived: Boolean = false): Unit = {
-    val converter = new CatalystSchemaConverter(
+    val converter = new ParquetSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
       followParquetFormatSpec = followParquetFormatSpec)
