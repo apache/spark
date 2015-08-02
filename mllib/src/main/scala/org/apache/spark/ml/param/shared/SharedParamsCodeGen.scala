@@ -49,7 +49,7 @@ private[shared] object SharedParamsCodeGen {
         isValid = "ParamValidators.inRange(0, 1)", finalMethods = false),
       ParamDesc[Array[Double]]("thresholds",
         "thresholds in multi-class classification prediction, must be array with size of classes.",
-        Some("null"), finalMethods = false),
+        finalMethods = false),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
