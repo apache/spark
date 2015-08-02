@@ -142,25 +142,25 @@ class ExecutorRunnable(
 
     // Set the JVM memory
     val executorMemoryString = executorMemory + "m"
-    javaOpts += YarnSparkHadoopUtil.escapeForShell("-Xms" + executorMemoryString)
-    javaOpts += YarnSparkHadoopUtil.escapeForShell("-Xmx" + executorMemoryString)
+    javaOpts += "-Xms" + executorMemoryString
+    javaOpts += "-Xmx" + executorMemoryString
 
     // Set extra Java options for the executor, if defined
     sys.props.get("spark.executor.extraJavaOptions").map(
-      javaOpts ++= Utils.splitCommandString(_).map(YarnSparkHadoopUtil.escapeForShell)
+      javaOpts ++= Utils.splitCommandString(_)
     )
     sys.env.get("SPARK_JAVA_OPTS").foreach { opts =>
-      javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+      javaOpts ++= Utils.splitCommandString(opts)
     }
     sys.props.get("spark.executor.extraLibraryPath").foreach { p =>
       prefixEnv = Some(Client.getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(p))))
     }
 
-    javaOpts += YarnSparkHadoopUtil.escapeForShell("-Djava.io.tmpdir=" +
+    javaOpts += "-Djava.io.tmpdir=" +
       new Path(
         YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
         YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR
-      ))
+      )
 
     // Certain configs need to be passed here because they are needed before the Executor
     // registers with the Scheduler and transfers the spark configs. Since the Executor backend
@@ -168,7 +168,7 @@ class ExecutorRunnable(
     // authentication settings.
     sparkConf.getAll
       .filter { case (k, v) => SparkConf.isExecutorStartupConf(k) }
-      .foreach { case (k, v) => javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v") }
+      .foreach { case (k, v) => javaOpts += s"-D$k=$v" }
 
     // Commenting it out for now - so that people can refer to the properties if required. Remove
     // it once cpuset version is pushed out.
@@ -197,7 +197,7 @@ class ExecutorRunnable(
     */
 
     // For log4j configuration to reference
-    javaOpts += YarnSparkHadoopUtil.escapeForShell("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
+    javaOpts += "-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR
 
     val userClassPath = Client.getUserClasspath(sparkConf).flatMap { uri =>
       val absPath =
@@ -224,17 +224,14 @@ class ExecutorRunnable(
         "--executor-id", slaveId.toString,
         "--hostname", hostname.toString,
         "--cores", executorCores.toString,
-        "--app-id", appId)
-        .map(YarnSparkHadoopUtil.escapeForShell) ++
-      userClassPath
-        .map(YarnSparkHadoopUtil.escapeForShell) ++
+        "--app-id", appId) ++
+      userClassPath ++
       Seq(
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
         "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
-        .map(YarnSparkHadoopUtil.escapeForShell)
 
     // TODO: it would be nicer to just make sure there are no null commands here
-    commands.map(s => if (s == null) "null" else s).toList
+    commands.map(s => if (s == null) "null" else s).map(YarnSparkHadoopUtil.escapeForShell).toList
   }
 
   private def setupDistributedCache(
