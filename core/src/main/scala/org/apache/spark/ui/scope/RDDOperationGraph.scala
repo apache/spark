@@ -180,11 +180,11 @@ private[ui] object RDDOperationGraph extends Logging {
     s"""${node.id} [label="${node.name} [${node.id}]"]"""
   }
 
-  /** Return the dot representation of a subgraph in an RDDOperationGraph. */
+  /** Update the dot representation of the RDDOperationGraph in cluster to subgraph. */
   private def makeDotSubgraph(
-    subgraph: StringBuilder,
-    cluster: RDDOperationCluster,
-    indent: String): Unit = {
+      subgraph: StringBuilder,
+      cluster: RDDOperationCluster,
+      indent: String): Unit = {
     subgraph.append(indent).append(s"subgraph cluster${cluster.id} {\n")
     subgraph.append(indent).append(s"""  label="${cluster.name}";\n""")
     cluster.childNodes.foreach { node =>
