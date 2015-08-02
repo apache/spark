@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.scalacheck.Gen
 import org.scalactic.TripleEqualsSupport.Spread
 
 import org.apache.spark.SparkFunSuite
@@ -243,6 +244,16 @@ trait ExpressionEvalHelper extends PropertyGenerator {
     ) { (l1: Literal, l2: Literal, l3: Literal) =>
       val expr = ctor.newInstance(l1, l2, l3).asInstanceOf[Expression]
       cmpInterpretWithCodegen(EmptyRow, expr)
+    }
+  }
+
+  def checkSeqConsistency(dt: DataType, clazz: Class[_], leastNumOfElements: Int = 0): Unit = {
+    val ctor = clazz.getDeclaredConstructor(classOf[Seq[Expression]])
+    forAll (Gen.listOf(randomGen(dt))) { (literals: Seq[Literal]) =>
+      whenever(literals.size >= leastNumOfElements) {
+        val expr = ctor.newInstance(literals).asInstanceOf[Expression]
+        cmpInterpretWithCodegen(EmptyRow, expr)
+      }
     }
   }
 

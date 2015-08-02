@@ -42,10 +42,16 @@ trait PropertyGenerator extends GeneratorDrivenPropertyChecks with Matchers {
     for { l <- Arbitrary.arbLong.arbitrary } yield Literal.create(l, LongType)
 
   lazy val floatLiteralGen: Gen[Literal] =
-    for { f <- Arbitrary.arbFloat.arbitrary } yield Literal.create(f, FloatType)
+    for {
+      f <- Gen.chooseNum(Float.MinValue / 2, Float.MaxValue / 2,
+        Float.NaN, Float.PositiveInfinity, Float.NegativeInfinity)
+    } yield Literal.create(f, FloatType)
 
   lazy val doubleLiteralGen: Gen[Literal] =
-    for { d <- Arbitrary.arbDouble.arbitrary } yield Literal.create(d, DoubleType)
+    for {
+      f <- Gen.chooseNum(Double.MinValue / 2, Double.MaxValue / 2,
+        Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity)
+    } yield Literal.create(f, DoubleType)
 
   // TODO: decimal type
 
@@ -54,7 +60,7 @@ trait PropertyGenerator extends GeneratorDrivenPropertyChecks with Matchers {
 
   lazy val binaryLiteralGen: Gen[Literal] =
     for { ab <- Gen.listOf[Byte](Arbitrary.arbByte.arbitrary) }
-      yield Literal.create(ab, BinaryType)
+      yield Literal.create(ab.toArray, BinaryType)
 
   lazy val booleanLiteralGen: Gen[Literal] =
     for { b <- Arbitrary.arbBool.arbitrary } yield Literal.create(b, BooleanType)
@@ -74,8 +80,8 @@ trait PropertyGenerator extends GeneratorDrivenPropertyChecks with Matchers {
   // for example, the `times` arguments for StringRepeat would hang the test 'forever'
   // if it's tested against Int.MaxValue by ScalaCheck, therefore, use values from a limited
   // range is more reasonable
-  val limitedIntegerLiteralGen: Gen[Literal] =
-    for {i <- Gen.choose(-100, 100)} yield Literal.create(i, IntegerType)
+  lazy val limitedIntegerLiteralGen: Gen[Literal] =
+    for { i <- Gen.choose(-100, 100) } yield Literal.create(i, IntegerType)
 
   def randomGen(dt: DataType): Gen[Literal] = {
     dt match {

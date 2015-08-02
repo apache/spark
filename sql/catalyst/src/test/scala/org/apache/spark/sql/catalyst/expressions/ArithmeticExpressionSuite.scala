@@ -52,6 +52,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Add(positiveShortLit, negativeShortLit), -1.toShort)
     checkEvaluation(Add(positiveIntLit, negativeIntLit), -1)
     checkEvaluation(Add(positiveLongLit, negativeLongLit), -1L)
+
     DataTypeTestUtils.numericAndInterval.foreach { tpe =>
       checkConsistency(tpe, tpe, classOf[Add])
     }
@@ -74,6 +75,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(UnaryMinus(negativeIntLit), - negativeInt)
     checkEvaluation(UnaryMinus(positiveLongLit), - positiveLong)
     checkEvaluation(UnaryMinus(negativeLongLit), - negativeLong)
+
     DataTypeTestUtils.numericAndInterval.foreach { tpe =>
       checkConsistency(tpe, classOf[UnaryMinus])
     }
@@ -91,6 +93,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       (positiveShort - negativeShort).toShort)
     checkEvaluation(Subtract(positiveIntLit, negativeIntLit), positiveInt - negativeInt)
     checkEvaluation(Subtract(positiveLongLit, negativeLongLit), positiveLong - negativeLong)
+
     DataTypeTestUtils.numericAndInterval.foreach { tpe =>
       checkConsistency(tpe, tpe, classOf[Subtract])
     }
@@ -108,6 +111,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       (positiveShort * negativeShort).toShort)
     checkEvaluation(Multiply(positiveIntLit, negativeIntLit), positiveInt * negativeInt)
     checkEvaluation(Multiply(positiveLongLit, negativeLongLit), positiveLong * negativeLong)
+
     DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
       checkConsistency(tpe, tpe, classOf[Multiply])
     }
@@ -123,6 +127,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Divide(left, Literal.create(null, right.dataType)), null)
       checkEvaluation(Divide(left, Literal(convert(0))), null)  // divide by zero
     }
+
     DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
       checkConsistency(tpe, tpe, classOf[Divide])
     }
@@ -159,9 +164,15 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Remainder(negativeIntLit, negativeIntLit), 0)
     checkEvaluation(Remainder(positiveLongLit, positiveLongLit), 0L)
     checkEvaluation(Remainder(negativeLongLit, negativeLongLit), 0L)
+
     DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
       checkConsistency(tpe, tpe, classOf[Remainder])
     }
+    // TODO: the following lines would fail the test due to inconsistency result of interpret
+    // and codegen for remainder between giant values, seems like a numeric stability issue
+    // DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
+    //  checkConsistency(tpe, tpe, classOf[Remainder])
+    // }
   }
 
   test("Abs") {
@@ -179,6 +190,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Abs(negativeIntLit), - negativeInt)
     checkEvaluation(Abs(positiveLongLit), positiveLong)
     checkEvaluation(Abs(negativeLongLit), - negativeLong)
+
     DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
       checkConsistency(tpe, classOf[Abs])
     }
@@ -196,6 +208,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(MaxOf(positiveShortLit, negativeShortLit), (positiveShort).toShort)
     checkEvaluation(MaxOf(positiveIntLit, negativeIntLit), positiveInt)
     checkEvaluation(MaxOf(positiveLongLit, negativeLongLit), positiveLong)
+
     DataTypeTestUtils.ordered.foreach { tpe =>
       checkConsistency(tpe, tpe, classOf[MaxOf])
     }
@@ -220,6 +233,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(MinOf(positiveShortLit, negativeShortLit), (negativeShort).toShort)
     checkEvaluation(MinOf(positiveIntLit, negativeIntLit), negativeInt)
     checkEvaluation(MinOf(positiveLongLit, negativeLongLit), negativeLong)
+
     DataTypeTestUtils.ordered.foreach { tpe =>
       checkConsistency(tpe, tpe, classOf[MinOf])
     }
@@ -249,6 +263,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
     checkEvaluation(Pmod(positiveLong, negativeLong), positiveLong)
   }
+
   DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
     checkConsistency(tpe, tpe, classOf[MinOf])
   }

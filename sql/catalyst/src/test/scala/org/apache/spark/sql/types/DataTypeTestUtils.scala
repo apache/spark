@@ -61,6 +61,11 @@ object DataTypeTestUtils {
     numericTypeWithoutDecimal + BooleanType + TimestampType + DateType + StringType + BinaryType
 
   /**
+   * All the types that we can use in a property check
+   */
+  val propertyCheckSupported: Set[DataType] = ordered
+
+  /**
    * Instances of all [[AtomicType]]s.
    */
   val atomicTypes: Set[DataType] = numericTypes ++ Set(
