@@ -45,7 +45,7 @@ import org.apache.spark.util.StatCounter
  */
 private[regression] trait LinearRegressionParams extends PredictorParams
     with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
-    with HasFitIntercept
+    with HasFitIntercept with HasStandardization
 
 /**
  * :: Experimental ::
@@ -83,6 +83,14 @@ class LinearRegression(override val uid: String)
    */
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
   setDefault(fitIntercept -> true)
+
+  /**
+   * Set to enable scaling (standardization).
+   * Default is true.
+   * @group setParam
+   */
+  def setStandardization(value: Boolean): this.type = set(standardization, value)
+  setDefault(standardization -> true)
 
   /**
    * Set the ElasticNet mixing parameter.
@@ -165,7 +173,7 @@ class LinearRegression(override val uid: String)
     val effectiveL2RegParam = (1.0 - $(elasticNetParam)) * effectiveRegParam
 
     val costFun = new LeastSquaresCostFun(instances, yStd, yMean, $(fitIntercept),
-      featuresStd, featuresMean, effectiveL2RegParam)
+      $(standardization), featuresStd, featuresMean, effectiveL2RegParam)
 
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
       new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
@@ -464,6 +472,7 @@ private class LeastSquaresAggregator(
     labelStd: Double,
     labelMean: Double,
     fitIntercept: Boolean,
+    standardization: Boolean,
     featuresStd: Array[Double],
     featuresMean: Array[Double]) extends Serializable {
 
@@ -510,7 +519,11 @@ private class LeastSquaresAggregator(
       val localGradientSumArray = gradientSumArray
       data.foreachActive { (index, value) =>
         if (featuresStd(index) != 0.0 && value != 0.0) {
-          localGradientSumArray(index) += diff * value / featuresStd(index)
+          if (standardization) {
+            localGradientSumArray(index) += diff * value / featuresStd(index)
+          } else {
+            localGradientSumArray(index) += diff * value
+          }
         }
       }
       lossSum += diff * diff / 2.0
@@ -568,6 +581,7 @@ private class LeastSquaresCostFun(
     labelStd: Double,
     labelMean: Double,
     fitIntercept: Boolean,
+    standardization: Boolean,
     featuresStd: Array[Double],
     featuresMean: Array[Double],
     effectiveL2regParam: Double) extends DiffFunction[BDV[Double]] {
@@ -576,7 +590,7 @@ private class LeastSquaresCostFun(
     val w = Vectors.fromBreeze(weights)
 
     val leastSquaresAggregator = data.treeAggregate(new LeastSquaresAggregator(w, labelStd,
-      labelMean, fitIntercept, featuresStd, featuresMean))(
+      labelMean, fitIntercept, standardization, featuresStd, featuresMean))(
         seqOp = (c, v) => (c, v) match {
           case (aggregator, (label, features)) => aggregator.add(label, features)
         },
@@ -584,14 +598,35 @@ private class LeastSquaresCostFun(
           case (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
         })
 
-    // regVal is the sum of weight squares for L2 regularization
-    val norm = brzNorm(weights, 2.0)
-    val regVal = 0.5 * effectiveL2regParam * norm * norm
+    // If we are not doing standardization go back to unscaled weights
+    if (standardization) {
+      // regVal is the sum of weight squares for L2 regularization
+      val norm = brzNorm(weights, 2.0)
+      val regVal = 0.5 * effectiveL2regParam * norm * norm
 
-    val loss = leastSquaresAggregator.loss + regVal
-    val gradient = leastSquaresAggregator.gradient
-    axpy(effectiveL2regParam, w, gradient)
+      val loss = leastSquaresAggregator.loss + regVal
+      val gradient = leastSquaresAggregator.gradient
+      axpy(effectiveL2regParam, w, gradient)
 
-    (loss, gradient.toBreeze.asInstanceOf[BDV[Double]])
+      (loss, gradient.toBreeze.asInstanceOf[BDV[Double]])
+    } else {
+      val unscaledWeights = weights.copy
+      val len = unscaledWeights.length
+      var i = 0
+      while (i < len) {
+        unscaledWeights(i) /= featuresStd(i)
+        i += 1
+      }
+      val norm = brzNorm(unscaledWeights, 2.0)
+
+      val regVal = 0.5 * effectiveL2regParam * norm * norm
+
+      val loss = leastSquaresAggregator.loss + regVal
+      val gradient = leastSquaresAggregator.gradient
+      val mw = Vectors.dense(unscaledWeights.toArray)
+      axpy(effectiveL2regParam, mw, gradient)
+
+      (loss, gradient.toBreeze.asInstanceOf[BDV[Double]])
+    }
   }
 }
