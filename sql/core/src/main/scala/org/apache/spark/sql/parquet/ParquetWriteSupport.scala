@@ -37,6 +37,17 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.parquet.ParquetSchemaConverter.{MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64, minBytesForPrecision}
 import org.apache.spark.sql.types._
 
+/**
+ * A Parquet [[WriteSupport]] implementation that writes Catalyst [[InternalRow]]s as Parquet
+ * messages.  This class can write Parquet data in two modes:
+ *
+ *  - Standard mode: Parquet data are written in standard format defined in parquet-format spec.
+ *  - Legacy mode: Parquet data are written in legacy format compatible with Spark 1.4 and prior.
+ *
+ * This behavior can be controlled by SQL option `spark.sql.parquet.writeLegacyParquetFormat`.  The
+ * value of the option is propagated to this class by the `init()` method and its Hadoop
+ * configuration argument.
+ */
 private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to the record consumer.
   // Here we are using `SpecializedGetters` rather than `InternalRow` so that we can directly access
@@ -52,8 +63,8 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   // The Parquet `RecordConsumer` to which all `InternalRow`s are written
   private var recordConsumer: RecordConsumer = _
 
-  // Whether we should write standard Parquet data conforming to parquet-format spec or not
-  private var followParquetFormatSpec: Boolean = _
+  // Whether to write data in legacy Parquet format compatible with Spark 1.4 and prior versions
+  private var writeLegacyParquetFormat: Boolean = _
 
   // Reusable byte array used to write timestamps as Parquet INT96 values
   private val timestampBuffer = new Array[Byte](12)
@@ -65,12 +76,10 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
     val schemaString = configuration.get(ParquetWriteSupport.SPARK_ROW_SCHEMA)
     schema = StructType.fromString(schemaString)
     rootFieldWriters = schema.map(_.dataType).map(makeWriter)
-
-    assert(configuration.get(SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key) != null)
-    followParquetFormatSpec =
-      configuration.getBoolean(
-        SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key,
-        SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.defaultValue.get)
+    writeLegacyParquetFormat = {
+      assert(configuration.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key) != null)
+      configuration.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key).toBoolean
+    }
 
     val messageType = new ParquetSchemaConverter(configuration).convert(schema)
     val metadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> schemaString).asJava
@@ -141,9 +150,15 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
           recordConsumer.addBinary(Binary.fromByteArray(row.getUTF8String(ordinal).getBytes))
 
       case TimestampType =>
-        // TODO Writes `TimestampType` values as `TIMESTAMP_MICROS` once parquet-mr implements it
         (row: SpecializedGetters, ordinal: Int) => {
-          // Actually Spark SQL `TimestampType` only has microsecond precision.
+          // TODO Writes `TimestampType` values as `TIMESTAMP_MICROS` once parquet-mr implements it
+          // Currently we only support timestamps stored as INT96, which is compatible with Hive
+          // and Impala.  However, INT96 is to be deprecated.  We plan to support `TIMESTAMP_MICROS`
+          // defined in the parquet-format spec.  But up until writing, the most recent parquet-mr
+          // version (1.8.1) hasn't implemented it yet.
+
+          // NOTE: Starting from Spark 1.5, Spark SQL `TimestampType` only has microsecond
+          // precision.  Nanosecond parts of timestamp values read from INT96 are simply stripped.
           val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(row.getLong(ordinal))
           val buf = ByteBuffer.wrap(timestampBuffer)
           buf.order(ByteOrder.LITTLE_ENDIAN).putLong(timeOfDayNanos).putInt(julianDay)
@@ -162,26 +177,14 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
         (row: SpecializedGetters, ordinal: Int) =>
           consumeGroup(writeFields(row.getStruct(ordinal, t.length), t, fieldWriters))
 
-      case ArrayType(elementType, _) if followParquetFormatSpec =>
-        makeThreeLevelArrayWriter(elementType, "list", "element")
+      case t: ArrayType => makeArrayWriter(t)
 
-      case ArrayType(elementType, true) if !followParquetFormatSpec =>
-        makeThreeLevelArrayWriter(elementType, "bag", "array")
+      case t: MapType => makeMapWriter(t)
 
-      case ArrayType(elementType, false) if !followParquetFormatSpec =>
-        makeTwoLevelArrayWriter(elementType, "array")
+      case t: UserDefinedType[_] => makeWriter(t.sqlType)
 
-      case t: MapType if followParquetFormatSpec =>
-        makeMapWriter(t, "key_value")
-
-      case t: MapType if !followParquetFormatSpec =>
-        makeMapWriter(t, "map")
-
-      case t: UserDefinedType[_] =>
-        makeWriter(t.sqlType)
-
-      case _ =>
-        sys.error(s"Unsupported data type $dataType.")
+      // TODO Adds IntervalType support
+      case _ => sys.error(s"Unsupported data type $dataType.")
     }
   }
 
@@ -239,15 +242,15 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
         recordConsumer.addBinary(Binary.fromByteArray(fixedLengthBytes, 0, numBytes))
       }
 
-    followParquetFormatSpec match {
+    writeLegacyParquetFormat match {
       // Standard mode, writes decimals with precision <= 9 as INT32
-      case true if precision <= MAX_PRECISION_FOR_INT32 => int32Writer
+      case false if precision <= MAX_PRECISION_FOR_INT32 => int32Writer
 
       // Standard mode, writes decimals with precision <= 18 as INT64
-      case true if precision <= MAX_PRECISION_FOR_INT64 => int64Writer
+      case false if precision <= MAX_PRECISION_FOR_INT64 => int64Writer
 
       // Legacy mode, writes decimals with precision <= 18 as FIXED_LEN_BYTE_ARRAY
-      case false if precision <= MAX_PRECISION_FOR_INT64 => binaryWriterUsingUnscaledLong
+      case true if precision <= MAX_PRECISION_FOR_INT64 => binaryWriterUsingUnscaledLong
 
       // All other cases:
       //  - Standard mode, writes decimals with precision > 18 as FIXED_LEN_BYTE_ARRAY
@@ -256,59 +259,113 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
     }
   }
 
-  private def makeThreeLevelArrayWriter(
-      elementType: DataType, repeatedGroupName: String, elementFieldName: String): ValueWriter = {
-    val elementWriter = makeWriter(elementType)
+  def makeArrayWriter(arrayType: ArrayType): ValueWriter = {
+    val elementWriter = makeWriter(arrayType.elementType)
 
-    (row: SpecializedGetters, ordinal: Int) => {
-      val array = row.getArray(ordinal)
-      consumeGroup {
-        // Only creates the repeated field if the array is non-empty.
-        if (array.numElements() > 0) {
-          consumeField(repeatedGroupName, 0) {
-            var i = 0
-            while (i < array.numElements()) {
-              consumeGroup {
-                // Only creates the element field if the current array element is not null.
-                if (!array.isNullAt(i)) {
-                  consumeField(elementFieldName, 0)(elementWriter.apply(array, i))
+    def threeLevelArrayWriter(repeatedGroupName: String, elementFieldName: String): ValueWriter =
+      (row: SpecializedGetters, ordinal: Int) => {
+        val array = row.getArray(ordinal)
+        consumeGroup {
+          // Only creates the repeated field if the array is non-empty.
+          if (array.numElements() > 0) {
+            consumeField(repeatedGroupName, 0) {
+              var i = 0
+              while (i < array.numElements()) {
+                consumeGroup {
+                  // Only creates the element field if the current array element is not null.
+                  if (!array.isNullAt(i)) {
+                    consumeField(elementFieldName, 0)(elementWriter.apply(array, i))
+                  }
                 }
+                i += 1
               }
-              i += 1
             }
           }
         }
       }
-    }
-  }
 
-  private def makeTwoLevelArrayWriter(
-      elementType: DataType, repeatedFieldName: String): ValueWriter = {
-    val elementWriter = makeWriter(elementType)
-
-    (row: SpecializedGetters, ordinal: Int) => {
-      val array = row.getArray(ordinal)
-      consumeGroup {
-        // Only creates the repeated field if the array is non-empty.
-        if (array.numElements() > 0) {
-          consumeField(repeatedFieldName, 0) {
-            var i = 0
-            while (i < array.numElements()) {
-              elementWriter.apply(array, i)
-              i += 1
+    def twoLevelArrayWriter(repeatedFieldName: String): ValueWriter =
+      (row: SpecializedGetters, ordinal: Int) => {
+        val array = row.getArray(ordinal)
+        consumeGroup {
+          // Only creates the repeated field if the array is non-empty.
+          if (array.numElements() > 0) {
+            consumeField(repeatedFieldName, 0) {
+              var i = 0
+              while (i < array.numElements()) {
+                elementWriter.apply(array, i)
+                i += 1
+              }
             }
           }
         }
       }
+
+    (writeLegacyParquetFormat, arrayType.containsNull) match {
+      case (false, _) =>
+        // Standard mode:
+        //
+        //   <list-repetition> group <name> (LIST) {
+        //     repeated group list {
+        //                    ^~~~  repeatedGroupName
+        //       <element-repetition> <element-type> element;
+        //                                           ^~~~~~~  elementFieldName
+        //     }
+        //   }
+        threeLevelArrayWriter(repeatedGroupName = "list", elementFieldName = "element")
+
+      case (true, true) =>
+        // Legacy mode, with nullable elements:
+        //
+        //   <list-repetition> group <name> (LIST) {
+        //     optional group bag {
+        //                    ^~~  repeatedGroupName
+        //       repeated <element-type> array;
+        //                               ^~~~~ elementFieldName
+        //     }
+        //   }
+        threeLevelArrayWriter(repeatedGroupName = "bag", elementFieldName = "array")
+
+      case (true, false) =>
+        // Legacy mode, with non-nullable elements:
+        //
+        //   <list-repetition> group <name> (LIST) {
+        //     repeated <element-type> array;
+        //                             ^~~~~  repeatedFieldName
+        //   }
+        twoLevelArrayWriter(repeatedFieldName = "array")
     }
   }
 
-  private def makeMapWriter(mapType: MapType, repeatedGroupName: String): ValueWriter = {
+  private def makeMapWriter(mapType: MapType): ValueWriter = {
     val keyType = mapType.keyType
     val valueType = mapType.valueType
     val keyWriter = makeWriter(keyType)
     val valueWriter = makeWriter(valueType)
     val mutableRow = new SpecificMutableRow(keyType :: valueType :: Nil)
+    val repeatedGroupName = if (writeLegacyParquetFormat) {
+      // Legacy mode:
+      //
+      //   <map-repetition> group <name> (MAP) {
+      //     repeated group map (MAP_KEY_VALUE) {
+      //                    ^~~  repeatedGroupName
+      //       required <key-type> key;
+      //       <value-repetition> <value-type> value;
+      //     }
+      //   }
+      "map"
+    } else {
+      // Standard mode:
+      //
+      //   <map-repetition> group <name> (MAP) {
+      //     repeated group key_value {
+      //                    ^~~~~~~~~  repeatedGroupName
+      //       required <key-type> key;
+      //       <value-repetition> <value-type> value;
+      //     }
+      //   }
+      "key_value"
+    }
 
     (row: SpecializedGetters, ordinal: Int) => {
       val map = row.getMap(ordinal)
