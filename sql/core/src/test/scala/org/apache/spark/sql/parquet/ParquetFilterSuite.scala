@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.parquet
 
-import org.scalatest.BeforeAndAfterAll
 import org.apache.parquet.filter2.predicate.Operators._
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.sources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row, SQLConf}
 
@@ -40,7 +39,7 @@ import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row, SQLConf}
  * 2. `Tuple1(Option(x))` is used together with `AnyVal` types like `Int` to ensure the inferred
  *    data type is nullable.
  */
-class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
+class ParquetFilterSuite extends QueryTest with ParquetTest {
   lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
 
   private def checkFilterPredicate(
@@ -56,17 +55,9 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
         .select(output.map(e => Column(e)): _*)
         .where(Column(predicate))
 
-      val maybeAnalyzedPredicate = {
-        val forParquetTableScan = query.queryExecution.executedPlan.collect {
-          case plan: ParquetTableScan => plan.columnPruningPred
-        }.flatten.reduceOption(_ && _)
-
-        val forParquetDataSource = query.queryExecution.optimizedPlan.collect {
-          case PhysicalOperation(_, filters, LogicalRelation(_: ParquetRelation2)) => filters
-        }.flatten.reduceOption(_ && _)
-
-        forParquetTableScan.orElse(forParquetDataSource)
-      }
+      val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
+        case PhysicalOperation(_, filters, LogicalRelation(_: ParquetRelation)) => filters
+      }.flatten.reduceOption(_ && _)
 
       assert(maybeAnalyzedPredicate.isDefined)
       maybeAnalyzedPredicate.foreach { pred =>
@@ -98,7 +89,7 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
       (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Seq[Row])
       (implicit df: DataFrame): Unit = {
     def checkBinaryAnswer(df: DataFrame, expected: Seq[Row]) = {
-      assertResult(expected.map(_.getAs[Array[Byte]](0).mkString(",")).toSeq.sorted) {
+      assertResult(expected.map(_.getAs[Array[Byte]](0).mkString(",")).sorted) {
         df.map(_.getAs[Array[Byte]](0).mkString(",")).collect().toSeq.sorted
       }
     }
@@ -308,18 +299,6 @@ class ParquetFilterSuiteBase extends QueryTest with ParquetTest {
         '_1 < 2.b || '_1 > 3.b, classOf[Operators.Or], Seq(Row(1.b), Row(4.b)))
     }
   }
-}
-
-class ParquetDataSourceOnFilterSuite extends ParquetFilterSuiteBase with BeforeAndAfterAll {
-  lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
-
-  override protected def beforeAll(): Unit = {
-    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, true)
-  }
-
-  override protected def afterAll(): Unit = {
-    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
-  }
 
   test("SPARK-6554: don't push down predicates which reference partition columns") {
     import sqlContext.implicits._
@@ -334,40 +313,6 @@ class ParquetDataSourceOnFilterSuite extends ParquetFilterSuiteBase with BeforeA
         checkAnswer(
           sqlContext.read.parquet(path).filter("part = 1"),
           (1 to 3).map(i => Row(i, i.toString, 1)))
-      }
-    }
-  }
-}
-
-class ParquetDataSourceOffFilterSuite extends ParquetFilterSuiteBase with BeforeAndAfterAll {
-  lazy val originalConf = sqlContext.conf.parquetUseDataSourceApi
-
-  override protected def beforeAll(): Unit = {
-    sqlContext.conf.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, false)
-  }
-
-  override protected def afterAll(): Unit = {
-    sqlContext.setConf(SQLConf.PARQUET_USE_DATA_SOURCE_API, originalConf)
-  }
-
-  test("SPARK-6742: don't push down predicates which reference partition columns") {
-    import sqlContext.implicits._
-
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withTempPath { dir =>
-        val path = s"${dir.getCanonicalPath}/part=1"
-        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
-
-        // If the "part = 1" filter gets pushed down, this query will throw an exception since
-        // "part" is not a valid column in the actual Parquet file
-        val df = DataFrame(sqlContext, org.apache.spark.sql.parquet.ParquetRelation(
-          path,
-          Some(sqlContext.sparkContext.hadoopConfiguration), sqlContext,
-          Seq(AttributeReference("part", IntegerType, false)()) ))
-
-        checkAnswer(
-          df.filter("a = 1 or part = 1"),
-          (1 to 3).map(i => Row(1, i, i.toString)))
       }
     }
   }

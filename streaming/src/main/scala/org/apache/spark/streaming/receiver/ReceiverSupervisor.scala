@@ -24,9 +24,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent._
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{SparkEnv, Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{Utils, ThreadUtils}
 
 /**
  * Abstract class that is responsible for supervising a Receiver in the worker.
@@ -58,6 +58,9 @@ private[streaming] abstract class ReceiverSupervisor(
 
   /** Time between a receiver is stopped and started again */
   private val defaultRestartDelay = conf.getInt("spark.streaming.receiverRestartDelay", 2000)
+
+  /** The current maximum rate limit for this receiver. */
+  private[streaming] def getCurrentRateLimit: Option[Long] = None
 
   /** Exception associated with the stopping of the receiver */
   @volatile protected var stoppingError: Throwable = null

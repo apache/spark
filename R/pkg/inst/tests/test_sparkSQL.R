@@ -112,7 +112,8 @@ test_that("create DataFrame from RDD", {
   df <- jsonFile(sqlContext, jsonPathNa)
   hiveCtx <- tryCatch({
     newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
-  }, error = function(err) {
+  },
+  error = function(err) {
     skip("Hive is not build with SparkSQL, skipped")
   })
   sql(hiveCtx, "CREATE TABLE people (name string, age double, height float)")
@@ -602,7 +603,8 @@ test_that("write.df() as parquet file", {
 test_that("test HiveContext", {
   hiveCtx <- tryCatch({
     newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
-  }, error = function(err) {
+  },
+  error = function(err) {
     skip("Hive is not build with SparkSQL, skipped")
   })
   df <- createExternalTable(hiveCtx, "json", jsonPath, "json")
@@ -985,6 +987,24 @@ test_that("fillna() on a DataFrame", {
   expected$name[is.na(expected$name)] <- "unknown"
   actual <- collect(fillna(df, list("age" = 50, "height" = 50.6, "name" = "unknown")))
   expect_identical(expected, actual)
+})
+
+test_that("crosstab() on a DataFrame", {
+  rdd <- lapply(parallelize(sc, 0:3), function(x) {
+    list(paste0("a", x %% 3), paste0("b", x %% 2))
+  })
+  df <- toDF(rdd, list("a", "b"))
+  ct <- crosstab(df, "a", "b")
+  ordered <- ct[order(ct$a_b),]
+  row.names(ordered) <- NULL
+  expected <- data.frame("a_b" = c("a0", "a1", "a2"), "b0" = c(1, 0, 1), "b1" = c(1, 1, 0),
+                         stringsAsFactors = FALSE, row.names = NULL)
+  expect_identical(expected, ordered)
+})
+
+test_that("SQL error message is returned from JVM", {
+  retError <- tryCatch(sql(sqlContext, "select * from blah"), error = function(e) e)
+  expect_equal(grepl("Table Not Found: blah", retError), TRUE)
 })
 
 unlink(parquetPath)

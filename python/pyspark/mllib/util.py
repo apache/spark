@@ -21,7 +21,9 @@ import warnings
 
 if sys.version > '3':
     xrange = range
+    basestring = str
 
+from pyspark import SparkContext
 from pyspark.mllib.common import callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
 
@@ -223,6 +225,10 @@ class JavaSaveable(Saveable):
     """
 
     def save(self, sc, path):
+        if not isinstance(sc, SparkContext):
+            raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
+        if not isinstance(path, basestring):
+            raise TypeError("path should be a basestring, got type %s" % type(path))
         self._java_model.save(sc._jsc.sc(), path)
 
 

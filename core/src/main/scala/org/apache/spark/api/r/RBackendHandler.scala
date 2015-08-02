@@ -20,6 +20,7 @@ package org.apache.spark.api.r
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.HashMap
+import scala.language.existentials
 
 import io.netty.channel.ChannelHandler.Sharable
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
@@ -68,8 +69,11 @@ private[r] class RBackendHandler(server: RBackend)
             case e: Exception =>
               logError(s"Removing $objId failed", e)
               writeInt(dos, -1)
+              writeString(dos, s"Removing $objId failed: ${e.getMessage}")
           }
-        case _ => dos.writeInt(-1)
+        case _ =>
+          dos.writeInt(-1)
+          writeString(dos, s"Error: unknown method $methodName")
       }
     } else {
       handleMethodCall(isStatic, objId, methodName, numArgs, dis, dos)
@@ -145,8 +149,11 @@ private[r] class RBackendHandler(server: RBackend)
       }
     } catch {
       case e: Exception =>
-        logError(s"$methodName on $objId failed", e)
+        logError(s"$methodName on $objId failed")
         writeInt(dos, -1)
+        // Writing the error message of the cause for the exception. This will be returned
+        // to user in the R process.
+        writeString(dos, Utils.exceptionString(e.getCause))
     }
   }
 
