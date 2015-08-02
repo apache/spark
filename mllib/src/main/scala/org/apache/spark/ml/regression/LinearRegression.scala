@@ -182,7 +182,7 @@ class LinearRegression(override val uid: String)
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
       new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
     } else {
-      def regParamL1Fun = (index: Int) => {
+      def effectiveL1RegFun = (index: Int) => {
         if ($(standardization)) {
           effectiveL1RegParam
         } else {
@@ -194,7 +194,7 @@ class LinearRegression(override val uid: String)
           if (featuresStd(index) != 0.0) effectiveL1RegParam / featuresStd(index) else 0.0
         }
       }
-      new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
+      new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, effectiveL1RegFun, $(tol))
     }
 
     val initialWeights = Vectors.zeros(numFeatures)
