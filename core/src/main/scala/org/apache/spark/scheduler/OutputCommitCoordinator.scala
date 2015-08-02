@@ -40,7 +40,7 @@ private case class AskPermissionToCommitOutput(stage: Int, task: Long, taskAttem
  * This class was introduced in SPARK-4879; see that JIRA issue (and the associated pull requests)
  * for an extensive design discussion.
  */
-private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
+private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean) extends Logging {
 
   // Initialized by SparkEnv
   var coordinatorActor: Option[ActorRef] = None
@@ -134,9 +134,11 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
   }
 
   def stop(): Unit = synchronized {
-    coordinatorActor.foreach(_ ! StopCoordinator)
-    coordinatorActor = None
-    authorizedCommittersByStage.clear()
+    if (isDriver) {
+      coordinatorActor.foreach(_ ! StopCoordinator)
+      coordinatorActor = None
+      authorizedCommittersByStage.clear()
+    }
   }
 
   // Marked private[scheduler] instead of private so this can be mocked in tests
