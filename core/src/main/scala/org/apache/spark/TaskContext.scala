@@ -65,6 +65,8 @@ object TaskContext {
   /**
    * An empty task context that does not represent an actual task.
    */
+  // Unfortunately, this must be fully public for Java tests to access it
+  @VisibleForTesting
   private[spark] def empty(): TaskContextImpl = {
     new TaskContextImpl(0, 0, 0, 0, null, null, Seq.empty)
   }
