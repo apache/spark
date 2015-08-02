@@ -22,7 +22,7 @@ import org.junit.Test;
 import static junit.framework.Assert.*;
 import static org.apache.spark.unsafe.types.CalendarInterval.*;
 
-public class IntervalSuite {
+public class CalendarIntervalSuite {
 
   @Test
   public void equalsTest() {
