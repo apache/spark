@@ -155,6 +155,14 @@ private[spark] abstract class ProbabilisticClassificationModel[
     raw2probabilityInPlace(probs)
   }
 
+  override protected def raw2prediction(rawPrediction: Vector): Double = {
+    if (!isDefined(thresholds)) {
+      rawPrediction.argmax
+    } else {
+      probability2prediction(raw2probability(rawPrediction))
+    }
+  }
+
   /**
    * Predict the probability of each class given the features.
    * These predictions are also called class conditional probabilities.
