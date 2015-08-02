@@ -40,18 +40,10 @@ import org.apache.spark.util.collection.unsafe.sort.*;
 
 public final class UnsafeKVExternalSorter {
 
-  /**
-   * If positive, forces records to be spilled to disk at the given frequency (measured in numbers
-   * of records). This is only intended to be used in tests.
-   */
-  private int testSpillFrequency = 0;
-
   private final StructType keySchema;
   private final StructType valueSchema;
   private final UnsafeExternalRowSorter.PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
-
-  private long numElements = 0;
 
   public UnsafeKVExternalSorter(StructType keySchema, StructType valueSchema,
       BlockManager blockManager, ShuffleMemoryManager shuffleMemoryManager, long pageSizeBytes)
@@ -128,11 +120,6 @@ public final class UnsafeKVExternalSorter {
     sorter.insertKVRecord(
       key.getBaseObject(), key.getBaseOffset(), key.getSizeInBytes(),
       value.getBaseObject(), value.getBaseOffset(), value.getSizeInBytes(), prefix);
-    numElements++;
-
-    if (testSpillFrequency > 0 && (numElements % testSpillFrequency) == 0) {
-      spill();
-    }
   }
 
   public KVIterator<UnsafeRow, UnsafeRow> sortedIterator() throws IOException {
