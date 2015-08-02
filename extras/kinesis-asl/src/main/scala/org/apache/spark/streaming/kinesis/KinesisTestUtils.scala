@@ -75,11 +75,11 @@ private class KinesisTestUtils(
   }
 
   def createStream(): Unit = {
-    logInfo("Creating stream")
     require(!streamCreated, "Stream already created")
     _streamName = findNonExistentStreamName()
 
     // Create a stream. The number of shards determines the provisioned throughput.
+    logInfo(s"Creating stream ${_streamName}")
     val createStreamRequest = new CreateStreamRequest()
     createStreamRequest.setStreamName(_streamName)
     createStreamRequest.setShardCount(2)
@@ -88,7 +88,7 @@ private class KinesisTestUtils(
     // The stream is now being created. Wait for it to become active.
     waitForStreamToBeActive(_streamName)
     streamCreated = true
-    logInfo("Created stream")
+    logInfo(s"Created stream ${_streamName}")
   }
 
   /**

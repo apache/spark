@@ -25,7 +25,7 @@ import com.amazonaws.auth.{AWSCredentials, AWSCredentialsProvider, DefaultAWSCre
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorFactory}
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration, Worker}
 
-import org.apache.spark.{SparkEnv, Logging}
+import org.apache.spark.{SparkException, SparkEnv, Logging}
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver}
@@ -48,23 +48,23 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
  * -
  *
  *
- * @param appName  Kinesis application name. Kinesis Apps are mapped to Kinesis Streams
- *                 by the Kinesis Client Library.  If you change the App name or Stream name,
- *                 the KCL will throw errors.  This usually requires deleting the backing
- *                 DynamoDB table with the same name this Kinesis application.
  * @param streamName   Kinesis stream name
  * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
  * @param regionName  Region name used by the Kinesis Client Library for
  *                    DynamoDB (lease coordination and checkpointing) and CloudWatch (metrics)
- * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
- *                            See the Kinesis Spark Streaming documentation for more
- *                            details on the different types of checkpoints.
  * @param initialPositionInStream  In the absence of Kinesis checkpoint info, this is the
  *                                 worker's initial starting position in the stream.
  *                                 The values are either the beginning of the stream
  *                                 per Kinesis' limit of 24 hours
  *                                 (InitialPositionInStream.TRIM_HORIZON) or
  *                                 the tip of the stream (InitialPositionInStream.LATEST).
+ * @param checkpointAppName  Kinesis application name. Kinesis Apps are mapped to Kinesis Streams
+ *                 by the Kinesis Client Library.  If you change the App name or Stream name,
+ *                 the KCL will throw errors.  This usually requires deleting the backing
+ *                 DynamoDB table with the same name this Kinesis application.
+ * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
+ *                            See the Kinesis Spark Streaming documentation for more
+ *                            details on the different types of checkpoints.
  * @param storageLevel Storage level to use for storing the received objects
  * @param awsCredentialsOption Optional AWS credentials, used when user directly specifies
  *                             the credentials
@@ -107,7 +107,8 @@ private[kinesis] class KinesisReceiver(
 
   private val seqNumRangesInCurrentBlock = new mutable.ArrayBuffer[SequenceNumberRange]
 
-  private val blockIdToSeqNumRanges = new mutable.HashMap[StreamBlockId, Array[SequenceNumberRange]]
+  private val blockIdToSeqNumRanges = new mutable.HashMap[StreamBlockId, SequenceNumberRanges]
+    with mutable.SynchronizedMap[StreamBlockId, SequenceNumberRanges]
 
   /**
    * This is called when the KinesisReceiver starts and must be non-blocking.
@@ -195,30 +196,40 @@ private[kinesis] class KinesisReceiver(
     }
   }
 
-  /** Remember the range of sequence numbers that was added to the currently active block */
+  /**
+   * Remember the range of sequence numbers that was added to the currently active block.
+   * Internally, this is synchronized with `finalizeRangesForCurrentBlock()`.
+   */
   private def rememberAddedRange(range: SequenceNumberRange): Unit = {
     seqNumRangesInCurrentBlock += range
   }
 
   /**
-   * Finalize the ranges added to the block that was active
-   * and prepare the ranges buffer for next block.
+   * Finalize the ranges added to the block that was active and prepare the ranges buffer
+   * for next block. Internally, this is synchronized with `rememberAddedRange()`.
    */
   private def finalizeRangesForCurrentBlock(blockId: StreamBlockId): Unit = {
-    blockIdToSeqNumRanges(blockId) = seqNumRangesInCurrentBlock.toArray
+    blockIdToSeqNumRanges(blockId) = SequenceNumberRanges(seqNumRangesInCurrentBlock.toArray)
     seqNumRangesInCurrentBlock.clear()
-    logDebug(s"Generated block $blockId has ${ blockIdToSeqNumRanges(blockId).mkString(", ")}")
+    logDebug(s"Generated block $blockId has $blockIdToSeqNumRanges")
   }
 
+  /** Store the block along with its associated ranges */
   private def storeBlockWithRanges(
       blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[Array[Byte]]): Unit = {
-    val rangesToReport = SequenceNumberRanges(blockIdToSeqNumRanges(blockId))
+    val rangesToReport = blockIdToSeqNumRanges.remove(blockId)
+    if (rangesToReport.isEmpty) {
+      stop("Error while storing block into Spark, could not find sequence number ranges " +
+        s"for block $blockId")
+      return
+    }
+
     var count = 0
     var stored = false
     var throwable: Throwable = null
     while (!stored && count <= 3) {
       try {
-        store(arrayBuffer, rangesToReport)
+        store(arrayBuffer, rangesToReport.get)
         stored = true
       } catch {
         case NonFatal(th) =>
@@ -226,7 +237,6 @@ private[kinesis] class KinesisReceiver(
           throwable = th
       }
     }
-    blockIdToSeqNumRanges -= blockId
     if (!stored) {
       stop("Error while storing block into Spark", throwable)
     }
