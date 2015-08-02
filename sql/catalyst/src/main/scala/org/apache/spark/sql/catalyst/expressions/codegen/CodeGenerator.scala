@@ -285,17 +285,15 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected def declareMutableStates(ctx: CodeGenContext): String = {
     ctx.mutableStates.map { case (javaType, variableName, _) =>
       s"private $javaType $variableName;"
-    }.mkString("\n      ")
+    }.mkString
   }
 
   protected def initMutableStates(ctx: CodeGenContext): String = {
-    ctx.mutableStates.map(_._3).mkString("\n        ")
+    ctx.mutableStates.map(_._3).mkString
   }
 
   protected def declareAddedFunctions(ctx: CodeGenContext): String = {
-    ctx.addedFuntions.map { case (funcName, funcCode) =>
-      s"$funcCode"
-    }.mkString("\n      ")
+    ctx.addedFuntions.map { case (funcName, funcCode) => funcCode }.mkString
   }
 
   /**
