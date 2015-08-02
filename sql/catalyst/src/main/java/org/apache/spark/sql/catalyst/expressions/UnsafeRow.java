@@ -350,7 +350,6 @@ public final class UnsafeRow extends MutableRow {
 
   @Override
   public Decimal getDecimal(int ordinal, int precision, int scale) {
-    assertIndexIsValid(ordinal);
     if (isNullAt(ordinal)) {
       return null;
     }
@@ -414,7 +413,6 @@ public final class UnsafeRow extends MutableRow {
     if (isNullAt(ordinal)) {
       return null;
     } else {
-      assertIndexIsValid(ordinal);
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) (offsetAndSize & ((1L << 32) - 1));
@@ -429,7 +427,6 @@ public final class UnsafeRow extends MutableRow {
     if (isNullAt(ordinal)) {
       return null;
     } else {
-      assertIndexIsValid(ordinal);
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) (offsetAndSize & ((1L << 32) - 1));

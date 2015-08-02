@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.PlatformDependent;
@@ -25,10 +28,24 @@ import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
-
-// todo: doc
+/**
+ * An Unsafe implementation of Array which is backed by raw memory instead of Java objects.
+ *
+ * Each tuple has two parts: [offsets] [values]
+ *
+ * In the `offsets` region, we store 4 bytes per element, represents the start address of this
+ * element in `values` region. We can get the length of this element by subtracting next offset.
+ * Note that offset can by negative which means this element is null.
+ *
+ * In ghe `values` region, we store the content of elements. As we can get length info, so elements
+ * can be variable-length.
+ *
+ * Note that when we write out this array, we should write out the `numElements` at first 4 bytes,
+ * then follows content. When we read in an array, we should read first 4 bytes as `numElements`
+ * and take the rest as content.
+ *
+ * Instances of `UnsafeArrayData` act as pointers to row data stored in this format.
+ */
 // todo: there is a lof of duplicated code between UnsafeRow and UnsafeArrayData.
 public class UnsafeArrayData extends ArrayData {
 
@@ -139,169 +156,133 @@ public class UnsafeArrayData extends ArrayData {
   public boolean getBoolean(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
-    if (offset < 0) {
-      return false;
-    } else {
-      return PlatformDependent.UNSAFE.getBoolean(baseObject, baseOffset + offset);
-    }
+    if (offset < 0) return false;
+    return PlatformDependent.UNSAFE.getBoolean(baseObject, baseOffset + offset);
   }
 
   @Override
   public byte getByte(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
-    if (offset < 0) {
-      return 0;
-    } else {
-      return PlatformDependent.UNSAFE.getByte(baseObject, baseOffset + offset);
-    }
+    if (offset < 0) return 0;
+    return PlatformDependent.UNSAFE.getByte(baseObject, baseOffset + offset);
   }
 
   @Override
   public short getShort(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
-    if (offset < 0) {
-      return 0;
-    } else {
-      return PlatformDependent.UNSAFE.getShort(baseObject, baseOffset + offset);
-    }
+    if (offset < 0) return 0;
+    return PlatformDependent.UNSAFE.getShort(baseObject, baseOffset + offset);
   }
 
   @Override
   public int getInt(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
-    if (offset < 0) {
-      return 0;
-    } else {
-      return PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + offset);
-    }
+    if (offset < 0) return 0;
+    return PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + offset);
   }
 
   @Override
   public long getLong(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
-    if (offset < 0) {
-      return 0;
-    } else {
-      return PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset);
-    }
+    if (offset < 0) return 0;
+    return PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset);
   }
 
   @Override
   public float getFloat(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
-    if (offset < 0) {
-      return 0;
-    } else {
-      return PlatformDependent.UNSAFE.getFloat(baseObject, baseOffset + offset);
-    }
+    if (offset < 0) return 0;
+    return PlatformDependent.UNSAFE.getFloat(baseObject, baseOffset + offset);
   }
 
   @Override
   public double getDouble(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
-    if (offset < 0) {
-      return 0;
-    } else {
-      return PlatformDependent.UNSAFE.getDouble(baseObject, baseOffset + offset);
-    }
+    if (offset < 0) return 0;
+    return PlatformDependent.UNSAFE.getDouble(baseObject, baseOffset + offset);
   }
 
   @Override
   public Decimal getDecimal(int ordinal, int precision, int scale) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
-    if (offset < 0) {
-      return null;
+    if (offset < 0) return null;
+
+    if (precision <= Decimal.MAX_LONG_DIGITS()) {
+      final long value = PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset);
+      return Decimal.apply(value, precision, scale);
     } else {
-      if (precision <= Decimal.MAX_LONG_DIGITS()) {
-        final long value = PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset);
-        return Decimal.apply(value, precision, scale);
-      } else {
-        final byte[] bytes = getBinary(ordinal);
-        final BigInteger bigInteger = new BigInteger(bytes);
-        final BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
-        return Decimal.apply(new scala.math.BigDecimal(javaDecimal), precision, scale);
-      }
+      final byte[] bytes = getBinary(ordinal);
+      final BigInteger bigInteger = new BigInteger(bytes);
+      final BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
+      return Decimal.apply(new scala.math.BigDecimal(javaDecimal), precision, scale);
     }
   }
 
   @Override
   public UTF8String getUTF8String(int ordinal) {
-    final byte[] bytes = getBinary(ordinal);
-    if (bytes == null) {
-      return null;
-    } else {
-      return UTF8String.fromBytes(bytes);
-    }
+    assertIndexIsValid(ordinal);
+    final int offset = getElementOffset(ordinal);
+    if (offset < 0) return null;
+    final int size = getElementSize(offset, ordinal);
+    return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
   }
 
   @Override
   public byte[] getBinary(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
-    if (offset < 0) {
-      return null;
-    } else {
-      final int size = getElementSize(offset, ordinal);
-      final byte[] bytes = new byte[size];
-      PlatformDependent.copyMemory(
-        baseObject,
-        baseOffset + offset,
-        bytes,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
-        size);
-      return bytes;
-    }
+    if (offset < 0) return null;
+    final int size = getElementSize(offset, ordinal);
+    final byte[] bytes = new byte[size];
+    PlatformDependent.copyMemory(
+      baseObject,
+      baseOffset + offset,
+      bytes,
+      PlatformDependent.BYTE_ARRAY_OFFSET,
+      size);
+    return bytes;
   }
 
   @Override
   public CalendarInterval getInterval(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
-    if (offset < 0) {
-      return null;
-    } else {
-      final int months = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset);
-      final long microseconds =
-        PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset + 8);
-      return new CalendarInterval(months, microseconds);
-    }
+    if (offset < 0) return null;
+    final int months = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset);
+    final long microseconds =
+      PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset + 8);
+    return new CalendarInterval(months, microseconds);
   }
 
   @Override
   public InternalRow getStruct(int ordinal, int numFields) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
-    if (offset < 0) {
-      return null;
-    } else {
-      final int size = getElementSize(offset, ordinal);
-      final UnsafeRow row = new UnsafeRow();
-      row.pointTo(baseObject, baseOffset + offset, numFields, size);
-      return row;
-    }
+    if (offset < 0) return null;
+    final int size = getElementSize(offset, ordinal);
+    final UnsafeRow row = new UnsafeRow();
+    row.pointTo(baseObject, baseOffset + offset, numFields, size);
+    return row;
   }
 
   @Override
   public ArrayData getArray(int ordinal) {
     assertIndexIsValid(ordinal);
     final int offset = getElementOffset(ordinal);
-    if (offset < 0) {
-      return null;
-    } else {
-      final int numElements = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + offset);
-      final int size = getElementSize(offset, ordinal);
-      final UnsafeArrayData array = new UnsafeArrayData();
-      // Skip the first 4 bytes.
-      array.pointTo(baseObject, baseOffset + offset + 4, numElements, size - 4);
-      return array;
-    }
+    if (offset < 0) return null;
+    final int numElements = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset + offset);
+    final int size = getElementSize(offset, ordinal);
+    final UnsafeArrayData array = new UnsafeArrayData();
+    // Skip the first 4 bytes.
+    array.pointTo(baseObject, baseOffset + offset + 4, numElements, size - 4);
+    return array;
   }
 
   @Override
