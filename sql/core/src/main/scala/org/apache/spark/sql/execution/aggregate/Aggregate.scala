@@ -72,6 +72,8 @@ case class Aggregate(
 
   override def canProcessUnsafeRows: Boolean = true
 
+  override def outputsUnsafeRows: Boolean = useHybridIterator
+
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
   override def requiredChildDistribution: List[Distribution] = {
@@ -109,7 +111,7 @@ case class Aggregate(
       // we need to get the value of iter.hasNext first.
       val hasInput = iter.hasNext
       if (hasInput && useHybridIterator && groupingExpressions.nonEmpty) {
-        new UnsafeHybridAggregationIterator(
+        UnsafeHybridAggregationIterator.createFromInputIterator(
           groupingExpressions,
           nonCompleteAggregateExpressions,
           nonCompleteAggregateAttributes,
@@ -117,19 +119,18 @@ case class Aggregate(
           completeAggregateAttributes,
           initialInputBufferOffset,
           resultExpressions,
-          newMutableProjection,
-          UnsafeProjection.create,
-          newOrdering,
+          newMutableProjection _,
           child.output,
           iter,
-          child.outputsUnsafeRows)
+          child.outputsUnsafeRows,
+          outputsUnsafeRows)
       } else {
         if (!hasInput && groupingExpressions.nonEmpty) {
           // This is a grouped aggregate and the input iterator is empty,
           // so return an empty iterator.
           Iterator[InternalRow]()
         } else {
-          val outputIter = new SortBasedAggregationIterator(
+          val outputIter = SortBasedAggregationIterator.createFromInputIterator(
             groupingExpressions,
             nonCompleteAggregateExpressions,
             nonCompleteAggregateAttributes,
@@ -139,9 +140,9 @@ case class Aggregate(
             resultExpressions,
             newMutableProjection _ ,
             newProjection _,
-            newOrdering _,
             child.output,
-            iter)
+            iter,
+            outputsUnsafeRows)
           if (!hasInput && groupingExpressions.isEmpty) {
             // There is no input and there is no grouping expressions.
             // We need to output a single row as the output.

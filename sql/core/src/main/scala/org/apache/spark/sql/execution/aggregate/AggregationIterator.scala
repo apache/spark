@@ -31,7 +31,6 @@ import scala.collection.mutable.ArrayBuffer
 abstract class AggregationIterator(
     groupingKeyAttributes: Seq[Attribute],
     valueAttributes: Seq[Attribute],
-    inputKVIterator: KVIterator[InternalRow, InternalRow],
     nonCompleteAggregateExpressions: Seq[AggregateExpression2],
     nonCompleteAggregateAttributes: Seq[Attribute],
     completeAggregateExpressions: Seq[AggregateExpression2],
@@ -39,8 +38,7 @@ abstract class AggregationIterator(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-    newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
-    newOrdering: (Seq[SortOrder], Seq[Attribute]) => Ordering[InternalRow])
+    outputsUnsafeRows: Boolean)
   extends Iterator[InternalRow] with Logging {
 
   ///////////////////////////////////////////////////////////////////////////
@@ -304,6 +302,13 @@ abstract class AggregationIterator(
   // Initializing the function used to generate the output row.
   protected val generateOutput: (InternalRow, MutableRow) => InternalRow = {
     val rowToBeEvaluated = new JoinedRow
+    val safeOutoutRow = new GenericMutableRow(resultExpressions.length)
+    val mutableOutput = if (outputsUnsafeRows) {
+      UnsafeProjection.create(resultExpressions.map(_.dataType).toArray).apply(safeOutoutRow)
+    } else {
+      safeOutoutRow
+    }
+
 
     aggregationMode match {
       // Partial-only or PartialMerge-only: every output row is basically the values of
@@ -317,6 +322,7 @@ abstract class AggregationIterator(
           newMutableProjection(
             groupingKeyAttributes ++ bufferSchema,
             groupingKeyAttributes ++ bufferSchema)()
+        resultProjection.target(mutableOutput)
 
         (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
           resultProjection(rowToBeEvaluated(currentGroupingKey, currentBuffer))
@@ -338,6 +344,7 @@ abstract class AggregationIterator(
         val resultProjection =
           newMutableProjection(
             resultExpressions, groupingKeyAttributes ++ aggregateResultSchema)()
+        resultProjection.target(mutableOutput)
 
         (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
           // Generate results for all algebraic aggregate functions.
@@ -357,6 +364,7 @@ abstract class AggregationIterator(
       case (None, None) =>
         val resultProjection =
           newMutableProjection(resultExpressions, groupingKeyAttributes)()
+        resultProjection.target(mutableOutput)
 
         (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
           resultProjection(currentGroupingKey)
@@ -414,6 +422,46 @@ object AggregationIterator {
       }
 
       override def getKey(): InternalRow = {
+        groupingKey
+      }
+
+      override def getValue(): InternalRow = {
+        value
+      }
+
+      override def close(): Unit = {
+        // Do nothing
+      }
+    }
+  }
+
+  def unsafeKVIterator(
+      groupingExpressions: Seq[NamedExpression],
+      inputAttributes: Seq[Attribute],
+      inputIter: Iterator[InternalRow]): KVIterator[UnsafeRow, InternalRow] = {
+    new KVIterator[UnsafeRow, InternalRow] {
+      private[this] val groupingKeyGenerator =
+        UnsafeProjection.create(groupingExpressions, inputAttributes)
+
+      private[this] var groupingKey: UnsafeRow = _
+
+      private[this] var value: InternalRow = _
+
+      override def next(): Boolean = {
+        if (inputIter.hasNext) {
+          // Read the next input row.
+          val inputRow = inputIter.next()
+          // Get groupingKey based on groupingExpressions.
+          groupingKey = groupingKeyGenerator.apply(inputRow)
+          // The value is the inputRow.
+          value = inputRow
+          true
+        } else {
+          false
+        }
+      }
+
+      override def getKey(): UnsafeRow = {
         groupingKey
       }
 

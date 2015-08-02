@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.sql.execution.UnsafeFixedWidthAggregationMap
+import org.apache.spark.sql.execution.{UnsafeKeyValueSorter, UnsafeFixedWidthAggregationMap}
 import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.StructType
 class UnsafeHybridAggregationIterator(
     groupingKeyAttributes: Seq[Attribute],
     valueAttributes: Seq[Attribute],
-    inputKVIterator: KVIterator[InternalRow, InternalRow],
+    inputKVIterator: KVIterator[UnsafeRow, InternalRow],
     nonCompleteAggregateExpressions: Seq[AggregateExpression2],
     nonCompleteAggregateAttributes: Seq[Attribute],
     completeAggregateExpressions: Seq[AggregateExpression2],
@@ -42,13 +42,11 @@ class UnsafeHybridAggregationIterator(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-    newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
-    newOrdering: (Seq[SortOrder], Seq[Attribute]) => Ordering[InternalRow],
-    unsafeInput: Boolean)
+    unsafeInputRows: Boolean,
+    outputsUnsafeRows: Boolean)
   extends AggregationIterator(
     groupingKeyAttributes,
     valueAttributes,
-    inputKVIterator,
     nonCompleteAggregateExpressions,
     nonCompleteAggregateAttributes,
     completeAggregateExpressions,
@@ -56,38 +54,7 @@ class UnsafeHybridAggregationIterator(
     initialInputBufferOffset,
     resultExpressions,
     newMutableProjection,
-    newProjection,
-    newOrdering) {
-
-  def this(
-      groupingExprs: Seq[NamedExpression],
-      nonCompleteAggregateExpressions: Seq[AggregateExpression2],
-      nonCompleteAggregateAttributes: Seq[Attribute],
-      completeAggregateExpressions: Seq[AggregateExpression2],
-      completeAggregateAttributes: Seq[Attribute],
-      initialInputBufferOffset: Int,
-      resultExpressions: Seq[NamedExpression],
-      newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-      newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
-      newOrdering: (Seq[SortOrder], Seq[Attribute]) => Ordering[InternalRow],
-      inputAttributes: Seq[Attribute],
-      inputIter: Iterator[InternalRow],
-      unsafeInput: Boolean) = {
-    this(
-      groupingExprs.map(_.toAttribute),
-      inputAttributes,
-      AggregationIterator.kvIterator(groupingExprs, newProjection, inputAttributes, inputIter),
-      nonCompleteAggregateExpressions,
-      nonCompleteAggregateAttributes,
-      completeAggregateExpressions,
-      completeAggregateAttributes,
-      initialInputBufferOffset,
-      resultExpressions,
-      newMutableProjection,
-      newProjection,
-      newOrdering,
-      unsafeInput)
-  }
+    outputsUnsafeRows) {
 
   require(groupingKeyAttributes.nonEmpty)
 
@@ -109,15 +76,16 @@ class UnsafeHybridAggregationIterator(
     false // disable tracking of performance metrics
   )
 
-  override protected def newBuffer: MutableRow = {
-    val bufferRowSize: Int = allAggregateFunctions.map(_.bufferSchema.length).sum
-    val projection =
-      UnsafeProjection.create(allAggregateFunctions.flatMap(_.bufferAttributes).map(_.dataType))
-    // We use a mutable row and a mutable projection at here since we need to fill in
-    // buffer values for those nonAlgebraicAggregateFunctions manually.
-    val buffer = new GenericMutableRow(bufferRowSize)
+  override protected def newBuffer: UnsafeRow = {
+    val bufferSchema = allAggregateFunctions.flatMap(_.bufferAttributes)
+    val bufferRowSize: Int = bufferSchema.length
+
+    val genericMutableBuffer = new GenericMutableRow(bufferRowSize)
+    val unsafeProjection =
+      UnsafeProjection.create(bufferSchema.map(_.dataType))
+    val buffer = unsafeProjection.apply(genericMutableBuffer)
     initializeBuffer(buffer)
-    projection.apply(buffer)
+    buffer
   }
 
   ///////////////////////////////////////////////////////////////////////////
@@ -127,46 +95,51 @@ class UnsafeHybridAggregationIterator(
 
   private[this] var sortBasedAggregationIterator: SortBasedAggregationIterator = _
 
-  private def processOriginalInput(firstRow: InternalRow): Iterator[InternalRow] = {
-    new Iterator[InternalRow] {
+  private def processOriginalInput(firstKey: InternalRow, firstValue: InternalRow): KVIterator[InternalRow, InternalRow] = {
+    new KVIterator[InternalRow, InternalRow] {
       private[this] var isFirstRow = true
+
+      private[this] var groupingKey: InternalRow = _
 
       private[this] val buffer = newBuffer
 
-      // TODO: We should use UnsafeConcat.
-      private[this] val joinedRow = new JoinedRow()
-
-      private[this] val convertToUnsafe =
-        UnsafeProjection.create(resultExpressions.map(_.dataType).toArray)
-
-      override def hasNext: Boolean = isFirstRow || inputIter.hasNext
-
-      override def next(): InternalRow = {
-        val rowToBeProcessed = if (isFirstRow) {
-          isFirstRow = false
-          firstRow.copy()
-        } else if (inputIter.hasNext) {
-          inputIter.next()
-        } else {
-          // no more result
-          throw new NoSuchElementException
-        }
-        val groupingKey = groupGenerator(rowToBeProcessed)
+      override def next(): Boolean = {
         initializeBuffer(buffer)
-        processRow(buffer, rowToBeProcessed)
+        if (isFirstRow) {
+          isFirstRow = false
+          groupingKey = firstKey.copy()
+          processRow(buffer, firstValue)
 
-        // TODO: Use unsafe concat at here to avoid use UnsafeProjection + JoinedRow.
-        convertToUnsafe(joinedRow(groupingKey, buffer))
+          true
+        } else if (inputKVIterator.next()) {
+          groupingKey = inputKVIterator.getKey()
+          processRow(buffer, inputKVIterator.getValue())
+
+          true
+        } else {
+          false
+        }
+      }
+
+      override def getKey(): InternalRow = {
+        groupingKey
+      }
+
+      override def getValue(): InternalRow = {
+        buffer
+      }
+
+      override def close(): Unit = {
+        // Do nothing.
       }
     }
   }
 
   // we find we cannot alloate memory when processing currentRow, we need to also put it into the sorter.
-  private def switchToSortBasedAggregation(currentRow: InternalRow): Unit = {
+  private def switchToSortBasedAggregation(groupingKey: UnsafeRow, currentRow: InternalRow): Unit = {
     logInfo("falling back to sort based aggregation.")
     // TODO: Step 1: Sort the map entries.
-
-    // val sortedAggregationBufferMapIterator = MapSorter.doSort(aggregationBufferMapIterator)
+    val externalSorter: UnsafeKeyValueSorter = null // buffers.externalSorter
 
     // TODO: Step 2: Spill the sorted map entries.
     // val spillHandle = sortedAggregationBufferMapIterator.spill()
@@ -174,17 +147,7 @@ class UnsafeHybridAggregationIterator(
     // Step3: Free the memory used by the map.
     buffers.free()
 
-    // TODO: Step 4: Create a external sorter
-    // val externalSorter = create external sorter
-
-    // TODO: Step 5: Add the spilled map to the sorter.
-    // externalSorter.addSpill(spillHandle)
-
-    // TODO: Step 6: Get the iterator of the external sorter
-    val sortBasedInputIter: Iterator[InternalRow] = null
-    // sortBasedInputIter = externalSorter.iterator
-
-    // TODO: Step 7: If we have aggregate function with mode Partial or Complete,
+    // TODO: Step 4: If we have aggregate function with mode Partial or Complete,
     // we need to process them to get aggregation buffer.
     // So, later in the sort-based aggregation iterator, we can do merge.
     // Also, when we do not need to process input rows but input rows are not
@@ -198,27 +161,15 @@ class UnsafeHybridAggregationIterator(
 
     val processedIterator = if (needsProcess) {
       // Rows returned by this
-      processOriginalInput(currentRow)
-    } else if (!unsafeInput) {
-      new Iterator[InternalRow] {
-        val convertToUnsafe = UnsafeProjection.create(inputAttributes.map(_.dataType).toArray)
-
-        override def hasNext: Boolean = inputIter.hasNext
-
-        override def next(): InternalRow = {
-          if (hasNext) {
-            convertToUnsafe(inputIter.next())
-          } else {
-            // no more result
-            throw new NoSuchElementException
-          }
-        }
-      }
+      processOriginalInput(groupingKey, currentRow)
     } else {
-      inputIter
+      inputKVIterator
     }
 
     // TODO: Step 8: Direct processedIterator to sortBasedInputIter.
+    while (processedIterator.next()) {
+      // externalSorter.insert(processedIterator.getKey(), processedIterator.getValue())
+    }
 
     // Step 9: sortBasedAggregationIterator.
 
@@ -233,23 +184,26 @@ class UnsafeHybridAggregationIterator(
       nonCompleteAggregateAttributes ++ completeAggregateAttributes
 
     val newResultExpressions =
-      groupingExpressions.map(_.toAttribute) ++
+      groupingKeyAttributes ++
         allAggregateExpressions.flatMap(_.aggregateFunction.bufferAttributes)
 
     sortBased = true
-    sortBasedAggregationIterator = new SortBasedAggregationIterator(
-      groupingExpressions = groupingExpressions,
+
+    // externalSorter.kvIterator
+    val sortedKVIterator: KVIterator[UnsafeRow, UnsafeRow] = null
+    sortBasedAggregationIterator = SortBasedAggregationIterator.createFromKVIterator(
+      groupingKeyAttributes = groupingKeyAttributes,
+      valueAttributes = newResultExpressions,
+      inputKVIterator = null,
       nonCompleteAggregateExpressions = newNonCompleteAggregateExpressions,
       nonCompleteAggregateAttributes = newNonCompleteAggregateAttributes,
       completeAggregateExpressions = Nil,
       completeAggregateAttributes = Nil,
-      initialInputBufferOffset = groupingExpressions.length,
+      initialInputBufferOffset = 0,
       resultExpressions = newResultExpressions,
-      newMutableProjection = newMutableProjection,
-      newProjection = UnsafeProjection.create,
-      newOrdering = newOrdering,
-      inputAttributes = newResultExpressions,
-      inputIter = sortBasedInputIter)
+      newMutableProjection,
+      UnsafeProjection.create(_, _),
+      true)
   }
 
   ///////////////////////////////////////////////////////////////////////////
@@ -265,7 +219,7 @@ class UnsafeHybridAggregationIterator(
       if (buffer == null) {
         // buffer == null means that we could not allocate more memory.
         // Now, we need to spill the map and switch to sort-based aggregation.
-        switchToSortBasedAggregation(currentRow)
+        switchToSortBasedAggregation(groupingKey, currentRow)
       } else {
         processRow(buffer, currentRow)
       }
@@ -286,7 +240,6 @@ class UnsafeHybridAggregationIterator(
     _mapIteratorHasNext = aggregationBufferMapIterator.next()
     // If the map is empty, we just free it.
     if (!_mapIteratorHasNext) {
-      println("free !!!")
       buffers.free()
     }
   }
@@ -296,9 +249,9 @@ class UnsafeHybridAggregationIterator(
   ///////////////////////////////////////////////////////////////////////////
 
   override final def hasNext: Boolean = {
-    println("_mapIteratorHasNext " + _mapIteratorHasNext + " " + ((sortBased && sortBasedAggregationIterator.hasNext) || (!sortBased && _mapIteratorHasNext)))
     (sortBased && sortBasedAggregationIterator.hasNext) || (!sortBased && _mapIteratorHasNext)
   }
+
 
   override final def next(): InternalRow = {
     if (hasNext) {
@@ -310,13 +263,11 @@ class UnsafeHybridAggregationIterator(
           generateOutput(
             aggregationBufferMapIterator.getKey,
             aggregationBufferMapIterator.getValue)
-
         // Pre-load next key-value pair form aggregationBufferMapIterator.
         _mapIteratorHasNext = aggregationBufferMapIterator.next()
 
         if (!_mapIteratorHasNext) {
           val resultCopy = result.copy()
-          println("free in next !!!")
           buffers.free()
           resultCopy
         } else {
@@ -327,5 +278,63 @@ class UnsafeHybridAggregationIterator(
       // no more result
       throw new NoSuchElementException
     }
+  }
+}
+
+object UnsafeHybridAggregationIterator {
+  def createFromInputIterator(
+      groupingExprs: Seq[NamedExpression],
+      nonCompleteAggregateExpressions: Seq[AggregateExpression2],
+      nonCompleteAggregateAttributes: Seq[Attribute],
+      completeAggregateExpressions: Seq[AggregateExpression2],
+      completeAggregateAttributes: Seq[Attribute],
+      initialInputBufferOffset: Int,
+      resultExpressions: Seq[NamedExpression],
+      newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+      inputAttributes: Seq[Attribute],
+      inputIter: Iterator[InternalRow],
+      unsafeInputRows: Boolean,
+      outputsUnsafeRows: Boolean): UnsafeHybridAggregationIterator = {
+    new UnsafeHybridAggregationIterator(
+      groupingExprs.map(_.toAttribute),
+      inputAttributes,
+      AggregationIterator.unsafeKVIterator(groupingExprs, inputAttributes, inputIter),
+      nonCompleteAggregateExpressions,
+      nonCompleteAggregateAttributes,
+      completeAggregateExpressions,
+      completeAggregateAttributes,
+      initialInputBufferOffset,
+      resultExpressions,
+      newMutableProjection,
+      unsafeInputRows,
+      outputsUnsafeRows)
+  }
+
+  def createFromKVIterator(
+      groupingKeyAttributes: Seq[Attribute],
+      valueAttributes: Seq[Attribute],
+      inputKVIterator: KVIterator[UnsafeRow, InternalRow],
+      nonCompleteAggregateExpressions: Seq[AggregateExpression2],
+      nonCompleteAggregateAttributes: Seq[Attribute],
+      completeAggregateExpressions: Seq[AggregateExpression2],
+      completeAggregateAttributes: Seq[Attribute],
+      initialInputBufferOffset: Int,
+      resultExpressions: Seq[NamedExpression],
+      newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+      unsafeInputRows: Boolean,
+      outputsUnsafeRows: Boolean): UnsafeHybridAggregationIterator = {
+    new UnsafeHybridAggregationIterator(
+      groupingKeyAttributes,
+      valueAttributes,
+      inputKVIterator,
+      nonCompleteAggregateExpressions,
+      nonCompleteAggregateAttributes,
+      completeAggregateExpressions,
+      completeAggregateAttributes,
+      initialInputBufferOffset,
+      resultExpressions,
+      newMutableProjection,
+      unsafeInputRows,
+      outputsUnsafeRows)
   }
 }
