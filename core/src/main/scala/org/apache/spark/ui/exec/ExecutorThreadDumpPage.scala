@@ -54,7 +54,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
           val v1 = if (threadTrace1.threadName.contains("Executor task launch")) 1 else 0
           val v2 = if (threadTrace2.threadName.contains("Executor task launch")) 1 else 0
           if (v1 == v2) {
-            threadTrace1.threadName > threadTrace2.threadName
+            threadTrace1.threadName < threadTrace2.threadName
           } else {
             v1 > v2
           }
@@ -63,9 +63,9 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
         val threadName = thread.threadName
         val className = "accordion-toggle " + {
           if (threadName.contains("Executor task launch")) {
-            "executor_thread"
+            "executor-thread"
           } else {
-            "non-executor_thread"
+            "non-executor-thread"
           }
         }
         <div class="accordion-group">

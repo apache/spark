@@ -225,10 +225,10 @@ a.expandbutton {
   cursor: pointer;
 }
 
-.executor_thread {
+.executor-thread {
   background: #E6E6E6;
 }
 
-.non-executor_thread {
+.non-executor-thread {
   background: #FAFAFA;
 }
