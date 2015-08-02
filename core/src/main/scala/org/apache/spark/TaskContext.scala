@@ -67,7 +67,7 @@ object TaskContext {
    */
   // Unfortunately, this must be fully public for Java tests to access it
   @VisibleForTesting
-  private[spark] def empty(): TaskContextImpl = {
+  def empty(): TaskContextImpl = {
     new TaskContextImpl(0, 0, 0, 0, null, null, Seq.empty)
   }
 
