@@ -217,14 +217,14 @@ abstract class AbstractCommandBuilder {
       libdir = new File(sparkHome, "lib_managed/jars");
     }
 
-    if (!isTesting) {
-      checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
-        libdir.getAbsolutePath());
+    if (libdir.isDirectory()) {
       for (File jar : libdir.listFiles()) {
         if (jar.getName().startsWith("datanucleus-")) {
           addToClassPath(cp, jar.getAbsolutePath());
         }
       }
+    } else {
+      checkState(isTesting, "Library directory '%s' does not exist.", libdir.getAbsolutePath());
     }
 
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
