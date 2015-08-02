@@ -65,7 +65,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
               "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
     fitIntercept = Param(Params._dummy(), "fitIntercept", "whether to fit an intercept term.")
     thresholds = Param(Params._dummy(), "thresholds",
-                      "array of thresholds in classification")
+                       "array of thresholds in classification")
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -89,7 +89,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         self.fitIntercept = Param(self, "fitIntercept", "whether to fit an intercept term.")
         #: param for threshold in binary classification prediction, in range [0, 1].
         self.thresholds = Param(self, "thresholds",
-                               "thresholds in classification")
+                                "thresholds in classification")
         self._setDefault(maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1E-6,
                          fitIntercept=True, thresholds=[0.5, 0.5])
         kwargs = self.__init__._input_kwargs
@@ -153,12 +153,18 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         self._paramMap[self.thresholds] = value
         return self
 
-
     def getThresholds(self):
         """
         Gets the value of thresholds or its default value.
         """
         return self.getOrDefault(self.thresholds)
+
+    def getThreshold(self):
+        """
+        Gets the value of threshold or its default value.
+        """
+        thresholds = self.getOrDefault(self.thresholds)
+        return 1/(1+thresholds[1]/thresholds[0])
 
 
 class LogisticRegressionModel(JavaModel):
