@@ -397,7 +397,7 @@ public final class UnsafeExternalSorter {
     currentPagePosition += keyLen;
 
     PlatformDependent.copyMemory(
-      valueBaseObj, valueOffset, dataPageBaseObject, currentPagePosition, keyLen);
+      valueBaseObj, valueOffset, dataPageBaseObject, currentPagePosition, valueLen);
     currentPagePosition += valueLen;
 
     freeSpaceInCurrentPage -= totalSpaceRequired;
