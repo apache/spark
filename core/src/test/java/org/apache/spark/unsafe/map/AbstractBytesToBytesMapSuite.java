@@ -67,12 +67,11 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @After
   public void tearDown() {
-    if (taskMemoryManager != null) {
+    Assert.assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
+    if (shuffleMemoryManager != null) {
       long leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask();
-      Assert.assertEquals(0, taskMemoryManager.cleanUpAllAllocatedMemory());
-      Assert.assertEquals(0, leakedShuffleMemory);
       shuffleMemoryManager = null;
-      taskMemoryManager = null;
+      Assert.assertEquals(0L, leakedShuffleMemory);
     }
   }
 

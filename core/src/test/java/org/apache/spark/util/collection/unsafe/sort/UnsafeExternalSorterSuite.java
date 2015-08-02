@@ -54,7 +54,7 @@ import org.apache.spark.util.Utils;
 
 public class UnsafeExternalSorterSuite {
 
-  final TaskMemoryManager memoryManager =
+  final TaskMemoryManager taskMemoryManager =
     new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP));
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
   final PrefixComparator prefixComparator = new PrefixComparator() {
@@ -133,7 +133,13 @@ public class UnsafeExternalSorterSuite {
 
   @After
   public void tearDown() {
-    assertEquals(0L, shuffleMemoryManager.getMemoryConsumptionForThisTask());
+    long leakedUnsafeMemory = taskMemoryManager.cleanUpAllAllocatedMemory();
+    if (shuffleMemoryManager != null) {
+      long leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask();
+      shuffleMemoryManager = null;
+      assertEquals(0L, leakedShuffleMemory);
+    }
+    assertEquals(0, leakedUnsafeMemory);
   }
 
   private static void insertNumber(UnsafeExternalSorter sorter, int value) throws Exception {
@@ -145,7 +151,7 @@ public class UnsafeExternalSorterSuite {
   public void testSortingOnlyByPrefix() throws Exception {
 
     final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
-      memoryManager,
+      taskMemoryManager,
       shuffleMemoryManager,
       blockManager,
       taskContext,
@@ -180,7 +186,7 @@ public class UnsafeExternalSorterSuite {
   public void testSortingEmptyArrays() throws Exception {
 
     final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
-      memoryManager,
+      taskMemoryManager,
       shuffleMemoryManager,
       blockManager,
       taskContext,
@@ -211,7 +217,7 @@ public class UnsafeExternalSorterSuite {
   @Test
   public void testFillingPage() throws Exception {
     final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
-      memoryManager,
+      taskMemoryManager,
       shuffleMemoryManager,
       blockManager,
       taskContext,
