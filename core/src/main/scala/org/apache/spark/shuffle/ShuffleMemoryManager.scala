@@ -82,8 +82,6 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
         if (freeMemory >= math.min(maxToGrant, maxMemory / (2 * numActiveTasks) - curMem)) {
           val toGrant = math.min(maxToGrant, freeMemory)
           taskMemory(taskAttemptId) += toGrant
-          println("Granted " + toGrant)
-          Thread.dumpStack()
           return toGrant
         } else {
           logInfo(
@@ -94,7 +92,6 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
         // Only give it as much memory as is free, which might be none if it reached 1 / numThreads
         val toGrant = math.min(maxToGrant, freeMemory)
         taskMemory(taskAttemptId) += toGrant
-        println("Granted " + toGrant)
         return toGrant
       }
     }
@@ -103,8 +100,6 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
 
   /** Release numBytes bytes for the current task. */
   def release(numBytes: Long): Unit = synchronized {
-    println("Releasing " + numBytes)
-    Thread.dumpStack()
     val taskAttemptId = currentTaskAttemptId()
     val curMem = taskMemory.getOrElse(taskAttemptId, 0L)
     if (curMem < numBytes) {
