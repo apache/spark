@@ -362,6 +362,13 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       case expressions.InSet(a: Attribute, set) =>
         Some(sources.In(a.name, set.toArray))
 
+      // Because we only convert In to InSet in Optimizer when there are more than certain
+      // items. So it is possible we still get an In expression here that needs to be pushed
+      // down.
+      case expressions.In(a: Attribute, list) if !list.exists(!_.isInstanceOf[Literal]) =>
+        val hSet = list.map(e => e.eval(EmptyRow))
+        Some(sources.In(a.name, hSet.toArray))
+
       case expressions.IsNull(a: Attribute) =>
         Some(sources.IsNull(a.name))
       case expressions.IsNotNull(a: Attribute) =>
