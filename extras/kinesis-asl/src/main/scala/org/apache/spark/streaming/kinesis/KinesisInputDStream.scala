@@ -27,7 +27,7 @@ import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.streaming.{Duration, StreamingContext, Time}
 
 private[kinesis] class KinesisInputDStream(
-    ssc: StreamingContext,
+    @transient _ssc: StreamingContext,
     streamName: String,
     endpointUrl: String,
     regionName: String,
@@ -36,7 +36,7 @@ private[kinesis] class KinesisInputDStream(
     checkpointInterval: Duration,
     storageLevel: StorageLevel,
     awsCredentialsOption: Option[SerializableAWSCredentials]
-  ) extends ReceiverInputDStream[Array[Byte]](ssc) {
+  ) extends ReceiverInputDStream[Array[Byte]](_ssc) {
 
   private[streaming]
   override def createBlockRDD(time: Time, blockInfos: Seq[ReceivedBlockInfo]): RDD[Array[Byte]] = {
