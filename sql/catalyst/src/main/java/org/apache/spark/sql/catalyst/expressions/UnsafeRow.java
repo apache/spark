@@ -59,7 +59,7 @@ public final class UnsafeRow extends MutableRow {
   //////////////////////////////////////////////////////////////////////////////
 
   public static int calculateBitSetWidthInBytes(int numFields) {
-    return ((numFields / 64) + (numFields % 64 == 0 ? 0 : 1)) * 8;
+    return ((numFields + 63)/ 64) * 8;
   }
 
   /**
