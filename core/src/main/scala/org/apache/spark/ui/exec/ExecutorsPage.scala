@@ -58,7 +58,11 @@ private[ui] class ExecutorsPage(
     val diskUsed = storageStatusList.map(_.diskUsed).sum
     val execInfo = for (statusId <- 0 until storageStatusList.size) yield
       ExecutorsPage.getExecInfo(listener, statusId)
-    val execInfoSorted = execInfo.sortBy(_.id)
+    val execInfoSorted = execInfo.filter(x => {
+      val numPattern = "[0-9]+".r
+      val noIntId = numPattern.findFirstIn(x.id).isEmpty
+      listener.getExecutorIds.contains(x.id).||(noIntId)
+    }).sortBy(_.id)
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
 
     val execTable =
