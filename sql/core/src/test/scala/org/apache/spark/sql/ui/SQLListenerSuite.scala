@@ -23,10 +23,10 @@ import org.apache.spark.{SparkException, SparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.spark.sql.execution.SparkSQLExecution
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.test.TestSQLContext
 
-class SQLSparkListenerSuite extends SparkFunSuite {
+class SQLListenerSuite extends SparkFunSuite {
 
   private def createTestDataFrame: DataFrame = {
     import TestSQLContext.implicits._
@@ -38,7 +38,7 @@ class SQLSparkListenerSuite extends SparkFunSuite {
 
   private def createProperties(executionId: Long): Properties = {
     val properties = new Properties()
-    properties.setProperty(SparkSQLExecution.EXECUTION_ID_KEY, executionId.toString)
+    properties.setProperty(SQLExecution.EXECUTION_ID_KEY, executionId.toString)
     properties
   }
 
@@ -73,7 +73,7 @@ class SQLSparkListenerSuite extends SparkFunSuite {
   }
 
   test("basic") {
-    val listener = new SQLSparkListener(TestSQLContext)
+    val listener = new SQLListener(TestSQLContext)
     val executionId = 0
     val df = createTestDataFrame
     val accumulatorIds =
@@ -206,7 +206,7 @@ class SQLSparkListenerSuite extends SparkFunSuite {
   }
 
   test("onExecutionEnd happens before onJobEnd(JobSucceeded)") {
-    val listener = new SQLSparkListener(TestSQLContext)
+    val listener = new SQLListener(TestSQLContext)
     val executionId = 0
     listener.onExecutionStart(
       executionId, "test", "test", createTestDataFrame, System.currentTimeMillis())
@@ -229,7 +229,7 @@ class SQLSparkListenerSuite extends SparkFunSuite {
   }
 
   test("onExecutionEnd happens before onJobEnd(JobFailed)") {
-    val listener = new SQLSparkListener(TestSQLContext)
+    val listener = new SQLListener(TestSQLContext)
     val executionId = 0
     listener.onExecutionStart(
       executionId, "test", "test", createTestDataFrame, System.currentTimeMillis())

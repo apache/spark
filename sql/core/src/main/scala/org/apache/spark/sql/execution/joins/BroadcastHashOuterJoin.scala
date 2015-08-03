@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, RightOuter}
-import org.apache.spark.sql.execution.{BinaryNode, SparkPlan, SparkSQLExecution}
+import org.apache.spark.sql.execution.{BinaryNode, SparkPlan, SQLExecution}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -64,11 +64,11 @@ case class BroadcastHashOuterJoin(
   @transient
   private lazy val broadcastFuture = {
     // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
-    val executionId = sparkContext.getLocalProperty(SparkSQLExecution.EXECUTION_ID_KEY)
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     Future {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
-      SparkSQLExecution.withExecutionId(sparkContext, executionId) {
+      SQLExecution.withExecutionId(sparkContext, executionId) {
         // Note that we use .execute().collect() because we don't want to convert data to Scala
         // types
         val input: Array[InternalRow] = buildPlan.execute().map(_.copy()).collect()

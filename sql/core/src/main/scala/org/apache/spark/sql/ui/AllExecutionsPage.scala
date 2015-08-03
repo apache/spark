@@ -63,7 +63,7 @@ private[ui] abstract class ExecutionTable(
     tableId: String,
     tableName: String,
     currentTime: Long,
-    executionUIDatas: Seq[SparkSQLExecutionUIData],
+    executionUIDatas: Seq[SQLExecutionUIData],
     showRunningJobs: Boolean,
     showSucceededJobs: Boolean,
     showFailedJobs: Boolean) {
@@ -76,7 +76,7 @@ private[ui] abstract class ExecutionTable(
 
   protected def header: Seq[String]
 
-  protected def row(currentTime: Long, executionUIData: SparkSQLExecutionUIData): Seq[Node] = {
+  protected def row(currentTime: Long, executionUIData: SQLExecutionUIData): Seq[Node] = {
     val submissionTime = executionUIData.submissionTime
     val duration = executionUIData.completionTime.getOrElse(currentTime) - submissionTime
 
@@ -121,7 +121,7 @@ private[ui] abstract class ExecutionTable(
     </tr>
   }
 
-  private def descriptionCell(execution: SparkSQLExecutionUIData): Seq[Node] = {
+  private def descriptionCell(execution: SQLExecutionUIData): Seq[Node] = {
     val details = if (execution.details.nonEmpty) {
       <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
             class="expand-details">
@@ -166,7 +166,7 @@ private[ui] abstract class ExecutionTable(
   def toNodeSeq: Seq[Node] = {
     <div>
       <h4>{tableName}</h4>
-      {UIUtils.listingTable[SparkSQLExecutionUIData](
+      {UIUtils.listingTable[SQLExecutionUIData](
         header, row(currentTime, _), executionUIDatas, id = Some(tableId))}
     </div>
   }
@@ -182,7 +182,7 @@ private[ui] class RunningExecutionTable(
     parent: SQLTab,
     tableName: String,
     currentTime: Long,
-    executionUIDatas: Seq[SparkSQLExecutionUIData])
+    executionUIDatas: Seq[SQLExecutionUIData])
   extends ExecutionTable(
     parent,
     "running-execution-table",
@@ -201,7 +201,7 @@ private[ui] class CompletedExecutionTable(
     parent: SQLTab,
     tableName: String,
     currentTime: Long,
-    executionUIDatas: Seq[SparkSQLExecutionUIData])
+    executionUIDatas: Seq[SQLExecutionUIData])
   extends ExecutionTable(
     parent,
     "completed-execution-table",
@@ -219,7 +219,7 @@ private[ui] class FailedExecutionTable(
     parent: SQLTab,
     tableName: String,
     currentTime: Long,
-    executionUIDatas: Seq[SparkSQLExecutionUIData])
+    executionUIDatas: Seq[SQLExecutionUIData])
   extends ExecutionTable(
     parent,
     "failed-execution-table",

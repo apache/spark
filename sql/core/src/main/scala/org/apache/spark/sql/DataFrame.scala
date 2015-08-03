@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD, SparkSQLExecution}
+import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.json.{JacksonGenerator, JSONRelation}
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -1876,7 +1876,7 @@ class DataFrame private[sql](
    * an execution.
    */
   private[sql] def withNewExecution[T](body: => T): T = {
-    SparkSQLExecution.withNewExecution(sqlContext, this)(body)
+    SQLExecution.withNewExecutionId(sqlContext, this)(body)
   }
 
   ////////////////////////////////////////////////////////////////////////////

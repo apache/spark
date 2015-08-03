@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.ui.{SQLSparkListener, SQLTab}
+import org.apache.spark.sql.ui.{SQLListener, SQLTab}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -78,7 +78,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * `listener` should be only used in the driver
    */
-  @transient private[sql] val listener = new SQLSparkListener(this)
+  @transient private[sql] val listener = new SQLListener(this)
   sparkContext.addSparkListener(listener)
   sparkContext.ui.foreach(new SQLTab(this, _))
 

@@ -23,7 +23,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.util.Utils
 
-private[sql] object SparkSQLExecution {
+private[sql] object SQLExecution {
 
   val EXECUTION_ID_KEY = "spark.sql.execution.id"
 
@@ -35,11 +35,11 @@ private[sql] object SparkSQLExecution {
    * Wrap a DataFrame action to track all Spark jobs in the body so that we can connect them with
    * an execution.
    */
-  def withNewExecution[T](sqlContext: SQLContext, df: DataFrame)(body: => T): T = {
+  def withNewExecutionId[T](sqlContext: SQLContext, df: DataFrame)(body: => T): T = {
     val sc = sqlContext.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     if (oldExecutionId == null) {
-      val executionId = SparkSQLExecution.nextExecutionId
+      val executionId = SQLExecution.nextExecutionId
       sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
       val r = try {
         val callSite = Utils.getCallSite()
@@ -52,7 +52,7 @@ private[sql] object SparkSQLExecution {
           // However, onJobStart and onJobEnd run in the listener thread. Because we cannot add new
           // SQL event types to SparkListener since it's a public API, we cannot guarantee that.
           //
-          // SQLSparkListener should handle the case that onExecutionEnd happens before onJobEnd.
+          // SQLListener should handle the case that onExecutionEnd happens before onJobEnd.
           //
           // The worst case is onExecutionEnd may happen before onJobStart when the listener thread
           // is very busy. If so, we cannot track the jobs for the execution. It seems acceptable.
@@ -82,12 +82,12 @@ private[sql] object SparkSQLExecution {
   }
 
   def withExecutionId[T](sc: SparkContext, executionId: String)(body: => T): T = {
-    val oldExecutionId = sc.getLocalProperty(SparkSQLExecution.EXECUTION_ID_KEY)
+    val oldExecutionId = sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     try {
-      sc.setLocalProperty(SparkSQLExecution.EXECUTION_ID_KEY, executionId)
+      sc.setLocalProperty(SQLExecution.EXECUTION_ID_KEY, executionId)
       body
     } finally {
-      sc.setLocalProperty(SparkSQLExecution.EXECUTION_ID_KEY, oldExecutionId)
+      sc.setLocalProperty(SQLExecution.EXECUTION_ID_KEY, oldExecutionId)
     }
   }
 }

@@ -23,20 +23,20 @@ import org.apache.spark.{AccumulatorParam, JobExecutionStatus}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.spark.sql.execution.SparkSQLExecution
+import org.apache.spark.sql.execution.SQLExecution
 
-private[sql] class SQLSparkListener(sqlContext: SQLContext) extends SparkListener {
+private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener {
 
   private val retainedExecutions =
     sqlContext.sparkContext.conf.getInt("spark.sql.ui.retainedExecutions", 1000)
 
-  private val activeExecutions = mutable.HashMap[Long, SparkSQLExecutionUIData]()
+  private val activeExecutions = mutable.HashMap[Long, SQLExecutionUIData]()
 
   // Old data in the following fields must be removed in "trimExecutionsIfNecessary".
   // If adding new fields, make sure "trimExecutionsIfNecessary" can clean up old data
 
   // VisibleForTesting
-  val executionIdToData = mutable.HashMap[Long, SparkSQLExecutionUIData]()
+  val executionIdToData = mutable.HashMap[Long, SQLExecutionUIData]()
 
   /**
    * Maintain the relation between job id and execution id so that we can get the execution id in
@@ -46,9 +46,9 @@ private[sql] class SQLSparkListener(sqlContext: SQLContext) extends SparkListene
 
   private val stageIdToStageMetrics = mutable.HashMap[Long, SQLStageMetrics]()
 
-  private val failedExecutions = mutable.ListBuffer[SparkSQLExecutionUIData]()
+  private val failedExecutions = mutable.ListBuffer[SQLExecutionUIData]()
 
-  private val completedExecutions = mutable.ListBuffer[SparkSQLExecutionUIData]()
+  private val completedExecutions = mutable.ListBuffer[SQLExecutionUIData]()
 
   // VisibleForTesting
   def executionIdToDataSize: Int = synchronized {
@@ -66,7 +66,7 @@ private[sql] class SQLSparkListener(sqlContext: SQLContext) extends SparkListene
   }
 
   private def trimExecutionsIfNecessary(
-      executions: mutable.ListBuffer[SparkSQLExecutionUIData]): Unit = {
+      executions: mutable.ListBuffer[SQLExecutionUIData]): Unit = {
     if (executions.size > retainedExecutions) {
       val toRemove = math.max(retainedExecutions / 10, 1)
       executions.take(toRemove).foreach { execution =>
@@ -84,7 +84,7 @@ private[sql] class SQLSparkListener(sqlContext: SQLContext) extends SparkListene
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-    val executionId = jobStart.properties.getProperty(SparkSQLExecution.EXECUTION_ID_KEY)
+    val executionId = jobStart.properties.getProperty(SQLExecution.EXECUTION_ID_KEY)
     if (executionId == null) {
       // This is not a job created by SQL
       return
@@ -122,7 +122,7 @@ private[sql] class SQLSparkListener(sqlContext: SQLContext) extends SparkListene
    * 2. onExecutionEnd happens before onJobEnd
    */
   private def tryFinishExecution(
-      executionUIData: SparkSQLExecutionUIData, time: Long): Unit = synchronized {
+      executionUIData: SQLExecutionUIData, time: Long): Unit = synchronized {
     if (executionUIData.isFinished) {
       if (executionUIData.completionTime.isEmpty) {
         // This is called from the last onJobEnd. We just show the job end time to UI. If will be
@@ -202,7 +202,7 @@ private[sql] class SQLSparkListener(sqlContext: SQLContext) extends SparkListene
       node.metrics.map(metric => metric.accumulatorId -> metric)
     }
 
-    val executionUIData = SparkSQLExecutionUIData(executionId, description, details,
+    val executionUIData = SQLExecutionUIData(executionId, description, details,
       physicalPlanDescription, physicalPlanGraph, metrics.toMap, time)
 
     synchronized {
@@ -218,19 +218,19 @@ private[sql] class SQLSparkListener(sqlContext: SQLContext) extends SparkListene
     }
   }
 
-  def getRunningExecutions: Seq[SparkSQLExecutionUIData] = synchronized {
+  def getRunningExecutions: Seq[SQLExecutionUIData] = synchronized {
     activeExecutions.values.toSeq
   }
 
-  def getFailedExecutions: Seq[SparkSQLExecutionUIData] = synchronized {
+  def getFailedExecutions: Seq[SQLExecutionUIData] = synchronized {
     failedExecutions
   }
 
-  def getCompletedExecutions: Seq[SparkSQLExecutionUIData] = synchronized {
+  def getCompletedExecutions: Seq[SQLExecutionUIData] = synchronized {
     completedExecutions
   }
 
-  def getExecution(executionId: Long): Option[SparkSQLExecutionUIData] = synchronized {
+  def getExecution(executionId: Long): Option[SQLExecutionUIData] = synchronized {
     executionIdToData.get(executionId)
   }
 
@@ -267,7 +267,7 @@ private[sql] class SQLSparkListener(sqlContext: SQLContext) extends SparkListene
 /**
  * Represent all necessary data for an execution that will be used in Web UI.
  */
-private[ui] case class SparkSQLExecutionUIData(
+private[ui] case class SQLExecutionUIData(
     executionId: Long,
     description: String,
     details: String,
