@@ -61,8 +61,6 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
-    >>> lr = LogisticRegression()
-    >>> lr.
     """
 
     # a placeholder to make it appear in the generated doc
@@ -166,6 +164,14 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     def setThreshold(self, value):
         """
+        >>> lr = LogisticRegression()
+        >>> lr.getThreshold()
+        0.5
+        >>> lr.setThreshold(0.6)
+        >>> lr.getThreshold()
+        0.6
+        >>> lr.getThresholds()
+        [0.4, 0.6]
         Sets the value of :py:attr:`thresholds` using [1-value, value].
         """
         return self.setThresholds([1-value, value])
@@ -189,6 +195,10 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         if self.isDefined(self.thresholds):
             thresholds = self.getOrDefault(self.thresholds)
+            if len(thresholds) != 2:
+                raise ValueError("Logistic Regression getThreshold only applies to" +
+                                 " binary classification, but thresholds has length != 2." +
+                                 "  thresholds: " + ",".join(thresholds))
             return 1.0/(1.0+thresholds[0]/thresholds[1])
         else:
             return 0.5

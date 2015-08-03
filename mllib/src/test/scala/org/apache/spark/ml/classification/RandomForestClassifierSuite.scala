@@ -178,28 +178,6 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     assert(mostImportantFeature === 1)
   }
 
-  test("simple two input training test") {
-    val trainingInput = Seq(
-      LabeledPoint(1.0, Vectors.dense(1.0)),
-      LabeledPoint(0.0, Vectors.sparse(1, Array[Int](), Array[Double]())))
-    val categoricalFeatures = Map.empty[Int, Int]
-    val numClasses = 2
-    val trainingData = TreeTests.setMetadata(sc.parallelize(trainingInput),
-      categoricalFeatures, numClasses)
-    val rf = new RandomForestClassifier()
-      .setNumTrees(3)
-      .setMaxDepth(2)
-      .setSeed(42)
-      .fit(trainingData)
-    val testInput = Seq(
-      LabeledPoint(0.0, Vectors.dense(-1.0)),
-      LabeledPoint(0.0, Vectors.sparse(1, Array(0), Array(1.0)))
-    )
-    val testData = sqlContext.createDataFrame(testInput)
-    val results = rf.transform(testData).select("prediction").map(_.getDouble(0))
-    assert(results.collect() === Array(0.0, 1.0))
-  }
-
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
