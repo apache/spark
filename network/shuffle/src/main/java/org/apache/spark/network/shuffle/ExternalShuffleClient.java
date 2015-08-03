@@ -50,8 +50,8 @@ public class ExternalShuffleClient extends ShuffleClient {
   private final boolean saslEncryptionEnabled;
   private final SecretKeyHolder secretKeyHolder;
 
-  private TransportClientFactory clientFactory;
-  private String appId;
+  protected TransportClientFactory clientFactory;
+  protected String appId;
 
   /**
    * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
@@ -69,6 +69,10 @@ public class ExternalShuffleClient extends ShuffleClient {
     this.secretKeyHolder = secretKeyHolder;
     this.saslEnabled = saslEnabled;
     this.saslEncryptionEnabled = saslEncryptionEnabled;
+  }
+
+  protected void checkInit() {
+    assert appId != null : "Called before init()";
   }
 
   @Override
@@ -89,7 +93,7 @@ public class ExternalShuffleClient extends ShuffleClient {
       final String execId,
       String[] blockIds,
       BlockFetchingListener listener) {
-    assert appId != null : "Called before init()";
+    checkInit();
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
       RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
@@ -132,7 +136,7 @@ public class ExternalShuffleClient extends ShuffleClient {
       int port,
       String execId,
       ExecutorShuffleInfo executorInfo) throws IOException {
-    assert appId != null : "Called before init()";
+    checkInit();
     TransportClient client = clientFactory.createClient(host, port);
     byte[] registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteArray();
     client.sendRpcSync(registerMessage, 5000 /* timeoutMs */);

@@ -19,6 +19,7 @@ package org.apache.spark.network.client;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.net.SocketAddress;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -78,6 +79,8 @@ public class TransportClient implements Closeable {
   public boolean isActive() {
     return channel.isOpen() || channel.isActive();
   }
+
+  public SocketAddress getSocketAddress() { return channel.remoteAddress(); }
 
   /**
    * Requests a single chunk from the remote side, from the pre-negotiated streamId.

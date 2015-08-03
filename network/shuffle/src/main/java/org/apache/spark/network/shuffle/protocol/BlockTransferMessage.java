@@ -21,6 +21,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
 import org.apache.spark.network.protocol.Encodable;
+import org.apache.spark.network.shuffle.protocol.mesos.RegisterDriver;
 
 /**
  * Messages handled by the {@link org.apache.spark.network.shuffle.ExternalShuffleBlockHandler}, or
@@ -37,7 +38,7 @@ public abstract class BlockTransferMessage implements Encodable {
 
   /** Preceding every serialized message is its type, which allows us to deserialize it. */
   public static enum Type {
-    OPEN_BLOCKS(0), UPLOAD_BLOCK(1), REGISTER_EXECUTOR(2), STREAM_HANDLE(3);
+    OPEN_BLOCKS(0), UPLOAD_BLOCK(1), REGISTER_EXECUTOR(2), STREAM_HANDLE(3), REGISTER_DRIVER(4);
 
     private final byte id;
 
@@ -60,6 +61,7 @@ public abstract class BlockTransferMessage implements Encodable {
         case 1: return UploadBlock.decode(buf);
         case 2: return RegisterExecutor.decode(buf);
         case 3: return StreamHandle.decode(buf);
+        case 4: return RegisterDriver.decode(buf);
         default: throw new IllegalArgumentException("Unknown message type: " + type);
       }
     }
