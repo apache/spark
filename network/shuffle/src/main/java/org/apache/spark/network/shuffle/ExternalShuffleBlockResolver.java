@@ -265,19 +265,20 @@ public class ExternalShuffleBlockResolver {
     }
   }
 
+  /**
+   * write out the set of registered executors to a file so we can reload them on restart.
+   * You must have a lock on executors when calling this
+   */
   private void saveRegisteredExecutors() throws IOException {
     if (registeredExecutorFile != null) {
-      logger.info("Saving registered executors to {}", registeredExecutorFile);
-      ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(registeredExecutorFile));
-      // synchronize so we can write out the size :(
-      synchronized (executors) {
-        out.writeInt(executors.size());
-        for (Map.Entry<AppExecId, ExecutorShuffleInfo> e: executors.entrySet()) {
-          out.writeObject(e.getKey());
-          out.writeObject(e.getValue());
-        }
-      }
+      File tmp = File.createTempFile("registeredExecutors",".bin");
+      ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(tmp));
+      out.writeObject(executors);
       out.close();
+      if (!tmp.renameTo(registeredExecutorFile)) {
+        logger.error("Failed to move registered executors to {}", registeredExecutorFile);
+      }
+      logger.info("Saving registered executors to {}", registeredExecutorFile);
     }
   }
 }

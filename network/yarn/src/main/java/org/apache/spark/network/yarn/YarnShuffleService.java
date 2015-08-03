@@ -130,7 +130,7 @@ public class YarnShuffleService extends AuxiliaryService {
     // a small race -- if the NM restarts *again*, after only some of the existing apps have been
     // re-registered, their info will be lost.
     registeredExecutorFile =
-      findRegisteredExecutorFile(conf.get("yarn.nodemanager.local-dirs").split(","));
+      findRegisteredExecutorFile(conf.getStrings("yarn.nodemanager.local-dirs"));
     try {
       reloadRegisteredExecutors();
     } catch (Exception e) {
@@ -248,20 +248,18 @@ public class YarnShuffleService extends AuxiliaryService {
 
   private void reloadRegisteredExecutors() throws IOException, ClassNotFoundException {
     if (registeredExecutorFile != null && registeredExecutorFile.exists()) {
-      ObjectInputStream in = new ObjectInputStream(new FileInputStream(registeredExecutorFile));
-      int nExecutors = in.readInt();
       logger.info("Reloading executors from {}", registeredExecutorFile);
-      for (int i = 0; i < nExecutors; i++) {
-        AppExecId appExecId = (AppExecId) in.readObject();
-        ExecutorShuffleInfo shuffleInfo = (ExecutorShuffleInfo) in.readObject();
-        logger.info("Recovered executor {} with {}", appExecId, shuffleInfo);
+      ObjectInputStream in = new ObjectInputStream(new FileInputStream(registeredExecutorFile));
+      Map<AppExecId, ExecutorShuffleInfo> registeredExecutors =
+        (Map<AppExecId, ExecutorShuffleInfo>) in.readObject();
+      for (Entry<AppExecId, ExecutorShuffleInfo> e: registeredExecutors.entrySet()) {
         List<Map.Entry<AppExecId, ExecutorShuffleInfo>> executorsForApp =
-          recoveredExecutorRegistrations.get(appExecId.appId);
+          recoveredExecutorRegistrations.get(e.getKey().appId);
         if (executorsForApp == null) {
           executorsForApp = new ArrayList<>();
-          recoveredExecutorRegistrations.put(appExecId.appId, executorsForApp);
+          recoveredExecutorRegistrations.put(e.getKey().appId, executorsForApp);
         }
-        executorsForApp.add(new AbstractMap.SimpleImmutableEntry<>(appExecId, shuffleInfo));
+        executorsForApp.add(new AbstractMap.SimpleImmutableEntry<>(e.getKey(), e.getValue()));
       }
       in.close();
     } else {
