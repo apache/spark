@@ -262,10 +262,9 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   private def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
-    val hasGeneratedAgg = df.queryExecution.executedPlan match {
-      case _: GeneratedAggregate | _: aggregate.Aggregate => true
-      case _ => false
-    }
+    val hasGeneratedAgg = df.queryExecution.executedPlan
+      .collect { case _: GeneratedAggregate | _: aggregate.Aggregate => true }
+      .nonEmpty
     if (!hasGeneratedAgg) {
       fail(
         s"""
