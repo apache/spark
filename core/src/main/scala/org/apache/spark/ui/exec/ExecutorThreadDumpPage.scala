@@ -61,7 +61,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
         }
       }.map { thread =>
         val threadName = thread.threadName
-        val className = "accordion-toggle " + {
+        val className = "accordion-heading " + {
           if (threadName.contains("Executor task launch")) {
             "executor-thread"
           } else {
