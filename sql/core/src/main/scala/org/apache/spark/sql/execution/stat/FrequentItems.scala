@@ -30,21 +30,31 @@ private[sql] object FrequentItems extends Logging {
   /** A helper class wrapping `MutableMap[Any, Long]` for simplicity. */
   private class FreqItemCounter(size: Int) extends Serializable {
     val baseMap: MutableMap[Any, Long] = MutableMap.empty[Any, Long]
-
+    var maxCount: Long = -1L
     /**
      * Add a new example to the counts if it exists, otherwise deduct the count
      * from existing items.
      */
     def add(key: Any, count: Long): this.type = {
+      println(s"k: $key - c: $count, max: $maxCount")
       if (baseMap.contains(key))  {
         baseMap(key) += count
+        if (baseMap(key) > maxCount) maxCount = baseMap(key)
       } else {
         if (baseMap.size < size) {
           baseMap += key -> count
+          if (count > maxCount) maxCount = count
         } else {
-          // TODO: Make this more efficient... A flatMap?
-          baseMap.retain((k, v) => v > count)
-          baseMap.transform((k, v) => v - count)
+          val remainder = count - maxCount
+          if (remainder > 0) {
+            baseMap.clear()
+            baseMap += key -> remainder
+            maxCount = remainder
+          } else {
+            baseMap.retain((k, v) => v > count)
+            baseMap.transform((k, v) => v - count)
+            maxCount += remainder
+          }
         }
       }
       this
@@ -55,6 +65,9 @@ private[sql] object FrequentItems extends Logging {
      * @param other The map containing the counts for that partition
      */
     def merge(other: FreqItemCounter): this.type = {
+      println("merging")
+      println(baseMap)
+      println(other.baseMap)
       other.baseMap.foreach { case (k, v) =>
         add(k, v)
       }
