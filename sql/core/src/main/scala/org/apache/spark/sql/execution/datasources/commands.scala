@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.IOException
 import java.util.{Date, UUID}
 
 import scala.collection.JavaConversions.asScalaIterator
@@ -36,7 +37,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{Utils, SerializableConfiguration}
 
 
 private[sql] case class InsertIntoDataSource(
@@ -102,7 +103,12 @@ private[sql] case class InsertIntoHadoopFsRelation(
       case (SaveMode.ErrorIfExists, true) =>
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
       case (SaveMode.Overwrite, true) =>
-        fs.delete(qualifiedOutputPath, true)
+        Utils.tryOrIOException {
+          if (!fs.delete(qualifiedOutputPath, true /* recursively */)) {
+            throw new IOException(s"Unable to clear output " +
+              s"directory $qualifiedOutputPath prior to writing to it")
+          }
+        }
         true
       case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
         true
