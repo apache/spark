@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.scalatest.BeforeAndAfterAll
-
 import java.sql.Timestamp
 
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.AccumulatorSuite
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.errors.DialectException
-import org.apache.spark.sql.execution.aggregate.Aggregate2Sort
+import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
@@ -262,9 +262,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   private def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
-    val hasGeneratedAgg = df.queryExecution.executedPlan
-      .collect { case _: GeneratedAggregate | _: Aggregate2Sort => true }
-      .nonEmpty
+    var hasGeneratedAgg = false
+    df.queryExecution.executedPlan.foreach {
+      case generatedAgg: GeneratedAggregate => hasGeneratedAgg = true
+      case newAggregate: aggregate.Aggregate => hasGeneratedAgg = true
+      case _ =>
+    }
     if (!hasGeneratedAgg) {
       fail(
         s"""

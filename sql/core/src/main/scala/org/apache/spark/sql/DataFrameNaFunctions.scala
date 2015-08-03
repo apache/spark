@@ -122,7 +122,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def drop(minNonNulls: Int, cols: Seq[String]): DataFrame = {
     // Filtering condition:
     // only keep the row if it has at least `minNonNulls` non-null and non-NaN values.
-    val predicate = AtLeastNNonNulls(minNonNulls, cols.map(name => df.resolve(name)))
+    val predicate = AtLeastNNonNullNans(minNonNulls, cols.map(name => df.resolve(name)))
     df.filter(Column(predicate))
   }
 

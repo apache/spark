@@ -291,6 +291,10 @@ public final class UnsafeRow extends MutableRow {
       return getInterval(ordinal);
     } else if (dataType instanceof StructType) {
       return getStruct(ordinal, ((StructType) dataType).size());
+    } else if (dataType instanceof ArrayType) {
+      return getArray(ordinal);
+    } else if (dataType instanceof MapType) {
+      return getMap(ordinal);
     } else {
       throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
     }
@@ -346,7 +350,6 @@ public final class UnsafeRow extends MutableRow {
 
   @Override
   public Decimal getDecimal(int ordinal, int precision, int scale) {
-    assertIndexIsValid(ordinal);
     if (isNullAt(ordinal)) {
       return null;
     }
@@ -362,7 +365,6 @@ public final class UnsafeRow extends MutableRow {
 
   @Override
   public UTF8String getUTF8String(int ordinal) {
-    assertIndexIsValid(ordinal);
     if (isNullAt(ordinal)) return null;
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
@@ -372,7 +374,6 @@ public final class UnsafeRow extends MutableRow {
 
   @Override
   public byte[] getBinary(int ordinal) {
-    assertIndexIsValid(ordinal);
     if (isNullAt(ordinal)) {
       return null;
     } else {
@@ -410,7 +411,6 @@ public final class UnsafeRow extends MutableRow {
     if (isNullAt(ordinal)) {
       return null;
     } else {
-      assertIndexIsValid(ordinal);
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) (offsetAndSize & ((1L << 32) - 1));
@@ -420,11 +420,33 @@ public final class UnsafeRow extends MutableRow {
     }
   }
 
+  @Override
+  public ArrayData getArray(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      final long offsetAndSize = getLong(ordinal);
+      final int offset = (int) (offsetAndSize >> 32);
+      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      return UnsafeReaders.readArray(baseObject, baseOffset + offset, size);
+    }
+  }
+
+  @Override
+  public MapData getMap(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      final long offsetAndSize = getLong(ordinal);
+      final int offset = (int) (offsetAndSize >> 32);
+      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      return UnsafeReaders.readMap(baseObject, baseOffset + offset, size);
+    }
+  }
+
   /**
    * Copies this row, returning a self-contained UnsafeRow that stores its data in an internal
    * byte array rather than referencing data stored in a data page.
-   * <p>
-   * This method is only supported on UnsafeRows that do not use ObjectPools.
    */
   @Override
   public UnsafeRow copy() {

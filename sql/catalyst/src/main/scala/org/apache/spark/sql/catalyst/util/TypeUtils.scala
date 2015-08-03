@@ -18,39 +18,34 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.types._
 
 /**
  * Helper functions to check for valid data types.
  */
 object TypeUtils {
-  def checkForNumericExpr(t: DataType, caller: String): TypeCheckResult = {
-    if (t.isInstanceOf[NumericType] || t == NullType) {
+  def checkForNumericExpr(dt: DataType, caller: String): TypeCheckResult = {
+    if (dt.isInstanceOf[NumericType] || dt == NullType) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(s"$caller accepts numeric types, not $t")
+      TypeCheckResult.TypeCheckFailure(s"$caller requires numeric types, not $dt")
     }
   }
 
-  def checkForOrderingExpr(t: DataType, caller: String): TypeCheckResult = {
-    t match {
-      case i: AtomicType => TypeCheckResult.TypeCheckSuccess
-      case n: NullType => TypeCheckResult.TypeCheckSuccess
-      case s: StructType =>
-        if (s.supportOrdering(s)) {
-          TypeCheckResult.TypeCheckSuccess
-        } else {
-          TypeCheckResult.TypeCheckFailure(s"Fields in $s do not support ordering")
-        }
-      case other => TypeCheckResult.TypeCheckFailure(s"$t doesn't support ordering on $caller")
+  def checkForOrderingExpr(dt: DataType, caller: String): TypeCheckResult = {
+    if (RowOrdering.isOrderable(dt)) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(s"$caller does not support ordering on type $dt")
     }
-
   }
 
   def checkForSameTypeInputExpr(types: Seq[DataType], caller: String): TypeCheckResult = {
     if (types.distinct.size > 1) {
       TypeCheckResult.TypeCheckFailure(
-        s"input to $caller should all be the same type, but it's ${types.mkString("[", ", ", "]")}")
+        s"input to $caller should all be the same type, but it's " +
+          types.map(_.simpleString).mkString("[", ", ", "]"))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
