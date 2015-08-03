@@ -34,7 +34,9 @@ private[sql] class SQLSparkListener(sqlContext: SQLContext) extends SparkListene
 
   // Old data in the following fields must be removed in "trimExecutionsIfNecessary".
   // If adding new fields, make sure "trimExecutionsIfNecessary" can clean up old data
-  private val executionIdToData = mutable.HashMap[Long, SparkSQLExecutionUIData]()
+
+  // VisibleForTesting
+  val executionIdToData = mutable.HashMap[Long, SparkSQLExecutionUIData]()
 
   /**
    * Maintain the relation between job id and execution id so that we can get the execution id in
@@ -47,6 +49,21 @@ private[sql] class SQLSparkListener(sqlContext: SQLContext) extends SparkListene
   private val failedExecutions = mutable.ListBuffer[SparkSQLExecutionUIData]()
 
   private val completedExecutions = mutable.ListBuffer[SparkSQLExecutionUIData]()
+
+  // VisibleForTesting
+  def executionIdToDataSize: Int = synchronized {
+    executionIdToData.size
+  }
+
+  // VisibleForTesting
+  def jobIdToExecutionIdSize: Int = synchronized {
+    jobIdToExecutionId.size
+  }
+
+  // VisibleForTesting
+  def stageIdToStageMetricsSize: Int = synchronized {
+    stageIdToStageMetrics.size
+  }
 
   private def trimExecutionsIfNecessary(
       executions: mutable.ListBuffer[SparkSQLExecutionUIData]): Unit = {
@@ -94,6 +111,31 @@ private[sql] class SQLSparkListener(sqlContext: SQLContext) extends SparkListene
       jobEnd.jobResult match {
         case JobSucceeded => executionUIData.jobs(jobId) = JobExecutionStatus.SUCCEEDED
         case JobFailed(_) => executionUIData.jobs(jobId) = JobExecutionStatus.FAILED
+      }
+      tryFinishExecution(executionUIData, jobEnd.time)
+    }
+  }
+
+  /**
+   * Should handle two cases:
+   * 1. onJobEnd happens before onExecutionEnd
+   * 2. onExecutionEnd happens before onJobEnd
+   */
+  private def tryFinishExecution(
+      executionUIData: SparkSQLExecutionUIData, time: Long): Unit = synchronized {
+    if (executionUIData.isFinished) {
+      if (executionUIData.completionTime.isEmpty) {
+        // This is called from the last onJobEnd. We just show the job end time to UI. If will be
+        // updated by onExecutionEnd later.
+        executionUIData.completionTime = Some(time)
+      }
+      activeExecutions.remove(executionUIData.executionId)
+      if (executionUIData.isFailed) {
+        failedExecutions += executionUIData
+        trimExecutionsIfNecessary(failedExecutions)
+      } else {
+        completedExecutions += executionUIData
+        trimExecutionsIfNecessary(completedExecutions)
       }
     }
   }
@@ -170,15 +212,9 @@ private[sql] class SQLSparkListener(sqlContext: SQLContext) extends SparkListene
   }
 
   def onExecutionEnd(executionId: Long, time: Long): Unit = synchronized {
-    activeExecutions.remove(executionId).foreach { executionUIData =>
+    executionIdToData.get(executionId).foreach { executionUIData =>
       executionUIData.completionTime = Some(time)
-      if (executionUIData.isFailed) {
-        failedExecutions += executionUIData
-        trimExecutionsIfNecessary(failedExecutions)
-      } else {
-        completedExecutions += executionUIData
-        trimExecutionsIfNecessary(completedExecutions)
-      }
+      tryFinishExecution(executionUIData, time)
     }
   }
 
@@ -243,6 +279,14 @@ private[ui] case class SparkSQLExecutionUIData(
     jobs: mutable.HashMap[Long, JobExecutionStatus] = mutable.HashMap.empty,
     stages: mutable.ArrayBuffer[Int] = mutable.ArrayBuffer()) {
 
+  /**
+   * Return if there is no running job.
+   */
+  def isFinished: Boolean = jobs.forall(_._2 != JobExecutionStatus.RUNNING)
+
+  /**
+   * Return if there is any failed job.
+   */
   def isFailed: Boolean = jobs.exists(_._2 == JobExecutionStatus.FAILED)
 
   def runningJobs: Seq[Long] = jobs.filter(_._2 == JobExecutionStatus.RUNNING).map(_._1).toSeq

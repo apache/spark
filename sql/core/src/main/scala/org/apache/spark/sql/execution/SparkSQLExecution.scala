@@ -38,37 +38,46 @@ private[sql] object SparkSQLExecution {
   def withNewExecution[T](sqlContext: SQLContext, df: DataFrame)(body: => T): T = {
     val sc = sqlContext.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
-    try {
-      if (oldExecutionId == null) {
-        val executionId = SparkSQLExecution.nextExecutionId
-        sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
+    if (oldExecutionId == null) {
+      val executionId = SparkSQLExecution.nextExecutionId
+      sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
+      val r = try {
         val callSite = Utils.getCallSite()
         sqlContext.listener.onExecutionStart(
           executionId, callSite.shortForm, callSite.longForm, df, System.currentTimeMillis())
-        val r = body
-        sqlContext.listener.onExecutionEnd(executionId, System.currentTimeMillis())
-        r
-      } else {
-        // Don't support nested `withNewExecution`. This is an example of the nested
-        // `withNewExecution`:
-        //
-        // class DataFrame {
-        //   def foo: T = withNewExecution { something.createNewDataFrame().collect() }
-        // }
-        //
-        // Note: `collect` will call withNewExecution
-        // In this case, only the "executedPlan" for "collect" will be executed. The "executedPlan"
-        // for the outer DataFrame won't be executed. So it's meaningless to create a new Execution
-        // for the outer DataFrame. Even if we track it, since its "executedPlan" doesn't run,
-        // all accumulator metrics will be 0. It will confuse people if we show them in Web UI.
-        //
-        // A real case is the `DataFrame.count` method.
-        throw new IllegalArgumentException(s"$EXECUTION_ID_KEY is already set")
-      }
-    } finally {
-      if (oldExecutionId == null) {
+        try {
+          body
+        } finally {
+          // Ideally, we need to make sure onExecutionEnd happens after onJobStart and onJobEnd.
+          // However, onJobStart and onJobEnd run in the listener thread. Because we cannot add new
+          // SQL event types to SparkListener since it's a public API, we cannot guarantee that.
+          //
+          // SQLSparkListener should handle the case that onExecutionEnd happens before onJobEnd.
+          //
+          // The worst case is onExecutionEnd may happen before onJobStart when the listener thread
+          // is very busy. If so, we cannot track the jobs for the execution. It seems acceptable.
+          sqlContext.listener.onExecutionEnd(executionId, System.currentTimeMillis())
+        }
+      } finally {
         sc.setLocalProperty(EXECUTION_ID_KEY, null)
       }
+      r
+    } else {
+      // Don't support nested `withNewExecution`. This is an example of the nested
+      // `withNewExecution`:
+      //
+      // class DataFrame {
+      //   def foo: T = withNewExecution { something.createNewDataFrame().collect() }
+      // }
+      //
+      // Note: `collect` will call withNewExecution
+      // In this case, only the "executedPlan" for "collect" will be executed. The "executedPlan"
+      // for the outer DataFrame won't be executed. So it's meaningless to create a new Execution
+      // for the outer DataFrame. Even if we track it, since its "executedPlan" doesn't run,
+      // all accumulator metrics will be 0. It will confuse people if we show them in Web UI.
+      //
+      // A real case is the `DataFrame.count` method.
+      throw new IllegalArgumentException(s"$EXECUTION_ID_KEY is already set")
     }
   }
 
