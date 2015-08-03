@@ -357,7 +357,7 @@ object SparkEnv extends Logging {
     }
 
     val outputCommitCoordinator = mockOutputCommitCoordinator.getOrElse {
-      new OutputCommitCoordinator(conf)
+      new OutputCommitCoordinator(conf, isDriver)
     }
     val outputCommitCoordinatorActor = registerOrLookup("OutputCommitCoordinator",
       new OutputCommitCoordinatorActor(outputCommitCoordinator))
