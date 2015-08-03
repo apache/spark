@@ -608,7 +608,7 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-6899: type should match when using codegen") {
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.TUNGSTEN_ENABLED.key -> "true") {
       checkAnswer(
         decimalData.agg(avg('a)),
         Row(new java.math.BigDecimal(2.0)))
@@ -844,12 +844,12 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-8608: call `show` on local DataFrame with random columns should return same value") {
     // Make sure we can pass this test for both codegen mode and interpreted mode.
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.TUNGSTEN_ENABLED.key -> "true") {
       val df = testData.select(rand(33))
       assert(df.showString(5) == df.showString(5))
     }
 
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.TUNGSTEN_ENABLED.key -> "false") {
       val df = testData.select(rand(33))
       assert(df.showString(5) == df.showString(5))
     }
@@ -861,11 +861,11 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-8609: local DataFrame with random columns should return same value after sort") {
     // Make sure we can pass this test for both codegen mode and interpreted mode.
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.TUNGSTEN_ENABLED.key -> "true") {
       checkAnswer(testData.sort(rand(33)), testData.sort(rand(33)))
     }
 
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.TUNGSTEN_ENABLED.key -> "false") {
       checkAnswer(testData.sort(rand(33)), testData.sort(rand(33)))
     }
 
