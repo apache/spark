@@ -464,6 +464,38 @@ public final class UnsafeRow extends MutableRow {
   }
 
   /**
+   * Creates an empty UnsafeRow from a byte array with specified numBytes and numFields.
+   * The returned row is invalid until we call copyFrom on it.
+   */
+  public static UnsafeRow createFromByteArray(int numBytes, int numFields) {
+    final UnsafeRow row = new UnsafeRow();
+    row.pointTo(new byte[numBytes], numFields, numBytes);
+    return row;
+  }
+
+  /**
+   * Copies the input UnsafeRow to this UnsafeRow, and resize the underlying byte[] when the
+   * input row is larger than this row.
+   */
+  public void copyFrom(UnsafeRow row) {
+    // copyFrom is only available for UnsafeRow created from byte array.
+    assert (baseObject instanceof byte[]) && baseOffset == PlatformDependent.BYTE_ARRAY_OFFSET;
+    if (row.sizeInBytes > this.sizeInBytes) {
+      // resize the underlying byte[] if it's not large enough.
+      this.baseObject = new byte[row.sizeInBytes];
+    }
+    PlatformDependent.copyMemory(
+      row.baseObject,
+      row.baseOffset,
+      this.baseObject,
+      this.baseOffset,
+      row.sizeInBytes
+    );
+    // update the sizeInBytes.
+    this.sizeInBytes = row.sizeInBytes;
+  }
+
+  /**
    * Write this UnsafeRow's underlying bytes to the given OutputStream.
    *
    * @param out the stream to write to.
