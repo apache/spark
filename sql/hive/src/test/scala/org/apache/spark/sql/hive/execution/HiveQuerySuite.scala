@@ -672,32 +672,32 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   // test get_json_object again Hive, because the HiveCompatabilitySuite cannot handle result
   // with newline in it.
-  createQueyTest("get_json_object #1",
+  createQueryTest("get_json_object #1",
     "SELECT get_json_object(src_json.json, '$') FROM src_json")
 
-  createQueyTest("get_json_object #2",
+  createQueryTest("get_json_object #2",
     "SELECT get_json_object(src_json.json, '$.owner'), get_json_object(src_json.json, '$.store')" +
       " FROM src_json")
 
-  createQueyTest("get_json_object #3",
+  createQueryTest("get_json_object #3",
     "SELECT get_json_object(src_json.json, '$.store.bicycle'), " +
       "get_json_object(src_json.json, '$.store.book') FROM src_json")
 
-  createQueyTest("get_json_object #4",
+  createQueryTest("get_json_object #4",
     "SELECT get_json_object(src_json.json, '$.store.book[0]'), " +
       "get_json_object(src_json.json, '$.store.book[*]') FROM src_json")
 
-  createQueyTest("get_json_object #5",
+  createQueryTest("get_json_object #5",
     "SELECT get_json_object(src_json.json, '$.store.book[0].category'), " +
       "get_json_object(src_json.json, '$.store.book[*].category'), " +
       "get_json_object(src_json.json, '$.store.book[*].isbn'), " +
       "get_json_object(src_json.json, '$.store.book[*].reader') FROM src_json")
 
-  createQueyTest("get_json_object #6",
+  createQueryTest("get_json_object #6",
     "SELECT get_json_object(src_json.json, '$.store.book[*].reader[0].age'), " +
       "get_json_object(src_json.json, '$.store.book[*].reader[*].age') FROM src_json")
 
-  createQueyTest("get_json_object #7",
+  createQueryTest("get_json_object #7",
     "SELECT get_json_object(src_json.json, '$.store.basket[0][1]'), " +
       "get_json_object(src_json.json, '$.store.basket[*]'), " +
       "get_json_object(src_json.json, '$.store.basket[*][0]'), " +
@@ -706,7 +706,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       "get_json_object(src_json.json, '$.store.basket[0][2].b'), " +
       "get_json_object(src_json.json, '$.store.basket[0][*].b') FROM src_json")
 
-  createQueyTest("get_json_object #8",
+  createQueryTest("get_json_object #8",
     "SELECT get_json_object(src_json.json, '$.non_exist_key'), " +
       "get_json_object(src_json.json, '$..no_recursive'), " +
       "get_json_object(src_json.json, '$.store.book[10]'), " +
@@ -714,20 +714,19 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       "get_json_object(src_json.json, '$.store.basket[*].non_exist_key'), " +
       "get_json_object(src_json.json, '$.store.basket[0][*].non_exist_key') FROM src_json")
 
-  createQueyTest("get_json_object #9",
+  createQueryTest("get_json_object #9",
     "SELECT get_json_object(src_json.json, '$.zip code') FROM src_json")
 
-  createQueyTest("get_json_object #10",
+  createQueryTest("get_json_object #10",
     "SELECT get_json_object(src_json.json, '$.fb:testid') FROM src_json")
 
-  createQueyTest("get_json_obect with newline",
-    s"""
-       |CREATE TABLE dest2(c1 STRING) STORED AS RCFILE;
-       |INSERT OVERWRITE TABLE dest2 SELECT '{"a":"b\nc"}' FROM src tablesample (1 rows);
-       |
-       |SELECT get_json_object(c1, '$.a') FROM dest2
-     """.stripMargin
-    )
+  createQueryTest("get_json_object with newline",
+    """
+      |CREATE TABLE dest2(c1 STRING) STORED AS RCFILE;
+      |INSERT OVERWRITE TABLE dest2 SELECT '{"a":"b\nc"}' FROM src tablesample (1 rows);
+      |
+      |SELECT get_json_object(c1, '$.a') FROM dest2
+    """.stripMargin)
 
   test("predicates contains an empty AttributeSet() references") {
     sql(

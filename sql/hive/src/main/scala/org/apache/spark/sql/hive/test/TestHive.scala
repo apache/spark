@@ -373,7 +373,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     TestTable("src_json",
       s"""CREATE TABLE src_json (json STRING) STORED AS TEXTFILE
        """.stripMargin.cmd,
-      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/json.txt")}' INTO TABLE src".cmd)
+      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/json.txt")}' INTO TABLE src_json".cmd)
   )
 
   hiveQTestUtilTables.foreach(registerTestTable)
