@@ -55,7 +55,6 @@ case class ShuffledHashOuterJoin(
   protected override def doExecute(): RDD[InternalRow] = {
     val joinedRow = new JoinedRow()
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
-      // TODO this probably can be replaced by external sort (sort merged join?)
       joinType match {
         case LeftOuter =>
           val hashed = HashedRelation(rightIter, buildKeyGenerator)
