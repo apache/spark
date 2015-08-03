@@ -50,7 +50,7 @@ object DataTypeTestUtils {
   val numericTypeWithoutDecimal: Set[DataType] = integralType ++ Set(DoubleType, FloatType)
 
   /**
-   * Instances of all [[NumericType]]s and CalendarIntervalType
+   * Instances of all [[NumericType]]s and [[CalendarIntervalType]]
    */
   val numericAndInterval: Set[DataType] = numericTypeWithoutDecimal + CalendarIntervalType
 
