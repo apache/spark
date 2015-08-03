@@ -18,6 +18,7 @@
 // TODO: uncomment the test here! It is currently failing due to
 // bad interaction with org.apache.spark.sql.test.TestSQLContext.
 
+// scalastyle:off
 //package org.apache.spark.sql.execution.joins
 //
 //import scala.reflect.ClassTag
@@ -90,3 +91,4 @@
 //  }
 //
 //}
+// scalastyle:on
