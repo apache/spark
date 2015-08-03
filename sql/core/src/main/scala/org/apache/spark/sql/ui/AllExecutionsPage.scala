@@ -60,6 +60,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
 private[ui] abstract class ExecutionTable(
     parent: SQLTab,
+    tableId: String,
     tableName: String,
     currentTime: Long,
     executionUIDatas: Seq[SparkSQLExecutionUIData],
@@ -165,7 +166,8 @@ private[ui] abstract class ExecutionTable(
   def toNodeSeq: Seq[Node] = {
     <div>
       <h4>{tableName}</h4>
-      {UIUtils.listingTable[SparkSQLExecutionUIData](header, row(currentTime, _), executionUIDatas)}
+      {UIUtils.listingTable[SparkSQLExecutionUIData](
+        header, row(currentTime, _), executionUIDatas, id = Some(tableId))}
     </div>
   }
 
@@ -183,6 +185,7 @@ private[ui] class RunningExecutionTable(
     executionUIDatas: Seq[SparkSQLExecutionUIData])
   extends ExecutionTable(
     parent,
+    "running-execution-table",
     tableName,
     currentTime,
     executionUIDatas,
@@ -201,6 +204,7 @@ private[ui] class CompletedExecutionTable(
     executionUIDatas: Seq[SparkSQLExecutionUIData])
   extends ExecutionTable(
     parent,
+    "completed-execution-table",
     tableName,
     currentTime,
     executionUIDatas,
@@ -218,6 +222,7 @@ private[ui] class FailedExecutionTable(
     executionUIDatas: Seq[SparkSQLExecutionUIData])
   extends ExecutionTable(
     parent,
+    "failed-execution-table",
     tableName,
     currentTime,
     executionUIDatas,
