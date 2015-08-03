@@ -93,4 +93,4 @@ INDEX
 .lintr
 gen-java.*
 .*avpr
-org.apache.spark.sql.sources.DataSourceProvider
+services/*

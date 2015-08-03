@@ -202,7 +202,7 @@ private[sql] object ResolvedDataSource extends Logging {
     val sl = ServiceLoader.load(classOf[DataSourceProvider], loader)
 
     sl.iterator().filter(_.format() == provider).toList match {
-      case Nil => logInfo(s"provider: $provider is not registered in the service loader")
+      case Nil => logDebug(s"provider: $provider is not registered in the service loader")
       case head :: Nil => return head.getClass
       case sources => sys.error(s"Multiple sources found for $provider, " +
         s"(${sources.map(_.getClass.getName).mkString(", ")}, " +
