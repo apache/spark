@@ -49,7 +49,7 @@ import org.apache.spark.util.Utils
 @Experimental
 // scalastyle:off
 object functions {
-  // scalastyle:on
+// scalastyle:on
 
   private[this] implicit def toColumn(expr: Expression): Column = Column(expr)
 
@@ -1866,10 +1866,10 @@ object functions {
   /* Translate any character in the srcString by a character in replaceString.
   * The characters in replaceString is corresponding to the characters in matchingString.
   * The translate will happen when any character in the string matching with the character
-    * in the matchingString.
+  * in the matchingString.
   *
   * @group string_funcs
-    * @since 1.5.0
+  * @since 1.5.0
   */
   def translate(srcString: Column, matchingString: String, replaceString: String): Column =
     StringTranslate(srcString.expr, lit(matchingString).expr, lit(replaceString).expr)

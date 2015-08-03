@@ -22,7 +22,7 @@ import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteOrder;
 import java.util.Arrays;
-import java.util.*;
+import java.util.Map;
 
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;

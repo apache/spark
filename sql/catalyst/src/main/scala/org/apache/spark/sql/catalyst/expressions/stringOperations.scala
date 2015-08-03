@@ -377,45 +377,22 @@ object StringTranslate {
  * in the `matchingExpr`.
  */
 case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replaceExpr: Expression)
-  extends Expression with ImplicitCastInputTypes {
-
-  override def foldable: Boolean = srcExpr.foldable && matchingExpr.foldable && replaceExpr.foldable
-  override def nullable: Boolean = srcExpr.nullable || matchingExpr.nullable || replaceExpr.nullable
-
-  override def dataType: DataType = StringType
-
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
-
-  override def children: Seq[Expression] = srcExpr :: matchingExpr :: replaceExpr :: Nil
+  extends TernaryExpression with ImplicitCastInputTypes {
 
   @transient private var lastMatching: UTF8String = _
   @transient private var lastReplace: UTF8String = _
   @transient private var dict: JMap[Character, Character] = _
 
-  override def eval(input: InternalRow): Any = {
-    val srcEval = srcExpr.eval(input)
-    if (srcEval != null) {
-      val matchingEval = matchingExpr.eval(input)
-      if (matchingEval != null) {
-        val replaceEval = replaceExpr.eval(input)
-        if (replaceEval != null) {
-          if (matchingEval != lastMatching || replaceEval != lastReplace) {
-            lastMatching = matchingEval.asInstanceOf[UTF8String]
-            lastReplace = replaceEval.asInstanceOf[UTF8String]
-            dict = StringTranslate.buildDict(lastMatching, lastReplace)
-          }
-          return srcEval.asInstanceOf[UTF8String].translate(dict)
-        }
-      }
+  override def nullSafeEval(srcEval: Any, matchingEval: Any, replaceEval: Any): Any = {
+    if (matchingEval != lastMatching || replaceEval != lastReplace) {
+      lastMatching = matchingEval.asInstanceOf[UTF8String]
+      lastReplace = replaceEval.asInstanceOf[UTF8String]
+      dict = StringTranslate.buildDict(lastMatching, lastReplace)
     }
-    null
+    srcEval.asInstanceOf[UTF8String].translate(dict)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val srcGen = srcExpr.gen(ctx)
-    val matchingGen = matchingExpr.gen(ctx)
-    val replaceGen = replaceExpr.gen(ctx)
-
     val termLastMatching = ctx.freshName("lastMatching")
     val termLastReplace = ctx.freshName("lastReplace")
     val termDict = ctx.freshName("dict")
@@ -426,33 +403,24 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     ctx.addMutableState(classNameUTF8String, termLastReplace, s"${termLastReplace} = null;")
     ctx.addMutableState(classNameDict, termDict, s"${termDict} = null;")
 
-    s"""
-      ${srcGen.code}
-      boolean ${ev.isNull} = ${srcGen.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${matchingGen.code}
-        if (!${matchingGen.isNull}) {
-          ${replaceGen.code}
-          if (!${replaceGen.isNull}) {
-            if (!${matchingGen.primitive}.equals(${termLastMatching}) ||
-              !${replaceGen.primitive}.equals(${termLastReplace})) {
-              // matching or replace value changed
-              ${termLastMatching} = ${matchingGen.primitive};
-              ${termLastReplace} = ${replaceGen.primitive};
-              ${termDict} = org.apache.spark.sql.catalyst.expressions.StringTranslate
-                .buildDict(${termLastMatching}, ${termLastReplace});
-            }
-            ${ev.primitive} = ${srcGen.primitive}.translate(${termDict});
-          } else {
-            ${ev.isNull} = true;
-          }
-        } else {
-          ${ev.isNull} = true;
-        }
+    nullSafeCodeGen(ctx, ev, (src, matching, replace) => {
+      s"""if (!${matching}.equals(${termLastMatching}) ||
+        !${replace}.equals(${termLastReplace})) {
+        // matching or replace value changed
+        ${termLastMatching} = ${matching};
+        ${termLastReplace} = ${replace};
+        ${termDict} = org.apache.spark.sql.catalyst.expressions.StringTranslate
+          .buildDict(${termLastMatching}, ${termLastReplace});
       }
-     """
+      ${ev.primitive} = ${src}.translate(${termDict});
+      """
+    })
   }
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
+  override def children: Seq[Expression] = srcExpr :: matchingExpr :: replaceExpr :: Nil
+  override def prettyName: String = "translate"
 }
 
 /**
