@@ -68,22 +68,22 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
   errorTest(
     "single invalid type, single arg",
     testRelation.select(TestFunction(dateLit :: Nil, IntegerType :: Nil).as('a)),
-    "cannot resolve" :: "testfunction" :: "argument 1" :: "expected to be of type int" ::
-    "'null' is of type date" ::Nil)
+    "cannot resolve" :: "testfunction" :: "argument 1" :: "requires int type" ::
+    "'null' is of date type" ::Nil)
 
   errorTest(
     "single invalid type, second arg",
     testRelation.select(
       TestFunction(dateLit :: dateLit :: Nil, DateType :: IntegerType :: Nil).as('a)),
-    "cannot resolve" :: "testfunction" :: "argument 2" :: "expected to be of type int" ::
-    "'null' is of type date" ::Nil)
+    "cannot resolve" :: "testfunction" :: "argument 2" :: "requires int type" ::
+    "'null' is of date type" ::Nil)
 
   errorTest(
     "multiple invalid type",
     testRelation.select(
       TestFunction(dateLit :: dateLit :: Nil, IntegerType :: IntegerType :: Nil).as('a)),
     "cannot resolve" :: "testfunction" :: "argument 1" :: "argument 2" ::
-    "expected to be of type int" :: "'null' is of type date" ::Nil)
+    "requires int type" :: "'null' is of date type" ::Nil)
 
   errorTest(
     "unresolved window function",
@@ -111,12 +111,12 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
   errorTest(
     "bad casts",
     testRelation.select(Literal(1).cast(BinaryType).as('badCast)),
-    "cannot cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
+  "cannot cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
 
   errorTest(
     "sorting by unsupported column types",
     listRelation.orderBy('list.asc),
-    "sorting" :: "type" :: "array<int>" :: Nil)
+    "sort" :: "type" :: "array<int>" :: Nil)
 
   errorTest(
     "non-boolean filters",

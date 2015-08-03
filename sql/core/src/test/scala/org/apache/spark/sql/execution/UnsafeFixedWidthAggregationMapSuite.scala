@@ -56,11 +56,21 @@ class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
         assert(leakedShuffleMemory === 0)
         taskMemoryManager = null
       }
+      TaskContext.unset()
     }
 
     test(name) {
       taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
       shuffleMemoryManager = new TestShuffleMemoryManager
+
+      TaskContext.setTaskContext(new TaskContextImpl(
+        stageId = 0,
+        partitionId = 0,
+        taskAttemptId = Random.nextInt(10000),
+        attemptNumber = 0,
+        taskMemoryManager = taskMemoryManager,
+        metricsSystem = null))
+
       try {
         f
       } catch {
@@ -162,14 +172,6 @@ class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
   testWithMemoryLeakDetection("test external sorting") {
     // Calling this make sure we have block manager and everything else setup.
     TestSQLContext
-
-    TaskContext.setTaskContext(new TaskContextImpl(
-      stageId = 0,
-      partitionId = 0,
-      taskAttemptId = 0,
-      attemptNumber = 0,
-      taskMemoryManager = taskMemoryManager,
-      metricsSystem = null))
 
     // Memory consumption in the beginning of the task.
     val initialMemoryConsumption = shuffleMemoryManager.getMemoryConsumptionForThisTask()
