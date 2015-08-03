@@ -151,7 +151,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     require(ovr1.getClassifier.getOrDefault(lr.maxIter) === 10,
       "copy should handle extra classifier params")
 
-    val ovrModel = ovr1.fit(dataset).copy(ParamMap(lr.thresholds -> Array(0.1, 0.9)))
+    val ovrModel = ovr1.fit(dataset).copy(ParamMap(lr.thresholds -> Array(0.9, 0.1)))
     ovrModel.models.foreach { case m: LogisticRegressionModel =>
       require(m.getThreshold === 0.1, "copy should handle extra model params")
     }

@@ -18,26 +18,20 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 final class TestProbabilisticClassificationModel(
-  override val numClasses: Int)
-    extends ProbabilisticClassificationModel[Vector, TestProbabilisticClassificationModel] {
-  override val uid = null
-  override def copy(extra: org.apache.spark.ml.param.ParamMap):
-      TestProbabilisticClassificationModel = {
-    defaultCopy(extra)
-  }
+    override val uid: String,
+    override val numClasses: Int)
+  extends ProbabilisticClassificationModel[Vector, TestProbabilisticClassificationModel] {
 
-  /** @group setParam */
-  def setThresholds(value: Array[Double]): this.type = set(thresholds, value)
+  override def copy(extra: org.apache.spark.ml.param.ParamMap): this.type = defaultCopy(extra)
 
-  override def predictRaw(input: Vector): Vector = {
+  override protected def predictRaw(input: Vector): Vector = {
     input
   }
 
-  override def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
+  override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction
   }
 
@@ -50,14 +44,14 @@ final class TestProbabilisticClassificationModel(
 class ProbabilisticClassifierSuite extends SparkFunSuite {
 
   test("test thresholding") {
-    val threshold = Array(0.5, 0.2)
-    val testModel = (new TestProbabilisticClassificationModel(2)).setThresholds(threshold)
-    assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 1.0))) == 1.0)
-    assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 0.2))) == 0.0)
+    val thresholds = Array(0.5, 0.2)
+    val testModel = new TestProbabilisticClassificationModel("myuid", 2).setThresholds(thresholds)
+    assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 1.0))) === 1.0)
+    assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 0.2))) === 0.0)
   }
 
   test("test thresholding not required") {
-    val testModel = new TestProbabilisticClassificationModel(2)
-    assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 2.0))) == 1.0)
+    val testModel = new TestProbabilisticClassificationModel("myuid", 2)
+    assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 2.0))) === 1.0)
   }
 }

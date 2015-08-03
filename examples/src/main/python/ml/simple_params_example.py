@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
     # We may alternatively specify parameters using a parameter map.
     # paramMap overrides all lr parameters set earlier.
-    paramMap = {lr.maxIter: 20, lr.threshold: 0.55, lr.probabilityCol: "myProbability"}
+    paramMap = {lr.maxIter: 20, lr.thresholds: [0.5, 0.55], lr.probabilityCol: "myProbability"}
 
     # Now learn a new model using the new parameters.
     model2 = lr.fit(training, paramMap)

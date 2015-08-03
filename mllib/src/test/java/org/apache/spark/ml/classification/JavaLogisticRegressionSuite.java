@@ -87,8 +87,8 @@ public class JavaLogisticRegressionSuite implements Serializable {
     LogisticRegression parent = (LogisticRegression) model.parent();
     assert(parent.getMaxIter() == 10);
     assert(parent.getRegParam() == 1.0);
-    assert(parent.getThresholds()[0] == 0.6);
-    assert(parent.getThresholds()[1] == 0.4);
+    assert(parent.getThresholds()[0] == 0.4);
+    assert(parent.getThresholds()[1] == 0.6);
     assert(parent.getThreshold() == 0.6);
     assert(model.getThreshold() == 0.6);
 
@@ -100,7 +100,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
       assert(r.getDouble(0) == 0.0);
     }
     // Call transform with params, and check that the params worked.
-    double[] thresholds = {0.0, 1.0};
+    double[] thresholds = {1.0, 0.0};
     model.transform(
       dataset, model.thresholds().w(thresholds), model.probabilityCol().w("myProb"))
       .registerTempTable("predNotAllZero");
@@ -112,7 +112,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
     assert(foundNonZero);
 
     // Call fit() with new params, and check as many params as we can.
-    double[] thresholds2 = {0.4, 0.6};
+    double[] thresholds2 = {0.6, 0.4};
     LogisticRegressionModel model2 = lr.fit(dataset, lr.maxIter().w(5), lr.regParam().w(0.1),
         lr.thresholds().w(thresholds2), lr.probabilityCol().w("theProb"));
     LogisticRegression parent2 = (LogisticRegression) model2.parent();

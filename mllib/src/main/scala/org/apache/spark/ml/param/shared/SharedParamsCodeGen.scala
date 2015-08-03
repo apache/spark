@@ -47,9 +47,12 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[Double]("threshold",
         "threshold in binary classification prediction, in range [0, 1]",
         isValid = "ParamValidators.inRange(0, 1)", finalMethods = false),
-      ParamDesc[Array[Double]]("thresholds",
-        "thresholds in multi-class classification prediction, must be array with size of classes.",
-        finalMethods = false),
+      ParamDesc[Array[Double]]("thresholds", "Thresholds in multi-class classification" +
+        " to adjust the probability of predicting each class." +
+        " Array must have length equal to the number of classes, with values >= 0." +
+        " The class with largest value p/t is predicted, where p is the original probability" +
+        " of that class and t is the class' threshold.",
+        isValid = "(t: Array[Double]) => t.forall(_ >= 0)"),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
