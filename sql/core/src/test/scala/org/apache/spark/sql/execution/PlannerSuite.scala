@@ -210,6 +210,54 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
           }
           i += 1
         }
+
+        {
+          val numExchanges: Int = sql(
+            s"""
+                |SELECT small.key, count(*)
+                |FROM
+                |  normal JOIN small ON (normal.key = small.key)
+                |  JOIN tiny ON (small.key = tiny.key)
+                |GROUP BY
+                |  small.key
+              """.stripMargin
+          ).queryExecution.executedPlan.collect {
+            case exchange: Exchange => exchange
+          }.length
+          assert(numExchanges === 3)
+        }
+
+        {
+          val numExchanges: Int = sql(
+            s"""
+                |SELECT normal.key, count(*)
+                |FROM
+                |  normal LEFT OUTER JOIN small ON (normal.key = small.key)
+                |  JOIN tiny ON (small.key = tiny.key)
+                |GROUP BY
+                |  normal.key
+              """.stripMargin
+          ).queryExecution.executedPlan.collect {
+            case exchange: Exchange => exchange
+          }.length
+          assert(numExchanges === 3)
+        }
+
+        {
+          val numExchanges: Int = sql(
+            s"""
+                |SELECT small.key, count(*)
+                |FROM
+                |  normal LEFT OUTER JOIN small ON (normal.key = small.key)
+                |  JOIN tiny ON (small.key = tiny.key)
+                |GROUP BY
+                |  small.key
+              """.stripMargin
+          ).queryExecution.executedPlan.collect {
+            case exchange: Exchange => exchange
+          }.length
+          assert(numExchanges === 4)
+        }
       }
     }
   }

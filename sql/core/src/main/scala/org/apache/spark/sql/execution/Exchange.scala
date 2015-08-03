@@ -213,7 +213,12 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
 
         def addShuffleIfNecessary(child: SparkPlan): SparkPlan = {
           if (!child.outputPartitioning.guarantees(partitioning)) {
-            Exchange(partitioning, child)
+            // If the child's outputPartitioning does not guarantees partitioning,
+            // we need to add an Exchange operator. At here, we always use
+            // the nullSafe version of the given partitioning because the nullSafe
+            // version always guarantees the nullUnsafe version of the partitioning and
+            // we do not have any special handling for nullUnsafe partitioning for now.
+            Exchange(partitioning.withNullSafeSetting(newNullSafe = true), child)
           } else {
             child
           }

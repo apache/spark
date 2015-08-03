@@ -98,6 +98,8 @@ sealed trait Partitioning {
    * Returns true iff we can say that the partitioning scheme of this [[Partitioning]]
    * guarantees the same partitioning scheme described by `other`.
    *
+   * If a [[Partitioning]] supports `nullSafe` setting, the nullSafe version of this
+   * [[Partitioning]] should always `guarantees` its nullUnsafe version.
    * For example, HashPartitioning(expressions = 'a, numPartitions = 10, nullSafe = true)
    * guarantees HashPartitioning(expressions = 'a, numPartitions = 10, nullSafe = false).
    * However, HashPartitioning(expressions = 'a, numPartitions = 10, nullSafe = false) does not
