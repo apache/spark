@@ -504,7 +504,7 @@ private[spark] class ExecutorAllocationManager(
   private class ExecutorAllocationListener extends SparkListener {
 
     private val stageIdToNumTasks = new mutable.HashMap[Int, Int]
-    private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[String]]
+    private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
     private val executorIdToTaskIds = new mutable.HashMap[String, mutable.HashSet[Long]]
     // Number of tasks currently running on the cluster.  Should be 0 when no stages are active.
     private var numRunningTasks: Int = _
@@ -537,19 +537,10 @@ private[spark] class ExecutorAllocationManager(
       }
     }
 
-    override def onTaskResubmit(taskResubmit: SparkListenerTaskResubmit): Unit = {
-      val stageId = taskResubmit.stageId
-      allocationManager.synchronized {
-        val num = stageIdToNumTasks.getOrElse(stageId, 0)
-        stageIdToNumTasks.update(stageId, num + 1)
-      }
-    }
-
     override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
       val stageId = taskStart.stageId
       val taskId = taskStart.taskInfo.taskId
       val taskIndex = taskStart.taskInfo.index
-      val attemptId = taskStart.taskInfo.attempt
       val executorId = taskStart.taskInfo.executorId
 
       allocationManager.synchronized {
@@ -563,17 +554,7 @@ private[spark] class ExecutorAllocationManager(
 
         // If this is the last pending task, mark the scheduler queue as empty
         stageIdToTaskIndices
-          .getOrElseUpdate(stageId, new mutable.HashSet[String]) += (taskIndex + "." + attemptId)
-        val numTasksScheduled = stageIdToTaskIndices(stageId).size
-        val numTasksTotal = stageIdToNumTasks.getOrElse(stageId, -1)
-        if (numTasksScheduled == numTasksTotal) {
-          // No more pending tasks for this stage
-          stageIdToNumTasks -= stageId
-          stageIdToTaskIndices -= stageId
-          if (stageIdToNumTasks.isEmpty) {
-            allocationManager.onSchedulerQueueEmpty()
-          }
-        }
+          .getOrElseUpdate(stageId, new mutable.HashSet[Int]) += taskIndex
 
         // Mark the executor on which this task is scheduled as busy
         executorIdToTaskIds.getOrElseUpdate(executorId, new mutable.HashSet[Long]) += taskId
@@ -584,6 +565,8 @@ private[spark] class ExecutorAllocationManager(
     override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
       val executorId = taskEnd.taskInfo.executorId
       val taskId = taskEnd.taskInfo.taskId
+      val taskIndex = taskEnd.taskInfo.index
+      val stageId = taskEnd.stageId
       allocationManager.synchronized {
         numRunningTasks -= 1
         // If the executor is no longer running any scheduled tasks, mark it as idle
@@ -592,6 +575,13 @@ private[spark] class ExecutorAllocationManager(
           if (executorIdToTaskIds(executorId).isEmpty) {
             executorIdToTaskIds -= executorId
             allocationManager.onExecutorIdle(executorId)
+          }
+        }
+
+        // If the task failed, we expect it to be resubmitted later.
+        if (taskEnd.reason != Success) {
+          stageIdToTaskIndices.get(stageId).foreach { taskIndices =>
+            taskIndices.remove(taskIndex)
           }
         }
       }

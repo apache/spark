@@ -17,7 +17,23 @@
 
 package org.apache.spark;
 
-import org.apache.spark.scheduler.*;
+import org.apache.spark.scheduler.SparkListener;
+import org.apache.spark.scheduler.SparkListenerApplicationEnd;
+import org.apache.spark.scheduler.SparkListenerApplicationStart;
+import org.apache.spark.scheduler.SparkListenerBlockManagerAdded;
+import org.apache.spark.scheduler.SparkListenerBlockManagerRemoved;
+import org.apache.spark.scheduler.SparkListenerEnvironmentUpdate;
+import org.apache.spark.scheduler.SparkListenerExecutorAdded;
+import org.apache.spark.scheduler.SparkListenerExecutorMetricsUpdate;
+import org.apache.spark.scheduler.SparkListenerExecutorRemoved;
+import org.apache.spark.scheduler.SparkListenerJobEnd;
+import org.apache.spark.scheduler.SparkListenerJobStart;
+import org.apache.spark.scheduler.SparkListenerStageCompleted;
+import org.apache.spark.scheduler.SparkListenerStageSubmitted;
+import org.apache.spark.scheduler.SparkListenerTaskEnd;
+import org.apache.spark.scheduler.SparkListenerTaskGettingResult;
+import org.apache.spark.scheduler.SparkListenerTaskStart;
+import org.apache.spark.scheduler.SparkListenerUnpersistRDD;
 
 /**
  * Java clients should extend this class instead of implementing
@@ -36,9 +52,6 @@ public class JavaSparkListener implements SparkListener {
 
   @Override
   public void onStageSubmitted(SparkListenerStageSubmitted stageSubmitted) { }
-
-  @Override
-  public void onTaskResubmit(SparkListenerTaskResubmit taskResubmit) { }
 
   @Override
   public void onTaskStart(SparkListenerTaskStart taskStart) { }

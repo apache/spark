@@ -751,6 +751,23 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsTarget(manager) === 2)
   }
 
+  test("SPARK-8366: it should be resubmitted later if task fails") {
+    sc = createSparkContext()
+    val manager = sc.executorAllocationManager.get
+    assert(maxNumExecutorsNeeded(manager) === 0)
+
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, 1)))
+    assert(maxNumExecutorsNeeded(manager) === 1)
+
+    val taskInfo = createTaskInfo(1, 1, "executor-1")
+    sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, taskInfo))
+    assert(maxNumExecutorsNeeded(manager) === 1)
+
+    val taskEndReason = ExceptionFailure(null, null, null, null, null)
+    sc.listenerBus.postToAll(SparkListenerTaskEnd(0, 0, null, taskEndReason, taskInfo, null))
+    assert(maxNumExecutorsNeeded(manager) === 1)
+  }
+
   private def createSparkContext(
       minExecutors: Int = 1,
       maxExecutors: Int = 5,

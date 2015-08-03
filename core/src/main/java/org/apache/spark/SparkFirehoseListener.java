@@ -43,11 +43,6 @@ public class SparkFirehoseListener implements SparkListener {
     }
 
     @Override
-    public void onTaskResubmit(SparkListenerTaskResubmit taskResubmit) {
-        onEvent(taskResubmit);
-    }
-
-    @Override
     public final void onTaskStart(SparkListenerTaskStart taskStart) {
         onEvent(taskStart);
     }
