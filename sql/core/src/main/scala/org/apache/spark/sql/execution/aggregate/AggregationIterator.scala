@@ -90,14 +90,14 @@ abstract class AggregationIterator(
         case _ =>
           // We only need to set inputBufferOffset for aggregate functions with mode
           // PartialMerge and Final.
-          func.inputBufferOffset = inputBufferOffset
+          func.withNewInputBufferOffset(inputBufferOffset)
           inputBufferOffset += func.bufferSchema.length
           func
       }
       // Set mutableBufferOffset for this function. It is important that setting
       // mutableBufferOffset happens after all potential bindReference operations
       // because bindReference will create a new instance of the function.
-      funcWithBoundReferences.mutableBufferOffset = mutableBufferOffset
+      funcWithBoundReferences.withNewMutableBufferOffset(mutableBufferOffset)
       mutableBufferOffset += funcWithBoundReferences.bufferSchema.length
       functions(i) = funcWithBoundReferences
       i += 1
@@ -347,7 +347,8 @@ abstract class AggregationIterator(
         }
         val algebraicEvalProjection = newMutableProjection(evalExpressions, bufferSchemata)()
         val aggregateResultSchema = nonCompleteAggregateAttributes ++ completeAggregateAttributes
-        val aggregateResult: MutableRow = new GenericMutableRow(aggregateResultSchema.length)
+        // TODO: Use unsafe row.
+        val aggregateResult = new GenericMutableRow(aggregateResultSchema.length)
         val resultProjection =
           newMutableProjection(
             resultExpressions, groupingKeyAttributes ++ aggregateResultSchema)()

@@ -47,6 +47,9 @@ case class Aggregate(
   private[this] val allAggregateExpressions =
     nonCompleteAggregateExpressions ++ completeAggregateExpressions
 
+  private[this] val hasNonAlgebricAggregateFunctions =
+    !allAggregateExpressions.forall(_.aggregateFunction.isInstanceOf[AlgebraicAggregate])
+
   // Use the hybrid iterator if (1) unsafe is enabled, (2) the schemata of
   // grouping key and aggregation buffer is supported; and (3) all
   // aggregate functions are algebraic.
@@ -56,14 +59,13 @@ case class Aggregate(
         allAggregateExpressions.flatMap(_.aggregateFunction.bufferAttributes))
     val groupKeySchema: StructType =
       StructType.fromAttributes(groupingExpressions.map(_.toAttribute))
-    val resultSchema: StructType =
-      StructType.fromAttributes(resultExpressions.map(_.toAttribute))
+
     val schemaSupportsUnsafe: Boolean =
       UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema) &&
-        UnsafeProjection.canSupport(groupKeySchema) &&
-        UnsafeProjection.canSupport(resultSchema)
+        UnsafeProjection.canSupport(groupKeySchema)
 
-    sqlContext.conf.unsafeEnabled && schemaSupportsUnsafe
+    // TODO: Use the hybrid iterator for non-algebric aggregate functions.
+    sqlContext.conf.unsafeEnabled && schemaSupportsUnsafe && !hasNonAlgebricAggregateFunctions
   }
 
   private[this] val hybridAggregateEnabled = sqlContext.conf.useHybridAggregate
@@ -74,9 +76,17 @@ case class Aggregate(
     groupingExpressions.nonEmpty && (!supportsHybridIterator || !hybridAggregateEnabled)
   }
 
-  override def canProcessUnsafeRows: Boolean = false // true
+  override def canProcessUnsafeRows: Boolean = !hasNonAlgebricAggregateFunctions
 
-  override def outputsUnsafeRows: Boolean = supportsHybridIterator
+  // If result expressions' data types are all fixed length, we generate unsafe rows
+  // (We have this requirement instead of check the result of UnsafeProjection.canSupport
+  // is because we use a mutable projection to generate the result).
+  override def outputsUnsafeRows: Boolean = {
+    // resultExpressions.map(_.dataType).forall(UnsafeRow.isFixedLength)
+    // TODO: Supports generating UnsafeRows. We can just re-enable the line above and fix
+    // any issue we get.
+    false
+  }
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -131,7 +141,7 @@ case class Aggregate(
           newMutableProjection _,
           child.output,
           iter,
-          child.outputsUnsafeRows)
+          outputsUnsafeRows)
       } else {
         if (!hasInput && groupingExpressions.nonEmpty) {
           // This is a grouped aggregate and the input iterator is empty,

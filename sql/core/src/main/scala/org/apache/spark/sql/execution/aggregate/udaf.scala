@@ -206,7 +206,6 @@ private[sql] class MutableAggregationBufferImpl (
         s"Could not access ${i}th value in this buffer because it only has $length values.")
     }
     toScalaConverters(i)(bufferValueGetters(i)(underlyingBuffer, offsets(i)))
-    // toScalaConverters(i)(underlyingBuffer.get(offsets(i), schema(i).dataType))
   }
 
   def update(i: Int, value: Any): Unit = {
@@ -216,7 +215,13 @@ private[sql] class MutableAggregationBufferImpl (
     }
 
     bufferValueSetters(i)(underlyingBuffer, offsets(i), toCatalystConverters(i)(value))
-    // underlyingBuffer.update(offsets(i), toCatalystConverters(i)(value))
+  }
+
+  // Because get method call specialized getter based on the schema, we cannot use the
+  // default implementation of the isNullAt (which is get(i) == null).
+  // We have to override it to call isNullAt of the underlyingBuffer.
+  override def isNullAt(i: Int): Boolean = {
+    underlyingBuffer.isNullAt(offsets(i))
   }
 
   override def copy(): MutableAggregationBufferImpl = {
@@ -252,6 +257,8 @@ private[sql] class InputAggregationBuffer private[sql] (
 
   private[this] val bufferValueGetters = createGetters(schema)
 
+  def getBufferOffset: Int = bufferOffset
+
   override def length: Int = toCatalystConverters.length
 
   override def get(i: Int): Any = {
@@ -259,8 +266,14 @@ private[sql] class InputAggregationBuffer private[sql] (
       throw new IllegalArgumentException(
         s"Could not access ${i}th value in this buffer because it only has $length values.")
     }
-    // toScalaConverters(i)(underlyingInputBuffer.get(offsets(i), schema(i).dataType))
     toScalaConverters(i)(bufferValueGetters(i)(underlyingInputBuffer, offsets(i)))
+  }
+
+  // Because get method call specialized getter based on the schema, we cannot use the
+  // default implementation of the isNullAt (which is get(i) == null).
+  // We have to override it to call isNullAt of the underlyingInputBuffer.
+  override def isNullAt(i: Int): Boolean = {
+    underlyingInputBuffer.isNullAt(offsets(i))
   }
 
   override def copy(): InputAggregationBuffer = {
@@ -303,7 +316,7 @@ private[sql] case class ScalaUDAF(
 
   override lazy val cloneBufferAttributes = bufferAttributes.map(_.newInstance())
 
-  val childrenSchema: StructType = {
+  private[this] val childrenSchema: StructType = {
     val inputFields = children.zipWithIndex.map {
       case (child, index) =>
         StructField(s"input$index", child.dataType, child.nullable, Metadata.empty)
@@ -311,7 +324,7 @@ private[sql] case class ScalaUDAF(
     StructType(inputFields)
   }
 
-  lazy val inputProjection = {
+  private lazy val inputProjection = {
     val inputAttributes = childrenSchema.toAttributes
     log.debug(
       s"Creating MutableProj: $children, inputSchema: $inputAttributes.")
@@ -324,40 +337,68 @@ private[sql] case class ScalaUDAF(
     }
   }
 
-  val inputToScalaConverters: Any => Any =
+  private[this] val inputToScalaConverters: Any => Any =
     CatalystTypeConverters.createToScalaConverter(childrenSchema)
 
-  val bufferValuesToCatalystConverters: Array[Any => Any] = bufferSchema.fields.map { field =>
-    CatalystTypeConverters.createToCatalystConverter(field.dataType)
+  private[this] val bufferValuesToCatalystConverters: Array[Any => Any] = {
+    bufferSchema.fields.map { field =>
+      CatalystTypeConverters.createToCatalystConverter(field.dataType)
+    }
   }
 
-  val bufferValuesToScalaConverters: Array[Any => Any] = bufferSchema.fields.map { field =>
-    CatalystTypeConverters.createToScalaConverter(field.dataType)
+  private[this] val bufferValuesToScalaConverters: Array[Any => Any] = {
+    bufferSchema.fields.map { field =>
+      CatalystTypeConverters.createToScalaConverter(field.dataType)
+    }
   }
 
-  lazy val inputAggregateBuffer: InputAggregationBuffer =
-    new InputAggregationBuffer(
-      bufferSchema,
-      bufferValuesToCatalystConverters,
-      bufferValuesToScalaConverters,
-      inputBufferOffset,
-      null)
+  // This buffer is only used at executor side.
+  private[this] var inputAggregateBuffer: InputAggregationBuffer = null
 
-  lazy val mutableAggregateBuffer: MutableAggregationBufferImpl =
-    new MutableAggregationBufferImpl(
-      bufferSchema,
-      bufferValuesToCatalystConverters,
-      bufferValuesToScalaConverters,
-      mutableBufferOffset,
-      null)
+  // This buffer is only used at executor side.
+  private[this] var mutableAggregateBuffer: MutableAggregationBufferImpl = null
 
-  lazy val evalAggregateBuffer: InputAggregationBuffer =
-    new InputAggregationBuffer(
-      bufferSchema,
-      bufferValuesToCatalystConverters,
-      bufferValuesToScalaConverters,
-      mutableBufferOffset,
-      null)
+  // This buffer is only used at executor side.
+  private[this] var evalAggregateBuffer: InputAggregationBuffer = null
+
+  /**
+   * Sets the inputBufferOffset to newInputBufferOffset and then create a new instance of
+   * `inputAggregateBuffer` based on this new inputBufferOffset.
+   */
+  override def withNewInputBufferOffset(newInputBufferOffset: Int): Unit = {
+    super.withNewInputBufferOffset(newInputBufferOffset)
+    // inputBufferOffset has been updated.
+    inputAggregateBuffer =
+      new InputAggregationBuffer(
+        bufferSchema,
+        bufferValuesToCatalystConverters,
+        bufferValuesToScalaConverters,
+        inputBufferOffset,
+        null)
+  }
+
+  /**
+   * Sets the mutableBufferOffset to newMutableBufferOffset and then create a new instance of
+   * `mutableAggregateBuffer` and `evalAggregateBuffer` based on this new mutableBufferOffset.
+   */
+  override def withNewMutableBufferOffset(newMutableBufferOffset: Int): Unit = {
+    super.withNewMutableBufferOffset(newMutableBufferOffset)
+    // mutableBufferOffset has been updated.
+    mutableAggregateBuffer =
+      new MutableAggregationBufferImpl(
+        bufferSchema,
+        bufferValuesToCatalystConverters,
+        bufferValuesToScalaConverters,
+        mutableBufferOffset,
+        null)
+    evalAggregateBuffer =
+      new InputAggregationBuffer(
+        bufferSchema,
+        bufferValuesToCatalystConverters,
+        bufferValuesToScalaConverters,
+        mutableBufferOffset,
+        null)
+  }
 
   override def initialize(buffer: MutableRow): Unit = {
     mutableAggregateBuffer.underlyingBuffer = buffer
