@@ -27,11 +27,12 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
+import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext}
 
 class KinesisStreamSuite extends KinesisFunSuite
   with Eventually with BeforeAndAfter with BeforeAndAfterAll {
@@ -41,6 +42,8 @@ class KinesisStreamSuite extends KinesisFunSuite
 
   // This is the name that KCL will use to save metadata to DynamoDB
   private val appName = s"KinesisStreamSuite-${math.abs(Random.nextLong())}"
+
+  private val batchDuration = Seconds(1)
 
   private var testUtils: KinesisTestUtils = null
 
@@ -75,7 +78,7 @@ class KinesisStreamSuite extends KinesisFunSuite
   }
 
   before {
-    ssc = new StreamingContext(sc, Seconds(1))
+    ssc = new StreamingContext(sc, batchDuration)
   }
 
   after {
@@ -101,6 +104,62 @@ class KinesisStreamSuite extends KinesisFunSuite
       "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
       InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2,
       "awsAccessKey", "awsSecretKey")
+  }
+
+  test("RDD generation") {
+    val awsAccessKey = "qqq"
+    val awsSecretKey = "zzz"
+    val inputStream = KinesisUtils.createStream(ssc, appName, "mySparkStream",
+      endpointUrl, regionName, InitialPositionInStream.LATEST, Seconds(2),
+      StorageLevel.MEMORY_AND_DISK_2, awsAccessKey, awsSecretKey)
+    assert(inputStream.isInstanceOf[KinesisInputDStream])
+
+    val kinesisStream = inputStream.asInstanceOf[KinesisInputDStream]
+    val time = Time(1000)
+
+    // Generate block info data for testing
+    val seqNumRanges1 = SequenceNumberRanges(
+      SequenceNumberRange("fakeStream", "fakeShardId", "xxx", "yyy"))
+    val blockId1 = StreamBlockId(kinesisStream.id, 123)
+    val blockInfo1 = ReceivedBlockInfo(
+      0, None, Some(seqNumRanges1), new BlockManagerBasedStoreResult(blockId1, None))
+
+    val seqNumRanges2 = SequenceNumberRanges(
+      SequenceNumberRange("fakeStream", "fakeShardId", "aaa", "bbb"))
+    val blockId2 = StreamBlockId(kinesisStream.id, 345)
+    val blockInfo2 = ReceivedBlockInfo(
+      0, None, Some(seqNumRanges2), new BlockManagerBasedStoreResult(blockId2, None))
+
+    // Verify that the generated KinesisBackedBlockRDD has the all the right information
+    val blockInfos = Seq(blockInfo1, blockInfo2)
+    val nonEmptyRDD = kinesisStream.createBlockRDD(time, blockInfos)
+    assert(nonEmptyRDD.isInstanceOf[KinesisBackedBlockRDD])
+    val kinesisRDD = nonEmptyRDD.asInstanceOf[KinesisBackedBlockRDD]
+    assert(kinesisRDD.regionName === regionName)
+    assert(kinesisRDD.endpointUrl === endpointUrl)
+    assert(kinesisRDD.retryTimeoutMs === batchDuration.milliseconds)
+    assert(kinesisRDD.awsCredentialsOption ===
+      Some(SerializableAWSCredentials(awsAccessKey, awsSecretKey)))
+    assert(nonEmptyRDD.partitions.size === blockInfos.size)
+    assert(nonEmptyRDD.partitions.forall( _.isInstanceOf[KinesisBackedBlockRDDPartition]))
+    val partitions = nonEmptyRDD.partitions.map {
+      _.asInstanceOf[KinesisBackedBlockRDDPartition] }.toSeq
+    assert(partitions.map { _.seqNumberRanges } === Seq(seqNumRanges1, seqNumRanges2))
+    assert(partitions.map { _.blockId } === Seq(blockId1, blockId2))
+    assert(partitions.forall { _.isBlockIdValid === true })
+
+    // Verify that KinesisBackedBlockRDD is generated even when there are no blocks
+    val emptyRDD = kinesisStream.createBlockRDD(time, Seq.empty)
+    assert(emptyRDD.isInstanceOf[KinesisBackedBlockRDD])
+    assert(emptyRDD.partitions.isEmpty)
+
+    // Verify that the KinesisBackedBlockRDD has isBlockValid = false when blocks are invalid
+    blockInfos.foreach { _.setBlockIdInvalid() }
+    assert(
+      kinesisStream.createBlockRDD(time, blockInfos).partitions.forall {
+      _.asInstanceOf[KinesisBackedBlockRDDPartition].isBlockIdValid === false
+      }
+    )
   }
 
 

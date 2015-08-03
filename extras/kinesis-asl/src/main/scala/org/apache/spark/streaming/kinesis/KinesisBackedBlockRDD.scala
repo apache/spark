@@ -39,8 +39,15 @@ case class SequenceNumberRange(
 private[kinesis]
 case class SequenceNumberRanges(ranges: Array[SequenceNumberRange]) {
   def isEmpty(): Boolean = ranges.isEmpty
+
   def nonEmpty(): Boolean = ranges.nonEmpty
+
   override def toString(): String = ranges.mkString("SequenceNumberRanges(", ", ", ")")
+
+  override def equals(obj: Any): Boolean = {
+    obj.isInstanceOf[SequenceNumberRanges] &&
+      obj.asInstanceOf[SequenceNumberRanges].ranges.toSeq == ranges.toSeq
+  }
 }
 
 private[kinesis]
@@ -67,13 +74,13 @@ class KinesisBackedBlockRDDPartition(
 private[kinesis]
 class KinesisBackedBlockRDD(
     sc: SparkContext,
-    regionName: String,
-    endpointUrl: String,
-    @transient blockIds: Array[BlockId],
-    @transient private[kinesis] val arrayOfseqNumberRanges: Array[SequenceNumberRanges],
+    val regionName: String,
+    val endpointUrl: String,
+    @transient override val blockIds: Array[BlockId],
+    @transient val arrayOfseqNumberRanges: Array[SequenceNumberRanges],
     @transient isBlockIdValid: Array[Boolean] = Array.empty,
-    retryTimeoutMs: Int = 10000,
-    awsCredentialsOption: Option[SerializableAWSCredentials] = None
+    val retryTimeoutMs: Int = 10000,
+    val awsCredentialsOption: Option[SerializableAWSCredentials] = None
   ) extends BlockRDD[Array[Byte]](sc, blockIds) {
 
   require(blockIds.length == arrayOfseqNumberRanges.length,

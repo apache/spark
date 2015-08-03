@@ -41,21 +41,25 @@ private[kinesis] class KinesisInputDStream(
   private[streaming]
   override def createBlockRDD(time: Time, blockInfos: Seq[ReceivedBlockInfo]): RDD[Array[Byte]] = {
 
+    // This returns true even for when blockInfos is empty
     val allBlocksHaveRanges = blockInfos.map { _.metadataOption }.forall(_.nonEmpty)
 
     if (allBlocksHaveRanges) {
+      // Create a KinesisBackedBlockRDD, even when there are no blocks
       val blockIds = blockInfos.map { _.blockId.asInstanceOf[BlockId] }.toArray
-      val seqNumRanges =
-        blockInfos.map { _.metadataOption.get.asInstanceOf[SequenceNumberRanges] }.toArray
-      logDebug(s"Creating KinesisBackedBlockRDD for $time with ${seqNumRanges.size} " +
+      val seqNumRanges = blockInfos.map {
+        _.metadataOption.get.asInstanceOf[SequenceNumberRanges] }.toArray
+      val isBlockIdValid = blockInfos.map { _.isBlockIdValid() }.toArray
+      logDebug(s"Creating KinesisBackedBlockRDD for $time with ${seqNumRanges.length} " +
           s"seq number ranges: ${seqNumRanges.mkString(", ")} ")
-      new KinesisBackedBlockRDD(context.sc, regionName, endpointUrl, blockIds, seqNumRanges)
+      new KinesisBackedBlockRDD(
+        context.sc, regionName, endpointUrl, blockIds, seqNumRanges,
+        isBlockIdValid = isBlockIdValid,
+        retryTimeoutMs = ssc.graph.batchDuration.milliseconds.toInt,
+        awsCredentialsOption = awsCredentialsOption)
     } else {
-      // This branch is a fallback and its not expected to enter this branch
-      if (blockInfos.nonEmpty) {
-        logWarning("Kinesis sequence number information was not present with some block metadata," +
-          " it may not be possible to recover from failures")
-      }
+      logWarning("Kinesis sequence number information was not present with some block metadata," +
+        " it may not be possible to recover from failures")
       super.createBlockRDD(time, blockInfos)
     }
   }
