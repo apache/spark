@@ -161,8 +161,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                   allAggregates(rewrittenAggregateExpressions)) &&
                codegenEnabled &&
                !canBeConvertedToNewAggregation(plan) =>
-          logInfo(s"Using ${classOf[execution.GeneratedAggregate].getCanonicalName} as " +
-            s"the physical Aggregate Operator.")
           execution.GeneratedAggregate(
             partial = false,
             namedGroupingAttributes,
@@ -182,8 +180,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              groupingExpressions,
              partialComputation,
              child) if !canBeConvertedToNewAggregation(plan) =>
-        logInfo(s"Using ${classOf[execution.Aggregate].getCanonicalName} as " +
-          s"the physical Aggregate Operator.")
         execution.Aggregate(
           partial = false,
           namedGroupingAttributes,
@@ -231,8 +227,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         converted match {
           case None => Nil // Cannot convert to new aggregation code path.
           case Some(logical.Aggregate(groupingExpressions, resultExpressions, child)) =>
-            logInfo(s"Using ${classOf[aggregate.Aggregate].getCanonicalName} as " +
-              s"the physical Aggregate Operator.")
             // Extracts all distinct aggregate expressions from the resultExpressions.
             val aggregateExpressions = resultExpressions.flatMap { expr =>
               expr.collect {
@@ -392,8 +386,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           Nil
         } else {
           Utils.checkInvalidAggregateFunction2(a)
-          logInfo(s"Using ${classOf[execution.Aggregate].getCanonicalName} as " +
-            s"the physical Aggregate Operator.")
           execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
         }
       }

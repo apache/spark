@@ -508,32 +508,32 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
 
 class SortBasedAggregationQuerySuite extends AggregationQuerySuite {
 
-  var originalUseTungstenAggregate: Boolean = _
+  var originalUnsafeEnabled: Boolean = _
 
   override def beforeAll(): Unit = {
-    originalUseTungstenAggregate = sqlContext.conf.useHybridAggregate
-    sqlContext.setConf(SQLConf.USE_HYBRID_AGGREGATE.key, "false")
+    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "false")
     super.beforeAll()
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    sqlContext.setConf(SQLConf.USE_HYBRID_AGGREGATE.key, originalUseTungstenAggregate.toString)
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
   }
 }
 
 class TungstenAggregationQuerySuite extends AggregationQuerySuite {
 
-  var originalUseTungstenAggregate: Boolean = _
+  var originalUnsafeEnabled: Boolean = _
 
   override def beforeAll(): Unit = {
-    originalUseTungstenAggregate = sqlContext.conf.useHybridAggregate
-    sqlContext.setConf(SQLConf.USE_HYBRID_AGGREGATE.key, "true")
+    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "true")
     super.beforeAll()
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    sqlContext.setConf(SQLConf.USE_HYBRID_AGGREGATE.key, originalUseTungstenAggregate.toString)
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
   }
 }

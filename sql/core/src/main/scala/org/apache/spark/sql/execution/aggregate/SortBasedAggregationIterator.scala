@@ -133,8 +133,6 @@ class SortBasedAggregationIterator(
 
   override final def hasNext: Boolean = sortedInputHasNewGroup
 
-  val toSafeResult = FromUnsafeProjection(resultExpressions.map(_.dataType).toArray)
-
   override final def next(): InternalRow = {
     if (hasNext) {
       // Process the current group.

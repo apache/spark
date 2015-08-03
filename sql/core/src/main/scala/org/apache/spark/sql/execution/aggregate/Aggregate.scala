@@ -68,12 +68,10 @@ case class Aggregate(
     sqlContext.conf.unsafeEnabled && schemaSupportsUnsafe && !hasNonAlgebricAggregateFunctions
   }
 
-  private[this] val hybridAggregateEnabled = sqlContext.conf.useHybridAggregate
-
   // We need to use sorted input if we have grouping expressions, and
   // we cannot use the hybrid iterator or the hybrid is disabled.
   private[this] val requiresSortedInput: Boolean = {
-    groupingExpressions.nonEmpty && (!supportsHybridIterator || !hybridAggregateEnabled)
+    groupingExpressions.nonEmpty && !supportsHybridIterator
   }
 
   override def canProcessUnsafeRows: Boolean = !hasNonAlgebricAggregateFunctions
@@ -127,8 +125,7 @@ case class Aggregate(
       val useHybridIterator =
         hasInput &&
           supportsHybridIterator &&
-          groupingExpressions.nonEmpty &&
-          hybridAggregateEnabled
+          groupingExpressions.nonEmpty
       if (useHybridIterator) {
         UnsafeHybridAggregationIterator.createFromInputIterator(
           groupingExpressions,
