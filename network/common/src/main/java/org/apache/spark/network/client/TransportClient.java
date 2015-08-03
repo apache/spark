@@ -80,7 +80,9 @@ public class TransportClient implements Closeable {
     return channel.isOpen() || channel.isActive();
   }
 
-  public SocketAddress getSocketAddress() { return channel.remoteAddress(); }
+  public SocketAddress getSocketAddress() {
+    return channel.remoteAddress();
+  }
 
   /**
    * Requests a single chunk from the remote side, from the pre-negotiated streamId.

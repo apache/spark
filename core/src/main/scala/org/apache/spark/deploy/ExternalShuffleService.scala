@@ -19,8 +19,6 @@ package org.apache.spark.deploy
 
 import java.util.concurrent.CountDownLatch
 
-import org.apache.spark.network.util.TransportConf
-
 import scala.collection.JavaConversions._
 
 import org.apache.spark.{Logging, SparkConf, SecurityManager}
@@ -29,6 +27,7 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.sasl.SaslServerBootstrap
 import org.apache.spark.network.server.TransportServer
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
+import org.apache.spark.network.util.TransportConf
 import org.apache.spark.util.Utils
 
 /**
@@ -39,20 +38,23 @@ import org.apache.spark.util.Utils
  * Optionally requires SASL authentication in order to read. See [[SecurityManager]].
  */
 private[deploy]
-class ExternalShuffleService(
-    sparkConf: SparkConf,
-    securityManager: SecurityManager,
-    transportConf: TransportConf,
-    blockHandler: ExternalShuffleBlockHandler)
+class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityManager)
   extends Logging {
 
   private val enabled = sparkConf.getBoolean("spark.shuffle.service.enabled", false)
   private val port = sparkConf.getInt("spark.shuffle.service.port", 7337)
   private val useSasl: Boolean = securityManager.isAuthenticationEnabled()
 
+  private val transportConf = SparkTransportConf.fromSparkConf(sparkConf, numUsableCores = 0)
+  private val blockHandler = newShuffleBlockHandler(transportConf)
   private val transportContext: TransportContext = new TransportContext(transportConf, blockHandler)
 
   private var server: TransportServer = _
+
+  /** Create a new shuffle block handler. Factored out for subclasses to override. */
+  protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
+    new ExternalShuffleBlockHandler(conf)
+  }
 
   /** Starts the external shuffle service if the user has configured us to. */
   def startIfEnabled() {
@@ -97,6 +99,13 @@ object ExternalShuffleService extends Logging {
   private val barrier = new CountDownLatch(1)
 
   def main(args: Array[String]): Unit = {
+    main(args, (conf: SparkConf, sm: SecurityManager) => new ExternalShuffleService(conf, sm))
+  }
+
+  /** A helper main method that allows the caller to call this with a custom shuffle service. */
+  private[spark] def main(
+      args: Array[String],
+      newShuffleService: (SparkConf, SecurityManager) => ExternalShuffleService): Unit = {
     val sparkConf = new SparkConf
     Utils.loadDefaultSparkProperties(sparkConf)
     val securityManager = new SecurityManager(sparkConf)
@@ -104,9 +113,7 @@ object ExternalShuffleService extends Logging {
     // we override this value since this service is started from the command line
     // and we assume the user really wants it to be running
     sparkConf.set("spark.shuffle.service.enabled", "true")
-    val transportConf = SparkTransportConf.fromSparkConf(sparkConf, numUsableCores = 0)
-    val blockHandler = new ExternalShuffleBlockHandler(transportConf)
-    server = new ExternalShuffleService(sparkConf, securityManager, transportConf, blockHandler)
+    server = newShuffleService(sparkConf, securityManager)
     server.start()
 
     installShutdownHook()

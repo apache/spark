@@ -18,25 +18,20 @@
 package org.apache.spark.deploy.mesos
 
 import java.net.SocketAddress
-import java.util.concurrent.CountDownLatch
 
+import scala.collection.mutable
+
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
-import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage
 import org.apache.spark.network.shuffle.protocol.mesos.RegisterDriver
 import org.apache.spark.network.util.TransportConf
-import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
-
-import scala.collection.mutable
-
 
 /**
- * MesosExternalShuffleServiceEndpoint is a RPC endpoint that receives
- * registration requests from Spark drivers launched with Mesos.
- * It detects driver termination and calls the cleanup callback to [[ExternalShuffleService]]
+ * An RPC endpoint that receives registration requests from Spark drivers running on Mesos.
+ * It detects driver termination and calls the cleanup callback to [[ExternalShuffleService]].
  */
 private[mesos] class MesosExternalShuffleBlockHandler(transportConf: TransportConf)
   extends ExternalShuffleBlockHandler(transportConf) with Logging {
@@ -50,13 +45,13 @@ private[mesos] class MesosExternalShuffleBlockHandler(transportConf: TransportCo
       callback: RpcResponseCallback): Unit = {
     message match {
       case RegisterDriverParam(appId) =>
-        val address = client.getSocketAddress()
-        logDebug(s"Received registration request from app $appId, address $address")
+        val address = client.getSocketAddress
+        logDebug(s"Received registration request from app $appId (remote address $address).")
         if (connectedApps.contains(address)) {
-          val existingAppId: String = connectedApps(address)
+          val existingAppId = connectedApps(address)
           if (!existingAppId.equals(appId)) {
-            logError(s"A new app id $appId has connected to existing address $address" +
-              s", removing registered app $existingAppId")
+            logError(s"A new app '$appId' has connected to existing address $address, " +
+              s"removing previously registered app '$existingAppId'.")
             applicationRemoved(existingAppId, true)
           }
         }
@@ -66,76 +61,46 @@ private[mesos] class MesosExternalShuffleBlockHandler(transportConf: TransportCo
     }
   }
 
+  /**
+   * On connection termination, clean up shuffle files written by the associated application.
+   */
   override def connectionTerminated(client: TransportClient): Unit = {
-    val address = client.getSocketAddress()
+    val address = client.getSocketAddress
     if (connectedApps.contains(address)) {
       val appId = connectedApps(address)
-      logInfo(s"Application $appId disconnected (address was $address)")
-      applicationRemoved(appId, true)
+      logInfo(s"Application $appId disconnected (address was $address).")
+      applicationRemoved(appId, true /* cleanupLocalDirs */)
       connectedApps.remove(address)
     } else {
-      logWarning(s"Address $address not found in mesos shuffle service")
+      logWarning(s"Unknown $address disconnected.")
     }
+  }
+
+  /** An extractor object for matching [[RegisterDriver]] message. */
+  private object RegisterDriverParam {
+    def unapply(r: RegisterDriver): Option[String] = Some(r.getAppId)
   }
 }
 
 /**
- * An extractor object for matching RegisterDriver message.
+ * A wrapper of [[ExternalShuffleService]] that provides an additional endpoint for drivers
+ * to associate with. This allows the shuffle service to detect when a driver is terminated
+ * and can clean up the associated shuffle files.
  */
-private[mesos] object RegisterDriverParam {
-  def unapply(r: RegisterDriver): Option[String] = Some(r.getAppId())
-}
+private[mesos] class MesosExternalShuffleService(conf: SparkConf, securityManager: SecurityManager)
+  extends ExternalShuffleService(conf, securityManager) {
 
-/**
- * MesosExternalShuffleService wraps [[ExternalShuffleService]] which provides an additional
- * endpoint for drivers to associate with. This allows the shuffle service to detect when
- * a driver is terminated and can further clean up the cached shuffle data.
- */
-private[mesos] class MesosExternalShuffleService(
-    conf: SparkConf,
-    securityManager: SecurityManager,
-    transportConf: TransportConf)
-  extends ExternalShuffleService(
-    conf, securityManager, transportConf, new MesosExternalShuffleBlockHandler(transportConf)) {
+  protected override def newShuffleBlockHandler(
+      conf: TransportConf): ExternalShuffleBlockHandler = {
+    new MesosExternalShuffleBlockHandler(conf)
+  }
 }
 
 private[spark] object MesosExternalShuffleService extends Logging {
-  val SYSTEM_NAME = "mesosExternalShuffleService"
-  val ENDPOINT_NAME = "mesosExternalShuffleServiceEndpoint"
-
-  @volatile
-  private var server: MesosExternalShuffleService = _
-
-  private val barrier = new CountDownLatch(1)
 
   def main(args: Array[String]): Unit = {
-    val sparkConf = new SparkConf
-    Utils.loadDefaultSparkProperties(sparkConf)
-    val securityManager = new SecurityManager(sparkConf)
-
-    // we override this value since this service is started from the command line
-    // and we assume the user really wants it to be running
-    sparkConf.set("spark.shuffle.service.enabled", "true")
-    val transportConf = SparkTransportConf.fromSparkConf(sparkConf, numUsableCores = 0)
-    server = new MesosExternalShuffleService(
-      sparkConf, securityManager, transportConf)
-    server.start()
-
-    installShutdownHook()
-
-    // keep running until the process is terminated
-    barrier.await()
-  }
-
-  private def installShutdownHook(): Unit = {
-    Runtime.getRuntime.addShutdownHook(
-      new Thread("Mesos External Shuffle Service shutdown thread") {
-      override def run() {
-        logInfo("Shutting down Mesos shuffle service.")
-        server.stop()
-        barrier.countDown()
-      }
-    })
+    ExternalShuffleService.main(args,
+      (conf: SparkConf, sm: SecurityManager) => new MesosExternalShuffleService(conf, sm))
   }
 }
 

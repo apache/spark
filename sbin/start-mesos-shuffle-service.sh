@@ -18,12 +18,12 @@
 #
 
 # Starts the Mesos external shuffle server on the machine this script is executed on.
-# The Mesos external shuffle server detects when an application exits and automatically
+# The Mesos external shuffle service detects when an application exits and automatically
 # cleans up its shuffle files.
 #
 # Usage: start-mesos-shuffle-server.sh
 #
-# Use the SPARK_SHUFFLE_OPTS environment variable to set shuffle server configuration.
+# Use the SPARK_SHUFFLE_OPTS environment variable to set shuffle service configuration.
 #
 
 sbin="`dirname "$0"`"

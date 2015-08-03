@@ -19,11 +19,12 @@ package org.apache.spark.network.shuffle.protocol.mesos;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+
 import org.apache.spark.network.protocol.Encoders;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 
 /**
- * A message sent from the driver to register with the [[MesosExternalShuffleService]]
+ * A message sent from the driver to register with the MesosExternalShuffleService.
  */
 public class RegisterDriver extends BlockTransferMessage {
   private final String appId;

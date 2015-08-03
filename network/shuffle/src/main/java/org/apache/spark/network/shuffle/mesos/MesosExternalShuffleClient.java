@@ -19,21 +19,30 @@ package org.apache.spark.network.shuffle.mesos;
 
 import java.io.IOException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.shuffle.ExternalShuffleClient;
 import org.apache.spark.network.shuffle.protocol.mesos.RegisterDriver;
 import org.apache.spark.network.util.TransportConf;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+/**
+ * A client for talking to the external shuffle service in Mesos coarse-grained mode.
+ *
+ * This is used by the Spark driver to register with each external shuffle service on the cluster.
+ * The reason why the driver has to talk to the service is for cleaning up shuffle files reliably
+ * after the application exits. Mesos does not provide a great alternative to do this, so Spark
+ * has to detect this itself.
+ */
 public class MesosExternalShuffleClient extends ExternalShuffleClient {
   private final Logger logger = LoggerFactory.getLogger(MesosExternalShuffleClient.class);
 
   /**
-   * Creates an Mesos external shuffle client that wraps the [[ExternalShuffleClient]].
-   * Please refer to docs on [[ExternalShuffleClient]] for more information.
+   * Creates an Mesos external shuffle client that wraps the {@link ExternalShuffleClient}.
+   * Please refer to docs on {@link ExternalShuffleClient} for more information.
    */
   public MesosExternalShuffleClient(
       TransportConf conf,
@@ -50,13 +59,13 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
     client.sendRpc(registerDriver, new RpcResponseCallback() {
       @Override
       public void onSuccess(byte[] response) {
-        logger.info("Successfully registered app " + appId);
+        logger.info("Successfully registered app " + appId + " with external shuffle service.");
       }
 
       @Override
       public void onFailure(Throwable e) {
         logger.warn("Unable to register app " + appId + " with external shuffle service. " +
-            "Please manually remove shuffle data after driver exit. Error: " + e);
+          "Please manually remove shuffle data after driver exit. Error: " + e);
       }
     });
   }
