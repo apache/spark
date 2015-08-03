@@ -305,13 +305,12 @@ class DataFrameFunctionsSuite extends QueryTest {
     val df2 = Seq((Array[Array[Int]](Array(2)), "x")).toDF("a", "b")
     assert(intercept[AnalysisException] {
       df2.selectExpr("sort_array(a)").collect()
-    }.getMessage().contains("Type ArrayType(IntegerType,false) is not the AtomicType, " +
-      "we can not perform the ordering operations"))
+    }.getMessage().contains("does not support sorting array of type array<int>"))
 
     val df3 = Seq(("xxx", "x")).toDF("a", "b")
     assert(intercept[AnalysisException] {
       df3.selectExpr("sort_array(a)").collect()
-    }.getMessage().contains("ArrayType(AtomicType) is expected, but we got StringType"))
+    }.getMessage().contains("only supports array input"))
   }
 
   test("array size function") {
