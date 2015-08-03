@@ -65,7 +65,7 @@ private[ui] object SparkPlanGraph {
       SQLPlanMetric(accumulator.name.getOrElse(key), accumulator.id,
         accumulator.param.asInstanceOf[AccumulatorParam[Any]])
     }
-    val node = SparkPlanGraphNode(nodeIdGenerator.getAndIncrement(), plan.nodeName, metrics)
+    val node = SparkPlanGraphNode(nodeIdGenerator.getAndIncrement(), plan.simpleString, metrics)
     nodes += node
     val childrenNodes = plan.children.map(
       child => buildSparkPlanGraphNode(child, nodeIdGenerator, nodes, edges))

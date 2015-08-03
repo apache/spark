@@ -34,16 +34,9 @@ private[sql] case class LocalTableScan(
 
   protected override def doExecute(): RDD[InternalRow] = rdd
 
-  override lazy val accumulators = Map(
-    "numRows" -> sparkContext.internalAccumulator(0L, "number of rows"))
-
   override def executeCollect(): Array[Row] = {
     val converter = CatalystTypeConverters.createToScalaConverter(schema)
-    val numRows = accumulator[Long]("numRows")
-    rows.map { row =>
-      numRows += 1
-      converter(row).asInstanceOf[Row]
-    }.toArray
+    rows.map(converter(_).asInstanceOf[Row]).toArray
   }
 
   override def executeTake(limit: Int): Array[Row] = {

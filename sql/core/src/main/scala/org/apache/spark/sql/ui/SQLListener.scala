@@ -167,6 +167,10 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener {
       stageAttemptID: Int,
       metrics: TaskMetrics,
       finishTask: Boolean): Unit = {
+    if (metrics == null) {
+      return
+    }
+
     stageIdToStageMetrics.get(stageId) match {
       case Some(stageMetrics) =>
         if (stageAttemptID < stageMetrics.stageAttemptId) {

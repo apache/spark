@@ -80,6 +80,11 @@ case class BroadcastHashOuterJoin(
     }(BroadcastHashOuterJoin.broadcastHashOuterJoinExecutionContext)
   }
 
+  protected override lazy val doPrepare: Unit = {
+    broadcastFuture
+    children.foreach(_.prepare())
+  }
+
   override def doExecute(): RDD[InternalRow] = {
     val broadcastRelation = Await.result(broadcastFuture, timeout)
 

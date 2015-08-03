@@ -121,8 +121,27 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         "Operator will receive unsafe rows as input but cannot process unsafe rows")
     }
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+      prepare()
       doExecute()
     }
+  }
+
+  /**
+   * Do the preparation for SparkPlan.
+   */
+  final def prepare(): Unit = {
+    doPrepare
+  }
+
+  /**
+   * Overridden by concrete implementations of SparkPlan. It is guaranteed to run before any
+   * `execute` of SparkPlan. This is helpful when we want to launch some background works, e.g.,
+   * `BroadcastHashJoin` uses it to broadcast asynchronously.
+   *
+   * This is lazy to make sure running doPrepare is called only once for each SparkPlan.
+   */
+  protected lazy val doPrepare: Unit = {
+    children.foreach(_.prepare())
   }
 
   /**
