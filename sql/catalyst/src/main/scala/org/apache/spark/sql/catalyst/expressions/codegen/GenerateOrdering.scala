@@ -53,9 +53,21 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
     })
   }
 
-  protected def create(ordering: Seq[SortOrder]): BaseOrdering = {
-    val ctx = newCodeGenContext()
+  /**
+   * Generates the code for comparing a struct type according to its natural ordering
+   * (i.e. ascending order by field 1, then field 2, ..., then field n.
+   */
+  def genComparisons(ctx: CodeGenContext, schema: StructType): String = {
+    val ordering = schema.fields.map(_.dataType).zipWithIndex.map {
+      case(dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    }
+    genComparisons(ctx, ordering)
+  }
 
+  /**
+   * Generates the code for ordering based on the given order.
+   */
+  def genComparisons(ctx: CodeGenContext, ordering: Seq[SortOrder]): String = {
     val comparisons = ordering.map { order =>
       val eval = order.child.gen(ctx)
       val asc = order.direction == Ascending
@@ -94,6 +106,12 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           }
       """
     }.mkString("\n")
+    comparisons
+  }
+
+  protected def create(ordering: Seq[SortOrder]): BaseOrdering = {
+    val ctx = newCodeGenContext()
+    val comparisons = genComparisons(ctx, ordering)
     val code = s"""
       public SpecificOrdering generate($exprType[] expr) {
         return new SpecificOrdering(expr);
@@ -103,6 +121,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
 
         private $exprType[] expressions;
         ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
 
         public SpecificOrdering($exprType[] expr) {
           expressions = expr;
