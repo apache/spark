@@ -385,6 +385,10 @@ def run_sparkr_tests():
 
     if which("R"):
         run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
+        # R style check should be executed after `install-dev.sh`.
+        # Since warnings about `no visible global function definition` appear
+        # without the installation. SEE ALSO: SPARK-9121.
+        run_cmd([os.path.join(SPARK_HOME, "dev", "lint-r")])
         run_cmd([os.path.join(SPARK_HOME, "R", "run-tests.sh")])
     else:
         print("Ignoring SparkR tests as R was not found in PATH")

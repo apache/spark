@@ -17,19 +17,22 @@
 
 argv <- commandArgs(TRUE)
 SPARK_ROOT_DIR <- as.character(argv[1])
+LOCAL_LIB_LOC <- file.path(SPARK_ROOT_DIR, "R", "lib")
 
-# Installs lintr from Github.
+# Checks if SparkR is installed in a local directory.
+if (! library(SparkR, lib.loc = LOCAL_LIB_LOC, logical.return = TRUE)) {
+  stop("You should install SparkR in a local directory with `R/install-dev.sh`.")
+}
+
+# Installs lintr from Github in a local directory.
 # NOTE: The CRAN's version is too old to adapt to our rules.
-if ("lintr" %in% row.names(installed.packages())  == FALSE) {
-  devtools::install_github("jimhester/lintr")
+installed_packages <- row.names(installed.packages(lib.loc = LOCAL_LIB_LOC))
+if ("lintr" %in% installed_packages  == FALSE) {
+  devtools::with_lib(LOCAL_LIB_LOC, devtools::install_github("jimhester/lintr"))
 }
 
 library(lintr)
 library(methods)
 library(testthat)
-if (! library(SparkR, lib.loc = file.path(SPARK_ROOT_DIR, "R", "lib"), logical.return = TRUE)) {
-  stop("You should install SparkR in a local directory with `R/install-dev.sh`.")
-}
-
 path.to.package <- file.path(SPARK_ROOT_DIR, "R", "pkg")
 lint_package(path.to.package, cache = FALSE)
