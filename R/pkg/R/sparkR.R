@@ -17,16 +17,13 @@
 
 .sparkREnv <- new.env()
 
-sparkR.onLoad <- function(libname, pkgname) {
-  .sparkREnv$libname <- libname
-}
-
 # Utility function that returns TRUE if we have an active connection to the
 # backend and FALSE otherwise
 connExists <- function(env) {
   tryCatch({
     exists(".sparkRCon", envir = env) && isOpen(env[[".sparkRCon"]])
-  }, error = function(err) {
+  },
+  error = function(err) {
     return(FALSE)
   })
 }
@@ -80,7 +77,6 @@ sparkR.stop <- function() {
 #' @param sparkEnvir Named list of environment variables to set on worker nodes.
 #' @param sparkExecutorEnv Named list of environment variables to be used when launching executors.
 #' @param sparkJars Character string vector of jar files to pass to the worker nodes.
-#' @param sparkRLibDir The path where R is installed on the worker nodes.
 #' @param sparkPackages Character string vector of packages from spark-packages.org
 #' @export
 #' @examples
@@ -101,7 +97,6 @@ sparkR.init <- function(
   sparkEnvir = list(),
   sparkExecutorEnv = list(),
   sparkJars = "",
-  sparkRLibDir = "",
   sparkPackages = "") {
 
   if (exists(".sparkRjsc", envir = .sparkREnv)) {
@@ -110,16 +105,13 @@ sparkR.init <- function(
     return(get(".sparkRjsc", envir = .sparkREnv))
   }
 
-  sparkMem <- Sys.getenv("SPARK_MEM", "1024m")
   jars <- suppressWarnings(normalizePath(as.character(sparkJars)))
 
   # Classpath separator is ";" on Windows
   # URI needs four /// as from http://stackoverflow.com/a/18522792
   if (.Platform$OS.type == "unix") {
-    collapseChar <- ":"
     uriSep <- "//"
   } else {
-    collapseChar <- ";"
     uriSep <- "////"
   }
 
@@ -146,7 +138,7 @@ sparkR.init <- function(
     if (!file.exists(path)) {
       stop("JVM is not ready after 10 seconds")
     }
-    f <- file(path, open='rb')
+    f <- file(path, open="rb")
     backendPort <- readInt(f)
     monitorPort <- readInt(f)
     close(f)
@@ -162,16 +154,13 @@ sparkR.init <- function(
   .sparkREnv$backendPort <- backendPort
   tryCatch({
     connectBackend("localhost", backendPort)
-  }, error = function(err) {
+  },
+  error = function(err) {
     stop("Failed to connect JVM\n")
   })
 
   if (nchar(sparkHome) != 0) {
     sparkHome <- normalizePath(sparkHome)
-  }
-
-  if (nchar(sparkRLibDir) != 0) {
-    .sparkREnv$libname <- sparkRLibDir
   }
 
   sparkEnvirMap <- new.env()
@@ -277,7 +266,8 @@ sparkRHive.init <- function(jsc = NULL) {
   ssc <- callJMethod(sc, "sc")
   hiveCtx <- tryCatch({
     newJObject("org.apache.spark.sql.hive.HiveContext", ssc)
-  }, error = function(err) {
+  },
+  error = function(err) {
     stop("Spark SQL is not built with Hive support")
   })
 

@@ -33,7 +33,7 @@ class BooleanBitSetSuite extends SparkFunSuite {
 
     val builder = TestCompressibleColumnBuilder(new NoopColumnStats, BOOLEAN, BooleanBitSet)
     val rows = Seq.fill[InternalRow](count)(makeRandomRow(BOOLEAN))
-    val values = rows.map(_(0))
+    val values = rows.map(_.getBoolean(0))
 
     rows.foreach(builder.appendFrom(_, 0))
     val buffer = builder.build()

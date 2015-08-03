@@ -36,9 +36,9 @@ connectBackend <- function(hostname, port, timeout = 6000) {
 
 determineSparkSubmitBin <- function() {
   if (.Platform$OS.type == "unix") {
-    sparkSubmitBinName = "spark-submit"
+    sparkSubmitBinName <- "spark-submit"
   } else {
-    sparkSubmitBinName = "spark-submit.cmd"
+    sparkSubmitBinName <- "spark-submit.cmd"
   }
   sparkSubmitBinName
 }
@@ -48,7 +48,7 @@ generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, pack
     jars <- paste("--jars", jars)
   }
 
-  if (packages != "") {
+  if (!identical(packages, "")) {
     packages <- paste("--packages", packages)
   }
 

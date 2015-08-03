@@ -41,9 +41,9 @@ private[sql] trait ColumnAccessor {
   protected def underlyingBuffer: ByteBuffer
 }
 
-private[sql] abstract class BasicColumnAccessor[T <: DataType, JvmType](
+private[sql] abstract class BasicColumnAccessor[JvmType](
     protected val buffer: ByteBuffer,
-    protected val columnType: ColumnType[T, JvmType])
+    protected val columnType: ColumnType[JvmType])
   extends ColumnAccessor {
 
   protected def initialize() {}
@@ -93,14 +93,14 @@ private[sql] class StringColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, STRING)
 
 private[sql] class BinaryColumnAccessor(buffer: ByteBuffer)
-  extends BasicColumnAccessor[BinaryType.type, Array[Byte]](buffer, BINARY)
+  extends BasicColumnAccessor[Array[Byte]](buffer, BINARY)
   with NullableColumnAccessor
 
 private[sql] class FixedDecimalColumnAccessor(buffer: ByteBuffer, precision: Int, scale: Int)
   extends NativeColumnAccessor(buffer, FIXED_DECIMAL(precision, scale))
 
-private[sql] class GenericColumnAccessor(buffer: ByteBuffer)
-  extends BasicColumnAccessor[DataType, Array[Byte]](buffer, GENERIC)
+private[sql] class GenericColumnAccessor(buffer: ByteBuffer, dataType: DataType)
+  extends BasicColumnAccessor[Array[Byte]](buffer, GENERIC(dataType))
   with NullableColumnAccessor
 
 private[sql] class DateColumnAccessor(buffer: ByteBuffer)
@@ -131,7 +131,7 @@ private[sql] object ColumnAccessor {
       case BinaryType => new BinaryColumnAccessor(dup)
       case DecimalType.Fixed(precision, scale) if precision < 19 =>
         new FixedDecimalColumnAccessor(dup, precision, scale)
-      case _ => new GenericColumnAccessor(dup)
+      case other => new GenericColumnAccessor(dup, other)
     }
   }
 }

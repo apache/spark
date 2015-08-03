@@ -57,9 +57,9 @@ test_that("infer types", {
   expect_equal(infer_type(as.Date("2015-03-11")), "date")
   expect_equal(infer_type(as.POSIXlt("2015-03-11 12:13:04.043")), "timestamp")
   expect_equal(infer_type(c(1L, 2L)),
-               list(type = 'array', elementType = "integer", containsNull = TRUE))
+               list(type = "array", elementType = "integer", containsNull = TRUE))
   expect_equal(infer_type(list(1L, 2L)),
-               list(type = 'array', elementType = "integer", containsNull = TRUE))
+               list(type = "array", elementType = "integer", containsNull = TRUE))
   testStruct <- infer_type(list(a = 1L, b = "2"))
   expect_equal(class(testStruct), "structType")
   checkStructField(testStruct$fields()[[1]], "a", "IntegerType", TRUE)
@@ -88,6 +88,9 @@ test_that("create DataFrame from RDD", {
   df <- createDataFrame(sqlContext, rdd, list("a", "b"))
   expect_is(df, "DataFrame")
   expect_equal(count(df), 10)
+  expect_equal(nrow(df), 10)
+  expect_equal(ncol(df), 2)
+  expect_equal(dim(df), c(10, 2))
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
 
@@ -108,6 +111,35 @@ test_that("create DataFrame from RDD", {
   expect_equal(count(df), 10)
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
+
+  df <- jsonFile(sqlContext, jsonPathNa)
+  hiveCtx <- tryCatch({
+    newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
+  },
+  error = function(err) {
+    skip("Hive is not build with SparkSQL, skipped")
+  })
+  sql(hiveCtx, "CREATE TABLE people (name string, age double, height float)")
+  insertInto(df, "people")
+  expect_equal(sql(hiveCtx, "SELECT age from people WHERE name = 'Bob'"), c(16))
+  expect_equal(sql(hiveCtx, "SELECT height from people WHERE name ='Bob'"), c(176.5))
+
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  df2 <- createDataFrame(sqlContext, df.toRDD, schema)
+  expect_equal(columns(df2), c("name", "age", "height"))
+  expect_equal(dtypes(df2), list(c("name", "string"), c("age", "int"), c("height", "float")))
+  expect_equal(collect(where(df2, df2$name == "Bob")), c("Bob", 16, 176.5))
+
+  localDF <- data.frame(name=c("John", "Smith", "Sarah"),
+                        age=c(19, 23, 18),
+                        height=c(164.10, 181.4, 173.7))
+  df <- createDataFrame(sqlContext, localDF, schema)
+  expect_is(df, "DataFrame")
+  expect_equal(count(df), 3)
+  expect_equal(columns(df), c("name", "age", "height"))
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "int"), c("height", "float")))
+  expect_equal(collect(where(df, df$name == "John")), c("John", 19, 164.10))
 })
 
 test_that("convert NAs to null type in DataFrames", {
@@ -462,7 +494,7 @@ test_that("head() and first() return the correct data", {
   expect_equal(nrow(testFirst), 1)
 })
 
-test_that("distinct() on DataFrames", {
+test_that("distinct() and unique on DataFrames", {
   lines <- c("{\"name\":\"Michael\"}",
              "{\"name\":\"Andy\", \"age\":30}",
              "{\"name\":\"Justin\", \"age\":19}",
@@ -474,6 +506,10 @@ test_that("distinct() on DataFrames", {
   uniques <- distinct(df)
   expect_is(uniques, "DataFrame")
   expect_equal(count(uniques), 3)
+
+  uniques2 <- unique(df)
+  expect_is(uniques2, "DataFrame")
+  expect_equal(count(uniques2), 3)
 })
 
 test_that("sample on a DataFrame", {
@@ -576,7 +612,8 @@ test_that("write.df() as parquet file", {
 test_that("test HiveContext", {
   hiveCtx <- tryCatch({
     newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
-  }, error = function(err) {
+  },
+  error = function(err) {
     skip("Hive is not build with SparkSQL, skipped")
   })
   df <- createExternalTable(hiveCtx, "json", jsonPath, "json")
@@ -612,6 +649,18 @@ test_that("column functions", {
   c7 <- floor(c) + log(c) + log10(c) + log1p(c) + rint(c)
   c8 <- sign(c) + sin(c) + sinh(c) + tan(c) + tanh(c)
   c9 <- toDegrees(c) + toRadians(c)
+
+  df <- jsonFile(sqlContext, jsonPath)
+  df2 <- select(df, between(df$age, c(20, 30)), between(df$age, c(10, 20)))
+  expect_equal(collect(df2)[[2, 1]], TRUE)
+  expect_equal(collect(df2)[[2, 2]], FALSE)
+  expect_equal(collect(df2)[[3, 1]], FALSE)
+  expect_equal(collect(df2)[[3, 2]], TRUE)
+
+  df3 <- select(df, between(df$name, c("Apache", "Spark")))
+  expect_equal(collect(df3)[[1, 1]], TRUE)
+  expect_equal(collect(df3)[[2, 1]], FALSE)
+  expect_equal(collect(df3)[[3, 1]], TRUE)
 })
 
 test_that("column binary mathfunctions", {
@@ -626,10 +675,12 @@ test_that("column binary mathfunctions", {
   expect_equal(collect(select(df, atan2(df$a, df$b)))[2, "ATAN2(a, b)"], atan2(2, 6))
   expect_equal(collect(select(df, atan2(df$a, df$b)))[3, "ATAN2(a, b)"], atan2(3, 7))
   expect_equal(collect(select(df, atan2(df$a, df$b)))[4, "ATAN2(a, b)"], atan2(4, 8))
+  ## nolint start
   expect_equal(collect(select(df, hypot(df$a, df$b)))[1, "HYPOT(a, b)"], sqrt(1^2 + 5^2))
   expect_equal(collect(select(df, hypot(df$a, df$b)))[2, "HYPOT(a, b)"], sqrt(2^2 + 6^2))
   expect_equal(collect(select(df, hypot(df$a, df$b)))[3, "HYPOT(a, b)"], sqrt(3^2 + 7^2))
   expect_equal(collect(select(df, hypot(df$a, df$b)))[4, "HYPOT(a, b)"], sqrt(4^2 + 8^2))
+  ## nolint end
 })
 
 test_that("string operators", {
@@ -714,7 +765,7 @@ test_that("filter() on a DataFrame", {
   expect_equal(count(filtered6), 2)
 })
 
-test_that("join() on a DataFrame", {
+test_that("join() and merge() on a DataFrame", {
   df <- jsonFile(sqlContext, jsonPath)
 
   mockLines2 <- c("{\"name\":\"Michael\", \"test\": \"yes\"}",
@@ -743,6 +794,12 @@ test_that("join() on a DataFrame", {
   expect_equal(names(joined4), c("newAge", "name", "test"))
   expect_equal(count(joined4), 4)
   expect_equal(collect(orderBy(joined4, joined4$name))$newAge[3], 24)
+
+  merged <- select(merge(df, df2, df$name == df2$name, "outer"),
+                   alias(df$age + 5, "newAge"), df$name, df2$test)
+  expect_equal(names(merged), c("newAge", "name", "test"))
+  expect_equal(count(merged), 4)
+  expect_equal(collect(orderBy(merged, joined4$name))$newAge[3], 24)
 })
 
 test_that("toJSON() returns an RDD of the correct values", {
@@ -771,7 +828,7 @@ test_that("isLocal()", {
   expect_false(isLocal(df))
 })
 
-test_that("unionAll(), except(), and intersect() on a DataFrame", {
+test_that("unionAll(), rbind(), except(), and intersect() on a DataFrame", {
   df <- jsonFile(sqlContext, jsonPath)
 
   lines <- c("{\"name\":\"Bob\", \"age\":24}",
@@ -785,6 +842,11 @@ test_that("unionAll(), except(), and intersect() on a DataFrame", {
   expect_is(unioned, "DataFrame")
   expect_equal(count(unioned), 6)
   expect_equal(first(unioned)$name, "Michael")
+
+  unioned2 <- arrange(rbind(unioned, df, df2), df$age)
+  expect_is(unioned2, "DataFrame")
+  expect_equal(count(unioned2), 12)
+  expect_equal(first(unioned2)$name, "Michael")
 
   excepted <- arrange(except(df, df2), desc(df$age))
   expect_is(unioned, "DataFrame")
@@ -809,7 +871,7 @@ test_that("withColumn() and withColumnRenamed()", {
   expect_equal(columns(newDF2)[1], "newerAge")
 })
 
-test_that("mutate() and rename()", {
+test_that("mutate(), rename() and names()", {
   df <- jsonFile(sqlContext, jsonPath)
   newDF <- mutate(df, newAge = df$age + 2)
   expect_equal(length(columns(newDF)), 3)
@@ -819,6 +881,10 @@ test_that("mutate() and rename()", {
   newDF2 <- rename(df, newerAge = df$age)
   expect_equal(length(columns(newDF2)), 2)
   expect_equal(columns(newDF2)[1], "newerAge")
+
+  names(newDF2) <- c("newerName", "evenNewerAge")
+  expect_equal(length(names(newDF2)), 2)
+  expect_equal(names(newDF2)[1], "newerName")
 })
 
 test_that("write.df() on DataFrame and works with parquetFile", {
@@ -836,10 +902,10 @@ test_that("parquetFile works with multiple input paths", {
   write.df(df, parquetPath2, "parquet", mode="overwrite")
   parquetDF <- parquetFile(sqlContext, parquetPath, parquetPath2)
   expect_is(parquetDF, "DataFrame")
-  expect_equal(count(parquetDF), count(df)*2)
+  expect_equal(count(parquetDF), count(df) * 2)
 })
 
-test_that("describe() on a DataFrame", {
+test_that("describe() and summarize() on a DataFrame", {
   df <- jsonFile(sqlContext, jsonPath)
   stats <- describe(df, "age")
   expect_equal(collect(stats)[1, "summary"], "count")
@@ -848,6 +914,10 @@ test_that("describe() on a DataFrame", {
   stats <- describe(df)
   expect_equal(collect(stats)[4, "name"], "Andy")
   expect_equal(collect(stats)[5, "age"], "30")
+
+  stats2 <- summary(df)
+  expect_equal(collect(stats2)[4, "name"], "Andy")
+  expect_equal(collect(stats2)[5, "age"], "30")
 })
 
 test_that("dropna() on a DataFrame", {
@@ -947,6 +1017,24 @@ test_that("fillna() on a DataFrame", {
   expected$name[is.na(expected$name)] <- "unknown"
   actual <- collect(fillna(df, list("age" = 50, "height" = 50.6, "name" = "unknown")))
   expect_identical(expected, actual)
+})
+
+test_that("crosstab() on a DataFrame", {
+  rdd <- lapply(parallelize(sc, 0:3), function(x) {
+    list(paste0("a", x %% 3), paste0("b", x %% 2))
+  })
+  df <- toDF(rdd, list("a", "b"))
+  ct <- crosstab(df, "a", "b")
+  ordered <- ct[order(ct$a_b),]
+  row.names(ordered) <- NULL
+  expected <- data.frame("a_b" = c("a0", "a1", "a2"), "b0" = c(1, 0, 1), "b1" = c(1, 1, 0),
+                         stringsAsFactors = FALSE, row.names = NULL)
+  expect_identical(expected, ordered)
+})
+
+test_that("SQL error message is returned from JVM", {
+  retError <- tryCatch(sql(sqlContext, "select * from blah"), error = function(e) e)
+  expect_equal(grepl("Table Not Found: blah", retError), TRUE)
 })
 
 unlink(parquetPath)

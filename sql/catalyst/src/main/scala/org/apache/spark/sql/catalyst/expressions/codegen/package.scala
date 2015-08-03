@@ -67,8 +67,10 @@ package object codegen {
       outfile.write(generatedBytes)
       outfile.close()
 
+      // scalastyle:off println
       println(
         s"javap -p -v -classpath ${dumpDirectory.getCanonicalPath} ${generatedClass.getName}".!!)
+      // scalastyle:on println
     }
   }
 }

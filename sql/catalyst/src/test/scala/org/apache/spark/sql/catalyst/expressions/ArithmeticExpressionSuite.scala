@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.Decimal
-
+import org.apache.spark.sql.types._
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -57,6 +56,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(UnaryMinus(input), convert(-1))
       checkEvaluation(UnaryMinus(Literal.create(null, dataType)), null)
     }
+    checkEvaluation(UnaryMinus(Literal(Long.MinValue)), Long.MinValue)
+    checkEvaluation(UnaryMinus(Literal(Int.MinValue)), Int.MinValue)
+    checkEvaluation(UnaryMinus(Literal(Short.MinValue)), Short.MinValue)
+    checkEvaluation(UnaryMinus(Literal(Byte.MinValue)), Byte.MinValue)
   }
 
   test("- (Minus)") {
@@ -117,9 +120,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   test("Abs") {
     testNumericDataTypes { convert =>
+      val input = Literal(convert(1))
+      val dataType = input.dataType
       checkEvaluation(Abs(Literal(convert(0))), convert(0))
       checkEvaluation(Abs(Literal(convert(1))), convert(1))
       checkEvaluation(Abs(Literal(convert(-1))), convert(1))
+      checkEvaluation(Abs(Literal.create(null, dataType)), null)
     }
   }
 
@@ -157,5 +163,20 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(MinOf("abc", "bcd"), "abc")
     checkEvaluation(MinOf(Array(1.toByte, 2.toByte), Array(1.toByte, 3.toByte)),
       Array(1.toByte, 2.toByte))
+  }
+
+  test("pmod") {
+    testNumericDataTypes { convert =>
+      val left = Literal(convert(7))
+      val right = Literal(convert(3))
+      checkEvaluation(Pmod(left, right), convert(1))
+      checkEvaluation(Pmod(Literal.create(null, left.dataType), right), null)
+      checkEvaluation(Pmod(left, Literal.create(null, right.dataType)), null)
+      checkEvaluation(Remainder(left, Literal(convert(0))), null)  // mod by 0
+    }
+    checkEvaluation(Pmod(-7, 3), 2)
+    checkEvaluation(Pmod(7.2D, 4.1D), 3.1000000000000005)
+    checkEvaluation(Pmod(Decimal(0.7), Decimal(0.2)), Decimal(0.1))
+    checkEvaluation(Pmod(2L, Long.MaxValue), 2L)
   }
 }

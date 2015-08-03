@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkException, SparkConf, Logging}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{MetadataCleaner, Utils}
 import org.apache.spark.streaming.scheduler.JobGenerator
@@ -48,6 +49,8 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
     // Reload properties for the checkpoint application since user wants to set a reload property
     // or spark had changed its value and user wants to set it back.
     val propertiesToReload = List(
+      "spark.driver.host",
+      "spark.driver.port",
       "spark.master",
       "spark.yarn.keytab",
       "spark.yarn.principal")
@@ -98,7 +101,7 @@ object Checkpoint extends Logging {
     }
 
     val path = new Path(checkpointDir)
-    val fs = fsOption.getOrElse(path.getFileSystem(new Configuration()))
+    val fs = fsOption.getOrElse(path.getFileSystem(SparkHadoopUtil.get.conf))
     if (fs.exists(path)) {
       val statuses = fs.listStatus(path)
       if (statuses != null) {

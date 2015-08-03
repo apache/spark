@@ -34,18 +34,19 @@ import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 
+import org.apache.spark.Logging
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.SQLConf.SQLConfEntry._
-import org.apache.spark.sql.catalyst.ParserDialect
+import org.apache.spark.sql.catalyst.{TableIdentifier, ParserDialect}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUDFs, SetCommand}
+import org.apache.spark.sql.execution.datasources.{PreWriteCheck, PreInsertCastAndRename, DataSourceStrategy}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
-import org.apache.spark.sql.sources.DataSourceStrategy
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -65,12 +66,12 @@ private[hive] class HiveQLDialect extends ParserDialect {
  *
  * @since 1.0.0
  */
-class HiveContext(sc: SparkContext) extends SQLContext(sc) {
+class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
   self =>
 
   import HiveContext._
 
-  println("create HiveContext")
+  logDebug("create HiveContext")
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
@@ -266,7 +267,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
-    catalog.refreshTable(catalog.client.currentDatabase, tableName)
+    val tableIdent = TableIdentifier(tableName).withDatabase(catalog.client.currentDatabase)
+    catalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
@@ -359,7 +361,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     hiveconf.set(key, value)
   }
 
-  private[sql] override def setConf[T](entry: SQLConfEntry[T], value: T): Unit = {
+  override private[sql] def setConf[T](entry: SQLConfEntry[T], value: T): Unit = {
     setConf(entry.key, entry.stringConverter(value))
   }
 
@@ -371,7 +373,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
   override protected[sql] lazy val functionRegistry: FunctionRegistry =
-    new OverrideFunctionRegistry(new HiveFunctionRegistry(FunctionRegistry.builtin))
+    new HiveFunctionRegistry(FunctionRegistry.builtin)
 
   /* An analyzer that uses the Hive metastore. */
   @transient
@@ -383,11 +385,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         catalog.PreInsertionCasts ::
         ExtractPythonUDFs ::
         ResolveHiveWindowFunction ::
-        sources.PreInsertCastAndRename ::
+        PreInsertCastAndRename ::
         Nil
 
       override val extendedCheckRules = Seq(
-        sources.PreWriteCheck(catalog)
+        PreWriteCheck(catalog)
       )
     }
 
@@ -443,13 +445,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       HiveDDLStrategy,
       DDLStrategy,
       TakeOrderedAndProject,
-      ParquetOperations,
       InMemoryScans,
-      ParquetConversion, // Must be before HiveTableScans
       HiveTableScans,
       DataSinks,
       Scripts,
       HashAggregation,
+      Aggregation,
       LeftSemiJoin,
       HashJoin,
       BasicOperators,

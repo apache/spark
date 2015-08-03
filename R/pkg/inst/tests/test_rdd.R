@@ -250,7 +250,7 @@ test_that("flatMapValues() on pairwise RDDs", {
   expect_equal(actual, list(list(1,1), list(1,2), list(2,3), list(2,4)))
 
   # Generate x to x+1 for every value
-  actual <- collect(flatMapValues(intRdd, function(x) { x:(x + 1) }))
+  actual <- collect(flatMapValues(intRdd, function(x) { x: (x + 1) }))
   expect_equal(actual,
                list(list(1L, -1), list(1L, 0), list(2L, 100), list(2L, 101),
                     list(2L, 1), list(2L, 2), list(1L, 200), list(1L, 201)))
@@ -293,7 +293,7 @@ test_that("sumRDD() on RDDs", {
 })
 
 test_that("keyBy on RDDs", {
-  func <- function(x) { x*x }
+  func <- function(x) { x * x }
   keys <- keyBy(rdd, func)
   actual <- collect(keys)
   expect_equal(actual, lapply(nums, function(x) { list(func(x), x) }))
@@ -311,7 +311,7 @@ test_that("repartition/coalesce on RDDs", {
   r2 <- repartition(rdd, 6)
   expect_equal(numPartitions(r2), 6L)
   count <- length(collectPartition(r2, 0L))
-  expect_true(count >=0 && count <= 4)
+  expect_true(count >= 0 && count <= 4)
 
   # coalesce
   r3 <- coalesce(rdd, 1)
@@ -447,7 +447,7 @@ test_that("zipRDD() on RDDs", {
   expect_equal(actual,
                list(list(0, 1000), list(1, 1001), list(2, 1002), list(3, 1003), list(4, 1004)))
 
-  mockFile = c("Spark is pretty.", "Spark is awesome.")
+  mockFile <- c("Spark is pretty.", "Spark is awesome.")
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")
   writeLines(mockFile, fileName)
 
@@ -483,7 +483,7 @@ test_that("cartesian() on RDDs", {
   actual <- collect(cartesian(rdd, emptyRdd))
   expect_equal(actual, list())
 
-  mockFile = c("Spark is pretty.", "Spark is awesome.")
+  mockFile <- c("Spark is pretty.", "Spark is awesome.")
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")
   writeLines(mockFile, fileName)
 
