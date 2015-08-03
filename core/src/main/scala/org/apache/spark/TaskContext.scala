@@ -19,8 +19,6 @@ package org.apache.spark
 
 import java.io.Serializable
 
-import com.google.common.annotations.VisibleForTesting
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.metrics.source.Source
@@ -65,9 +63,7 @@ object TaskContext {
   /**
    * An empty task context that does not represent an actual task.
    */
-  // Unfortunately, this must be fully public for Java tests to access it
-  @VisibleForTesting
-  def empty(): TaskContextImpl = {
+  private[spark] def empty(): TaskContextImpl = {
     new TaskContextImpl(0, 0, 0, 0, null, null, Seq.empty)
   }
 
