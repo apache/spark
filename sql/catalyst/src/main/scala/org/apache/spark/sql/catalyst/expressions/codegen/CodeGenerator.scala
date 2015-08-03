@@ -90,6 +90,22 @@ class CodeGenContext {
     addedFuntions += ((funcName, funcCode))
   }
 
+  /**
+   * Set to true when we are expecting a JoinedRow as input.
+   */
+  var join: Boolean = false
+  def unwrapJoinRow: String = {
+    if (join) {
+      // We could also add the left()/right() methods to the InternalRow interface.
+      """
+        |org.apache.spark.sql.catalyst.expressions.JoinedRow join = (org.apache.spark.sql.catalyst.expressions.JoinedRow) i;
+        |InternalRow left = join.left();
+        |InternalRow right = join.right();
+      """.stripMargin
+    }
+    else ""
+  }
+
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
   final val JAVA_SHORT = "short"

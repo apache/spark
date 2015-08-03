@@ -35,6 +35,8 @@ abstract class AbstractBoundReference extends LeafExpression with NamedExpressio
 
   protected[this] def genCodeInput = "i"
 
+  protected[this] def join = false
+
   protected[this] def unwrap(input: InternalRow): InternalRow = input
 
   override def toString: String = s"${prefix}input[$ordinal, $dataType]"
@@ -74,6 +76,7 @@ abstract class AbstractBoundReference extends LeafExpression with NamedExpressio
   override def exprId: ExprId = throw new UnsupportedOperationException
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    ctx.join = join
     val javaType = ctx.javaType(dataType)
     val value = ctx.getValue(genCodeInput, dataType, ordinal.toString)
     s"""
@@ -88,18 +91,18 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
 case class LeftBoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   extends AbstractBoundReference {
+  override protected def join = true
   override protected def prefix = "left"
-  override protected def genCodeInput =
-    "((org.apache.spark.sql.catalyst.expressions.JoinedRow)i).left()"
+  override protected def genCodeInput = "left"
   override protected def unwrap(input: InternalRow): InternalRow =
     input.asInstanceOf[JoinedRow].left
 }
 
 case class RightBoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   extends AbstractBoundReference {
+  override protected def join = true
   override protected def prefix = "right"
-  override protected def genCodeInput =
-    "((org.apache.spark.sql.catalyst.expressions.JoinedRow)i).right()"
+  override protected def genCodeInput = "right"
   override protected def unwrap(input: InternalRow): InternalRow =
     input.asInstanceOf[JoinedRow].right
 }
