@@ -105,11 +105,25 @@ class ExternalTaskSensor(BaseSensorOperator):
     :param external_task_id: The task_id that contains the task you want to
         wait for
     :type external_task_id: string
+    :param allowed_states: list of allowed states, default is ``['success']``
+    :type allowed_states: list
+    :param execution_delta: time difference with the previous execution to
+        look at, the default is the same execution_date as the current task.
+        For yesterday, use [positive!] datetime.timedelta(days=1)
+    :type execution_delta: datetime.timedelta
     """
 
     @apply_defaults
-    def __init__(self, external_dag_id, external_task_id, *args, **kwargs):
+    def __init__(
+            self,
+            external_dag_id,
+            external_task_id,
+            allowed_states=None,
+            execution_delta=None,
+            *args, **kwargs):
         super(ExternalTaskSensor, self).__init__(*args, **kwargs)
+        self.allowed_states = allowed_states or [State.SUCCESS]
+        self.execution_delta = execution_delta
         self.external_dag_id = external_dag_id
         self.external_task_id = external_task_id
 
@@ -120,12 +134,18 @@ class ExternalTaskSensor(BaseSensorOperator):
             '{self.external_task_id} on '
             '{context[execution_date]} ... '.format(**locals()))
         TI = TaskInstance
+
+        if self.execution_delta:
+            dttm = context['execution_date'] - self.execution_delta
+        else:
+            dttm = context['execution_date']
+
         session = settings.Session()
         count = session.query(TI).filter(
             TI.dag_id == self.external_dag_id,
             TI.task_id == self.external_task_id,
-            TI.state == State.SUCCESS,
-            TI.execution_date == context['execution_date'],
+            TI.state.in_(self.allowed_states),
+            TI.execution_date == dttm,
         ).count()
         session.commit()
         session.close()
