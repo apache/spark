@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.ml.util.MultiStopwatch
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -128,11 +129,13 @@ private class RandomForest (
    */
   def run(input: RDD[LabeledPoint]): RandomForestModel = {
 
-    val timer = new TimeTracker()
+    val multiTimer = new MultiStopwatch(input.sparkContext)
 
-    timer.start("total")
+    multiTimer.addLocal("total")
+    multiTimer("total").start()
 
-    timer.start("init")
+    multiTimer.addLocal("init")
+    multiTimer("init").start()
 
     val retaggedInput = input.retag(classOf[LabeledPoint])
     val metadata =
@@ -147,9 +150,10 @@ private class RandomForest (
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
-    timer.start("findSplitsBins")
+    multiTimer.addLocal("findSplitsBins")
+    multiTimer("findSplitsBins").start()
     val (splits, bins) = DecisionTree.findSplitsBins(retaggedInput, metadata)
-    timer.stop("findSplitsBins")
+    multiTimer("findSplitsBins").stop()
     logDebug("numBins: feature: number of bins")
     logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
         s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
@@ -190,7 +194,7 @@ private class RandomForest (
       " which is too small for the given features." +
       s"  Minimum value = ${maxMemoryPerNode / (1024L * 1024L)}")
 
-    timer.stop("init")
+    multiTimer("init").stop()
 
     /*
      * The main idea here is to perform group-wise training of the decision tree nodes thus
@@ -221,6 +225,8 @@ private class RandomForest (
     val topNodes: Array[Node] = Array.fill[Node](numTrees)(Node.emptyNode(nodeIndex = 1))
     Range(0, numTrees).foreach(treeIndex => nodeQueue.enqueue((treeIndex, topNodes(treeIndex))))
 
+    multiTimer.addLocal("findBestSplits")
+    multiTimer.addLocal("chooseSplits")
     while (nodeQueue.nonEmpty) {
       // Collect some nodes to split, and choose features for each node (if subsampling).
       // Each group of nodes may come from one or multiple trees, and at multiple levels.
@@ -231,18 +237,19 @@ private class RandomForest (
         s"RandomForest selected empty nodesForGroup.  Error for unknown reason.")
 
       // Choose node splits, and enqueue new nodes as needed.
-      timer.start("findBestSplits")
+      multiTimer("findBestSplits").start()
       DecisionTree.findBestSplits(baggedInput, metadata, topNodes, nodesForGroup,
-        treeToNodeToIndexInfo, splits, bins, nodeQueue, timer, nodeIdCache = nodeIdCache)
-      timer.stop("findBestSplits")
+        treeToNodeToIndexInfo, splits, bins, nodeQueue, multiTimer("chooseSplits"),
+        nodeIdCache = nodeIdCache)
+      multiTimer("findBestSplits").stop()
     }
 
     baggedInput.unpersist()
 
-    timer.stop("total")
+    multiTimer("total").stop()
 
     logInfo("Internal timing for DecisionTree:")
-    logInfo(s"$timer")
+    logInfo(s"$multiTimer")
 
     // Delete any remaining checkpoints used for node Id cache.
     if (nodeIdCache.nonEmpty) {

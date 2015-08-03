@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuilder
 
+import org.apache.spark.ml.util.{Stopwatch, LocalStopwatch}
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
@@ -447,7 +448,7 @@ object DecisionTree extends Serializable with Logging {
       splits: Array[Array[Split]],
       bins: Array[Array[Bin]],
       nodeQueue: mutable.Queue[(Int, Node)],
-      timer: TimeTracker = new TimeTracker,
+      timer: Stopwatch = new LocalStopwatch("chooseSplits"),
       nodeIdCache: Option[NodeIdCache] = None): Unit = {
 
     /*
@@ -580,7 +581,7 @@ object DecisionTree extends Serializable with Logging {
     }
 
     // Calculate best splits for all nodes in the group
-    timer.start("chooseSplits")
+    timer.start()
 
     // In each partition, iterate all instances and compute aggregate stats for each node,
     // yield an (nodeIndex, nodeAggregateStats) pair for each node.
@@ -641,7 +642,7 @@ object DecisionTree extends Serializable with Logging {
           (nodeIndex, (split, stats, predict))
         }.collectAsMap()
 
-    timer.stop("chooseSplits")
+    timer.stop()
 
     val nodeIdUpdaters = if (nodeIdCache.nonEmpty) {
       Array.fill[mutable.Map[Int, NodeIndexUpdater]](
