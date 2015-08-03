@@ -49,7 +49,7 @@ import org.apache.spark.util.Utils
 @Experimental
 // scalastyle:off
 object functions {
-// scalastyle:on
+  // scalastyle:on
 
   private[this] implicit def toColumn(expr: Expression): Column = Column(expr)
 
@@ -1100,11 +1100,11 @@ object functions {
   }
 
   /**
-    * Computes hex value of the given column.
-    *
-    * @group math_funcs
-    * @since 1.5.0
-    */
+   * Computes hex value of the given column.
+   *
+   * @group math_funcs
+   * @since 1.5.0
+   */
   def hex(column: Column): Column = Hex(column.expr)
 
   /**
@@ -1862,6 +1862,17 @@ object functions {
    */
   def substring_index(str: Column, delim: String, count: Int): Column =
     SubstringIndex(str.expr, lit(delim).expr, lit(count).expr)
+
+  /* Translate any character in the srcString by a character in replaceString.
+  * The characters in replaceString is corresponding to the characters in matchingString.
+  * The translate will happen when any character in the string matching with the character
+    * in the matchingString.
+  *
+  * @group string_funcs
+    * @since 1.5.0
+  */
+  def translate(srcString: Column, matchingString: String, replaceString: String): Column =
+    StringTranslate(srcString.expr, lit(matchingString).expr, lit(replaceString).expr)
 
   /**
    * Trim the spaces from both ends for the specified string column.
