@@ -553,8 +553,7 @@ private[spark] class ExecutorAllocationManager(
         }
 
         // If this is the last pending task, mark the scheduler queue as empty
-        stageIdToTaskIndices
-          .getOrElseUpdate(stageId, new mutable.HashSet[Int]) += taskIndex
+        stageIdToTaskIndices.getOrElseUpdate(stageId, new mutable.HashSet[Int]) += taskIndex
 
         // Mark the executor on which this task is scheduled as busy
         executorIdToTaskIds.getOrElseUpdate(executorId, new mutable.HashSet[Long]) += taskId
