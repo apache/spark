@@ -73,19 +73,19 @@ class DirectKafkaInputDStream[
 
   protected val kc = new KafkaCluster(kafkaParams)
 
-  private val ratePerSec: Int = context.sparkContext.getConf.getInt(
+  private val ratePerPartition: Int = context.sparkContext.getConf.getInt(
       "spark.streaming.kafka.maxRatePerPartition", 0)
   protected def maxMessagesPerPartition: Option[Long] = {
     val estimatedRate = rateController.map(_.getLatestRate().toInt).getOrElse(-1)
     val numPartitions = currentOffsets.keys.size
-    val effectiveRatePerSec = if (estimatedRate > 0) {
-      (ratePerSec min (estimatedRate / numPartitions))
+    val effectiveRatePerPartition = if (estimatedRate > 0) {
+      Math.min(ratePerPartition, (estimatedRate / numPartitions))
     } else {
-      ratePerSec
+      ratePerPartition
     }
-    if (effectiveRatePerSec > 0) {
+    if (effectiveRatePerPartition > 0) {
       val secsPerBatch = context.graph.batchDuration.milliseconds.toDouble / 1000
-      Some((secsPerBatch * effectiveRatePerSec).toLong)
+      Some((secsPerBatch * effectiveRatePerPartition).toLong)
     } else {
       None
     }
