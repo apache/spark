@@ -225,8 +225,8 @@ private[spark] object SQLConf {
 
   val TUNGSTEN_ENABLED = booleanConf("spark.sql.tungsten.enabled",
     defaultValue = Some(true),
-    doc = "When true, use the optimized Tungsten physical execution backend which explicitly manages memory and " +
-          "dynamically generates bytecode for expression evaluation.")
+    doc = "When true, use the optimized Tungsten physical execution backend which explicitly " +
+          "manages memory and dynamically generates bytecode for expression evaluation.")
 
   val DIALECT = stringConf(
     "spark.sql.dialect",
@@ -468,7 +468,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT)
 
   private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN)
-  
+
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   private[spark] def tungstenEnabled: Boolean = getConf(TUNGSTEN_ENABLED)

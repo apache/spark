@@ -207,7 +207,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case p: logical.Aggregate if sqlContext.conf.useSqlAggregate2 && sqlContext.conf.tungstenEnabled =>
+      case p: logical.Aggregate if sqlContext.conf.useSqlAggregate2 &&
+                                   sqlContext.conf.tungstenEnabled =>
         val converted = p.newAggregation
         converted match {
           case None => Nil // Cannot convert to new aggregation code path.
