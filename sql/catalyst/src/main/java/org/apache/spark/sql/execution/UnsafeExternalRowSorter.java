@@ -48,7 +48,6 @@ final class UnsafeExternalRowSorter {
   private long numRowsInserted = 0;
 
   private final StructType schema;
-  private final UnsafeProjection unsafeProjection;
   private final PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
 
@@ -60,21 +59,21 @@ final class UnsafeExternalRowSorter {
       StructType schema,
       Ordering<InternalRow> ordering,
       PrefixComparator prefixComparator,
-      PrefixComputer prefixComputer) throws IOException {
+      PrefixComputer prefixComputer,
+      long pageSizeBytes) throws IOException {
     this.schema = schema;
-    this.unsafeProjection = UnsafeProjection.create(schema);
     this.prefixComputer = prefixComputer;
     final SparkEnv sparkEnv = SparkEnv.get();
     final TaskContext taskContext = TaskContext.get();
-    sorter = new UnsafeExternalSorter(
+    sorter = UnsafeExternalSorter.create(
       taskContext.taskMemoryManager(),
       sparkEnv.shuffleMemoryManager(),
       sparkEnv.blockManager(),
       taskContext,
       new RowComparator(ordering, schema.length()),
       prefixComparator,
-      4096,
-      sparkEnv.conf()
+      /* initialSize */ 4096,
+      pageSizeBytes
     );
   }
 
@@ -88,13 +87,12 @@ final class UnsafeExternalRowSorter {
   }
 
   @VisibleForTesting
-  void insertRow(InternalRow row) throws IOException {
-    UnsafeRow unsafeRow = unsafeProjection.apply(row);
+  void insertRow(UnsafeRow row) throws IOException {
     final long prefix = prefixComputer.computePrefix(row);
     sorter.insertRecord(
-      unsafeRow.getBaseObject(),
-      unsafeRow.getBaseOffset(),
-      unsafeRow.getSizeInBytes(),
+      row.getBaseObject(),
+      row.getBaseOffset(),
+      row.getSizeInBytes(),
       prefix
     );
     numRowsInserted++;
@@ -113,7 +111,7 @@ final class UnsafeExternalRowSorter {
   }
 
   @VisibleForTesting
-  Iterator<InternalRow> sort() throws IOException {
+  Iterator<UnsafeRow> sort() throws IOException {
     try {
       final UnsafeSorterIterator sortedIterator = sorter.getSortedIterator();
       if (!sortedIterator.hasNext()) {
@@ -121,7 +119,7 @@ final class UnsafeExternalRowSorter {
         // here in order to prevent memory leaks.
         cleanupResources();
       }
-      return new AbstractScalaRowIterator() {
+      return new AbstractScalaRowIterator<UnsafeRow>() {
 
         private final int numFields = schema.length();
         private UnsafeRow row = new UnsafeRow();
@@ -132,7 +130,7 @@ final class UnsafeExternalRowSorter {
         }
 
         @Override
-        public InternalRow next() {
+        public UnsafeRow next() {
           try {
             sortedIterator.loadNext();
             row.pointTo(
@@ -164,11 +162,11 @@ final class UnsafeExternalRowSorter {
   }
 
 
-  public Iterator<InternalRow> sort(Iterator<InternalRow> inputIterator) throws IOException {
-      while (inputIterator.hasNext()) {
-        insertRow(inputIterator.next());
-      }
-      return sort();
+  public Iterator<UnsafeRow> sort(Iterator<UnsafeRow> inputIterator) throws IOException {
+    while (inputIterator.hasNext()) {
+      insertRow(inputIterator.next());
+    }
+    return sort();
   }
 
   /**

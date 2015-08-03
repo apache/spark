@@ -70,6 +70,11 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     server = transportContext.createServer(port, bootstraps)
   }
 
+  /** Clean up all shuffle files associated with an application that has exited. */
+  def applicationRemoved(appId: String): Unit = {
+    blockHandler.applicationRemoved(appId, true /* cleanupLocalDirs */)
+  }
+
   def stop() {
     if (server != null) {
       server.close()
