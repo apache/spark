@@ -70,13 +70,22 @@ case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) 
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    this.transformAllExpressions {
-      case CreateStruct(children) => CreateStructUnsafe(children)
-      case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+  override lazy val accumulators = Map(
+    "numRows" -> sparkContext.internalAccumulator(0L, "number of rows"))
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numRows = accumulator[Long]("numRows")
+    child.execute().mapPartitions { iter =>
+      this.transformAllExpressions {
+        case CreateStruct(children) => CreateStructUnsafe(children)
+        case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+      }
+      val project = UnsafeProjection.create(projectList, child.output)
+      iter.map { row =>
+        numRows += 1
+        project(row)
+      }
     }
-    val project = UnsafeProjection.create(projectList, child.output)
-    iter.map(project)
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering

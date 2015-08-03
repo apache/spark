@@ -15,4 +15,23 @@
  * limitations under the License.
  */
 
-/* TODO SPARK-8862 Visualize physical plans */
+#plan-viz-graph .label {
+  font-weight: normal;
+  text-shadow: none;
+}
+
+#plan-viz-graph svg g.node rect {
+  fill: #C3EBFF;
+  stroke: #3EC0FF;
+  stroke-width: 1px;
+}
+
+/* Hightlight the SparkPlan node name */
+#plan-viz-graph svg text :first-child {
+  font-weight: bold;
+}
+
+#plan-viz-graph svg path {
+  stroke: #444;
+  stroke-width: 1.5px;
+}

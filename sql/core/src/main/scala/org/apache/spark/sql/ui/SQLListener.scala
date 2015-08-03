@@ -112,32 +112,10 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener {
         case JobSucceeded => executionUIData.jobs(jobId) = JobExecutionStatus.SUCCEEDED
         case JobFailed(_) => executionUIData.jobs(jobId) = JobExecutionStatus.FAILED
       }
-      tryFinishExecution(executionUIData, jobEnd.time)
-    }
-  }
-
-  /**
-   * Should handle two cases:
-   * 1. onJobEnd happens before onExecutionEnd
-   * 2. onExecutionEnd happens before onJobEnd
-   */
-  private def tryFinishExecution(
-      executionUIData: SQLExecutionUIData, time: Long): Unit = synchronized {
-    if (executionUIData.isFinished) {
-      if (executionUIData.completionTime.isEmpty) {
-        // This is called from the last onJobEnd. We just show the job end time to UI. If will be
-        // updated by onExecutionEnd later.
-        executionUIData.completionTime = Some(time)
-      }
-      // Note: this execution may have been already removed by other method. If so, just do nothing.
-      activeExecutions.remove(executionUIData.executionId).foreach { _ =>
-        if (executionUIData.isFailed) {
-          failedExecutions += executionUIData
-          trimExecutionsIfNecessary(failedExecutions)
-        } else {
-          completedExecutions += executionUIData
-          trimExecutionsIfNecessary(completedExecutions)
-        }
+      if (executionUIData.completionTime.nonEmpty && !executionUIData.hasRunningJobs) {
+        // onExecutionEnd happens before this onJobEnd and we are the last job, so we should update
+        // the execution lists.
+        updateExecutionLists(executionId)
       }
     }
   }
@@ -228,7 +206,27 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener {
   def onExecutionEnd(executionId: Long, time: Long): Unit = synchronized {
     executionIdToData.get(executionId).foreach { executionUIData =>
       executionUIData.completionTime = Some(time)
-      tryFinishExecution(executionUIData, time)
+      if (!executionUIData.hasRunningJobs) {
+        // onExecutionEnd happens after all "onJobEnd"s
+        // So we should update the execution lists.
+        updateExecutionLists(executionId)
+      } else {
+        // There are some running jobs, onExecutionEnd happens before some "onJobEnd"s.
+        // Then we don't if the execution is successful, so let the last onJobEnd updates the
+        // execution lists.
+      }
+    }
+  }
+
+  private def updateExecutionLists(executionId: Long): Unit = {
+    activeExecutions.remove(executionId).foreach { executionUIData =>
+      if (executionUIData.isFailed) {
+        failedExecutions += executionUIData
+        trimExecutionsIfNecessary(failedExecutions)
+      } else {
+        completedExecutions += executionUIData
+        trimExecutionsIfNecessary(completedExecutions)
+      }
     }
   }
 
@@ -296,7 +294,7 @@ private[ui] case class SQLExecutionUIData(
   /**
    * Return if there is no running job.
    */
-  def isFinished: Boolean = jobs.values.forall(_ != JobExecutionStatus.RUNNING)
+  def hasRunningJobs: Boolean = jobs.values.exists(_ == JobExecutionStatus.RUNNING)
 
   /**
    * Return if there is any failed job.

@@ -228,6 +228,40 @@ class SQLListenerSuite extends SparkFunSuite {
     assert(executionUIData.failedJobs.isEmpty)
   }
 
+  test("onExecutionEnd happens before multiple onJobEnd(JobSucceeded)s") {
+    val listener = new SQLListener(TestSQLContext)
+    val executionId = 0
+    listener.onExecutionStart(
+      executionId, "test", "test", createTestDataFrame, System.currentTimeMillis())
+    listener.onJobStart(SparkListenerJobStart(
+      jobId = 0,
+      time = System.currentTimeMillis(),
+      stageInfos = Nil,
+      createProperties(executionId)))
+    listener.onJobEnd(SparkListenerJobEnd(
+        jobId = 0,
+        time = System.currentTimeMillis(),
+        JobSucceeded
+    ))
+
+    listener.onJobStart(SparkListenerJobStart(
+      jobId = 1,
+      time = System.currentTimeMillis(),
+      stageInfos = Nil,
+      createProperties(executionId)))
+    listener.onExecutionEnd(executionId, System.currentTimeMillis())
+    listener.onJobEnd(SparkListenerJobEnd(
+      jobId = 1,
+      time = System.currentTimeMillis(),
+      JobSucceeded
+    ))
+
+    val executionUIData = listener.executionIdToData(0)
+    assert(executionUIData.runningJobs.isEmpty)
+    assert(executionUIData.succeededJobs.sorted === Seq(0, 1))
+    assert(executionUIData.failedJobs.isEmpty)
+  }
+
   test("onExecutionEnd happens before onJobEnd(JobFailed)") {
     val listener = new SQLListener(TestSQLContext)
     val executionId = 0

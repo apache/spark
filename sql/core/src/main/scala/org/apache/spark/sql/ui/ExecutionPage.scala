@@ -53,7 +53,7 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
             {if (executionUIData.runningJobs.nonEmpty) {
               <li>
                 <strong>Running Jobs: </strong>
-                {executionUIData.runningJobs.map { jobId =>
+                {executionUIData.runningJobs.sorted.map { jobId =>
                 <a href={jobURL(jobId)}>{jobId.toString}</a><span>&nbsp;</span>
               }}
               </li>
@@ -61,7 +61,7 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
             {if (executionUIData.succeededJobs.nonEmpty) {
               <li>
                 <strong>Succeeded Jobs: </strong>
-                {executionUIData.succeededJobs.map { jobId =>
+                {executionUIData.succeededJobs.sorted.map { jobId =>
                   <a href={jobURL(jobId)}>{jobId.toString}</a><span>&nbsp;</span>
                 }}
               </li>
@@ -69,7 +69,7 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
             {if (executionUIData.failedJobs.nonEmpty) {
               <li>
                 <strong>Failed Jobs: </strong>
-                {executionUIData.failedJobs.map { jobId =>
+                {executionUIData.failedJobs.sorted.map { jobId =>
                   <a href={jobURL(jobId)}>{jobId.toString}</a><span>&nbsp;</span>
                 }}
               </li>
@@ -83,9 +83,7 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
 
       val metrics = listener.getExecutionMetrics(executionId)
 
-      summary ++
-        planMetricsTable(metrics, executionUIData.physicalPlanGraph) ++
-        planVisualization(metrics, executionUIData.physicalPlanGraph)
+      summary ++ planVisualization(metrics, executionUIData.physicalPlanGraph)
     }.getOrElse {
       <div>No information to display for Plan {executionId}</div>
     }
@@ -104,48 +102,24 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
     // scalastyle:on
   }
 
-  private def planMetricsTable(metrics: Map[Long, Any], graph: SparkPlanGraph): Seq[Node] = {
-    val headers = Seq("Plan", "Metrics")
-
-    def row(node: SparkPlanGraphNode): Seq[Node] = {
-      val metricsHtml =
-        node.metrics.map { metric =>
-          // Show "" by default. We cannot get any accumulator value until the
-          // task sends accumulator updates back at the first time.
-          StringEscapeUtils.escapeHtml4(
-            s"${metric.name}: ${metrics.get(metric.accumulatorId).getOrElse("")}")
-        }
-
-      if (metricsHtml.isEmpty) {
-        // Hide SparkPlans that don't have metrics
-        Nil
-      } else {
-        <tr>
-          <td>{node.name}</td>
-          <td>{Unparsed(metricsHtml.mkString("<br/>"))}</td>
-        </tr>
-      }
-    }
-
-    // Reverse the nodes so that showing the children nodes before the parent node
-    <div>
-      <h4>Metrics</h4>
-      {UIUtils.listingTable(headers, row, graph.nodes.reverse)}
-    </div>
-  }
-
   private def planVisualization(metrics: Map[Long, Any], graph: SparkPlanGraph): Seq[Node] = {
-    // TODO SPARK-8862 Visualize physical plans
-    // Now just hide it in HTML.
+    val metadata = graph.nodes.flatMap { node =>
+      val nodeId = s"plan-meta-data-${node.id}"
+
+      <div id={nodeId}>{node.desc}</div>
+    }
 
     <div>
       <div id="plan-viz-graph"></div>
       <div id="plan-viz-metadata" style="display:none">
         <div class="dot-file">
-          {graph.makeDotFile}
+          {graph.makeDotFile(metrics)}
         </div>
+        <div id="plan-viz-metadata-size">{graph.nodes.size.toString}</div>
+        {metadata}
       </div>
       {planVisualizationResources}
+      <script>$(function(){{ renderPlanViz(); }})</script>
     </div>
   }
 

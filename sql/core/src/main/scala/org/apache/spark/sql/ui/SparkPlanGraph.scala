@@ -33,10 +33,10 @@ import org.apache.spark.sql.execution.SparkPlan
 private[ui] case class SparkPlanGraph(
     nodes: Seq[SparkPlanGraphNode], edges: Seq[SparkPlanGraphEdge]) {
 
-  def makeDotFile: String = {
+  def makeDotFile(metrics: Map[Long, Any]): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
-    nodes.foreach(node => dotFile.append(node.makeDotNode + "\n"))
+    nodes.foreach(node => dotFile.append(node.makeDotNode(metrics) + "\n"))
     edges.foreach(edge => dotFile.append(edge.makeDotEdge + "\n"))
     dotFile.append("}")
     dotFile.toString()
@@ -65,12 +65,13 @@ private[ui] object SparkPlanGraph {
       SQLPlanMetric(accumulator.name.getOrElse(key), accumulator.id,
         accumulator.param.asInstanceOf[AccumulatorParam[Any]])
     }
-    val node = SparkPlanGraphNode(nodeIdGenerator.getAndIncrement(), plan.simpleString, metrics)
+    val node = SparkPlanGraphNode(
+      nodeIdGenerator.getAndIncrement(), plan.nodeName, plan.simpleString, metrics)
     nodes += node
     val childrenNodes = plan.children.map(
       child => buildSparkPlanGraphNode(child, nodeIdGenerator, nodes, edges))
     for (child <- childrenNodes) {
-      edges += SparkPlanGraphEdge(node.id, child.id)
+      edges += SparkPlanGraphEdge(child.id, node.id)
     }
     node
   }
@@ -83,9 +84,21 @@ private[ui] object SparkPlanGraph {
  * @param name the name of this SparkPlan node
  * @param metrics metrics that this SparkPlan node will track
  */
-private[ui] case class SparkPlanGraphNode(id: Long, name: String, metrics: Seq[SQLPlanMetric]) {
+private[ui] case class SparkPlanGraphNode(
+    id: Long, name: String, desc: String, metrics: Seq[SQLPlanMetric]) {
 
-  def makeDotNode: String = s"""  $id [label="$name"];"""
+  def makeDotNode(metricsValue: Map[Long, Any]): String = {
+    val values =
+      for (metric <- metrics;
+           value <- metricsValue.get(metric.accumulatorId))
+        yield metric.name + ": " + value
+    val label = if (values.isEmpty) {
+        name
+      } else {
+        name + "\\n \\n" + values.mkString("\\n")
+      }
+    s"""  $id [label="$label"];"""
+  }
 }
 
 /**
