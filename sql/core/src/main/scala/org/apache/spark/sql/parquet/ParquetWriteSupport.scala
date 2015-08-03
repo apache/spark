@@ -243,18 +243,16 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
       }
 
     writeLegacyParquetFormat match {
-      // Standard mode, writes decimals with precision <= 9 as INT32
+      // Standard mode, 1 <= precision <= 9, writes as INT32
       case false if precision <= MAX_PRECISION_FOR_INT32 => int32Writer
 
-      // Standard mode, writes decimals with precision <= 18 as INT64
+      // Standard mode, 10 <= precision <= 18, writes as INT64
       case false if precision <= MAX_PRECISION_FOR_INT64 => int64Writer
 
-      // Legacy mode, writes decimals with precision <= 18 as FIXED_LEN_BYTE_ARRAY
+      // Legacy mode, 1 <= precision <= 18, writes as FIXED_LEN_BYTE_ARRAY
       case true if precision <= MAX_PRECISION_FOR_INT64 => binaryWriterUsingUnscaledLong
 
-      // All other cases:
-      //  - Standard mode, writes decimals with precision > 18 as FIXED_LEN_BYTE_ARRAY
-      //  - Legacy mode, writes decimals with precision > 18 as FIXED_LEN_BYTE_ARRAY
+      // Either standard or legacy mode, 19 <= precision <= 38, writes as FIXED_LEN_BYTE_ARRAY
       case _ => binaryWriterUsingUnscaledBytes
     }
   }
