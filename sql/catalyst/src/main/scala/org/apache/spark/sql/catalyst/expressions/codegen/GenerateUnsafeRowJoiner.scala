@@ -76,7 +76,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
         } else if (i - bitset1Words < bitset2Words - 1) {
           // combine next two words of bitset2
           s"($getLong(obj2, offset2 + ${(i - bitset1Words) * 8}) >>> (64 - $bitset1Remainder))" +
-            s"| ($getLong(obj2, offset2 + ${(i - bitset1Words + 1) * 8}) << $bitset1Remainder)"
+            s" | ($getLong(obj2, offset2 + ${(i - bitset1Words + 1) * 8}) << $bitset1Remainder)"
         } else {
           // last word of bitset2
           s"$getLong(obj2, offset2 + ${(i - bitset1Words) * 8}) >>> (64 - $bitset1Remainder)"
