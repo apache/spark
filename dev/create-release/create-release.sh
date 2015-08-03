@@ -118,13 +118,13 @@ if [[ ! "$@" =~ --skip-publish ]]; then
 
   rm -rf $SPARK_REPO
 
-  build/mvn -DskipTests -Pyarn -Phive -Prelease\
+  build/mvn -DskipTests -Pyarn -Phive \
     -Phive-thriftserver -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
 
   ./dev/change-scala-version.sh 2.11
   
-  build/mvn -DskipTests -Pyarn -Phive -Prelease\
+  build/mvn -DskipTests -Pyarn -Phive \
     -Dscala-2.11 -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
 

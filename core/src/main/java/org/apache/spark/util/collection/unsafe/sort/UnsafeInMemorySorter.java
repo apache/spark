@@ -100,6 +100,10 @@ public final class UnsafeInMemorySorter {
     return pointerArray.length * 8L;
   }
 
+  static long getMemoryRequirementsForPointerArray(long numEntries) {
+    return numEntries * 2L * 8L;
+  }
+
   public boolean hasSpaceForAnotherRecord() {
     return pointerArrayInsertPosition + 2 < pointerArray.length;
   }

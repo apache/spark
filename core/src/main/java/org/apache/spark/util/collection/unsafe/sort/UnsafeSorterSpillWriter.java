@@ -140,6 +140,10 @@ final class UnsafeSorterSpillWriter {
     writeBuffer = null;
   }
 
+  public File getFile() {
+    return file;
+  }
+
   public UnsafeSorterSpillReader getReader(BlockManager blockManager) throws IOException {
     return new UnsafeSorterSpillReader(blockManager, file, blockId);
   }
