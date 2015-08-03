@@ -152,8 +152,6 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
       this.clusteringSet == o.clusteringSet && this.numPartitions == o.numPartitions
     case _ => false
   }
-
-  override def toString: String = s"${super.toString} numPartitions=$numPartitions"
 }
 
 /**
