@@ -262,11 +262,9 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   private def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
-    var hasGeneratedAgg = false
-    df.queryExecution.executedPlan.foreach {
-      case generatedAgg: GeneratedAggregate => hasGeneratedAgg = true
-      case newAggregate: aggregate.Aggregate => hasGeneratedAgg = true
-      case _ =>
+    val hasGeneratedAgg = df.queryExecution.executedPlan match {
+      case _: GeneratedAggregate | _: aggregate.Aggregate => true
+      case _ => false
     }
     if (!hasGeneratedAgg) {
       fail(
@@ -1607,7 +1605,9 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("aggregation with codegen updates peak execution memory") {
-    withSQLConf((SQLConf.CODEGEN_ENABLED.key, "true")) {
+    withSQLConf(
+        (SQLConf.CODEGEN_ENABLED.key, "true"),
+        (SQLConf.USE_SQL_AGGREGATE2.key, "false")) {
       val sc = sqlContext.sparkContext
       AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "aggregation with codegen") {
         testCodeGen(
