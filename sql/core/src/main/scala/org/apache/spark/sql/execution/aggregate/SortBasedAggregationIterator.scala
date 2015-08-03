@@ -25,8 +25,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.KVIterator
 
 /**
- * An iterator used to evaluate [[AggregateFunction2]]. It assumes the input rows are sorted
- * by values of [[groupingKeyAttributes]].
+ * An iterator used to evaluate [[AggregateFunction2]]. It assumes the input rows have been
+ * sorted by values of [[groupingKeyAttributes]].
  */
 class SortBasedAggregationIterator(
     groupingKeyAttributes: Seq[Attribute],
@@ -52,8 +52,6 @@ class SortBasedAggregationIterator(
     newMutableProjection,
     outputsUnsafeRows) {
 
-  logInfo(s"Using SortBasedAggregationIterator (output UnsafeRow: $outputsUnsafeRows).")
-
   override protected def newBuffer: MutableRow = {
     val bufferSchema = allAggregateFunctions.flatMap(_.bufferAttributes)
     val bufferRowSize: Int = bufferSchema.length
@@ -77,19 +75,19 @@ class SortBasedAggregationIterator(
   ///////////////////////////////////////////////////////////////////////////
 
   // The partition key of the current partition.
-  protected var currentGroupingKey: InternalRow = _
+  private[this] var currentGroupingKey: InternalRow = _
 
   // The partition key of next partition.
-  protected var nextGroupingKey: InternalRow = _
+  private[this] var nextGroupingKey: InternalRow = _
 
   // The first row of next partition.
-  protected var firstRowInNextGroup: InternalRow = _
+  private[this] var firstRowInNextGroup: InternalRow = _
 
   // Indicates if we has new group of rows from the sorted input iterator
-  protected var sortedInputHasNewGroup: Boolean = false
+  private[this] var sortedInputHasNewGroup: Boolean = false
 
   // The aggregation buffer used by the sort-based aggregation.
-  protected val sortBasedAggregationBuffer: MutableRow = newBuffer
+  private[this] val sortBasedAggregationBuffer: MutableRow = newBuffer
 
   /** Processes rows in the current group. It will stop when it find a new group. */
   protected def processCurrentSortedGroup(): Unit = {

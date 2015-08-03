@@ -57,8 +57,6 @@ class UnsafeHybridAggregationIterator(
 
   require(groupingKeyAttributes.nonEmpty)
 
-  logInfo(s"Using UnsafeHybridAggregationIterator (output UnsafeRow: $outputsUnsafeRows).")
-
   ///////////////////////////////////////////////////////////////////////////
   // Unsafe Aggregation buffers
   ///////////////////////////////////////////////////////////////////////////
