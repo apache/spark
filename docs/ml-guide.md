@@ -3,16 +3,40 @@ layout: global
 title: Spark ML Programming Guide
 ---
 
-`spark.ml` is a new package introduced in Spark 1.2, which aims to provide a uniform set of
+`\[
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\x}{\mathbf{x}}
+\newcommand{\y}{\mathbf{y}}
+\newcommand{\wv}{\mathbf{w}}
+\newcommand{\av}{\mathbf{\alpha}}
+\newcommand{\bv}{\mathbf{b}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\id}{\mathbf{I}}
+\newcommand{\ind}{\mathbf{1}}
+\newcommand{\0}{\mathbf{0}}
+\newcommand{\unit}{\mathbf{e}}
+\newcommand{\one}{\mathbf{1}}
+\newcommand{\zero}{\mathbf{0}}
+\]`
+
+
+Spark 1.2 introduced a new package called `spark.ml`, which aims to provide a uniform set of
 high-level APIs that help users create and tune practical machine learning pipelines.
-It is currently an alpha component, and we would like to hear back from the community about
-how it fits real-world use cases and how it could be improved.
+
+*Graduated from Alpha!*  The Pipelines API is no longer an alpha component, although many elements of it are still `Experimental` or `DeveloperApi`.
 
 Note that we will keep supporting and adding features to `spark.mllib` along with the
 development of `spark.ml`.
 Users should be comfortable using `spark.mllib` features and expect more features coming.
 Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
 to `spark.ml`.
+
+Guides for sub-packages of `spark.ml` include:
+
+* [Feature Extraction, Transformation, and Selection](ml-features.html): Details on transformers supported in the Pipelines API, including a few not in the lower-level `spark.mllib` API
+* [Ensembles](ml-ensembles.html): Details on ensemble learning methods in the Pipelines API
+
 
 **Table of Contents**
 
@@ -157,6 +181,9 @@ There are now several algorithms in the Pipelines API which are not in the lower
 * [Feature Extraction, Transformation, and Selection](ml-features.html)
 * [Ensembles](ml-ensembles.html)
 
+**Algorithms in `spark.ml`**
+
+* [Linear methods with elastic net regularization](ml-linear-methods.html)
 
 # Code Examples
 
@@ -534,7 +561,7 @@ test = sc.parallelize([(4L, "spark i j k"),
 prediction = model.transform(test)
 selected = prediction.select("id", "text", "prediction")
 for row in selected.collect():
-    print row
+    print(row)
 
 sc.stop()
 {% endhighlight %}
@@ -782,6 +809,16 @@ Please see the [MLlib Dependencies guide](mllib-guide.html#dependencies) for mor
 Spark ML also depends upon Spark SQL, but the relevant parts of Spark SQL do not bring additional dependencies.
 
 # Migration Guide
+
+## From 1.3 to 1.4
+
+Several major API changes occurred, including:
+* `Param` and other APIs for specifying parameters
+* `uid` unique IDs for Pipeline components
+* Reorganization of certain classes
+Since the `spark.ml` API was an Alpha Component in Spark 1.3, we do not list all changes here.
+
+However, now that `spark.ml` is no longer an Alpha Component, we will provide details on any API changes for future releases.
 
 ## From 1.2 to 1.3
 

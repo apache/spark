@@ -38,7 +38,7 @@ class WorkerWebUI(
   extends WebUI(worker.securityMgr, requestedPort, worker.conf, name = "WorkerUI")
   with Logging {
 
-  private[ui] val timeout = RpcUtils.askTimeout(worker.conf)
+  private[ui] val timeout = RpcUtils.askRpcTimeout(worker.conf)
 
   initialize()
 
@@ -53,6 +53,8 @@ class WorkerWebUI(
   }
 }
 
-private[ui] object WorkerWebUI {
+private[worker] object WorkerWebUI {
   val STATIC_RESOURCE_BASE = SparkUI.STATIC_RESOURCE_DIR
+  val DEFAULT_RETAINED_DRIVERS = 1000
+  val DEFAULT_RETAINED_EXECUTORS = 1000
 }

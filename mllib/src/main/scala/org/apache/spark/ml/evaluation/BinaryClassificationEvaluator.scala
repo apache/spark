@@ -79,4 +79,6 @@ class BinaryClassificationEvaluator(override val uid: String)
     metrics.unpersist()
     metric
   }
+
+  override def copy(extra: ParamMap): BinaryClassificationEvaluator = defaultCopy(extra)
 }

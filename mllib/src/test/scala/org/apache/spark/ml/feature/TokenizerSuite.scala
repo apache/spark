@@ -20,14 +20,26 @@ package org.apache.spark.ml.feature
 import scala.beans.BeanInfo
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
 @BeanInfo
 case class TokenizerTestData(rawText: String, wantedTokens: Array[String])
 
+class TokenizerSuite extends SparkFunSuite {
+
+  test("params") {
+    ParamsSuite.checkParams(new Tokenizer)
+  }
+}
+
 class RegexTokenizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   import org.apache.spark.ml.feature.RegexTokenizerSuite._
+
+  test("params") {
+    ParamsSuite.checkParams(new RegexTokenizer)
+  }
 
   test("RegexTokenizer") {
     val tokenizer0 = new RegexTokenizer()

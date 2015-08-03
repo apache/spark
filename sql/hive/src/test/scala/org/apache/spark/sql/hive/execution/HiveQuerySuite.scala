@@ -85,6 +85,60 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
 
+  createQueryTest("SPARK-8976 Wrong Result for Rollup #1",
+    """
+      SELECT count(*) AS cnt, key % 5,GROUPING__ID FROM src group by key%5 WITH ROLLUP
+    """.stripMargin)
+
+  createQueryTest("SPARK-8976 Wrong Result for Rollup #2",
+    """
+      SELECT
+        count(*) AS cnt,
+        key % 5 as k1,
+        key-5 as k2,
+        GROUPING__ID as k3
+      FROM src group by key%5, key-5
+      WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
+    """.stripMargin)
+
+  createQueryTest("SPARK-8976 Wrong Result for Rollup #3",
+    """
+      SELECT
+        count(*) AS cnt,
+        key % 5 as k1,
+        key-5 as k2,
+        GROUPING__ID as k3
+      FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
+      WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
+    """.stripMargin)
+
+  createQueryTest("SPARK-8976 Wrong Result for CUBE #1",
+    """
+      SELECT count(*) AS cnt, key % 5,GROUPING__ID FROM src group by key%5 WITH CUBE
+    """.stripMargin)
+
+  createQueryTest("SPARK-8976 Wrong Result for CUBE #2",
+    """
+      SELECT
+        count(*) AS cnt,
+        key % 5 as k1,
+        key-5 as k2,
+        GROUPING__ID as k3
+      FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
+      WITH CUBE ORDER BY cnt, k1, k2, k3 LIMIT 10
+    """.stripMargin)
+
+  createQueryTest("SPARK-8976 Wrong Result for GroupingSet",
+    """
+      SELECT
+        count(*) AS cnt,
+        key % 5 as k1,
+        key-5 as k2,
+        GROUPING__ID as k3
+      FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
+      GROUPING SETS (key%5, key-5) ORDER BY cnt, k1, k2, k3 LIMIT 10
+    """.stripMargin)
+
   createQueryTest("insert table with generator with column name",
     """
       |  CREATE TABLE gen_tmp (key Int);
@@ -132,7 +186,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       lower("AA"), "10",
       repeat(lower("AA"), 3), "11",
       lower(repeat("AA", 3)), "12",
-      printf("Bb%d", 12), "13",
+      printf("bb%d", 12), "13",
       repeat(printf("s%d", 14), 2), "14") FROM src LIMIT 1""")
 
   createQueryTest("NaN to Decimal",
@@ -321,20 +375,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       | SELECT
       | CAST(CAST('1970-01-01 22:00:00' AS timestamp) AS date) ==
       | CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date)
-      | FROM src LIMIT 1
-    """.stripMargin)
-
-  createQueryTest("Date comparison test 2",
-    "SELECT CAST(CAST(0 AS timestamp) AS date) > CAST(0 AS timestamp) FROM src LIMIT 1")
-
-  createQueryTest("Date cast",
-    """
-      | SELECT
-      | CAST(CAST(0 AS timestamp) AS date),
-      | CAST(CAST(CAST(0 AS timestamp) AS date) AS string),
-      | CAST(0 AS timestamp),
-      | CAST(CAST(0 AS timestamp) AS string),
-      | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
       | FROM src LIMIT 1
     """.stripMargin)
 
@@ -1084,13 +1124,15 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     val testKey = "spark.sql.key.usedfortestonly"
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
-    val KV = "([^=]+)=([^=]*)".r
-    def collectResults(df: DataFrame): Set[(String, String)] =
+    def collectResults(df: DataFrame): Set[Any] =
       df.collect().map {
         case Row(key: String, value: String) => key -> value
-        case Row(KV(key, value)) => key -> value
+        case Row(key: String, defaultValue: String, doc: String) => (key, defaultValue, doc)
       }.toSet
     conf.clear()
+
+    val expectedConfs = conf.getAllDefinedConfs.toSet
+    assertResult(expectedConfs)(collectResults(sql("SET -v")))
 
     // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
@@ -1102,15 +1144,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     assert(hiveconf.get(testKey, "") == testVal)
     assertResult(Set(testKey -> testVal))(collectResults(sql("SET")))
-    assertResult(Set(testKey -> testVal))(collectResults(sql("SET -v")))
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
     assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
       collectResults(sql("SET"))
-    }
-    assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      collectResults(sql("SET -v"))
     }
 
     // "SET key"

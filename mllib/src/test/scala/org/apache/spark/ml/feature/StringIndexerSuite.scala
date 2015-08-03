@@ -19,9 +19,16 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  test("params") {
+    ParamsSuite.checkParams(new StringIndexer)
+    val model = new StringIndexerModel("indexer", Array("a", "b"))
+    ParamsSuite.checkParams(model)
+  }
 
   test("StringIndexer") {
     val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
@@ -40,6 +47,19 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     // a -> 0, b -> 2, c -> 1
     val expected = Set((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0))
     assert(output === expected)
+    // convert reverse our transform
+    val reversed = indexer.invert("labelIndex", "label2")
+      .transform(transformed)
+      .select("id", "label2")
+    assert(df.collect().map(r => (r.getInt(0), r.getString(1))).toSet ===
+      reversed.collect().map(r => (r.getInt(0), r.getString(1))).toSet)
+    // Check invert using only metadata
+    val inverse2 = new StringIndexerInverse()
+      .setInputCol("labelIndex")
+      .setOutputCol("label2")
+    val reversed2 = inverse2.transform(transformed).select("id", "label2")
+    assert(df.collect().map(r => (r.getInt(0), r.getString(1))).toSet ===
+      reversed2.collect().map(r => (r.getInt(0), r.getString(1))).toSet)
   }
 
   test("StringIndexer with a numeric input column") {

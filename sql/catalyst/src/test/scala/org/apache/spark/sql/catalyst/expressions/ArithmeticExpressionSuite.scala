@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{Decimal, DoubleType, IntegerType}
-
+import org.apache.spark.sql.types._
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -57,6 +56,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(UnaryMinus(input), convert(-1))
       checkEvaluation(UnaryMinus(Literal.create(null, dataType)), null)
     }
+    checkEvaluation(UnaryMinus(Literal(Long.MinValue)), Long.MinValue)
+    checkEvaluation(UnaryMinus(Literal(Int.MinValue)), Int.MinValue)
+    checkEvaluation(UnaryMinus(Literal(Short.MinValue)), Short.MinValue)
+    checkEvaluation(UnaryMinus(Literal(Byte.MinValue)), Byte.MinValue)
   }
 
   test("- (Minus)") {
@@ -117,44 +120,63 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   test("Abs") {
     testNumericDataTypes { convert =>
+      val input = Literal(convert(1))
+      val dataType = input.dataType
       checkEvaluation(Abs(Literal(convert(0))), convert(0))
       checkEvaluation(Abs(Literal(convert(1))), convert(1))
       checkEvaluation(Abs(Literal(convert(-1))), convert(1))
+      checkEvaluation(Abs(Literal.create(null, dataType)), null)
     }
   }
 
-  test("MaxOf") {
-    checkEvaluation(MaxOf(1, 2), 2)
-    checkEvaluation(MaxOf(2, 1), 2)
-    checkEvaluation(MaxOf(1L, 2L), 2L)
-    checkEvaluation(MaxOf(2L, 1L), 2L)
-
-    checkEvaluation(MaxOf(Literal.create(null, IntegerType), 2), 2)
-    checkEvaluation(MaxOf(2, Literal.create(null, IntegerType)), 2)
-  }
-
-  test("MinOf") {
-    checkEvaluation(MinOf(1, 2), 1)
-    checkEvaluation(MinOf(2, 1), 1)
-    checkEvaluation(MinOf(1L, 2L), 1L)
-    checkEvaluation(MinOf(2L, 1L), 1L)
-
-    checkEvaluation(MinOf(Literal.create(null, IntegerType), 1), 1)
-    checkEvaluation(MinOf(1, Literal.create(null, IntegerType)), 1)
-  }
-
-  test("SQRT") {
-    val inputSequence = (1 to (1<<24) by 511).map(_ * (1L<<24))
-    val expectedResults = inputSequence.map(l => math.sqrt(l.toDouble))
-    val rowSequence = inputSequence.map(l => create_row(l.toDouble))
-    val d = 'a.double.at(0)
-
-    for ((row, expected) <- rowSequence zip expectedResults) {
-      checkEvaluation(Sqrt(d), expected, row)
+  test("MaxOf basic") {
+    testNumericDataTypes { convert =>
+      val small = Literal(convert(1))
+      val large = Literal(convert(2))
+      checkEvaluation(MaxOf(small, large), convert(2))
+      checkEvaluation(MaxOf(large, small), convert(2))
+      checkEvaluation(MaxOf(Literal.create(null, small.dataType), large), convert(2))
+      checkEvaluation(MaxOf(large, Literal.create(null, small.dataType)), convert(2))
     }
+  }
 
-    checkEvaluation(Sqrt(Literal.create(null, DoubleType)), null, create_row(null))
-    checkEvaluation(Sqrt(-1), null, EmptyRow)
-    checkEvaluation(Sqrt(-1.5), null, EmptyRow)
+  test("MaxOf for atomic type") {
+    checkEvaluation(MaxOf(true, false), true)
+    checkEvaluation(MaxOf("abc", "bcd"), "bcd")
+    checkEvaluation(MaxOf(Array(1.toByte, 2.toByte), Array(1.toByte, 3.toByte)),
+      Array(1.toByte, 3.toByte))
+  }
+
+  test("MinOf basic") {
+    testNumericDataTypes { convert =>
+      val small = Literal(convert(1))
+      val large = Literal(convert(2))
+      checkEvaluation(MinOf(small, large), convert(1))
+      checkEvaluation(MinOf(large, small), convert(1))
+      checkEvaluation(MinOf(Literal.create(null, small.dataType), large), convert(2))
+      checkEvaluation(MinOf(small, Literal.create(null, small.dataType)), convert(1))
+    }
+  }
+
+  test("MinOf for atomic type") {
+    checkEvaluation(MinOf(true, false), false)
+    checkEvaluation(MinOf("abc", "bcd"), "abc")
+    checkEvaluation(MinOf(Array(1.toByte, 2.toByte), Array(1.toByte, 3.toByte)),
+      Array(1.toByte, 2.toByte))
+  }
+
+  test("pmod") {
+    testNumericDataTypes { convert =>
+      val left = Literal(convert(7))
+      val right = Literal(convert(3))
+      checkEvaluation(Pmod(left, right), convert(1))
+      checkEvaluation(Pmod(Literal.create(null, left.dataType), right), null)
+      checkEvaluation(Pmod(left, Literal.create(null, right.dataType)), null)
+      checkEvaluation(Remainder(left, Literal(convert(0))), null)  // mod by 0
+    }
+    checkEvaluation(Pmod(-7, 3), 2)
+    checkEvaluation(Pmod(7.2D, 4.1D), 3.1000000000000005)
+    checkEvaluation(Pmod(Decimal(0.7), Decimal(0.2)), Decimal(0.1))
+    checkEvaluation(Pmod(2L, Long.MaxValue), 2L)
   }
 }

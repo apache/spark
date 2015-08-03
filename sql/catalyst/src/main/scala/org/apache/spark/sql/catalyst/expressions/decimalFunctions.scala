@@ -17,60 +17,59 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.types._
 
-/** Return the unscaled Long value of a Decimal, assuming it fits in a Long */
+/**
+ * Return the unscaled Long value of a Decimal, assuming it fits in a Long.
+ * Note: this expression is internal and created only by the optimizer,
+ * we don't need to do type check for it.
+ */
 case class UnscaledValue(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = LongType
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
   override def toString: String = s"UnscaledValue($child)"
 
-  override def eval(input: InternalRow): Any = {
-    val childResult = child.eval(input)
-    if (childResult == null) {
-      null
-    } else {
-      childResult.asInstanceOf[Decimal].toUnscaledLong
-    }
-  }
+  protected override def nullSafeEval(input: Any): Any =
+    input.asInstanceOf[Decimal].toUnscaledLong
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c => s"$c.toUnscaledLong()")
   }
 }
 
-/** Create a Decimal from an unscaled Long value */
+/**
+ * Create a Decimal from an unscaled Long value.
+ * Note: this expression is internal and created only by the optimizer,
+ * we don't need to do type check for it.
+ */
 case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends UnaryExpression {
 
   override def dataType: DataType = DecimalType(precision, scale)
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
   override def toString: String = s"MakeDecimal($child,$precision,$scale)"
 
-  override def eval(input: InternalRow): Decimal = {
-    val childResult = child.eval(input)
-    if (childResult == null) {
-      null
-    } else {
-      new Decimal().setOrNull(childResult.asInstanceOf[Long], precision, scale)
-    }
-  }
+  protected override def nullSafeEval(input: Any): Any =
+    Decimal(input.asInstanceOf[Long], precision, scale)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val eval = child.gen(ctx)
-    eval.code + s"""
-      boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.decimalType} ${ev.primitive} = null;
-
-      if (!${ev.isNull}) {
-        ${ev.primitive} = (new ${ctx.decimalType}()).setOrNull(
-          ${eval.primitive}, $precision, $scale);
+    nullSafeCodeGen(ctx, ev, eval => {
+      s"""
+        ${ev.primitive} = (new Decimal()).setOrNull($eval, $precision, $scale);
         ${ev.isNull} = ${ev.primitive} == null;
-      }
       """
+    })
   }
+}
+
+/**
+ * An expression used to wrap the children when promote the precision of DecimalType to avoid
+ * promote multiple times.
+ */
+case class ChangeDecimalPrecision(child: Expression) extends UnaryExpression {
+  override def dataType: DataType = child.dataType
+  override def eval(input: InternalRow): Any = child.eval(input)
+  override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = ""
+  override def prettyName: String = "change_decimal_precision"
 }

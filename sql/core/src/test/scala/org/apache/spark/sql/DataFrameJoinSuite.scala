@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.functions._
 
 class DataFrameJoinSuite extends QueryTest {
@@ -92,5 +93,21 @@ class DataFrameJoinSuite extends QueryTest {
     checkAnswer(
       left.join(right, left("key") === right("key")),
       Row(1, 1, 1, 1) :: Row(2, 1, 2, 2) :: Nil)
+  }
+
+  test("broadcast join hint") {
+    val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+    val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+
+    // equijoin - should be converted into broadcast join
+    val plan1 = df1.join(broadcast(df2), "key").queryExecution.executedPlan
+    assert(plan1.collect { case p: BroadcastHashJoin => p }.size === 1)
+
+    // no join key -- should not be a broadcast join
+    val plan2 = df1.join(broadcast(df2)).queryExecution.executedPlan
+    assert(plan2.collect { case p: BroadcastHashJoin => p }.size === 0)
+
+    // planner should not crash without a join
+    broadcast(df1).queryExecution.executedPlan
   }
 }

@@ -328,12 +328,14 @@ private object YarnClusterDriver extends Logging with Matchers {
 
   def main(args: Array[String]): Unit = {
     if (args.length != 1) {
+      // scalastyle:off println
       System.err.println(
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
         |Usage: YarnClusterDriver [result file]
         """.stripMargin)
+      // scalastyle:on println
       System.exit(1)
     }
 
@@ -376,7 +378,7 @@ private object YarnClusterDriver extends Logging with Matchers {
       new URL(urlStr)
       val containerId = YarnSparkHadoopUtil.get.getContainerId
       val user = Utils.getCurrentUserName()
-      assert(urlStr.endsWith(s"/node/containerlogs/$containerId/$user/stderr?start=0"))
+      assert(urlStr.endsWith(s"/node/containerlogs/$containerId/$user/stderr?start=-4096"))
     }
   }
 
@@ -386,12 +388,14 @@ private object YarnClasspathTest {
 
   def main(args: Array[String]): Unit = {
     if (args.length != 2) {
+      // scalastyle:off println
       System.err.println(
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
         |Usage: YarnClasspathTest [driver result file] [executor result file]
         """.stripMargin)
+      // scalastyle:on println
       System.exit(1)
     }
 

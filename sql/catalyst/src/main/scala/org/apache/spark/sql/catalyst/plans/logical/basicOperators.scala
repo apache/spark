@@ -18,8 +18,10 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.Utils
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.OpenHashSet
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
@@ -32,7 +34,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
       }.nonEmpty
     )
 
-    !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
+    expressions.forall(_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 }
 
@@ -66,7 +68,7 @@ case class Generate(
     generator.resolved &&
       childrenResolved &&
       generator.elementTypes.length == generatorOutput.length &&
-      !generatorOutput.exists(!_.resolved)
+      generatorOutput.forall(_.resolved)
   }
 
   // we don't want the gOutput to be taken as part of the expressions
@@ -84,7 +86,37 @@ case class Generate(
 }
 
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  /**
+   * Indicates if `atLeastNNulls` is used to check if atLeastNNulls.children
+   * have at least one null value and atLeastNNulls.children are all attributes.
+   */
+  private def isAtLeastOneNullOutputAttributes(atLeastNNulls: AtLeastNNulls): Boolean = {
+    val expressions = atLeastNNulls.children
+    val n = atLeastNNulls.n
+    if (n != 1) {
+      // AtLeastNNulls is not used to check if atLeastNNulls.children have
+      // at least one null value.
+      false
+    } else {
+      // AtLeastNNulls is used to check if atLeastNNulls.children have
+      // at least one null value. We need to make sure all atLeastNNulls.children
+      // are attributes.
+      expressions.forall(_.isInstanceOf[Attribute])
+    }
+  }
+
+  override def output: Seq[Attribute] = condition match {
+    case Not(a: AtLeastNNulls) if isAtLeastOneNullOutputAttributes(a) =>
+      // The condition is used to make sure that there is no null value in
+      // a.children.
+      val nonNullableAttributes = AttributeSet(a.children.asInstanceOf[Seq[Attribute]])
+      child.output.map {
+        case attr if nonNullableAttributes.contains(attr) =>
+          attr.withNullability(false)
+        case attr => attr
+      }
+    case _ => child.output
+  }
 }
 
 case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -122,16 +154,31 @@ case class Join(
     }
   }
 
-  private def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+  def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
-  // Joins are only resolved if they don't introduce ambiguious expression ids.
+  // Joins are only resolved if they don't introduce ambiguous expression ids.
   override lazy val resolved: Boolean = {
-    childrenResolved && !expressions.exists(!_.resolved) && selfJoinResolved
+    childrenResolved &&
+      expressions.forall(_.resolved) &&
+      selfJoinResolved &&
+      condition.forall(_.dataType == BooleanType)
   }
 }
 
+/**
+ * A hint for the optimizer that we should broadcast the `child` if used in a join operator.
+ */
+case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+}
+
+
 case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   override def output: Seq[Attribute] = left.output
+
+  override lazy val resolved: Boolean =
+    childrenResolved &&
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
 }
 
 case class InsertIntoTable(
@@ -170,14 +217,8 @@ case class WithWindowDefinition(
   override def output: Seq[Attribute] = child.output
 }
 
-case class WriteToFile(
-    path: String,
-    child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
-}
-
 /**
- * @param order  The ordering expressions
+ * @param order  The ordering expressions, should all be [[AttributeReference]]
  * @param global True means global sorting apply for entire data set,
  *               False means sorting only apply within the partition.
  * @param child  Child logical plan
@@ -187,6 +228,11 @@ case class Sort(
     global: Boolean,
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  def hasNoEvaluation: Boolean = order.forall(_.child.isInstanceOf[AttributeReference])
+
+  override lazy val resolved: Boolean =
+    expressions.forall(_.resolved) && childrenResolved && hasNoEvaluation
 }
 
 case class Aggregate(
@@ -201,8 +247,10 @@ case class Aggregate(
       }.nonEmpty
     )
 
-    !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions
+    expressions.forall(_.resolved) && childrenResolved && !hasWindowExpressions
   }
+
+  lazy val newAggregation: Option[Aggregate] = Utils.tryConvert(this)
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
 }
@@ -210,7 +258,8 @@ case class Aggregate(
 case class Window(
     projectList: Seq[Attribute],
     windowExpressions: Seq[NamedExpression],
-    windowSpec: WindowSpecDefinition,
+    partitionSpec: Seq[Expression],
+    orderSpec: Seq[SortOrder],
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] =
@@ -220,28 +269,82 @@ case class Window(
 /**
  * Apply the all of the GroupExpressions to every input row, hence we will get
  * multiple output rows for a input row.
- * @param projections The group of expressions, all of the group expressions should
- *                    output the same schema specified by the parameter `output`
- * @param output      The output Schema
+ * @param bitmasks The bitmask set represents the grouping sets
+ * @param groupByExprs The grouping by expressions
  * @param child       Child operator
  */
 case class Expand(
-    projections: Seq[Seq[Expression]],
-    output: Seq[Attribute],
+    bitmasks: Seq[Int],
+    groupByExprs: Seq[Expression],
+    gid: Attribute,
     child: LogicalPlan) extends UnaryNode {
   override def statistics: Statistics = {
     val sizeInBytes = child.statistics.sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
+
+  val projections: Seq[Seq[Expression]] = expand()
+
+  /**
+   * Extract attribute set according to the grouping id
+   * @param bitmask bitmask to represent the selected of the attribute sequence
+   * @param exprs the attributes in sequence
+   * @return the attributes of non selected specified via bitmask (with the bit set to 1)
+   */
+  private def buildNonSelectExprSet(bitmask: Int, exprs: Seq[Expression])
+  : OpenHashSet[Expression] = {
+    val set = new OpenHashSet[Expression](2)
+
+    var bit = exprs.length - 1
+    while (bit >= 0) {
+      if (((bitmask >> bit) & 1) == 0) set.add(exprs(bit))
+      bit -= 1
+    }
+
+    set
+  }
+
+  /**
+   * Create an array of Projections for the child projection, and replace the projections'
+   * expressions which equal GroupBy expressions with Literal(null), if those expressions
+   * are not set for this grouping set (according to the bit mask).
+   */
+  private[this] def expand(): Seq[Seq[Expression]] = {
+    val result = new scala.collection.mutable.ArrayBuffer[Seq[Expression]]
+
+    bitmasks.foreach { bitmask =>
+      // get the non selected grouping attributes according to the bit mask
+      val nonSelectedGroupExprSet = buildNonSelectExprSet(bitmask, groupByExprs)
+
+      val substitution = (child.output :+ gid).map(expr => expr transformDown {
+        case x: Expression if nonSelectedGroupExprSet.contains(x) =>
+          // if the input attribute in the Invalid Grouping Expression set of for this group
+          // replace it with constant null
+          Literal.create(null, expr.dataType)
+        case x if x == gid =>
+          // replace the groupingId with concrete value (the bit mask)
+          Literal.create(bitmask, IntegerType)
+      })
+
+      result += substitution
+    }
+
+    result.toSeq
+  }
+
+  override def output: Seq[Attribute] = {
+    child.output :+ gid
+  }
 }
 
 trait GroupingAnalytics extends UnaryNode {
-  self: Product =>
-  def gid: AttributeReference
+
   def groupByExprs: Seq[Expression]
   def aggregations: Seq[NamedExpression]
 
   override def output: Seq[Attribute] = aggregations.map(_.toAttribute)
+
+  def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics
 }
 
 /**
@@ -256,17 +359,16 @@ trait GroupingAnalytics extends UnaryNode {
  * @param child        Child operator
  * @param aggregations The Aggregation expressions, those non selected group by expressions
  *                     will be considered as constant null if it appears in the expressions
- * @param gid          The attribute represents the virtual column GROUPING__ID, and it's also
- *                     the bitmask indicates the selected GroupBy Expressions for each
- *                     aggregating output row.
- *                     The associated output will be one of the value in `bitmasks`
  */
 case class GroupingSets(
     bitmasks: Seq[Int],
     groupByExprs: Seq[Expression],
     child: LogicalPlan,
-    aggregations: Seq[NamedExpression],
-    gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingAnalytics
+    aggregations: Seq[NamedExpression]) extends GroupingAnalytics {
+
+  def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics =
+    this.copy(aggregations = aggs)
+}
 
 /**
  * Cube is a syntactic sugar for GROUPING SETS, and will be transformed to GroupingSets,
@@ -276,15 +378,15 @@ case class GroupingSets(
  * @param child        Child operator
  * @param aggregations The Aggregation expressions, those non selected group by expressions
  *                     will be considered as constant null if it appears in the expressions
- * @param gid          The attribute represents the virtual column GROUPING__ID, and it's also
- *                     the bitmask indicates the selected GroupBy Expressions for each
- *                     aggregating output row.
  */
 case class Cube(
     groupByExprs: Seq[Expression],
     child: LogicalPlan,
-    aggregations: Seq[NamedExpression],
-    gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingAnalytics
+    aggregations: Seq[NamedExpression]) extends GroupingAnalytics {
+
+  def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics =
+    this.copy(aggregations = aggs)
+}
 
 /**
  * Rollup is a syntactic sugar for GROUPING SETS, and will be transformed to GroupingSets,
@@ -295,21 +397,21 @@ case class Cube(
  * @param child        Child operator
  * @param aggregations The Aggregation expressions, those non selected group by expressions
  *                     will be considered as constant null if it appears in the expressions
- * @param gid          The attribute represents the virtual column GROUPING__ID, and it's also
- *                     the bitmask indicates the selected GroupBy Expressions for each
- *                     aggregating output row.
  */
 case class Rollup(
     groupByExprs: Seq[Expression],
     child: LogicalPlan,
-    aggregations: Seq[NamedExpression],
-    gid: AttributeReference = VirtualColumn.newGroupingId) extends GroupingAnalytics
+    aggregations: Seq[NamedExpression]) extends GroupingAnalytics {
+
+  def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics =
+    this.copy(aggregations = aggs)
+}
 
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override lazy val statistics: Statistics = {
-    val limit = limitExpr.eval(null).asInstanceOf[Int]
+    val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
     Statistics(sizeInBytes = sizeInBytes)
   }
@@ -375,4 +477,8 @@ case object OneRowRelation extends LeafNode {
 
 case class Intersect(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   override def output: Seq[Attribute] = left.output
+
+  override lazy val resolved: Boolean =
+    childrenResolved &&
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
 }

@@ -252,6 +252,17 @@ class FeatureTests(PySparkTestCase):
         output = idf0m.transform(dataset)
         self.assertIsNotNone(output.head().idf)
 
+    def test_ngram(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([
+            ([["a", "b", "c", "d", "e"]])], ["input"])
+        ngram0 = NGram(n=4, inputCol="input", outputCol="output")
+        self.assertEqual(ngram0.getN(), 4)
+        self.assertEqual(ngram0.getInputCol(), "input")
+        self.assertEqual(ngram0.getOutputCol(), "output")
+        transformedDF = ngram0.transform(dataset)
+        self.assertEquals(transformedDF.head().output, ["a b c d", "b c d e"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.sources
 
-import java.sql.{Timestamp, Date}
-
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.util.DateUtils
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -68,12 +67,12 @@ case class AllDataTypesScan(
 
   override def schema: StructType = userSpecifiedSchema
 
-  override def needConversion: Boolean = false
+  override def needConversion: Boolean = true
 
   override def buildScan(): RDD[Row] = {
     sqlContext.sparkContext.parallelize(from to to).map { i =>
-      InternalRow(
-        UTF8String.fromString(s"str_$i"),
+      Row(
+        s"str_$i",
         s"str_$i".getBytes(),
         i % 2 == 0,
         i.toByte,
@@ -82,18 +81,18 @@ case class AllDataTypesScan(
         i.toLong,
         i.toFloat,
         i.toDouble,
-        Decimal(new java.math.BigDecimal(i)),
-        Decimal(new java.math.BigDecimal(i)),
-        DateUtils.fromJavaDate(new Date(1970, 1, 1)),
-        DateUtils.fromJavaTimestamp(new Timestamp(20000 + i)),
-        UTF8String.fromString(s"varchar_$i"),
+        new java.math.BigDecimal(i),
+        new java.math.BigDecimal(i),
+        new Date(1970, 1, 1),
+        new Timestamp(20000 + i),
+        s"varchar_$i",
         Seq(i, i + 1),
-        Seq(Map(UTF8String.fromString(s"str_$i") -> InternalRow(i.toLong))),
+        Seq(Map(s"str_$i" -> Row(i.toLong))),
         Map(i -> i.toString),
-        Map(Map(UTF8String.fromString(s"str_$i") -> i.toFloat) -> InternalRow(i.toLong)),
+        Map(Map(s"str_$i" -> i.toFloat) -> Row(i.toLong)),
         Row(i, i.toString),
-        Row(Seq(UTF8String.fromString(s"str_$i"), UTF8String.fromString(s"str_${i + 1}")),
-          InternalRow(Seq(DateUtils.fromJavaDate(new Date(1970, 1, i + 1))))))
+          Row(Seq(s"str_$i", s"str_${i + 1}"),
+            Row(Seq(new Date(1970, 1, i + 1)))))
     }
   }
 }
@@ -203,7 +202,7 @@ class TableScanSuite extends DataSourceTest {
       StructField("longField_:,<>=+/~^", LongType, true) ::
       StructField("floatField", FloatType, true) ::
       StructField("doubleField", DoubleType, true) ::
-      StructField("decimalField1", DecimalType.Unlimited, true) ::
+      StructField("decimalField1", DecimalType.USER_DEFAULT, true) ::
       StructField("decimalField2", DecimalType(9, 2), true) ::
       StructField("dateField", DateType, true) ::
       StructField("timestampField", TimestampType, true) ::

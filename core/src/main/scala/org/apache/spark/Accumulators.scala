@@ -20,7 +20,8 @@ package org.apache.spark
 import java.io.{ObjectInputStream, Serializable}
 
 import scala.collection.generic.Growable
-import scala.collection.mutable.Map
+import scala.collection.Map
+import scala.collection.mutable
 import scala.ref.WeakReference
 import scala.reflect.ClassTag
 
@@ -39,25 +40,44 @@ import org.apache.spark.util.Utils
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `R` and `T`
  * @param name human-readable name for use in Spark's web UI
+ * @param internal if this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported
+ *                 to the driver via heartbeats. For internal [[Accumulable]]s, `R` must be
+ *                 thread safe so that they can be reported correctly.
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
-class Accumulable[R, T] (
+class Accumulable[R, T] private[spark] (
     @transient initialValue: R,
     param: AccumulableParam[R, T],
-    val name: Option[String])
+    val name: Option[String],
+    internal: Boolean)
   extends Serializable {
+
+  private[spark] def this(
+      @transient initialValue: R, param: AccumulableParam[R, T], internal: Boolean) = {
+    this(initialValue, param, None, internal)
+  }
+
+  def this(@transient initialValue: R, param: AccumulableParam[R, T], name: Option[String]) =
+    this(initialValue, param, name, false)
 
   def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
     this(initialValue, param, None)
 
   val id: Long = Accumulators.newId
 
-  @transient private var value_ = initialValue // Current value on master
+  @volatile @transient private var value_ : R = initialValue // Current value on master
   val zero = param.zero(initialValue)  // Zero value to be passed to workers
   private var deserialized = false
 
-  Accumulators.register(this, true)
+  Accumulators.register(this)
+
+  /**
+   * If this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported to the driver
+   * via heartbeats. For internal [[Accumulable]]s, `R` must be thread safe so that they can be
+   * reported correctly.
+   */
+  private[spark] def isInternal: Boolean = internal
 
   /**
    * Add more data to this accumulator / accumulable
@@ -132,7 +152,8 @@ class Accumulable[R, T] (
     in.defaultReadObject()
     value_ = zero
     deserialized = true
-    Accumulators.register(this, false)
+    val taskContext = TaskContext.get()
+    taskContext.registerAccumulator(this)
   }
 
   override def toString: String = if (value_ == null) "null" else value_.toString
@@ -284,16 +305,7 @@ private[spark] object Accumulators extends Logging {
    * It keeps weak references to these objects so that accumulators can be garbage-collected
    * once the RDDs and user-code that reference them are cleaned up.
    */
-  val originals = Map[Long, WeakReference[Accumulable[_, _]]]()
-
-  /**
-   * This thread-local map holds per-task copies of accumulators; it is used to collect the set
-   * of accumulator updates to send back to the driver when tasks complete. After tasks complete,
-   * this map is cleared by `Accumulators.clear()` (see Executor.scala).
-   */
-  private val localAccums = new ThreadLocal[Map[Long, Accumulable[_, _]]]() {
-    override protected def initialValue() = Map[Long, Accumulable[_, _]]()
-  }
+  val originals = mutable.Map[Long, WeakReference[Accumulable[_, _]]]()
 
   private var lastId: Long = 0
 
@@ -302,34 +314,14 @@ private[spark] object Accumulators extends Logging {
     lastId
   }
 
-  def register(a: Accumulable[_, _], original: Boolean): Unit = synchronized {
-    if (original) {
-      originals(a.id) = new WeakReference[Accumulable[_, _]](a)
-    } else {
-      localAccums.get()(a.id) = a
-    }
-  }
-
-  // Clear the local (non-original) accumulators for the current thread
-  def clear() {
-    synchronized {
-      localAccums.get.clear()
-    }
+  def register(a: Accumulable[_, _]): Unit = synchronized {
+    originals(a.id) = new WeakReference[Accumulable[_, _]](a)
   }
 
   def remove(accId: Long) {
     synchronized {
       originals.remove(accId)
     }
-  }
-
-  // Get the values of the local accumulators for the current thread (by ID)
-  def values: Map[Long, Any] = synchronized {
-    val ret = Map[Long, Any]()
-    for ((id, accum) <- localAccums.get) {
-      ret(id) = accum.localValue
-    }
-    return ret
   }
 
   // Add values to the original accumulators with some given IDs
@@ -349,7 +341,4 @@ private[spark] object Accumulators extends Logging {
     }
   }
 
-  def stringifyPartialValue(partialValue: Any): String = "%s".format(partialValue)
-
-  def stringifyValue(value: Any): String = "%s".format(value)
 }
