@@ -159,8 +159,12 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener {
       taskEnd.taskInfo.taskId, taskEnd.stageId, taskEnd.stageAttemptId, taskEnd.taskMetrics, true)
   }
 
-  private def updateTaskMetrics(taskId: Long, stageId: Int, stageAttemptID: Int,
-      metrics: TaskMetrics, finishTask: Boolean): Unit = {
+  private def updateTaskMetrics(
+      taskId: Long,
+      stageId: Int,
+      stageAttemptID: Int,
+      metrics: TaskMetrics,
+      finishTask: Boolean): Unit = {
     stageIdToStageMetrics.get(stageId) match {
       case Some(stageMetrics) =>
         if (stageAttemptID < stageMetrics.stageAttemptId) {
@@ -195,7 +199,11 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener {
   }
 
   def onExecutionStart(
-      executionId: Long, description: String, details: String, df: DataFrame, time: Long): Unit = {
+      executionId: Long,
+      description: String,
+      details: String,
+      df: DataFrame,
+      time: Long): Unit = {
     val physicalPlanDescription = df.queryExecution.toString
     val physicalPlanGraph = SparkPlanGraph(df.queryExecution.executedPlan)
     val metrics = physicalPlanGraph.nodes.flatMap { node =>
@@ -282,18 +290,21 @@ private[ui] case class SQLExecutionUIData(
   /**
    * Return if there is no running job.
    */
-  def isFinished: Boolean = jobs.forall(_._2 != JobExecutionStatus.RUNNING)
+  def isFinished: Boolean = jobs.values.forall(_ != JobExecutionStatus.RUNNING)
 
   /**
    * Return if there is any failed job.
    */
-  def isFailed: Boolean = jobs.exists(_._2 == JobExecutionStatus.FAILED)
+  def isFailed: Boolean = jobs.values.exists(_ == JobExecutionStatus.FAILED)
 
-  def runningJobs: Seq[Long] = jobs.filter(_._2 == JobExecutionStatus.RUNNING).map(_._1).toSeq
+  def runningJobs: Seq[Long] =
+    jobs.filter { case (_, status) => status == JobExecutionStatus.RUNNING }.keys.toSeq
 
-  def succeededJobs: Seq[Long] = jobs.filter(_._2 == JobExecutionStatus.SUCCEEDED).map(_._1).toSeq
+  def succeededJobs: Seq[Long] =
+    jobs.filter { case (_, status) => status == JobExecutionStatus.SUCCEEDED }.keys.toSeq
 
-  def failedJobs: Seq[Long] = jobs.filter(_._2 == JobExecutionStatus.FAILED).map(_._1).toSeq
+  def failedJobs: Seq[Long] =
+    jobs.filter { case (_, status) => status == JobExecutionStatus.FAILED }.keys.toSeq
 }
 
 /**

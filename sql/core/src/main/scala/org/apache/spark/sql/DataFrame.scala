@@ -119,6 +119,9 @@ class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
     @DeveloperApi @transient val queryExecution: SQLContext#QueryExecution) extends Serializable {
 
+  // Note for Spark contributors: if adding or updating any action in `DataFrame`, please make sure
+  // you wrap it with `withNewExecution` if this actions doesn't call other action.
+
   /**
    * A constructor that automatically analyzes the logical plan.
    *

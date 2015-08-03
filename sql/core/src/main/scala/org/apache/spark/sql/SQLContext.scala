@@ -75,9 +75,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   protected[sql] def conf = currentSession().conf
 
-  /**
-   * `listener` should be only used in the driver
-   */
+  // `listener` should be only used in the driver
   @transient private[sql] val listener = new SQLListener(this)
   sparkContext.addSparkListener(listener)
   sparkContext.ui.foreach(new SQLTab(this, _))
