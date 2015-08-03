@@ -71,13 +71,14 @@ public final class UnsafeExternalSorter {
   private final LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
 
   // These variables are reset after spilling:
-  private UnsafeInMemorySorter inMemSorter;
+  @Nullable private UnsafeInMemorySorter inMemSorter;
   // Whether the in-mem sorter is created internally, or passed in from outside.
   // If it is passed in from outside, we shouldn't release the in-mem sorter's memory.
   private boolean isInMemSorterExternal = false;
   private MemoryBlock currentPage = null;
   private long currentPagePosition = -1;
   private long freeSpaceInCurrentPage = 0;
+  private long peakMemoryUsedBytes = 0;
 
   public static UnsafeExternalSorter createWithExistingInMemorySorter(
       TaskMemoryManager taskMemoryManager,
@@ -184,6 +185,7 @@ public final class UnsafeExternalSorter {
    * Sort and spill the current records in response to memory pressure.
    */
   public void spill() throws IOException {
+    assert(inMemSorter != null);
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
       Utils.bytesToString(getMemoryUsage()),
@@ -220,7 +222,22 @@ public final class UnsafeExternalSorter {
     for (MemoryBlock page : allocatedPages) {
       totalPageSize += page.size();
     }
-    return inMemSorter.getMemoryUsage() + totalPageSize;
+    return ((inMemSorter == null) ? 0 : inMemSorter.getMemoryUsage()) + totalPageSize;
+  }
+
+  private void updatePeakMemoryUsed() {
+    long mem = getMemoryUsage();
+    if (mem > peakMemoryUsedBytes) {
+      peakMemoryUsedBytes = mem;
+    }
+  }
+
+  /**
+   * Return the peak memory used so far, in bytes.
+   */
+  public long getPeakMemoryUsedBytes() {
+    updatePeakMemoryUsed();
+    return peakMemoryUsedBytes;
   }
 
   @VisibleForTesting
@@ -234,6 +251,7 @@ public final class UnsafeExternalSorter {
    * @return the number of bytes freed.
    */
   public long freeMemory() {
+    updatePeakMemoryUsed();
     long memoryFreed = 0;
     for (MemoryBlock block : allocatedPages) {
       taskMemoryManager.freePage(block);
@@ -275,6 +293,7 @@ public final class UnsafeExternalSorter {
    * obtained, then the in-memory data will be spilled to disk.
    */
   private void growPointerArrayIfNecessary() throws IOException {
+    assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
       logger.debug("Attempting to expand sort pointer array");
       final long oldPointerArrayMemoryUsage = inMemSorter.getMemoryUsage();
@@ -390,6 +409,7 @@ public final class UnsafeExternalSorter {
       dataPageBaseObject,
       dataPagePosition,
       lengthInBytes);
+    assert(inMemSorter != null);
     inMemSorter.insertRecord(recordAddress, prefix);
   }
 
@@ -460,6 +480,7 @@ public final class UnsafeExternalSorter {
     PlatformDependent.copyMemory(
       valueBaseObj, valueOffset, dataPageBaseObject, dataPagePosition, valueLen);
 
+    assert(inMemSorter != null);
     inMemSorter.insertRecord(recordAddress, prefix);
   }
 
@@ -468,6 +489,7 @@ public final class UnsafeExternalSorter {
    * `deleteSpillFiles()` after consuming this iterator.
    */
   public UnsafeSorterIterator getSortedIterator() throws IOException {
+    assert(inMemSorter != null);
     final UnsafeSorterIterator inMemoryIterator = inMemSorter.getSortedIterator();
     int numIteratorsToMerge = spillWriters.size() + (inMemoryIterator.hasNext() ? 1 : 0);
     if (spillWriters.isEmpty()) {

@@ -27,6 +27,7 @@ import scala.Product2;
 import scala.collection.JavaConversions;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
+import scala.collection.immutable.Map;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.ByteStreams;
@@ -78,8 +79,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final SparkConf sparkConf;
   private final boolean transferToEnabled;
 
-  private MapStatus mapStatus = null;
-  private UnsafeShuffleExternalSorter sorter = null;
+  @Nullable private MapStatus mapStatus;
+  @Nullable private UnsafeShuffleExternalSorter sorter;
+  private long peakMemoryUsedBytes = 0;
 
   /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
   private static final class MyByteArrayOutputStream extends ByteArrayOutputStream {
@@ -131,7 +133,26 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @VisibleForTesting
   public int maxRecordSizeBytes() {
+    assert(sorter != null);
     return sorter.maxRecordSizeBytes;
+  }
+
+  private void updatePeakMemoryUsed() {
+    // sorter can be null if this writer is closed
+    if (sorter != null) {
+      long mem = sorter.getPeakMemoryUsedBytes();
+      if (mem > peakMemoryUsedBytes) {
+        peakMemoryUsedBytes = mem;
+      }
+    }
+  }
+
+  /**
+   * Return the peak memory used so far, in bytes.
+   */
+  public long getPeakMemoryUsedBytes() {
+    updatePeakMemoryUsed();
+    return peakMemoryUsedBytes;
   }
 
   /**
@@ -144,7 +165,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @Override
   public void write(scala.collection.Iterator<Product2<K, V>> records) throws IOException {
-    // Keep track of success so we know if we ecountered an exception
+    // Keep track of success so we know if we encountered an exception
     // We do this rather than a standard try/catch/re-throw to handle
     // generic throwables.
     boolean success = false;
@@ -189,6 +210,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @VisibleForTesting
   void closeAndWriteOutput() throws IOException {
+    assert(sorter != null);
+    updatePeakMemoryUsed();
     serBuffer = null;
     serOutputStream = null;
     final SpillInfo[] spills = sorter.closeAndGetSpills();
@@ -209,6 +232,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @VisibleForTesting
   void insertRecordIntoSorter(Product2<K, V> record) throws IOException {
+    assert(sorter != null);
     final K key = record._1();
     final int partitionId = partitioner.getPartition(key);
     serBuffer.reset();
@@ -431,6 +455,14 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Override
   public Option<MapStatus> stop(boolean success) {
     try {
+      // Update task metrics from accumulators (null in UnsafeShuffleWriterSuite)
+      Map<String, Accumulator<Object>> internalAccumulators =
+        taskContext.internalMetricsToAccumulators();
+      if (internalAccumulators != null) {
+        internalAccumulators.apply(InternalAccumulator.PEAK_EXECUTION_MEMORY())
+          .add(getPeakMemoryUsedBytes());
+      }
+
       if (stopping) {
         return Option.apply(null);
       } else {
