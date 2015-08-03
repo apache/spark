@@ -17,10 +17,7 @@
 
 package org.apache.spark.network.yarn;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.ObjectInputStream;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.Map.Entry;
@@ -96,13 +93,18 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   static int boundPort = -1;
 
+  // just for integration tests that want to look at this file -- in general not sensible as
+  // a static
   @VisibleForTesting
-  Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> recoveredExecutorRegistrations =
-    new HashMap<>();
+  static YarnShuffleService instance;
+
+  @VisibleForTesting
+  Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> recoveredExecutorRegistrations = null;
 
   public YarnShuffleService() {
     super("spark_shuffle");
     logger.info("Initializing YARN shuffle service for Spark");
+    instance = this;
   }
 
   /**
@@ -128,12 +130,13 @@ public class YarnShuffleService extends AuxiliaryService {
     // app again via #initializeApplication, so we know its still running.  That is important
     // for preventing a leak where the app data would stick around *forever*.  This does leave
     // a small race -- if the NM restarts *again*, after only some of the existing apps have been
-    // re-registered, their info will be lost.
+    // re-registered, the info of the remaining apps is lost.
     registeredExecutorFile =
       findRegisteredExecutorFile(conf.getStrings("yarn.nodemanager.local-dirs"));
     try {
-      reloadRegisteredExecutors();
+      recoveredExecutorRegistrations = reloadRegisteredExecutors();
     } catch (Exception e) {
+      recoveredExecutorRegistrations = new HashMap<>();
       logger.error("Failed to load previously registered executors", e);
     }
 
@@ -246,25 +249,37 @@ public class YarnShuffleService extends AuxiliaryService {
     return ByteBuffer.allocate(0);
   }
 
-  private void reloadRegisteredExecutors() throws IOException, ClassNotFoundException {
+  private Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> reloadRegisteredExecutors()
+      throws IOException, ClassNotFoundException {
     if (registeredExecutorFile != null && registeredExecutorFile.exists()) {
       logger.info("Reloading executors from {}", registeredExecutorFile);
-      ObjectInputStream in = new ObjectInputStream(new FileInputStream(registeredExecutorFile));
-      Map<AppExecId, ExecutorShuffleInfo> registeredExecutors =
-        (Map<AppExecId, ExecutorShuffleInfo>) in.readObject();
-      for (Entry<AppExecId, ExecutorShuffleInfo> e: registeredExecutors.entrySet()) {
-        List<Map.Entry<AppExecId, ExecutorShuffleInfo>> executorsForApp =
-          recoveredExecutorRegistrations.get(e.getKey().appId);
-        if (executorsForApp == null) {
-          executorsForApp = new ArrayList<>();
-          recoveredExecutorRegistrations.put(e.getKey().appId, executorsForApp);
-        }
-        executorsForApp.add(new AbstractMap.SimpleImmutableEntry<>(e.getKey(), e.getValue()));
-      }
-      in.close();
+      return reloadRegisteredExecutors(registeredExecutorFile);
     } else {
       logger.info("No executor info to reload");
+      return new HashMap<>();
     }
+  }
+
+
+  @VisibleForTesting
+  static Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> reloadRegisteredExecutors(
+      File file
+  ) throws IOException, ClassNotFoundException {
+    Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> result = new HashMap<>();
+    ObjectInputStream in = new ObjectInputStream(new FileInputStream(file));
+    Map<AppExecId, ExecutorShuffleInfo> registeredExecutors =
+      (Map<AppExecId, ExecutorShuffleInfo>) in.readObject();
+    for (Entry<AppExecId, ExecutorShuffleInfo> e: registeredExecutors.entrySet()) {
+      List<Map.Entry<AppExecId, ExecutorShuffleInfo>> executorsForApp =
+        result.get(e.getKey().appId);
+      if (executorsForApp == null) {
+        executorsForApp = new ArrayList<>();
+        result.put(e.getKey().appId, executorsForApp);
+      }
+      executorsForApp.add(new AbstractMap.SimpleImmutableEntry<>(e.getKey(), e.getValue()));
+    }
+    in.close();
+    return result;
   }
 
 

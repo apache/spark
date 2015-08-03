@@ -43,6 +43,10 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
 
   test("external shuffle service") {
     val shuffleServicePort = YarnTestAccessor.getShuffleServicePort
+    val shuffleService = YarnTestAccessor.getShuffleServiceInstance
+
+    assert(!YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
+
     logInfo("Shuffle service port = " + shuffleServicePort)
     val result = File.createTempFile("result", null, tempDir)
     runSpark(
@@ -55,6 +59,8 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
       )
     )
     checkResult(result)
+    assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
+    assert(!YarnTestAccessor.loadSavedExecutors(shuffleService).isEmpty)
   }
 }
 

@@ -16,6 +16,14 @@
  */
 package org.apache.spark.network.yarn
 
+import java.io.File
+import java.util.{List => JList, Map => JMap}
+import java.util.Map.Entry
+
+
+import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
+
 /**
  * just a cheat to get package-visible members in tests
  */
@@ -23,4 +31,19 @@ object YarnTestAccessor {
   def getShuffleServicePort: Int = {
     YarnShuffleService.boundPort
   }
+
+  def getShuffleServiceInstance: YarnShuffleService = {
+    YarnShuffleService.instance
+  }
+
+  def getRegisteredExecutorFile(service: YarnShuffleService): File = {
+    service.registeredExecutorFile
+  }
+
+  def loadSavedExecutors(
+      service: YarnShuffleService
+  ): JMap[String, JList[Entry[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo]]] = {
+    YarnShuffleService.reloadRegisteredExecutors(service.registeredExecutorFile)
+  }
+
 }
