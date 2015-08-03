@@ -99,81 +99,66 @@ private[this] object GetJsonObject {
   jsonFactory.enable(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS)
 }
 
-case class GetJsonObject(
-    jsonExpression: Expression,
-    pathExpression: Expression)
-  extends Expression
-  with CodegenFallback {
+/**
+ * Extracts json object from a json string based on json path specified, and returns json string
+ * of the extracted json object. It will return null if the input json string is invalid.
+ *
+ * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-get_json_object
+ */
+case class GetJsonObject(json: Expression, path: Expression)
+  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
   import GetJsonObject._
   import PathInstruction._
   import WriteStyle._
   import com.fasterxml.jackson.core.JsonToken._
 
+  override def left: Expression = json
+  override def right: Expression = path
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def dataType: DataType =  StringType
+  override def prettyName: String = "get_json_object"
+
+  @transient private lazy val parsedPath = parsePath(path.eval().asInstanceOf[UTF8String])
+
   override def eval(input: InternalRow): Any = {
-    val json = jsonExpression.eval(input).asInstanceOf[UTF8String]
-    if (json == null) {
+    val jsonStr = json.eval(input).asInstanceOf[UTF8String]
+    if (jsonStr == null) {
       return null
     }
 
-    pathParser(input) match {
-      case Some(path) =>
-        try {
-          val parser = jsonFactory.createParser(json.getBytes)
-          val output = new ByteArrayOutputStream()
-          val generator = jsonFactory.createGenerator(output, JsonEncoding.UTF8)
-          parser.nextToken()
-          val dirty = evaluatePath(parser, generator, RawStyle, path)
-          generator.close()
-          if (dirty) {
-            UTF8String.fromBytes(output.toByteArray)
-          } else {
-            null
-          }
-        } catch {
-          case _: JsonProcessingException => null
-        }
+    val parsed = if (path.foldable) {
+      parsedPath
+    } else {
+      parsePath(path.eval(input).asInstanceOf[UTF8String])
+    }
 
-      case None =>
-        null
+    if (parsed.isDefined) {
+      try {
+        val parser = jsonFactory.createParser(jsonStr.getBytes)
+        val output = new ByteArrayOutputStream()
+        val generator = jsonFactory.createGenerator(output, JsonEncoding.UTF8)
+        parser.nextToken()
+        val matched = evaluatePath(parser, generator, RawStyle, parsed.get)
+        generator.close()
+        if (matched) {
+          UTF8String.fromBytes(output.toByteArray)
+        } else {
+          null
+        }
+      } catch {
+        case _: JsonProcessingException => null
+      }
+    } else {
+      null
     }
   }
 
-  override def nullable: Boolean = {
-    // get_json_object returns null on invalid json
-    true
-  }
-
-  override def dataType: DataType = {
-    StringType
-  }
-
-  override def children: Seq[Expression] = {
-    Seq(jsonExpression, pathExpression)
-  }
-
-  override lazy val resolved: Boolean = {
-    childrenResolved &&
-      jsonExpression.dataType.isInstanceOf[StringType] &&
-      pathExpression.dataType.isInstanceOf[StringType]
-  }
-
-  override def prettyName: String = {
-    "get_json_object"
-  }
-
-  private val pathParser: InternalRow => Option[List[PathInstruction]] = {
-    pathExpression match {
-      case Literal(path: UTF8String, StringType) =>
-        val cached = JsonPathParser.parse(path.toString)
-        Function.const(cached)
-
-      case _ =>
-        row: InternalRow =>
-          pathExpression.eval(row) match {
-            case path: UTF8String => JsonPathParser.parse(path.toString)
-            case null => None
-          }
+  private def parsePath(path: UTF8String): Option[List[PathInstruction]] = {
+    if (path != null) {
+      JsonPathParser.parse(path.toString)
+    } else {
+      None
     }
   }
 

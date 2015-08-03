@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 
-class JsonFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val json =
     """
       |{"store":{"fruit":[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}],
@@ -149,7 +149,7 @@ class JsonFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("$.fb:testid") {
     checkEvaluation(
       GetJsonObject(Literal(json), Literal("$.fb:testid")),
-      expected = "1234")
+      "1234")
   }
 
   test("preserve newlines") {
@@ -186,5 +186,11 @@ class JsonFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       GetJsonObject(Literal(json), Literal("$.store.basket[*].non_exist_key")),
       null)
+  }
+
+  test("non foldable literal") {
+    checkEvaluation(
+      GetJsonObject(NonFoldableLiteral(json), NonFoldableLiteral("$.fb:testid")),
+      "1234")
   }
 }
