@@ -63,7 +63,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, "sort")
     val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, "hash")
 
-
     val blockHandler = service.blockHandler
     val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
     ShuffleTestAccessor.registeredExecutorFile(blockResolver) should be (execStateFile)
@@ -79,7 +78,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     // now we pretend the shuffle service goes down, and comes back up
     service.stop()
-
     val s2 = new YarnShuffleService
     s2.init(yarnConfig)
     s2.registeredExecutorFile should be (execStateFile)
@@ -97,13 +95,10 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s2.initializeApplication(app1Data)
     ShuffleTestAccessor.getExecutorInfo(app1Id, "exec-1", resolver2) should be (Some(shuffleInfo1))
 
-
     ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", resolver2) should be (None)
 
     // Act like the NM restarts one more time
-
     s2.stop()
-
     val s3 = new YarnShuffleService
     s3.init(yarnConfig)
     s3.registeredExecutorFile should be (execStateFile)
@@ -126,7 +121,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     ShuffleTestAccessor.getExecutorInfo(app1Id, "exec-1", resolver3) should be (Some(shuffleInfo1))
     ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", resolver3) should be (None)
-
   }
 
 }
