@@ -92,15 +92,15 @@ class UnsafeRowSuite extends SparkFunSuite {
     val buffer = emptyRow.getBaseObject
 
     emptyRow.copyFrom(unsafeRow)
-    assert(emptyRow.getSizeInBytes() == unsafeRow.getSizeInBytes)
-    assert(emptyRow.getInt(0) == unsafeRow.getInt(0))
-    assert(emptyRow.getUTF8String(1) == unsafeRow.getUTF8String(1))
+    assert(emptyRow.getSizeInBytes() === unsafeRow.getSizeInBytes)
+    assert(emptyRow.getInt(0) === unsafeRow.getInt(0))
+    assert(emptyRow.getUTF8String(1) === unsafeRow.getUTF8String(1))
     // make sure we reuse the buffer.
-    assert(emptyRow.getBaseObject == buffer)
+    assert(emptyRow.getBaseObject === buffer)
 
     // make sure we really copied the input row.
     unsafeRow.setInt(0, 2)
-    assert(emptyRow.getInt(0) == 1)
+    assert(emptyRow.getInt(0) === 1)
 
     val longString = UTF8String.fromString((1 to 100).map(_ => "abc").reduce(_ + _))
     val row2 = InternalRow(3, longString)
@@ -108,16 +108,16 @@ class UnsafeRowSuite extends SparkFunSuite {
 
     // make sure we can resize.
     emptyRow.copyFrom(unsafeRow2)
-    assert(emptyRow.getSizeInBytes() == unsafeRow2.getSizeInBytes)
-    assert(emptyRow.getInt(0) == 3)
-    assert(emptyRow.getUTF8String(1) == longString)
+    assert(emptyRow.getSizeInBytes() === unsafeRow2.getSizeInBytes)
+    assert(emptyRow.getInt(0) === 3)
+    assert(emptyRow.getUTF8String(1) === longString)
     // make sure we really resized.
     assert(emptyRow.getBaseObject != buffer)
 
     // make sure we can still handle small rows after resize.
     emptyRow.copyFrom(unsafeRow)
-    assert(emptyRow.getSizeInBytes() == unsafeRow.getSizeInBytes)
-    assert(emptyRow.getInt(0) == unsafeRow.getInt(0))
-    assert(emptyRow.getUTF8String(1) == unsafeRow.getUTF8String(1))
+    assert(emptyRow.getSizeInBytes() === unsafeRow.getSizeInBytes)
+    assert(emptyRow.getInt(0) === unsafeRow.getInt(0))
+    assert(emptyRow.getUTF8String(1) === unsafeRow.getUTF8String(1))
   }
 }
