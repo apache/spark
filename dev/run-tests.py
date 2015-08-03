@@ -512,7 +512,7 @@ def main():
     build_apache_spark(build_tool, hadoop_version)
 
     # backwards compatibility checks
-    detect_binary_inop_with_mima()
+    # FIXME: TEMPORARILY DISABLED detect_binary_inop_with_mima()
 
     # run the test suites
     run_scala_tests(build_tool, hadoop_version, test_modules)
