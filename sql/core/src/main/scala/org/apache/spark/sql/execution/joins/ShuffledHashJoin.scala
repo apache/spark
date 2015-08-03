@@ -42,7 +42,8 @@ case class ShuffledHashJoin(
     PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
 
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+    ClusteredDistribution(leftKeys, nullSafe = false) ::
+      ClusteredDistribution(rightKeys, nullSafe = false) :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = {
     buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>

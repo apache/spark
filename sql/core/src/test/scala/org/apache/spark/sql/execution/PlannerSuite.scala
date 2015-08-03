@@ -170,35 +170,46 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
 
       // Disable broadcast join
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-        {
-          val numExchanges = sql(
-            """
-              |SELECT *
-              |FROM
-              |  normal JOIN small ON (normal.key = small.key)
-              |  JOIN tiny ON (small.key = tiny.key)
-            """.stripMargin
-          ).queryExecution.executedPlan.collect {
-            case exchange: Exchange => exchange
-          }.length
-          assert(numExchanges === 3)
-        }
+        val joins = Array("JOIN", "LEFT OUTER JOIN", "RIGHT OUTER JOIN", "FULL OUTER JOIN")
+        var i = 0
+        while (i < joins.length) {
+          var j = 0
+          while (j < joins.length) {
+            val firstJoin: String = joins(i)
+            val secondJoin: String = joins(j)
 
-        {
-          // This second query joins on different keys:
-          val numExchanges = sql(
-            """
-              |SELECT *
-              |FROM
-              |  normal JOIN small ON (normal.key = small.key)
-              |  JOIN tiny ON (normal.key = tiny.key)
-            """.stripMargin
-          ).queryExecution.executedPlan.collect {
-            case exchange: Exchange => exchange
-          }.length
-          assert(numExchanges === 3)
-        }
+            {
+              val numExchanges: Int = sql(
+                s"""
+                |SELECT *
+                |FROM
+                |  normal $firstJoin small ON (normal.key = small.key)
+                |  $secondJoin tiny ON (small.key = tiny.key)
+              """.stripMargin
+              ).queryExecution.executedPlan.collect {
+                case exchange: Exchange => exchange
+              }.length
+              assert(numExchanges === 3)
+            }
 
+            {
+              val numExchanges: Int = sql(
+                s"""
+                |SELECT *
+                |FROM
+                |  normal $firstJoin small ON (normal.key = small.key)
+                |  $secondJoin tiny ON (normal.key = tiny.key)
+              """.stripMargin
+              ).queryExecution.executedPlan.collect {
+                case exchange: Exchange => exchange
+              }.length
+              assert(numExchanges === 3)
+            }
+
+            j += 1
+          }
+          i += 1
+        }
       }
     }
   }

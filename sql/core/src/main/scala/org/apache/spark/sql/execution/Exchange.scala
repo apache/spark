@@ -148,7 +148,8 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
   protected override def doExecute(): RDD[InternalRow] = attachTree(this , "execute") {
     val rdd = child.execute()
     val part: Partitioner = newPartitioning match {
-      case HashPartitioning(expressions, numPartitions) => new HashPartitioner(numPartitions)
+      case HashPartitioning(expressions, numPartitions, nullSafe) =>
+        new HashPartitioner(numPartitions)
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
         // partition bounds. To get accurate samples, we need to copy the mutable keys.
@@ -167,7 +168,9 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
       // TODO: Handle BroadcastPartitioning.
     }
     def getPartitionKeyExtractor(): InternalRow => InternalRow = newPartitioning match {
-      case HashPartitioning(expressions, _) => newMutableProjection(expressions, child.output)()
+      // TODO: If nullSafe is false, we can randomly distribute rows having any null in
+      // clustering.
+      case HashPartitioning(expressions, _, _) => newMutableProjection(expressions, child.output)()
       case RangePartitioning(_, _) | SinglePartition => identity
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
     }
@@ -240,8 +243,9 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       val fixedChildren = requirements.zipped.map {
         case (AllTuples, rowOrdering, child) =>
           addOperatorsIfNecessary(SinglePartition, rowOrdering, child)
-        case (ClusteredDistribution(clustering), rowOrdering, child) =>
-          addOperatorsIfNecessary(HashPartitioning(clustering, numPartitions), rowOrdering, child)
+        case (ClusteredDistribution(clustering, nullSafe), rowOrdering, child) =>
+          val hashPartitioning = HashPartitioning(clustering, numPartitions, nullSafe)
+          addOperatorsIfNecessary(hashPartitioning, rowOrdering, child)
         case (OrderedDistribution(ordering), rowOrdering, child) =>
           addOperatorsIfNecessary(RangePartitioning(ordering, numPartitions), rowOrdering, child)
 
