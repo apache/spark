@@ -24,6 +24,8 @@ import org.apache.spark.sql.catalyst.expressions.{Nondeterministic, Expression}
  */
 trait CodegenFallback extends Expression {
 
+  val exprType: String = classOf[Expression].getName
+
   protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     foreach {
       case n: Nondeterministic => n.setInitialValues()
@@ -34,7 +36,7 @@ trait CodegenFallback extends Expression {
     val objectTerm = ctx.freshName("obj")
     s"""
       /* expression: ${this} */
-      Object $objectTerm = expressions[${ctx.references.size - 1}].eval(i);
+      Object $objectTerm = ((${exprType})expressions[${ctx.references.size - 1}]).eval(i);
       boolean ${ev.isNull} = $objectTerm == null;
       ${ctx.javaType(this.dataType)} ${ev.primitive} = ${ctx.defaultValue(this.dataType)};
       if (!${ev.isNull}) {

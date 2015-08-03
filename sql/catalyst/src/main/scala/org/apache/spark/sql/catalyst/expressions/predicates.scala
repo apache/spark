@@ -142,26 +142,6 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 }
 
 /**
- * Helper companion object in order to support code generation.
- */
-object InSet {
-
-  @transient val hsets: mutable.HashMap[String, Set[Any]] = mutable.HashMap()
-
-  def addHSet(key: String, hset: Set[Any]): Unit = {
-    hsets += ((key, hset))
-  }
-
-  def check(key: String, o: Any): Boolean = {
-    if (hsets.contains(key)) {
-      hsets(key).contains(o)
-    } else {
-      false
-    }
-  }
-}
-
-/**
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
@@ -175,15 +155,14 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val hsetName = ctx.freshName("InSet")
-    InSet.addHSet(hsetName, hset)
-
+    val setName = classOf[Set[Any]].getName
     val childGen = child.gen(ctx)
+    ctx.references += hset
     s"""
       ${childGen.code}
       boolean ${ev.isNull} = false;
       boolean ${ev.primitive} =
-        ${classOf[InSet].getName.stripSuffix("$")}.check("${hsetName}", ${childGen.primitive});
+        ((${setName})expressions[${ctx.references.size - 1}]).contains(${childGen.primitive});
      """
   }
 }

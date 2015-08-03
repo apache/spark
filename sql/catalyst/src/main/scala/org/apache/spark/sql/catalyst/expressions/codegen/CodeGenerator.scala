@@ -55,8 +55,10 @@ class CodeGenContext {
 
   /**
    * Holding all the expressions those do not support codegen, will be evaluated directly.
+   * Since we generalize the types to Any, it can be also used to hold other objects which need
+   * to be passed into generated code in runtime.
    */
-  val references: mutable.ArrayBuffer[Expression] = new mutable.ArrayBuffer[Expression]()
+  val references: mutable.ArrayBuffer[Any] = new mutable.ArrayBuffer[Any]()
 
   /**
    * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
@@ -268,7 +270,7 @@ class CodeGenContext {
  * into generated class.
  */
 abstract class GeneratedClass {
-  def generate(expressions: Array[Expression]): Any
+  def generate(expressions: Array[Any]): Any
 }
 
 /**
@@ -278,7 +280,7 @@ abstract class GeneratedClass {
  */
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
 
-  protected val exprType: String = classOf[Expression].getName
+  protected val exprType: String = classOf[Any].getName
   protected val mutableRowType: String = classOf[MutableRow].getName
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
 
