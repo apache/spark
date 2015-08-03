@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import scala.concurrent._
 import scala.concurrent.duration._
 
+import org.apache.spark.{InternalAccumulator, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -74,6 +75,13 @@ case class BroadcastHashOuterJoin(
       val joinedRow = new JoinedRow()
       val hashTable = broadcastRelation.value
       val keyGenerator = streamedKeyGenerator
+
+      hashTable match {
+        case unsafe: UnsafeHashedRelation =>
+          TaskContext.get().internalMetricsToAccumulators(
+            InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getUnsafeSize)
+        case _ =>
+      }
 
       joinType match {
         case LeftOuter =>
