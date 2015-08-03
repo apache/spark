@@ -16,7 +16,7 @@
  */
 package org.apache.spark.network.yarn
 
-import java.io.{PrintWriter, File}
+import java.io.{DataOutputStream, FileOutputStream, PrintWriter, File}
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.yarn.api.records.ApplicationId
@@ -159,8 +159,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     // make a corrupt registeredExecutor File
     s1.stop()
 
-    val out = new PrintWriter(execStateFile)
-    out.println("42")
+    val out = new DataOutputStream(new FileOutputStream(execStateFile))
+    out.writeInt(42)
     out.close()
 
     s2 = new YarnShuffleService
