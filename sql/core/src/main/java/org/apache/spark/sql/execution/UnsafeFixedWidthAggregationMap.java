@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution;
 
+import java.io.IOException;
+
+import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.types.Decimal;
-import org.apache.spark.sql.types.DecimalType;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.KVIterator;
@@ -208,7 +209,7 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
-   * Free the unsafe memory associated with this map.
+   * Free the memory associated with this map. This is idempotent and can be called multiple times.
    */
   public void free() {
     map.free();
@@ -225,4 +226,18 @@ public final class UnsafeFixedWidthAggregationMap {
     System.out.println("Total memory consumption (bytes): " + map.getTotalMemoryConsumption());
   }
 
+  /**
+   * Sorts the map's records in place, spill them to disk, and returns an [[UnsafeKVExternalSorter]]
+   * that can be used to insert more records to do external sorting.
+   *
+   * The only memory that is allocated is the address/prefix array, 16 bytes per record.
+   *
+   * Note that this destroys the map, and as a result, the map cannot be used anymore after this.
+   */
+  public UnsafeKVExternalSorter destructAndCreateExternalSorter() throws IOException {
+    UnsafeKVExternalSorter sorter = new UnsafeKVExternalSorter(
+      groupingKeySchema, aggregationBufferSchema,
+      SparkEnv.get().blockManager(), map.getShuffleMemoryManager(), map.getPageSizeBytes(), map);
+    return sorter;
+  }
 }

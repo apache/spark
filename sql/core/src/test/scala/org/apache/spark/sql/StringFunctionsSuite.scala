@@ -176,58 +176,12 @@ class StringFunctionsSuite extends QueryTest {
   test("string substring_index function") {
     val df = Seq(("www.apache.org", ".", "zz")).toDF("a", "b", "c")
     checkAnswer(
-      df.select(substring_index($"a", ".", 3)),
-      Row("www.apache.org"))
-    checkAnswer(
       df.select(substring_index($"a", ".", 2)),
       Row("www.apache"))
     checkAnswer(
-      df.select(substring_index($"a", ".", 1)),
-      Row("www"))
-    checkAnswer(
-      df.select(substring_index($"a", ".", 0)),
-      Row(""))
-    checkAnswer(
-      df.select(substring_index(lit("www.apache.org"), ".", -1)),
-      Row("org"))
-    checkAnswer(
-      df.select(substring_index(lit("www.apache.org"), ".", -2)),
-      Row("apache.org"))
-    checkAnswer(
-      df.select(substring_index(lit("www.apache.org"), ".", -3)),
-      Row("www.apache.org"))
-    // str is empty string
-    checkAnswer(
-      df.select(substring_index(lit(""), ".", 1)),
-      Row(""))
-    // empty string delim
-    checkAnswer(
-      df.select(substring_index(lit("www.apache.org"), "", 1)),
-      Row(""))
-    // delim does not exist in str
-    checkAnswer(
-      df.select(substring_index(lit("www.apache.org"), "#", 1)),
-      Row("www.apache.org"))
-    // delim is 2 chars
-    checkAnswer(
-      df.select(substring_index(lit("www||apache||org"), "||", 2)),
-      Row("www||apache"))
-    checkAnswer(
-      df.select(substring_index(lit("www||apache||org"), "||", -2)),
-      Row("apache||org"))
-    // null
-    checkAnswer(
-      df.select(substring_index(lit(null), "||", 2)),
-      Row(null))
-    checkAnswer(
-      df.select(substring_index(lit("www.apache.org"), null, 2)),
-      Row(null))
-    // non ascii chars
-    // scalastyle:off
-    checkAnswer(
-      df.selectExpr("""substring_index("大千世界大千世界", "千", 2)"""),
-      Row("大千世界大"))
-    // scalastyle:on
+      df.selectExpr("substring_index(a, '.', 2)"),
+      Row("www.apache")
+    )
   }
 
   test("string locate function") {
@@ -313,6 +267,15 @@ class StringFunctionsSuite extends QueryTest {
         df.selectExpr("length(c)"), // int type of the argument is unacceptable
         Row("5.0000"))
     }
+  }
+
+  test("initcap function") {
+    val df = Seq(("ab", "a B")).toDF("l", "r")
+    checkAnswer(
+      df.select(initcap($"l"), initcap($"r")), Row("Ab", "A B"))
+
+    checkAnswer(
+      df.selectExpr("InitCap(l)", "InitCap(r)"), Row("Ab", "A B"))
   }
 
   test("number format function") {

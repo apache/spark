@@ -115,6 +115,14 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void titleCase() {
+    assertEquals(fromString(""), fromString("").toTitleCase());
+    assertEquals(fromString("Ab Bc Cd"), fromString("ab bc cd").toTitleCase());
+    assertEquals(fromString("Ѐ Ё Ђ Ѻ Ώ Ề"), fromString("ѐ ё ђ ѻ ώ ề").toTitleCase());
+    assertEquals(fromString("大千世界 数据砖头"), fromString("大千世界 数据砖头").toTitleCase());
+  }
+
+  @Test
   public void concatTest() {
     assertEquals(EMPTY_UTF8, concat());
     assertEquals(null, concat((UTF8String) null));

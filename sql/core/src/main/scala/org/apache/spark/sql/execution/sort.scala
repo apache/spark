@@ -116,6 +116,7 @@ case class TungstenSort(
   protected override def doExecute(): RDD[InternalRow] = {
     val schema = child.schema
     val childOutput = child.output
+    val pageSize = sparkContext.conf.getSizeAsBytes("spark.buffer.pageSize", "64m")
     child.execute().mapPartitions({ iter =>
       val ordering = newOrdering(sortOrder, childOutput)
 
@@ -131,7 +132,8 @@ case class TungstenSort(
         }
       }
 
-      val sorter = new UnsafeExternalRowSorter(schema, ordering, prefixComparator, prefixComputer)
+      val sorter = new UnsafeExternalRowSorter(
+        schema, ordering, prefixComparator, prefixComputer, pageSize)
       if (testSpillFrequency > 0) {
         sorter.setTestSpillFrequency(testSpillFrequency)
       }

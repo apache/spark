@@ -1295,11 +1295,12 @@ object Client extends Logging {
 
         logDebug("Attempting to fetch HBase security token.")
 
-        val hbaseConf = confCreate.invoke(null, conf)
-        val token = obtainToken.invoke(null, hbaseConf).asInstanceOf[Token[TokenIdentifier]]
-        credentials.addToken(token.getService, token)
-
-        logInfo("Added HBase security token to credentials.")
+        val hbaseConf = confCreate.invoke(null, conf).asInstanceOf[Configuration]
+        if ("kerberos" == hbaseConf.get("hbase.security.authentication")) {
+          val token = obtainToken.invoke(null, hbaseConf).asInstanceOf[Token[TokenIdentifier]]
+          credentials.addToken(token.getService, token)
+          logInfo("Added HBase security token to credentials.")
+        }
       } catch {
         case e: java.lang.NoSuchMethodException =>
           logInfo("HBase Method not found: " + e)

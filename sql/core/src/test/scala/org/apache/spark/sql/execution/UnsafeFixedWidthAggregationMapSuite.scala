@@ -17,24 +17,26 @@
 
 package org.apache.spark.sql.execution
 
-import org.scalatest.{BeforeAndAfterEach, Matchers}
-
-import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 import scala.collection.mutable
-import scala.util.Random
+import scala.util.{Try, Random}
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.shuffle.ShuffleMemoryManager
+import org.scalatest.Matchers
+
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.{TaskContextImpl, TaskContext, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
 import org.apache.spark.unsafe.types.UTF8String
 
-
-class UnsafeFixedWidthAggregationMapSuite
-  extends SparkFunSuite
-  with Matchers
-  with BeforeAndAfterEach {
+/**
+ * Test suite for [[UnsafeFixedWidthAggregationMap]].
+ *
+ * Use [[testWithMemoryLeakDetection]] rather than [[test]] to construct test cases.
+ */
+class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
 
   import UnsafeFixedWidthAggregationMap._
 
@@ -44,23 +46,40 @@ class UnsafeFixedWidthAggregationMapSuite
   private val PAGE_SIZE_BYTES: Long = 1L << 26; // 64 megabytes
 
   private var taskMemoryManager: TaskMemoryManager = null
-  private var shuffleMemoryManager: ShuffleMemoryManager = null
+  private var shuffleMemoryManager: TestShuffleMemoryManager = null
 
-  override def beforeEach(): Unit = {
-    taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
-    shuffleMemoryManager = new ShuffleMemoryManager(Long.MaxValue)
-  }
+  def testWithMemoryLeakDetection(name: String)(f: => Unit) {
+    def cleanup(): Unit = {
+      if (taskMemoryManager != null) {
+        val leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask()
+        assert(taskMemoryManager.cleanUpAllAllocatedMemory() === 0)
+        assert(leakedShuffleMemory === 0)
+        taskMemoryManager = null
+      }
+    }
 
-  override def afterEach(): Unit = {
-    if (taskMemoryManager != null) {
-      val leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask()
-      assert(taskMemoryManager.cleanUpAllAllocatedMemory() === 0)
-      assert(leakedShuffleMemory === 0)
-      taskMemoryManager = null
+    test(name) {
+      taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
+      shuffleMemoryManager = new TestShuffleMemoryManager
+      try {
+        f
+      } catch {
+        case NonFatal(e) =>
+          Try(cleanup())
+          throw e
+      }
+      cleanup()
     }
   }
 
-  test("supported schemas") {
+  private def randomStrings(n: Int): Seq[String] = {
+    val rand = new Random(42)
+    Seq.fill(512) {
+      Seq.fill(rand.nextInt(100))(rand.nextPrintableChar()).mkString
+    }.distinct
+  }
+
+  testWithMemoryLeakDetection("supported schemas") {
     assert(supportsAggregationBufferSchema(
       StructType(StructField("x", DecimalType.USER_DEFAULT) :: Nil)))
     assert(!supportsAggregationBufferSchema(
@@ -70,7 +89,7 @@ class UnsafeFixedWidthAggregationMapSuite
       !supportsAggregationBufferSchema(StructType(StructField("x", ArrayType(IntegerType)) :: Nil)))
   }
 
-  test("empty map") {
+  testWithMemoryLeakDetection("empty map") {
     val map = new UnsafeFixedWidthAggregationMap(
       emptyAggregationBuffer,
       aggBufferSchema,
@@ -85,7 +104,7 @@ class UnsafeFixedWidthAggregationMapSuite
     map.free()
   }
 
-  test("updating values for a single key") {
+  testWithMemoryLeakDetection("updating values for a single key") {
     val map = new UnsafeFixedWidthAggregationMap(
       emptyAggregationBuffer,
       aggBufferSchema,
@@ -113,7 +132,7 @@ class UnsafeFixedWidthAggregationMapSuite
     map.free()
   }
 
-  test("inserting large random keys") {
+  testWithMemoryLeakDetection("inserting large random keys") {
     val map = new UnsafeFixedWidthAggregationMap(
       emptyAggregationBuffer,
       aggBufferSchema,
@@ -140,4 +159,73 @@ class UnsafeFixedWidthAggregationMapSuite
     map.free()
   }
 
+  testWithMemoryLeakDetection("test external sorting") {
+    // Calling this make sure we have block manager and everything else setup.
+    TestSQLContext
+
+    TaskContext.setTaskContext(new TaskContextImpl(
+      stageId = 0,
+      partitionId = 0,
+      taskAttemptId = 0,
+      attemptNumber = 0,
+      taskMemoryManager = taskMemoryManager,
+      metricsSystem = null))
+
+    // Memory consumption in the beginning of the task.
+    val initialMemoryConsumption = shuffleMemoryManager.getMemoryConsumptionForThisTask()
+
+    val map = new UnsafeFixedWidthAggregationMap(
+      emptyAggregationBuffer,
+      aggBufferSchema,
+      groupKeySchema,
+      taskMemoryManager,
+      shuffleMemoryManager,
+      128, // initial capacity
+      PAGE_SIZE_BYTES,
+      false // disable perf metrics
+    )
+
+    val keys = randomStrings(1024).take(512)
+    keys.foreach { keyString =>
+      val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(keyString)))
+      buf.setInt(0, keyString.length)
+      assert(buf != null)
+    }
+
+    // Convert the map into a sorter
+    val sorter = map.destructAndCreateExternalSorter()
+
+    withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
+      // 4096 * 16 is the initial size allocated for the pointer/prefix array in the in-mem sorter.
+      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() ===
+        initialMemoryConsumption + 4096 * 16)
+    }
+
+    // Add more keys to the sorter and make sure the results come out sorted.
+    val additionalKeys = randomStrings(1024)
+    val keyConverter = UnsafeProjection.create(groupKeySchema)
+    val valueConverter = UnsafeProjection.create(aggBufferSchema)
+
+    additionalKeys.zipWithIndex.foreach { case (str, i) =>
+      val k = InternalRow(UTF8String.fromString(str))
+      val v = InternalRow(str.length)
+      sorter.insertKV(keyConverter.apply(k), valueConverter.apply(v))
+
+      if ((i % 100) == 0) {
+        shuffleMemoryManager.markAsOutOfMemory()
+        sorter.closeCurrentPage()
+      }
+    }
+
+    val out = new scala.collection.mutable.ArrayBuffer[String]
+    val iter = sorter.sortedIterator()
+    while (iter.next()) {
+      assert(iter.getKey.getString(0).length === iter.getValue.getInt(0))
+      out += iter.getKey.getString(0)
+    }
+
+    assert(out === (keys ++ additionalKeys).sorted)
+
+    map.free()
+  }
 }

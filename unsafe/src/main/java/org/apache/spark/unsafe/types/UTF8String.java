@@ -79,6 +79,17 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   }
 
   /**
+   * Creates an UTF8String from given address (base and offset) and length.
+   */
+  public static UTF8String fromAddress(Object base, long offset, int numBytes) {
+    if (base != null) {
+      return new UTF8String(base, offset, numBytes);
+    } else {
+      return null;
+    }
+  }
+
+  /**
    * Creates an UTF8String from String.
    */
   public static UTF8String fromString(String str) {
@@ -279,6 +290,29 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Returns the upper case of this string
    */
   public UTF8String toUpperCase() {
+    if (numBytes == 0) {
+      return EMPTY_UTF8;
+    }
+
+    byte[] bytes = new byte[numBytes];
+    bytes[0] = (byte) Character.toTitleCase(getByte(0));
+    for (int i = 0; i < numBytes; i++) {
+      byte b = getByte(i);
+      if (numBytesForFirstByte(b) != 1) {
+        // fallback
+        return toUpperCaseSlow();
+      }
+      int upper = Character.toUpperCase((int) b);
+      if (upper > 127) {
+        // fallback
+        return toUpperCaseSlow();
+      }
+      bytes[i] = (byte) upper;
+    }
+    return fromBytes(bytes);
+  }
+
+  private UTF8String toUpperCaseSlow() {
     return fromString(toString().toUpperCase());
   }
 
@@ -286,7 +320,72 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Returns the lower case of this string
    */
   public UTF8String toLowerCase() {
+    if (numBytes == 0) {
+      return EMPTY_UTF8;
+    }
+
+    byte[] bytes = new byte[numBytes];
+    bytes[0] = (byte) Character.toTitleCase(getByte(0));
+    for (int i = 0; i < numBytes; i++) {
+      byte b = getByte(i);
+      if (numBytesForFirstByte(b) != 1) {
+        // fallback
+        return toLowerCaseSlow();
+      }
+      int lower = Character.toLowerCase((int) b);
+      if (lower > 127) {
+        // fallback
+        return toLowerCaseSlow();
+      }
+      bytes[i] = (byte) lower;
+    }
+    return fromBytes(bytes);
+  }
+
+  private UTF8String toLowerCaseSlow() {
     return fromString(toString().toLowerCase());
+  }
+
+  /**
+   * Returns the title case of this string, that could be used as title.
+   */
+  public UTF8String toTitleCase() {
+    if (numBytes == 0) {
+      return EMPTY_UTF8;
+    }
+
+    byte[] bytes = new byte[numBytes];
+    for (int i = 0; i < numBytes; i++) {
+      byte b = getByte(i);
+      if (i == 0 || getByte(i - 1) == ' ') {
+        if (numBytesForFirstByte(b) != 1) {
+          // fallback
+          return toTitleCaseSlow();
+        }
+        int upper = Character.toTitleCase(b);
+        if (upper > 127) {
+          // fallback
+          return toTitleCaseSlow();
+        }
+        bytes[i] = (byte) upper;
+      } else {
+        bytes[i] = b;
+      }
+    }
+    return fromBytes(bytes);
+  }
+
+  private UTF8String toTitleCaseSlow() {
+    StringBuffer sb = new StringBuffer();
+    String s = toString();
+    sb.append(s);
+    sb.setCharAt(0, Character.toTitleCase(sb.charAt(0)));
+    for (int i = 1; i < s.length(); i++) {
+      if (sb.charAt(i - 1) == ' ') {
+        sb.setCharAt(i, Character.toTitleCase(sb.charAt(i)));
+      }
+    }
+    return fromString(sb.toString());
   }
 
   /**
@@ -349,7 +448,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     while (i < numBytes) {
       int len = numBytesForFirstByte(getByte(i));
       copyMemory(this.base, this.offset + i, result,
-              BYTE_ARRAY_OFFSET + result.length - i - len, len);
+        BYTE_ARRAY_OFFSET + result.length - i - len, len);
 
       i += len;
     }

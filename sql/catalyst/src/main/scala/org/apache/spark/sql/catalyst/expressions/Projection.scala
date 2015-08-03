@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateMutableProjection}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
+import org.apache.spark.sql.types.{DataType, Decimal, StructType, _}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -114,8 +114,7 @@ object UnsafeProjection {
    * Returns an UnsafeProjection for given Array of DataTypes.
    */
   def create(fields: Array[DataType]): UnsafeProjection = {
-    val exprs = fields.zipWithIndex.map(x => new BoundReference(x._2, x._1, true))
-    create(exprs)
+    create(fields.zipWithIndex.map(x => new BoundReference(x._2, x._1, true)))
   }
 
   /**
@@ -124,6 +123,8 @@ object UnsafeProjection {
   def create(exprs: Seq[Expression]): UnsafeProjection = {
     GenerateUnsafeProjection.generate(exprs)
   }
+
+  def create(expr: Expression): UnsafeProjection = create(Seq(expr))
 
   /**
    * Returns an UnsafeProjection for given sequence of Expressions, which will be bound to
@@ -137,19 +138,27 @@ object UnsafeProjection {
 /**
  * A projection that could turn UnsafeRow into GenericInternalRow
  */
-case class FromUnsafeProjection(fields: Seq[DataType]) extends Projection {
+object FromUnsafeProjection {
 
-  def this(schema: StructType) = this(schema.fields.map(_.dataType))
-
-  private[this] val expressions = fields.zipWithIndex.map { case (dt, idx) =>
-    new BoundReference(idx, dt, true)
+  /**
+   * Returns an Projection for given StructType.
+   */
+  def apply(schema: StructType): Projection = {
+    apply(schema.fields.map(_.dataType))
   }
 
-  @transient private[this] lazy val generatedProj =
-    GenerateMutableProjection.generate(expressions)()
+  /**
+   * Returns an UnsafeProjection for given Array of DataTypes.
+   */
+  def apply(fields: Seq[DataType]): Projection = {
+    create(fields.zipWithIndex.map(x => new BoundReference(x._2, x._1, true)))
+  }
 
-  override def apply(input: InternalRow): InternalRow = {
-    generatedProj(input)
+  /**
+   * Returns an Projection for given sequence of Expressions (bounded).
+   */
+  private def create(exprs: Seq[Expression]): Projection = {
+    GenerateSafeProjection.generate(exprs)
   }
 }
 
