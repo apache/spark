@@ -165,7 +165,7 @@ private[deploy] object RPackageUtils extends Logging {
       printStream: PrintStream = null,
       verbose: Boolean = false): Unit = {
     jars.split(",").foreach { jarPath =>
-      val file = new File(new URI(jarPath))
+      val file = new File(Utils.resolveURI(jarPath))
       if (file.exists()) {
         val jar = new JarFile(file)
         if (checkManifestForR(jar)) {
