@@ -464,12 +464,12 @@ public final class UnsafeRow extends MutableRow {
   }
 
   /**
-   * Creates an empty UnsafeRow from a byte array with specified size.
+   * Creates an empty UnsafeRow from a byte array with specified numBytes and numFields.
    * The returned row is invalid until we call copyFrom on it.
    */
-  public static UnsafeRow createFromByteArray(int size) {
+  public static UnsafeRow createFromByteArray(int numBytes, int numFields) {
     final UnsafeRow row = new UnsafeRow();
-    row.pointTo(new byte[size], PlatformDependent.BYTE_ARRAY_OFFSET, size);
+    row.pointTo(new byte[numBytes], numFields, numBytes);
     return row;
   }
 
@@ -483,7 +483,6 @@ public final class UnsafeRow extends MutableRow {
     if (row.sizeInBytes > this.sizeInBytes) {
       // resize the underlying byte[] if it's not large enough.
       this.baseObject = new byte[row.sizeInBytes];
-      this.sizeInBytes = row.sizeInBytes;
     }
     PlatformDependent.copyMemory(
       row.baseObject,
@@ -492,6 +491,8 @@ public final class UnsafeRow extends MutableRow {
       this.baseOffset,
       row.sizeInBytes
     );
+    // update the sizeInBytes.
+    this.sizeInBytes = row.sizeInBytes;
   }
 
   /**
