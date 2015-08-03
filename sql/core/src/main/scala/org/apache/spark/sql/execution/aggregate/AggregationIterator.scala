@@ -26,7 +26,12 @@ import org.apache.spark.unsafe.KVIterator
 import scala.collection.mutable.ArrayBuffer
 
 /**
- * The base class of iterators used to evaluate [[AggregateFunction2]].
+ * The base class of [[SortBasedAggregationIterator]] and [[UnsafeHybridAggregationIterator]].
+ * It mainly contains two parts:
+ * 1. It initializes aggregate functions.
+ * 2. It creates two functions, `processRow` and `generateOutput` based on [[AggregateMode]] of
+ *    its aggregate functions. `processRow` is the function to handle an input. `generateOutput`
+ *    is used to generate result.
  */
 abstract class AggregationIterator(
     groupingKeyAttributes: Seq[Attribute],
