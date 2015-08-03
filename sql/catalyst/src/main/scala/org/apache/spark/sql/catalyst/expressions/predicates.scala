@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Objects
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -144,10 +146,18 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
  */
 object InSet {
 
-  @transient var hset: Set[Any] = null
+  @transient val hsets: mutable.HashMap[String, Set[Any]] = mutable.HashMap()
 
-  def check(o: Any): Boolean = {
-    hset.contains(o)
+  def addHSet(key: String, hset: Set[Any]): Unit = {
+    hsets += ((key, hset))
+  }
+
+  def check(key: String, o: Any): Boolean = {
+    if (hsets.contains(key)) {
+      hsets(key).contains(o)
+    } else {
+      false
+    }
   }
 }
 
@@ -160,19 +170,20 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
   override def toString: String = s"$child INSET ${hset.mkString("(", ",", ")")}"
 
-  InSet.hset = hset
-
   override def eval(input: InternalRow): Any = {
-    InSet.check(child.eval(input))
+    hset.contains(child.eval(input))
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val hsetName = ctx.freshName("InSet")
+    InSet.addHSet(hsetName, hset)
+
     val childGen = child.gen(ctx)
     s"""
       ${childGen.code}
       boolean ${ev.isNull} = false;
       boolean ${ev.primitive} =
-        ${classOf[InSet].getName.stripSuffix("$")}.check(${childGen.primitive});
+        ${classOf[InSet].getName.stripSuffix("$")}.check("${hsetName}", ${childGen.primitive});
      """
   }
 }
