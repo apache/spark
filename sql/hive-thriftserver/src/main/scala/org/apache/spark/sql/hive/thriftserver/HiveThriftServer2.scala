@@ -188,12 +188,18 @@ object HiveThriftServer2 extends Logging {
         statement: String,
         groupId: String,
         userName: String = "UNKNOWN"): Unit = {
+      while (!sessionList.contains(sessionId)) {
+        logWarning(s"sessionList don't contain the specific sessionId, wait one second " +
+          s"for the session complete adding into sessionList.")
+        Thread.sleep(1000)
+      }
       val info = new ExecutionInfo(statement, sessionId, System.currentTimeMillis, userName)
       info.state = ExecutionState.STARTED
+      info.groupId = groupId
+
       executionList.put(id, info)
       trimExecutionIfNecessary()
       sessionList(sessionId).totalExecution += 1
-      executionList(id).groupId = groupId
       totalRunning += 1
     }
 
