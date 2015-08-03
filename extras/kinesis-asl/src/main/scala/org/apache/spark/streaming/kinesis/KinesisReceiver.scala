@@ -53,9 +53,9 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
  *   inserted into a Block Generator, and the corresponding range of sequence numbers is recorded.
  * - When the block generator defines a block, then the recorded sequence number ranges that were
  *   inserted into the block are recorded separately for being used later.
- * - When the block is ready to be pushed, the block is pushed and the corresponding
- *   sequence number ranges is used to find out the latest sequence number for each shard that can
- *   be checkpointed through the DynamoDB.
+ * - When the block is ready to be pushed, the block is pushed and the ranges are reported as
+ *   metadata of the block. In addition, the ranges are used to find out the latest sequence
+ *   number for each shard that can be checkpointed through the DynamoDB.
  * - Periodically, each KinesisRecordProcessor checkpoints the latest successfully stored sequence
  *   number for it own shard.
  *
