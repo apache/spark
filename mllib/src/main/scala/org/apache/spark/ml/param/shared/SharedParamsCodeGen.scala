@@ -46,7 +46,10 @@ private[shared] object SharedParamsCodeGen {
         Some("\"probability\"")),
       ParamDesc[Double]("threshold",
         "threshold in binary classification prediction, in range [0, 1]",
-        isValid = "ParamValidators.inRange(0, 1)"),
+        isValid = "ParamValidators.inRange(0, 1)", finalMethods = false),
+      ParamDesc[Array[Double]]("thresholds",
+        "thresholds in multi-class classification prediction, must be array with size of classes.",
+        finalMethods = false),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
@@ -74,7 +77,8 @@ private[shared] object SharedParamsCodeGen {
       name: String,
       doc: String,
       defaultValueStr: Option[String] = None,
-      isValid: String = "") {
+      isValid: String = "",
+      finalMethods: Boolean = true) {
 
     require(name.matches("[a-z][a-zA-Z0-9]*"), s"Param name $name is invalid.")
     require(doc.nonEmpty) // TODO: more rigorous on doc
@@ -88,6 +92,7 @@ private[shared] object SharedParamsCodeGen {
         case _ if c == classOf[Double] => "DoubleParam"
         case _ if c == classOf[Boolean] => "BooleanParam"
         case _ if c.isArray && c.getComponentType == classOf[String] => s"StringArrayParam"
+        case _ if c.isArray && c.getComponentType == classOf[Double] => s"DoubleArrayParam"
         case _ => s"Param[${getTypeString(c)}]"
       }
     }
@@ -131,6 +136,11 @@ private[shared] object SharedParamsCodeGen {
     } else {
       ""
     }
+    val methodStr = if (param.finalMethods) {
+      "final def"
+    } else {
+      "def"
+    }
 
     s"""
       |/**
@@ -145,7 +155,7 @@ private[shared] object SharedParamsCodeGen {
       |  final val $name: $Param = new $Param(this, "$name", "$doc"$isValid)
       |$setDefault
       |  /** @group getParam */
-      |  final def get$Name: $T = $$($name)
+      |  $methodStr get$Name: $T = $$($name)
       |}
       |""".stripMargin
   }
