@@ -372,6 +372,9 @@ public final class UnsafeExternalSorter {
       acquireNewPageIfNecessary(totalSpaceRequired);
       dataPage = currentPage;
       dataPagePosition = currentPagePosition;
+      // Update bookkeeping information
+      freeSpaceInCurrentPage -= totalSpaceRequired;
+      currentPagePosition += totalSpaceRequired;
     }
     final Object dataPageBaseObject = dataPage.getBaseObject();
 
@@ -388,12 +391,6 @@ public final class UnsafeExternalSorter {
       dataPagePosition,
       lengthInBytes);
     inMemSorter.insertRecord(recordAddress, prefix);
-
-    // --- Update bookeeping data structures ------------------------------------------------------
-    if (!useOverflowPage) {
-      freeSpaceInCurrentPage -= totalSpaceRequired;
-      currentPagePosition += totalSpaceRequired;
-    }
   }
 
   /**
@@ -440,6 +437,9 @@ public final class UnsafeExternalSorter {
       acquireNewPageIfNecessary(totalSpaceRequired);
       dataPage = currentPage;
       dataPagePosition = currentPagePosition;
+      // Update bookkeeping information
+      freeSpaceInCurrentPage -= totalSpaceRequired;
+      currentPagePosition += totalSpaceRequired;
     }
     final Object dataPageBaseObject = dataPage.getBaseObject();
 
@@ -461,17 +461,11 @@ public final class UnsafeExternalSorter {
       valueBaseObj, valueOffset, dataPageBaseObject, dataPagePosition, valueLen);
 
     inMemSorter.insertRecord(recordAddress, prefix);
-
-    // --- Update bookeeping data structures ------------------------------------------------------
-    if (!useOverflowPage) {
-      freeSpaceInCurrentPage -= totalSpaceRequired;
-      currentPagePosition += totalSpaceRequired;
-    }
   }
 
   /**
-   * Returns a sorted iterator. It is the caller's responsibility to call `freeMemory()` after
-   * consuming this iterator.
+   * Returns a sorted iterator. It is the caller's responsibility to call `freeMemory()` and
+   * `deleteSpillFiles()` after consuming this iterator.
    */
   public UnsafeSorterIterator getSortedIterator() throws IOException {
     final UnsafeSorterIterator inMemoryIterator = inMemSorter.getSortedIterator();

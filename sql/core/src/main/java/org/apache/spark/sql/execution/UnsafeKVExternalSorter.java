@@ -211,6 +211,7 @@ public final class UnsafeKVExternalSorter {
 
   private void cleanupResources() {
     sorter.freeMemory();
+    sorter.deleteSpillFiles();
   }
 
   private static final class KVComparator extends RecordComparator {
