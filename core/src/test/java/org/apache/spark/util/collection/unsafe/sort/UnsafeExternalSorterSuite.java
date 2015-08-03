@@ -203,7 +203,7 @@ public class UnsafeExternalSorterSuite {
       assertEquals(i, PlatformDependent.UNSAFE.getInt(iter.getBaseObject(), iter.getBaseOffset()));
     }
 
-    sorter.freeMemory();
+    sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
   }
 
@@ -226,7 +226,7 @@ public class UnsafeExternalSorterSuite {
       assertEquals(0, iter.getRecordLength());
     }
 
-    sorter.freeMemory();
+    sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
   }
 
@@ -251,7 +251,7 @@ public class UnsafeExternalSorterSuite {
       assertEquals(i, PlatformDependent.UNSAFE.getInt(iter.getBaseObject(), iter.getBaseOffset()));
       i++;
     }
-    sorter.freeMemory();
+    sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
   }
 
@@ -262,7 +262,7 @@ public class UnsafeExternalSorterSuite {
     while (sorter.getNumberOfAllocatedPages() < 2) {
       sorter.insertRecord(record, PlatformDependent.BYTE_ARRAY_OFFSET, record.length, 0);
     }
-    sorter.freeMemory();
+    sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
   }
 
@@ -308,7 +308,7 @@ public class UnsafeExternalSorterSuite {
     assertEquals(456, PlatformDependent.UNSAFE.getInt(iter.getBaseObject(), iter.getBaseOffset()));
 
     assertFalse(iter.hasNext());
-    sorter.freeMemory();
+    sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
   }
 
@@ -354,7 +354,8 @@ public class UnsafeExternalSorterSuite {
       newPeakMemory = sorter.getPeakMemoryUsedBytes();
       assertEquals(previousPeakMemory, newPeakMemory);
     } finally {
-      sorter.freeMemory();
+      sorter.cleanupResources();
+      assertSpillFilesWereCleanedUp();
     }
   }
 

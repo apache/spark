@@ -144,8 +144,7 @@ public final class UnsafeExternalSorter {
     taskContext.addOnCompleteCallback(new AbstractFunction0<BoxedUnit>() {
       @Override
       public BoxedUnit apply() {
-        deleteSpillFiles();
-        freeMemory();
+        cleanupResources();
         return null;
       }
     });
@@ -250,7 +249,7 @@ public final class UnsafeExternalSorter {
    *
    * @return the number of bytes freed.
    */
-  public long freeMemory() {
+  private long freeMemory() {
     updatePeakMemoryUsed();
     long memoryFreed = 0;
     for (MemoryBlock block : allocatedPages) {
@@ -276,15 +275,23 @@ public final class UnsafeExternalSorter {
   /**
    * Deletes any spill files created by this sorter.
    */
-  public void deleteSpillFiles() {
+  private void deleteSpillFiles() {
     for (UnsafeSorterSpillWriter spill : spillWriters) {
       File file = spill.getFile();
       if (file != null && file.exists()) {
         if (!file.delete()) {
           logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
-        };
+        }
       }
     }
+  }
+
+  /**
+   * Frees this sorter's in-memory data structures and cleans up its spill files.
+   */
+  public void cleanupResources() {
+    deleteSpillFiles();
+    freeMemory();
   }
 
   /**
@@ -485,8 +492,8 @@ public final class UnsafeExternalSorter {
   }
 
   /**
-   * Returns a sorted iterator. It is the caller's responsibility to call `freeMemory()` and
-   * `deleteSpillFiles()` after consuming this iterator.
+   * Returns a sorted iterator. It is the caller's responsibility to call `cleanupResources()`
+   * after consuming this iterator.
    */
   public UnsafeSorterIterator getSortedIterator() throws IOException {
     assert(inMemSorter != null);
