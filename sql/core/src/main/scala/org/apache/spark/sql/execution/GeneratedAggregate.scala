@@ -285,6 +285,10 @@ case class GeneratedAggregate(
           updateProjection.target(aggregationBuffer)(joinedRow(aggregationBuffer, currentRow))
         }
 
+        // Record memory used in the process
+        taskContext.internalMetricsToAccumulators(
+          InternalAccumulator.PEAK_EXECUTION_MEMORY).add(aggregationMap.getMemoryUsage)
+
         new Iterator[InternalRow] {
           private[this] val mapIterator = aggregationMap.iterator()
           private[this] val resultProjection = resultProjectionBuilder()
@@ -301,10 +305,7 @@ case class GeneratedAggregate(
               } else {
                 // This is the last element in the iterator, so let's free the buffer. Before we do,
                 // though, we need to make a defensive copy of the result so that we don't return an
-                // object that might contain dangling pointers to the freed memory. Also record the
-                // memory used in the process.
-                taskContext.internalMetricsToAccumulators(
-                  InternalAccumulator.PEAK_EXECUTION_MEMORY).add(aggregationMap.getMemoryUsage)
+                // object that might contain dangling pointers to the freed memory.
                 val resultCopy = result.copy()
                 aggregationMap.free()
                 resultCopy

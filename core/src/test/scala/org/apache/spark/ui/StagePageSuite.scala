@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.mockito.Mockito.{mock, when}
+import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite, Success}
 import org.apache.spark.executor.TaskMetrics
@@ -50,7 +50,7 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
   private def renderStagePage(conf: SparkConf): Seq[Node] = {
     val jobListener = new JobProgressListener(conf)
     val graphListener = new RDDOperationGraphListener(conf)
-    val tab = mock(classOf[StagesTab])
+    val tab = mock(classOf[StagesTab], RETURNS_SMART_NULLS)
     val request = mock(classOf[HttpServletRequest])
     when(tab.conf).thenReturn(conf)
     when(tab.progressListener).thenReturn(jobListener)

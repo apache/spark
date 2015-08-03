@@ -272,7 +272,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
       taskContext.internalMetricsToAccumulators(TEST_ACCUMULATOR) += 1
       // Fail the first attempts of a subset of the tasks
       if (failCondition(i) && taskContext.attemptNumber() == 0) {
-        1 / 0
+        throw new Exception("Failing a task intentionally.")
       }
       iter
     }.count()

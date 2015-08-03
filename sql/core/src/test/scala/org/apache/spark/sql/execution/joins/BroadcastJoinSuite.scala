@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.execution.joins
 
 import scala.reflect.ClassTag
 
@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{AccumulatorSuite, SparkConf, SparkContext}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.{SQLConf, SQLContext, QueryTest}
 
 /**
  * Test various broadcast join operators with unsafe enabled.
