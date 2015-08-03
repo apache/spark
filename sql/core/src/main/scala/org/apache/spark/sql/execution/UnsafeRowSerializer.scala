@@ -37,9 +37,6 @@ import org.apache.spark.unsafe.PlatformDependent
  * Note that this serializer implements only the [[Serializer]] methods that are used during
  * shuffle, so certain [[SerializerInstance]] methods will throw UnsupportedOperationException.
  *
- * This serializer does not support UnsafeRows that use
- * [[org.apache.spark.sql.catalyst.util.ObjectPool]].
- *
  * @param numFields the number of fields in the row being serialized.
  */
 private[sql] class UnsafeRowSerializer(numFields: Int) extends Serializer with Serializable {
@@ -65,7 +62,6 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
 
     override def writeValue[T: ClassTag](value: T): SerializationStream = {
       val row = value.asInstanceOf[UnsafeRow]
-      assert(row.getPool == null, "UnsafeRowSerializer does not support ObjectPool")
       dOut.writeInt(row.getSizeInBytes)
       row.writeToStream(out, writeBuffer)
       this
@@ -118,7 +114,7 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
               rowBuffer = new Array[Byte](rowSize)
             }
             ByteStreams.readFully(in, rowBuffer, 0, rowSize)
-            row.pointTo(rowBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, rowSize, null)
+            row.pointTo(rowBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, rowSize)
             rowSize = dIn.readInt() // read the next row's size
             if (rowSize == EOF) { // We are returning the last row in this stream
               val _rowTuple = rowTuple
@@ -152,7 +148,7 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
           rowBuffer = new Array[Byte](rowSize)
         }
         ByteStreams.readFully(in, rowBuffer, 0, rowSize)
-        row.pointTo(rowBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, rowSize, null)
+        row.pointTo(rowBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, rowSize)
         row.asInstanceOf[T]
       }
 

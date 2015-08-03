@@ -56,6 +56,30 @@ class StringFunctionsSuite extends QueryTest {
     checkAnswer(df.selectExpr("levenshtein(l, r)"), Seq(Row(3), Row(1)))
   }
 
+  test("string regex_replace / regex_extract") {
+    val df = Seq(
+      ("100-200", "(\\d+)-(\\d+)", "300"),
+      ("100-200", "(\\d+)-(\\d+)", "400"),
+      ("100-200", "(\\d+)", "400")).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(
+        regexp_replace($"a", "(\\d+)", "num"),
+        regexp_extract($"a", "(\\d+)-(\\d+)", 1)),
+      Row("num-num", "100") :: Row("num-num", "100") :: Row("num-num", "100") :: Nil)
+
+    // for testing the mutable state of the expression in code gen.
+    // This is a hack way to enable the codegen, thus the codegen is enable by default,
+    // it will still use the interpretProjection if projection followed by a LocalRelation,
+    // hence we add a filter operator.
+    // See the optimizer rule `ConvertToLocalRelation`
+    checkAnswer(
+      df.filter("isnotnull(a)").selectExpr(
+        "regexp_replace(a, b, c)",
+        "regexp_extract(a, b, 1)"),
+      Row("300", "100") :: Row("400", "100") :: Row("400-400", "100") :: Nil)
+  }
+
   test("string ascii function") {
     val df = Seq(("abc", "")).toDF("a", "b")
     checkAnswer(
@@ -77,6 +101,16 @@ class StringFunctionsSuite extends QueryTest {
     checkAnswer(
       df.selectExpr("base64(a)", "unbase64(b)"),
       Row("AQIDBA==", bytes))
+  }
+
+  test("string / binary substring function") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("1世3", Array[Byte](1, 2, 3, 4))).toDF("a", "b")
+    checkAnswer(df.select(substring($"a", 1, 2)), Row("1世"))
+    checkAnswer(df.select(substring($"b", 2, 2)), Row(Array[Byte](2,3)))
+    checkAnswer(df.selectExpr("substring(a, 1, 2)"), Row("1世"))
+    // scalastyle:on
   }
 
   test("string encode/decode function") {
@@ -110,12 +144,21 @@ class StringFunctionsSuite extends QueryTest {
     val df = Seq(("aa%d%s", 123, "cc")).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(formatString("aa%d%s", "b", "c")),
+      df.select(format_string("aa%d%s", $"b", $"c")),
       Row("aa123cc"))
 
     checkAnswer(
       df.selectExpr("printf(a, b, c)"),
       Row("aa123cc"))
+  }
+
+  test("soundex function") {
+    val df = Seq(("MARY", "SU")).toDF("l", "r")
+    checkAnswer(
+      df.select(soundex($"l"), soundex($"r")), Row("M600", "S000"))
+
+    checkAnswer(
+      df.selectExpr("SoundEx(l)", "SoundEx(r)"), Row("M600", "S000"))
   }
 
   test("string instr function") {
@@ -128,6 +171,17 @@ class StringFunctionsSuite extends QueryTest {
     checkAnswer(
       df.selectExpr("instr(a, b)"),
       Row(1))
+  }
+
+  test("string substring_index function") {
+    val df = Seq(("www.apache.org", ".", "zz")).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(substring_index($"a", ".", 2)),
+      Row("www.apache"))
+    checkAnswer(
+      df.selectExpr("substring_index(a, '.', 2)"),
+      Row("www.apache")
+    )
   }
 
   test("string locate function") {
@@ -215,6 +269,15 @@ class StringFunctionsSuite extends QueryTest {
     }
   }
 
+  test("initcap function") {
+    val df = Seq(("ab", "a B")).toDF("l", "r")
+    checkAnswer(
+      df.select(initcap($"l"), initcap($"r")), Row("Ab", "A B"))
+
+    checkAnswer(
+      df.selectExpr("InitCap(l)", "InitCap(r)"), Row("Ab", "A B"))
+  }
+
   test("number format function") {
     val tuple =
       ("aa", 1.asInstanceOf[Byte], 2.asInstanceOf[Short],
@@ -274,5 +337,15 @@ class StringFunctionsSuite extends QueryTest {
         df.selectExpr("format_number(e, g)"), // decimal type of the 2nd argument is unacceptable
         Row("5.0000"))
     }
+
+    // for testing the mutable state of the expression in code gen.
+    // This is a hack way to enable the codegen, thus the codegen is enable by default,
+    // it will still use the interpretProjection if projection follows by a LocalRelation,
+    // hence we add a filter operator.
+    // See the optimizer rule `ConvertToLocalRelation`
+    val df2 = Seq((5L, 4), (4L, 3), (3L, 2)).toDF("a", "b")
+    checkAnswer(
+      df2.filter("b>0").selectExpr("format_number(a, b)"),
+      Row("5.0000") :: Row("4.000") :: Row("3.00") :: Nil)
   }
 }

@@ -28,11 +28,11 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.sources.PartitioningUtils._
-import org.apache.spark.sql.sources.{LogicalRelation, Partition, PartitionSpec}
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, PartitionSpec, Partition, PartitioningUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
 import org.apache.spark.unsafe.types.UTF8String
+import PartitioningUtils._
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -467,7 +467,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
       val queryExecution = sqlContext.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
-        case LogicalRelation(relation: ParquetRelation2) =>
+        case LogicalRelation(relation: ParquetRelation) =>
           assert(relation.partitionSpec === PartitionSpec.emptySpec)
       }.getOrElse {
         fail(s"Expecting a ParquetRelation2, but got:\n$queryExecution")
@@ -509,7 +509,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         FloatType,
         DoubleType,
         DecimalType(10, 5),
-        DecimalType.Unlimited,
+        DecimalType.SYSTEM_DEFAULT,
         DateType,
         TimestampType,
         StringType)

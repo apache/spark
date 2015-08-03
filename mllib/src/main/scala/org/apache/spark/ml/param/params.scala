@@ -166,6 +166,11 @@ object ParamValidators {
   def inArray[T](allowed: java.util.List[T]): T => Boolean = { (value: T) =>
     allowed.contains(value)
   }
+
+  /** Check that the array length is greater than lowerBound. */
+  def arrayLengthGt[T](lowerBound: Double): Array[T] => Boolean = { (value: Array[T]) =>
+    value.length > lowerBound
+  }
 }
 
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
@@ -476,11 +481,14 @@ trait Params extends Identifiable with Serializable {
   /**
    * Sets default values for a list of params.
    *
+   * Note: Java developers should use the single-parameter [[setDefault()]].
+   *       Annotating this with varargs can cause compilation failures due to a Scala compiler bug.
+   *       See SPARK-9268.
+   *
    * @param paramPairs  a list of param pairs that specify params and their default values to set
    *                    respectively. Make sure that the params are initialized before this method
    *                    gets called.
    */
-  @varargs
   protected final def setDefault(paramPairs: ParamPair[_]*): this.type = {
     paramPairs.foreach { p =>
       setDefault(p.param.asInstanceOf[Param[Any]], p.value)

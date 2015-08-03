@@ -40,13 +40,13 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.SQLConf.SQLConfEntry._
-import org.apache.spark.sql.catalyst.ParserDialect
+import org.apache.spark.sql.catalyst.{TableIdentifier, ParserDialect}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUDFs, SetCommand}
+import org.apache.spark.sql.execution.datasources.{PreWriteCheck, PreInsertCastAndRename, DataSourceStrategy}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
-import org.apache.spark.sql.sources.DataSourceStrategy
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -267,7 +267,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
    * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
-    catalog.refreshTable(catalog.client.currentDatabase, tableName)
+    val tableIdent = TableIdentifier(tableName).withDatabase(catalog.client.currentDatabase)
+    catalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
@@ -384,11 +385,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
         catalog.PreInsertionCasts ::
         ExtractPythonUDFs ::
         ResolveHiveWindowFunction ::
-        sources.PreInsertCastAndRename ::
+        PreInsertCastAndRename ::
         Nil
 
       override val extendedCheckRules = Seq(
-        sources.PreWriteCheck(catalog)
+        PreWriteCheck(catalog)
       )
     }
 
@@ -444,13 +445,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
       HiveDDLStrategy,
       DDLStrategy,
       TakeOrderedAndProject,
-      ParquetOperations,
       InMemoryScans,
-      ParquetConversion, // Must be before HiveTableScans
       HiveTableScans,
       DataSinks,
       Scripts,
       HashAggregation,
+      Aggregation,
       LeftSemiJoin,
       HashJoin,
       BasicOperators,

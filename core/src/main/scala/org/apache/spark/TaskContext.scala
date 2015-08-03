@@ -21,6 +21,7 @@ import java.io.Serializable
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util.TaskCompletionListener
 
@@ -58,6 +59,14 @@ object TaskContext {
    * Unset the thread local TaskContext. Internal to Spark.
    */
   protected[spark] def unset(): Unit = taskContext.remove()
+
+  /**
+   * Return an empty task context that is not actually used.
+   * Internal use only.
+   */
+  private[spark] def empty(): TaskContext = {
+    new TaskContextImpl(0, 0, 0, 0, null, null)
+  }
 }
 
 
@@ -147,6 +156,14 @@ abstract class TaskContext extends Serializable {
   /** ::DeveloperApi:: */
   @DeveloperApi
   def taskMetrics(): TaskMetrics
+
+  /**
+   * ::DeveloperApi::
+   * Returns all metrics sources with the given name which are associated with the instance
+   * which runs the task. For more information see [[org.apache.spark.metrics.MetricsSystem!]].
+   */
+  @DeveloperApi
+  def getMetricsSources(sourceName: String): Seq[Source]
 
   /**
    * Returns the manager for this task's managed memory.

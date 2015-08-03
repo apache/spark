@@ -21,9 +21,9 @@ import java.util.Random
 
 import org.scalatest.Matchers._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.functions.col
 
-class DataFrameStatSuite extends SparkFunSuite  {
+class DataFrameStatSuite extends QueryTest {
 
   private val sqlCtx = org.apache.spark.sql.test.TestSQLContext
   import sqlCtx.implicits._
@@ -129,5 +129,13 @@ class DataFrameStatSuite extends SparkFunSuite  {
     val singleColResults = df.stat.freqItems(Array("negDoubles"), 0.1)
     val items2 = singleColResults.collect().head
     items2.getSeq[Double](0) should contain (-1.0)
+  }
+
+  test("sampleBy") {
+    val df = sqlCtx.range(0, 100).select((col("id") % 3).as("key"))
+    val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
+    checkAnswer(
+      sampled.groupBy("key").count().orderBy("key"),
+      Seq(Row(0, 5), Row(1, 8)))
   }
 }

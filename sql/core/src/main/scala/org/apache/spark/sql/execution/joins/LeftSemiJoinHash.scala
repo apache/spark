@@ -21,7 +21,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.ClusteredDistribution
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, Distribution, ClusteredDistribution}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
 /**
@@ -37,13 +37,15 @@ case class LeftSemiJoinHash(
     right: SparkPlan,
     condition: Option[Expression]) extends BinaryNode with HashSemiJoin {
 
-  override def requiredChildDistribution: Seq[ClusteredDistribution] =
+  override def outputPartitioning: Partitioning = left.outputPartitioning
+
+  override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = {
     right.execute().zipPartitions(left.execute()) { (buildIter, streamIter) =>
       if (condition.isEmpty) {
-        val hashSet = buildKeyHashSet(buildIter, copy = false)
+        val hashSet = buildKeyHashSet(buildIter)
         hashSemiJoin(streamIter, hashSet)
       } else {
         val hashRelation = HashedRelation(buildIter, rightKeyGenerator)
