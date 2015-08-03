@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Private
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
@@ -26,7 +25,6 @@ import org.apache.spark.sql.types.StructType
 /**
  * Inherits some default implementation for Java from `Ordering[Row]`
  */
-@Private
 class BaseOrdering extends Ordering[InternalRow] {
   def compare(a: InternalRow, b: InternalRow): Int = {
     throw new UnsupportedOperationException

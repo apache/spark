@@ -562,6 +562,11 @@ object HiveTypeCoercion {
           case Some(finalDataType) => Coalesce(es.map(Cast(_, finalDataType)))
           case None => c
         }
+
+      case NaNvl(l, r) if l.dataType == DoubleType && r.dataType == FloatType =>
+        NaNvl(l, Cast(r, DoubleType))
+      case NaNvl(l, r) if l.dataType == FloatType && r.dataType == DoubleType =>
+        NaNvl(Cast(l, DoubleType), r)
     }
   }
 

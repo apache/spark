@@ -302,18 +302,6 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   private[sql] val ordering = RowOrdering.forSchema(this.fields.map(_.dataType))
-
-  private[sql] def supportOrdering(s: StructType): Boolean = {
-    s.fields.forall { f =>
-      if (f.dataType.isInstanceOf[AtomicType]) {
-        true
-      } else if (f.dataType.isInstanceOf[StructType]) {
-        supportOrdering(f.dataType.asInstanceOf[StructType])
-      } else {
-        false
-      }
-    }
-  }
 }
 
 object StructType extends AbstractDataType {

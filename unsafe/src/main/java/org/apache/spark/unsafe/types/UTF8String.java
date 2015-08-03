@@ -43,6 +43,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   private final long offset;
   private final int numBytes;
 
+  public Object getBaseObject() { return base; }
+  public long getBaseOffset() { return offset; }
+
   private static int[] bytesOfCodePointInUTF8 = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,

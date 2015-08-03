@@ -209,7 +209,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
           child: SparkPlan): SparkPlan = {
 
         def addShuffleIfNecessary(child: SparkPlan): SparkPlan = {
-          if (child.outputPartitioning != partitioning) {
+          if (!child.outputPartitioning.guarantees(partitioning)) {
             Exchange(partitioning, child)
           } else {
             child
