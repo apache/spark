@@ -134,6 +134,10 @@ public final class UnsafeKVExternalSorter {
       value.getBaseObject(), value.getBaseOffset(), value.getSizeInBytes(), prefix);
   }
 
+  /**
+   * Returns a sorted iterator. It is the caller's responsibility to call `cleanupResources()`
+   * after consuming this iterator.
+   */
   public KVIterator<UnsafeRow, UnsafeRow> sortedIterator() throws IOException {
     try {
       final UnsafeSorterIterator underlying = sorter.getSortedIterator();
@@ -209,7 +213,10 @@ public final class UnsafeKVExternalSorter {
     sorter.closeCurrentPage();
   }
 
-  private void cleanupResources() {
+  /**
+   * Frees this sorter's in-memory data structures and cleans up its spill files.
+   */
+  public void cleanupResources() {
     sorter.cleanupResources();
   }
 
