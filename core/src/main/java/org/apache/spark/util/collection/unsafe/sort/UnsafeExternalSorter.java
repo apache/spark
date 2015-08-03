@@ -70,7 +70,7 @@ public final class UnsafeExternalSorter {
   private final LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
 
   // These variables are reset after spilling:
-  private UnsafeInMemorySorter inMemSorter;
+  @Nullable private UnsafeInMemorySorter inMemSorter;
   // Whether the in-mem sorter is created internally, or passed in from outside.
   // If it is passed in from outside, we shouldn't release the in-mem sorter's memory.
   private boolean isInMemSorterExternal = false;
@@ -184,6 +184,7 @@ public final class UnsafeExternalSorter {
    * Sort and spill the current records in response to memory pressure.
    */
   public void spill() throws IOException {
+    assert(inMemSorter != null);
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
       Thread.currentThread().getId(),
       Utils.bytesToString(getMemoryUsage()),
@@ -220,16 +221,13 @@ public final class UnsafeExternalSorter {
     for (MemoryBlock page : allocatedPages) {
       totalPageSize += page.size();
     }
-    return inMemSorter.getMemoryUsage() + totalPageSize;
+    return ((inMemSorter == null) ? 0 : inMemSorter.getMemoryUsage()) + totalPageSize;
   }
 
   private void updatePeakMemoryUsed() {
-    // This is null after freeing memory
-    if (inMemSorter != null) {
-      long mem = getMemoryUsage();
-      if (mem > peakMemoryUsedBytes) {
-        peakMemoryUsedBytes = mem;
-      }
+    long mem = getMemoryUsage();
+    if (mem > peakMemoryUsedBytes) {
+      peakMemoryUsedBytes = mem;
     }
   }
 
@@ -297,7 +295,8 @@ public final class UnsafeExternalSorter {
    * @return true if the record can be inserted without requiring more allocations, false otherwise.
    */
   private boolean haveSpaceForRecord(int requiredSpace) {
-    assert (requiredSpace > 0);
+    assert(requiredSpace > 0);
+    assert(inMemSorter != null);
     return (inMemSorter.hasSpaceForAnotherRecord() && (requiredSpace <= freeSpaceInCurrentPage));
   }
 
@@ -310,6 +309,7 @@ public final class UnsafeExternalSorter {
    *                      the record size.
    */
   private void allocateSpaceForRecord(int requiredSpace) throws IOException {
+    assert(inMemSorter != null);
     // TODO: merge these steps to first calculate total memory requirements for this insert,
     // then try to acquire; no point in acquiring sort buffer only to spill due to no space in the
     // data page.
@@ -370,6 +370,7 @@ public final class UnsafeExternalSorter {
     if (!haveSpaceForRecord(totalSpaceRequired)) {
       allocateSpaceForRecord(totalSpaceRequired);
     }
+    assert(inMemSorter != null);
 
     final long recordAddress =
       taskMemoryManager.encodePageNumberAndOffset(currentPage, currentPagePosition);
@@ -402,6 +403,7 @@ public final class UnsafeExternalSorter {
     if (!haveSpaceForRecord(totalSpaceRequired)) {
       allocateSpaceForRecord(totalSpaceRequired);
     }
+    assert(inMemSorter != null);
 
     final long recordAddress =
       taskMemoryManager.encodePageNumberAndOffset(currentPage, currentPagePosition);
@@ -425,6 +427,7 @@ public final class UnsafeExternalSorter {
   }
 
   public UnsafeSorterIterator getSortedIterator() throws IOException {
+    assert(inMemSorter != null);
     final UnsafeSorterIterator inMemoryIterator = inMemSorter.getSortedIterator();
     int numIteratorsToMerge = spillWriters.size() + (inMemoryIterator.hasNext() ? 1 : 0);
     if (spillWriters.isEmpty()) {

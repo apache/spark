@@ -20,6 +20,7 @@ package org.apache.spark.shuffle.unsafe;
 import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
+import javax.annotation.Nullable;
 
 import scala.Tuple2;
 
@@ -90,8 +91,8 @@ final class UnsafeShuffleExternalSorter {
   private long peakMemoryUsedBytes;
 
   // These variables are reset after spilling:
-  private UnsafeShuffleInMemorySorter sorter;
-  private MemoryBlock currentPage = null;
+  @Nullable private UnsafeShuffleInMemorySorter sorter;
+  @Nullable private MemoryBlock currentPage = null;
   private long currentPagePosition = -1;
   private long freeSpaceInCurrentPage = 0;
 
@@ -283,7 +284,7 @@ final class UnsafeShuffleExternalSorter {
     for (MemoryBlock page : allocatedPages) {
       totalPageSize += page.size();
     }
-    return sorter.getMemoryUsage() + totalPageSize;
+    return ((sorter == null) ? 0 : sorter.getMemoryUsage()) + totalPageSize;
   }
 
   private void updatePeakMemoryUsed() {

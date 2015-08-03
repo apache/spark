@@ -79,8 +79,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final SparkConf sparkConf;
   private final boolean transferToEnabled;
 
-  private MapStatus mapStatus = null;
-  private UnsafeShuffleExternalSorter sorter = null;
+  @Nullable private MapStatus mapStatus;
+  @Nullable private UnsafeShuffleExternalSorter sorter;
   private long peakMemoryUsedBytes = 0;
 
   /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
@@ -133,6 +133,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @VisibleForTesting
   public int maxRecordSizeBytes() {
+    assert(sorter != null);
     return sorter.maxRecordSizeBytes;
   }
 
@@ -209,6 +210,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @VisibleForTesting
   void closeAndWriteOutput() throws IOException {
+    assert(sorter != null);
     updatePeakMemoryUsed();
     serBuffer = null;
     serOutputStream = null;
@@ -230,6 +232,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @VisibleForTesting
   void insertRecordIntoSorter(Product2<K, V> record) throws IOException {
+    assert(sorter != null);
     final K key = record._1();
     final int partitionId = partitioner.getPartition(key);
     serBuffer.reset();
