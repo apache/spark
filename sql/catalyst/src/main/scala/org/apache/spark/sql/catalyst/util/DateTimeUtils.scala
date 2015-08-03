@@ -614,8 +614,9 @@ object DateTimeUtils {
    */
   def dateAddMonths(days: Int, months: Int): Int = {
     val absoluteMonth = (getYear(days) - YearZero) * 12 + getMonth(days) - 1 + months
-    val currentMonthInYear = absoluteMonth % 12
-    val currentYear = absoluteMonth / 12
+    val nonNegativeMonth = if (absoluteMonth >= 0) absoluteMonth else 0
+    val currentMonthInYear = nonNegativeMonth % 12
+    val currentYear = nonNegativeMonth / 12
     val leapDay = if (currentMonthInYear == 1 && isLeapYear(currentYear + YearZero)) 1 else 0
     val lastDayOfMonth = monthDays(currentMonthInYear) + leapDay
 
@@ -626,7 +627,7 @@ object DateTimeUtils {
     } else {
       dayOfMonth
     }
-    firstDayOfMonth(absoluteMonth) + currentDayInMonth - 1
+    firstDayOfMonth(nonNegativeMonth) + currentDayInMonth - 1
   }
 
   /**

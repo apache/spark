@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{LongType, Decimal}
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -56,6 +56,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(UnaryMinus(input), convert(-1))
       checkEvaluation(UnaryMinus(Literal.create(null, dataType)), null)
     }
+    checkEvaluation(UnaryMinus(Literal.create(Long.MinValue, LongType)), Long.MinValue)
   }
 
   test("- (Minus)") {

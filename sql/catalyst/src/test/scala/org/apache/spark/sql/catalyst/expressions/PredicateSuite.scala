@@ -213,4 +213,11 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(nullInt <=> normalInt, false)
     checkEvaluation(nullInt <=> nullInt, true)
   }
+
+  test("BinaryComparison: boolean input") {
+    checkEvaluation(LessThan(Literal(true), Literal(false)), false)
+    checkEvaluation(LessThanOrEqual(Literal(true), Literal(false)), false)
+    checkEvaluation(GreaterThan(Literal(true), Literal(false)), true)
+    checkEvaluation(GreaterThanOrEqual(Literal(true), Literal(false)), true)
+  }
 }
