@@ -17,13 +17,9 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.types.{StructType, MapType, ArrayType}
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
@@ -52,13 +48,16 @@ object Utils {
       agg.aggregateFunction.bufferAttributes
     }
     val partialAggregate =
-      Aggregate2Sort(
-        None: Option[Seq[Expression]],
-        namedGroupingExpressions.map(_._2),
-        partialAggregateExpressions,
-        partialAggregateAttributes,
-        namedGroupingAttributes ++ partialAggregateAttributes,
-        child)
+      Aggregate(
+        requiredChildDistributionExpressions = None: Option[Seq[Expression]],
+        groupingExpressions = namedGroupingExpressions.map(_._2),
+        nonCompleteAggregateExpressions = partialAggregateExpressions,
+        nonCompleteAggregateAttributes = partialAggregateAttributes,
+        completeAggregateExpressions = Nil,
+        completeAggregateAttributes = Nil,
+        initialInputBufferOffset = 0,
+        resultExpressions = namedGroupingAttributes ++ partialAggregateAttributes,
+        child = child)
 
     // 2. Create an Aggregate Operator for final aggregations.
     val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Final))
@@ -78,13 +77,17 @@ object Utils {
           }.getOrElse(expression)
       }.asInstanceOf[NamedExpression]
     }
-    val finalAggregate = Aggregate2Sort(
-      Some(namedGroupingAttributes),
-      namedGroupingAttributes,
-      finalAggregateExpressions,
-      finalAggregateAttributes,
-      rewrittenResultExpressions,
-      partialAggregate)
+    val finalAggregate =
+      Aggregate(
+        requiredChildDistributionExpressions = Some(namedGroupingAttributes),
+        groupingExpressions = namedGroupingAttributes,
+        nonCompleteAggregateExpressions = finalAggregateExpressions,
+        nonCompleteAggregateAttributes = finalAggregateAttributes,
+        completeAggregateExpressions = Nil,
+        completeAggregateAttributes = Nil,
+        initialInputBufferOffset = namedGroupingAttributes.length,
+        resultExpressions = rewrittenResultExpressions,
+        child = partialAggregate)
 
     finalAggregate :: Nil
   }
@@ -133,14 +136,21 @@ object Utils {
     val partialAggregateAttributes = partialAggregateExpressions.flatMap { agg =>
       agg.aggregateFunction.bufferAttributes
     }
+    val partialAggregateGroupingExpressions =
+      (namedGroupingExpressions ++ namedDistinctColumnExpressions).map(_._2)
+    val partialAggregateResult =
+      namedGroupingAttributes ++ distinctColumnAttributes ++ partialAggregateAttributes
     val partialAggregate =
-      Aggregate2Sort(
-        None: Option[Seq[Expression]],
-        (namedGroupingExpressions ++ namedDistinctColumnExpressions).map(_._2),
-        partialAggregateExpressions,
-        partialAggregateAttributes,
-        namedGroupingAttributes ++ distinctColumnAttributes ++ partialAggregateAttributes,
-        child)
+      Aggregate(
+        requiredChildDistributionExpressions = None: Option[Seq[Expression]],
+        groupingExpressions = partialAggregateGroupingExpressions,
+        nonCompleteAggregateExpressions = partialAggregateExpressions,
+        nonCompleteAggregateAttributes = partialAggregateAttributes,
+        completeAggregateExpressions = Nil,
+        completeAggregateAttributes = Nil,
+        initialInputBufferOffset = 0,
+        resultExpressions = partialAggregateResult,
+        child = child)
 
     // 2. Create an Aggregate Operator for partial merge aggregations.
     val partialMergeAggregateExpressions = functionsWithoutDistinct.map {
@@ -151,14 +161,19 @@ object Utils {
       partialMergeAggregateExpressions.flatMap { agg =>
         agg.aggregateFunction.bufferAttributes
       }
+    val partialMergeAggregateResult =
+      namedGroupingAttributes ++ distinctColumnAttributes ++ partialMergeAggregateAttributes
     val partialMergeAggregate =
-      Aggregate2Sort(
-        Some(namedGroupingAttributes),
-        namedGroupingAttributes ++ distinctColumnAttributes,
-        partialMergeAggregateExpressions,
-        partialMergeAggregateAttributes,
-        namedGroupingAttributes ++ distinctColumnAttributes ++ partialMergeAggregateAttributes,
-        partialAggregate)
+      Aggregate(
+        requiredChildDistributionExpressions = Some(namedGroupingAttributes),
+        groupingExpressions = namedGroupingAttributes ++ distinctColumnAttributes,
+        nonCompleteAggregateExpressions = partialMergeAggregateExpressions,
+        nonCompleteAggregateAttributes = partialMergeAggregateAttributes,
+        completeAggregateExpressions = Nil,
+        completeAggregateAttributes = Nil,
+        initialInputBufferOffset = (namedGroupingAttributes ++ distinctColumnAttributes).length,
+        resultExpressions = partialMergeAggregateResult,
+        child = partialAggregate)
 
     // 3. Create an Aggregate Operator for partial merge aggregations.
     val finalAggregateExpressions = functionsWithoutDistinct.map {
@@ -199,15 +214,17 @@ object Utils {
           }.getOrElse(expression)
       }.asInstanceOf[NamedExpression]
     }
-    val finalAndCompleteAggregate = FinalAndCompleteAggregate2Sort(
-      namedGroupingAttributes ++ distinctColumnAttributes,
-      namedGroupingAttributes,
-      finalAggregateExpressions,
-      finalAggregateAttributes,
-      completeAggregateExpressions,
-      completeAggregateAttributes,
-      rewrittenResultExpressions,
-      partialMergeAggregate)
+    val finalAndCompleteAggregate =
+      Aggregate(
+        requiredChildDistributionExpressions = Some(namedGroupingAttributes),
+        groupingExpressions = namedGroupingAttributes,
+        nonCompleteAggregateExpressions = finalAggregateExpressions,
+        nonCompleteAggregateAttributes = finalAggregateAttributes,
+        completeAggregateExpressions = completeAggregateExpressions,
+        completeAggregateAttributes = completeAggregateAttributes,
+        initialInputBufferOffset = (namedGroupingAttributes ++ distinctColumnAttributes).length,
+        resultExpressions = rewrittenResultExpressions,
+        child = partialMergeAggregate)
 
     finalAndCompleteAggregate :: Nil
   }
