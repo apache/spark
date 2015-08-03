@@ -913,7 +913,7 @@ scaledData = scalerModel.transform(dataFrame)
 * `min`: 0.0 by default. Lower bound after transformation, shared by all features.
 * `max`: 1.0 by default. Upper bound after transformation, shared by all features.
 
-`MinMaxScaler` is a `Model` which can be `fit` on a dataset to produce a `MinMaxScalerModel`; this amounts to computing summary statistics.  The model can then transform each feature individually such that it is in the given range.
+`MinMaxScaler` computes summary statistics on a data set and produces a `MinMaxScalerModel`. The model can then transform each feature individually such that it is in the given range.
 
 The rescaled value for a feature E is calculated as,
 
