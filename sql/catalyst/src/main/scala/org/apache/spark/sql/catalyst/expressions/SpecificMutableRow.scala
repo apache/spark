@@ -211,15 +211,13 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   def this() = this(Seq.empty)
 
-  override def length: Int = values.length
+  override def numFields: Int = values.length
 
-  override def toSeq: Seq[Any] = values.map(_.boxed).toSeq
+  override def toSeq: Seq[Any] = values.map(_.boxed)
 
   override def setNullAt(i: Int): Unit = {
     values(i).isNull = true
   }
-
-  override def get(i: Int): Any = values(i).boxed
 
   override def isNullAt(i: Int): Boolean = values(i).isNull
 
@@ -234,6 +232,8 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     new GenericInternalRow(newValues)
   }
 
+  override def genericGet(i: Int): Any = values(i).boxed
+
   override def update(ordinal: Int, value: Any) {
     if (value == null) {
       setNullAt(ordinal)
@@ -241,11 +241,6 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
       values(ordinal).update(value)
     }
   }
-
-  override def setString(ordinal: Int, value: String): Unit =
-    update(ordinal, UTF8String.fromString(value))
-
-  override def getString(ordinal: Int): String = apply(ordinal).toString
 
   override def setInt(ordinal: Int, value: Int): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableInt]
@@ -315,9 +310,5 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def getByte(i: Int): Byte = {
     values(i).asInstanceOf[MutableByte].value
-  }
-
-  override def getAs[T](i: Int): T = {
-    values(i).boxed.asInstanceOf[T]
   }
 }

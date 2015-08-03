@@ -91,7 +91,11 @@ private[hive] class ClientWrapper(
         // this action explicit.
         initialConf.setClassLoader(initClassLoader)
         config.foreach { case (k, v) =>
-          logDebug(s"Hive Config: $k=$v")
+          if (k.toLowerCase.contains("password")) {
+            logDebug(s"Hive Config: $k=xxx")
+          } else {
+            logDebug(s"Hive Config: $k=$v")
+          }
           initialConf.set(k, v)
         }
         val newState = new SessionState(initialConf)

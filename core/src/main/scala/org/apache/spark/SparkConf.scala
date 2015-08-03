@@ -18,10 +18,11 @@
 package org.apache.spark
 
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
+
+import org.apache.avro.{SchemaNormalization, Schema}
 
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
@@ -159,6 +160,26 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     set("spark.kryo.classesToRegister", allClassNames.mkString(","))
     set("spark.serializer", classOf[KryoSerializer].getName)
     this
+  }
+
+  private final val avroNamespace = "avro.schema."
+
+  /**
+   * Use Kryo serialization and register the given set of Avro schemas so that the generic
+   * record serializer can decrease network IO
+   */
+  def registerAvroSchemas(schemas: Schema*): SparkConf = {
+    for (schema <- schemas) {
+      set(avroNamespace + SchemaNormalization.parsingFingerprint64(schema), schema.toString)
+    }
+    this
+  }
+
+  /** Gets all the avro schemas in the configuration used in the generic Avro record serializer */
+  def getAvroSchema: Map[Long, String] = {
+    getAll.filter { case (k, v) => k.startsWith(avroNamespace) }
+      .map { case (k, v) => (k.substring(avroNamespace.length).toLong, v) }
+      .toMap
   }
 
   /** Remove a parameter from the configuration */
@@ -527,7 +548,9 @@ private[spark] object SparkConf extends Logging {
     "spark.rpc.askTimeout" -> Seq(
       AlternateConfig("spark.akka.askTimeout", "1.4")),
     "spark.rpc.lookupTimeout" -> Seq(
-      AlternateConfig("spark.akka.lookupTimeout", "1.4"))
+      AlternateConfig("spark.akka.lookupTimeout", "1.4")),
+    "spark.streaming.fileStream.minRememberDuration" -> Seq(
+      AlternateConfig("spark.streaming.minRememberDuration", "1.5"))
     )
 
   /**

@@ -30,7 +30,7 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testFunc(1L, LongType)
     testFunc(1.0F, FloatType)
     testFunc(1.0, DoubleType)
-    testFunc(Decimal(1.5), DecimalType.Unlimited)
+    testFunc(Decimal(1.5), DecimalType(2, 1))
     testFunc(new java.sql.Date(10), DateType)
     testFunc(new java.sql.Timestamp(10), TimestampType)
     testFunc("abcd", StringType)
@@ -77,7 +77,7 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("AtLeastNNonNulls") {
+  test("AtLeastNNonNullNans") {
     val mix = Seq(Literal("x"),
       Literal.create(null, StringType),
       Literal.create(null, DoubleType),
@@ -92,15 +92,50 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val nullOnly = Seq(Literal("x"),
       Literal.create(null, DoubleType),
-      Literal.create(null, DecimalType.Unlimited),
+      Literal.create(null, DecimalType.USER_DEFAULT),
       Literal(Float.MaxValue),
       Literal(false))
 
-    checkEvaluation(AtLeastNNonNulls(2, mix), true, EmptyRow)
-    checkEvaluation(AtLeastNNonNulls(3, mix), false, EmptyRow)
-    checkEvaluation(AtLeastNNonNulls(3, nanOnly), true, EmptyRow)
-    checkEvaluation(AtLeastNNonNulls(4, nanOnly), false, EmptyRow)
-    checkEvaluation(AtLeastNNonNulls(3, nullOnly), true, EmptyRow)
-    checkEvaluation(AtLeastNNonNulls(4, nullOnly), false, EmptyRow)
+    checkEvaluation(AtLeastNNonNullNans(0, mix), true, EmptyRow)
+    checkEvaluation(AtLeastNNonNullNans(2, mix), true, EmptyRow)
+    checkEvaluation(AtLeastNNonNullNans(3, mix), false, EmptyRow)
+    checkEvaluation(AtLeastNNonNullNans(0, nanOnly), true, EmptyRow)
+    checkEvaluation(AtLeastNNonNullNans(3, nanOnly), true, EmptyRow)
+    checkEvaluation(AtLeastNNonNullNans(4, nanOnly), false, EmptyRow)
+    checkEvaluation(AtLeastNNonNullNans(0, nullOnly), true, EmptyRow)
+    checkEvaluation(AtLeastNNonNullNans(3, nullOnly), true, EmptyRow)
+    checkEvaluation(AtLeastNNonNullNans(4, nullOnly), false, EmptyRow)
+  }
+
+  test("AtLeastNNull") {
+    val mix = Seq(Literal("x"),
+      Literal.create(null, StringType),
+      Literal.create(null, DoubleType),
+      Literal(Double.NaN),
+      Literal(5f))
+
+    val nanOnly = Seq(Literal("x"),
+      Literal(10.0),
+      Literal(Float.NaN),
+      Literal(math.log(-2)),
+      Literal(Double.MaxValue))
+
+    val nullOnly = Seq(Literal("x"),
+      Literal.create(null, DoubleType),
+      Literal.create(null, DecimalType.USER_DEFAULT),
+      Literal(Float.MaxValue),
+      Literal(false))
+
+    checkEvaluation(AtLeastNNulls(0, mix), true, EmptyRow)
+    checkEvaluation(AtLeastNNulls(1, mix), true, EmptyRow)
+    checkEvaluation(AtLeastNNulls(2, mix), true, EmptyRow)
+    checkEvaluation(AtLeastNNulls(3, mix), false, EmptyRow)
+    checkEvaluation(AtLeastNNulls(0, nanOnly), true, EmptyRow)
+    checkEvaluation(AtLeastNNulls(1, nanOnly), false, EmptyRow)
+    checkEvaluation(AtLeastNNulls(2, nanOnly), false, EmptyRow)
+    checkEvaluation(AtLeastNNulls(0, nullOnly), true, EmptyRow)
+    checkEvaluation(AtLeastNNulls(1, nullOnly), true, EmptyRow)
+    checkEvaluation(AtLeastNNulls(2, nullOnly), true, EmptyRow)
+    checkEvaluation(AtLeastNNulls(3, nullOnly), false, EmptyRow)
   }
 }

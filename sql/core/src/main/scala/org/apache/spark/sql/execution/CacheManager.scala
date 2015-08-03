@@ -84,7 +84,7 @@ private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
   }
 
   /**
-   * Caches the data produced by the logical representation of the given schema rdd.  Unlike
+   * Caches the data produced by the logical representation of the given [[DataFrame]]. Unlike
    * `RDD.cache()`, the default storage level is set to be `MEMORY_AND_DISK` because recomputing
    * the in-memory columnar representation of the underlying table is expensive.
    */

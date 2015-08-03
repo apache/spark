@@ -137,7 +137,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   }
 
   test("Single command with --database") {
-    runCliWithin(1.minute)(
+    runCliWithin(2.minute)(
       "CREATE DATABASE hive_test_db;"
         -> "OK",
       "USE hive_test_db;"
@@ -148,7 +148,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
         -> "Time taken: "
     )
 
-    runCliWithin(1.minute, Seq("--database", "hive_test_db", "-e", "SHOW TABLES;"))(
+    runCliWithin(2.minute, Seq("--database", "hive_test_db", "-e", "SHOW TABLES;"))(
       ""
         -> "OK",
       ""

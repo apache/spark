@@ -136,7 +136,7 @@ package object debug {
             tupleCount += 1
             var i = 0
             while (i < numColumns) {
-              val value = currentRow(i)
+              val value = currentRow.get(i, output(i).dataType)
               if (value != null) {
                 columnStats(i).elementTypes += HashSet(value.getClass.getName)
               }
@@ -158,11 +158,17 @@ package object debug {
 
       case (row: InternalRow, StructType(fields)) =>
         row.toSeq.zip(fields.map(_.dataType)).foreach { case(d, t) => typeCheck(d, t) }
-      case (s: Seq[_], ArrayType(elemType, _)) =>
-        s.foreach(typeCheck(_, elemType))
-      case (m: Map[_, _], MapType(keyType, valueType, _)) =>
-        m.keys.foreach(typeCheck(_, keyType))
-        m.values.foreach(typeCheck(_, valueType))
+      case (a: ArrayData, ArrayType(elemType, _)) =>
+        a.foreach(elemType, (_, e) => {
+          typeCheck(e, elemType)
+        })
+      case (m: MapData, MapType(keyType, valueType, _)) =>
+        m.keyArray().foreach(keyType, (_, e) => {
+          typeCheck(e, keyType)
+        })
+        m.valueArray().foreach(valueType, (_, e) => {
+          typeCheck(e, valueType)
+        })
 
       case (_: Long, LongType) =>
       case (_: Int, IntegerType) =>
