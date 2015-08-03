@@ -37,7 +37,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * element in `values` region. We can get the length of this element by subtracting next offset.
  * Note that offset can by negative which means this element is null.
  *
- * In ghe `values` region, we store the content of elements. As we can get length info, so elements
+ * In the `values` region, we store the content of elements. As we can get length info, so elements
  * can be variable-length.
  *
  * Note that when we write out this array, we should write out the `numElements` at first 4 bytes,
@@ -314,5 +314,20 @@ public class UnsafeArrayData extends ArrayData {
       targetOffset,
       sizeInBytes
     );
+  }
+
+  @Override
+  public UnsafeArrayData copy() {
+    UnsafeArrayData arrayCopy = new UnsafeArrayData();
+    final byte[] arrayDataCopy = new byte[sizeInBytes];
+    PlatformDependent.copyMemory(
+      baseObject,
+      baseOffset,
+      arrayDataCopy,
+      PlatformDependent.BYTE_ARRAY_OFFSET,
+      sizeInBytes
+    );
+    arrayCopy.pointTo(arrayDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numElements, sizeInBytes);
+    return arrayCopy;
   }
 }

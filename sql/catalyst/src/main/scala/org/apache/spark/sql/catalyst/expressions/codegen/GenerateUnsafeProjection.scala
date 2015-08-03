@@ -379,13 +379,18 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           case _: MapType => "UnsafeMapData"
           case _ => ctx.javaType(elementType)
         }
+        val copy = elementType match {
+          // We reuse the buffer during conversion, need copy it before process next element.
+          case _: StructType | _: ArrayType | _: MapType => ".copy()"
+          case _ => ""
+        }
 
         s"""
           final $unsafeType[] $elements = new $unsafeType[$numElements];
           for (int $index = 0; $index < $numElements; $index++) {
             ${convertedElement.code}
             if (!${convertedElement.isNull}) {
-              $elements[$index] = ${convertedElement.primitive};
+              $elements[$index] = ${convertedElement.primitive}$copy;
               $numBytes += $elementSize;
             }
           }

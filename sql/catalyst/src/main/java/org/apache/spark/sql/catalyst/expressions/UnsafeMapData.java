@@ -58,4 +58,9 @@ public class UnsafeMapData extends MapData {
   public ArrayData valueArray() {
     return values;
   }
+
+  @Override
+  public UnsafeMapData copy() {
+    return new UnsafeMapData(keys.copy(), values.copy());
+  }
 }

@@ -26,6 +26,8 @@ class GenericArrayData(private[sql] val array: Array[Any])
 
   override def genericGet(ordinal: Int): Any = array(ordinal)
 
+  override def copy(): ArrayData = new GenericArrayData(array.clone())
+
   // todo: Array is invariant in scala, maybe use toSeq instead?
   override def toArray[T: ClassTag](elementType: DataType): Array[T] = array.map(_.asInstanceOf[T])
 

@@ -24,6 +24,8 @@ import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 abstract class ArrayData extends SpecializedGetters with Serializable {
   def numElements(): Int
 
+  def copy(): ArrayData
+
   def toBooleanArray(): Array[Boolean] = {
     val size = numElements()
     val values = new Array[Boolean](size)
