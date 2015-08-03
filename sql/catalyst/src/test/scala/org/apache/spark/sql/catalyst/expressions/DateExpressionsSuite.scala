@@ -280,6 +280,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(AddMonths(Literal.create(null, DateType), Literal(1)), null)
     checkEvaluation(AddMonths(Literal.create(null, DateType), Literal.create(null, IntegerType)),
       null)
+    checkEvaluation(
+      AddMonths(Literal(Date.valueOf("2015-01-30")), Literal(Int.MinValue)), -7293498)
   }
 
   test("months_between") {
