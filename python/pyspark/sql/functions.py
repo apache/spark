@@ -1022,6 +1022,7 @@ def array_contains(col, value):
     """
     Collection function: returns True if the array contains the given value. The collection
     elements and value must be of the same type.
+
     :param col: name of column containing array
     :param value: value to check for in array
 

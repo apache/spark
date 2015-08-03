@@ -117,6 +117,9 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def prettyName: String = "sort_array"
 }
 
+/**
+ * Checks if the array (left) has the element (right)
+ */
 case class ArrayContains(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
@@ -133,7 +136,11 @@ case class ArrayContains(left: Expression, right: Expression)
   override def checkInputDataTypes(): TypeCheckResult = {
     inputTypes.size match {
       case 0 => TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
-      case _ => super.checkInputDataTypes()
+      case _ => left.dataType match {
+        case n @ ArrayType(element, _) => super.checkInputDataTypes()
+        case _ => TypeCheckResult.TypeCheckFailure(
+          "Arguments must be an array followed by a value of same type as the array members")
+      }
     }
   }
 
@@ -160,13 +167,9 @@ case class ArrayContains(left: Expression, right: Expression)
         ${arrGen.code}
         boolean ${ev.isNull} = false;
         boolean ${ev.primitive} = false;
-        if (${arrGen.isNull}) {
-          ${ev.primitive} = false;
-        } else {
+        if (!${arrGen.isNull}) {
           ${elementGen.code}
-          if (${elementGen.isNull}) {
-            ${ev.primitive} = false;
-          } else {
+          if (!${elementGen.isNull}) {
             ${ev.primitive} = ${arrGen.primitive}.contains(${elementGen.primitive});
           }
         }
