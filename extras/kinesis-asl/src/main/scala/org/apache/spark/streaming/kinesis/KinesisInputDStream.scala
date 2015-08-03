@@ -53,8 +53,8 @@ private[kinesis] class KinesisInputDStream(
     } else {
       // This branch is a fallback and its not expected to enter this branch
       if (blockInfos.nonEmpty) {
-        logWarning("Kinesis sequence number information was not present with some block metadata, " +
-          "it may not be possible to recover from failures")
+        logWarning("Kinesis sequence number information was not present with some block metadata," +
+          " it may not be possible to recover from failures")
       }
       super.createBlockRDD(time, blockInfos)
     }
