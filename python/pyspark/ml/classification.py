@@ -168,10 +168,9 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         >>> lr.getThreshold()
         0.5
         >>> lr.setThreshold(0.6)
-        >>> lr.getThreshold()
-        0.6
-        >>> lr.getThresholds()
-        [0.4, 0.6]
+        LogisticRegression_...
+        >>> abs(lr.getThreshold() - 0.6) < 1e-5
+        True
         Sets the value of :py:attr:`thresholds` using [1-value, value].
         """
         return self.setThresholds([1-value, value])
