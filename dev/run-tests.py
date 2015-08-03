@@ -241,8 +241,7 @@ def kill_zinc_on_port(zinc_port):
     """
     cmd = ("/usr/sbin/lsof -P |grep %s | grep LISTEN "
            "| awk '{ print $2; }' | xargs kill") % zinc_port
-    # TODO: Not sure what happens here if no process exists
-    run_cmd(cmd)
+    subprocess.check_call(cmd, shell=True)
 
 
 def exec_maven(mvn_args=()):
