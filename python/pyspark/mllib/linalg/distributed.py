@@ -16,7 +16,7 @@
 #
 
 """
-MLlib utilities for distributed linear algebra.
+Package for distributed linear algebra.
 """
 
 import sys
