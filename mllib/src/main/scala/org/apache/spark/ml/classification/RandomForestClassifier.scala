@@ -95,7 +95,8 @@ final class RandomForestClassifier(override val uid: String)
     val trees =
       RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed)
         .map(_.asInstanceOf[DecisionTreeClassificationModel])
-    new RandomForestClassificationModel(trees, numClasses)
+    val numFeatures = oldDataset.first().features.size
+    new RandomForestClassificationModel(trees, numFeatures, numClasses)
   }
 
   override def copy(extra: ParamMap): RandomForestClassifier = defaultCopy(extra)
@@ -118,11 +119,13 @@ object RandomForestClassifier {
  * features.
  * @param _trees  Decision trees in the ensemble.
  *               Warning: These have null parents.
+ * @param numFeatures  Number of features used by this model
  */
 @Experimental
 final class RandomForestClassificationModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel],
+    val numFeatures: Int,
     override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, RandomForestClassificationModel]
   with TreeEnsembleModel with Serializable {
@@ -133,8 +136,8 @@ final class RandomForestClassificationModel private[ml] (
    * Construct a random forest classification model, with all trees weighted equally.
    * @param trees  Component trees
    */
-  def this(trees: Array[DecisionTreeClassificationModel], numClasses: Int) =
-    this(Identifiable.randomUID("rfc"), trees, numClasses)
+  def this(trees: Array[DecisionTreeClassificationModel], numFeatures: Int, numClasses: Int) =
+    this(Identifiable.randomUID("rfc"), trees, numFeatures, numClasses)
 
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
@@ -182,12 +185,29 @@ final class RandomForestClassificationModel private[ml] (
   }
 
   override def copy(extra: ParamMap): RandomForestClassificationModel = {
-    copyValues(new RandomForestClassificationModel(uid, _trees, numClasses), extra)
+    copyValues(new RandomForestClassificationModel(uid, _trees, numFeatures, numClasses), extra)
   }
 
   override def toString: String = {
     s"RandomForestClassificationModel with $numTrees trees"
   }
+
+  /**
+   * Estimate of the importance of each feature.
+   *
+   * This generalizes the idea of "Gini" importance to other losses,
+   * following the explanation of Gini importance from "Random Forests" documentation
+   * by Leo Breiman and Adele Cutler, and following the implementation from scikit-learn.
+   *
+   * This feature importance is calculated as follows:
+   *  - Average over trees:
+   *     - importance(feature j) = sum (over nodes which split on feature j) of the gain,
+   *       where gain is scaled by the number of instances passing through node
+   *     - Normalize importances for tree based on total number of training instances used
+   *       to build tree.
+   *  - Normalize feature importance vector to sum to 1.
+   */
+  lazy val featureImportances: Vector = RandomForest.featureImportances(trees, numFeatures)
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldRandomForestModel = {
@@ -210,6 +230,6 @@ private[ml] object RandomForestClassificationModel {
       DecisionTreeClassificationModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("rfc")
-    new RandomForestClassificationModel(uid, newTrees, numClasses)
+    new RandomForestClassificationModel(uid, newTrees, -1, numClasses)
   }
 }
