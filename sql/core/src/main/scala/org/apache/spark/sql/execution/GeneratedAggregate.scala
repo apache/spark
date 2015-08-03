@@ -44,7 +44,6 @@ case class AggregateEvaluation(
  *                ensure all values where `groupingExpressions` are equal are present.
  * @param groupingExpressions expressions that are evaluated to determine grouping.
  * @param aggregateExpressions expressions that are computed for each group.
- * @param unsafeEnabled whether to allow Unsafe-based aggregation buffers to be used.
  * @param child the input data source.
  */
 @DeveloperApi
@@ -52,7 +51,6 @@ case class GeneratedAggregate(
     partial: Boolean,
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
-    unsafeEnabled: Boolean,
     child: SparkPlan)
   extends UnaryNode {
 
@@ -259,7 +257,7 @@ case class GeneratedAggregate(
         val resultProjection = resultProjectionBuilder()
         Iterator(resultProjection(buffer))
 
-      } else if (unsafeEnabled && schemaSupportsUnsafe) {
+      } else if (schemaSupportsUnsafe) {
         assert(iter.hasNext, "There should be at least one row for this path")
         log.info("Using Unsafe-based aggregator")
         val pageSizeBytes = SparkEnv.get.conf.getSizeAsBytes("spark.buffer.pageSize", "64m")
@@ -316,9 +314,6 @@ case class GeneratedAggregate(
           }
         }
       } else {
-        if (unsafeEnabled) {
-          log.info("Not using Unsafe-based aggregator because it is not supported for this schema")
-        }
         val buffers = new java.util.HashMap[InternalRow, MutableRow]()
 
         var currentRow: InternalRow = null

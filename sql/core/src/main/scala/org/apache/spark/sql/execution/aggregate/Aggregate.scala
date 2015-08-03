@@ -65,7 +65,7 @@ case class Aggregate(
         UnsafeProjection.canSupport(groupKeySchema)
 
     // TODO: Use the hybrid iterator for non-algebric aggregate functions.
-    sqlContext.conf.unsafeEnabled && schemaSupportsUnsafe && !hasNonAlgebricAggregateFunctions
+    sqlContext.conf.tungstenEnabled && schemaSupportsUnsafe && !hasNonAlgebricAggregateFunctions
   }
 
   // We need to use sorted input if we have grouping expressions, and

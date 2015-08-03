@@ -227,7 +227,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
 
     val output = df.queryExecution.executedPlan.output
     val (partitionOutput, dataOutput) = output.partition(a => partitionColumns.contains(a.name))
-    val codegenEnabled = df.sqlContext.conf.codegenEnabled
+    val codegenEnabled = df.sqlContext.conf.tungstenEnabled
 
     // This call shouldn't be put into the `try` block below because it only initializes and
     // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.

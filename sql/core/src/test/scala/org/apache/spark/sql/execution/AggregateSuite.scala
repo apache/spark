@@ -25,10 +25,10 @@ class AggregateSuite extends SparkPlanTest {
 
   test("SPARK-8357 unsafe aggregation path should not leak memory with empty input") {
     val codegenDefault = TestSQLContext.getConf(SQLConf.CODEGEN_ENABLED)
-    val unsafeDefault = TestSQLContext.getConf(SQLConf.UNSAFE_ENABLED)
+    val unsafeDefault = TestSQLContext.getConf(SQLConf.TUNGSTEN_ENABLED)
     try {
       TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, true)
-      TestSQLContext.setConf(SQLConf.UNSAFE_ENABLED, true)
+      TestSQLContext.setConf(SQLConf.TUNGSTEN_ENABLED, true)
       val df = Seq.empty[(Int, Int)].toDF("a", "b")
       checkAnswer(
         df,
@@ -42,7 +42,7 @@ class AggregateSuite extends SparkPlanTest {
       )
     } finally {
       TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, codegenDefault)
-      TestSQLContext.setConf(SQLConf.UNSAFE_ENABLED, unsafeDefault)
+      TestSQLContext.setConf(SQLConf.TUNGSTEN_ENABLED, unsafeDefault)
     }
   }
 }

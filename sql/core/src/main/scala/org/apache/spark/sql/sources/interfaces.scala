@@ -389,7 +389,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 
-  private val codegenEnabled = sqlContext.conf.codegenEnabled
+  private val codegenEnabled = sqlContext.conf.tungstenEnabled
 
   private var _partitionSpec: PartitionSpec = _
 
