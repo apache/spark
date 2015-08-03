@@ -129,13 +129,15 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener {
         // updated by onExecutionEnd later.
         executionUIData.completionTime = Some(time)
       }
-      activeExecutions.remove(executionUIData.executionId)
-      if (executionUIData.isFailed) {
-        failedExecutions += executionUIData
-        trimExecutionsIfNecessary(failedExecutions)
-      } else {
-        completedExecutions += executionUIData
-        trimExecutionsIfNecessary(completedExecutions)
+      // Note: this execution may have been already removed by other method. If so, just do nothing.
+      activeExecutions.remove(executionUIData.executionId).foreach { _ =>
+        if (executionUIData.isFailed) {
+          failedExecutions += executionUIData
+          trimExecutionsIfNecessary(failedExecutions)
+        } else {
+          completedExecutions += executionUIData
+          trimExecutionsIfNecessary(completedExecutions)
+        }
       }
     }
   }
