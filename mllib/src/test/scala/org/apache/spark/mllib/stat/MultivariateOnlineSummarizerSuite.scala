@@ -27,6 +27,7 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
     val summarizer = new MultivariateOnlineSummarizer
 
     assert(summarizer.count === 0, "should be zero since nothing is added.")
+    assert(summarizer.weightedCount === 0, "should be zero since nothing is added.")
 
     withClue("Getting numNonzeros from empty summarizer should throw exception.") {
       intercept[IllegalArgumentException] {
@@ -173,7 +174,7 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
     assert(summarizer.count === 6)
   }
 
-  test("merging summarizer with empty summarizer") {
+  test("merging summarizes with empty summarizer") {
     // If one of two is non-empty, this should return the non-empty summarizer.
     // If both of them are empty, then just return the empty summarizer.
     val summarizer1 = (new MultivariateOnlineSummarizer)
@@ -217,5 +218,73 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
       .add(Vectors.dense(-1.0))
     s0.merge(s1)
     assert(s0.mean(0) ~== 1.0 absTol 1e-14)
+  }
+
+  test("merging summarizers with weighted samples") {
+    // Test integer weights. Samples with zero weights will not be counted.
+    val summarizer1a = (new MultivariateOnlineSummarizer)
+      .add(Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))), 3.0)
+      .add(Vectors.dense(0.0, -1.0, -3.0), 5.0)
+      .add(Vectors.dense(9.2, 2.4, 5.1), 0.0)
+      .add(Vectors.dense(3.1, 2.3, 9.7), 0.0)
+
+    val summarizer1b = (new MultivariateOnlineSummarizer)
+      .add(Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))))
+      .add(Vectors.dense(0.0, -1.0, -3.0))
+      .add(Vectors.dense(0.0, -1.0, -3.0))
+      .add(Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))))
+      .add(Vectors.dense(0.0, -1.0, -3.0))
+      .add(Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))))
+      .add(Vectors.dense(0.0, -1.0, -3.0))
+      .add(Vectors.dense(0.0, -1.0, -3.0))
+
+    assert(summarizer1a.count === 2)
+    assert(summarizer1a.weightedCount === summarizer1b.weightedCount)
+    assert(summarizer1b.count === 8)
+    assert(summarizer1b.count === summarizer1b.weightedCount)
+
+    assert(summarizer1a.mean ~== summarizer1b.mean absTol 1E-10, "mean mismatch")
+    assert(summarizer1a.variance ~== summarizer1b.variance absTol 1E-10, "variance mismatch")
+    assert(summarizer1a.numNonzeros ~==
+      summarizer1b.numNonzeros absTol 1E-10, "numNonzeros mismatch")
+    assert(summarizer1a.max ~== summarizer1b.max absTol 1E-10, "max mismatch")
+    assert(summarizer1a.min ~== summarizer1b.min absTol 1E-10, "min mismatch")
+    assert(summarizer1a.normL2 ~== summarizer1b.normL2 absTol 1E-10, "normL2 mismatch")
+    assert(summarizer1a.normL1 ~== summarizer1b.normL1 absTol 1E-10, "normL1 mismatch")
+
+    // Test decimal weights.
+    val summarizer2a = (new MultivariateOnlineSummarizer)
+      .add(Vectors.sparse(3, Seq((0, -0.8), (1, 1.7))), 0.6)
+      .add(Vectors.dense(0.0, -1.2, -1.7), 0.4)
+      .add(Vectors.sparse(3, Seq((0, -0.8), (1, 1.7))), 0.6)
+      .add(Vectors.dense(0.0, -1.2, -1.7), 0.4)
+      .add(Vectors.dense(0.0, -1.2, -1.7), 0.4)
+      .add(Vectors.sparse(3, Seq((0, -0.8), (1, 1.7))), 0.6)
+      .add(Vectors.dense(0.0, -1.2, -1.7), 0.4).merge(
+        (new MultivariateOnlineSummarizer)
+          .add(Vectors.sparse(3, Seq((0, -0.8), (1, 1.7))), 0.6)
+          .add(Vectors.dense(0.0, -1.2, -1.7), 0.4)
+          .add(Vectors.sparse(3, Seq((0, -0.8), (1, 1.7))), 0.6))
+
+    val summarizer2b = (new MultivariateOnlineSummarizer)
+      .add(Vectors.sparse(3, Seq((0, -0.8), (1, 1.7))))
+      .add(Vectors.dense(0.0, -1.2, -1.7))
+      .add(Vectors.sparse(3, Seq((0, -0.8), (1, 1.7))))
+      .add(Vectors.sparse(3, Seq((0, -0.8), (1, 1.7))))
+      .add(Vectors.dense(0.0, -1.2, -1.7))
+
+    assert(summarizer2a.count === 10)
+    assert(summarizer2a.weightedCount === 5)
+    assert(summarizer2b.count === 5)
+    assert(summarizer2b.count === summarizer2b.weightedCount)
+
+    assert(summarizer2a.mean ~== summarizer2b.mean absTol 1E-10, "mean mismatch")
+    assert(summarizer2a.variance ~== summarizer2b.variance absTol 1E-10, "variance mismatch")
+    assert(summarizer2a.numNonzeros ~==
+      summarizer2b.numNonzeros absTol 1E-10, "numNonzeros mismatch")
+    assert(summarizer2a.max ~== summarizer2b.max absTol 1E-10, "max mismatch")
+    assert(summarizer2a.min ~== summarizer2b.min absTol 1E-10, "min mismatch")
+    assert(summarizer2a.normL2 ~== summarizer2b.normL2 absTol 1E-10, "normL2 mismatch")
+    assert(summarizer2a.normL1 ~== summarizer2b.normL1 absTol 1E-10, "normL1 mismatch")
   }
 }

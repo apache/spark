@@ -105,6 +105,23 @@ private[ml] trait HasPredictionCol extends Params {
 }
 
 /**
+ * Trait for shared param weightCol (default: "").
+ */
+private[ml] trait HasWeightCol extends Params {
+
+  /**
+   * Param for whether to over-/undersamples each of training sample according to the given weights in `sampleWeightCol`. If empty,  all samples are supposed to have weight one.
+   * @group param
+   */
+  final val weightCol: Param[String] = new Param[String](this, "weightCol", "whether to over-/undersamples each of training sample according to the given weights in `sampleWeightCol`. If empty,  all samples are supposed to have weight one")
+
+  setDefault(weightCol, "")
+
+  /** @group getParam */
+  final def getWeightCol: String = $(weightCol)
+}
+
+/**
  * Trait for shared param rawPredictionCol (default: "rawPrediction").
  */
 private[ml] trait HasRawPredictionCol extends Params {
@@ -127,10 +144,10 @@ private[ml] trait HasRawPredictionCol extends Params {
 private[ml] trait HasProbabilityCol extends Params {
 
   /**
-   * Param for Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities..
+   * Param for Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
    * @group param
    */
-  final val probabilityCol: Param[String] = new Param[String](this, "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.")
+  final val probabilityCol: Param[String] = new Param[String](this, "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities")
 
   setDefault(probabilityCol, "probability")
 
@@ -253,10 +270,10 @@ private[ml] trait HasFitIntercept extends Params {
 private[ml] trait HasStandardization extends Params {
 
   /**
-   * Param for whether to standardize the training features before fitting the model..
+   * Param for whether to standardize the training features before fitting the model.
    * @group param
    */
-  final val standardization: BooleanParam = new BooleanParam(this, "standardization", "whether to standardize the training features before fitting the model.")
+  final val standardization: BooleanParam = new BooleanParam(this, "standardization", "whether to standardize the training features before fitting the model")
 
   setDefault(standardization, true)
 
@@ -287,10 +304,10 @@ private[ml] trait HasSeed extends Params {
 private[ml] trait HasElasticNetParam extends Params {
 
   /**
-   * Param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty..
+   * Param for the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
    * @group param
    */
-  final val elasticNetParam: DoubleParam = new DoubleParam(this, "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", ParamValidators.inRange(0, 1))
+  final val elasticNetParam: DoubleParam = new DoubleParam(this, "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty", ParamValidators.inRange(0, 1))
 
   /** @group getParam */
   final def getElasticNetParam: Double = $(elasticNetParam)
@@ -317,10 +334,10 @@ private[ml] trait HasTol extends Params {
 private[ml] trait HasStepSize extends Params {
 
   /**
-   * Param for Step size to be used for each iteration of optimization..
+   * Param for Step size to be used for each iteration of optimization.
    * @group param
    */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization.")
+  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization")
 
   /** @group getParam */
   final def getStepSize: Double = $(stepSize)

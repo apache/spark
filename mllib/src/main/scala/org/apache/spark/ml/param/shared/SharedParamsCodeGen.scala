@@ -38,11 +38,14 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("featuresCol", "features column name", Some("\"features\"")),
       ParamDesc[String]("labelCol", "label column name", Some("\"label\"")),
       ParamDesc[String]("predictionCol", "prediction column name", Some("\"prediction\"")),
+      ParamDesc[String]("weightCol", "whether to over-/undersamples each of training" +
+        " sample according to the given weights in `weightCol`. If empty, " +
+        " all samples are supposed to have weight one", Some("\"\"")),
       ParamDesc[String]("rawPredictionCol", "raw prediction (a.k.a. confidence) column name",
         Some("\"rawPrediction\"")),
       ParamDesc[String]("probabilityCol", "Column name for predicted class conditional" +
         " probabilities. Note: Not all models output well-calibrated probability estimates!" +
-        " These probabilities should be treated as confidences, not precise probabilities.",
+        " These probabilities should be treated as confidences, not precise probabilities",
         Some("\"probability\"")),
       ParamDesc[Double]("threshold",
         "threshold in binary classification prediction, in range [0, 1]",
@@ -60,13 +63,13 @@ private[shared] object SharedParamsCodeGen {
         isValid = "ParamValidators.gtEq(1)"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
       ParamDesc[Boolean]("standardization", "whether to standardize the training features" +
-        " before fitting the model.", Some("true")),
+        " before fitting the model", Some("true")),
       ParamDesc[Long]("seed", "random seed", Some("this.getClass.getName.hashCode.toLong")),
       ParamDesc[Double]("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]." +
-        " For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.",
+        " For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty",
         isValid = "ParamValidators.inRange(0, 1)"),
       ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms"),
-      ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization."))
+      ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization"))
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"
