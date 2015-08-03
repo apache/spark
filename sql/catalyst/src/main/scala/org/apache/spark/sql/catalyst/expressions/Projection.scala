@@ -151,7 +151,15 @@ object FromUnsafeProjection {
    * Returns an UnsafeProjection for given Array of DataTypes.
    */
   def apply(fields: Seq[DataType]): Projection = {
-    create(fields.zipWithIndex.map(x => new BoundReference(x._2, x._1, true)))
+    create(fields.zipWithIndex.map(x => {
+      val b = new BoundReference(x._2, x._1, true)
+      // todo: this is quite slow, maybe remove this whole projection after remove generic getter of
+      // InternalRow?
+      b.dataType match {
+        case _: StructType | _: ArrayType | _: MapType => FromUnsafe(b)
+        case _ => b
+      }
+    }))
   }
 
   /**

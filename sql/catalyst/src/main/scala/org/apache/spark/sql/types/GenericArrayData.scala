@@ -17,13 +17,19 @@
 
 package org.apache.spark.sql.types
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.sql.catalyst.expressions.GenericSpecializedGetters
 
-class GenericArrayData(array: Array[Any]) extends ArrayData with GenericSpecializedGetters {
+class GenericArrayData(private[sql] val array: Array[Any])
+  extends ArrayData with GenericSpecializedGetters {
 
   override def genericGet(ordinal: Int): Any = array(ordinal)
 
-  override def toArray[T](elementType: DataType): Array[T] = array.asInstanceOf[Array[T]]
+  override def copy(): ArrayData = new GenericArrayData(array.clone())
+
+  // todo: Array is invariant in scala, maybe use toSeq instead?
+  override def toArray[T: ClassTag](elementType: DataType): Array[T] = array.map(_.asInstanceOf[T])
 
   override def numElements(): Int = array.length
 
