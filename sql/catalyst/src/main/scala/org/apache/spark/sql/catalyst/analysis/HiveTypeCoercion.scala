@@ -563,11 +563,10 @@ object HiveTypeCoercion {
           case None => c
         }
 
-      case n @ NaNvl(l, r) if l.dataType != r.dataType =>
-        l.dataType match {
-          case DoubleType => NaNvl(l, Cast(r, DoubleType))
-          case FloatType => NaNvl(Cast(l, DoubleType), r)
-        }
+      case NaNvl(l, r) if l.dataType == DoubleType && r.dataType == FloatType =>
+        NaNvl(l, Cast(r, DoubleType))
+      case NaNvl(l, r) if l.dataType == FloatType && r.dataType == DoubleType =>
+        NaNvl(Cast(l, DoubleType), r)
     }
   }
 
