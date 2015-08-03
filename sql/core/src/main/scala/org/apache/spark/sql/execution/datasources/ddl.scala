@@ -196,33 +196,30 @@ private[sql] class DDLParser(
 
 private[sql] object ResolvedDataSource extends Logging {
 
+  private lazy val loader = Utils.getContextOrSparkClassLoader
+  private lazy val serviceLoader = ServiceLoader.load(classOf[DataSourceProvider], loader)
+
+  /** Tries to load the particular class */
+  private def tryLoad(provider: String): Option[Class[_]] = try {
+    Some(loader.loadClass(provider))
+  } catch {
+    case cnf: ClassNotFoundException => if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
+      sys.error("The ORC data source must be used with Hive support enabled.")
+    } else {
+      None
+    }
+  }
+
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String): Class[_] = {
-    val loader = Utils.getContextOrSparkClassLoader
-    val sl = ServiceLoader.load(classOf[DataSourceProvider], loader)
-
-    sl.iterator().filter(_.format() == provider).toList match {
-      case Nil => logDebug(s"provider: $provider is not registered in the service loader")
-      case head :: Nil => return head.getClass
+    serviceLoader.iterator().filter(_.format() == provider).toList match {
+      case Nil => tryLoad(provider).orElse(tryLoad(s"$provider.DefaultSource")).getOrElse {
+        sys.error(s"Failed to load class for data source: $provider")
+      }
+      case head :: Nil => head.getClass
       case sources => sys.error(s"Multiple sources found for $provider, " +
-        s"(${sources.map(_.getClass.getName).mkString(", ")}, " +
+        s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
         "please specify the fully qualified class name")
-    }
-
-    try {
-      loader.loadClass(provider)
-    } catch {
-      case cnf: java.lang.ClassNotFoundException =>
-        try {
-          loader.loadClass(provider + ".DefaultSource")
-        } catch {
-          case cnf: java.lang.ClassNotFoundException =>
-            if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
-              sys.error("The ORC data source must be used with Hive support enabled.")
-            } else {
-              sys.error(s"Failed to load class for data source: $provider")
-            }
-        }
     }
   }
 

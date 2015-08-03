@@ -22,37 +22,41 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class FakeSourceOne extends RelationProvider {
 
-  override def format() = "Fluet da Bomb"
+  override def format(): String = "Fluet da Bomb"
 
-  override def createRelation(cont: SQLContext, param: Map[String, String]) = new BaseRelation {
-    override def sqlContext: SQLContext = cont
+  override def createRelation(cont: SQLContext, param: Map[String, String]): BaseRelation =
+    new BaseRelation {
+      override def sqlContext: SQLContext = cont
 
-    override def schema: StructType =
-      StructType(Seq(StructField("stringType", StringType, nullable = false)))
-  }
+      override def schema: StructType =
+        StructType(Seq(StructField("stringType", StringType, nullable = false)))
+    }
 }
 
 class FakeSourceTwo extends RelationProvider {
 
-  override def format() = "Fluet da Bomb"
+  override def format(): String = "Fluet da Bomb"
 
-  override def createRelation(cont: SQLContext, param: Map[String, String]) = new BaseRelation {
-    override def sqlContext: SQLContext = cont
+  override def createRelation(cont: SQLContext, param: Map[String, String]): BaseRelation =
+    new BaseRelation {
+      override def sqlContext: SQLContext = cont
 
-    override def schema: StructType =
-      StructType(Seq(StructField("stringType", StringType, nullable = false)))
-  }
+      override def schema: StructType =
+        StructType(Seq(StructField("stringType", StringType, nullable = false)))
+    }
 }
 
 class FakeSourceThree extends RelationProvider {
-  override def format() = "gathering quorum"
 
-  override def createRelation(cont: SQLContext, param: Map[String, String]) = new BaseRelation {
-    override def sqlContext: SQLContext = cont
+  override def format(): String = "gathering quorum"
 
-    override def schema: StructType =
-      StructType(Seq(StructField("stringType", StringType, nullable = false)))
-  }
+  override def createRelation(cont: SQLContext, param: Map[String, String]): BaseRelation =
+    new BaseRelation {
+      override def sqlContext: SQLContext = cont
+
+      override def schema: StructType =
+        StructType(Seq(StructField("stringType", StringType, nullable = false)))
+    }
 }
 // please note that the META-INF/services had to be modified for the test directory for this to work
 class DDLSourceLoadSuite extends DataSourceTest {
