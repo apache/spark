@@ -18,7 +18,6 @@ package org.apache.spark.streaming.kinesis
 
 import java.util.List
 
-import scala.collection.JavaConversions.asScalaIterator
 import scala.util.Random
 import scala.util.control.NonFatal
 
@@ -47,9 +46,6 @@ private[kinesis] class KinesisRecordProcessor(
     workerId: String,
     checkpointState: KinesisCheckpointState) extends IRecordProcessor with Logging {
 
-  private val streamName = receiver.streamName
-  private val blockGenerator = receiver.blockGenerator
-
   // shardId to be populated during initialize()
   @volatile
   private var shardId: String = _
@@ -76,18 +72,8 @@ private[kinesis] class KinesisRecordProcessor(
   override def processRecords(batch: List[Record], checkpointer: IRecordProcessorCheckpointer) {
     if (!receiver.isStopped()) {
       try {
-        if (batch.size() > 0) {
-
-
-          // Note that its not safe in general to do ByteBuffer.array() to get the data
-          // as the ByteBuffer may refer to a subsequence in the array, whereas ByteBuffer.array()
-          // returns the whole array. But it is fine to do it here because the AWS SDK converts
-          val dataIterator = batch.iterator().map { _.getData().array() }
-          val metadata = SequenceNumberRange(streamName, shardId,
-            batch.get(0).getSequenceNumber(), batch.get(batch.size() - 1).getSequenceNumber())
-          blockGenerator.addMultipleDataWithCallback(dataIterator, metadata)
-          logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
-        }
+        receiver.addRecords(shardId, batch)
+        logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
 
         /*
          *
@@ -102,19 +88,19 @@ private[kinesis] class KinesisRecordProcessor(
          * checkpointing so that it checkpoints in a timely manner independent of whether
          * new records are available or not.
          */
-        val latestSeqNumToCheckpointOption = receiver.getLatestSeqNumToCheckpoint(shardId)
-        if (latestSeqNumToCheckpointOption.nonEmpty && checkpointState.shouldCheckpoint()) {
-          /* Perform the checkpoint */
-          KinesisRecordProcessor.retryRandom(
-            checkpointer.checkpoint(latestSeqNumToCheckpointOption.get), 4, 100)
+        if (checkpointState.shouldCheckpoint()) {
+          receiver.getLatestSeqNumToCheckpoint(shardId).foreach { latestSeqNum =>
+            /* Perform the checkpoint */
+            KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(latestSeqNum), 4, 100)
 
-          /* Update the next checkpoint time */
-          checkpointState.advanceCheckpoint()
+            /* Update the next checkpoint time */
+            checkpointState.advanceCheckpoint()
 
-          logDebug(s"Checkpoint:  WorkerId $workerId completed checkpoint of ${batch.size}" +
+            logDebug(s"Checkpoint:  WorkerId $workerId completed checkpoint of ${batch.size}" +
               s" records for shardId $shardId")
-          logDebug(s"Checkpoint:  Next checkpoint is at " +
+            logDebug(s"Checkpoint:  Next checkpoint is at " +
               s" ${checkpointState.checkpointClock.getTimeMillis()} for shardId $shardId")
+          }
         }
       } catch {
         case NonFatal(e) => {
