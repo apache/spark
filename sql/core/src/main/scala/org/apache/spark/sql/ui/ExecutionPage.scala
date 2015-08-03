@@ -26,7 +26,7 @@ import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
-class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
+private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
 
   private val listener = parent.listener
 
