@@ -45,8 +45,17 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
  * https://github.com/awslabs/amazon-kinesis-client
  *
  * The way this Receiver works is as follows:
- * -
- *
+ * - The receiver starts a KCL Worker, which is essentially runs a threadpool of multiple
+ *   KinesisRecordProcessor
+ * - Each KinesisRecordProcessor receives data from a Kinesis shard in batches. Each batch is
+ *   inserted into a Block Generator, and the corresponding range of sequence numbers is recorded.
+ * - When the block generator defines a block, then the recorded sequence number ranges that were
+ *   inserted into the block are recorded separately for being used later.
+ * - When the block is ready to be pushed, the block is pushed and the corresponding
+ *   sequence number ranges is used to find out the latest sequence number for each shard that can
+ *   be checkpointed through the DynamoDB.
+ * - Periodically, each KinesisRecordProcessor checkpoints the latest successfully stored sequence
+ *   number for it own shard.
  *
  * @param streamName   Kinesis stream name
  * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
@@ -105,11 +114,21 @@ private[kinesis] class KinesisReceiver(
   /** BlockGenerator used to generates blocks out of Kinesis data */
   @volatile private[kinesis] var blockGenerator: BlockGenerator = null
 
+  /**
+   * Sequence number ranges added to the current block being generated.
+   * Accessing and updating of this map is synchronized by locks in BlockGenerator.
+   */
   private val seqNumRangesInCurrentBlock = new mutable.ArrayBuffer[SequenceNumberRange]
 
+  /** Sequence number ranges of data added to each generated block */
   private val blockIdToSeqNumRanges = new mutable.HashMap[StreamBlockId, SequenceNumberRanges]
     with mutable.SynchronizedMap[StreamBlockId, SequenceNumberRanges]
 
+  /**
+   * Latest sequence number ranges that have been stored successfully.
+   * This is used for checkpointing through KCL */
+  private val shardIdToLatestStoredSeqNum = new mutable.HashMap[String, String]
+    with mutable.SynchronizedMap[String, String]
   /**
    * This is called when the KinesisReceiver starts and must be non-blocking.
    * The KCL creates and manages the receiving/processing thread pool through Worker.run().
@@ -178,6 +197,10 @@ private[kinesis] class KinesisReceiver(
     workerId = null
   }
 
+  private[streaming] def getLatestSeqNumToCheckpoint(shardId: String): Option[String] = {
+    shardIdToLatestStoredSeqNum.get(shardId)
+  }
+
   /**
    * If AWS credential is provided, return a AWSCredentialProvider returning that credential.
    * Otherwise, return the DefaultAWSCredentialsProviderChain.
@@ -217,28 +240,36 @@ private[kinesis] class KinesisReceiver(
   /** Store the block along with its associated ranges */
   private def storeBlockWithRanges(
       blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[Array[Byte]]): Unit = {
-    val rangesToReport = blockIdToSeqNumRanges.remove(blockId)
-    if (rangesToReport.isEmpty) {
+    val rangesToReportOption = blockIdToSeqNumRanges.remove(blockId)
+    if (rangesToReportOption.isEmpty) {
       stop("Error while storing block into Spark, could not find sequence number ranges " +
         s"for block $blockId")
       return
     }
 
-    var count = 0
+    val rangesToReport = rangesToReportOption.get
+    var attempt = 0
     var stored = false
     var throwable: Throwable = null
-    while (!stored && count <= 3) {
+    while (!stored && attempt <= 3) {
       try {
-        store(arrayBuffer, rangesToReport.get)
+        store(arrayBuffer, rangesToReport)
         stored = true
       } catch {
         case NonFatal(th) =>
-          count += 1
+          attempt += 1
           throwable = th
       }
     }
     if (!stored) {
       stop("Error while storing block into Spark", throwable)
+    }
+
+    // Update the latest sequence number that have been successfully stored for each shard
+    // Note that we are doing this sequentially because the array of sequence number ranges
+    // is assumed to be
+    rangesToReport.ranges.foreach { range =>
+      shardIdToLatestStoredSeqNum(range.shardId) = range.toSeqNumber
     }
   }
 

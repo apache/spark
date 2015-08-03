@@ -77,6 +77,11 @@ private[kinesis] class KinesisRecordProcessor(
     if (!receiver.isStopped()) {
       try {
         if (batch.size() > 0) {
+
+
+          // Note that its not safe in general to do ByteBuffer.array() to get the data
+          // as the ByteBuffer may refer to a subsequence in the array, whereas ByteBuffer.array()
+          // returns the whole array. But it is fine to do it here because the AWS SDK converts
           val dataIterator = batch.iterator().map { _.getData().array() }
           val metadata = SequenceNumberRange(streamName, shardId,
             batch.get(0).getSequenceNumber(), batch.get(batch.size() - 1).getSequenceNumber())
@@ -85,19 +90,23 @@ private[kinesis] class KinesisRecordProcessor(
         }
 
         /*
-         * Checkpoint the sequence number of the last record successfully processed/stored
-         *   in the batch.
-         * In this implementation, we're checkpointing after the given checkpointIntervalMillis.
-         * Note that this logic requires that processRecords() be called AND that it's time to
-         *   checkpoint.  I point this out because there is no background thread running the
-         *   checkpointer.  Checkpointing is tested and trigger only when a new batch comes in.
-         * If the worker is shutdown cleanly, checkpoint will happen (see shutdown() below).
-         * However, if the worker dies unexpectedly, a checkpoint may not happen.
-         * This could lead to records being processed more than once.
+         *
+         * Checkpoint the sequence number of the last record successfully stored.
+         * Note that in this current implementation, the checkpointing occurs only when after
+         * checkpointIntervalMillis from the last checkpoint, AND when there is new record
+         * to process. This leads to the checkpointing lagging behind what records have been
+         * stored by the receiver. Ofcourse, this can lead records processed more than once,
+         * under failures and restarts.
+         *
+         * TODO: Instead of checkpointing here, run a separate timer task to perform
+         * checkpointing so that it checkpoints in a timely manner independent of whether
+         * new records are available or not.
          */
-        if (checkpointState.shouldCheckpoint()) {
+        val latestSeqNumToCheckpointOption = receiver.getLatestSeqNumToCheckpoint(shardId)
+        if (latestSeqNumToCheckpointOption.nonEmpty && checkpointState.shouldCheckpoint()) {
           /* Perform the checkpoint */
-          KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(), 4, 100)
+          KinesisRecordProcessor.retryRandom(
+            checkpointer.checkpoint(latestSeqNumToCheckpointOption.get), 4, 100)
 
           /* Update the next checkpoint time */
           checkpointState.advanceCheckpoint()
@@ -147,7 +156,11 @@ private[kinesis] class KinesisRecordProcessor(
        * It's now OK to read from the new shards that resulted from a resharding event.
        */
       case ShutdownReason.TERMINATE =>
-        KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(), 4, 100)
+        val latestSeqNumToCheckpointOption = receiver.getLatestSeqNumToCheckpoint(shardId)
+        if (latestSeqNumToCheckpointOption.nonEmpty) {
+          KinesisRecordProcessor.retryRandom(
+            checkpointer.checkpoint(latestSeqNumToCheckpointOption.get), 4, 100)
+        }
 
       /*
        * ZOMBIE Use Case.  NoOp.

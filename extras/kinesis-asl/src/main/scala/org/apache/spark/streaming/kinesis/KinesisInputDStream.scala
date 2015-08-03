@@ -51,8 +51,10 @@ private[kinesis] class KinesisInputDStream(
         s"Creating KBBRDD for $time with seq number ranges = ${seqNumRanges.mkString(", ")} ")
       new KinesisBackedBlockRDD(context.sc, regionName, endpointUrl, blockIds, seqNumRanges)
     } else {
-      logWarning("Kinesis sequence number information not present with block metadata, " +
-        "may not be possible to recover from failures")
+      if (blockInfos.nonEmpty) {
+        logWarning("Kinesis sequence number information not present with block metadata, " +
+          "may not be possible to recover from failures")
+      }
       super.createBlockRDD(time, blockInfos)
     }
   }
