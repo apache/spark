@@ -266,6 +266,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Hive returns string from UTC formatted timestamp, spark returns timestamp type
     "date_udf",
 
+    // Can't compare the result that have newline in it
+    "udf_get_json_object",
+
     // Unlike Hive, we do support log base in (0, 1.0], therefore disable this
     "udf7"
   )
@@ -878,7 +881,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_floor",
     "udf_format_number",
     "udf_from_unixtime",
-    "udf_get_json_object",
     "udf_greaterthan",
     "udf_greaterthanorequal",
     "udf_hash",

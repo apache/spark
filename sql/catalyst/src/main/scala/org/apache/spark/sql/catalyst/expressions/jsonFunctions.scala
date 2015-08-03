@@ -102,8 +102,6 @@ private[this] object GetJsonObject {
 /**
  * Extracts json object from a json string based on json path specified, and returns json string
  * of the extracted json object. It will return null if the input json string is invalid.
- *
- * https://cwiki.apache.org/confluence/display/Hive/LanguageManual+UDF#LanguageManualUDF-get_json_object
  */
 case class GetJsonObject(json: Expression, path: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
@@ -116,7 +114,7 @@ case class GetJsonObject(json: Expression, path: Expression)
   override def left: Expression = json
   override def right: Expression = path
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
-  override def dataType: DataType =  StringType
+  override def dataType: DataType = StringType
   override def prettyName: String = "get_json_object"
 
   @transient private lazy val parsedPath = parsePath(path.eval().asInstanceOf[UTF8String])
