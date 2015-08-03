@@ -58,7 +58,8 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
     case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
       TypeCheckResult.TypeCheckSuccess
     case ArrayType(dt, _) =>
-      TypeCheckResult.TypeCheckFailure(s"$prettyName does not support sorting array of type $dt")
+      TypeCheckResult.TypeCheckFailure(
+        s"$prettyName does not support sorting array of type ${dt.simpleString}")
     case _ =>
       TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
   }
