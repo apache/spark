@@ -68,10 +68,7 @@ case class FilterNullsInJoinKey(
       keys: Seq[Expression],
       child: LogicalPlan): LogicalPlan = {
     // We get all attributes from keys.
-    val attributes = keys.filter {
-      case attr: Attribute => true
-      case _ => false
-    }
+    val attributes = keys.filter(_.isInstanceOf[Attribute])
 
     // Then, we create a Filter to make sure these attributes are non-nullable.
     val filter =
@@ -81,8 +78,6 @@ case class FilterNullsInJoinKey(
         child
       }
 
-    // We return attributes representing keys (keyAttributes) and the filter.
-    // keyAttributes will be used to rewrite the join condition.
     filter
   }
 
@@ -90,9 +85,9 @@ case class FilterNullsInJoinKey(
    * We reconstruct the join condition.
    */
   private def reconstructJoinCondition(
-    leftKeys: Seq[Expression],
-    rightKeys: Seq[Expression],
-    otherPredicate: Option[Expression]): Expression = {
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression],
+      otherPredicate: Option[Expression]): Expression = {
     // First, we rewrite the equal condition part. When we extract those keys,
     // we use splitConjunctivePredicates. So, it is safe to use .reduce(And).
     val rewrittenEqualJoinCondition = leftKeys.zip(rightKeys).map {

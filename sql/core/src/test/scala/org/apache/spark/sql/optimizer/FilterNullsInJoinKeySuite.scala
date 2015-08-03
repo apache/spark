@@ -97,7 +97,7 @@ class FilterNullsInJoinKeySuite extends PlanTest {
     // Make sure that we have three Not(AtLeastNNulls(1, exprs)) for those three tables.
     assert(conditions.length === 3)
 
-    // Make sure attribtues are indded a, b, e, i, and j.
+    // Make sure attribtues are indeed a, b, e, i, and j.
     assert(
       conditions.flatMap(exprs => exprs).toSet ===
         joinedPlan.select('a, 'b, 'e, 'i, 'j).analyze.output.toSet)
