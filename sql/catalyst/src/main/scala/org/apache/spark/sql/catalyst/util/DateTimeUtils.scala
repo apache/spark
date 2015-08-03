@@ -500,39 +500,37 @@ object DateTimeUtils {
   def splitDate(date: Int): (Int, Int, Int, Int) = {
     var (year, dayInYear) = getYearAndDayInYear(date)
     val isLeap = isLeapYear(year)
-    val (month, dayOfMonth, daysToMonthEnd) =
-      if (isLeap && dayInYear == 60) {
-        (2, 29, 0)
-      } else {
-        if (isLeap && dayInYear > 60) dayInYear -= 1
+    if (isLeap && dayInYear == 60) {
+      (year, 2, 29, 0)
+    } else {
+      if (isLeap && dayInYear > 60) dayInYear -= 1
 
-        if (dayInYear <= 31) {
-          (1, dayInYear, 31 - dayInYear)
-        } else if (dayInYear <= 59) {
-          (2, dayInYear - 31, if (isLeap) 60 - dayInYear else 59 - dayInYear)
-        } else if (dayInYear <= 90) {
-          (3, dayInYear - 59, 90 - dayInYear)
-        } else if (dayInYear <= 120) {
-          (4, dayInYear - 90, 120 - dayInYear)
-        } else if (dayInYear <= 151) {
-          (5, dayInYear - 120, 151 - dayInYear)
-        } else if (dayInYear <= 181) {
-          (6, dayInYear - 151, 181 - dayInYear)
-        } else if (dayInYear <= 212) {
-          (7, dayInYear - 181, 212 - dayInYear)
-        } else if (dayInYear <= 243) {
-          (8, dayInYear - 212, 243 - dayInYear)
-        } else if (dayInYear <= 273) {
-          (9, dayInYear - 243, 273 - dayInYear)
-        } else if (dayInYear <= 304) {
-          (10, dayInYear - 273, 304 - dayInYear)
-        } else if (dayInYear <= 334) {
-          (11, dayInYear - 304, 334 - dayInYear)
-        } else {
-          (12, dayInYear - 334, 365 - dayInYear)
-        }
+      if (dayInYear <= 31) {
+        (year, 1, dayInYear, 31 - dayInYear)
+      } else if (dayInYear <= 59) {
+        (year, 2, dayInYear - 31, if (isLeap) 60 - dayInYear else 59 - dayInYear)
+      } else if (dayInYear <= 90) {
+        (year, 3, dayInYear - 59, 90 - dayInYear)
+      } else if (dayInYear <= 120) {
+        (year, 4, dayInYear - 90, 120 - dayInYear)
+      } else if (dayInYear <= 151) {
+        (year, 5, dayInYear - 120, 151 - dayInYear)
+      } else if (dayInYear <= 181) {
+        (year, 6, dayInYear - 151, 181 - dayInYear)
+      } else if (dayInYear <= 212) {
+        (year, 7, dayInYear - 181, 212 - dayInYear)
+      } else if (dayInYear <= 243) {
+        (year, 8, dayInYear - 212, 243 - dayInYear)
+      } else if (dayInYear <= 273) {
+        (year, 9, dayInYear - 243, 273 - dayInYear)
+      } else if (dayInYear <= 304) {
+        (year, 10, dayInYear - 273, 304 - dayInYear)
+      } else if (dayInYear <= 334) {
+        (year, 11, dayInYear - 304, 334 - dayInYear)
+      } else {
+        (year, 12, dayInYear - 334, 365 - dayInYear)
       }
-    (year, month, dayOfMonth, daysToMonthEnd)
+    }
   }
 
   /**
