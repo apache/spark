@@ -22,6 +22,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.PlatformDependent
 
 /**
  * A test suite for the bitset portion of the row concatenation.
@@ -91,8 +92,9 @@ class GenerateUnsafeRowJoinerBitsetSuite extends SparkFunSuite {
   private def createUnsafeRow(numFields: Int): UnsafeRow = {
     val row = new UnsafeRow
     val sizeInBytes = numFields * 8 + ((numFields + 63) / 64) * 8
-    val buf = new Array[Byte](sizeInBytes)
-    row.pointTo(buf, numFields, sizeInBytes)
+    val offset = numFields * 8
+    val buf = new Array[Byte](sizeInBytes + offset)
+    row.pointTo(buf, PlatformDependent.BYTE_ARRAY_OFFSET + offset, numFields, sizeInBytes)
     row
   }
 
@@ -133,6 +135,7 @@ class GenerateUnsafeRowJoinerBitsetSuite extends SparkFunSuite {
          |input1: ${set1.mkString}
          |input2: ${set2.mkString}
          |output: ${out.mkString}
+         |expect: ${set1.mkString}${set2.mkString}
        """.stripMargin
     }
 
