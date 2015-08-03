@@ -499,9 +499,9 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void testTotalMemoryConsumption() {
-    final long recordLengthBytes = 32;
+    final long recordLengthBytes = 24;
     final long pageSizeBytes = 256 + 8; // 8 bytes for end-of-page marker
-    final long numRecordsPerPage = pageSizeBytes / recordLengthBytes;
+    final long numRecordsPerPage = (pageSizeBytes - 8) / recordLengthBytes;
     final BytesToBytesMap map = new BytesToBytesMap(
       taskMemoryManager, shuffleMemoryManager, 1024, pageSizeBytes);
 

@@ -505,7 +505,7 @@ public final class BytesToBytesMap {
       // Here, we'll copy the data into our data pages. Because we only store a relative offset from
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
-      // (8 byte key length) (key) (8 byte value length) (value)
+      // (8 byte key length) (key) (value)
       final long requiredSize = 8 + keyLengthBytes + valueLengthBytes;
 
       // --- Figure out where to insert the new record ---------------------------------------------
