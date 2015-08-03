@@ -134,7 +134,7 @@ class KinesisStreamSuite extends KinesisFunSuite
     ssc.stop(stopSparkContext = false)
   }
 
-  testIfEnabled("recovery") {
+  testIfEnabled("failure recovery") {
     val sparkConf = new SparkConf().setMaster("local[4]").setAppName(this.getClass.getSimpleName)
     val checkpointDir = Utils.createTempDir().getAbsolutePath
 
@@ -142,43 +142,62 @@ class KinesisStreamSuite extends KinesisFunSuite
     ssc.checkpoint(checkpointDir)
 
     val awsCredentials = KinesisTestUtils.getAWSCredentials()
+    val collectedData = new mutable.HashMap[Time, (Array[SequenceNumberRanges], Seq[Int])]
+      with mutable.SynchronizedMap[Time, (Array[SequenceNumberRanges], Seq[Int])]
 
-    val stream = KinesisUtils.createStream(ssc, appName, testUtils.streamName,
+    val kinesisStream = KinesisUtils.createStream(ssc, appName, testUtils.streamName,
       testUtils.endpointUrl, testUtils.regionName, InitialPositionInStream.LATEST,
       Seconds(10), StorageLevel.MEMORY_ONLY,
       awsCredentials.getAWSAccessKeyId, awsCredentials.getAWSSecretKey)
 
-    val collected = new mutable.HashMap[Time, Seq[Int]] with mutable.SynchronizedMap[Time, Seq[Int]]
-    val mappedStream = stream.map { bytes => new String(bytes).toInt }
-    val windowedStream = mappedStream.window(Seconds(60))
-    windowedStream.foreachRDD((rdd: RDD[Int], time: Time) => {
-      collected(time) = rdd.collect().toSeq
+    // Verify that the generated RDDs are KinesisBackedBlockRDDs, and collect the data in each batch
+    kinesisStream.foreachRDD((rdd: RDD[Array[Byte]], time: Time) => {
+      val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD]
+      val data = rdd.map { bytes => new String(bytes).toInt }.collect().toSeq
+      collectedData(time) = (kRdd.arrayOfseqNumberRanges, data)
     })
 
     ssc.remember(Minutes(60)) // remember all the batches so that they are all saved in checkpoint
     ssc.start()
 
-    def numBatchesWithData: Int = collected.count(_._2.nonEmpty)
+    def numBatchesWithData: Int = collectedData.count(_._2._2.nonEmpty)
 
     def isCheckpointPresent: Boolean = Checkpoint.getCheckpointFiles(checkpointDir).nonEmpty
 
     // Run until there are at least 10 batches with some data in them
-    eventually(timeout(60 seconds), interval(1 second)) {
+    // If this times out because numBatchesWithData is empty, then its likely that foreachRDD
+    // function failed with exceptions, and nothing got added to `collectedData`
+    eventually(timeout(2 minutes), interval(1 seconds)) {
       testUtils.pushData(1 to 5)
       assert(isCheckpointPresent && numBatchesWithData > 10)
     }
-    ssc.stop(stopSparkContext = false)
+    ssc.stop(stopSparkContext = true)  // stop the SparkContext so that the blocks are not reused
 
     // Restart the context from checkpoint and verify whether the
-    logInfo("Restarting form checkpoint")
+    logInfo("Restarting from checkpoint")
     ssc = new StreamingContext(checkpointDir)
     ssc.start()
-    val recoveredWindowedStream =
-      ssc.graph.getOutputStreams().head.dependencies.head.asInstanceOf[DStream[Int]]
-    collected.keySet.foreach { time =>
-      assert(recoveredWindowedStream.getOrCompute(time).get.collect().toSeq === collected(time))
+    val recoveredKinesisStream = ssc.graph.getInputStreams().head
+
+    // Verify that the recomputed RDDs are KinesisBackedBlockRDDs with the same sequence ranges
+    // and return the same data
+    val times = collectedData.keySet
+    times.foreach { time =>
+      val (arrayOfSeqNumRanges, data) = collectedData(time)
+      val rdd = recoveredKinesisStream.getOrCompute(time).get.asInstanceOf[RDD[Array[Byte]]]
+      assert(rdd.isInstanceOf[KinesisBackedBlockRDD])
+
+      // Verify the recovered sequence ranges
+      val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD]
+      assert(kRdd.arrayOfseqNumberRanges.size === arrayOfSeqNumRanges.size)
+      arrayOfSeqNumRanges.zip(kRdd.arrayOfseqNumberRanges).foreach { case (expected, found) =>
+        assert(expected.ranges.toSeq === found.ranges.toSeq)
+      }
+
+      // Verify the recovered data
+      assert(rdd.map { bytes => new String(bytes).toInt }.collect().toSeq === data)
     }
-    ssc.stop(stopSparkContext = false)
+    ssc.stop()
   }
 
 }

@@ -70,7 +70,7 @@ class KinesisBackedBlockRDD(
     regionName: String,
     endpointUrl: String,
     @transient blockIds: Array[BlockId],
-    @transient arrayOfseqNumberRanges: Array[SequenceNumberRanges],
+    @transient private[kinesis] val arrayOfseqNumberRanges: Array[SequenceNumberRanges],
     @transient isBlockIdValid: Array[Boolean] = Array.empty,
     retryTimeoutMs: Int = 10000,
     awsCredentialsOption: Option[SerializableAWSCredentials] = None

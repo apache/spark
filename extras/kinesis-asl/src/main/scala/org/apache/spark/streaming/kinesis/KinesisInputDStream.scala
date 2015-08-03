@@ -43,17 +43,18 @@ private[kinesis] class KinesisInputDStream(
 
     val allBlocksHaveRanges = blockInfos.map { _.metadataOption }.forall(_.nonEmpty)
 
-    if (blockInfos.nonEmpty && allBlocksHaveRanges) {
+    if (allBlocksHaveRanges) {
       val blockIds = blockInfos.map { _.blockId.asInstanceOf[BlockId] }.toArray
       val seqNumRanges =
         blockInfos.map { _.metadataOption.get.asInstanceOf[SequenceNumberRanges] }.toArray
-      logDebug(
-        s"Creating KBBRDD for $time with seq number ranges = ${seqNumRanges.mkString(", ")} ")
+      logDebug(s"Creating KinesisBackedBlockRDD for $time with ${seqNumRanges.size} " +
+          s"seq number ranges: ${seqNumRanges.mkString(", ")} ")
       new KinesisBackedBlockRDD(context.sc, regionName, endpointUrl, blockIds, seqNumRanges)
     } else {
+      // This branch is a fallback and its not expected to enter this branch
       if (blockInfos.nonEmpty) {
-        logWarning("Kinesis sequence number information not present with block metadata, " +
-          "may not be possible to recover from failures")
+        logWarning("Kinesis sequence number information was not present with some block metadata, " +
+          "it may not be possible to recover from failures")
       }
       super.createBlockRDD(time, blockInfos)
     }
