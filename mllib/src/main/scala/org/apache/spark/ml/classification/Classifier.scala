@@ -18,14 +18,13 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.{PredictionModel, PredictorParams, Predictor}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 
 /**
@@ -156,13 +155,5 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * This may be overridden to support thresholds which favor particular labels.
    * @return  predicted label
    */
-  protected def raw2prediction(rawPrediction: Vector): Double = {
-    val modelScores = rawPrediction.toArray.zipWithIndex
-    // Apply thresholding, or use votes if no thresholding
-    val scores = Option(getThresholds).map{thresholds =>
-      modelScores.map{case (score, index) =>
-        (score/thresholds(index), index)
-      }}.getOrElse(modelScores)
-    scores.maxBy(_._1)._2
-  }
+  protected def raw2prediction(rawPrediction: Vector): Double = rawPrediction.argmax
 }

@@ -40,7 +40,7 @@ import org.apache.spark.sql.functions._
  */
 @Experimental
 final class RandomForestClassifier(override val uid: String)
-  extends Classifier[Vector, RandomForestClassifier, RandomForestClassificationModel]
+  extends ProbabilisticClassifier[Vector, RandomForestClassifier, RandomForestClassificationModel]
   with RandomForestParams with TreeClassifierParams {
 
   def this() = this(Identifiable.randomUID("rfc"))
@@ -128,7 +128,7 @@ final class RandomForestClassificationModel private[ml] (
     val numFeatures: Int,
     override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, RandomForestClassificationModel]
-  with TreeEnsembleModel with HasThresholds with Serializable {
+  with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
 
@@ -138,9 +138,6 @@ final class RandomForestClassificationModel private[ml] (
    */
   def this(trees: Array[DecisionTreeClassificationModel], numFeatures: Int, numClasses: Int) =
     this(Identifiable.randomUID("rfc"), trees, numFeatures, numClasses)
-
-  /** @group setParam */
-  def setThresholds(value: Array[Double]): this.type = set(thresholds, value)
 
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
