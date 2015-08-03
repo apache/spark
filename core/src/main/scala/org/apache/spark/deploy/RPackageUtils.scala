@@ -190,19 +190,19 @@ private[deploy] object RPackageUtils extends Logging {
     }
   }
 
-  private def listFilesRecursively(dir: File): Seq[File] = {
+  private def listFilesRecursively(dir: File): Set[File] = {
     if (!dir.exists()) {
-      Seq.empty[File]
+      Set.empty[File]
     } else {
       if (dir.isDirectory) {
         val subDir = dir.listFiles(new FilenameFilter {
           override def accept(dir: File, name: String): Boolean = {
-            !dir.getAbsolutePath.contains("SparkR" + File.separator)
+            !dir.getAbsolutePath.contains("SparkR") && !name.contains(".zip")
           }
         })
-        subDir.flatMap(listFilesRecursively)
+        subDir.flatMap(listFilesRecursively).toSet
       } else {
-        Seq(dir)
+        Set(dir)
       }
     }
   }

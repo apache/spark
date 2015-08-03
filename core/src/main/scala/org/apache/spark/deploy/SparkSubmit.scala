@@ -376,11 +376,11 @@ object SparkSubmit {
         printErrorAndExit(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in YARN mode.")
       }
       val localURI = Utils.resolveURI(rPackageFile.getAbsolutePath)
-      val rExtras = RPackageUtils.zipRLibraries(new File(rPackagePath.get), SPARKR_EXTRAS_ARCHIVE)
-      val extrasURI = Utils.resolveURI(rExtras.getAbsolutePath).toString + "#sparkr-extras"
+      // val rExtras = RPackageUtils.zipRLibraries(new File(rPackagePath.get), SPARKR_EXTRAS_ARCHIVE)
+      // val extrasURI = Utils.resolveURI(rExtras.getAbsolutePath).toString + "#sparkr-extras"
 
       // Assigns a symbol link name "sparkr" to the shipped package.
-      args.archives = mergeFileLists(args.archives, localURI.toString + "#sparkr", extrasURI)
+      args.archives = mergeFileLists(args.archives, localURI.toString + "#sparkr")
     }
 
     // If we're running a R app, set the main class to our specific R runner
