@@ -467,6 +467,7 @@ for binarized_feature, in binarizedFeatures.collect():
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+See the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.feature.PCA) for API details.
 {% highlight scala %}
 import org.apache.spark.ml.feature.PCA
 import org.apache.spark.mllib.linalg.Vectors
@@ -489,11 +490,14 @@ result.show()
 </div>
 
 <div data-lang="java" markdown="1">
+See the [Java API documentation](api/java/org/apache/spark/ml/feature/PCA.html) for API details.
 {% highlight java %}
 import com.google.common.collect.Lists;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.ml.feature.PCA
+import org.apache.spark.ml.feature.PCAModel
 import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.DataFrame;
@@ -526,6 +530,7 @@ result.show();
 </div>
 
 <div data-lang="python" markdown="1">
+See the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.feature.PCA) for API details.
 {% highlight python %}
 from pyspark.ml.feature import PCA
 from pyspark.mllib.linalg import Vectors
