@@ -307,6 +307,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     It supports both binary and multiclass labels, as well as both continuous and categorical
     features.
 
+    >>> import numpy
     >>> from numpy import allclose
     >>> from pyspark.mllib.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
@@ -324,10 +325,10 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
-    >>> result.probability
-    DenseVector([0.66..., 0.33...])
-    >>> result.rawPrediction
-    DenseVector([2.0, 1.0])
+    >>> numpy.argmax(result.probability)
+    0
+    >>> numpy.argmax(result.rawPrediction)
+    0
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
