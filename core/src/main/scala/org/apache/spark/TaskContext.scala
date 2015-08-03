@@ -59,6 +59,14 @@ object TaskContext {
    * Unset the thread local TaskContext. Internal to Spark.
    */
   protected[spark] def unset(): Unit = taskContext.remove()
+
+  /**
+   * Return an empty task context that is not actually used.
+   * Internal use only.
+   */
+  private[spark] def empty(): TaskContext = {
+    new TaskContextImpl(0, 0, 0, 0, null, null)
+  }
 }
 
 
