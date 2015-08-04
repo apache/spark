@@ -78,10 +78,10 @@ class ReliableKafkaReceiver[
   private var blockOffsetMap: ConcurrentHashMap[StreamBlockId, Map[TopicAndPartition, Long]] = null
 
   /**
-   * Manage the BlockGenerator in receiver itself for better managing block store and offset
-   * commit.
+   * A BlockGenerator managed by the receiver itself for more control over storing blocks and
+   * committing offsets.
    */
-  private var blockGenerator: BlockGenerator = null
+  private lazy val blockGenerator = supervisor.createBlockGenerator(new GeneratedBlockHandler)
 
   /** Thread pool running the handlers for receiving message from multiple topics and partitions. */
   private var messageHandlerThreadPool: ThreadPoolExecutor = null
@@ -94,9 +94,6 @@ class ReliableKafkaReceiver[
 
     // Initialize the stream block id / offset snapshot hash map.
     blockOffsetMap = new ConcurrentHashMap[StreamBlockId, Map[TopicAndPartition, Long]]()
-
-    // Initialize the block generator for storing Kafka message.
-    blockGenerator = new BlockGenerator(new GeneratedBlockHandler, streamId, conf)
 
     if (kafkaParams.contains(AUTO_OFFSET_COMMIT) && kafkaParams(AUTO_OFFSET_COMMIT) == "true") {
       logWarning(s"$AUTO_OFFSET_COMMIT should be set to false in ReliableKafkaReceiver, " +
@@ -123,8 +120,6 @@ class ReliableKafkaReceiver[
 
     messageHandlerThreadPool = ThreadUtils.newDaemonFixedThreadPool(
       topics.values.sum, "KafkaMessageHandler")
-
-    blockGenerator.start()
 
     val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
       .newInstance(consumerConfig.props)
@@ -158,11 +153,6 @@ class ReliableKafkaReceiver[
     if (zkClient != null) {
       zkClient.close()
       zkClient = null
-    }
-
-    if (blockGenerator != null) {
-      blockGenerator.stop()
-      blockGenerator = null
     }
 
     if (topicPartitionOffsetMap != null) {

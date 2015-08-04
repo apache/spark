@@ -69,6 +69,10 @@ private[streaming] trait BlockGeneratorListener {
  * named blocks at regular intervals. This class starts two threads,
  * one to periodically start a new batch and prepare the previous batch of as a block,
  * the other to push the blocks into the block manager.
+ *
+ * Note: Do not create BlockGenerator instances directly inside receivers. Use
+ * `ReceiverSupervisor.createBlockGenerator` to create a BlockGenerator and use it.
+ *
  */
 private[streaming] class BlockGenerator(
     listener: BlockGeneratorListener,

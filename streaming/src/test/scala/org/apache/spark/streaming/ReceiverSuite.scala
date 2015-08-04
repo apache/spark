@@ -348,6 +348,11 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     }
 
     override protected def onReceiverStart(): Boolean = true
+
+    override def createBlockGenerator(
+        blockGeneratorListener: BlockGeneratorListener): BlockGenerator = {
+      null
+    }
   }
 
   /**

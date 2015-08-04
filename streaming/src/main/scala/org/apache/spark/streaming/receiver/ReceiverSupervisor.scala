@@ -60,7 +60,7 @@ private[streaming] abstract class ReceiverSupervisor(
   private val defaultRestartDelay = conf.getInt("spark.streaming.receiverRestartDelay", 2000)
 
   /** The current maximum rate limit for this receiver. */
-  private[streaming] def getCurrentRateLimit: Option[Long] = None
+  private[streaming] def getCurrentRateLimit: Long = Long.MaxValue
 
   /** Exception associated with the stopping of the receiver */
   @volatile protected var stoppingError: Throwable = null
@@ -92,13 +92,27 @@ private[streaming] abstract class ReceiverSupervisor(
       optionalBlockId: Option[StreamBlockId]
     )
 
+  /**
+   * Create a custom [[BlockGenerator]] that the receiver implementation can directly control
+   * using their provided [[BlockGeneratorListener]].
+   */
+  def createBlockGenerator(blockGeneratorListener: BlockGeneratorListener): BlockGenerator
+
   /** Report errors. */
   def reportError(message: String, throwable: Throwable)
 
-  /** Called when supervisor is started */
+  /**
+   * Called when supervisor is started.
+   * Note that this must be called before the receiver.onStart() is called to ensure
+   * things like [[BlockGenerator]]s are started before the receiver starts sending data.
+   */
   protected def onStart() { }
 
-  /** Called when supervisor is stopped */
+  /**
+   * Called when supervisor is stopped.
+   * Note that this must be called after the receiver.onStop() is called to ensure
+   * things like [[BlockGenerator]]s are cleaned up after the receiver stops sending data.
+   */
   protected def onStop(message: String, error: Option[Throwable]) { }
 
   /** Called when receiver is started. Return true if the driver accepts us */
