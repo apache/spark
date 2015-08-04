@@ -1605,7 +1605,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
   test("aggregation with codegen updates peak execution memory") {
     withSQLConf(
-        (SQLConf.CODEGEN_ENABLED.key, "true"),
+        (SQLConf.TUNGSTEN_ENABLED.key, "true"),
         (SQLConf.USE_SQL_AGGREGATE2.key, "false")) {
       val sc = sqlContext.sparkContext
       AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "aggregation with codegen") {
