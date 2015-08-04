@@ -945,8 +945,7 @@ private[ui] class TaskDataSource(
       shuffleRead,
       shuffleWrite,
       bytesSpilled,
-      errorMessage.getOrElse("")
-    )
+      errorMessage.getOrElse(""))
   }
 
   /**
@@ -1160,8 +1159,7 @@ private[ui] class TaskPagedTable(
     currentTime,
     pageSize,
     sortColumn,
-    desc
-  )
+    desc)
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")

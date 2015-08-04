@@ -20,10 +20,10 @@ package org.apache.spark.ui.storage
 import java.net.URLEncoder
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{Unparsed, Node}
+import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.status.api.v1.{AllRDDResource, RDDDataDistribution, RDDPartitionInfo}
-import org.apache.spark.ui.{PagedTable, PagedDataSource, UIUtils, WebUIPage}
+import org.apache.spark.ui.{PagedDataSource, PagedTable, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
@@ -44,7 +44,6 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     val blockSortDesc = Option(parameterBlockSortDesc).map(_.toBoolean).getOrElse(false)
     val blockPageSize = Option(parameterBlockPageSize).map(_.toInt).getOrElse(100)
 
-
     val rddId = parameterId.toInt
     val rddStorageInfo = AllRDDResource.getRDDStorageInfo(rddId, listener, includeDetails = true)
       .getOrElse {
@@ -63,8 +62,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
         rddStorageInfo.partitions.get,
         blockPageSize,
         blockSortColumn,
-        blockSortDesc
-      )
+        blockSortDesc)
       (_blockTable, _blockTable.table(blockPage))
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
@@ -73,16 +71,17 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
 
     val jsForScrollingDownToBlockTable =
       <script>
-        {Unparsed {
-        """
-          |$(function() {
-          |  if (/.*&block.sort=.*$/.test(location.search)) {
-          |    var topOffset = $("#blocks-section").offset().top;
-          |    $("html,body").animate({scrollTop: topOffset}, 200);
-          |  }
-          |});
-        """.stripMargin
-      }
+        {
+          Unparsed {
+            """
+              |$(function() {
+              |  if (/.*&block.sort=.*$/.test(location.search)) {
+              |    var topOffset = $("#blocks-section").offset().top;
+              |    $("html,body").animate({scrollTop: topOffset}, 200);
+              |  }
+              |});
+            """.stripMargin
+          }
         }
       </script>
 
@@ -176,12 +175,11 @@ private[ui] class BlockDataSource(
 
   private def blockRow(rddPartition: RDDPartitionInfo): BlockTableRowData = {
     BlockTableRowData(
-    rddPartition.blockName,
-    rddPartition.storageLevel,
-    rddPartition.memoryUsed,
-    rddPartition.diskUsed,
-    rddPartition.executors.mkString(" ")
-    )
+      rddPartition.blockName,
+      rddPartition.storageLevel,
+      rddPartition.memoryUsed,
+      rddPartition.diskUsed,
+      rddPartition.executors.mkString(" "))
   }
 
   /**
@@ -234,8 +232,7 @@ private[ui] class BlockPagedTable(
     rddPartitions,
     pageSize,
     sortColumn,
-    desc
-  )
+    desc)
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
