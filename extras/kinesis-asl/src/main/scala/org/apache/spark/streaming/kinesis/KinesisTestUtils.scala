@@ -38,7 +38,7 @@ import org.apache.spark.Logging
  */
 private class KinesisTestUtils extends Logging {
 
-  val endpointUrl = "https://kinesis.us-west-2.amazonaws.com"
+  val endpointUrl = KinesisTestUtils.endpointUrl
   val regionName = RegionUtils.getRegionByEndpoint(endpointUrl).getName()
   val streamShardCount = 2
 
@@ -179,9 +179,32 @@ private class KinesisTestUtils extends Logging {
 
 private[kinesis] object KinesisTestUtils {
 
-  val envVarName = "ENABLE_KINESIS_TESTS"
+  val envVarNameForEnablingTests = "ENABLE_KINESIS_TESTS"
+  val endVarNameForEndpoint = "KINESIS_TEST_ENDPOINT_URL"
+  val defaultEndpointUrl = "https://kinesis.us-west-2.amazonaws.com"
 
-  val shouldRunTests = sys.env.get(envVarName) == Some("1")
+  lazy val shouldRunTests = {
+    val isEnvSet = sys.env.get(envVarNameForEnablingTests) == Some("1")
+    if (isEnvSet) {
+      println(
+        s"""
+          |Kinesis tests that actually send data has been enabled by setting the environment
+          |variable $envVarNameForEnablingTests to 1. This will create Kinesis Streams and
+          |DynamoDB tables in AWS. Please be aware that this may incur some AWS costs.
+          |By default, the tests use the endpoint URL $defaultEndpointUrl to create Kinesis streams.
+          |To change this endpoint URL to a different region, you can set the environment variable
+          |$endVarNameForEndpoint to the desired endpoint URL
+          |(e.g. $endVarNameForEndpoint="https://kinesis.us-west-2.amazonaws.com").
+        """.stripMargin)
+    }
+    isEnvSet
+  }
+
+  lazy val endpointUrl = {
+    val url = sys.env.getOrElse(endVarNameForEndpoint, defaultEndpointUrl)
+    println(s"Using endpoint URL $url for creating Kinesis streams for tests.")
+    url
+  }
 
   def isAWSCredentialsPresent: Boolean = {
     Try { new DefaultAWSCredentialsProviderChain().getCredentials() }.isSuccess
@@ -193,7 +216,13 @@ private[kinesis] object KinesisTestUtils {
     Try { new DefaultAWSCredentialsProviderChain().getCredentials() } match {
       case Success(cred) => cred
       case Failure(e) =>
-        throw new Exception("Kinesis tests enabled, but could get not AWS credentials")
+        throw new Exception(
+          s"""
+             |Kinesis tests enabled using environment variable $envVarNameForEnablingTests
+             |but could not find AWS credentials. Please follow instructions in AWS documentation
+             |to set the credentials in your system such that the DefaultAWSCredentialsProviderChain
+             |can find the credentials.
+           """.stripMargin)
     }
   }
 }
