@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
-import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.util.collection.{BitSet, CompactBuffer}
 
 /**
  * :: DeveloperApi ::
@@ -105,7 +105,7 @@ case class SortMergeJoin(
 
     streamResults.zipPartitions(bufferResults) ( (streamedIter, bufferedIter) => {
       // standard null rows
-      val streamedNullRow = InternalRow.fromSeq(Seq.fill(bufferedPlan.output.length)(null))
+      val streamedNullRow = InternalRow.fromSeq(Seq.fill(streamedPlan.output.length)(null))
       val bufferedNullRow = InternalRow.fromSeq(Seq.fill(bufferedPlan.output.length)(null))
       new Iterator[InternalRow] {
         // An ordering that can be used to compare keys from both sides.
@@ -124,22 +124,80 @@ case class SortMergeJoin(
         // that do not have a corresponding match. So we need to mark which side it is. True means
         // streamed side not have match, and False means the buffered side. Only set when needed.
         private[this] var continueStreamed: Boolean = _
-        // when we do full outer join and find all matched keys, we put a null stream row into
-        // this to tell next() that we need to combine null stream row with all rows that not match
-        // conditions.
-        private[this] var secondStreamedElement: InternalRow = _
-        // Stores rows that match the join key but not match conditions.
-        // These rows will be useful when we are doing Full Outer Join.
-        private[this] var secondBufferedMatches: CompactBuffer[InternalRow] = _
+        private[this] var streamNullGenerated: Boolean = false
+        // Tracks if each element in bufferedMatches have a matched streamedElement.
+        private[this] var bitSet: BitSet = _
+        // marks if the found result has been fetched.
+        private[this] var found: Boolean = false
+        private[this] var bufferNullGenerated: Boolean = false
 
         // initialize iterator
         initialize()
 
-        override final def hasNext: Boolean = nextMatchingPair()
+        override final def hasNext: Boolean = {
+          val matching = nextMatchingBlock()
+          if (matching && !isBufferEmpty(bufferedMatches)) {
+            // The buffer stores all rows that match key, but condition may not be matched.
+            // If none of rows in the buffer match condition, we'll fetch next matching block.
+            findNextInBuffer() || hasNext
+          } else {
+            matching
+          }
+        }
+
+        /**
+         * Run down the current `bufferedMatches` to find rows that match conditions.
+         * If `joinType` is not `Inner`, we will use `bufferNullGenerated` to mark if
+         * we need to build a bufferedNullRow for result.
+         * If `joinType` is `FullOuter`, we will use `streamNullGenerated` to mark if
+         * a buffered element need to join with a streamedNullRow.
+         * The method can be called multiple times since `found` serves as a guardian.
+         */
+        def findNextInBuffer(): Boolean = {
+          while (!found && streamedElement != null
+            && keyOrdering.compare(streamedKey, matchKey) == 0) {
+            while (bufferedPosition < bufferedMatches.size && !boundCondition(
+              smartJoinRow(streamedElement, bufferedMatches(bufferedPosition)))) {
+              bufferedPosition += 1
+            }
+            if (bufferedPosition == bufferedMatches.size) {
+              if (joinType == Inner || bufferNullGenerated) {
+                bufferNullGenerated = false
+                bufferedPosition = 0
+                fetchStreamed()
+              } else {
+                found = true
+              }
+            } else {
+              // mark as true so we don't generate null row for streamed row.
+              bufferNullGenerated = true
+              bitSet.set(bufferedPosition)
+              found = true
+            }
+          }
+          if (!found) {
+            if (joinType == FullOuter && !streamNullGenerated) {
+              streamNullGenerated = true
+            }
+            if (streamNullGenerated) {
+              while (bufferedPosition < bufferedMatches.size && bitSet.get(bufferedPosition)) {
+                bufferedPosition += 1
+              }
+              if (bufferedPosition < bufferedMatches.size) {
+                found = true
+              }
+            }
+          }
+          if (!found) {
+            stop = false
+            bufferedMatches = null
+          }
+          found
+        }
 
         override final def next(): InternalRow = {
           if (hasNext) {
-            if (bufferedMatches == null || bufferedMatches.size == 0) {
+            if (isBufferEmpty(bufferedMatches)) {
               // we just found a row with no join match and we are here to produce a row
               // with this row and a standard null row from the other side.
               if (continueStreamed) {
@@ -153,26 +211,22 @@ case class SortMergeJoin(
               }
             } else {
               // we are using the buffered right rows and run down left iterator
-              val joinedRow = smartJoinRow(streamedElement, bufferedMatches(bufferedPosition))
-              bufferedPosition += 1
-              if (bufferedPosition >= bufferedMatches.size) {
-                bufferedPosition = 0
-                if (joinType != FullOuter || secondStreamedElement == null) {
-                  fetchStreamed()
-                  if (streamedElement == null || keyOrdering.compare(streamedKey, matchKey) != 0) {
-                    stop = false
-                    bufferedMatches = null
-                  }
+              val joinedRow = if (streamNullGenerated) {
+                val ret = smartJoinRow(streamedNullRow, bufferedMatches(bufferedPosition))
+                bufferedPosition += 1
+                ret
+              } else {
+                if (bufferedPosition == bufferedMatches.size && !bufferNullGenerated) {
+                  val ret = smartJoinRow(streamedElement, bufferedNullRow)
+                  bufferNullGenerated = true
+                  ret
                 } else {
-                  // in FullOuter join and the first time we finish the match buffer,
-                  // we still want to generate all rows with streamed null row and buffered
-                  // rows that match the join key but not the conditions.
-                  streamedElement = secondStreamedElement
-                  bufferedMatches = secondBufferedMatches
-                  secondStreamedElement = null
-                  secondBufferedMatches = null
+                  val ret = smartJoinRow(streamedElement, bufferedMatches(bufferedPosition))
+                  bufferedPosition += 1
+                  ret
                 }
               }
+              found = false
               joinedRow
             }
           } else {
@@ -211,18 +265,16 @@ case class SortMergeJoin(
         }
 
         /**
-         * Searches the right iterator for the next rows that have matches in left side, and store
-         * them in a buffer.
-         * When this is not a Inner join, we will also return true when we get a row with no match
-         * on the other side. This search will jump out every time from the same position until
-         * `next()` is called.
+         * Searches the right iterator for the next rows that have matches in left side (only check
+         * key match), and stores them in a buffer.
+         * This search will jump out every time from the same position until `next()` is called.
          * Unless we call `next()`, this function can be called multiple times, with the same
          * return value and result as running it once, since we have set guardians in it.
          *
          * @return true if the search is successful, and false if the right iterator runs out of
          *         tuples.
          */
-        private def nextMatchingPair(): Boolean = {
+        private def nextMatchingBlock(): Boolean = {
           if (!stop && streamedElement != null) {
             // step 1: run both side to get the first match pair
             while (!stop && streamedElement != null && bufferedElement != null) {
@@ -253,38 +305,25 @@ case class SortMergeJoin(
             }
             // step 2: run down the buffered side to put all matched rows in a buffer
             bufferedMatches = new CompactBuffer[InternalRow]()
-            secondBufferedMatches = new CompactBuffer[InternalRow]()
             if (stop) {
               stop = false
               // iterate the right side to buffer all rows that matches
               // as the records should be ordered, exit when we meet the first that not match
               while (!stop) {
-                if (boundCondition(joinRow(streamedElement, bufferedElement))) {
-                  bufferedMatches += bufferedElement
-                } else if (joinType == FullOuter) {
-                  bufferedMatches += bufferedNullRow
-                  secondBufferedMatches += bufferedElement
-                }
+                bufferedMatches += bufferedElement
                 fetchBuffered()
                 stop =
                   keyOrdering.compare(streamedKey, bufferedKey) != 0 || bufferedElement == null
               }
-              if (bufferedMatches.size == 0 && joinType != Inner) {
-                bufferedMatches += bufferedNullRow
-              }
-              if (bufferedMatches.size > 0) {
-                bufferedPosition = 0
-                matchKey = streamedKey
-                // secondBufferedMatches.size cannot be larger than bufferedMatches
-                if (secondBufferedMatches.size > 0) {
-                  secondStreamedElement = streamedNullRow
-                }
-              }
+              bufferedPosition = 0
+              streamNullGenerated = false
+              bitSet = new BitSet(bufferedMatches.size)
+              matchKey = streamedKey
             }
           }
           // `stop` is false iff left or right has finished iteration in step 1.
           // if we get into step 2, `stop` cannot be false.
-          if (!stop && (bufferedMatches == null || bufferedMatches.size == 0)) {
+          if (!stop && isBufferEmpty(bufferedMatches)) {
             if (streamedElement == null && bufferedElement != null) {
               // streamedElement == null but bufferedElement != null
               if (joinType == FullOuter) {
@@ -299,8 +338,11 @@ case class SortMergeJoin(
               }
             }
           }
-          bufferedMatches != null && bufferedMatches.size > 0
+          !isBufferEmpty(bufferedMatches)
         }
+
+        private def isBufferEmpty(buffer: CompactBuffer[InternalRow]): Boolean =
+          buffer == null || buffer.isEmpty
       }
     })
   }
