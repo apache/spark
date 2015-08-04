@@ -34,7 +34,6 @@ from pyspark.sql.column import Column, _to_java_column, _to_seq
 
 __all__ = [
     'array',
-    'array_contains',
     'approxCountDistinct',
     'bin',
     'coalesce',

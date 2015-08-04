@@ -121,7 +121,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
  * Checks if the array (left) has the element (right)
  */
 case class ArrayContains(left: Expression, right: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = BooleanType
 
@@ -134,13 +134,14 @@ case class ArrayContains(left: Expression, right: Expression)
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    inputTypes.size match {
-      case 0 => TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
-      case _ => left.dataType match {
-        case n @ ArrayType(element, _) => super.checkInputDataTypes()
-        case _ => TypeCheckResult.TypeCheckFailure(
-          "Arguments must be an array followed by a value of same type as the array members")
-      }
+    if (right.dataType == NullType) {
+      TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
+    } else if (!left.dataType.isInstanceOf[ArrayType]
+      || left.dataType.asInstanceOf[ArrayType].elementType != right.dataType) {
+      TypeCheckResult.TypeCheckFailure(
+        "Arguments must be an array followed by a value of same type as the array members")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
     }
   }
 
@@ -155,7 +156,7 @@ case class ArrayContains(left: Expression, right: Expression)
       if (value == null) {
         false
       } else {
-        arr.asInstanceOf[Seq[Any]].contains(value)
+        arr.asInstanceOf[ArrayData].toArray[Any](right.dataType).contains(value)
       }
     }
   }
@@ -163,16 +164,23 @@ case class ArrayContains(left: Expression, right: Expression)
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val arrGen = left.gen(ctx)
     val elementGen = right.gen(ctx)
+    val i = ctx.freshName("i")
+    val getValue = ctx.getValue(arrGen.primitive, right.dataType, i)
     s"""
-        ${arrGen.code}
-        boolean ${ev.isNull} = false;
-        boolean ${ev.primitive} = false;
-        if (!${arrGen.isNull}) {
-          ${elementGen.code}
-          if (!${elementGen.isNull}) {
-            ${ev.primitive} = ${arrGen.primitive}.contains(${elementGen.primitive});
+      ${arrGen.code}
+      boolean ${ev.isNull} = false;
+      boolean ${ev.primitive} = false;
+      if (!${arrGen.isNull}) {
+        ${elementGen.code}
+        if (!${elementGen.isNull}) {
+          for (int $i = 0; $i < ${arrGen.primitive}.numElements(); $i ++) {
+            if (${ctx.genEqual(right.dataType, elementGen.primitive, getValue)}) {
+              ${ev.primitive} = true;
+              break;
+            }
           }
         }
+      }
      """
   }
 
