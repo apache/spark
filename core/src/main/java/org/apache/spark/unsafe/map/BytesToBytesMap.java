@@ -232,6 +232,11 @@ public final class BytesToBytesMap {
     private Object pageBaseObject;
     private long offsetInPage;
 
+    // If this iterator destructive or not. When it is true, it frees each page as it moves onto
+    // next one. By defauly it is false.
+    private boolean destructive = false;
+    private BytesToBytesMap map;
+
     private BytesToBytesMapIterator(
         int numRecords, Iterator<MemoryBlock> dataPagesIterator, Location loc) {
       this.numRecords = numRecords;
@@ -242,7 +247,18 @@ public final class BytesToBytesMap {
       }
     }
 
+    public BytesToBytesMapIterator setDestructive(boolean dt, BytesToBytesMap map) {
+      this.destructive = dt;
+      this.map = map;
+      return this;
+    }
+
     private void advanceToNextPage() {
+      if (destructive) {
+        dataPagesIterator.remove();
+        this.map.taskMemoryManager.freePage(currentPage);
+        this.map.shuffleMemoryManager.release(currentPage.size());
+      }
       currentPage = dataPagesIterator.next();
       pageBaseObject = currentPage.getBaseObject();
       offsetInPage = currentPage.getBaseOffset();
@@ -250,12 +266,31 @@ public final class BytesToBytesMap {
 
     @Override
     public boolean hasNext() {
-      return currentRecordNumber != numRecords;
+      boolean ret = currentRecordNumber != numRecords;
+      if (destructive && !ret) {
+        // Remove latest page.
+        dataPagesIterator.remove();
+        this.map.taskMemoryManager.freePage(currentPage);
+        this.map.shuffleMemoryManager.release(currentPage.size());
+        this.map.bitset = null;
+        this.map.longArray = null;
+        assert(this.map.dataPages.isEmpty());
+      }
+      return ret;
     }
 
     @Override
     public Location next() {
       int totalLength = PlatformDependent.UNSAFE.getInt(pageBaseObject, offsetInPage);
+      if (destructive) {
+        MemoryLocation keyAddress = loc.getKeyAddress();
+        Object keyBaseObject = keyAddress.getBaseObject();
+        long keyBaseOffset = keyAddress.getBaseOffset();
+
+        int hashcode = HASHER.hashUnsafeWords(keyBaseObject, keyBaseOffset, loc.getKeyLength());
+        int pos = hashcode & map.mask;
+        this.map.bitset.unset(pos);
+      }
       if (totalLength == END_OF_PAGE_MARKER) {
         advanceToNextPage();
         totalLength = PlatformDependent.UNSAFE.getInt(pageBaseObject, offsetInPage);
@@ -282,6 +317,19 @@ public final class BytesToBytesMap {
    */
   public BytesToBytesMapIterator iterator() {
     return new BytesToBytesMapIterator(numElements, dataPages.iterator(), loc);
+  }
+
+  /**
+   * Returns an iterator for iterating over the entries of this map and sets if it is destructive.
+   *
+   * For efficiency, all calls to `next()` will return the same {@link Location} object.
+   *
+   * If any other lookups or operations are performed on this map while iterating over it, including
+   * `lookup()`, the behavior of the returned iterator is undefined.
+   */
+  public BytesToBytesMapIterator iterator(boolean destructive) {
+    BytesToBytesMapIterator iter = new BytesToBytesMapIterator(numElements, dataPages.iterator(), loc);
+    return iter.setDestructive(destructive, this);
   }
 
   /**
