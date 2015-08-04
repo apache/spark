@@ -19,8 +19,6 @@ package org.apache.spark.deploy
 
 import java.io._
 
-import org.apache.spark.api.r.RUtils
-
 import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.base.Charsets.UTF_8
