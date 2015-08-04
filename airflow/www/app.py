@@ -706,7 +706,7 @@ class Airflow(BaseView):
     @expose('/logout')
     def logout(self):
         logout_user()
-        return redirect('/admin/dagmodel/')
+        return redirect(url_for('admin.index'))
 
     @expose('/rendered')
     @login_required
