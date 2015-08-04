@@ -18,12 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.unsafe.types.UTF8String
-
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
@@ -46,25 +43,26 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def nullable: Boolean = false
 
   override def eval(input: InternalRow): Any = {
-    children.map(_.eval(input))
+    new GenericArrayData(children.map(_.eval(input)).toArray)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val arraySeqClass = classOf[mutable.ArraySeq[Any]].getName
+    val arrayClass = classOf[GenericArrayData].getName
     s"""
-      boolean ${ev.isNull} = false;
-      $arraySeqClass<Object> ${ev.primitive} = new $arraySeqClass<Object>(${children.size});
+      final boolean ${ev.isNull} = false;
+      final Object[] values = new Object[${children.size}];
     """ +
       children.zipWithIndex.map { case (e, i) =>
         val eval = e.gen(ctx)
         eval.code + s"""
           if (${eval.isNull}) {
-            ${ev.primitive}.update($i, null);
+            values[$i] = null;
           } else {
-            ${ev.primitive}.update($i, ${eval.primitive});
+            values[$i] = ${eval.primitive};
           }
          """
-      }.mkString("\n")
+      }.mkString("\n") +
+      s"final ${ctx.javaType(dataType)} ${ev.primitive} = new $arrayClass(values);"
   }
 
   override def prettyName: String = "array"

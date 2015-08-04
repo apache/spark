@@ -187,15 +187,15 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
         val row = new GenericMutableRow(4)
         row.setByte(0, 0)
         row.setInt(1, size)
-        row.update(2, indices.toSeq)
-        row.update(3, values.toSeq)
+        row.update(2, new GenericArrayData(indices.map(_.asInstanceOf[Any])))
+        row.update(3, new GenericArrayData(values.map(_.asInstanceOf[Any])))
         row
       case DenseVector(values) =>
         val row = new GenericMutableRow(4)
         row.setByte(0, 1)
         row.setNullAt(1)
         row.setNullAt(2)
-        row.update(3, values.toSeq)
+        row.update(3, new GenericArrayData(values.map(_.asInstanceOf[Any])))
         row
     }
   }
@@ -209,14 +209,11 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
         tpe match {
           case 0 =>
             val size = row.getInt(1)
-            val indices =
-              row.getAs[Seq[Int]](2, ArrayType(IntegerType, containsNull = false)).toArray
-            val values =
-              row.getAs[Seq[Double]](3, ArrayType(DoubleType, containsNull = false)).toArray
+            val indices = row.getArray(2).toIntArray()
+            val values = row.getArray(3).toDoubleArray()
             new SparseVector(size, indices, values)
           case 1 =>
-            val values =
-              row.getAs[Seq[Double]](3, ArrayType(DoubleType, containsNull = false)).toArray
+            val values = row.getArray(3).toDoubleArray()
             new DenseVector(values)
         }
     }

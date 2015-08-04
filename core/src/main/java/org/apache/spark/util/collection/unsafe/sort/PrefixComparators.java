@@ -28,9 +28,11 @@ public class PrefixComparators {
   private PrefixComparators() {}
 
   public static final StringPrefixComparator STRING = new StringPrefixComparator();
-  public static final IntegralPrefixComparator INTEGRAL = new IntegralPrefixComparator();
-  public static final FloatPrefixComparator FLOAT = new FloatPrefixComparator();
+  public static final StringPrefixComparatorDesc STRING_DESC = new StringPrefixComparatorDesc();
+  public static final LongPrefixComparator LONG = new LongPrefixComparator();
+  public static final LongPrefixComparatorDesc LONG_DESC = new LongPrefixComparatorDesc();
   public static final DoublePrefixComparator DOUBLE = new DoublePrefixComparator();
+  public static final DoublePrefixComparatorDesc DOUBLE_DESC = new DoublePrefixComparatorDesc();
 
   public static final class StringPrefixComparator extends PrefixComparator {
     @Override
@@ -38,36 +40,30 @@ public class PrefixComparators {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
 
-    public long computePrefix(UTF8String value) {
+    public static long computePrefix(UTF8String value) {
       return value == null ? 0L : value.getPrefix();
     }
   }
 
-  /**
-   * Prefix comparator for all integral types (boolean, byte, short, int, long).
-   */
-  public static final class IntegralPrefixComparator extends PrefixComparator {
+  public static final class StringPrefixComparatorDesc extends PrefixComparator {
+    @Override
+    public int compare(long bPrefix, long aPrefix) {
+      return UnsignedLongs.compare(aPrefix, bPrefix);
+    }
+  }
+
+  public static final class LongPrefixComparator extends PrefixComparator {
     @Override
     public int compare(long a, long b) {
       return (a < b) ? -1 : (a > b) ? 1 : 0;
     }
-
-    public final long NULL_PREFIX = Long.MIN_VALUE;
   }
 
-  public static final class FloatPrefixComparator extends PrefixComparator {
+  public static final class LongPrefixComparatorDesc extends PrefixComparator {
     @Override
-    public int compare(long aPrefix, long bPrefix) {
-      float a = Float.intBitsToFloat((int) aPrefix);
-      float b = Float.intBitsToFloat((int) bPrefix);
-      return Utils.nanSafeCompareFloats(a, b);
+    public int compare(long b, long a) {
+      return (a < b) ? -1 : (a > b) ? 1 : 0;
     }
-
-    public long computePrefix(float value) {
-      return Float.floatToIntBits(value) & 0xffffffffL;
-    }
-
-    public final long NULL_PREFIX = computePrefix(Float.NEGATIVE_INFINITY);
   }
 
   public static final class DoublePrefixComparator extends PrefixComparator {
@@ -78,10 +74,21 @@ public class PrefixComparators {
       return Utils.nanSafeCompareDoubles(a, b);
     }
 
-    public long computePrefix(double value) {
+    public static long computePrefix(double value) {
       return Double.doubleToLongBits(value);
     }
+  }
 
-    public final long NULL_PREFIX = computePrefix(Double.NEGATIVE_INFINITY);
+  public static final class DoublePrefixComparatorDesc extends PrefixComparator {
+    @Override
+    public int compare(long bPrefix, long aPrefix) {
+      double a = Double.longBitsToDouble(aPrefix);
+      double b = Double.longBitsToDouble(bPrefix);
+      return Utils.nanSafeCompareDoubles(a, b);
+    }
+
+    public static long computePrefix(double value) {
+      return Double.doubleToLongBits(value);
+    }
   }
 }

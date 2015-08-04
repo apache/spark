@@ -19,8 +19,8 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, normalize, sum}
-import breeze.numerics.{abs, exp}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, all, normalize, sum}
+import breeze.numerics.{trigamma, abs, exp}
 import breeze.stats.distributions.{Gamma, RandBasis}
 
 import org.apache.spark.annotation.DeveloperApi
@@ -144,6 +144,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
     this.checkpointInterval = lda.getCheckpointInterval
     this.graphCheckpointer = new PeriodicGraphCheckpointer[TopicCounts, TokenCount](
       checkpointInterval, graph.vertices.sparkContext)
+    this.graphCheckpointer.update(this.graph)
     this.globalTopicTotals = computeGlobalTopicTotals()
     this
   }
@@ -238,22 +239,26 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   /** alias for docConcentration */
   private var alpha: Vector = Vectors.dense(0)
 
-  /** (private[clustering] for debugging)  Get docConcentration */
+  /** (for debugging)  Get docConcentration */
   private[clustering] def getAlpha: Vector = alpha
 
   /** alias for topicConcentration */
   private var eta: Double = 0
 
-  /** (private[clustering] for debugging)  Get topicConcentration */
+  /** (for debugging)  Get topicConcentration */
   private[clustering] def getEta: Double = eta
 
   private var randomGenerator: java.util.Random = null
+
+  /** (for debugging) Whether to sample mini-batches with replacement. (default = true) */
+  private var sampleWithReplacement: Boolean = true
 
   // Online LDA specific parameters
   // Learning rate is: (tau0 + t)^{-kappa}
   private var tau0: Double = 1024
   private var kappa: Double = 0.51
   private var miniBatchFraction: Double = 0.05
+  private var optimizeAlpha: Boolean = false
 
   // internal data structure
   private var docs: RDD[(Long, Vector)] = null
@@ -261,7 +266,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   /** Dirichlet parameter for the posterior over topics */
   private var lambda: BDM[Double] = null
 
-  /** (private[clustering] for debugging) Get parameter for topics */
+  /** (for debugging) Get parameter for topics */
   private[clustering] def getLambda: BDM[Double] = lambda
 
   /** Current iteration (count of invocations of [[next()]]) */
@@ -324,7 +329,22 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
   /**
-   * (private[clustering])
+   * Optimize alpha, indicates whether alpha (Dirichlet parameter for document-topic distribution)
+   * will be optimized during training.
+   */
+  def getOptimzeAlpha: Boolean = this.optimizeAlpha
+
+  /**
+   * Sets whether to optimize alpha parameter during training.
+   *
+   * Default: false
+   */
+  def setOptimzeAlpha(optimizeAlpha: Boolean): this.type = {
+    this.optimizeAlpha = optimizeAlpha
+    this
+  }
+
+  /**
    * Set the Dirichlet parameter for the posterior over topics.
    * This is only used for testing now. In the future, it can help support training stop/resume.
    */
@@ -334,13 +354,21 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
   /**
-   * (private[clustering])
    * Used for random initialization of the variational parameters.
    * Larger value produces values closer to 1.0.
    * This is only used for testing currently.
    */
   private[clustering] def setGammaShape(shape: Double): this.type = {
     this.gammaShape = shape
+    this
+  }
+
+  /**
+   * Sets whether to sample mini-batches with or without replacement. (default = true)
+   * This is only used for testing currently.
+   */
+  private[clustering] def setSampleWithReplacement(replace: Boolean): this.type = {
+    this.sampleWithReplacement = replace
     this
   }
 
@@ -375,7 +403,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
   override private[clustering] def next(): OnlineLDAOptimizer = {
-    val batch = docs.sample(withReplacement = true, miniBatchFraction, randomGenerator.nextLong())
+    val batch = docs.sample(withReplacement = sampleWithReplacement, miniBatchFraction,
+      randomGenerator.nextLong())
     if (batch.isEmpty()) return this
     submitMiniBatch(batch)
   }
@@ -394,7 +423,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val gammaShape = this.gammaShape
 
     val stats: RDD[(BDM[Double], List[BDV[Double]])] = batch.mapPartitions { docs =>
-      val nonEmptyDocs = docs.filter(_._2.numActives > 0)
+      val nonEmptyDocs = docs.filter(_._2.numNonzeros > 0)
 
       val stat = BDM.zeros[Double](k, vocabSize)
       var gammaPart = List[BDV[Double]]()
@@ -417,6 +446,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
 
     // Note that this is an optimization to avoid batch.count
     updateLambda(batchResult, (miniBatchFraction * corpusSize).ceil.toInt)
+    if (optimizeAlpha) updateAlpha(gammat)
     this
   }
 
@@ -432,13 +462,39 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
       weight * (stat * (corpusSize.toDouble / batchSize.toDouble) + eta)
   }
 
-  /** Calculates learning rate rho, which decays as a function of [[iteration]] */
+  /**
+   * Update alpha based on `gammat`, the inferred topic distributions for documents in the
+   * current mini-batch. Uses Newton-Rhapson method.
+   * @see Section 3.3, Huang: Maximum Likelihood Estimation of Dirichlet Distribution Parameters
+   *      (http://jonathan-huang.org/research/dirichlet/dirichlet.pdf)
+   */
+  private def updateAlpha(gammat: BDM[Double]): Unit = {
+    val weight = rho()
+    val N = gammat.rows.toDouble
+    val alpha = this.alpha.toBreeze.toDenseVector
+    val logphat: BDM[Double] = sum(LDAUtils.dirichletExpectation(gammat)(::, breeze.linalg.*)) / N
+    val gradf = N * (-LDAUtils.dirichletExpectation(alpha) + logphat.toDenseVector)
+
+    val c = N * trigamma(sum(alpha))
+    val q = -N * trigamma(alpha)
+    val b = sum(gradf / q) / (1D / c + sum(1D / q))
+
+    val dalpha = -(gradf - b) / q
+
+    if (all((weight * dalpha + alpha) :> 0D)) {
+      alpha :+= weight * dalpha
+      this.alpha = Vectors.dense(alpha.toArray)
+    }
+  }
+
+
+  /** Calculate learning rate rho for the current [[iteration]]. */
   private def rho(): Double = {
     math.pow(getTau0 + this.iteration, -getKappa)
   }
 
   /**
-   * Get a random matrix to initialize lambda
+   * Get a random matrix to initialize lambda.
    */
   private def getGammaMatrix(row: Int, col: Int): BDM[Double] = {
     val randBasis = new RandBasis(new org.apache.commons.math3.random.MersenneTwister(
@@ -461,7 +517,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
 private[clustering] object OnlineLDAOptimizer {
   /**
    * Uses variational inference to infer the topic distribution `gammad` given the term counts
-   * for a document. `termCounts` must be non-empty, otherwise Breeze will throw a BLAS error.
+   * for a document. `termCounts` must contain at least one non-zero entry, otherwise Breeze will
+   * throw a BLAS error.
    *
    * An optimization (Lee, Seung: Algorithms for non-negative matrix factorization, NIPS 2001)
    * avoids explicit computation of variational parameter `phi`.

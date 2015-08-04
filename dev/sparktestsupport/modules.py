@@ -138,6 +138,7 @@ streaming_kinesis_asl = Module(
     dependencies=[],
     source_file_regexes=[
         "extras/kinesis-asl/",
+        "extras/kinesis-asl-assembly/",
     ],
     build_profile_flags=[
         "-Pkinesis-asl",
@@ -300,7 +301,13 @@ pyspark_sql = Module(
 
 pyspark_streaming = Module(
     name="pyspark-streaming",
-    dependencies=[pyspark_core, streaming, streaming_kafka, streaming_flume_assembly],
+    dependencies=[
+        pyspark_core,
+        streaming,
+        streaming_kafka,
+        streaming_flume_assembly,
+        streaming_kinesis_asl
+    ],
     source_file_regexes=[
         "python/pyspark/streaming"
     ],
@@ -323,7 +330,7 @@ pyspark_mllib = Module(
         "pyspark.mllib.evaluation",
         "pyspark.mllib.feature",
         "pyspark.mllib.fpm",
-        "pyspark.mllib.linalg",
+        "pyspark.mllib.linalg.__init__",
         "pyspark.mllib.random",
         "pyspark.mllib.recommendation",
         "pyspark.mllib.regression",

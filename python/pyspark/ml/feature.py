@@ -24,7 +24,7 @@ from pyspark.mllib.common import inherit_doc
 __all__ = ['Binarizer', 'HashingTF', 'IDF', 'IDFModel', 'NGram', 'Normalizer', 'OneHotEncoder',
            'PolynomialExpansion', 'RegexTokenizer', 'StandardScaler', 'StandardScalerModel',
            'StringIndexer', 'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer',
-           'Word2Vec', 'Word2VecModel', 'PCA', 'PCAModel']
+           'Word2Vec', 'Word2VecModel', 'PCA', 'PCAModel', 'RFormula', 'RFormulaModel']
 
 
 @inherit_doc
@@ -1107,6 +1107,89 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
 class PCAModel(JavaModel):
     """
     Model fitted by PCA.
+    """
+
+
+@inherit_doc
+class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol):
+    """
+    .. note:: Experimental
+
+    Implements the transforms required for fitting a dataset against an
+    R model formula. Currently we support a limited subset of the R
+    operators, including '~', '+', '-', and '.'. Also see the R formula
+    docs:
+    http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
+
+    >>> df = sqlContext.createDataFrame([
+    ...     (1.0, 1.0, "a"),
+    ...     (0.0, 2.0, "b"),
+    ...     (0.0, 0.0, "a")
+    ... ], ["y", "x", "s"])
+    >>> rf = RFormula(formula="y ~ x + s")
+    >>> rf.fit(df).transform(df).show()
+    +---+---+---+---------+-----+
+    |  y|  x|  s| features|label|
+    +---+---+---+---------+-----+
+    |1.0|1.0|  a|[1.0,1.0]|  1.0|
+    |0.0|2.0|  b|[2.0,0.0]|  0.0|
+    |0.0|0.0|  a|[0.0,1.0]|  0.0|
+    +---+---+---+---------+-----+
+    ...
+    >>> rf.fit(df, {rf.formula: "y ~ . - s"}).transform(df).show()
+    +---+---+---+--------+-----+
+    |  y|  x|  s|features|label|
+    +---+---+---+--------+-----+
+    |1.0|1.0|  a|   [1.0]|  1.0|
+    |0.0|2.0|  b|   [2.0]|  0.0|
+    |0.0|0.0|  a|   [0.0]|  0.0|
+    +---+---+---+--------+-----+
+    ...
+    """
+
+    # a placeholder to make it appear in the generated doc
+    formula = Param(Params._dummy(), "formula", "R model formula")
+
+    @keyword_only
+    def __init__(self, formula=None, featuresCol="features", labelCol="label"):
+        """
+        __init__(self, formula=None, featuresCol="features", labelCol="label")
+        """
+        super(RFormula, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
+        self.formula = Param(self, "formula", "R model formula")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, formula=None, featuresCol="features", labelCol="label"):
+        """
+        setParams(self, formula=None, featuresCol="features", labelCol="label")
+        Sets params for RFormula.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setFormula(self, value):
+        """
+        Sets the value of :py:attr:`formula`.
+        """
+        self._paramMap[self.formula] = value
+        return self
+
+    def getFormula(self):
+        """
+        Gets the value of :py:attr:`formula`.
+        """
+        return self.getOrDefault(self.formula)
+
+    def _create_model(self, java_model):
+        return RFormulaModel(java_model)
+
+
+class RFormulaModel(JavaModel):
+    """
+    Model fitted by :py:class:`RFormula`.
     """
 
 

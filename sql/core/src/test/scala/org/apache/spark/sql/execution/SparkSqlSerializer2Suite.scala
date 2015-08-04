@@ -138,7 +138,14 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
           s"Expected $expectedSerializerClass as the serializer of Exchange. " +
           s"However, the serializer was not set."
         val serializer = dependency.serializer.getOrElse(fail(serializerNotSetMessage))
-        assert(serializer.getClass === expectedSerializerClass)
+        val isExpectedSerializer =
+          serializer.getClass == expectedSerializerClass ||
+            serializer.getClass == classOf[UnsafeRowSerializer]
+        val wrongSerializerErrorMessage =
+          s"Expected ${expectedSerializerClass.getCanonicalName} or " +
+            s"${classOf[UnsafeRowSerializer].getCanonicalName}. But " +
+            s"${serializer.getClass.getCanonicalName} is used."
+        assert(isExpectedSerializer, wrongSerializerErrorMessage)
       case _ => // Ignore other nodes.
     }
   }

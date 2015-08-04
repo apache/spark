@@ -20,6 +20,7 @@ package org.apache.spark.shuffle.unsafe;
 import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
+import javax.annotation.Nullable;
 
 import scala.Tuple2;
 
@@ -86,9 +87,12 @@ final class UnsafeShuffleExternalSorter {
 
   private final LinkedList<SpillInfo> spills = new LinkedList<SpillInfo>();
 
+  /** Peak memory used by this sorter so far, in bytes. **/
+  private long peakMemoryUsedBytes;
+
   // These variables are reset after spilling:
-  private UnsafeShuffleInMemorySorter sorter;
-  private MemoryBlock currentPage = null;
+  @Nullable private UnsafeShuffleInMemorySorter sorter;
+  @Nullable private MemoryBlock currentPage = null;
   private long currentPagePosition = -1;
   private long freeSpaceInCurrentPage = 0;
 
@@ -106,6 +110,7 @@ final class UnsafeShuffleExternalSorter {
     this.blockManager = blockManager;
     this.taskContext = taskContext;
     this.initialSize = initialSize;
+    this.peakMemoryUsedBytes = initialSize;
     this.numPartitions = numPartitions;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
@@ -279,10 +284,26 @@ final class UnsafeShuffleExternalSorter {
     for (MemoryBlock page : allocatedPages) {
       totalPageSize += page.size();
     }
-    return sorter.getMemoryUsage() + totalPageSize;
+    return ((sorter == null) ? 0 : sorter.getMemoryUsage()) + totalPageSize;
+  }
+
+  private void updatePeakMemoryUsed() {
+    long mem = getMemoryUsage();
+    if (mem > peakMemoryUsedBytes) {
+      peakMemoryUsedBytes = mem;
+    }
+  }
+
+  /**
+   * Return the peak memory used so far, in bytes.
+   */
+  long getPeakMemoryUsedBytes() {
+    updatePeakMemoryUsed();
+    return peakMemoryUsedBytes;
   }
 
   private long freeMemory() {
+    updatePeakMemoryUsed();
     long memoryFreed = 0;
     for (MemoryBlock block : allocatedPages) {
       memoryManager.freePage(block);

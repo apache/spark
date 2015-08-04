@@ -254,8 +254,10 @@ setGeneric("flatMapValues", function(X, FUN) { standardGeneric("flatMapValues") 
 
 # @rdname intersection
 # @export
-setGeneric("intersection", function(x, other, numPartitions = 1) {
-  standardGeneric("intersection") })
+setGeneric("intersection",
+           function(x, other, numPartitions = 1) {
+             standardGeneric("intersection")
+           })
 
 # @rdname keys
 # @export
@@ -459,6 +461,10 @@ setGeneric("isLocal", function(x) { standardGeneric("isLocal") })
 #' @export
 setGeneric("limit", function(x, num) {standardGeneric("limit") })
 
+#' rdname merge
+#' @export
+setGeneric("merge")
+
 #' @rdname withColumn
 #' @export
 setGeneric("mutate", function(x, ...) {standardGeneric("mutate") })
@@ -489,9 +495,7 @@ setGeneric("sample",
 #' @rdname sample
 #' @export
 setGeneric("sample_frac",
-           function(x, withReplacement, fraction, seed) {
-             standardGeneric("sample_frac")
-           })
+           function(x, withReplacement, fraction, seed) { standardGeneric("sample_frac") })
 
 #' @rdname saveAsParquetFile
 #' @export
@@ -531,6 +535,10 @@ setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
 #' @export
 setGeneric("summarize", function(x,...) { standardGeneric("summarize") })
 
+##' rdname summary
+##' @export
+setGeneric("summary", function(x, ...) { standardGeneric("summary") })
+
 # @rdname tojson
 # @export
 setGeneric("toJSON", function(x) { standardGeneric("toJSON") })
@@ -553,8 +561,8 @@ setGeneric("withColumn", function(x, colName, col) { standardGeneric("withColumn
 
 #' @rdname withColumnRenamed
 #' @export
-setGeneric("withColumnRenamed", function(x, existingCol, newCol) {
-  standardGeneric("withColumnRenamed") })
+setGeneric("withColumnRenamed",
+           function(x, existingCol, newCol) { standardGeneric("withColumnRenamed") })
 
 
 ###################### Column Methods ##########################
@@ -669,3 +677,7 @@ setGeneric("upper", function(x) { standardGeneric("upper") })
 #' @rdname glm
 #' @export
 setGeneric("glm")
+
+#' @rdname rbind
+#' @export
+setGeneric("rbind", signature = "...")

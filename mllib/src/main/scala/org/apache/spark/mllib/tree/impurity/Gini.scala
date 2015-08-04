@@ -114,7 +114,7 @@ private[tree] class GiniAggregator(numClasses: Int)
  * (node, feature, bin).
  * @param stats  Array of sufficient statistics for a (node, feature, bin).
  */
-private[tree] class GiniCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
+private[spark] class GiniCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
 
   /**
    * Make a deep copy of this [[ImpurityCalculator]].

@@ -176,13 +176,13 @@ case class ScriptTransformation(
             val prevLine = curLine
             curLine = reader.readLine()
             if (!ioschema.schemaLess) {
-              new GenericInternalRow(CatalystTypeConverters.convertToCatalyst(
-                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")))
-                .asInstanceOf[Array[Any]])
+              new GenericInternalRow(
+                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
+                  .map(CatalystTypeConverters.convertToCatalyst))
             } else {
-              new GenericInternalRow(CatalystTypeConverters.convertToCatalyst(
-                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2))
-                .asInstanceOf[Array[Any]])
+              new GenericInternalRow(
+                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
+                  .map(CatalystTypeConverters.convertToCatalyst))
             }
           } else {
             val ret = deserialize()
@@ -247,7 +247,7 @@ private class ScriptTransformationWriterThread(
         } else {
           val writable = inputSerde.serialize(
             row.asInstanceOf[GenericInternalRow].values, inputSoi)
-          prepareWritable(writable).write(dataOutputStream)
+          prepareWritable(writable, ioschema.outputSerdeProps).write(dataOutputStream)
         }
       }
       outputStream.close()
@@ -345,9 +345,7 @@ case class HiveScriptIOSchema (
 
     val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
 
-    var propsMap = serdeProps.map(kv => {
-      (kv._1.split("'")(1), kv._2.split("'")(1))
-    }).toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
+    var propsMap = serdeProps.toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
     propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
 
     val properties = new Properties()
