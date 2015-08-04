@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.io.IOException
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{InternalAccumulator, SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -263,11 +263,12 @@ case class GeneratedAggregate(
         assert(iter.hasNext, "There should be at least one row for this path")
         log.info("Using Unsafe-based aggregator")
         val pageSizeBytes = SparkEnv.get.conf.getSizeAsBytes("spark.buffer.pageSize", "64m")
+        val taskContext = TaskContext.get()
         val aggregationMap = new UnsafeFixedWidthAggregationMap(
           newAggregationBuffer(EmptyRow),
           aggregationBufferSchema,
           groupKeySchema,
-          TaskContext.get.taskMemoryManager(),
+          taskContext.taskMemoryManager(),
           SparkEnv.get.shuffleMemoryManager,
           1024 * 16, // initial capacity
           pageSizeBytes,
@@ -283,6 +284,10 @@ case class GeneratedAggregate(
           }
           updateProjection.target(aggregationBuffer)(joinedRow(aggregationBuffer, currentRow))
         }
+
+        // Record memory used in the process
+        taskContext.internalMetricsToAccumulators(
+          InternalAccumulator.PEAK_EXECUTION_MEMORY).add(aggregationMap.getMemoryUsage)
 
         new Iterator[InternalRow] {
           private[this] val mapIterator = aggregationMap.iterator()
@@ -300,7 +305,7 @@ case class GeneratedAggregate(
               } else {
                 // This is the last element in the iterator, so let's free the buffer. Before we do,
                 // though, we need to make a defensive copy of the result so that we don't return an
-                // object that might contain dangling pointers to the freed memory
+                // object that might contain dangling pointers to the freed memory.
                 val resultCopy = result.copy()
                 aggregationMap.free()
                 resultCopy

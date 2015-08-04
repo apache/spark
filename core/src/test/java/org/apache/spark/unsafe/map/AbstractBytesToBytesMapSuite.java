@@ -25,6 +25,7 @@ import org.junit.*;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.junit.Assert.*;
 import static org.mockito.AdditionalMatchers.geq;
 import static org.mockito.Mockito.*;
 
@@ -494,5 +495,43 @@ public abstract class AbstractBytesToBytesMapSuite {
       PAGE_SIZE_BYTES);
     map.growAndRehash();
     map.free();
+  }
+
+  @Test
+  public void testTotalMemoryConsumption() {
+    final long recordLengthBytes = 24;
+    final long pageSizeBytes = 256 + 8; // 8 bytes for end-of-page marker
+    final long numRecordsPerPage = (pageSizeBytes - 8) / recordLengthBytes;
+    final BytesToBytesMap map = new BytesToBytesMap(
+      taskMemoryManager, shuffleMemoryManager, 1024, pageSizeBytes);
+
+    // Since BytesToBytesMap is append-only, we expect the total memory consumption to be
+    // monotonically increasing. More specifically, every time we allocate a new page it
+    // should increase by exactly the size of the page. In this regard, the memory usage
+    // at any given time is also the peak memory used.
+    long previousMemory = map.getTotalMemoryConsumption();
+    long newMemory;
+    try {
+      for (long i = 0; i < numRecordsPerPage * 10; i++) {
+        final long[] value = new long[]{i};
+        map.lookup(value, PlatformDependent.LONG_ARRAY_OFFSET, 8).putNewKey(
+          value,
+          PlatformDependent.LONG_ARRAY_OFFSET,
+          8,
+          value,
+          PlatformDependent.LONG_ARRAY_OFFSET,
+          8);
+        newMemory = map.getTotalMemoryConsumption();
+        if (i % numRecordsPerPage == 0) {
+          // We allocated a new page for this record, so peak memory should change
+          assertEquals(previousMemory + pageSizeBytes, newMemory);
+        } else {
+          assertEquals(previousMemory, newMemory);
+        }
+        previousMemory = newMemory;
+      }
+    } finally {
+      map.free();
+    }
   }
 }

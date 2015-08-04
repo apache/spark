@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.sources
 
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 class DefaultSource extends SimpleScanSource
 
@@ -73,7 +71,7 @@ case class AllDataTypesScan(
     sqlContext.sparkContext.parallelize(from to to).map { i =>
       Row(
         s"str_$i",
-        s"str_$i".getBytes(),
+        s"str_$i".getBytes(StandardCharsets.UTF_8),
         i % 2 == 0,
         i.toByte,
         i.toShort,
@@ -83,7 +81,7 @@ case class AllDataTypesScan(
         i.toDouble,
         new java.math.BigDecimal(i),
         new java.math.BigDecimal(i),
-        new Date(1970, 1, 1),
+        Date.valueOf("1970-01-01"),
         new Timestamp(20000 + i),
         s"varchar_$i",
         Seq(i, i + 1),
@@ -92,7 +90,7 @@ case class AllDataTypesScan(
         Map(Map(s"str_$i" -> i.toFloat) -> Row(i.toLong)),
         Row(i, i.toString),
           Row(Seq(s"str_$i", s"str_${i + 1}"),
-            Row(Seq(new Date(1970, 1, i + 1)))))
+            Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))))
     }
   }
 }
@@ -113,7 +111,7 @@ class TableScanSuite extends DataSourceTest {
       i.toDouble,
       new java.math.BigDecimal(i),
       new java.math.BigDecimal(i),
-      new Date(1970, 1, 1),
+      Date.valueOf("1970-01-01"),
       new Timestamp(20000 + i),
       s"varchar_$i",
       Seq(i, i + 1),
@@ -121,7 +119,7 @@ class TableScanSuite extends DataSourceTest {
       Map(i -> i.toString),
       Map(Map(s"str_$i" -> i.toFloat) -> Row(i.toLong)),
       Row(i, i.toString),
-      Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(new Date(1970, 1, i + 1)))))
+      Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))))
   }.toSeq
 
   before {
@@ -280,7 +278,7 @@ class TableScanSuite extends DataSourceTest {
 
   sqlTest(
     "SELECT structFieldComplex.Value.`value_(2)` FROM tableWithSchema",
-    (1 to 10).map(i => Row(Seq(new Date(1970, 1, i + 1)))).toSeq)
+    (1 to 10).map(i => Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))).toSeq)
 
   test("Caching")  {
     // Cached Query Execution
