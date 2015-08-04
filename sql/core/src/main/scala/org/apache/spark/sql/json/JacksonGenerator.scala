@@ -50,9 +50,9 @@ private[sql] object JacksonGenerator {
       case (DateType, v) => gen.writeString(v.toString)
       case (udt: UserDefinedType[_], v) => valWriter(udt.sqlType, udt.serialize(v))
 
-      case (ArrayType(ty, _), v: Seq[_]) =>
+      case (ArrayType(ty, _), v: ArrayData) =>
         gen.writeStartArray()
-        v.foreach(valWriter(ty, _))
+        v.foreach(ty, (_, value) => valWriter(ty, value))
         gen.writeEndArray()
 
       case (MapType(kv, vv, _), v: Map[_, _]) =>
@@ -102,9 +102,9 @@ private[sql] object JacksonGenerator {
       case (DateType, v) => gen.writeString(v.toString)
       case (udt: UserDefinedType[_], v) => valWriter(udt.sqlType, udt.serialize(v))
 
-      case (ArrayType(ty, _), v: Seq[_]) =>
+      case (ArrayType(ty, _), v: ArrayData) =>
         gen.writeStartArray()
-        v.foreach(valWriter(ty, _))
+        v.foreach(ty, (_, value) => valWriter(ty, value))
         gen.writeEndArray()
 
       case (MapType(kv, vv, _), v: Map[_, _]) =>
