@@ -362,7 +362,8 @@ class DirectKafkaStreamSuite
       "auto.offset.reset" -> "smallest"
     )
 
-    val collectedData = new mutable.ArrayBuffer[Array[String]]() with mutable.SynchronizedBuffer[Array[String]]
+    val collectedData =
+      new mutable.ArrayBuffer[Array[String]]() with mutable.SynchronizedBuffer[Array[String]]
     // Send data to Kafka and wait for it to be received
     def sendDataAndWaitForReceive(data: Seq[Int]) {
       val strings = data.map { _.toString}
@@ -403,11 +404,11 @@ class DirectKafkaStreamSuite
     // Send some data and wait for them to be received
     sendDataAndWaitForReceive((1 to 100))
 
-    //assert that rate estimator values are used to determine maxMessagesPerPartition
-    assert(collectedData.exists(_.size == 10) === true) //maxRatePerPartition 100 * .1 secs
-    assert(collectedData.exists(_.size == 6) === true)  //rate estimator 60.0 * .1 secs
-    assert(collectedData.exists(_.size == 4) === true)  //rate estimator 40.0 * .1 secs
-    assert(collectedData.exists(_.size == 2) === true)  //rate estimator 20.0 * .1 secs
+    // Assert that rate estimator values are used to determine maxMessagesPerPartition
+    assert(collectedData.exists(_.size == 10) === true) // maxRatePerPartition 100 * .1 secs
+    assert(collectedData.exists(_.size == 6) === true)  // rate estimator 60.0 * .1 secs
+    assert(collectedData.exists(_.size == 4) === true)  // rate estimator 40.0 * .1 secs
+    assert(collectedData.exists(_.size == 2) === true)  // rate estimator 20.0 * .1 secs
 
     ssc.stop()
   }
