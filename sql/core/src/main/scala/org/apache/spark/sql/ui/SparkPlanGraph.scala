@@ -43,7 +43,7 @@ private[ui] case class SparkPlanGraph(
   }
 }
 
-private[ui] object SparkPlanGraph {
+private[sql] object SparkPlanGraph {
 
   /**
    * Build a SparkPlanGraph from the root of a SparkPlan tree.

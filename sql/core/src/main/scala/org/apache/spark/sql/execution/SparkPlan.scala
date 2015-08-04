@@ -73,9 +73,20 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
+   * Whether track the number of rows output by this SparkPlan
+   */
+  protected[sql] def trackNumOfRowsEnabled: Boolean = false
+
+  private lazy val numOfRowsAccumulator = sparkContext.internalAccumulator(0L, "number of rows")
+
+  /**
    * Return all accumulators containing metrics of this SparkPlan.
    */
-  private[sql] def accumulators: Map[String, Accumulator[_]] = Map.empty
+  private[sql] def accumulators: Map[String, Accumulator[_]] = if (trackNumOfRowsEnabled) {
+      Map("numRows" -> numOfRowsAccumulator)
+    } else {
+      Map.empty
+    }
 
   /**
    * Return the accumulator according to the name.
@@ -129,7 +140,15 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
-      doExecute()
+      if (trackNumOfRowsEnabled) {
+        val numRows = accumulator[Long]("numRows")
+        doExecute().map { row =>
+          numRows += 1
+          row
+        }
+      } else {
+        doExecute()
+      }
     }
   }
 

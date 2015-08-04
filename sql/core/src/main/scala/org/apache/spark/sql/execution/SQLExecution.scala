@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.ui.SparkPlanGraph
 import org.apache.spark.util.Utils
 
 private[sql] object SQLExecution {
@@ -32,10 +33,11 @@ private[sql] object SQLExecution {
   private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
 
   /**
-   * Wrap a DataFrame action to track all Spark jobs in the body so that we can connect them with
-   * an execution.
+   * Wrap an action that will execute "queryExecution" to track all Spark jobs in the body so that
+   * we can connect them with an execution.
    */
-  def withNewExecutionId[T](sqlContext: SQLContext, df: DataFrame)(body: => T): T = {
+  def withNewExecutionId[T](
+      sqlContext: SQLContext, queryExecution: SQLContext#QueryExecution)(body: => T): T = {
     val sc = sqlContext.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     if (oldExecutionId == null) {
@@ -44,7 +46,12 @@ private[sql] object SQLExecution {
       val r = try {
         val callSite = Utils.getCallSite()
         sqlContext.listener.onExecutionStart(
-          executionId, callSite.shortForm, callSite.longForm, df, System.currentTimeMillis())
+          executionId,
+          callSite.shortForm,
+          callSite.longForm,
+          queryExecution.toString,
+          SparkPlanGraph(queryExecution.executedPlan),
+          System.currentTimeMillis())
         try {
           body
         } finally {

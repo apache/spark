@@ -1879,7 +1879,7 @@ class DataFrame private[sql](
    * an execution.
    */
   private[sql] def withNewExecutionId[T](body: => T): T = {
-    SQLExecution.withNewExecutionId(sqlContext, this)(body)
+    SQLExecution.withNewExecutionId(sqlContext, queryExecution)(body)
   }
 
   ////////////////////////////////////////////////////////////////////////////

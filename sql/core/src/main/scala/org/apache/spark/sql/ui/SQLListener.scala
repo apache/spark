@@ -197,10 +197,9 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener wit
       executionId: Long,
       description: String,
       details: String,
-      df: DataFrame,
+      physicalPlanDescription: String,
+      physicalPlanGraph: SparkPlanGraph,
       time: Long): Unit = {
-    val physicalPlanDescription = df.queryExecution.toString
-    val physicalPlanGraph = SparkPlanGraph(df.queryExecution.executedPlan)
     val sqlPlanMetrics = physicalPlanGraph.nodes.flatMap { node =>
       node.metrics.map(metric => metric.accumulatorId -> metric)
     }

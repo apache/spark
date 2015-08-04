@@ -86,7 +86,12 @@ class SQLListenerSuite extends SparkFunSuite {
     }.toMap
 
     listener.onExecutionStart(
-    executionId, "test", "test", df, System.currentTimeMillis())
+      executionId,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanGraph(df.queryExecution.executedPlan),
+      System.currentTimeMillis())
 
     val executionUIData = listener.executionIdToData(0)
 
@@ -208,8 +213,14 @@ class SQLListenerSuite extends SparkFunSuite {
   test("onExecutionEnd happens before onJobEnd(JobSucceeded)") {
     val listener = new SQLListener(TestSQLContext)
     val executionId = 0
+    val df = createTestDataFrame
     listener.onExecutionStart(
-      executionId, "test", "test", createTestDataFrame, System.currentTimeMillis())
+      executionId,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanGraph(df.queryExecution.executedPlan),
+      System.currentTimeMillis())
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),
@@ -231,8 +242,14 @@ class SQLListenerSuite extends SparkFunSuite {
   test("onExecutionEnd happens before multiple onJobEnd(JobSucceeded)s") {
     val listener = new SQLListener(TestSQLContext)
     val executionId = 0
+    val df = createTestDataFrame
     listener.onExecutionStart(
-      executionId, "test", "test", createTestDataFrame, System.currentTimeMillis())
+      executionId,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanGraph(df.queryExecution.executedPlan),
+      System.currentTimeMillis())
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),
@@ -265,8 +282,14 @@ class SQLListenerSuite extends SparkFunSuite {
   test("onExecutionEnd happens before onJobEnd(JobFailed)") {
     val listener = new SQLListener(TestSQLContext)
     val executionId = 0
+    val df = createTestDataFrame
     listener.onExecutionStart(
-      executionId, "test", "test", createTestDataFrame, System.currentTimeMillis())
+      executionId,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanGraph(df.queryExecution.executedPlan),
+      System.currentTimeMillis())
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),

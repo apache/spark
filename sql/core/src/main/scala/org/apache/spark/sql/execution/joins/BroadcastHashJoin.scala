@@ -45,6 +45,8 @@ case class BroadcastHashJoin(
     right: SparkPlan)
   extends BinaryNode with HashJoin {
 
+  override protected[sql] val trackNumOfRowsEnabled = true
+
   val timeout: Duration = {
     val timeoutValue = sqlContext.conf.broadcastTimeout
     if (timeoutValue < 0) {
