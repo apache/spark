@@ -418,8 +418,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           (relation, parquetRelation, attributedRewrites)
 
         // Read path
-        case p @ PhysicalOperation(_, _, relation: MetastoreRelation)
-            if hive.convertMetastoreParquet &&
+        case relation: MetastoreRelation if hive.convertMetastoreParquet &&
               relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
           val parquetRelation = convertToParquetRelation(relation)
           val attributedRewrites = relation.output.zip(parquetRelation.output)

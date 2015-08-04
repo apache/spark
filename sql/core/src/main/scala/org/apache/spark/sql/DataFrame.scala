@@ -687,9 +687,7 @@ class DataFrame private[sql](
       case Column(explode: Explode) => MultiAlias(explode, Nil)
       case Column(expr: Expression) => Alias(expr, expr.prettyString)()
     }
-    // When user continuously call `select`, speed up analysis by collapsing `Project`
-    import org.apache.spark.sql.catalyst.optimizer.ProjectCollapsing
-    Project(namedExpressions.toSeq, ProjectCollapsing(logicalPlan))
+    Project(namedExpressions.toSeq, logicalPlan)
   }
 
   /**
