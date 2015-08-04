@@ -37,6 +37,8 @@ __all__ = ['DistributedMatrix', 'RowMatrix', 'IndexedRow',
 
 class DistributedMatrix(object):
     """
+    .. note:: Experimental
+
     Represents a distributively stored matrix backed by one or
     more RDDs.
 

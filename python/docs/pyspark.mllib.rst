@@ -47,7 +47,7 @@ pyspark.mllib.linalg module
     :show-inheritance:
 
 pyspark.mllib.linalg.distributed module
----------------------------
+---------------------------------------
 
 .. automodule:: pyspark.mllib.linalg.distributed
     :members:
