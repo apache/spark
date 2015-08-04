@@ -18,6 +18,8 @@ package org.apache.spark.network.yarn
 
 import java.io.{DataOutputStream, FileOutputStream, PrintWriter, File}
 
+import scala.annotation.tailrec
+
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -43,6 +45,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
         FileUtils.deleteDirectory(d)
       }
       FileUtils.forceMkdir(d)
+      logInfo(s"creating yarn.nodemanager.local-dirs: $d")
     }
   }
 
@@ -87,7 +90,16 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", blockResolver) should
       be (Some(shuffleInfo2))
 
-    execStateFile.exists() should be (true)
+    if (!execStateFile.exists()) {
+      @tailrec def findExistingParent(file: File): File = {
+        if (file == null) file
+        else if (file.exists()) file
+        else findExistingParent(file.getParentFile())
+      }
+      val existingParent = findExistingParent(execStateFile)
+      assert(false, s"$execStateFile does not exist -- closest existing parent is $existingParent")
+    }
+    assert(execStateFile.exists(), s"$execStateFile did not exist")
 
     // now we pretend the shuffle service goes down, and comes back up
     s1.stop()
