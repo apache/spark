@@ -34,7 +34,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
   override def render(request: HttpServletRequest): Seq[Node] = {
     val currentTime = System.currentTimeMillis()
     val content = listener.synchronized {
-      var _content = mutable.ListBuffer[Node]()
+      val _content = mutable.ListBuffer[Node]()
       if (listener.getRunningExecutions.nonEmpty) {
         _content ++=
           new RunningExecutionTable(
