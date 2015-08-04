@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Accumulator, Logging}
@@ -62,7 +64,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Whether the "prepare" method is called.
    */
-  private var prepareCalled = false
+  private val prepareCalled = new AtomicBoolean(false)
 
   /** Overridden make copy also propogates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): this.type = {
@@ -135,8 +137,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Prepare a SparkPlan for execution. It's idempotent.
    */
   final def prepare(): Unit = {
-    if (!prepareCalled) {
-      prepareCalled = true
+    if (prepareCalled.compareAndSet(false, true)) {
       doPrepare
       children.foreach(_.prepare())
     }
