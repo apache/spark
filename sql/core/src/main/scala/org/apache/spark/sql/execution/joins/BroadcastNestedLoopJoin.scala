@@ -47,7 +47,7 @@ case class BroadcastNestedLoopJoin(
   override def outputsUnsafeRows: Boolean = left.outputsUnsafeRows || right.outputsUnsafeRows
   override def canProcessUnsafeRows: Boolean = true
 
-  @transient private[this] lazy val resultProjection: InternalRow => InternalRow = {
+  @transient private[this] def genResultProjection: InternalRow => InternalRow = {
     if (outputsUnsafeRows) {
       UnsafeProjection.create(schema)
     } else {
@@ -78,6 +78,7 @@ case class BroadcastNestedLoopJoin(
       sparkContext.broadcast(broadcast.execute().map(_.copy())
         .collect().toIndexedSeq)
 
+    val resultProj = genResultProjection
     /** All rows that either match both-way, or rows from streamed joined with nulls. */
     val matchesOrStreamedRowsWithNulls = streamed.execute().mapPartitions { streamedIter =>
       val matchedRows = new CompactBuffer[InternalRow]
@@ -97,11 +98,11 @@ case class BroadcastNestedLoopJoin(
           val broadcastedRow = broadcastedRelation.value(i)
           buildSide match {
             case BuildRight if boundCondition(joinedRow(streamedRow, broadcastedRow)) =>
-              matchedRows += resultProjection(joinedRow(streamedRow, broadcastedRow)).copy()
+              matchedRows += resultProj(joinedRow(streamedRow, broadcastedRow)).copy()
               streamRowMatched = true
               includedBroadcastTuples += i
             case BuildLeft if boundCondition(joinedRow(broadcastedRow, streamedRow)) =>
-              matchedRows += resultProjection(joinedRow(broadcastedRow, streamedRow)).copy()
+              matchedRows += resultProj(joinedRow(broadcastedRow, streamedRow)).copy()
               streamRowMatched = true
               includedBroadcastTuples += i
             case _ =>
@@ -111,9 +112,9 @@ case class BroadcastNestedLoopJoin(
 
         (streamRowMatched, joinType, buildSide) match {
           case (false, LeftOuter | FullOuter, BuildRight) =>
-            matchedRows += resultProjection(joinedRow(streamedRow, rightNulls)).copy()
+            matchedRows += resultProj(joinedRow(streamedRow, rightNulls)).copy()
           case (false, RightOuter | FullOuter, BuildLeft) =>
-            matchedRows += resultProjection(joinedRow(leftNulls, streamedRow)).copy()
+            matchedRows += resultProj(joinedRow(leftNulls, streamedRow)).copy()
           case _ =>
         }
       }
@@ -138,7 +139,7 @@ case class BroadcastNestedLoopJoin(
           joinedRow.withLeft(leftNulls)
           while (i < rel.length) {
             if (!allIncludedBroadcastTuples.contains(i)) {
-              buf += resultProjection(joinedRow.withRight(rel(i))).copy()
+              buf += resultProj(joinedRow.withRight(rel(i))).copy()
             }
             i += 1
           }
@@ -147,7 +148,7 @@ case class BroadcastNestedLoopJoin(
           joinedRow.withRight(rightNulls)
           while (i < rel.length) {
             if (!allIncludedBroadcastTuples.contains(i)) {
-              buf += resultProjection(joinedRow.withLeft(rel(i))).copy()
+              buf += resultProj(joinedRow.withLeft(rel(i))).copy()
             }
             i += 1
           }
