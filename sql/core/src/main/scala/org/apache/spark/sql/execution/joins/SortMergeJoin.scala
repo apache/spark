@@ -157,7 +157,7 @@ case class SortMergeJoin(
           while (!found && streamedElement != null
             && keyOrdering.compare(streamedKey, matchKey) == 0) {
             while (bufferedPosition < bufferedMatches.size && !boundCondition(
-              smartJoinRow(streamedElement, bufferedMatches(bufferedPosition)))) {
+              joinRow(streamedElement, bufferedMatches(bufferedPosition)))) {
               bufferedPosition += 1
             }
             if (bufferedPosition == bufferedMatches.size) {
