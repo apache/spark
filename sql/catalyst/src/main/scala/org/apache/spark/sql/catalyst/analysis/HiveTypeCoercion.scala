@@ -61,19 +61,6 @@ object HiveTypeCoercion {
       FloatType,
       DoubleType)
 
-  implicit class RichLogicalPlan(plan: LogicalPlan) {
-    /**
-     * Recursively transforms the expressions of a tree, skipping nodes that have already
-     * been analyzed.
-     */
-    def resolveExpressions(r: PartialFunction[Expression, Expression]): LogicalPlan = {
-      plan transform {
-        case p if p.analyzed => p
-        case p => p transformExpressions(r)
-      }
-    }
-  }
-
   /**
    * Find the tightest common type of two types that might be used in a binary expression.
    * This handles all numeric types except fixed-precision decimals interacting with each other or
@@ -157,8 +144,7 @@ object HiveTypeCoercion {
    * instances higher in the query tree.
    */
   object PropagateTypes extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case p if p.analyzed => p
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperator {
 
       // No propagation required for leaf nodes.
       case q: LogicalPlan if q.children.isEmpty => q
@@ -240,7 +226,7 @@ object HiveTypeCoercion {
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperator {
       case p if p.analyzed => p
 
       case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
@@ -389,8 +375,8 @@ object HiveTypeCoercion {
       ChangeDecimalPrecision(Cast(e, dataType))
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case p if p.analyzed => p
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperator {
+
       // fix decimal precision for expressions
       case q => q.transformExpressions {
         // Skip nodes whose children have not been resolved yet
