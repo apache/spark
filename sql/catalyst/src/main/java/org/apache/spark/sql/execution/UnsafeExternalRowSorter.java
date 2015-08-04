@@ -114,7 +114,7 @@ final class UnsafeExternalRowSorter {
   }
 
   private void cleanupResources() {
-    sorter.freeMemory();
+    sorter.cleanupResources();
   }
 
   @VisibleForTesting
