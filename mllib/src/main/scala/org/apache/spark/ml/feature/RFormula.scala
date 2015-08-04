@@ -86,7 +86,21 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     val encoderStages = ArrayBuffer[PipelineStage]()
     val tempColumns = ArrayBuffer[String]()
     val takenNames = mutable.Set(dataset.columns: _*)
-    val encodedTerms = resolvedFormula.terms.map { term =>
+    val interactionTerms = resolvedFormula.interactions.map { interaction =>
+      val outputCol = {
+        var tmp = interaction.term
+        while (takenNames.contains(tmp)) {
+          tmp += "_"
+        }
+        tmp
+      }
+      takenNames.add(outputCol)
+      encoderStages += new Interaction()
+        .setInputCols(interaction.inputs)
+        .setOutputCol(outputCol)
+      outputCol
+    }
+    val standaloneTerms = resolvedFormula.terms.map { term =>
       dataset.schema(term) match {
         case column if column.dataType == StringType =>
           val indexCol = term + "_idx_" + uid
@@ -109,7 +123,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
       }
     }
     encoderStages += new VectorAssembler(uid)
-      .setInputCols(encodedTerms.toArray)
+      .setInputCols((interactionTerms ++ standaloneTerms).toArray)
       .setOutputCol($(featuresCol))
     encoderStages += new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
@@ -203,7 +217,7 @@ class RFormulaModel private[feature](
  * Utility transformer for removing temporary columns from a DataFrame.
  * TODO(ekl) make this a public transformer
  */
-private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
+private[feature] class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
   override val uid = Identifiable.randomUID("columnPruner")
 
   override def transform(dataset: DataFrame): DataFrame = {
