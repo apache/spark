@@ -374,7 +374,9 @@ class DirectKafkaStreamSuite
     }
 
     val sparkConf = new SparkConf()
-      .setMaster("local[4]")
+      // Safe, even with streaming, because we're using the direct API.
+      // Using 1 core is necessary to make the test more predictable.
+      .setMaster("local[1]")
       .setAppName(this.getClass.getSimpleName)
       .set("spark.streaming.kafka.maxRatePerPartition", "100")
 
@@ -404,11 +406,13 @@ class DirectKafkaStreamSuite
     // Send some data and wait for them to be received
     sendDataAndWaitForReceive((1 to 400))
 
+    def dataToString: String = collectedData.map(_.mkString("[",",","]")).mkString("{",", ","}")
+
     // Assert that rate estimator values are used to determine maxMessagesPerPartition
-    assert(collectedData.exists(_.size == 10) === true) // maxRatePerPartition 100 * .1 secs
-    assert(collectedData.exists(_.size == 6) === true)  // rate estimator 60.0 * .1 secs
-    assert(collectedData.exists(_.size == 4) === true)  // rate estimator 40.0 * .1 secs
-    assert(collectedData.exists(_.size == 2) === true)  // rate estimator 20.0 * .1 secs
+    assert(collectedData.exists(_.size == 10), dataToString)  // maxRatePerPartition 100 * .1 secs
+    assert(collectedData.exists(_.size ==  6), dataToString)  // rate estimator 60.0 * .1 secs
+    assert(collectedData.exists(_.size ==  4), dataToString)  // rate estimator 40.0 * .1 secs
+    assert(collectedData.exists(_.size ==  2), dataToString)  // rate estimator 20.0 * .1 secs
 
     ssc.stop()
   }
