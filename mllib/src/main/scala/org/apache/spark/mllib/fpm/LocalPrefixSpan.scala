@@ -60,7 +60,7 @@ private[fpm] class LocalPrefixSpan(
     val counts = mutable.Map.empty[Int, Long].withDefaultValue(0)
     postfixes.foreach { postfix =>
       postfix.genPrefixItems.foreach { case (x, _) =>
-        counts(x) = counts(x) + 1L
+        counts(x) += 1L
       }
     }
     val freqItems = counts.toSeq.filter { case (_, count) =>

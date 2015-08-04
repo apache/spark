@@ -44,9 +44,6 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val rdd = sc.parallelize(sequences, 2).cache()
 
-    val prefixspan = new PrefixSpan()
-      .setMinSupport(0.33)
-      .setMaxPatternLength(50)
     val result1 = PrefixSpan.genFreqPatterns(
       rdd, minCount = 2L, maxPatternLength = 50, maxLocalProjDBSize = 16L)
     val expectedValue1 = Array(
@@ -258,6 +255,30 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     compareInternalResults(expectedValue, result.collect())
   }
 
+  test("PrefixSpan projections with multiple partial starts") {
+    val sequences = Seq(
+      Array(Array(1, 2), Array(1, 2, 3)))
+    val rdd = sc.parallelize(sequences, 2)
+    val prefixSpan = new PrefixSpan()
+      .setMinSupport(1.0)
+      .setMaxPatternLength(2)
+    val model = prefixSpan.run(rdd)
+    val expected = Array(
+      (Array(Array(1)), 1L),
+      (Array(Array(1, 2)), 1L),
+      (Array(Array(1), Array(1)), 1L),
+      (Array(Array(1), Array(2)), 1L),
+      (Array(Array(1), Array(3)), 1L),
+      (Array(Array(1, 3)), 1L),
+      (Array(Array(2)), 1L),
+      (Array(Array(2, 3)), 1L),
+      (Array(Array(2), Array(1)), 1L),
+      (Array(Array(2), Array(2)), 1L),
+      (Array(Array(2), Array(3)), 1L),
+      (Array(Array(3)), 1L))
+    compareResults(expected, model.freqSequences.collect())
+  }
+
   test("PrefixSpan Integer type, variable-size itemsets") {
     val sequences = Seq(
       Array(Array(1, 2), Array(3)),
@@ -266,7 +287,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       Array(Array(6)))
     val rdd = sc.parallelize(sequences, 2).cache()
 
-    val prefixspan = new PrefixSpan()
+    val prefixSpan = new PrefixSpan()
       .setMinSupport(0.5)
       .setMaxPatternLength(5)
 
@@ -297,7 +318,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
         5   <{1,2}>    0.75
      */
 
-    val model = prefixspan.run(rdd)
+    val model = prefixSpan.run(rdd)
     val expected = Array(
       (Array(Array(1)), 3L),
       (Array(Array(2)), 3L),
@@ -305,7 +326,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       (Array(Array(1), Array(3)), 2L),
       (Array(Array(1, 2)), 3L)
     )
-    compareResults(expected, model.freqSequences.collect().map(x => (x.sequence, x.freq)))
+    compareResults(expected, model.freqSequences.collect())
   }
 
   test("PrefixSpan String type, variable-size itemsets") {
@@ -319,11 +340,11 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       Array(Array(6))).map(seq => seq.map(itemSet => itemSet.map(intToString)))
     val rdd = sc.parallelize(sequences, 2).cache()
 
-    val prefixspan = new PrefixSpan()
+    val prefixSpan = new PrefixSpan()
       .setMinSupport(0.5)
       .setMaxPatternLength(5)
 
-    val model = prefixspan.run(rdd)
+    val model = prefixSpan.run(rdd)
     val expected = Array(
       (Array(Array(1)), 3L),
       (Array(Array(2)), 3L),
@@ -333,17 +354,17 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     ).map { case (pattern, count) =>
       (pattern.map(itemSet => itemSet.map(intToString)), count)
     }
-    compareResults(expected, model.freqSequences.collect().map(x => (x.sequence, x.freq)))
+    compareResults(expected, model.freqSequences.collect())
   }
 
   private def compareResults[Item](
       expectedValue: Array[(Array[Array[Item]], Long)],
-      actualValue: Array[(Array[Array[Item]], Long)]): Unit = {
+      actualValue: Array[PrefixSpan.FreqSequence[Item]]): Unit = {
     val expectedSet = expectedValue.map { case (pattern: Array[Array[Item]], count: Long) =>
       (pattern.map(itemSet => itemSet.toSet).toSeq, count)
     }.toSet
-    val actualSet = actualValue.map { case (pattern: Array[Array[Item]], count: Long) =>
-      (pattern.map(itemSet => itemSet.toSet).toSeq, count)
+    val actualSet = actualValue.map { x =>
+      (x.sequence.map(_.toSet).toSeq, x.freq)
     }.toSet
     assert(expectedSet === actualSet)
   }

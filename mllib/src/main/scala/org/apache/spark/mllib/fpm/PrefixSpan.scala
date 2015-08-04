@@ -239,7 +239,7 @@ object PrefixSpan extends Logging {
     while (largePrefixes.nonEmpty) {
       val numLocalFreqPatterns = localFreqPatterns.length
       logInfo(s"number of local frequent patterns: $numLocalFreqPatterns")
-      if (localFreqPatterns.length > 1000000) {
+      if (numLocalFreqPatterns > 1000000) {
         logWarning(
           s"""
              | Collected $numLocalFreqPatterns local frequent patterns. You may want to consider:
@@ -300,8 +300,8 @@ object PrefixSpan extends Logging {
 
   /**
    * Represents a prefix.
-   * @param items: items in this prefix, using the internal format
-   * @param length: length of this prefix, not counting 0
+   * @param items items in this prefix, using the internal format
+   * @param length length of this prefix, not counting 0
    */
   private[fpm] class Prefix private (val items: Array[Int], val length: Int) extends Serializable {
 
@@ -343,11 +343,12 @@ object PrefixSpan extends Logging {
    * and mark the start index of the postfix, which is `2` in this example.
    * So the active items in this postfix are `[2, 0, 1, 3, 0, 1, 0]`.
    * We also remember the start indices of partial projections, the ones that split an itemset.
-   * For example, another possible partial projection w.r.t. `<1>` is <(_3)1>`.
+   * For example, another possible partial projection w.r.t. `<1>` is `<(_3)1>`.
    * We remember the start indices of partial projections, which is `[2, 5]` in this example.
    * This data structure makes it easier to do projections.
    *
-   * @param items an int array containing this postfix with 0 as the delimiter
+   * @param items a sequence stored as `Array[Int]` containing this postfix
+   * @param start the start index of this postfix in items
    * @param partialStarts start indices of possible partial projections, strictly increasing
    */
   private[fpm] class Postfix(
@@ -355,7 +356,12 @@ object PrefixSpan extends Logging {
       val start: Int = 0,
       val partialStarts: Array[Int] = Array.empty) extends Serializable {
 
-    require(items.last == 0, "The last item in a postfix must be zero.")
+    require(items.last == 0, s"The last item in a postfix must be zero, but got ${items.last}.")
+    if (partialStarts.nonEmpty) {
+      require(partialStarts.head >= start,
+        "The first partial start cannot be smaller than the start index," +
+          s"but got partialStarts.head = ${partialStarts.head} < start = $start.")
+    }
 
     /**
      * Start index of the first full itemset contained in this postfix.
@@ -371,10 +377,16 @@ object PrefixSpan extends Logging {
     /**
      * Generates length-1 prefix items of this postfix with the corresponding postfix sizes.
      * There are two types of prefix items:
-     *   a) the item can be assembled to the last itemset of the prefix, where we flip the sign in
-     *      the output,
-     *   b) the item can be appended to the prefix.
-     * @return an iterator of (prefix item, corresponding postfix size)
+     *   a) The item can be assembled to the last itemset of the prefix. For example,
+     *      the postfix of `<(12)(123)>1` w.r.t. `<1>` is `<(_2)(123)1>`. The prefix items of this
+     *      postfix can be assembled to `<1>` is `_2` and `_3`, resulting new prefixes `<(12)>` and
+     *      `<(13)>`. We flip the sign in the output to indicate that this is a partial prefix item.
+     *   b) The item can be appended to the prefix. Taking the same example above, the prefix items
+     *      can be appended to `<1>` is `1`, `2`, and `3`, resulting new prefixes `<11>`, `<12>`,
+     *      and `<13>`.
+     * @return an iterator of (prefix item, corresponding postfix size). If the item is negative, it
+     *         indicates a partial prefix item, which should be assembled to the last itemset of the
+     *         current prefix. Otherwise, the item should be appended to the current prefix.
      */
     def genPrefixItems: Iterator[(Int, Long)] = {
       val n1 = items.length - 1
@@ -434,7 +446,7 @@ object PrefixSpan extends Logging {
             i += 1
             if (!matched) {
               newStart = i
-              matched = false
+              matched = true
             }
             if (items(i) != 0) {
               newPartialStarts += i
