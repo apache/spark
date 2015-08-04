@@ -17,14 +17,19 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.{QueryTest, SQLContext, SaveMode}
+import org.apache.spark.sql.hive.test.TestHiveContext
+import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
+import org.apache.spark.sql.{QueryTest, SaveMode, SQLContext}
 
-class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
-  override val sqlContext: SQLContext = TestHive
+class MultiDatabaseSuite extends QueryTest with SQLTestUtils with MyTestSQLContext {
 
-  import sqlContext.sql
+  // Use a hive context instead
+  switchSQLContext(() => new TestHiveContext)
+  private val ctx = sqlContext
+  import ctx.sql
+
+  // For SQLTestUtils
+  protected override def _sqlContext: SQLContext = ctx
 
   private val df = sqlContext.range(10).coalesce(1)
 

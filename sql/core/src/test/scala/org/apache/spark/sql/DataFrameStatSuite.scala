@@ -22,11 +22,11 @@ import java.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.test.MyTestSQLContext
 
-class DataFrameStatSuite extends QueryTest {
-
-  private val sqlCtx = org.apache.spark.sql.test.TestSQLContext
-  import sqlCtx.implicits._
+class DataFrameStatSuite extends QueryTest with MyTestSQLContext {
+  private val ctx = sqlContext
+  import ctx.implicits._
 
   private def toLetter(i: Int): String = (i + 97).toChar.toString
 
@@ -132,7 +132,7 @@ class DataFrameStatSuite extends QueryTest {
   }
 
   test("sampleBy") {
-    val df = sqlCtx.range(0, 100).select((col("id") % 3).as("key"))
+    val df = ctx.range(0, 100).select((col("id") % 3).as("key"))
     val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
     checkAnswer(
       sampled.groupBy("key").count().orderBy("key"),

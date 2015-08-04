@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{BinaryType, DecimalType}
+import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.types.DecimalType
 
 
-class DataFrameAggregateSuite extends QueryTest {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+class DataFrameAggregateSuite extends QueryTest with MyTestSQLContext {
+  private val ctx = sqlContextWithData
   import ctx.implicits._
+  import ctx._
 
   test("groupBy") {
     checkAnswer(

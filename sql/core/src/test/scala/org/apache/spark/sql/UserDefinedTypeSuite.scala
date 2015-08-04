@@ -24,6 +24,7 @@ import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{OpenHashSetUDT, HyperLogLogUDT}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.MyTestSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashSet
@@ -66,9 +67,8 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
   private[spark] override def asNullable: MyDenseVectorUDT = this
 }
 
-class UserDefinedTypeSuite extends QueryTest {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+class UserDefinedTypeSuite extends QueryTest with MyTestSQLContext {
+  private val ctx = sqlContext
   import ctx.implicits._
 
   private lazy val pointsRDD = Seq(

@@ -27,9 +27,9 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
 trait SQLTestUtils { this: SparkFunSuite =>
-  def sqlContext: SQLContext
+  protected def _sqlContext: SQLContext
 
-  protected def configuration = sqlContext.sparkContext.hadoopConfiguration
+  protected def configuration = _sqlContext.sparkContext.hadoopConfiguration
 
   /**
    * Sets all SQL configurations specified in `pairs`, calls `f`, and then restore all SQL
@@ -39,12 +39,12 @@ trait SQLTestUtils { this: SparkFunSuite =>
    */
   protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
     val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(sqlContext.conf.getConfString(key)).toOption)
-    (keys, values).zipped.foreach(sqlContext.conf.setConfString)
+    val currentValues = keys.map(key => Try(_sqlContext.conf.getConfString(key)).toOption)
+    (keys, values).zipped.foreach(_sqlContext.conf.setConfString)
     try f finally {
       keys.zip(currentValues).foreach {
-        case (key, Some(value)) => sqlContext.conf.setConfString(key, value)
-        case (key, None) => sqlContext.conf.unsetConf(key)
+        case (key, Some(value)) => _sqlContext.conf.setConfString(key, value)
+        case (key, None) => _sqlContext.conf.unsetConf(key)
       }
     }
   }
@@ -76,7 +76,7 @@ trait SQLTestUtils { this: SparkFunSuite =>
    * Drops temporary table `tableName` after calling `f`.
    */
   protected def withTempTable(tableNames: String*)(f: => Unit): Unit = {
-    try f finally tableNames.foreach(sqlContext.dropTempTable)
+    try f finally tableNames.foreach(_sqlContext.dropTempTable)
   }
 
   /**
@@ -85,7 +85,7 @@ trait SQLTestUtils { this: SparkFunSuite =>
   protected def withTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally {
       tableNames.foreach { name =>
-        sqlContext.sql(s"DROP TABLE IF EXISTS $name")
+        _sqlContext.sql(s"DROP TABLE IF EXISTS $name")
       }
     }
   }
@@ -98,12 +98,12 @@ trait SQLTestUtils { this: SparkFunSuite =>
     val dbName = s"db_${UUID.randomUUID().toString.replace('-', '_')}"
 
     try {
-      sqlContext.sql(s"CREATE DATABASE $dbName")
+      _sqlContext.sql(s"CREATE DATABASE $dbName")
     } catch { case cause: Throwable =>
       fail("Failed to create temporary database", cause)
     }
 
-    try f(dbName) finally sqlContext.sql(s"DROP DATABASE $dbName CASCADE")
+    try f(dbName) finally _sqlContext.sql(s"DROP DATABASE $dbName CASCADE")
   }
 
   /**
@@ -111,7 +111,7 @@ trait SQLTestUtils { this: SparkFunSuite =>
    * `f` returns.
    */
   protected def activateDatabase(db: String)(f: => Unit): Unit = {
-    sqlContext.sql(s"USE $db")
-    try f finally sqlContext.sql(s"USE default")
+    _sqlContext.sql(s"USE $db")
+    try f finally _sqlContext.sql(s"USE default")
   }
 }

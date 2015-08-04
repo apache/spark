@@ -42,7 +42,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
-// SPARK-3729: Test key required to check for initialization errors with config.
+// TODO: remove it
 object TestHive
   extends TestHiveContext(
     new SparkContext(
@@ -71,6 +71,20 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   self =>
 
   import HiveContext._
+
+  def this() {
+    this(new SparkContext(
+      System.getProperty("spark.sql.test.master", "local[32]"),
+      "TestSQLContext",
+      new SparkConf()
+        // SPARK-3729: Test key required to check for initialization errors with config.
+        .set("spark.sql.test", "")
+        .set("spark.sql.hive.metastore.barrierPrefixes",
+          "org.apache.spark.sql.hive.execution.PairSerDe")
+        .set("spark.buffer.pageSize", "4m")
+        // SPARK-8910
+        .set("spark.ui.enabled", "false")))
+  }
 
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.

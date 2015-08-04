@@ -18,12 +18,12 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.MyTestSQLContext
 import org.apache.spark.sql.types.Decimal
 
 
-class StringFunctionsSuite extends QueryTest {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+class StringFunctionsSuite extends QueryTest with MyTestSQLContext {
+  private val ctx = sqlContext
   import ctx.implicits._
 
   test("string concat") {

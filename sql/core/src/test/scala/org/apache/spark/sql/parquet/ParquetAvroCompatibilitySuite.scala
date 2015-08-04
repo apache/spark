@@ -26,17 +26,13 @@ import org.apache.hadoop.fs.Path
 import org.apache.parquet.avro.AvroParquetWriter
 
 import org.apache.spark.sql.parquet.test.avro.{Nested, ParquetAvroCompat}
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.Row
 
 class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest {
   import ParquetCompatibilityTest._
 
-  override val sqlContext: SQLContext = TestSQLContext
-
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-
     val writer =
       new AvroParquetWriter[ParquetAvroCompat](
         new Path(parquetStore.getCanonicalPath),

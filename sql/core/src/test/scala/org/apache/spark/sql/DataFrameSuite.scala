@@ -28,13 +28,15 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.json.JSONRelation
 import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SQLTestUtils}
+import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SQLTestUtils, MyTestSQLContext}
 
-class DataFrameSuite extends QueryTest with SQLTestUtils {
-  import org.apache.spark.sql.TestData._
+class DataFrameSuite extends QueryTest with SQLTestUtils with MyTestSQLContext {
+  private val ctx = sqlContextWithData
+  import ctx.implicits._
+  import ctx._
 
-  lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
-  import sqlContext.implicits._
+  // For SQLTestUtils
+  protected override def _sqlContext = ctx
 
   test("analysis error should be eagerly reported") {
     // Eager analysis.
@@ -298,7 +300,7 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   }
 
   test("udf") {
-    val foo = udf((a: Int, b: String) => a.toString + b)
+    val foo = org.apache.spark.sql.functions.udf((a: Int, b: String) => a.toString + b)
 
     checkAnswer(
       // SELECT *, foo(key, value) FROM testData

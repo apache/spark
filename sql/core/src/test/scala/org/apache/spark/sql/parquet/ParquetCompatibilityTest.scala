@@ -23,12 +23,11 @@ import scala.collection.JavaConversions._
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.schema.MessageType
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.util.Utils
 
-abstract class ParquetCompatibilityTest extends QueryTest with ParquetTest with BeforeAndAfterAll {
+abstract class ParquetCompatibilityTest extends QueryTest with ParquetTest {
   protected var parquetStore: File = _
 
   /**
@@ -40,12 +39,14 @@ abstract class ParquetCompatibilityTest extends QueryTest with ParquetTest with 
   protected def stagingDir: Option[String] = None
 
   override protected def beforeAll(): Unit = {
+    super.beforeAll()
     parquetStore = Utils.createTempDir(namePrefix = "parquet-compat_")
     parquetStore.delete()
   }
 
   override protected def afterAll(): Unit = {
     Utils.deleteRecursively(parquetStore)
+    super.afterAll()
   }
 
   def readParquetSchema(path: String): MessageType = {

@@ -17,20 +17,22 @@
 
 package org.apache.spark.sql.columnar
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
+import org.apache.spark.sql.test.MyTestSQLContext
 
-class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfter {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfter with MyTestSQLContext {
+  private val ctx = sqlContextWithData
   import ctx.implicits._
+  import ctx._
 
   private lazy val originalColumnBatchSize = ctx.conf.columnBatchSize
   private lazy val originalInMemoryPartitionPruning = ctx.conf.inMemoryPartitionPruning
 
   override protected def beforeAll(): Unit = {
+    super.beforeAll()
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
     ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, 10)
 
@@ -49,6 +51,7 @@ class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfterAll wi
   override protected def afterAll(): Unit = {
     ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
     ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
+    super.afterAll()
   }
 
   before {

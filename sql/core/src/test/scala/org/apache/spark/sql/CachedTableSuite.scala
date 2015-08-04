@@ -23,18 +23,16 @@ import scala.language.{implicitConversions, postfixOps}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Accumulators
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar._
 import org.apache.spark.storage.{StorageLevel, RDDBlockId}
+import org.apache.spark.sql.test.MyTestSQLContext
 
-case class BigData(s: String)
+private case class BigData(s: String)
 
-class CachedTableSuite extends QueryTest {
-  TestData // Load test tables.
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+class CachedTableSuite extends QueryTest with MyTestSQLContext {
+  private val ctx = sqlContextWithData
   import ctx.implicits._
-  import ctx.sql
+  import ctx._
 
   def rddIdOf(tableName: String): Int = {
     val executedPlan = ctx.table(tableName).queryExecution.executedPlan

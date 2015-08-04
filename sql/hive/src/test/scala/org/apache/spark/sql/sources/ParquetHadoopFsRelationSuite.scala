@@ -28,10 +28,11 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 
 class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
-  override val dataSourceName: String = classOf[parquet.DefaultSource].getCanonicalName
+  private val ctx = sqlContext
+  import ctx.implicits._
+  import ctx._
 
-  import sqlContext._
-  import sqlContext.implicits._
+  override val dataSourceName: String = classOf[parquet.DefaultSource].getCanonicalName
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>

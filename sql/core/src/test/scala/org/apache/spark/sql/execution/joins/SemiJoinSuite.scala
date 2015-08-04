@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{LessThan, Expression}
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
 
 
-class SemiJoinSuite extends SparkPlanTest{
+class SemiJoinSuite extends SparkPlanTest {
   val left = Seq(
     (1, 2.0),
     (1, 2.0),

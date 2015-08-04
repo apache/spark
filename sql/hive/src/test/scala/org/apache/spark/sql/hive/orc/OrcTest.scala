@@ -24,13 +24,19 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.hive.test.TestHiveContext
+import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
 
-private[sql] trait OrcTest extends SQLTestUtils { this: SparkFunSuite =>
-  lazy val sqlContext = org.apache.spark.sql.hive.test.TestHive
+private[sql] trait OrcTest extends SparkFunSuite with SQLTestUtils with MyTestSQLContext {
 
-  import sqlContext.implicits._
-  import sqlContext.sparkContext
+  // Use a hive context instead
+  switchSQLContext(() => new TestHiveContext)
+  private val ctx = sqlContext
+  import ctx.implicits._
+  import ctx.sparkContext
+
+  // For SQLTestUtils
+  protected override def _sqlContext: SQLContext = ctx
 
   /**
    * Writes `data` to a Orc file, which is then passed to `f` and will be deleted after `f`

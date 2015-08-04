@@ -19,17 +19,17 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
+import org.apache.spark.sql.test.MyTestSQLContext
 
 private object MathExpressionsTestData {
   case class DoubleData(a: java.lang.Double, b: java.lang.Double)
   case class NullDoubles(a: java.lang.Double)
 }
 
-class MathExpressionsSuite extends QueryTest {
-
+class MathExpressionsSuite extends QueryTest with MyTestSQLContext {
   import MathExpressionsTestData._
 
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  private val ctx = sqlContext
   import ctx.implicits._
 
   private lazy val doubleData = (1 to 10).map(i => DoubleData(i * 0.2 - 1, i * -0.2 + 1)).toDF()

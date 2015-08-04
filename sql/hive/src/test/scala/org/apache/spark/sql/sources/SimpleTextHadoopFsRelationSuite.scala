@@ -23,9 +23,10 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
-  override val dataSourceName: String = classOf[SimpleTextSource].getCanonicalName
+  private val ctx = sqlContext
+  import ctx._
 
-  import sqlContext._
+  override val dataSourceName: String = classOf[SimpleTextSource].getCanonicalName
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>

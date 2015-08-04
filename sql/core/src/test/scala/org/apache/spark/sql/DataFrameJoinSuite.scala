@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.MyTestSQLContext
 
-class DataFrameJoinSuite extends QueryTest {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+class DataFrameJoinSuite extends QueryTest with MyTestSQLContext {
+  private val ctx = sqlContextWithData
   import ctx.implicits._
+  import ctx._
 
   test("join - join using") {
     val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")

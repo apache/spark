@@ -17,23 +17,22 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.{SQLContext, DataFrame, DataFrameHolder, Row}
-
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.{DataFrame, DataFrameHolder, Row, SQLContext}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.test.MyTestSQLContext
+
 
 /**
  * Base class for writing tests for individual physical operators. For an example of how this
  * class's test helper methods can be used, see [[SortSuite]].
  */
-class SparkPlanTest extends SparkFunSuite {
-
-  protected def sqlContext: SQLContext = TestSQLContext
+abstract class SparkPlanTest extends SparkFunSuite with MyTestSQLContext {
 
   /**
    * Creates a DataFrame from a local Seq of Product.

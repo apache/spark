@@ -19,10 +19,11 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConversions._
 
+import org.apache.spark.sql.test.MyTestSQLContext
 
-class DataFrameNaFunctionsSuite extends QueryTest {
 
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+class DataFrameNaFunctionsSuite extends QueryTest with MyTestSQLContext {
+  private val ctx = sqlContext
   import ctx.implicits._
 
   def createDF(): DataFrame = {

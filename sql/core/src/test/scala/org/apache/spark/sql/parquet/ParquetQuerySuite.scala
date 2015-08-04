@@ -29,8 +29,8 @@ import org.apache.spark.util.Utils
  * A test suite that tests various Parquet queries.
  */
 class ParquetQuerySuite extends QueryTest with ParquetTest {
-  lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
-  import sqlContext.sql
+  private val ctx = sqlContext
+  import ctx._
 
   test("simple select queries") {
     withParquetTable((0 until 10).map(i => (i, i.toString)), "t") {

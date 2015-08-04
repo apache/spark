@@ -19,16 +19,16 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.test.TestSQLContext
 
 class AggregateSuite extends SparkPlanTest {
+  private val ctx = sqlContext
 
   test("SPARK-8357 unsafe aggregation path should not leak memory with empty input") {
-    val codegenDefault = TestSQLContext.getConf(SQLConf.CODEGEN_ENABLED)
-    val unsafeDefault = TestSQLContext.getConf(SQLConf.UNSAFE_ENABLED)
+    val codegenDefault = ctx.getConf(SQLConf.CODEGEN_ENABLED)
+    val unsafeDefault = ctx.getConf(SQLConf.UNSAFE_ENABLED)
     try {
-      TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, true)
-      TestSQLContext.setConf(SQLConf.UNSAFE_ENABLED, true)
+      ctx.setConf(SQLConf.CODEGEN_ENABLED, true)
+      ctx.setConf(SQLConf.UNSAFE_ENABLED, true)
       val df = Seq.empty[(Int, Int)].toDF("a", "b")
       checkAnswer(
         df,
@@ -41,8 +41,8 @@ class AggregateSuite extends SparkPlanTest {
         Seq.empty
       )
     } finally {
-      TestSQLContext.setConf(SQLConf.CODEGEN_ENABLED, codegenDefault)
-      TestSQLContext.setConf(SQLConf.UNSAFE_ENABLED, unsafeDefault)
+      ctx.setConf(SQLConf.CODEGEN_ENABLED, codegenDefault)
+      ctx.setConf(SQLConf.UNSAFE_ENABLED, unsafeDefault)
     }
   }
 }

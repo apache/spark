@@ -22,11 +22,11 @@ import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.MyTestSQLContext
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class DateFunctionsSuite extends QueryTest {
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-
+class DateFunctionsSuite extends QueryTest with MyTestSQLContext {
+  private val ctx = sqlContext
   import ctx.implicits._
 
   test("function current_date") {

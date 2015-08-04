@@ -24,10 +24,15 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{SaveMode, Row}
+import org.apache.spark.sql.test.MyTestSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCWriteSuite extends SparkFunSuite with BeforeAndAfter {
+class JDBCWriteSuite extends SparkFunSuite with BeforeAndAfter with MyTestSQLContext {
+  private val ctx = sqlContext
+  import ctx.implicits._
+  import ctx._
+
   val url = "jdbc:h2:mem:testdb2"
   var conn: java.sql.Connection = null
   val url1 = "jdbc:h2:mem:testdb3"
@@ -36,10 +41,6 @@ class JDBCWriteSuite extends SparkFunSuite with BeforeAndAfter {
   properties.setProperty("user", "testUser")
   properties.setProperty("password", "testPass")
   properties.setProperty("rowId", "false")
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
-  import ctx.sql
 
   before {
     Utils.classForName("org.h2.Driver")

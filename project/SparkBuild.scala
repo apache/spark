@@ -312,6 +312,7 @@ object OldDeps {
   )
 }
 
+// TODO: check if this is OK
 object SQL {
   lazy val settings = Seq(
     initialCommands in console :=
@@ -325,7 +326,6 @@ object SQL {
         |import org.apache.spark.sql.catalyst.util._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.functions._
-        |import org.apache.spark.sql.test.TestSQLContext._
         |import org.apache.spark.sql.types._""".stripMargin,
     cleanupCommands in console := "sparkContext.stop()"
   )

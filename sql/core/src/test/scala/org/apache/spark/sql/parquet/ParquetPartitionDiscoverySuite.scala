@@ -32,7 +32,6 @@ import org.apache.spark.sql.execution.datasources.{LogicalRelation, PartitionSpe
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
 import org.apache.spark.unsafe.types.UTF8String
-import PartitioningUtils._
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -41,10 +40,11 @@ case class ParquetData(intField: Int, stringField: String)
 case class ParquetDataWithKey(intField: Int, pi: Int, stringField: String, ps: String)
 
 class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
+  import PartitioningUtils._
 
-  override lazy val sqlContext: SQLContext = org.apache.spark.sql.test.TestSQLContext
-  import sqlContext.implicits._
-  import sqlContext.sql
+  private val ctx = sqlContext
+  import ctx.implicits._
+  import ctx._
 
   val defaultPartitionName = "__HIVE_DEFAULT_PARTITION__"
 

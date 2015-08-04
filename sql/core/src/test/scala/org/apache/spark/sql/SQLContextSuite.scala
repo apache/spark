@@ -17,16 +17,15 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.test.MyTestSQLContext
 
-class SQLContextSuite extends SparkFunSuite with BeforeAndAfterAll {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+class SQLContextSuite extends SparkFunSuite with MyTestSQLContext {
+  private val ctx = sqlContext
 
   override def afterAll(): Unit = {
     SQLContext.setLastInstantiatedContext(ctx)
+    super.afterAll()
   }
 
   test("getOrCreate instantiates SQLContext") {

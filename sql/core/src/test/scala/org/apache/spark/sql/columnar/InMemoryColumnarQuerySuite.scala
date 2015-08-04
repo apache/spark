@@ -19,18 +19,15 @@ package org.apache.spark.sql.columnar
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.test.MyTestSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{QueryTest, Row, TestData}
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 
-class InMemoryColumnarQuerySuite extends QueryTest {
-  // Make sure the tables are loaded.
-  TestData
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+class InMemoryColumnarQuerySuite extends QueryTest with MyTestSQLContext {
+  private val ctx = sqlContextWithData
   import ctx.implicits._
-  import ctx.{logicalPlanToSparkQuery, sql}
+  import ctx._
 
   test("simple columnar query") {
     val plan = ctx.executePlan(testData.logicalPlan).executedPlan

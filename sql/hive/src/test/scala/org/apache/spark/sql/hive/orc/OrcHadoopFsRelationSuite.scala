@@ -24,10 +24,11 @@ import org.apache.spark.sql.sources.HadoopFsRelationTest
 import org.apache.spark.sql.types._
 
 class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
-  override val dataSourceName: String = classOf[DefaultSource].getCanonicalName
+  private val ctx = sqlContext
+  import ctx.implicits._
+  import ctx._
 
-  import sqlContext._
-  import sqlContext.implicits._
+  override val dataSourceName: String = classOf[DefaultSource].getCanonicalName
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>

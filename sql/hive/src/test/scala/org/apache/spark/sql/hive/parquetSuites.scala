@@ -19,17 +19,13 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
 import org.apache.spark.sql.hive.execution.HiveTableScan
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -58,6 +54,9 @@ case class ParquetDataWithKeyAndComplexTypes(
  * built in parquet support.
  */
 class ParquetMetastoreSuite extends ParquetPartitioningTest {
+  private val ctx = sqlContext.asInstanceOf[TestHiveContext]
+  import ctx._
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     dropTables("partitioned_parquet",
@@ -536,6 +535,10 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
  * A suite of tests for the Parquet support through the data sources API.
  */
 class ParquetSourceSuite extends ParquetPartitioningTest {
+  private val ctx = sqlContext.asInstanceOf[TestHiveContext]
+  import ctx.implicits._
+  import ctx._
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     dropTables("partitioned_parquet",
@@ -684,8 +687,16 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
 /**
  * A collection of tests for parquet data with various forms of partitioning.
  */
-abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
-  override def sqlContext: SQLContext = TestHive
+abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with MyTestSQLContext {
+
+  // Use a hive context instead
+  switchSQLContext(() => new TestHiveContext)
+  private val ctx = sqlContext
+  import ctx.implicits._
+  import ctx._
+
+  // For SQLTestUtils
+  protected override def _sqlContext: SQLContext = ctx
 
   var partitionedTableDir: File = null
   var normalTableDir: File = null

@@ -22,15 +22,15 @@ import org.scalatest.Matchers._
 import org.apache.spark.sql.execution.{Project, TungstenProject}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
 
-class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
-  import org.apache.spark.sql.TestData._
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+class ColumnExpressionSuite extends QueryTest with SQLTestUtils with MyTestSQLContext {
+  private val ctx = sqlContextWithData
   import ctx.implicits._
+  import ctx._
 
-  override def sqlContext(): SQLContext = ctx
+  // For SQLTestUtils
+  protected override def _sqlContext: SQLContext = ctx
 
   test("alias") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")

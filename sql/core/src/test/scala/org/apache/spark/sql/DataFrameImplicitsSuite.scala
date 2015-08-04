@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql
 
-class DataFrameImplicitsSuite extends QueryTest {
+import org.apache.spark.sql.test.MyTestSQLContext
 
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+class DataFrameImplicitsSuite extends QueryTest with MyTestSQLContext {
+  private val ctx = sqlContext
   import ctx.implicits._
 
   test("RDD of tuples") {

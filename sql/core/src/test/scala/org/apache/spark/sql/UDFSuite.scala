@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
 
-case class FunctionResult(f1: String, f2: String)
+private case class FunctionResult(f1: String, f2: String)
 
-class UDFSuite extends QueryTest with SQLTestUtils {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+class UDFSuite extends QueryTest with SQLTestUtils with MyTestSQLContext {
+  private val ctx = sqlContextWithData
   import ctx.implicits._
+  import ctx._
 
-  override def sqlContext(): SQLContext = ctx
+  // For SQLTestUtils
+  protected override def _sqlContext: SQLContext = ctx
 
   test("built-in fixed arity expressions") {
     val df = ctx.emptyDataFrame

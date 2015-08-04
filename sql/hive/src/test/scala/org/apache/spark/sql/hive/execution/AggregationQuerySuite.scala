@@ -18,17 +18,21 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.hive.test.TestHiveContext
+import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.sql.{SQLConf, AnalysisException, QueryTest, Row}
-import org.scalatest.BeforeAndAfterAll
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf, SQLContext}
 import test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 
-abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
+abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with MyTestSQLContext {
 
-  override val sqlContext = TestHive
-  import sqlContext.implicits._
+  // Use a hive context instead
+  switchSQLContext(() => new TestHiveContext)
+  private val ctx = sqlContext
+  import ctx.implicits._
+
+  // For SQLTestUtils
+  protected override def _sqlContext: SQLContext = ctx
 
   var originalUseAggregate2: Boolean = _
 

@@ -23,19 +23,20 @@ import java.sql.{Date, Timestamp}
 import com.fasterxml.jackson.core.JsonFactory
 import org.scalactic.Tolerance._
 
-import org.apache.spark.sql.{QueryTest, Row, SQLConf}
-import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.{QueryTest, Row, SQLConf, SQLContext}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.json.InferSchema.compatibleType
+import org.apache.spark.sql.test.MyTestSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JsonSuite extends QueryTest with TestJsonData {
+class JsonSuite extends QueryTest with TestJsonData with MyTestSQLContext {
+  private val _ctx = sqlContextWithData
+  import _ctx.implicits._
+  import _ctx._
 
-  protected lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.sql
-  import ctx.implicits._
+  protected override def ctx: SQLContext = _ctx
 
   test("Type promotion") {
     def checkTypePromotion(expected: Any, actual: Any) {
@@ -1040,24 +1041,23 @@ class JsonSuite extends QueryTest with TestJsonData {
   }
 
   test("JSONRelation equality test") {
-    val context = org.apache.spark.sql.test.TestSQLContext
     val relation1 = new JSONRelation(
       "path",
       1.0,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      context)
+      ctx)
     val logicalRelation1 = LogicalRelation(relation1)
     val relation2 = new JSONRelation(
       "path",
       0.5,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      context)
+      ctx)
     val logicalRelation2 = LogicalRelation(relation2)
     val relation3 = new JSONRelation(
       "path",
       1.0,
       Some(StructType(StructField("b", StringType, true) :: Nil)),
-      context)
+      ctx)
     val logicalRelation3 = LogicalRelation(relation3)
 
     assert(relation1 === relation2)

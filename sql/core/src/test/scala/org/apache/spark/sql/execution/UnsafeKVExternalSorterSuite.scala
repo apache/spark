@@ -22,16 +22,15 @@ import scala.util.Random
 import org.apache.spark._
 import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, RowOrdering, UnsafeProjection}
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.catalyst.expressions.{RowOrdering, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.test.MyTestSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
 
 /**
  * Test suite for [[UnsafeKVExternalSorter]], with randomly generated test data.
  */
-class UnsafeKVExternalSorterSuite extends SparkFunSuite {
-
+class UnsafeKVExternalSorterSuite extends SparkFunSuite with MyTestSQLContext {
   private val keyTypes = Seq(IntegerType, FloatType, DoubleType, StringType)
   private val valueTypes = Seq(IntegerType, FloatType, DoubleType, StringType)
 
@@ -65,9 +64,6 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite {
     val valueSchemaStr = valueSchema.map(_.dataType.simpleString).mkString("[", ",", "]")
 
     test(s"kv sorting key schema $keySchemaStr and value schema $valueSchemaStr") {
-      // Calling this make sure we have block manager and everything else setup.
-      TestSQLContext
-
       val taskMemMgr = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
       val shuffleMemMgr = new TestShuffleMemoryManager
       TaskContext.setTaskContext(new TaskContextImpl(

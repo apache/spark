@@ -18,15 +18,16 @@
 package org.apache.spark.sql.execution.debug
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.MyTestSQLContext
 
-class DebuggingSuite extends SparkFunSuite {
+class DebuggingSuite extends SparkFunSuite with MyTestSQLContext {
+  private val ctx = sqlContextWithData
+
   test("DataFrame.debug()") {
-    testData.debug()
+    ctx.testData.debug()
   }
 
   test("DataFrame.typeCheck()") {
-    testData.typeCheck()
+    ctx.testData.typeCheck()
   }
 }

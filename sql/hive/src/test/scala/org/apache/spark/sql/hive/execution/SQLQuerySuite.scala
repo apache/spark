@@ -26,12 +26,10 @@ import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
 import org.apache.spark.sql.types._
 
 case class Nested1(f1: Nested2)
@@ -64,11 +62,19 @@ class MyDialect extends DefaultParserDialect
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
-class SQLQuerySuite extends QueryTest with SQLTestUtils {
-  override def sqlContext: SQLContext = TestHive
+class SQLQuerySuite extends QueryTest with SQLTestUtils with MyTestSQLContext {
+
+  // Use a hive context instead
+  switchSQLContext(() => new TestHiveContext)
+  private val ctx = sqlContext.asInstanceOf[TestHiveContext]
+  import ctx.implicits._
+  import ctx._
+
+  // For SQLTestUtils
+  protected override def _sqlContext: SQLContext = ctx
 
   test("UDTF") {
-    sql(s"ADD JAR ${TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
+    sql(s"ADD JAR ${getHiveFile("TestUDTF.jar").getCanonicalPath()}")
     // The function source code can be found at:
     // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
     sql(
@@ -612,7 +618,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
     val rowRdd = sparkContext.parallelize(row :: Nil)
 
-    TestHive.createDataFrame(rowRdd, schema).registerTempTable("testTable")
+    createDataFrame(rowRdd, schema).registerTempTable("testTable")
 
     sql(
       """CREATE TABLE nullValuesInInnerComplexTypes
@@ -1030,10 +1036,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     val thread = new Thread {
       override def run() {
         // To make sure this test works, this jar should not be loaded in another place.
-        TestHive.sql(
-          s"ADD JAR ${TestHive.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
+        ctx.sql(s"ADD JAR ${getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
         try {
-          TestHive.sql(
+          ctx.sql(
             """
               |CREATE TEMPORARY FUNCTION example_max
               |AS 'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax'
@@ -1082,22 +1087,21 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-8588 HiveTypeCoercion.inConversion fires too early") {
-    val df =
-      TestHive.createDataFrame(Seq((1, "2014-01-01"), (2, "2015-01-01"), (3, "2016-01-01")))
+    val df = ctx.createDataFrame(Seq((1, "2014-01-01"), (2, "2015-01-01"), (3, "2016-01-01")))
     df.toDF("id", "datef").registerTempTable("test_SPARK8588")
     checkAnswer(
-      TestHive.sql(
+      ctx.sql(
         """
           |select id, concat(year(datef))
           |from test_SPARK8588 where concat(year(datef), ' year') in ('2015 year', '2014 year')
         """.stripMargin),
       Row(1, "2014") :: Row(2, "2015") :: Nil
     )
-    TestHive.dropTempTable("test_SPARK8588")
+    ctx.dropTempTable("test_SPARK8588")
   }
 
   test("SPARK-9371: fix the support for special chars in column names for hive context") {
-    TestHive.read.json(TestHive.sparkContext.makeRDD(
+    ctx.read.json(ctx.sparkContext.makeRDD(
       """{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""" :: Nil))
       .registerTempTable("t")
 

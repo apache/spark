@@ -18,22 +18,23 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.{SQLTestUtils, TestSQLContext}
-import org.apache.spark.sql.test.TestSQLContext._
-import org.apache.spark.sql.test.TestSQLContext.implicits._
-import org.apache.spark.sql.test.TestSQLContext.planner._
+import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{SQLContext, Row, SQLConf, execution}
+import org.apache.spark.sql.{execution, Row, SQLConf, SQLContext}
 
 
-class PlannerSuite extends SparkFunSuite with SQLTestUtils {
+class PlannerSuite extends SparkFunSuite with SQLTestUtils with MyTestSQLContext {
+  private val ctx = sqlContextWithData
+  import ctx.implicits._
+  import ctx.planner._
+  import ctx._
 
-  override def sqlContext: SQLContext = TestSQLContext
+  // For SQLTestUtils
+  protected override def _sqlContext: SQLContext = ctx
 
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val plannedOption = HashAggregation(query).headOption.orElse(Aggregation(query).headOption)
@@ -83,7 +84,7 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
       } :+ StructField("key", IntegerType, true)
       val schema = StructType(fields)
       val row = Row.fromSeq(Seq.fill(fields.size)(null))
-      val rowRDD = org.apache.spark.sql.test.TestSQLContext.sparkContext.parallelize(row :: Nil)
+      val rowRDD = ctx.sparkContext.parallelize(row :: Nil)
       createDataFrame(rowRDD, schema).registerTempTable("testLimit")
 
       val planned = sql(

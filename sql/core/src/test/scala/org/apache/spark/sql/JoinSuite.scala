@@ -19,19 +19,15 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.execution.joins._
-import org.apache.spark.sql.types.BinaryType
+import org.apache.spark.sql.test.MyTestSQLContext
 
 
-class JoinSuite extends QueryTest with BeforeAndAfterEach {
-  // Ensures tables are loaded.
-  TestData
-
-  lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+class JoinSuite extends QueryTest with BeforeAndAfterEach with MyTestSQLContext {
+  private val ctx = sqlContextWithData
   import ctx.implicits._
-  import ctx.logicalPlanToSparkQuery
+  import ctx._
 
   test("equi-join is hash-join") {
     val x = testData2.as("x")

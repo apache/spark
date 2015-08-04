@@ -20,6 +20,8 @@ package org.apache.spark.sql.json
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 
+// TODO: clean me up
+
 trait TestJsonData {
 
   protected def ctx: SQLContext

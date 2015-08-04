@@ -20,12 +20,12 @@ package org.apache.spark.sql
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, SpecificMutableRow}
+import org.apache.spark.sql.test.MyTestSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-class RowSuite extends SparkFunSuite {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+class RowSuite extends SparkFunSuite with MyTestSQLContext {
+  private val ctx = sqlContext
   import ctx.implicits._
 
   test("create row") {

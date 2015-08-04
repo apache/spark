@@ -23,26 +23,33 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.InvalidInputException
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.client.{HiveTable, ManagedTable}
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
  */
-class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
+class MetastoreDataSourcesSuite
+  extends QueryTest
+  with SQLTestUtils
+  with MyTestSQLContext
   with Logging {
-  override val sqlContext = TestHive
+
+  // Use a hive context instead
+  switchSQLContext(() => new TestHiveContext)
+  private val ctx = sqlContext.asInstanceOf[TestHiveContext]
+  import ctx.implicits._
+  import ctx._
+
+  protected override def _sqlContext: SQLContext = ctx
 
   var jsonFilePath: String = _
 
