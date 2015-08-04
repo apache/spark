@@ -23,6 +23,7 @@ import scala.language.postfixOps
 import scala.util.Random
 
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
@@ -133,7 +134,7 @@ class KinesisStreamSuite extends KinesisFunSuite
     // Verify that the generated KinesisBackedBlockRDD has the all the right information
     val blockInfos = Seq(blockInfo1, blockInfo2)
     val nonEmptyRDD = kinesisStream.createBlockRDD(time, blockInfos)
-    assert(nonEmptyRDD.isInstanceOf[KinesisBackedBlockRDD])
+    nonEmptyRDD shouldBe a [KinesisBackedBlockRDD]
     val kinesisRDD = nonEmptyRDD.asInstanceOf[KinesisBackedBlockRDD]
     assert(kinesisRDD.regionName === regionName)
     assert(kinesisRDD.endpointUrl === endpointUrl)
@@ -141,7 +142,7 @@ class KinesisStreamSuite extends KinesisFunSuite
     assert(kinesisRDD.awsCredentialsOption ===
       Some(SerializableAWSCredentials(awsAccessKey, awsSecretKey)))
     assert(nonEmptyRDD.partitions.size === blockInfos.size)
-    assert(nonEmptyRDD.partitions.forall( _.isInstanceOf[KinesisBackedBlockRDDPartition]))
+    nonEmptyRDD.partitions.foreach { _ shouldBe a [KinesisBackedBlockRDDPartition] }
     val partitions = nonEmptyRDD.partitions.map {
       _.asInstanceOf[KinesisBackedBlockRDDPartition] }.toSeq
     assert(partitions.map { _.seqNumberRanges } === Seq(seqNumRanges1, seqNumRanges2))
@@ -150,16 +151,14 @@ class KinesisStreamSuite extends KinesisFunSuite
 
     // Verify that KinesisBackedBlockRDD is generated even when there are no blocks
     val emptyRDD = kinesisStream.createBlockRDD(time, Seq.empty)
-    assert(emptyRDD.isInstanceOf[KinesisBackedBlockRDD])
-    assert(emptyRDD.partitions.isEmpty)
+    emptyRDD shouldBe a [KinesisBackedBlockRDD]
+    emptyRDD.partitions shouldBe empty
 
     // Verify that the KinesisBackedBlockRDD has isBlockValid = false when blocks are invalid
     blockInfos.foreach { _.setBlockIdInvalid() }
-    assert(
-      kinesisStream.createBlockRDD(time, blockInfos).partitions.forall {
-      _.asInstanceOf[KinesisBackedBlockRDDPartition].isBlockIdValid === false
-      }
-    )
+    kinesisStream.createBlockRDD(time, blockInfos).partitions.foreach { partition =>
+      assert(partition.asInstanceOf[KinesisBackedBlockRDDPartition].isBlockIdValid === false)
+    }
   }
 
 
@@ -244,7 +243,7 @@ class KinesisStreamSuite extends KinesisFunSuite
     times.foreach { time =>
       val (arrayOfSeqNumRanges, data) = collectedData(time)
       val rdd = recoveredKinesisStream.getOrCompute(time).get.asInstanceOf[RDD[Array[Byte]]]
-      assert(rdd.isInstanceOf[KinesisBackedBlockRDD])
+      rdd shouldBe a [KinesisBackedBlockRDD]
 
       // Verify the recovered sequence ranges
       val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD]

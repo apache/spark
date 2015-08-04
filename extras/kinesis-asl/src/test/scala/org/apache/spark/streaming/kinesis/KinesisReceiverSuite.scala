@@ -103,6 +103,8 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     recordProcessor.processRecords(batch, checkpointerMock)
 
     verify(receiverMock, times(1)).isStopped()
+    verify(receiverMock, never).addRecords(anyString, anyListOf(classOf[Record]))
+    verify(checkpointerMock, never).checkpoint(anyString)
   }
 
   test("shouldn't checkpoint when exception occurs during store") {
@@ -119,6 +121,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
 
     verify(receiverMock, times(1)).isStopped()
     verify(receiverMock, times(1)).addRecords(shardId, batch)
+    verify(checkpointerMock, never).checkpoint(anyString)
   }
 
   test("should set checkpoint time to currentTime + checkpoint interval upon instantiation") {

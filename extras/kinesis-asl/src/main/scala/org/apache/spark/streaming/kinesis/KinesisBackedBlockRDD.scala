@@ -37,23 +37,18 @@ case class SequenceNumberRange(
 
 /** Class representing an array of Kinesis sequence number ranges */
 private[kinesis]
-case class SequenceNumberRanges(ranges: Array[SequenceNumberRange]) {
+case class SequenceNumberRanges(ranges: Seq[SequenceNumberRange]) {
   def isEmpty(): Boolean = ranges.isEmpty
 
   def nonEmpty(): Boolean = ranges.nonEmpty
 
   override def toString(): String = ranges.mkString("SequenceNumberRanges(", ", ", ")")
-
-  override def equals(obj: Any): Boolean = {
-    obj.isInstanceOf[SequenceNumberRanges] &&
-      obj.asInstanceOf[SequenceNumberRanges].ranges.toSeq == ranges.toSeq
-  }
 }
 
 private[kinesis]
 object SequenceNumberRanges {
   def apply(range: SequenceNumberRange): SequenceNumberRanges = {
-    new SequenceNumberRanges(Array(range))
+    new SequenceNumberRanges(Seq(range))
   }
 }
 
@@ -73,10 +68,10 @@ class KinesisBackedBlockRDDPartition(
  */
 private[kinesis]
 class KinesisBackedBlockRDD(
-    sc: SparkContext,
+    @transient sc: SparkContext,
     val regionName: String,
     val endpointUrl: String,
-    @transient override val blockIds: Array[BlockId],
+    @transient blockIds: Array[BlockId],
     @transient val arrayOfseqNumberRanges: Array[SequenceNumberRanges],
     @transient isBlockIdValid: Array[Boolean] = Array.empty,
     val retryTimeoutMs: Int = 10000,

@@ -155,9 +155,10 @@ object KinesisUtils {
       initialPositionInStream: InitialPositionInStream,
       storageLevel: StorageLevel
     ): ReceiverInputDStream[Array[Byte]] = {
-    ssc.receiverStream(
-      new KinesisReceiver(streamName, endpointUrl, getRegionByEndpoint(endpointUrl),
-        initialPositionInStream, ssc.sc.appName, checkpointInterval, storageLevel, None))
+    ssc.withNamedScope("kinesis stream") {
+      new KinesisInputDStream(ssc, streamName, endpointUrl, getRegionByEndpoint(endpointUrl),
+        initialPositionInStream, ssc.sc.appName, checkpointInterval, storageLevel, None)
+    }
   }
 
   /**

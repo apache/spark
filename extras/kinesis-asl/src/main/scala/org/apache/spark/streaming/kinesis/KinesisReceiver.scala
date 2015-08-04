@@ -233,7 +233,7 @@ private[kinesis] class KinesisReceiver(
    * for next block. Internally, this is synchronized with `rememberAddedRange()`.
    */
   private def finalizeRangesForCurrentBlock(blockId: StreamBlockId): Unit = {
-    blockIdToSeqNumRanges(blockId) = SequenceNumberRanges(seqNumRangesInCurrentBlock.toArray)
+    blockIdToSeqNumRanges(blockId) = SequenceNumberRanges(seqNumRangesInCurrentBlock.toSeq)
     seqNumRangesInCurrentBlock.clear()
     logDebug(s"Generated block $blockId has $blockIdToSeqNumRanges")
   }
