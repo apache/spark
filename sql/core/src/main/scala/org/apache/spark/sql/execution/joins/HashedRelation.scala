@@ -17,16 +17,19 @@
 
 package org.apache.spark.sql.execution.joins
 
-import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.io.{IOException, Externalizable, ObjectInput, ObjectOutput}
 import java.nio.ByteOrder
 import java.util.{HashMap => JavaHashMap}
 
+import org.apache.spark.shuffle.ShuffleMemoryManager
+import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.CompactBuffer
 
 
@@ -216,7 +219,7 @@ private[joins] final class UnsafeHashedRelation(
     }
   }
 
-  override def writeExternal(out: ObjectOutput): Unit = {
+  override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     out.writeInt(hashTable.size())
 
     val iter = hashTable.entrySet().iterator()
@@ -228,7 +231,7 @@ private[joins] final class UnsafeHashedRelation(
       // write all the values as single byte array
       var totalSize = 0L
       var i = 0
-      while (i < values.size) {
+      while (i < values.length) {
         totalSize += values(i).getSizeInBytes + 4 + 4
         i += 1
       }
@@ -239,7 +242,7 @@ private[joins] final class UnsafeHashedRelation(
       out.writeInt(totalSize.toInt)
       out.write(key.getBytes)
       i = 0
-      while (i < values.size) {
+      while (i < values.length) {
         // [num of fields] [num of bytes] [row bytes]
         // write the integer in native order, so they can be read by UNSAFE.getInt()
         if (ByteOrder.nativeOrder() == ByteOrder.BIG_ENDIAN) {
@@ -255,11 +258,28 @@ private[joins] final class UnsafeHashedRelation(
     }
   }
 
-  override def readExternal(in: ObjectInput): Unit = {
+  override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     val nKeys = in.readInt()
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
-    val memoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
-    binaryMap = new BytesToBytesMap(memoryManager, nKeys * 2) // reduce hash collision
+    val taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
+
+    // Dummy shuffle memory manager which always grants all memory allocation requests.
+    // We use this because it doesn't make sense count shared broadcast variables' memory usage
+    // towards individual tasks' quotas. In the future, we should devise a better way of handling
+    // this.
+    val shuffleMemoryManager = new ShuffleMemoryManager(new SparkConf()) {
+      override def tryToAcquire(numBytes: Long): Long = numBytes
+      override def release(numBytes: Long): Unit = {}
+    }
+
+    val pageSizeBytes = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
+      .getSizeAsBytes("spark.buffer.pageSize", "64m")
+
+    binaryMap = new BytesToBytesMap(
+      taskMemoryManager,
+      shuffleMemoryManager,
+      nKeys * 2, // reduce hash collision
+      pageSizeBytes)
 
     var i = 0
     var keyBuffer = new Array[Byte](1024)
@@ -279,8 +299,11 @@ private[joins] final class UnsafeHashedRelation(
       // put it into binary map
       val loc = binaryMap.lookup(keyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, keySize)
       assert(!loc.isDefined, "Duplicated key found!")
-      loc.putNewKey(keyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, keySize,
+      val putSuceeded = loc.putNewKey(keyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, keySize,
         valuesBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, valuesSize)
+      if (!putSuceeded) {
+        throw new IOException("Could not allocate memory to grow BytesToBytesMap")
+      }
       i += 1
     }
   }

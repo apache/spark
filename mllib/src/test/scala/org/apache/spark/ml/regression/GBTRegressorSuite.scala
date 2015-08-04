@@ -26,7 +26,8 @@ import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => 
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.util.Utils
 
 
 /**
@@ -104,6 +105,24 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model = gbt.fit(df)
     val copied = model.copy(ParamMap.empty)
     assert(model.parent == copied.parent)
+  }
+
+  test("Checkpointing") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+    sc.setCheckpointDir(path)
+
+    val df = sqlContext.createDataFrame(data)
+    val gbt = new GBTRegressor()
+      .setMaxDepth(2)
+      .setMaxIter(5)
+      .setStepSize(0.1)
+      .setCheckpointInterval(2)
+    val model = gbt.fit(df)
+
+    sc.checkpointDir = None
+    Utils.deleteRecursively(tempDir)
+
   }
 
   // TODO: Reinstate test once runWithValidation is implemented  SPARK-7132

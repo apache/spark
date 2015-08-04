@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.scalatest.BeforeAndAfterAll
-
 import java.sql.Timestamp
 
+import org.scalatest.BeforeAndAfterAll
+
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.errors.DialectException
-import org.apache.spark.sql.execution.aggregate.Aggregate2Sort
+import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
@@ -273,7 +273,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       var hasGeneratedAgg = false
       df.queryExecution.executedPlan.foreach {
         case generatedAgg: GeneratedAggregate => hasGeneratedAgg = true
-        case newAggregate: Aggregate2Sort => hasGeneratedAgg = true
+        case newAggregate: aggregate.Aggregate => hasGeneratedAgg = true
         case _ =>
       }
       if (!hasGeneratedAgg) {
@@ -581,42 +581,28 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("sorting") {
-    val before = sqlContext.conf.externalSortEnabled
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, false)
-    sortTest()
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, before)
+    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "false") {
+      sortTest()
+    }
   }
 
   test("external sorting") {
-    val before = sqlContext.conf.externalSortEnabled
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, true)
-    sortTest()
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, before)
+    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "true") {
+      sortTest()
+    }
   }
 
   test("SPARK-6927 sorting with codegen on") {
-    val externalbefore = sqlContext.conf.externalSortEnabled
-    val codegenbefore = sqlContext.conf.codegenEnabled
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, false)
-    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
-    try{
+    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "false",
+      SQLConf.CODEGEN_ENABLED.key -> "true") {
       sortTest()
-    } finally {
-      sqlContext.setConf(SQLConf.EXTERNAL_SORT, externalbefore)
-      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, codegenbefore)
     }
   }
 
   test("SPARK-6927 external sorting with codegen on") {
-    val externalbefore = sqlContext.conf.externalSortEnabled
-    val codegenbefore = sqlContext.conf.codegenEnabled
-    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, true)
-    try {
+    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "true",
+      SQLConf.CODEGEN_ENABLED.key -> "true") {
       sortTest()
-    } finally {
-      sqlContext.setConf(SQLConf.EXTERNAL_SORT, externalbefore)
-      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, codegenbefore)
     }
   }
 
@@ -1577,10 +1563,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("SPARK-8753: add interval type") {
-    import org.apache.spark.unsafe.types.Interval
+    import org.apache.spark.unsafe.types.CalendarInterval
 
     val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
-    checkAnswer(df, Row(new Interval(12 * 3 - 3, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123 )))
+    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123 )))
     withTempPath(f => {
       // Currently we don't yet support saving out values of interval data type.
       val e = intercept[AnalysisException] {
@@ -1602,20 +1588,30 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {
-    import org.apache.spark.unsafe.types.Interval
-    import org.apache.spark.unsafe.types.Interval.MICROS_PER_WEEK
+    import org.apache.spark.unsafe.types.CalendarInterval
+    import org.apache.spark.unsafe.types.CalendarInterval.MICROS_PER_WEEK
 
     val df = sql("select interval 3 years -3 month 7 week 123 microseconds as i")
-    checkAnswer(df, Row(new Interval(12 * 3 - 3, 7L * MICROS_PER_WEEK + 123)))
+    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7L * MICROS_PER_WEEK + 123)))
 
-    checkAnswer(df.select(df("i") + new Interval(2, 123)),
-      Row(new Interval(12 * 3 - 3 + 2, 7L * MICROS_PER_WEEK + 123 + 123)))
+    checkAnswer(df.select(df("i") + new CalendarInterval(2, 123)),
+      Row(new CalendarInterval(12 * 3 - 3 + 2, 7L * MICROS_PER_WEEK + 123 + 123)))
 
-    checkAnswer(df.select(df("i") - new Interval(2, 123)),
-      Row(new Interval(12 * 3 - 3 - 2, 7L * MICROS_PER_WEEK + 123 - 123)))
+    checkAnswer(df.select(df("i") - new CalendarInterval(2, 123)),
+      Row(new CalendarInterval(12 * 3 - 3 - 2, 7L * MICROS_PER_WEEK + 123 - 123)))
 
     // unary minus
     checkAnswer(df.select(-df("i")),
-      Row(new Interval(-(12 * 3 - 3), -(7L * MICROS_PER_WEEK + 123))))
+      Row(new CalendarInterval(-(12 * 3 - 3), -(7L * MICROS_PER_WEEK + 123))))
+  }
+
+  test("SPARK-9511: error with table starting with number") {
+    val df = sqlContext.sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
+      .toDF("num", "str")
+    df.registerTempTable("1one")
+
+    checkAnswer(sqlContext.sql("select count(num) from 1one"), Row(10))
+
+    sqlContext.dropTempTable("1one")
   }
 }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.Utils
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
@@ -85,7 +86,37 @@ case class Generate(
 }
 
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  /**
+   * Indicates if `atLeastNNulls` is used to check if atLeastNNulls.children
+   * have at least one null value and atLeastNNulls.children are all attributes.
+   */
+  private def isAtLeastOneNullOutputAttributes(atLeastNNulls: AtLeastNNulls): Boolean = {
+    val expressions = atLeastNNulls.children
+    val n = atLeastNNulls.n
+    if (n != 1) {
+      // AtLeastNNulls is not used to check if atLeastNNulls.children have
+      // at least one null value.
+      false
+    } else {
+      // AtLeastNNulls is used to check if atLeastNNulls.children have
+      // at least one null value. We need to make sure all atLeastNNulls.children
+      // are attributes.
+      expressions.forall(_.isInstanceOf[Attribute])
+    }
+  }
+
+  override def output: Seq[Attribute] = condition match {
+    case Not(a: AtLeastNNulls) if isAtLeastOneNullOutputAttributes(a) =>
+      // The condition is used to make sure that there is no null value in
+      // a.children.
+      val nonNullableAttributes = AttributeSet(a.children.asInstanceOf[Seq[Attribute]])
+      child.output.map {
+        case attr if nonNullableAttributes.contains(attr) =>
+          attr.withNullability(false)
+        case attr => attr
+      }
+    case _ => child.output
+  }
 }
 
 case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -219,13 +250,16 @@ case class Aggregate(
     expressions.forall(_.resolved) && childrenResolved && !hasWindowExpressions
   }
 
+  lazy val newAggregation: Option[Aggregate] = Utils.tryConvert(this)
+
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
 }
 
 case class Window(
     projectList: Seq[Attribute],
     windowExpressions: Seq[NamedExpression],
-    windowSpec: WindowSpecDefinition,
+    partitionSpec: Seq[Expression],
+    orderSpec: Seq[SortOrder],
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] =

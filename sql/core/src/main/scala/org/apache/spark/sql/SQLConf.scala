@@ -200,7 +200,7 @@ private[spark] object SQLConf {
 
   val IN_MEMORY_PARTITION_PRUNING =
     booleanConf("spark.sql.inMemoryColumnarStorage.partitionPruning",
-      defaultValue = Some(false),
+      defaultValue = Some(true),
       doc = "When true, enable partition pruning for in-memory columnar tables.",
       isPublic = false)
 
@@ -229,7 +229,7 @@ private[spark] object SQLConf {
       " a specific query.")
 
   val UNSAFE_ENABLED = booleanConf("spark.sql.unsafe.enabled",
-    defaultValue = Some(false),
+    defaultValue = Some(true),
     doc = "When true, use the new optimized Tungsten physical execution backend.")
 
   val DIALECT = stringConf(
@@ -246,6 +246,13 @@ private[spark] object SQLConf {
     doc = "When true, the Parquet data source merges schemas collected from all data files, " +
           "otherwise the schema is picked from the summary file or a random data file " +
           "if no summary file is available.")
+
+  val PARQUET_SCHEMA_RESPECT_SUMMARIES = booleanConf("spark.sql.parquet.respectSummaryFiles",
+    defaultValue = Some(false),
+    doc = "When true, we make assumption that all part-files of Parquet are consistent with " +
+          "summary files and we will ignore them when merging schema. Otherwise, if this is " +
+          "false, which is the default, we will merge all part-files. This should be considered " +
+          "as expert-only option, and shouldn't be enabled before knowing what it means exactly.")
 
   val PARQUET_BINARY_AS_STRING = booleanConf("spark.sql.parquet.binaryAsString",
     defaultValue = Some(false),
@@ -406,6 +413,10 @@ private[spark] object SQLConf {
     "spark.sql.useSerializer2",
     defaultValue = Some(true), isPublic = false)
 
+  val ADVANCED_SQL_OPTIMIZATION = booleanConf(
+    "spark.sql.advancedOptimization",
+    defaultValue = Some(true), isPublic = false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -476,6 +487,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def useSqlAggregate2: Boolean = getConf(USE_SQL_AGGREGATE2)
 
   private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2)
+
+  private[spark] def advancedSqlOptimizations: Boolean = getConf(ADVANCED_SQL_OPTIMIZATION)
 
   private[spark] def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 

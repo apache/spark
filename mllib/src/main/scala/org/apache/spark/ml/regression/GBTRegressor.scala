@@ -180,7 +180,7 @@ final class GBTRegressionModel(
   override protected def predict(features: Vector): Double = {
     // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
     // Classifies by thresholding sum of weighted tree predictions
-    val treePredictions = _trees.map(_.rootNode.predict(features))
+    val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
     blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
   }
 

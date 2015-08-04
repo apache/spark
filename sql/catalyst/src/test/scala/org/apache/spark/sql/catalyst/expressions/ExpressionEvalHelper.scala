@@ -18,11 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.scalactic.TripleEqualsSupport.Spread
-import org.scalatest.Matchers._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
@@ -32,6 +30,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
  */
 trait ExpressionEvalHelper {
   self: SparkFunSuite =>
+
+  protected val defaultOptimizer = new DefaultOptimizer
 
   protected def create_row(values: Any*): InternalRow = {
     InternalRow.fromSeq(values.map(CatalystTypeConverters.convertToCatalyst))
@@ -188,7 +188,7 @@ trait ExpressionEvalHelper {
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
-    val optimizedPlan = DefaultOptimizer.execute(plan)
+    val optimizedPlan = defaultOptimizer.execute(plan)
     checkEvaluationWithoutCodegen(optimizedPlan.expressions.head, expected, inputRow)
   }
 

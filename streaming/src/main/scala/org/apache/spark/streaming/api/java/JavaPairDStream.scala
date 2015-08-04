@@ -788,7 +788,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[F],
-      conf: Configuration = new Configuration) {
+      conf: Configuration = dstream.context.sparkContext.hadoopConfiguration) {
     dstream.saveAsNewAPIHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass, conf)
   }
 

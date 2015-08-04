@@ -20,12 +20,14 @@ package org.apache.spark.util.collection.unsafe.sort;
 import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.LinkedList;
 import java.util.UUID;
 
 import scala.Tuple2;
 import scala.Tuple2$;
 import scala.runtime.AbstractFunction1;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
@@ -33,7 +35,6 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import static org.junit.Assert.*;
-import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.AdditionalAnswers.returnsSecondArg;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.*;
@@ -53,7 +54,8 @@ import org.apache.spark.util.Utils;
 
 public class UnsafeExternalSorterSuite {
 
-  final TaskMemoryManager memoryManager =
+  final LinkedList<File> spillFilesCreated = new LinkedList<File>();
+  final TaskMemoryManager taskMemoryManager =
     new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP));
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
   final PrefixComparator prefixComparator = new PrefixComparator() {
@@ -75,12 +77,14 @@ public class UnsafeExternalSorterSuite {
     }
   };
 
-  @Mock(answer = RETURNS_SMART_NULLS) ShuffleMemoryManager shuffleMemoryManager;
+  ShuffleMemoryManager shuffleMemoryManager;
   @Mock(answer = RETURNS_SMART_NULLS) BlockManager blockManager;
   @Mock(answer = RETURNS_SMART_NULLS) DiskBlockManager diskBlockManager;
   @Mock(answer = RETURNS_SMART_NULLS) TaskContext taskContext;
 
   File tempDir;
+
+  private final long pageSizeBytes = new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "64m");
 
   private static final class CompressStream extends AbstractFunction1<OutputStream, OutputStream> {
     @Override
@@ -93,15 +97,17 @@ public class UnsafeExternalSorterSuite {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     tempDir = new File(Utils.createTempDir$default$1());
+    shuffleMemoryManager = new ShuffleMemoryManager(Long.MAX_VALUE);
+    spillFilesCreated.clear();
     taskContext = mock(TaskContext.class);
     when(taskContext.taskMetrics()).thenReturn(new TaskMetrics());
-    when(shuffleMemoryManager.tryToAcquire(anyLong())).then(returnsFirstArg());
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
     when(diskBlockManager.createTempLocalBlock()).thenAnswer(new Answer<Tuple2<TempLocalBlockId, File>>() {
       @Override
       public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock) throws Throwable {
         TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
         File file = File.createTempFile("spillFile", ".spill", tempDir);
+        spillFilesCreated.add(file);
         return Tuple2$.MODULE$.apply(blockId, file);
       }
     });
@@ -130,6 +136,24 @@ public class UnsafeExternalSorterSuite {
       .then(returnsSecondArg());
   }
 
+  @After
+  public void tearDown() {
+    long leakedUnsafeMemory = taskMemoryManager.cleanUpAllAllocatedMemory();
+    if (shuffleMemoryManager != null) {
+      long leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask();
+      shuffleMemoryManager = null;
+      assertEquals(0L, leakedShuffleMemory);
+    }
+    assertEquals(0, leakedUnsafeMemory);
+  }
+
+  private void assertSpillFilesWereCleanedUp() {
+    for (File spillFile : spillFilesCreated) {
+      assertFalse("Spill file " + spillFile.getPath() + " was not cleaned up",
+        spillFile.exists());
+    }
+  }
+
   private static void insertNumber(UnsafeExternalSorter sorter, int value) throws Exception {
     final int[] arr = new int[] { value };
     sorter.insertRecord(arr, PlatformDependent.INT_ARRAY_OFFSET, 4, value);
@@ -138,15 +162,15 @@ public class UnsafeExternalSorterSuite {
   @Test
   public void testSortingOnlyByPrefix() throws Exception {
 
-    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
-      memoryManager,
+    final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
+      taskMemoryManager,
       shuffleMemoryManager,
       blockManager,
       taskContext,
       recordComparator,
       prefixComparator,
-      1024,
-      new SparkConf());
+      /* initialSize */ 1024,
+      pageSizeBytes);
 
     insertNumber(sorter, 5);
     insertNumber(sorter, 1);
@@ -165,22 +189,22 @@ public class UnsafeExternalSorterSuite {
       // TODO: read rest of value.
     }
 
-    // TODO: test for cleanup:
-    // assert(tempDir.isEmpty)
+    sorter.freeMemory();
+    assertSpillFilesWereCleanedUp();
   }
 
   @Test
   public void testSortingEmptyArrays() throws Exception {
 
-    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
-      memoryManager,
+    final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
+      taskMemoryManager,
       shuffleMemoryManager,
       blockManager,
       taskContext,
       recordComparator,
       prefixComparator,
-      1024,
-      new SparkConf());
+      /* initialSize */ 1024,
+      pageSizeBytes);
 
     sorter.insertRecord(null, 0, 0, 0);
     sorter.insertRecord(null, 0, 0, 0);
@@ -197,25 +221,30 @@ public class UnsafeExternalSorterSuite {
       assertEquals(0, iter.getKeyPrefix());
       assertEquals(0, iter.getRecordLength());
     }
+
+    sorter.freeMemory();
+    assertSpillFilesWereCleanedUp();
   }
 
   @Test
   public void testFillingPage() throws Exception {
-    final UnsafeExternalSorter sorter = new UnsafeExternalSorter(
-      memoryManager,
+
+    final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
+      taskMemoryManager,
       shuffleMemoryManager,
       blockManager,
       taskContext,
       recordComparator,
       prefixComparator,
-      1024,
-      new SparkConf());
+      /* initialSize */ 1024,
+      pageSizeBytes);
 
     byte[] record = new byte[16];
     while (sorter.getNumberOfAllocatedPages() < 2) {
       sorter.insertRecord(record, PlatformDependent.BYTE_ARRAY_OFFSET, record.length, 0);
     }
     sorter.freeMemory();
+    assertSpillFilesWereCleanedUp();
   }
 
 }

@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.types.BinaryType
 
 
 class JoinSuite extends QueryTest with BeforeAndAfterEach {
