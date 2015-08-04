@@ -36,9 +36,11 @@ else:
     import unittest
 
 from pyspark.context import SparkConf, SparkContext, RDD
+from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.context import StreamingContext
 from pyspark.streaming.kafka import Broker, KafkaUtils, OffsetRange, TopicAndPartition
 from pyspark.streaming.flume import FlumeUtils
+from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
@@ -891,6 +893,67 @@ class FlumePollingStreamTests(PySparkStreamingTestCase):
         self._testMultipleTimes(self._testFlumePollingMultipleHosts)
 
 
+class KinesisStreamTests(PySparkStreamingTestCase):
+
+    def test_kinesis_stream_api(self):
+        # Don't start the StreamingContext because we cannot test it in Jenkins
+        kinesisStream1 = KinesisUtils.createStream(
+            self.ssc, "myAppNam", "mySparkStream",
+            "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
+            InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_2)
+        kinesisStream2 = KinesisUtils.createStream(
+            self.ssc, "myAppNam", "mySparkStream",
+            "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
+            InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_2,
+            "awsAccessKey", "awsSecretKey")
+
+    def test_kinesis_stream(self):
+        if os.environ.get('ENABLE_KINESIS_TESTS') != '1':
+            print("Skip test_kinesis_stream")
+            return
+
+        import random
+        kinesisAppName = ("KinesisStreamTests-%d" % abs(random.randint(0, 10000000)))
+        kinesisTestUtilsClz = \
+            self.sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+                .loadClass("org.apache.spark.streaming.kinesis.KinesisTestUtils")
+        kinesisTestUtils = kinesisTestUtilsClz.newInstance()
+        try:
+            kinesisTestUtils.createStream()
+            aWSCredentials = kinesisTestUtils.getAWSCredentials()
+            stream = KinesisUtils.createStream(
+                self.ssc, kinesisAppName, kinesisTestUtils.streamName(),
+                kinesisTestUtils.endpointUrl(), kinesisTestUtils.regionName(),
+                InitialPositionInStream.LATEST, 10, StorageLevel.MEMORY_ONLY,
+                aWSCredentials.getAWSAccessKeyId(), aWSCredentials.getAWSSecretKey())
+
+            outputBuffer = []
+
+            def get_output(_, rdd):
+                for e in rdd.collect():
+                    outputBuffer.append(e)
+
+            stream.foreachRDD(get_output)
+            self.ssc.start()
+
+            testData = [i for i in range(1, 11)]
+            expectedOutput = set([str(i) for i in testData])
+            start_time = time.time()
+            while time.time() - start_time < 120:
+                kinesisTestUtils.pushData(testData)
+                if expectedOutput == set(outputBuffer):
+                    break
+                time.sleep(10)
+            self.assertEqual(expectedOutput, set(outputBuffer))
+        except:
+            import traceback
+            traceback.print_exc()
+            raise
+        finally:
+            kinesisTestUtils.deleteStream()
+            kinesisTestUtils.deleteDynamoDBTable(kinesisAppName)
+
+
 def search_kafka_assembly_jar():
     SPARK_HOME = os.environ["SPARK_HOME"]
     kafka_assembly_dir = os.path.join(SPARK_HOME, "external/kafka-assembly")
@@ -926,10 +989,31 @@ def search_flume_assembly_jar():
     else:
         return jars[0]
 
+
+def search_kinesis_asl_assembly_jar():
+    SPARK_HOME = os.environ["SPARK_HOME"]
+    kinesis_asl_assembly_dir = os.path.join(SPARK_HOME, "extras/kinesis-asl-assembly")
+    jars = glob.glob(
+        os.path.join(kinesis_asl_assembly_dir,
+                     "target/scala-*/spark-streaming-kinesis-asl-assembly-*.jar"))
+    if not jars:
+        raise Exception(
+            ("Failed to find Spark Streaming Kinesis ASL assembly jar in %s. " %
+             kinesis_asl_assembly_dir) + "You need to build Spark with "
+            "'build/sbt -Pkinesis-asl assembly/assembly streaming-kinesis-asl-assembly/assembly' "
+            "or 'build/mvn -Pkinesis-asl package' before running this test")
+    elif len(jars) > 1:
+        raise Exception(("Found multiple Spark Streaming Kinesis ASL assembly JARs in %s; please "
+                         "remove all but one") % kinesis_asl_assembly_dir)
+    else:
+        return jars[0]
+
+
 if __name__ == "__main__":
     kafka_assembly_jar = search_kafka_assembly_jar()
     flume_assembly_jar = search_flume_assembly_jar()
-    jars = "%s,%s" % (kafka_assembly_jar, flume_assembly_jar)
+    kinesis_asl_assembly_jar = search_kinesis_asl_assembly_jar()
+    jars = "%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, kinesis_asl_assembly_jar)
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
     unittest.main()

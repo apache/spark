@@ -80,8 +80,13 @@ object MimaExcludes {
               "org.apache.spark.mllib.linalg.Matrix.numActives")
           ) ++ Seq(
             // SPARK-8914 Remove RDDApi
-            ProblemFilters.exclude[MissingClassProblem](
-            "org.apache.spark.sql.RDDApi")
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RDDApi")
+          ) ++ Seq(
+            // SPARK-7292 Provide operator to truncate lineage cheaply
+            ProblemFilters.exclude[AbstractClassProblem](
+              "org.apache.spark.rdd.RDDCheckpointData"),
+            ProblemFilters.exclude[AbstractClassProblem](
+              "org.apache.spark.rdd.CheckpointRDD")
           ) ++ Seq(
             // SPARK-8701 Add input metadata in the batch page.
             ProblemFilters.exclude[MissingClassProblem](
@@ -151,6 +156,10 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.PartitionSpec$"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DescribeCommand"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DDLException")
+          ) ++ Seq(
+            // SPARK-4751 Dynamic allocation for standalone mode
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.SparkContext.supportDynamicAllocation")
           )
 
         case v if v.startsWith("1.4") =>

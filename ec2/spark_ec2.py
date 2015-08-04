@@ -242,7 +242,7 @@ def parse_args():
         help="Number of EBS volumes to attach to each node as /vol[x]. " +
              "The volumes will be deleted when the instances terminate. " +
              "Only possible on EBS-backed AMIs. " +
-             "EBS volumes are only attached if --ebs-vol-size > 0." +
+             "EBS volumes are only attached if --ebs-vol-size > 0. " +
              "Only support up to 8 EBS volumes.")
     parser.add_option(
         "--placement-group", type="string", default=None,

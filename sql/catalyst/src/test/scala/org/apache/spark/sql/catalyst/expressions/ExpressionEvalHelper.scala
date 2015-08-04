@@ -18,11 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.scalactic.TripleEqualsSupport.Spread
-import org.scalatest.Matchers._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
@@ -65,7 +63,7 @@ trait ExpressionEvalHelper {
 
   protected def evaluate(expression: Expression, inputRow: InternalRow = EmptyRow): Any = {
     expression.foreach {
-      case n: Nondeterministic => n.initialize()
+      case n: Nondeterministic => n.setInitialValues()
       case _ =>
     }
     expression.eval(inputRow)
@@ -78,12 +76,11 @@ trait ExpressionEvalHelper {
       generator
     } catch {
       case e: Throwable =>
-        val ctx = new CodeGenContext
-        val evaluated = expression.gen(ctx)
         fail(
           s"""
             |Code generation of $expression failed:
             |$e
+            |${e.getStackTraceString}
           """.stripMargin)
     }
   }
@@ -116,7 +113,7 @@ trait ExpressionEvalHelper {
     val actual = plan(inputRow).get(0, expression.dataType)
     if (!checkResult(actual, expected)) {
       val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
-      fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
+      fail(s"Incorrect evaluation: $expression, actual: $actual, expected: $expected$input")
     }
   }
 
@@ -148,7 +145,8 @@ trait ExpressionEvalHelper {
 
     if (actual != expectedRow) {
       val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
-      fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expectedRow$input")
+      fail("Incorrect Evaluation in codegen mode: " +
+        s"$expression, actual: $actual, expected: $expectedRow$input")
     }
     if (actual.copy() != expectedRow) {
       fail(s"Copy of generated Row is wrong: actual: ${actual.copy()}, expected: $expectedRow")
@@ -165,12 +163,21 @@ trait ExpressionEvalHelper {
       expression)
 
     val unsafeRow = plan(inputRow)
-    // UnsafeRow cannot be compared with GenericInternalRow directly
-    val actual = FromUnsafeProjection(expression.dataType :: Nil)(unsafeRow)
-    val expectedRow = InternalRow(expected)
-    if (actual != expectedRow) {
-      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
-      fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expectedRow$input")
+    val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
+
+    if (expected == null) {
+      if (!unsafeRow.isNullAt(0)) {
+        val expectedRow = InternalRow(expected)
+        fail("Incorrect evaluation in unsafe mode: " +
+          s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
+      }
+    } else {
+      val lit = InternalRow(expected)
+      val expectedRow = UnsafeProjection.create(Array(expression.dataType)).apply(lit)
+      if (unsafeRow != expectedRow) {
+        fail("Incorrect evaluation in unsafe mode: " +
+          s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
+      }
     }
   }
 
