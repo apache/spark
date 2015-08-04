@@ -18,9 +18,10 @@
 package org.apache.spark.mllib.fpm
 
 import java.{lang => jl, util => ju}
+import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuilder
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
@@ -101,27 +102,65 @@ class PrefixSpan private (
    * @return a [[PrefixSpanModel]] that contains the frequent sequences
    */
   def run[Item: ClassTag](data: RDD[Array[Array[Item]]]): PrefixSpanModel[Item] = {
-    val itemToInt = data.aggregate(Set[Item]())(
-      seqOp = { (uniqItems, item) => uniqItems ++ item.flatten.toSet },
-      combOp = { _ ++ _ }
-    ).zipWithIndex.toMap
-    val intToItem = Map() ++ (itemToInt.map { case (k, v) => (v, k) })
-
-    val dataInternalRepr = data.map { seq =>
-      seq.map(itemset => itemset.map(itemToInt)).reduce((a, b) => a ++ (DELIMITER +: b))
+    if (data.getStorageLevel == StorageLevel.NONE) {
+      logWarning("Input data is not cached.")
     }
-    val results = run(dataInternalRepr)
-
-    def toPublicRepr(pattern: Iterable[Int]): List[Array[Item]] = {
-      pattern.span(_ != DELIMITER) match {
-        case (x, xs) if xs.size > 1 => x.map(intToItem).toArray :: toPublicRepr(xs.tail)
-        case (x, xs) => List(x.map(intToItem).toArray)
+    val minCount = math.ceil(minSupport * data.count()).toLong
+    val freqItemAndCounts = data.flatMap { itemsets =>
+        val uniqItems = mutable.Set.empty[Item]
+        itemsets.foreach { _.foreach { item =>
+          uniqItems += item
+        }}
+        uniqItems.toIterator.map((_, 1L))
+      }.reduceByKey(_ + _)
+      .filter { case (_, count) =>
+        count >= minCount
+      }.collect()
+    val freqItems = freqItemAndCounts.sortBy(-_._2).map(_._1)
+    val itemToInt = freqItems.zipWithIndex.toMap
+    val dataInternalRepr = data.map { itemsets =>
+      val allItems = mutable.ArrayBuilder.make[Int]
+      allItems += 0
+      itemsets.foreach { itemsets =>
+        val items = mutable.ArrayBuilder.make[Int]
+        itemsets.foreach { item =>
+          if (itemToInt.contains(item)) {
+            items += itemToInt(item) + 1
+          }
+        }
+        val result = items.result()
+        if (result.nonEmpty) {
+          allItems ++= result.sorted
+        }
+        allItems += 0
       }
+      allItems.result()
+    }.persist(StorageLevel.MEMORY_AND_DISK)
+
+    val results = genFreqPatterns(dataInternalRepr, minCount, maxPatternLength, maxLocalProjDBSize)
+
+    def toPublicRepr(pattern: Array[Int]): Array[Array[Item]] = {
+      val sequenceBuilder = mutable.ArrayBuilder.make[Array[Item]]
+      val itemsetBuilder = mutable.ArrayBuilder.make[Item]
+      val n = pattern.length
+      var i = 1
+      while (i < n) {
+        val x = pattern(i)
+        if (x == 0) {
+          sequenceBuilder += itemsetBuilder.result()
+          itemsetBuilder.clear()
+        } else {
+          itemsetBuilder += freqItems(x - 1)
+        }
+        i += 1
+      }
+      sequenceBuilder.result()
     }
+
     val freqSequences = results.map { case (seq: Array[Int], count: Long) =>
-      new FreqSequence[Item](toPublicRepr(seq).toArray, count)
+      new FreqSequence(toPublicRepr(seq), count)
     }
-    new PrefixSpanModel[Item](freqSequences)
+    new PrefixSpanModel(freqSequences)
   }
 
   /**
@@ -139,6 +178,10 @@ class PrefixSpan private (
     run(data.rdd.map(_.asScala.map(_.asScala.toArray).toArray))
   }
 
+}
+
+object PrefixSpan extends Logging {
+
   /**
    * Find the complete set of sequential patterns in the input sequences. This method utilizes
    * the internal representation of itemsets as Array[Int] where each itemset is represented by
@@ -149,191 +192,233 @@ class PrefixSpan private (
    *         the key of pair is pattern (a list of elements),
    *         the value of pair is the pattern's count.
    */
-  private[fpm] def run(data: RDD[Array[Int]]): RDD[(Array[Int], Long)] = {
+  def genFreqPatterns(
+      data: RDD[Array[Int]],
+      minCount: Long,
+      maxPatternLength: Int,
+      maxLocalProjDBSize: Long): RDD[(Array[Int], Long)] = {
     val sc = data.sparkContext
 
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("Input data is not cached.")
     }
 
-    // Use List[Set[Item]] for internal computation
-    val sequences = data.map { seq => splitSequence(seq.toList) }
+    val suffices = data.map(items => new Suffix(items, 0, mutable.ArrayBuffer.empty))
 
-    // Convert min support to a min number of transactions for this dataset
-    val minCount = if (minSupport == 0) 0L else math.ceil(sequences.count() * minSupport).toLong
-
-    // (Frequent items -> number of occurrences, all items here satisfy the `minSupport` threshold
-    val freqItemCounts = sequences
-      .flatMap(seq => seq.flatMap(nonemptySubsets(_)).distinct.map(item => (item, 1L)))
-      .reduceByKey(_ + _)
-      .filter { case (item, count) => (count >= minCount) }
-      .collect()
-      .toMap
-
-    // Pairs of (length 1 prefix, suffix consisting of frequent items)
-    val itemSuffixPairs = {
-      val freqItemSets = freqItemCounts.keys.toSet
-      val freqItems = freqItemSets.flatten
-      sequences.flatMap { seq =>
-        val filteredSeq = seq.map(item => freqItems.intersect(item)).filter(_.nonEmpty)
-        freqItemSets.flatMap { item =>
-          val candidateSuffix = LocalPrefixSpan.getSuffix(item, filteredSeq)
-          candidateSuffix match {
-            case suffix if !suffix.isEmpty => Some((List(item), suffix))
-            case _ => None
+    val localFreqPatterns = mutable.ArrayBuffer.empty[(Array[Int], Long)]
+    val emptyPrefix = Prefix.empty
+    var largePrefixes = mutable.Map(emptyPrefix.id -> emptyPrefix)
+    val smallPrefixes = mutable.Map.empty[Int, Prefix]
+    while (largePrefixes.nonEmpty) {
+      val largePrefixArray = largePrefixes.values.toArray
+      val splits = suffices.flatMap { suffix =>
+        largePrefixArray.flatMap { prefix =>
+          suffix.project(prefix).genSplitStats.map { case (item, suffixSize) =>
+            ((prefix.id, item), (1L, suffixSize))
+          }
+        }
+      }.reduceByKey { case ((c0, s0), (c1, s1)) =>
+        (c0 + c1, s0 + s1)
+      }.filter { case (_, (c, _)) => c >= minCount }
+        .collect()
+      val newLargePrefixes = mutable.Map.empty[Int, Prefix]
+      splits.foreach { case ((id, item), (count, projDBSize)) =>
+        val newPrefix = largePrefixes(id) :+ item
+        localFreqPatterns += ((newPrefix.items :+ 0, count))
+        if (newPrefix.length < maxPatternLength) {
+          if (projDBSize > maxLocalProjDBSize) {
+            newLargePrefixes += newPrefix.id -> newPrefix
+          } else {
+            smallPrefixes += newPrefix.id -> newPrefix
           }
         }
       }
+      largePrefixes = newLargePrefixes
     }
 
-    // Accumulator for the computed results to be returned, initialized to the frequent items (i.e.
-    // frequent length-one prefixes)
-    var resultsAccumulator = freqItemCounts.map { case (item, count) => (List(item), count) }.toList
-
-    // Remaining work to be locally and distributively processed respectfully
-    var (pairsForLocal, pairsForDistributed) = partitionByProjDBSize(itemSuffixPairs)
-
-    // Continue processing until no pairs for distributed processing remain (i.e. all prefixes have
-    // projected database sizes <= `maxLocalProjDBSize`) or `maxPatternLength` is reached
-    var patternLength = 1
-    while (pairsForDistributed.count() != 0 && patternLength < maxPatternLength) {
-      val (nextPatternAndCounts, nextPrefixSuffixPairs) =
-        extendPrefixes(minCount, pairsForDistributed)
-      pairsForDistributed.unpersist()
-      val (smallerPairsPart, largerPairsPart) = partitionByProjDBSize(nextPrefixSuffixPairs)
-      pairsForDistributed = largerPairsPart
-      pairsForDistributed.persist(StorageLevel.MEMORY_AND_DISK)
-      pairsForLocal ++= smallerPairsPart
-      resultsAccumulator ++= nextPatternAndCounts.collect()
-      patternLength += 1 // pattern length grows one per iteration
+    val bcSmallPrefixes = sc.broadcast(smallPrefixes)
+    val distributedFreqPattern = suffices.flatMap { suffix =>
+      bcSmallPrefixes.value.values.map { prefix =>
+        (prefix.id, suffix.project(prefix).compressed)
+      }.filter(_._2.nonEmpty)
+    }.groupByKey().flatMap { case (id, projSuffixes) =>
+      val prefix = bcSmallPrefixes.value(id)
+      val localPrefixSpan = new LocalPrefixSpan(minCount, maxPatternLength - prefix.length)
+      localPrefixSpan.run(projSuffixes.toArray).map { case (pattern, count) =>
+        (prefix.items ++ pattern, count)
+      }
     }
-
-    // Process the small projected databases locally
-    val remainingResults = getPatternsInLocal(
-      minCount, sc.parallelize(pairsForLocal, 1).groupByKey())
-
-    (sc.parallelize(resultsAccumulator, 1) ++ remainingResults)
-      .map { case (pattern, count) => (flattenSequence(pattern.reverse).toArray, count) }
+    sc.parallelize(localFreqPatterns, 1) ++ distributedFreqPattern
   }
 
+  class Prefix(val items: Array[Int], val length: Int) extends Serializable {
+    val id: Int = Prefix.nextId
 
-  /**
-   * Partitions the prefix-suffix pairs by projected database size.
-   * @param prefixSuffixPairs prefix (length n) and suffix pairs,
-   * @return prefix-suffix pairs partitioned by whether their projected database size is <= or
-   *         greater than [[maxLocalProjDBSize]]
-   */
-  private def partitionByProjDBSize(prefixSuffixPairs: RDD[(List[Set[Int]], List[Set[Int]])])
-    : (List[(List[Set[Int]], List[Set[Int]])], RDD[(List[Set[Int]], List[Set[Int]])]) = {
-    val prefixToSuffixSize = prefixSuffixPairs
-      .aggregateByKey(0)(
-        seqOp = { case (count, suffix) => count + suffix.length },
-        combOp = { _ + _ })
-    val smallPrefixes = prefixToSuffixSize
-      .filter(_._2 <= maxLocalProjDBSize)
-      .keys
-      .collect()
-      .toSet
-    val small = prefixSuffixPairs.filter { case (prefix, _) => smallPrefixes.contains(prefix) }
-    val large = prefixSuffixPairs.filter { case (prefix, _) => !smallPrefixes.contains(prefix) }
-    (small.collect().toList, large)
+    def :+(item: Int): Prefix = {
+      require(item != 0)
+      if (item < 0) {
+        new Prefix(items :+ -item, length + 1)
+      } else {
+        new Prefix(items ++ Array(0, item), length + 1)
+      }
+    }
+  }
+
+  object Prefix {
+    private val count = new AtomicInteger(-1)
+    private def nextId: Int = count.incrementAndGet()
+    val empty: Prefix = new Prefix(Array.empty, 0)
   }
 
   /**
-   * Extends all prefixes by one itemset from their suffix and computes the resulting frequent
-   * prefixes and remaining work.
-   * @param minCount minimum count
-   * @param prefixSuffixPairs prefix (length N) and suffix pairs,
-   * @return (frequent length N+1 extended prefix, count) pairs and (frequent length N+1 extended
-   *         prefix, corresponding suffix) pairs.
+   * A projected sequence. For example, a projected sequence of `[1, 2, 0, 1, 3]` with respect to 1
+   * is stored as items = `[1, 2, 0, 1, 3]` and partialStarts = `[1, 4]`, which means [2, 0, 1, 3]
+   * and [3].
+   *
+   * @param items item array that contains this sequence
+   * @param partialStarts start indices of possible projections, strictly increasing
    */
-  private def extendPrefixes(
-      minCount: Long,
-      prefixSuffixPairs: RDD[(List[Set[Int]], List[Set[Int]])])
-    : (RDD[(List[Set[Int]], Long)], RDD[(List[Set[Int]], List[Set[Int]])]) = {
+  class Suffix(val items: Array[Int], val start: Int, val partialStarts: mutable.ArrayBuffer[Int]) extends Serializable {
 
-    // (length N prefix, itemset from suffix) pairs and their corresponding number of occurrences
-    // Every (prefix :+ suffix) is guaranteed to have support exceeding `minSupport`
-    val prefixItemPairAndCounts = prefixSuffixPairs
-      .flatMap { case (prefix, suffix) =>
-      suffix.flatMap(nonemptySubsets(_)).distinct.map(y => ((prefix, y), 1L)) }
-      .reduceByKey(_ + _)
-      .filter { case (item, count) => (count >= minCount) }
+    /**
+     * Start index of the first full itemset contained in this sequence.
+     */
+    private[this] def fullStart: Int = {
+      var i = start
+      while (items(i) != 0) {
+        i += 1
+      }
+      i
+    }
 
-    // Map from prefix to set of possible next items from suffix
-    val prefixToNextItems = prefixItemPairAndCounts
-      .keys
-      .groupByKey()
-      .mapValues(_.toSet)
-      .collect()
-      .toMap
-
-    // Frequent patterns with length N+1 and their corresponding counts
-    val extendedPrefixAndCounts = prefixItemPairAndCounts
-      .map { case ((prefix, item), count) => (item :: prefix, count) }
-
-    // Remaining work, all prefixes will have length N+1
-    val extendedPrefixAndSuffix = prefixSuffixPairs
-      .filter(x => prefixToNextItems.contains(x._1))
-      .flatMap { case (prefix, suffix) =>
-        val frequentNextItemSets = prefixToNextItems(prefix)
-        val frequentNextItems = frequentNextItemSets.flatten
-        val filteredSuffix = suffix
-          .map(item => frequentNextItems.intersect(item))
-          .filter(_.nonEmpty)
-        frequentNextItemSets.flatMap { item =>
-          LocalPrefixSpan.getSuffix(item, filteredSuffix) match {
-            case suffix if !suffix.isEmpty => Some(item :: prefix, suffix)
-            case _ => None
+    /**
+     * Generates possible splits, where each split contains an item and its corresponding suffix.
+     * There are two types of splits:
+     *   a) the item can be assembled to the last itemset of the prefix, where we flip the sign,
+     *   b) the item can be appended to the prefix.
+     * @return an iterator of splits
+     */
+    def genSplitStats: Iterator[(Int, Int)] = {
+      val n1 = items.length - 1
+      // For each unique item (subject to sign) in this sequence, we output exact one split.
+      val stats = mutable.Map.empty[Int, Int]
+      // a) items that can be assembled to the last itemset of the prefix
+      partialStarts.foreach { start =>
+        var i = start
+        var x = -items(i)
+        while (x != 0) {
+          if (!stats.contains(x)) {
+            stats(x) = n1 - i
           }
+          i += 1
+          x = -items(i)
         }
       }
-
-    (extendedPrefixAndCounts, extendedPrefixAndSuffix)
-  }
-
-  /**
-   * Calculate the patterns in local.
-   * @param minCount the absolute minimum count
-   * @param data prefixes and projected sequences data data
-   * @return patterns
-   */
-  private def getPatternsInLocal(
-      minCount: Long,
-      data: RDD[(List[Set[Int]], Iterable[List[Set[Int]]])]): RDD[(List[Set[Int]], Long)] = {
-    data.flatMap {
-      case (prefix, projDB) => LocalPrefixSpan.run(minCount, maxPatternLength, prefix, projDB)
+      // b) items that can be appended to the prefix
+      var i = fullStart
+      while (i < n1) {
+        val x = items(i)
+        if (x != 0 && !stats.contains(x)) {
+          stats(x) = n1 - i
+        }
+        i += 1
+      }
+      stats.toIterator
     }
-  }
 
-}
+    /** Tests whether this sequence is non-empty. */
+    def nonEmpty: Boolean = items.length > start + 1
 
-object PrefixSpan {
-  private[fpm] val DELIMITER = -1
-
-  /** Splits an array of itemsets delimited by [[DELIMITER]]. */
-  private[fpm] def splitSequence(sequence: List[Int]): List[Set[Int]] = {
-    sequence.span(_ != DELIMITER) match {
-      case (x, xs) if xs.length > 1 => x.toSet :: splitSequence(xs.tail)
-      case (x, xs) => List(x.toSet)
+    def project(item: Int): Suffix = {
+      require(item != 0)
+      var matched = false
+      var newStart = items.length - 1
+      val newPartialStarts = mutable.ArrayBuffer.empty[Int]
+      if (item < 0) {
+        val target = -item
+        partialStarts.foreach { start =>
+          var i = start
+          var x = items(i)
+          while (x != target && x != 0) {
+            i += 1
+            x = items(i)
+          }
+          if (x == target) {
+            i += 1
+            if (!matched) {
+              newStart = i
+              matched = false
+            }
+            if (items(i) != 0) {
+              newPartialStarts += i
+            }
+          }
+        }
+      } else {
+        val target = item
+        var i = fullStart
+        while (i < items.length - 1) {
+          val x = items(i)
+          if (x == target) {
+            if (!matched) {
+              newStart = i
+              matched = true
+            }
+            if (items(i + 1) != 0) {
+              newPartialStarts += i + 1
+            }
+          }
+          i += 1
+        }
+      }
+      new Suffix(items, newStart, newPartialStarts)
     }
-  }
 
-  /** Flattens a sequence of itemsets into an Array, inserting[[DELIMITER]] between itemsets. */
-  private[fpm] def flattenSequence(sequence: List[Set[Int]]): List[Int] = {
-    val builder = ArrayBuilder.make[Int]()
-    for (itemSet <- sequence) {
-      builder += DELIMITER
-      builder ++= itemSet.toSeq.sorted
+    /**
+     * Returns the same sequence with compressed storage if possible.
+     */
+    def compressed: Suffix = {
+      if (start > 0) {
+        new Suffix(items.slice(start, items.length), 0, partialStarts.map(_ - start))
+      } else {
+        this
+      }
     }
-    builder.result().toList.drop(1) // drop trailing delimiter
+
+    override def toString: String = compressed.items.mkString(",")
+
+    /**
+     * Projects a sequence of items.
+     */
+    def project(prefix: Array[Int]): Suffix = {
+      var partial = true
+      var cur = this
+      var i = 0
+      val np = prefix.length
+      while (i < np && cur.nonEmpty) {
+        val x = prefix(i)
+        if (x == 0) {
+          partial = false
+        } else {
+          if (partial) {
+            cur = cur.project(-x)
+          } else {
+            cur = cur.project(x)
+            partial = true
+          }
+        }
+        i += 1
+      }
+      cur
+    }
+
+    def project(prefix: Prefix): Suffix = project(prefix.items)
   }
 
-  /** Returns an iterator over all non-empty subsets of `itemSet` */
-  private[fpm] def nonemptySubsets(itemSet: Set[Int]): Iterator[Set[Int]] = {
-    // TODO: improve complexity by using partial prefixes, considering one item at a time
-    itemSet.subsets.filter(_ != Set.empty[Int])
+  object Suffix {
+    val empty: Suffix = new Suffix(Array(0), 0, mutable.ArrayBuffer.empty)
   }
+
 
   /**
    * Represents a frequence sequence.
