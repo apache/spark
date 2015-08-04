@@ -180,6 +180,9 @@ class DagBag(object):
         dag.resolve_template_files()
         dag.last_loaded = datetime.now()
 
+        for task in dag.tasks:
+            settings.policy(task)
+
         if self.sync_to_db:
             session = settings.Session()
             orm_dag = session.query(
@@ -828,7 +831,6 @@ class TaskInstance(Base):
                     signal.signal(signal.SIGTERM, signal_handler)
 
                     self.render_templates()
-                    settings.policy(task_copy)
                     task_copy.pre_execute(context=context)
 
                     # If a timout is specified for the task, make it fail

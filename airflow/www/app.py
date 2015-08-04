@@ -809,7 +809,6 @@ class Airflow(BaseView):
         dag = dagbag.get_dag(dag_id)
         task = dag.get_task(task_id)
         task = copy.copy(task)
-        settings.policy(task)
         task.resolve_template_files()
 
         attributes = []
