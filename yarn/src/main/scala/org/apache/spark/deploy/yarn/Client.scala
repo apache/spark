@@ -316,9 +316,7 @@ private[spark] class Client(
         destName: Option[String] = None,
         targetDir: Option[String] = None,
         appMasterOnly: Boolean = false): (Boolean, String) = {
-      logDebug("Current Path=" + path)
       val localURI = new URI(path.trim())
-      logDebug("Current Path as URI=" + localURI)
       if (localURI.getScheme != LOCAL_SCHEME) {
         if (addDistributedUri(localURI)) {
           val localPath = getQualifiedLocalPath(localURI, hadoopConf)

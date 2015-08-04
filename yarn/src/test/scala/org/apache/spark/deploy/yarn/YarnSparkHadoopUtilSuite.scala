@@ -46,7 +46,7 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
 
   val isWindows = {
     val os = System.getProperty("os.name")
-    if (os.contains("Windows")) true else false
+    os.contains("Windows")
   }
 
   if (!hasBash && !isWindows) {

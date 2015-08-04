@@ -146,9 +146,9 @@ class ExecutorRunnable(
     javaOpts += "-Xmx" + executorMemoryString
 
     // Set extra Java options for the executor, if defined
-    sys.props.get("spark.executor.extraJavaOptions").map(
+    sys.props.get("spark.executor.extraJavaOptions").foreach {
       javaOpts ++= Utils.splitCommandString(_)
-    )
+    }
     sys.env.get("SPARK_JAVA_OPTS").foreach { opts =>
       javaOpts ++= Utils.splitCommandString(opts)
     }

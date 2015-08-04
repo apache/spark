@@ -220,10 +220,12 @@ object YarnSparkHadoopUtil {
   }
 
   def escapeForShell(arg: String): String = {
-    if(Utils.isWindows)
+    if (Utils.isWindows) {
       escapeForShellWindows(arg)
-    else
+    }
+    else {
       escapeForShellUnix(arg)
+    }
   }
 
   /**
@@ -265,7 +267,7 @@ object YarnSparkHadoopUtil {
     var i: Int = 0
     while (i < arg.length && !needsQuotes) {
       val c = arg.charAt(i)
-      if (Character.isWhitespace(c) || c == '"' || c == '=' || c == ',' || c == ';' || c == ''') {
+      if (Character.isWhitespace(c) || c == '"' || c == '=' || c == ',' || c == ';' || c == '\'') {
         needsQuotes = true
       }
       i += 1
