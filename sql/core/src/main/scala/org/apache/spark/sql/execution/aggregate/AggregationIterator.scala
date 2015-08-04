@@ -262,7 +262,6 @@ abstract class AggregationIterator(
             valueAttributes)()
 
         (currentBuffer: MutableRow, row: InternalRow) => {
-          //val input = rowToBeProcessed(currentBuffer, row)
           // For all aggregate functions with mode Complete, update buffers.
           completeAlgebraicUpdateProjection.target(currentBuffer)(currentBuffer, row)
           var i = 0

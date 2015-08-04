@@ -114,7 +114,8 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
  * @param expressions a sequence of expressions that determine the value of each column of the
  *                    output row.
  */
-class InterpretedMutableJoinedProjection(expressions: Seq[Expression]) extends MutableJoinedProjection {
+class InterpretedMutableJoinedProjection(expressions: Seq[Expression])
+    extends MutableJoinedProjection {
   def this(expressions: Seq[Expression], leftInputSchema: Seq[Attribute], rightInputSchema:
       Seq[Attribute]) = {
     this(BindReferences.bindJoinReferences(expressions, leftInputSchema, rightInputSchema))
@@ -213,3 +214,4 @@ object FromUnsafeProjection {
     GenerateSafeProjection.generate(exprs)
   }
 }
+
