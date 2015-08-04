@@ -412,7 +412,7 @@ class CheckpointSuite extends TestSuiteBase {
 
     eventually(timeout(10.seconds)) {
       assert(RateTestReceiver.getActive().nonEmpty)
-      assert(RateTestReceiver.getActive().get.getDefaultBlockGeneratorRateLimit() === Some(200))
+      assert(RateTestReceiver.getActive().get.getDefaultBlockGeneratorRateLimit() === 200)
     }
     ssc.stop()
   }
