@@ -550,7 +550,9 @@ class DAGSchedulerSuite
    * @param attemptIdx - The current attempt count
    * @param shuffleId - The shuffleId of the stage with a fetch failure
    */
-  def completeNextShuffleMapWithFetchFailure(stageId: Int, attemptIdx: Int, shuffleId: Int): Unit = {
+  def completeNextShuffleMapWithFetchFailure(stageId: Int,
+      attemptIdx: Int,
+      shuffleId: Int): Unit = {
     val stageAttempt = taskSets.last
     checkStageId(stageId, attemptIdx, stageAttempt)
 
@@ -630,9 +632,6 @@ class DAGSchedulerSuite
     // In the first two iterations, Stage 0 succeeds and stage 1 fails. In the next two iterations,
     // stage 2 fails.
     for (attempt <- 0 until Stage.MAX_STAGE_FAILURES) {
-      println(s"attempt = $attempt")
-      println(taskSets.mkString(","))
-
       // Complete all the tasks for the current attempt of stage 0 successfully
       completeNextShuffleMapSuccesfully(0, attempt, numPartitions = 2)
 
