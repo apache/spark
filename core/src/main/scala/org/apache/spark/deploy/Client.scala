@@ -68,7 +68,12 @@ private class ClientEndpoint(
         val mainClass = "org.apache.spark.deploy.worker.DriverWrapper"
 
         val classPathConf = "spark.driver.extraClassPath"
-        val classPathEntries = sys.props.get(classPathConf).toSeq.flatMap { cp =>
+        val commonClassPathConf = "spark.common.extraClassPath"
+
+        val driverClassPath = Option((sys.props.get(commonClassPathConf) ++
+          sys.props.get(classPathConf)).mkString(java.io.File.pathSeparator)).filter(_.nonEmpty)
+
+        val classPathEntries = driverClassPath.toSeq.flatMap { cp =>
           cp.split(java.io.File.pathSeparator)
         }
 

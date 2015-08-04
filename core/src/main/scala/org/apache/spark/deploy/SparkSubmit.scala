@@ -406,6 +406,8 @@ object SparkSubmit {
       OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
         sysProp = "spark.driver.memory"),
+      OptionAssigner(args.commonExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = "spark.common.extraClassPath"),
       OptionAssigner(args.driverExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         sysProp = "spark.driver.extraClassPath"),
       OptionAssigner(args.driverExtraJavaOptions, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,

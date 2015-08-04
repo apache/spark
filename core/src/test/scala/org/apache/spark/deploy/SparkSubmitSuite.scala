@@ -497,6 +497,21 @@ class SparkSubmitSuite
   }
   // scalastyle:on println
 
+  test("spark.common.extraClassPath comes before spark.driver.extraClassPath in driver classpath") {
+    val commonExtraJar = TestUtils.createJarWithFiles(Map("test.resource" -> "COMMON"))
+    val driverExtraJar = TestUtils.createJarWithFiles(Map("test.resource" -> "DRIVER"))
+    val userJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"))
+    val args = Seq(
+      "--class", CommonClasspathAddedTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+     "--master", "local",
+      "--verbose",
+      "--conf", "spark.common.extraClassPath=" + commonExtraJar,
+      "--conf", "spark.driver.extraClassPath=" + driverExtraJar,
+      userJar.toString)
+    runSparkSubmit(args)
+  }
+
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   private def runSparkSubmit(args: Seq[String]): Unit = {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
@@ -591,6 +606,18 @@ object UserClasspathFirstTest {
     val contents = new String(bytes, 0, bytes.length, UTF_8)
     if (contents != "USER") {
       throw new SparkException("Should have read user resource, but instead read: " + contents)
+    }
+  }
+}
+
+object CommonClasspathAddedTest {
+  def main(args: Array[String]) {
+    val ccl = Thread.currentThread().getContextClassLoader()
+    val resource = ccl.getResourceAsStream("test.resource")
+    val bytes = ByteStreams.toByteArray(resource)
+    val contents = new String(bytes, 0, bytes.length, UTF_8)
+    if (contents != "COMMON") {
+      throw new SparkException("Should have read common resource, but instead read: " + contents)
     }
   }
 }

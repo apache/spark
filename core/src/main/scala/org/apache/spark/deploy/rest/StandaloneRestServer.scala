@@ -135,7 +135,10 @@ private[rest] class StandaloneSubmitRequestServlet(
     val driverMemory = sparkProperties.get("spark.driver.memory")
     val driverCores = sparkProperties.get("spark.driver.cores")
     val driverExtraJavaOptions = sparkProperties.get("spark.driver.extraJavaOptions")
-    val driverExtraClassPath = sparkProperties.get("spark.driver.extraClassPath")
+    val commonExtraClassPath = sparkProperties.get("spark.common.extraClassPath")
+    val driverSpecificExtraClassPath = sparkProperties.get("spark.driver.extraClassPath")
+    val driverExtraClassPath = Option(( commonExtraClassPath ++ driverSpecificExtraClassPath)
+      .mkString(File.pathSeparator)).filter(_.nonEmpty)
     val driverExtraLibraryPath = sparkProperties.get("spark.driver.extraLibraryPath")
     val superviseDriver = sparkProperties.get("spark.driver.supervise")
     val appArgs = request.appArgs

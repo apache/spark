@@ -97,6 +97,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
     conf.set("spark.driver.cores", "180")
     conf.set("spark.driver.extraJavaOptions", " -Dslices=5 -Dcolor=mostly_red")
     conf.set("spark.driver.extraClassPath", "food-coloring.jar")
+    conf.set("spark.common.extraClassPath", "saffron.jar")
     conf.set("spark.driver.extraLibraryPath", "pickle.jar")
     conf.set("spark.driver.supervise", "false")
     conf.set("spark.executor.memory", "256m")
@@ -131,6 +132,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
     assert(newMessage.sparkProperties("spark.driver.extraJavaOptions") ===
       " -Dslices=5 -Dcolor=mostly_red")
     assert(newMessage.sparkProperties("spark.driver.extraClassPath") === "food-coloring.jar")
+    assert(newMessage.sparkProperties("spark.common.extraClassPath") === "saffron.jar")
     assert(newMessage.sparkProperties("spark.driver.extraLibraryPath") === "pickle.jar")
     assert(newMessage.sparkProperties("spark.driver.supervise") === "false")
     assert(newMessage.sparkProperties("spark.executor.memory") === "256m")
@@ -250,6 +252,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
       |    "spark.files" : "fireball.png",
       |    "spark.driver.cores" : "180",
       |    "spark.driver.extraJavaOptions" : " -Dslices=5 -Dcolor=mostly_red",
+      |    "spark.common.extraClassPath" : "saffron.jar",
       |    "spark.executor.memory" : "256m",
       |    "spark.driver.extraClassPath" : "food-coloring.jar"
       |  }

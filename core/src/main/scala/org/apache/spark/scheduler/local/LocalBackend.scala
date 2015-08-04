@@ -110,7 +110,7 @@ private[spark] class LocalBackend(
    * @param conf Spark configuration.
    */
   def getUserClasspath(conf: SparkConf): Seq[URL] = {
-    val userClassPathStr = conf.getOption("spark.executor.extraClassPath")
+    val userClassPathStr = conf.getExecutorExtraClassPath()
     userClassPathStr.map(_.split(File.pathSeparator)).toSeq.flatten.map(new File(_).toURI.toURL)
   }
 

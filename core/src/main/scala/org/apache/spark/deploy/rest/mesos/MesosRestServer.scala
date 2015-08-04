@@ -88,7 +88,10 @@ private[mesos] class MesosSubmitRequestServlet(
     // Optional fields
     val sparkProperties = request.sparkProperties
     val driverExtraJavaOptions = sparkProperties.get("spark.driver.extraJavaOptions")
-    val driverExtraClassPath = sparkProperties.get("spark.driver.extraClassPath")
+    val commonExtraClassPath = sparkProperties.get("spark.common.extraClassPath")
+    val driverSpecificExtraClassPath = sparkProperties.get("spark.driver.extraClassPath")
+    val driverExtraClassPath = Option(( commonExtraClassPath ++ driverSpecificExtraClassPath)
+      .mkString(File.pathSeparator)).filter(_.nonEmpty)
     val driverExtraLibraryPath = sparkProperties.get("spark.driver.extraLibraryPath")
     val superviseDriver = sparkProperties.get("spark.driver.supervise")
     val driverMemory = sparkProperties.get("spark.driver.memory")

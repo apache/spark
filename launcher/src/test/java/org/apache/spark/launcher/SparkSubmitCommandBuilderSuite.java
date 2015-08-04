@@ -166,6 +166,7 @@ public class SparkSubmitCommandBuilderSuite {
     launcher.appArgs.add("bar");
     launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "1g");
     launcher.conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver");
+    launcher.conf.put(SparkLauncher.COMMON_EXTRA_CLASSPATH, "/common");
     launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver -XX:MaxPermSize=256m");
     launcher.conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native");
     launcher.conf.put("spark.foo", "foo");
@@ -201,9 +202,13 @@ public class SparkSubmitCommandBuilderSuite {
 
     String[] cp = findArgValue(cmd, "-cp").split(Pattern.quote(File.pathSeparator));
     if (isDriver) {
-      assertTrue("Driver classpath should contain provided entry.", contains("/driver", cp));
+      String expectedCustomCp = "/driver";
+      assertTrue("Driver classpath should contain " + expectedCustomCp, contains(expectedCustomCp, cp));
+      expectedCustomCp = "/common";
+      assertTrue("Driver classpath should contain " + expectedCustomCp, contains(expectedCustomCp, cp));
     } else {
       assertFalse("Driver classpath should not be in command.", contains("/driver", cp));
+      assertFalse("Driver classpath should not be in command.", contains("/common", cp));
     }
 
     String libPath = env.get(CommandBuilderUtils.getLibPathEnvName());

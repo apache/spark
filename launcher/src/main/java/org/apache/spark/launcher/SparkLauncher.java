@@ -57,6 +57,9 @@ public class SparkLauncher {
   /** Configuration key for the number of executor CPU cores. */
   public static final String EXECUTOR_CORES = "spark.executor.cores";
 
+  /** Configuration key for both the driver and executor classpath. */
+  public static final String COMMON_EXTRA_CLASSPATH = "spark.common.extraClassPath";
+
   private final SparkSubmitCommandBuilder builder;
 
   public SparkLauncher() {

@@ -24,7 +24,8 @@ rem SPARK-4161: scala does not assume use of the java classpath,
 rem so we need to add the "-Dscala.usejavacp=true" flag manually. We
 rem do this specifically for the Spark shell because the scala REPL
 rem has its own class loader, and any additional classpath specified
-rem through spark.driver.extraClassPath is not automatically propagated.
+rem through spark.driver.extraClassPath and/or spark.common.extraClassPath
+rem automatically propagated to spark shell.
 if "x%SPARK_SUBMIT_OPTS%"=="x" (
   set SPARK_SUBMIT_OPTS=-Dscala.usejavacp=true
   goto run_shell
