@@ -223,7 +223,7 @@ class LocalLDAModel private[clustering] (
    * @param documents test corpus to use for calculating log likelihood
    * @return variational lower bound on the log likelihood of the entire corpus
    */
-  def logLikelihood(documents: RDD[(Long, Vector)]): Double = corpusBound(documents,
+  def logLikelihood(documents: RDD[(Long, Vector)]): Double = logLikelihoodBound(documents,
     docConcentration, topicConcentration, topicsMatrix.toBreeze.toDenseMatrix, gammaShape, k,
     vocabSize)
 
@@ -259,7 +259,7 @@ class LocalLDAModel private[clustering] (
    * @param k number of topics
    * @param vocabSize number of unique terms in the entire test corpus
    */
-  private def corpusBound(
+  private def logLikelihoodBound(
       documents: RDD[(Long, Vector)],
       alpha: Vector,
       eta: Double,
