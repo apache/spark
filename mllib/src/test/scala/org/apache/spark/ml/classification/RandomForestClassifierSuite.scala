@@ -67,7 +67,7 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
   test("params") {
     ParamsSuite.checkParams(new RandomForestClassifier)
     val model = new RandomForestClassificationModel("rfc",
-      Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 2)), 2)
+      Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 2)), 2, 2)
     ParamsSuite.checkParams(model)
   }
 
@@ -147,6 +147,35 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
         "probability prediction mismatch")
       assert(probPred.toArray.sum ~== 1.0 relTol 1E-5)
     }
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Tests of feature importance
+  /////////////////////////////////////////////////////////////////////////////
+  test("Feature importance with toy data") {
+    val numClasses = 2
+    val rf = new RandomForestClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(3)
+      .setNumTrees(3)
+      .setFeatureSubsetStrategy("all")
+      .setSubsamplingRate(1.0)
+      .setSeed(123)
+
+    // In this data, feature 1 is very important.
+    val data: RDD[LabeledPoint] = sc.parallelize(Seq(
+      new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 1)),
+      new LabeledPoint(1, Vectors.dense(1, 1, 0, 1, 0)),
+      new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0)),
+      new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 0)),
+      new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0))
+    ))
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
+
+    val importances = rf.fit(df).featureImportances
+    val mostImportantFeature = importances.argmax
+    assert(mostImportantFeature === 1)
   }
 
   /////////////////////////////////////////////////////////////////////////////
