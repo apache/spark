@@ -1849,6 +1849,7 @@
               <javacArg>${java.version}</javacArg>
               <javacArg>-target</javacArg>
               <javacArg>${java.version}</javacArg>
+              <javacArg>-Xlint:all,-serial,-path</javacArg>
             </javacArgs>
           </configuration>
         </plugin>
@@ -1862,6 +1863,9 @@
             <encoding>UTF-8</encoding>
             <maxmem>1024m</maxmem>
             <fork>true</fork>
+            <compilerArgs>
+              <arg>-Xlint:all,-serial,-path</arg>
+            </compilerArgs>
           </configuration>
         </plugin>
         <!-- Surefire runs all Java tests -->
