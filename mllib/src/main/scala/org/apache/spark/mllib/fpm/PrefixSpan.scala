@@ -32,20 +32,20 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**
- *
  * :: Experimental ::
  *
- * A parallel PrefixSpan algorithm to mine sequential pattern.
- * The PrefixSpan algorithm is described in
- * [[http://doi.org/10.1109/ICDE.2001.914830]].
+ * A parallel PrefixSpan algorithm to mine frequent sequential patterns.
+ * The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
+ * Efficiently by Prefix-Projected Pattern Growth ([[http://doi.org/10.1109/ICDE.2001.914830]]).
  *
  * @param minSupport the minimal support level of the sequential pattern, any pattern appears
  *                   more than  (minSupport * size-of-the-dataset) times will be output
  * @param maxPatternLength the maximal length of the sequential pattern, any pattern appears
  *                         less than maxPatternLength will be output
- * @param maxLocalProjDBSize The maximum number of items allowed in a projected database before
- *                           local processing. If a projected database exceeds this size, another
- *                           iteration of distributed PrefixSpan is run.
+ * @param maxLocalProjDBSize The maximum number of items (including delimiters used in the internal
+ *                           storage format) allowed in a projected database before local
+ *                           processing. If a projected database exceeds this size, another
+ *                           iteration of distributed prefix growth is run.
  *
  * @see [[https://en.wikipedia.org/wiki/Sequential_Pattern_Mining Sequential Pattern Mining
  *       (Wikipedia)]]
@@ -101,8 +101,8 @@ class PrefixSpan private (
   def getMaxLocalProjDBSize: Long = maxLocalProjDBSize
 
   /**
-   * Sets the maximum number of items allowed in a projected database before local processing
-   * (default: `32000000L`).
+   * Sets the maximum number of items (including delimiters used in the internal storage format)
+   * allowed in a projected database before local processing (default: `32000000L`).
    */
   def setMaxLocalProjDBSize(maxLocalProjDBSize: Long): this.type = {
     require(maxLocalProjDBSize >= 0L,
@@ -138,12 +138,13 @@ class PrefixSpan private (
         count >= minCount
       }.collect()
     val freqItems = freqItemAndCounts.sortBy(-_._2).map(_._1)
-    logInfo(s"number of frequent items: ${freqItems.size}")
+    logInfo(s"number of frequent items: ${freqItems.length}")
 
     // Keep only frequent items from input sequences and convert them to internal storage.
     val itemToInt = freqItems.zipWithIndex.toMap
-    val dataInternalRepr = data.map { itemsets =>
+    val dataInternalRepr = data.flatMap { itemsets =>
       val allItems = mutable.ArrayBuilder.make[Int]
+      var containsFreqItems = false
       allItems += 0
       itemsets.foreach { itemsets =>
         val items = mutable.ArrayBuilder.make[Int]
@@ -154,11 +155,16 @@ class PrefixSpan private (
         }
         val result = items.result()
         if (result.nonEmpty) {
+          containsFreqItems = true
           allItems ++= result.sorted
         }
         allItems += 0
       }
-      allItems.result()
+      if (containsFreqItems) {
+        Iterator.single(allItems.result())
+      } else {
+        Iterator.empty
+      }
     }.persist(StorageLevel.MEMORY_AND_DISK)
 
     val results = genFreqPatterns(dataInternalRepr, minCount, maxPatternLength, maxLocalProjDBSize)
