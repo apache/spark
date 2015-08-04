@@ -409,7 +409,6 @@ class DirectKafkaStreamSuite
     def dataToString: String = collectedData.map(_.mkString("[", ",", "]")).mkString("{", ", ", "}")
 
     // Assert that rate estimator values are used to determine maxMessagesPerPartition
-    assert(collectedData.exists(_.size == 10), dataToString)  // maxRatePerPartition 100 * .1 secs
     assert(collectedData.exists(_.size ==  6), dataToString)  // rate estimator 60.0 * .1 secs
     assert(collectedData.exists(_.size ==  4), dataToString)  // rate estimator 40.0 * .1 secs
     assert(collectedData.exists(_.size ==  2), dataToString)  // rate estimator 20.0 * .1 secs
