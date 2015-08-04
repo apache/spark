@@ -30,11 +30,11 @@ object RuleExecutor {
   def resetTime(): Unit = timeMap.clear()
 
   /** Dump statistics about time spent running specific rules. */
-  def dumpTimeSpent(): Unit = {
-    val maxSize = timeMap.keys.map(_.toString.size).max
-    timeMap.toSeq.sortBy(_._2).reverse.foreach { case (k, v) =>
-      println(s"${k.padTo(maxSize, " ").mkString} $v")
-    }
+  def dumpTimeSpent(): String = {
+    val maxSize = timeMap.keys.map(_.toString.length).max
+    timeMap.toSeq.sortBy(_._2).reverseMap { case (k, v) =>
+      s"${k.padTo(maxSize, " ").mkString} $v"
+    }.mkString("\n")
   }
 }
 

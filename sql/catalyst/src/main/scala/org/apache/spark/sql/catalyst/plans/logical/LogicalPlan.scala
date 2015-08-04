@@ -27,19 +27,19 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
-  private var _analyzed = false
+  private var _analyzed: Boolean = false
 
   /**
    * Marks this plan as already analyzed.  This should only be called by CheckAnalysis.
    */
-  private[catalyst] def setAnalyzed() = { _analyzed = true }
+  private[catalyst] def setAnalyzed(): Unit = { _analyzed = true }
 
   /**
    * Returns true if this node and its children have already been gone through analysis and
    * verification.  Note that this is only an optimization used to avoid analyzing trees that
    * have already been analyzed, and can be reset by transformations.
    */
-  def analyzed = _analyzed
+  def analyzed: Boolean = _analyzed
 
   /**
    * Returns a copy of this node where `rule` has been recursively applied first to all of its
@@ -73,7 +73,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def resolveExpressions(r: PartialFunction[Expression, Expression]): LogicalPlan = {
     this resolveOperators  {
-      case p => p transformExpressions(r)
+      case p => p.transformExpressions(r)
     }
   }
 
