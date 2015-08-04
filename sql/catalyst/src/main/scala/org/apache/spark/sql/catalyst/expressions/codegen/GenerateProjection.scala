@@ -26,6 +26,8 @@ import org.apache.spark.sql.types._
  */
 abstract class BaseProjection extends Projection {}
 
+abstract class BaseJoinedProjection extends JoinedProjection {}
+
 abstract class CodeGenMutableRow extends MutableRow with BaseGenericInternalRow
 
 /**
@@ -34,7 +36,13 @@ abstract class CodeGenMutableRow extends MutableRow with BaseGenericInternalRow
  * object is custom generated based on the output types of the [[Expression]] to avoid boxing of
  * primitive values.
  */
-object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
+abstract class AbstractGenerateProjection[OutType <: AnyRef]
+    extends CodeGenerator[Seq[Expression], OutType] {
+  protected def projectionType: String
+
+  protected def inputNames: Seq[String]
+
+  private[this] def input(prefix: String) = inputNames.map(n => s"$prefix$n").mkString(", ")
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
@@ -43,7 +51,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     in.map(BindReferences.bindReference(_, inputSchema))
 
   // Make Mutablility optional...
-  protected def create(expressions: Seq[Expression]): Projection = {
+  protected def create(expressions: Seq[Expression]): OutType = {
     val ctx = newCodeGenContext()
     val columns = expressions.zipWithIndex.map {
       case (e, i) =>
@@ -159,7 +167,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       return new SpecificProjection(expr);
     }
 
-    class SpecificProjection extends ${classOf[BaseProjection].getName} {
+    class SpecificProjection extends $projectionType {
       private $exprType[] expressions;
       ${declareMutableStates(ctx)}
       ${declareAddedFunctions(ctx)}
@@ -170,15 +178,15 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       }
 
       @Override
-      public Object apply(Object r) {
-        return new SpecificRow((InternalRow) r);
+      public Object apply(${input("Object ")}) {
+        return new SpecificRow(${input("(InternalRow) ")});
       }
 
       final class SpecificRow extends ${classOf[CodeGenMutableRow].getName} {
 
         $columns
 
-        public SpecificRow(InternalRow i) {
+        public SpecificRow(${input("InternalRow ")}) {
           $initColumns
         }
 
@@ -238,6 +246,16 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n" +
       CodeFormatter.format(code))
 
-    compile(code).generate(ctx.references.toArray).asInstanceOf[Projection]
+    compile(code).generate(ctx.references.toArray).asInstanceOf[OutType]
   }
+}
+
+object GenerateProjection extends AbstractGenerateProjection[BaseProjection] {
+  override protected def projectionType = classOf[BaseProjection].getName
+  override protected def inputNames = Seq("i")
+}
+
+object GenerateJoinedProjection extends AbstractGenerateProjection[BaseJoinedProjection] {
+  override protected def projectionType = classOf[BaseJoinedProjection].getName
+  override protected def inputNames = Seq("left", "right")
 }

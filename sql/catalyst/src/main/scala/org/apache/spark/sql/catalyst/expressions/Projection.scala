@@ -53,6 +53,28 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
 }
 
 /**
+ * A [[JoinedProjection]] that is calculated by calling the `eval` of each of the specified
+ * expressions.
+ *
+ * @param expressions a sequence of expressions that determine the value of each column of the
+ *                    output row.
+ */
+class InterpretedJoinedProjection(expressions: Seq[Expression]) extends JoinedProjection {
+  def this(expressions: Seq[Expression], leftInputSchema: Seq[Attribute], rightInputSchema:
+      Seq[Attribute]) = {
+    this(BindReferences.bindJoinReferences(expressions, leftInputSchema, rightInputSchema))
+  }
+
+  private[this] val projection = new InterpretedProjection(expressions)
+
+  private[this] val join = new JoinedRow
+
+  def apply(left: InternalRow, right: InternalRow): InternalRow = {
+    projection(join(left, right))
+  }
+}
+
+/**
  * A [[MutableProjection]] that is calculated by calling `eval` on each of the specified
  * expressions.
  * @param expressions a sequence of expressions that determine the value of each column of the
@@ -83,6 +105,34 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
       i += 1
     }
     mutableRow
+  }
+}
+
+/**
+ * A [[MutableJoinedProjection]] that is calculated by calling `eval` on each of the specified
+ * expressions.
+ * @param expressions a sequence of expressions that determine the value of each column of the
+ *                    output row.
+ */
+class InterpretedMutableJoinedProjection(expressions: Seq[Expression]) extends MutableJoinedProjection {
+  def this(expressions: Seq[Expression], leftInputSchema: Seq[Attribute], rightInputSchema:
+      Seq[Attribute]) = {
+    this(BindReferences.bindJoinReferences(expressions, leftInputSchema, rightInputSchema))
+  }
+
+  private[this] val projection = new InterpretedMutableProjection(expressions)
+
+  private[this] val join = new JoinedRow
+
+  override def currentValue: InternalRow = projection.currentValue
+
+  override def target(row: MutableRow): MutableJoinedProjection = {
+    projection.target(row)
+    this
+  }
+
+  override def apply(left: InternalRow, right: InternalRow): InternalRow = {
+    projection(join(left, right))
   }
 }
 

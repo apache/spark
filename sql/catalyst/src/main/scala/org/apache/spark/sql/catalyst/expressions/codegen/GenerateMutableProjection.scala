@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.types.DecimalType
@@ -26,11 +27,19 @@ import org.apache.spark.sql.types.DecimalType
 // MutableProjection is not accessible in Java
 abstract class BaseMutableProjection extends MutableProjection
 
+abstract class BaseMutableJoinedProjection extends MutableJoinedProjection
+
 /**
  * Generates byte code that produces a [[MutableRow]] object that can update itself based on a new
  * input [[InternalRow]] for a fixed set of [[Expression Expressions]].
  */
-object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => MutableProjection] {
+abstract class AbstractGenerateMutableProjection[OutType <: AnyRef]
+    extends CodeGenerator[Seq[Expression], () => OutType] {
+  protected def projectionType: String
+
+  protected def inputNames: Seq[String]
+
+  private[this] def input(prefix: String) = inputNames.map(n => s"$prefix$n").mkString(", ")
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
@@ -38,7 +47,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
   protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
     in.map(BindReferences.bindReference(_, inputSchema))
 
-  protected def create(expressions: Seq[Expression]): (() => MutableProjection) = {
+  protected def create(expressions: Seq[Expression]): (() => OutType) = {
     val ctx = newCodeGenContext()
     val projectionCodes = expressions.zipWithIndex.map {
       case (NoOp, _) => ""
@@ -65,14 +74,15 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           """
         }
     }
-    val allProjections = ctx.splitExpressions("i", projectionCodes)
+
+    val allProjections = ctx.splitExpressions(inputNames, projectionCodes)
 
     val code = s"""
       public Object generate($exprType[] expr) {
         return new SpecificMutableProjection(expr);
       }
 
-      class SpecificMutableProjection extends ${classOf[BaseMutableProjection].getName} {
+      class SpecificProjection extends $projectionType {
 
         private $exprType[] expressions;
         private $mutableRowType mutableRow;
@@ -85,7 +95,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           ${initMutableStates(ctx)}
         }
 
-        public ${classOf[BaseMutableProjection].getName} target($mutableRowType row) {
+        public $projectionType target($mutableRowType row) {
           mutableRow = row;
           return this;
         }
@@ -95,9 +105,10 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           return (InternalRow) mutableRow;
         }
 
-        public Object apply(Object _i) {
-          InternalRow i = (InternalRow) _i;
+        public Object apply(${input("Object _")}) {
+          ${inputNames.map(n => s"InternalRow $n = (InternalRow) _$n;\n").mkString}
           $allProjections
+
           return mutableRow;
         }
       }
@@ -107,7 +118,19 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
     val c = compile(code)
     () => {
-      c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
+      c.generate(ctx.references.toArray).asInstanceOf[OutType]
     }
   }
+}
+
+object GenerateMutableProjection
+    extends AbstractGenerateMutableProjection[BaseMutableProjection] {
+  override protected def projectionType = classOf[BaseMutableProjection].getName
+  override protected def inputNames = Seq("i")
+}
+
+object GenerateMutableJoinedProjection
+    extends AbstractGenerateMutableProjection[BaseMutableJoinedProjection] {
+  override protected def projectionType = classOf[BaseMutableJoinedProjection].getName
+  override protected def inputNames = Seq("left", "right")
 }

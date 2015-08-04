@@ -80,4 +80,13 @@ package object expressions  {
     /** Uses the given row to store the output of the projection. */
     def target(row: MutableRow): MutableProjection
   }
+
+  abstract class JoinedProjection extends ((InternalRow, InternalRow) => InternalRow)
+
+  abstract class MutableJoinedProjection extends JoinedProjection {
+    def currentValue: InternalRow
+
+    /** Uses the given row to store the output of the projection. */
+    def target(row: MutableRow): MutableJoinedProjection
+  }
 }

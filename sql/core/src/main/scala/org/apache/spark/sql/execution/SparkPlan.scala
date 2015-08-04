@@ -245,6 +245,33 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
   }
 
+  protected def newJoinedProjection(
+      expressions: Seq[Expression],
+      leftInputSchema: Seq[Attribute],
+      rightInputSchema: Seq[Attribute]): JoinedProjection = {
+    log.debug(s"Creating Joined Projection: $expressions, leftInputSchema: $leftInputSchema" +
+        s", rightInputSchema: $rightInputSchema, codegen:$codegenEnabled")
+    val boundExpressions = BindReferences.bindJoinReferences(
+      expressions,
+      leftInputSchema,
+      rightInputSchema)
+    if (codegenEnabled) {
+      try {
+        GenerateJoinedProjection.generate(boundExpressions)
+      } catch {
+        case e: Exception =>
+          if (isTesting) {
+            throw e
+          } else {
+            log.error("Failed to generate joined projection, fallback to interpret", e)
+            new InterpretedJoinedProjection(boundExpressions)
+          }
+      }
+    } else {
+      new InterpretedJoinedProjection(boundExpressions)
+    }
+  }
+
   protected def newMutableProjection(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute]): () => MutableProjection = {
@@ -264,6 +291,34 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       }
     } else {
       () => new InterpretedMutableProjection(expressions, inputSchema)
+    }
+  }
+
+  protected def newMutableProjection(
+      expressions: Seq[Expression],
+      leftInputSchema: Seq[Attribute],
+      rightInputSchema: Seq[Attribute]): () => MutableJoinedProjection = {
+    log.debug(
+      s"Creating Mutable Joined Projection: $expressions, leftInputSchema: $leftInputSchema" +
+        s", rightInputSchema: $rightInputSchema, codegen:$codegenEnabled")
+    val boundExpressions = BindReferences.bindJoinReferences(
+      expressions,
+      leftInputSchema,
+      rightInputSchema)
+    if(codegenEnabled) {
+      try {
+        GenerateMutableJoinedProjection.generate(boundExpressions)
+      } catch {
+        case e: Exception =>
+          if (isTesting) {
+            throw e
+          } else {
+            log.error("Failed to generate mutable joined projection, fallback to interpreted", e)
+            () => new InterpretedMutableJoinedProjection(boundExpressions)
+          }
+      }
+    } else {
+      () => new InterpretedMutableJoinedProjection(boundExpressions)
     }
   }
 

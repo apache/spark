@@ -273,7 +273,7 @@ class CodeGenContext {
    *
    * @param row the variable name of row that is used by expressions
    */
-  def splitExpressions(row: String, expressions: Seq[String]): String = {
+  def splitExpressions(row: Seq[String], expressions: Seq[String]): String = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
@@ -291,10 +291,12 @@ class CodeGenContext {
       blocks.head
     } else {
       val apply = freshName("apply")
+      val functionParams = row.map("InternalRow " + _).mkString(", ")
+      val functionCall = row.mkString(", ")
       val functions = blocks.zipWithIndex.map { case (body, i) =>
         val name = s"${apply}_$i"
         val code = s"""
-           |private void $name(InternalRow $row) {
+           |private void $name($functionParams) {
            |  $body
            |}
          """.stripMargin
@@ -302,7 +304,7 @@ class CodeGenContext {
          name
       }
 
-      functions.map(name => s"$name($row);").mkString("\n")
+      functions.map(name => s"$name($functionCall);").mkString("\n")
     }
   }
 }
