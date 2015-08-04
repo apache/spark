@@ -413,7 +413,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case _ => input
   }
 
-  def createCode(ctx: CodeGenContext, expressions: Seq[Expression]) = {
+  def createCode(ctx: CodeGenContext, expressions: Seq[Expression]): GeneratedExpressionCode = {
     val exprEvals = expressions.map(e => e.gen(ctx))
     val exprTypes = expressions.map(_.dataType)
     createCodeForStruct(ctx, exprEvals, exprTypes)
