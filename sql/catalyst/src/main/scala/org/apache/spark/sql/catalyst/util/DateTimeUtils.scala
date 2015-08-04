@@ -538,8 +538,7 @@ object DateTimeUtils {
    * since 1.1.1970. January is month 1.
    */
   def getMonth(date: Int): Int = {
-    val (_, month, _, _) = splitDate(date)
-    month
+    splitDate(date)._2
   }
 
   /**
@@ -547,8 +546,7 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getDayOfMonth(date: Int): Int = {
-    val (_, _, dayOfMonth, _) = splitDate(date)
-    dayOfMonth
+    splitDate(date)._3
   }
 
   /**
