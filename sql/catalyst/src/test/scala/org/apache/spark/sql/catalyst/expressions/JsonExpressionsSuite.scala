@@ -155,7 +155,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("preserve newlines") {
     checkEvaluation(
       GetJsonObject(Literal("""{"a":"b\nc"}"""), Literal("$.a")),
-      "b\\nc")
+      "b\nc")
   }
 
   test("escape") {
