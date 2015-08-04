@@ -293,8 +293,8 @@ def round(col, scale=0):
     Round the value of `e` to `scale` decimal places if `scale` >= 0
     or at integral part when `scale` < 0.
 
-    >>> sqlContext.createDataFrame([(3.14159,)], ['a']).select(round('a', 2).alias('r')).collect()
-    [Row(r=3.14)]
+    >>> sqlContext.createDataFrame([(3.14159,)], ['a']).select(round('a', 1).alias('r')).collect()
+    [Row(r=3.1)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.round(_to_java_column(col), scale))
@@ -1134,7 +1134,7 @@ def lpad(col, len, pad):
 
     >>> df = sqlContext.createDataFrame([('abcd',)], ['s',])
     >>> df.select(lpad(df.s, 6, '#').alias('s')).collect()
-    [Row(s=u'--abcd')]
+    [Row(s=u'##abcd')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.lpad(_to_java_column(col), len, pad))
@@ -1148,7 +1148,7 @@ def rpad(col, len, pad):
 
     >>> df = sqlContext.createDataFrame([('abcd',)], ['s',])
     >>> df.select(rpad(df.s, 6, '#').alias('s')).collect()
-    [Row(s=u'abcd--')]
+    [Row(s=u'abcd##')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.rpad(_to_java_column(col), len, pad))
@@ -1235,7 +1235,7 @@ def soundex(col):
     [Row(soundex=u'P362'), Row(soundex=u'U612')]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.size(_to_java_column(col)))
+    return Column(sc._jvm.functions.soundex(_to_java_column(col)))
 
 
 @ignore_unicode_prefix
