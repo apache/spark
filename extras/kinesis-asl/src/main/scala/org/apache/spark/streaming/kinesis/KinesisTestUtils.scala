@@ -36,15 +36,10 @@ import org.apache.spark.Logging
 /**
  * Shared utility methods for performing Kinesis tests that actually transfer data
  */
-private class KinesisTestUtils(
-    val endpointUrl: String = "https://kinesis.us-west-2.amazonaws.com",
-    _regionName: String = "") extends Logging {
+private class KinesisTestUtils extends Logging {
 
-  val regionName = if (_regionName.length == 0) {
-    RegionUtils.getRegionByEndpoint(endpointUrl).getName()
-  } else {
-    RegionUtils.getRegion(_regionName).getName()
-  }
+  val endpointUrl = "https://kinesis.us-west-2.amazonaws.com"
+  val regionName = RegionUtils.getRegionByEndpoint(endpointUrl).getName()
 
   val streamShardCount = 2
 

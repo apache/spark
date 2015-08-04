@@ -38,9 +38,6 @@ import org.apache.spark.{SparkConf, SparkContext}
 class KinesisStreamSuite extends KinesisFunSuite
   with Eventually with BeforeAndAfter with BeforeAndAfterAll {
 
-  private val regionName = "us-east-1"
-  private val endpointUrl = "https://kinesis.us-east-1.amazonaws.com"
-
   // This is the name that KCL will use to save metadata to DynamoDB
   private val appName = s"KinesisStreamSuite-${math.abs(Random.nextLong())}"
 
@@ -58,7 +55,7 @@ class KinesisStreamSuite extends KinesisFunSuite
     sc = new SparkContext(conf)
 
     runIfTestsEnabled("Prepare KinesisTestUtils") {
-      testUtils = new KinesisTestUtils(endpointUrl)
+      testUtils = new KinesisTestUtils()
       testUtils.createStream()
     }
   }
@@ -111,7 +108,7 @@ class KinesisStreamSuite extends KinesisFunSuite
     val awsAccessKey = "qqq"
     val awsSecretKey = "zzz"
     val inputStream = KinesisUtils.createStream(ssc, appName, "mySparkStream",
-      endpointUrl, regionName, InitialPositionInStream.LATEST, Seconds(2),
+      testUtils.endpointUrl, testUtils.regionName, InitialPositionInStream.LATEST, Seconds(2),
       StorageLevel.MEMORY_AND_DISK_2, awsAccessKey, awsSecretKey)
     assert(inputStream.isInstanceOf[KinesisInputDStream])
 
@@ -136,8 +133,8 @@ class KinesisStreamSuite extends KinesisFunSuite
     val nonEmptyRDD = kinesisStream.createBlockRDD(time, blockInfos)
     nonEmptyRDD shouldBe a [KinesisBackedBlockRDD]
     val kinesisRDD = nonEmptyRDD.asInstanceOf[KinesisBackedBlockRDD]
-    assert(kinesisRDD.regionName === regionName)
-    assert(kinesisRDD.endpointUrl === endpointUrl)
+    assert(kinesisRDD.regionName === testUtils.regionName)
+    assert(kinesisRDD.endpointUrl === testUtils.endpointUrl)
     assert(kinesisRDD.retryTimeoutMs === batchDuration.milliseconds)
     assert(kinesisRDD.awsCredentialsOption ===
       Some(SerializableAWSCredentials(awsAccessKey, awsSecretKey)))
