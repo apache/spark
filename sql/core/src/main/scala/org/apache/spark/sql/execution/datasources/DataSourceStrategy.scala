@@ -187,15 +187,17 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         // To see whether the `index`-th column is a partition column...
         val i = partitionColumns.indexOf(name)
         if (i != -1) {
+          val dt = schema(partitionColumns(i)).dataType
           // If yes, gets column value from partition values.
           (mutableRow: MutableRow, dataRow: InternalRow, ordinal: Int) => {
-            mutableRow(ordinal) = partitionValues.genericGet(i)
+            mutableRow(ordinal) = partitionValues.get(i, dt)
           }
         } else {
           // Otherwise, inherits the value from scanned data.
           val i = nonPartitionColumns.indexOf(name)
+          val dt = schema(nonPartitionColumns(i)).dataType
           (mutableRow: MutableRow, dataRow: InternalRow, ordinal: Int) => {
-            mutableRow(ordinal) = dataRow.genericGet(i)
+            mutableRow(ordinal) = dataRow.get(i, dt)
           }
         }
       }

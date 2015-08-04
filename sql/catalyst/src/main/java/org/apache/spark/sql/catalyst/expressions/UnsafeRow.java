@@ -254,11 +254,6 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
-  public Object genericGet(int ordinal) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public Object get(int ordinal, DataType dataType) {
     if (isNullAt(ordinal) || dataType instanceof NullType) {
       return null;
