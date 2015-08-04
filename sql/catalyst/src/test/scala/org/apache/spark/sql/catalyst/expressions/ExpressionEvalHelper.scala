@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.scalacheck.Gen
 import org.scalactic.TripleEqualsSupport.Spread
 
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -30,7 +32,7 @@ import org.apache.spark.sql.types.DataType
 /**
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
  */
-trait ExpressionEvalHelper extends PropertyGenerator {
+trait ExpressionEvalHelper extends LiteralGenerator with GeneratorDrivenPropertyChecks {
   self: SparkFunSuite =>
 
   protected def create_row(values: Any*): InternalRow = {

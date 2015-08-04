@@ -26,8 +26,33 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
-
-trait PropertyGenerator extends GeneratorDrivenPropertyChecks with Matchers {
+/**
+ * Property is a high-level specification of behavior that should hold for a range of data points.
+ *
+ * For example, while we are evaluating a deterministic expression for some input, we should always
+ * hold the property that the result never changes, regardless of how we get the result,
+ * via interpreted or codegen.
+ *
+ * In ScalaTest, properties are specified as functions and the data points used to check properties
+ * can be supplied by either tables or generators.
+ *
+ * Generator-driven property checks are performed via integration with ScalaCheck.
+ *
+ * @example {{{
+ *   def toTest(i: Int): Boolean = if (i % 2 == 0) true else false
+ *
+ *   import org.scalacheck.Gen
+ *
+ *   test ("true if param is even") {
+ *     val evenInts = for (n <- Gen.choose(-1000, 1000)) yield 2 * n
+ *     forAll(evenInts) { (i: Int) =>
+ *       assert (toTest(i) === true)
+ *     }
+ *   }
+ * }}}
+ *
+ */
+trait LiteralGenerator {
 
   lazy val byteLiteralGen: Gen[Literal] =
     for { b <- Arbitrary.arbByte.arbitrary } yield Literal.create(b, ByteType)
