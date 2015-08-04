@@ -131,13 +131,7 @@ final class DecisionTreeClassificationModel private[ml] (
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction match {
       case dv: DenseVector =>
-        var i = 0
-        val size = dv.size
-        val sum = dv.values.sum
-        while (i < size) {
-          dv.values(i) = if (sum != 0) dv.values(i) / sum else 0.0
-          i += 1
-        }
+        ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(dv)
         dv
       case sv: SparseVector =>
         throw new RuntimeException("Unexpected error in DecisionTreeClassificationModel:" +

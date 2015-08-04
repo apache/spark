@@ -31,7 +31,7 @@ __all__ = ['LogisticRegression', 'LogisticRegressionModel', 'DecisionTreeClassif
 
 @inherit_doc
 class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                         HasRegParam, HasTol, HasProbabilityCol):
+                         HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol):
     """
     Logistic regression.
 
@@ -42,13 +42,18 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     ...     Row(label=0.0, features=Vectors.sparse(1, [], []))]).toDF()
     >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
     >>> model = lr.fit(df)
-    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
-    >>> model.transform(test0).head().prediction
-    0.0
     >>> model.weights
     DenseVector([5.5...])
     >>> model.intercept
     -2.68...
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
+    0.0
+    >>> result.probability
+    DenseVector([0.99..., 0.00...])
+    >>> result.rawPrediction
+    DenseVector([8.22..., -8.22...])
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
     >>> model.transform(test1).head().prediction
     1.0
@@ -70,11 +75,11 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                 threshold=0.5, probabilityCol="probability"):
+                 threshold=0.5, probabilityCol="probability", rawPredictionCol="rawPrediction"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                 threshold=0.5, probabilityCol="probability")
+                 threshold=0.5, probabilityCol="probability", rawPredictionCol="rawPrediction")
         """
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -98,11 +103,11 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     @keyword_only
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                  threshold=0.5, probabilityCol="probability"):
+                  threshold=0.5, probabilityCol="probability", rawPredictionCol="rawPrediction"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                 threshold=0.5, probabilityCol="probability")
+                 threshold=0.5, probabilityCol="probability", rawPredictionCol="rawPrediction")
         Sets params for logistic regression.
         """
         kwargs = self.setParams._input_kwargs
@@ -187,7 +192,8 @@ class GBTParams(object):
 
 @inherit_doc
 class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                             DecisionTreeParams, HasCheckpointInterval):
+                             HasProbabilityCol, HasRawPredictionCol, DecisionTreeParams,
+                             HasCheckpointInterval):
     """
     `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree`
     learning algorithm for classification.
@@ -209,8 +215,13 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> model.depth
     1
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.transform(test0).head().prediction
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
     0.0
+    >>> result.probability
+    DenseVector([1.0, 0.0])
+    >>> result.rawPrediction
+    DenseVector([1.0, 0.0])
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
@@ -223,10 +234,12 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 probabilityCol="probability", rawPredictionCol="rawPrediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini")
         """
@@ -246,11 +259,13 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
     @keyword_only
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  probabilityCol="probability", rawPredictionCol="rawPrediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   impurity="gini"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini")
         Sets params for the DecisionTreeClassifier.
@@ -578,7 +593,8 @@ class GBTClassificationModel(TreeEnsembleModels):
 
 
 @inherit_doc
-class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
+class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasProbabilityCol,
+                 HasRawPredictionCol):
     """
     Naive Bayes Classifiers.
 
@@ -595,8 +611,13 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
     >>> model.theta
     DenseMatrix(2, 2, [-1.09..., -0.40..., -0.40..., -1.09...], 1)
     >>> test0 = sc.parallelize([Row(features=Vectors.dense([1.0, 0.0]))]).toDF()
-    >>> model.transform(test0).head().prediction
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
     1.0
+    >>> result.probability
+    DenseVector([0.42..., 0.57...])
+    >>> result.rawPrediction
+    DenseVector([-1.60..., -1.32...])
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
     >>> model.transform(test1).head().prediction
     1.0
@@ -610,10 +631,12 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 smoothing=1.0, modelType="multinomial"):
+                 probabilityCol="probability", rawPredictionCol="rawPrediction", smoothing=1.0,
+                 modelType="multinomial"):
         """
-        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 smoothing=1.0, modelType="multinomial")
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 probabilityCol="probability", rawPredictionCol="rawPrediction", smoothing=1.0, \
+                 modelType="multinomial")
         """
         super(NaiveBayes, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -631,10 +654,12 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
 
     @keyword_only
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  smoothing=1.0, modelType="multinomial"):
+                  probabilityCol="probability", rawPredictionCol="rawPrediction", smoothing=1.0,
+                  modelType="multinomial"):
         """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  smoothing=1.0, modelType="multinomial")
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  probabilityCol="probability", rawPredictionCol="rawPrediction", smoothing=1.0, \
+                  modelType="multinomial")
         Sets params for Naive Bayes.
         """
         kwargs = self.setParams._input_kwargs

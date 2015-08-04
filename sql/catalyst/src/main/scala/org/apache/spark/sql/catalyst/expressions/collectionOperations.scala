@@ -20,6 +20,7 @@ import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -54,15 +55,17 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, BooleanType)
 
   override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
-    case _ @ ArrayType(n: AtomicType, _) => TypeCheckResult.TypeCheckSuccess
-    case _ @ ArrayType(n, _) => TypeCheckResult.TypeCheckFailure(
-                    s"Type $n is not the AtomicType, we can not perform the ordering operations")
-    case other =>
-      TypeCheckResult.TypeCheckFailure(s"ArrayType(AtomicType) is expected, but we got $other")
+    case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
+      TypeCheckResult.TypeCheckSuccess
+    case ArrayType(dt, _) =>
+      TypeCheckResult.TypeCheckFailure(
+        s"$prettyName does not support sorting array of type ${dt.simpleString}")
+    case _ =>
+      TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
   }
 
   @transient
-  private lazy val lt = {
+  private lazy val lt: Comparator[Any] = {
     val ordering = base.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
     }
@@ -83,7 +86,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   }
 
   @transient
-  private lazy val gt = {
+  private lazy val gt: Comparator[Any] = {
     val ordering = base.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
     }
@@ -106,9 +109,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def nullSafeEval(array: Any, ascending: Any): Any = {
     val elementType = base.dataType.asInstanceOf[ArrayType].elementType
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
-    java.util.Arrays.sort(
-      data,
-      if (ascending.asInstanceOf[Boolean]) lt else gt)
+    java.util.Arrays.sort(data, if (ascending.asInstanceOf[Boolean]) lt else gt)
     new GenericArrayData(data.asInstanceOf[Array[Any]])
   }
 

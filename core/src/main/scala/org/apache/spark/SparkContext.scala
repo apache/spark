@@ -1192,7 +1192,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   protected[spark] def checkpointFile[T: ClassTag](path: String): RDD[T] = withScope {
-    new CheckpointRDD[T](this, path)
+    new ReliableCheckpointRDD[T](this, path)
   }
 
   /** Build the union of a list of RDDs. */
@@ -2658,7 +2658,7 @@ object SparkContext extends Logging {
         val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", false)
         val url = mesosUrl.stripPrefix("mesos://") // strip scheme from raw Mesos URLs
         val backend = if (coarseGrained) {
-          new CoarseMesosSchedulerBackend(scheduler, sc, url)
+          new CoarseMesosSchedulerBackend(scheduler, sc, url, sc.env.securityManager)
         } else {
           new MesosSchedulerBackend(scheduler, sc, url)
         }

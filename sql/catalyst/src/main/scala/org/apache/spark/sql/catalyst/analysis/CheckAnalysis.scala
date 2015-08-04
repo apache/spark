@@ -130,11 +130,9 @@ trait CheckAnalysis {
 
           case Sort(orders, _, _) =>
             orders.foreach { order =>
-              order.dataType match {
-                case t: AtomicType => // OK
-                case NullType => // OK
-                case t =>
-                  failAnalysis(s"Sorting is not supported for columns of type ${t.simpleString}")
+              if (!RowOrdering.isOrderable(order.dataType)) {
+                failAnalysis(
+                  s"sorting is not supported for columns of type ${order.dataType.simpleString}")
               }
             }
 
