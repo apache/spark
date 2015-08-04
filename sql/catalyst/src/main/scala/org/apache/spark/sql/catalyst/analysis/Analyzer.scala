@@ -994,15 +994,19 @@ class Analyzer(
       case s @ Sort(ordering, global, child)
         if s.expressions.forall(_.resolved) && s.childrenResolved && !s.hasNoEvaluation =>
 
-        val (ref, needEval) = ordering.partition(_.child.isInstanceOf[AttributeReference])
+        val needEval = ordering.filterNot(_.child.isInstanceOf[AttributeReference])
 
         val namedExpr = needEval.map(_.child match {
           case n: NamedExpression => n
           case e => Alias(e, "_sortCondition")()
         })
 
-        val newOrdering = ref ++ needEval.zip(namedExpr).map { case (order, ne) =>
-          order.copy(child = ne.toAttribute)
+        val evaled = needEval.zip(namedExpr).map { case (order, ne) =>
+          new TreeNodeRef(order) -> order.copy(child = ne.toAttribute)
+        }.toMap
+
+        val newOrdering = ordering.map { order =>
+          evaled.getOrElse(new TreeNodeRef(order), order)
         }
 
         // Add still-need-evaluate ordering expressions into inner project and then project

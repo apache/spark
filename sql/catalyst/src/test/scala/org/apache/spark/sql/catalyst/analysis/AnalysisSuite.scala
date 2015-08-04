@@ -200,4 +200,26 @@ class AnalysisSuite extends AnalysisTest {
 
     checkAnalysis(plan, expected)
   }
+
+  test("SPARK-9512: keep the order of SortOrders when handling Sort") {
+    val a = testRelation2.output(0)
+    val b = testRelation2.output(1)
+
+    def makeOrder(e: Expression): SortOrder = SortOrder(e, Ascending)
+
+    val needEvalOrdering = makeOrder(Coalesce(Seq(a, Literal("1"))))
+    val noEvalOrdering = makeOrder(b)
+
+    val plan = Sort(Seq(needEvalOrdering, noEvalOrdering), false, testRelation2)
+
+    val evaluatedOrdering = makeOrder(AttributeReference("_sortCondition", StringType)())
+    val materializedExpr = Alias(needEvalOrdering.child, "_sortCondition")()
+
+    val expected =
+      Project(testRelation2.output,
+        Sort(Seq(evaluatedOrdering, noEvalOrdering), false,
+          Project(testRelation2.output :+ materializedExpr, testRelation2)))
+
+    checkAnalysis(plan, expected)
+  }
 }
