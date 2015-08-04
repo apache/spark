@@ -17,11 +17,12 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.HashSet
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.CallSite
 
-import scala.collection.mutable.HashSet
 
 /**
  * A stage is a set of independent tasks all computing the same function that need to run as part
@@ -121,7 +122,7 @@ private[scheduler] abstract class Stage(
   }
 }
 
-private[spark] object Stage {
+private[scheduler] object Stage {
   // The maximum number of times to retry a stage before aborting
   private[scheduler] val MAX_STAGE_FAILURES = 4
 }
