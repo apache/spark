@@ -21,10 +21,10 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeRegressorParams}
+import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
@@ -67,8 +67,9 @@ final class DecisionTreeRegressor(override val uid: String)
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy = getOldStrategy(categoricalFeatures)
-    val oldModel = OldDecisionTree.train(oldDataset, strategy)
-    DecisionTreeRegressionModel.fromOld(oldModel, this, categoricalFeatures)
+    val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
+      seed = 0L, parentUID = Some(uid))
+    trees.head.asInstanceOf[DecisionTreeRegressionModel]
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
@@ -102,8 +103,14 @@ final class DecisionTreeRegressionModel private[ml] (
   require(rootNode != null,
     "DecisionTreeClassificationModel given null rootNode, but it requires a non-null rootNode.")
 
+  /**
+   * Construct a decision tree regression model.
+   * @param rootNode  Root node of tree, with other nodes attached.
+   */
+  def this(rootNode: Node) = this(Identifiable.randomUID("dtr"), rootNode)
+
   override protected def predict(features: Vector): Double = {
-    rootNode.predict(features)
+    rootNode.predictImpl(features).prediction
   }
 
   override def copy(extra: ParamMap): DecisionTreeRegressionModel = {

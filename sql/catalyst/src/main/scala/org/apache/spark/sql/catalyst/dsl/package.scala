@@ -201,7 +201,7 @@ package object dsl {
 
       /** Creates a new AttributeReference of type decimal */
       def decimal: AttributeReference =
-        AttributeReference(s, DecimalType.Unlimited, nullable = true)()
+        AttributeReference(s, DecimalType.SYSTEM_DEFAULT, nullable = true)()
 
       /** Creates a new AttributeReference of type decimal */
       def decimal(precision: Int, scale: Int): AttributeReference =

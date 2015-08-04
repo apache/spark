@@ -42,7 +42,6 @@ class SparkSqlSerializer2DataTypeSuite extends SparkFunSuite {
   }
 
   checkSupported(null, isSupported = true)
-  checkSupported(NullType, isSupported = true)
   checkSupported(BooleanType, isSupported = true)
   checkSupported(ByteType, isSupported = true)
   checkSupported(ShortType, isSupported = true)
@@ -55,8 +54,10 @@ class SparkSqlSerializer2DataTypeSuite extends SparkFunSuite {
   checkSupported(StringType, isSupported = true)
   checkSupported(BinaryType, isSupported = true)
   checkSupported(DecimalType(10, 5), isSupported = true)
-  checkSupported(DecimalType.Unlimited, isSupported = true)
+  checkSupported(DecimalType.SYSTEM_DEFAULT, isSupported = true)
 
+  // If NullType is the only data type in the schema, we do not support it.
+  checkSupported(NullType, isSupported = false)
   // For now, ArrayType, MapType, and StructType are not supported.
   checkSupported(ArrayType(DoubleType, true), isSupported = false)
   checkSupported(ArrayType(StringType, false), isSupported = false)
@@ -85,7 +86,7 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
     val supportedTypes =
       Seq(StringType, BinaryType, NullType, BooleanType,
         ByteType, ShortType, IntegerType, LongType,
-        FloatType, DoubleType, DecimalType.Unlimited, DecimalType(6, 5),
+        FloatType, DoubleType, DecimalType.SYSTEM_DEFAULT, DecimalType(6, 5),
         DateType, TimestampType)
 
     val fields = supportedTypes.zipWithIndex.map { case (dataType, index) =>
@@ -131,13 +132,20 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
       expectedSerializerClass: Class[T]): Unit = {
     executedPlan.foreach {
       case exchange: Exchange =>
-        val shuffledRDD = exchange.execute().firstParent.asInstanceOf[ShuffledRDD[_, _, _]]
-        val dependency = shuffledRDD.getDependencies.head.asInstanceOf[ShuffleDependency[_, _, _]]
+        val shuffledRDD = exchange.execute()
+        val dependency = shuffledRDD.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]]
         val serializerNotSetMessage =
           s"Expected $expectedSerializerClass as the serializer of Exchange. " +
           s"However, the serializer was not set."
         val serializer = dependency.serializer.getOrElse(fail(serializerNotSetMessage))
-        assert(serializer.getClass === expectedSerializerClass)
+        val isExpectedSerializer =
+          serializer.getClass == expectedSerializerClass ||
+            serializer.getClass == classOf[UnsafeRowSerializer]
+        val wrongSerializerErrorMessage =
+          s"Expected ${expectedSerializerClass.getCanonicalName} or " +
+            s"${classOf[UnsafeRowSerializer].getCanonicalName}. But " +
+            s"${serializer.getClass.getCanonicalName} is used."
+        assert(isExpectedSerializer, wrongSerializerErrorMessage)
       case _ => // Ignore other nodes.
     }
   }
@@ -169,6 +177,23 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with BeforeAndAfterAll
   test("no map output field") {
     val df = ctx.sql(s"SELECT 1 + 1 FROM shuffle")
     checkSerializer(df.queryExecution.executedPlan, classOf[SparkSqlSerializer])
+  }
+
+  test("types of fields are all NullTypes") {
+    // Test range partitioning code path.
+    val nulls = ctx.sql(s"SELECT null as a, null as b, null as c")
+    val df = nulls.unionAll(nulls).sort("a")
+    checkSerializer(df.queryExecution.executedPlan, classOf[SparkSqlSerializer])
+    checkAnswer(
+      df,
+      Row(null, null, null) :: Row(null, null, null) :: Nil)
+
+    // Test hash partitioning code path.
+    val oneRow = ctx.sql(s"SELECT DISTINCT null, null, null FROM shuffle")
+    checkSerializer(oneRow.queryExecution.executedPlan, classOf[SparkSqlSerializer])
+    checkAnswer(
+      oneRow,
+      Row(null, null, null))
   }
 }
 

@@ -20,9 +20,11 @@ package org.apache.spark.sql.execution.joins
 import scala.concurrent._
 import scala.concurrent.duration._
 
+import org.apache.spark.{InternalAccumulator, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Expression, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.util.ThreadUtils
@@ -61,7 +63,7 @@ case class BroadcastHashJoin(
   private val broadcastFuture = future {
     // Note that we use .execute().collect() because we don't want to convert data to Scala types
     val input: Array[InternalRow] = buildPlan.execute().map(_.copy()).collect()
-    val hashed = HashedRelation(input.iterator, buildSideKeyGenerator, input.length)
+    val hashed = HashedRelation(input.iterator, buildSideKeyGenerator, input.size)
     sparkContext.broadcast(hashed)
   }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
 
@@ -69,7 +71,14 @@ case class BroadcastHashJoin(
     val broadcastRelation = Await.result(broadcastFuture, timeout)
 
     streamedPlan.execute().mapPartitions { streamedIter =>
-      hashJoin(streamedIter, broadcastRelation.value)
+      val hashedRelation = broadcastRelation.value
+      hashedRelation match {
+        case unsafe: UnsafeHashedRelation =>
+          TaskContext.get().internalMetricsToAccumulators(
+            InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getUnsafeSize)
+        case _ =>
+      }
+      hashJoin(streamedIter, hashedRelation)
     }
   }
 }

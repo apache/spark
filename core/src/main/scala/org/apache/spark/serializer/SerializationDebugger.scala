@@ -407,7 +407,9 @@ private[spark] object SerializationDebugger extends Logging {
 
     /** ObjectStreamClass$ClassDataSlot.desc field */
     val DescField: Field = {
+      // scalastyle:off classforname
       val f = Class.forName("java.io.ObjectStreamClass$ClassDataSlot").getDeclaredField("desc")
+      // scalastyle:on classforname
       f.setAccessible(true)
       f
     }

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+ // scalastyle:off println
 package org.apache.spark.examples
 
 import java.nio.ByteBuffer
@@ -140,3 +141,4 @@ object CassandraCQLTest {
     sc.stop()
   }
 }
+// scalastyle:on println

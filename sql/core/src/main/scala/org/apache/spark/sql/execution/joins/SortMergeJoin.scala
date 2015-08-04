@@ -21,6 +21,7 @@ import java.util.NoSuchElementException
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
@@ -39,7 +40,8 @@ case class SortMergeJoin(
 
   override def output: Seq[Attribute] = left.output ++ right.output
 
-  override def outputPartitioning: Partitioning = left.outputPartitioning
+  override def outputPartitioning: Partitioning =
+    PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
@@ -65,7 +67,7 @@ case class SortMergeJoin(
     leftResults.zipPartitions(rightResults) { (leftIter, rightIter) =>
       new Iterator[InternalRow] {
         // Mutable per row objects.
-        private[this] val joinRow = new JoinedRow5
+        private[this] val joinRow = new JoinedRow
         private[this] var leftElement: InternalRow = _
         private[this] var rightElement: InternalRow = _
         private[this] var leftKey: InternalRow = _

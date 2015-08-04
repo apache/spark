@@ -130,13 +130,40 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
 
     // Non-serializable closure in foreach function
     val thrown2 = intercept[SparkException] {
+      // scalastyle:off println
       sc.parallelize(1 to 10, 2).foreach(x => println(a))
+      // scalastyle:on println
     }
     assert(thrown2.getClass === classOf[SparkException])
     assert(thrown2.getMessage.contains("NotSerializableException") ||
       thrown2.getCause.getClass === classOf[NotSerializableException])
 
     FailureSuiteState.clear()
+  }
+
+  test("managed memory leak error should not mask other failures (SPARK-9266") {
+    val conf = new SparkConf().set("spark.unsafe.exceptionOnMemoryLeak", "true")
+    sc = new SparkContext("local[1,1]", "test", conf)
+
+    // If a task leaks memory but fails due to some other cause, then make sure that the original
+    // cause is preserved
+    val thrownDueToTaskFailure = intercept[SparkException] {
+      sc.parallelize(Seq(0)).mapPartitions { iter =>
+        TaskContext.get().taskMemoryManager().allocate(128)
+        throw new Exception("intentional task failure")
+        iter
+      }.count()
+    }
+    assert(thrownDueToTaskFailure.getMessage.contains("intentional task failure"))
+
+    // If the task succeeded but memory was leaked, then the task should fail due to that leak
+    val thrownDueToMemoryLeak = intercept[SparkException] {
+      sc.parallelize(Seq(0)).mapPartitions { iter =>
+        TaskContext.get().taskMemoryManager().allocate(128)
+        iter
+      }.count()
+    }
+    assert(thrownDueToMemoryLeak.getMessage.contains("memory leak"))
   }
 
   // TODO: Need to add tests with shuffle fetch failures.

@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
  * for different tests and there are a few properties needed to let Hive generate golden
  * files, every `createQueryTest` calls should explicitly set `reset` to `false`.
  */
-abstract class HiveWindowFunctionQueryBaseSuite extends HiveComparisonTest with BeforeAndAfter {
+class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
   private val testTempDir = Utils.createTempDir()
@@ -759,21 +759,7 @@ abstract class HiveWindowFunctionQueryBaseSuite extends HiveComparisonTest with 
     """.stripMargin, reset = false)
 }
 
-class HiveWindowFunctionQueryWithoutCodeGenSuite extends HiveWindowFunctionQueryBaseSuite {
-  var originalCodegenEnabled: Boolean = _
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    originalCodegenEnabled = conf.codegenEnabled
-    sql("set spark.sql.codegen=false")
-  }
-
-  override def afterAll(): Unit = {
-    sql(s"set spark.sql.codegen=$originalCodegenEnabled")
-    super.afterAll()
-  }
-}
-
-abstract class HiveWindowFunctionQueryFileBaseSuite
+class HiveWindowFunctionQueryFileSuite
   extends HiveCompatibilitySuite with BeforeAndAfter {
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
@@ -789,11 +775,11 @@ abstract class HiveWindowFunctionQueryFileBaseSuite
     // The following settings are used for generating golden files with Hive.
     // We have to use kryo to correctly let Hive serialize plans with window functions.
     // This is used to generate golden files.
-    sql("set hive.plan.serialization.format=kryo")
+    // sql("set hive.plan.serialization.format=kryo")
     // Explicitly set fs to local fs.
-    sql(s"set fs.default.name=file://$testTempDir/")
+    // sql(s"set fs.default.name=file://$testTempDir/")
     // Ask Hive to run jobs in-process as a single map and reduce task.
-    sql("set mapred.job.tracker=local")
+    // sql("set mapred.job.tracker=local")
   }
 
   override def afterAll() {
@@ -833,21 +819,8 @@ abstract class HiveWindowFunctionQueryFileBaseSuite
     "windowing_adjust_rowcontainer_sz"
   )
 
+  // Only run those query tests in the realWhileList (do not try other ignored query files).
   override def testCases: Seq[(String, File)] = super.testCases.filter {
     case (name, _) => realWhiteList.contains(name)
-  }
-}
-
-class HiveWindowFunctionQueryFileWithoutCodeGenSuite extends HiveWindowFunctionQueryFileBaseSuite {
-  var originalCodegenEnabled: Boolean = _
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    originalCodegenEnabled = conf.codegenEnabled
-    sql("set spark.sql.codegen=false")
-  }
-
-  override def afterAll(): Unit = {
-    sql(s"set spark.sql.codegen=$originalCodegenEnabled")
-    super.afterAll()
   }
 }

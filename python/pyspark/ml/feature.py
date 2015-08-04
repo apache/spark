@@ -24,7 +24,7 @@ from pyspark.mllib.common import inherit_doc
 __all__ = ['Binarizer', 'HashingTF', 'IDF', 'IDFModel', 'NGram', 'Normalizer', 'OneHotEncoder',
            'PolynomialExpansion', 'RegexTokenizer', 'StandardScaler', 'StandardScalerModel',
            'StringIndexer', 'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer',
-           'Word2Vec', 'Word2VecModel']
+           'Word2Vec', 'Word2VecModel', 'PCA', 'PCAModel', 'RFormula', 'RFormulaModel']
 
 
 @inherit_doc
@@ -525,7 +525,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     """
     A regex based tokenizer that extracts tokens either by using the
     provided regex pattern (in Java dialect) to split the text
-    (default) or repeatedly matching the regex (if gaps is true).
+    (default) or repeatedly matching the regex (if gaps is false).
     Optional parameters also allow filtering tokens using a minimal
     length.
     It returns an array of strings that can be empty.
@@ -627,6 +627,10 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
     >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> standardScaler = StandardScaler(inputCol="a", outputCol="scaled")
     >>> model = standardScaler.fit(df)
+    >>> model.mean
+    DenseVector([1.0])
+    >>> model.std
+    DenseVector([1.4142])
     >>> model.transform(df).collect()[1].scaled
     DenseVector([1.4142])
     """
@@ -691,6 +695,20 @@ class StandardScalerModel(JavaModel):
     """
     Model fitted by StandardScaler.
     """
+
+    @property
+    def std(self):
+        """
+        Standard deviation of the StandardScalerModel.
+        """
+        return self._call_java("std")
+
+    @property
+    def mean(self):
+        """
+        Mean of the StandardScalerModel.
+        """
+        return self._call_java("mean")
 
 
 @inherit_doc
@@ -1027,6 +1045,151 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
 class Word2VecModel(JavaModel):
     """
     Model fitted by Word2Vec.
+    """
+
+
+@inherit_doc
+class PCA(JavaEstimator, HasInputCol, HasOutputCol):
+    """
+    PCA trains a model to project vectors to a low-dimensional space using PCA.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> data = [(Vectors.sparse(5, [(1, 1.0), (3, 7.0)]),),
+    ...     (Vectors.dense([2.0, 0.0, 3.0, 4.0, 5.0]),),
+    ...     (Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0]),)]
+    >>> df = sqlContext.createDataFrame(data,["features"])
+    >>> pca = PCA(k=2, inputCol="features", outputCol="pca_features")
+    >>> model = pca.fit(df)
+    >>> model.transform(df).collect()[0].pca_features
+    DenseVector([1.648..., -4.013...])
+    """
+
+    # a placeholder to make it appear in the generated doc
+    k = Param(Params._dummy(), "k", "the number of principal components")
+
+    @keyword_only
+    def __init__(self, k=None, inputCol=None, outputCol=None):
+        """
+        __init__(self, k=None, inputCol=None, outputCol=None)
+        """
+        super(PCA, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.PCA", self.uid)
+        self.k = Param(self, "k", "the number of principal components")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, k=None, inputCol=None, outputCol=None):
+        """
+        setParams(self, k=None, inputCol=None, outputCol=None)
+        Set params for this PCA.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setK(self, value):
+        """
+        Sets the value of :py:attr:`k`.
+        """
+        self._paramMap[self.k] = value
+        return self
+
+    def getK(self):
+        """
+        Gets the value of k or its default value.
+        """
+        return self.getOrDefault(self.k)
+
+    def _create_model(self, java_model):
+        return PCAModel(java_model)
+
+
+class PCAModel(JavaModel):
+    """
+    Model fitted by PCA.
+    """
+
+
+@inherit_doc
+class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol):
+    """
+    .. note:: Experimental
+
+    Implements the transforms required for fitting a dataset against an
+    R model formula. Currently we support a limited subset of the R
+    operators, including '~', '+', '-', and '.'. Also see the R formula
+    docs:
+    http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
+
+    >>> df = sqlContext.createDataFrame([
+    ...     (1.0, 1.0, "a"),
+    ...     (0.0, 2.0, "b"),
+    ...     (0.0, 0.0, "a")
+    ... ], ["y", "x", "s"])
+    >>> rf = RFormula(formula="y ~ x + s")
+    >>> rf.fit(df).transform(df).show()
+    +---+---+---+---------+-----+
+    |  y|  x|  s| features|label|
+    +---+---+---+---------+-----+
+    |1.0|1.0|  a|[1.0,1.0]|  1.0|
+    |0.0|2.0|  b|[2.0,0.0]|  0.0|
+    |0.0|0.0|  a|[0.0,1.0]|  0.0|
+    +---+---+---+---------+-----+
+    ...
+    >>> rf.fit(df, {rf.formula: "y ~ . - s"}).transform(df).show()
+    +---+---+---+--------+-----+
+    |  y|  x|  s|features|label|
+    +---+---+---+--------+-----+
+    |1.0|1.0|  a|   [1.0]|  1.0|
+    |0.0|2.0|  b|   [2.0]|  0.0|
+    |0.0|0.0|  a|   [0.0]|  0.0|
+    +---+---+---+--------+-----+
+    ...
+    """
+
+    # a placeholder to make it appear in the generated doc
+    formula = Param(Params._dummy(), "formula", "R model formula")
+
+    @keyword_only
+    def __init__(self, formula=None, featuresCol="features", labelCol="label"):
+        """
+        __init__(self, formula=None, featuresCol="features", labelCol="label")
+        """
+        super(RFormula, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
+        self.formula = Param(self, "formula", "R model formula")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, formula=None, featuresCol="features", labelCol="label"):
+        """
+        setParams(self, formula=None, featuresCol="features", labelCol="label")
+        Sets params for RFormula.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setFormula(self, value):
+        """
+        Sets the value of :py:attr:`formula`.
+        """
+        self._paramMap[self.formula] = value
+        return self
+
+    def getFormula(self):
+        """
+        Gets the value of :py:attr:`formula`.
+        """
+        return self.getOrDefault(self.formula)
+
+    def _create_model(self, java_model):
+        return RFormulaModel(java_model)
+
+
+class RFormulaModel(JavaModel):
+    """
+    Model fitted by :py:class:`RFormula`.
     """
 
 
