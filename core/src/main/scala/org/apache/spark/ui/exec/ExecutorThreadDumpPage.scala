@@ -60,18 +60,14 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
           }
         }
       }.map { thread =>
-        val threadName = thread.threadName
-        val className = "accordion-heading " + {
-          if (threadName.contains("Executor task launch")) {
-            "executor-thread"
-          } else {
-            "non-executor-thread"
-          }
-        }
-        <tr class={className} onclick="$(this).next().toggleClass('hidden')">
-          <td>{thread.threadId}</td><td>{threadName}</td><td>{thread.threadState}</td>
+        val onClickEvent = s"$$('#${thread.threadId + "_stacktrace"}').toggleClass('hidden'); " +
+          s"$$('#stacktrace_column').toggleClass('hidden')"
+        <tr class="accordion-heading" onclick={onClickEvent}>
+          <td>{thread.threadId}</td><td>{thread.threadName}</td><td>{thread.threadState}</td>
+          <td id={thread.threadId + "_stacktrace"} class="accordion-body hidden">
+            <pre>{thread.stackTrace}</pre>
+          </td>
         </tr>
-        <tr class="accordion-body hidden"><td colspan="3"><pre>{thread.stackTrace}</pre></td></tr>
       }
 
     <div class="row-fluid">
@@ -79,20 +75,21 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
       {
         // scalastyle:off
         <p><a class="expandbutton"
-              onClick="$('.accordion-body').removeClass('hidden'); $('.expandbutton').toggleClass('hidden')">
+              onClick="$('#stacktrace_column').removeClass('hidden'); $('.accordion-body').removeClass('hidden'); $('.expandbutton').toggleClass('hidden')">
           Expand All
         </a></p>
         <p><a class="expandbutton hidden"
-              onClick="$('.accordion-body').addClass('hidden'); $('.expandbutton').toggleClass('hidden')">
+              onClick="$('#stacktrace_column').addClass('hidden'); $('.accordion-body').addClass('hidden'); $('.expandbutton').toggleClass('hidden')">
           Collapse All
         </a></p>
         // scalastyle:on
       }
-      <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group"}>
+      <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
         <thead>
           <th>Thread ID</th>
           <th>Thread Name</th>
           <th>Thread State</th>
+          <th id='stacktrace_column' class="hidden">Thread Stacktrace</th>
         </thead>
         <tbody>{dumpRows}</tbody>
       </table>
