@@ -717,15 +717,15 @@ case class First(child: Expression) extends PartialAggregate with trees.UnaryNod
 case class FirstFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
-  var result: Any = null
+  var result: MutableLiteral = MutableLiteral(null, expr.dataType)
 
   override def update(input: InternalRow): Unit = {
-    if (result == null) {
-      result = expr.eval(input)
+    if (result.value == null) {
+      result.value = expr.eval(input)
     }
   }
 
-  override def eval(input: InternalRow): Any = result
+  override def eval(input: InternalRow): Any = result.value
 }
 
 case class Last(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
@@ -746,13 +746,11 @@ case class Last(child: Expression) extends PartialAggregate with trees.UnaryNode
 case class LastFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
-  var result: Any = null
+  var result: MutableLiteral = MutableLiteral(null, expr.dataType)
 
   override def update(input: InternalRow): Unit = {
-    result = input
+    result.value = expr.eval(input)
   }
 
-  override def eval(input: InternalRow): Any = {
-    if (result != null) expr.eval(result.asInstanceOf[InternalRow]) else null
-  }
+  override def eval(input: InternalRow): Any = result.value
 }
