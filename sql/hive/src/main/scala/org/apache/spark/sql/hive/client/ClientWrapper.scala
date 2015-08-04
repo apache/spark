@@ -32,6 +32,7 @@ import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.ql.{Driver, metadata}
+import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -61,6 +62,39 @@ private[hive] class ClientWrapper(
     initClassLoader: ClassLoader)
   extends ClientInterface
   with Logging {
+
+  overrideHadoopShims()
+
+  // !! HACK ALERT !!
+  //
+  // This method is used to workaround CDH Hadoop versions like 2.0.0-mr1-cdh4.1.1.
+  //
+  // Internally, Hive `ShimLoader` tries to load different versions of Hadoop shims by checking
+  // version information gathered from Hadoop jar files.  If the major version number is 1,
+  // `Hadoop20SShims` will be loaded.  Otherwise, if the major version number is 2, `Hadoop23Shims`
+  // will be chosen.  However, CDH Hadoop versions like 2.0.0-mr1-cdh4.1.1 have 2 as major version
+  // number, but contain Hadoop 1 code.  This confuses Hive `ShimLoader` and loads wrong version of
+  // shims.
+  //
+  // Here we check for existence of the `Path.getPathWithoutSchemeAndAuthority` method, which
+  // doesn't exist in Hadoop 1 (it's also the method that reveals this shims loading issue), and
+  // load `Hadoop20SShims` when it doesn't exist.
+  private def overrideHadoopShims(): Unit = {
+    if (!classOf[Path].getDeclaredMethods.exists(_.getName == "getPathWithoutSchemeAndAuthority")) {
+      val shimClassName = "org.apache.hadoop.hive.shims.Hadoop20SShims"
+
+      try {
+        val shimsField = classOf[ShimLoader].getDeclaredField("hadoopShims")
+        val shimsClass = Class.forName(shimClassName)
+        val shims = classOf[HadoopShims].cast(shimsClass.newInstance())
+        shimsField.setAccessible(true)
+        shimsField.set(null, shims)
+      } catch { case cause: Throwable =>
+        logError(s"Failed to load $shimClassName")
+        // Falls back to normal Hive `ShimLoader` logic
+      }
+    }
+  }
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   private val outputBuffer = new CircularBuffer()
