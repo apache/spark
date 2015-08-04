@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.mutable
-
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
@@ -44,25 +43,26 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def nullable: Boolean = false
 
   override def eval(input: InternalRow): Any = {
-    children.map(_.eval(input))
+    new GenericArrayData(children.map(_.eval(input)).toArray)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val arraySeqClass = classOf[mutable.ArraySeq[Any]].getName
+    val arrayClass = classOf[GenericArrayData].getName
     s"""
-      boolean ${ev.isNull} = false;
-      $arraySeqClass<Object> ${ev.primitive} = new $arraySeqClass<Object>(${children.size});
+      final boolean ${ev.isNull} = false;
+      final Object[] values = new Object[${children.size}];
     """ +
       children.zipWithIndex.map { case (e, i) =>
         val eval = e.gen(ctx)
         eval.code + s"""
           if (${eval.isNull}) {
-            ${ev.primitive}.update($i, null);
+            values[$i] = null;
           } else {
-            ${ev.primitive}.update($i, ${eval.primitive});
+            values[$i] = ${eval.primitive};
           }
          """
-      }.mkString("\n")
+      }.mkString("\n") +
+      s"final ${ctx.javaType(dataType)} ${ev.primitive} = new $arrayClass(values);"
   }
 
   override def prettyName: String = "array"
@@ -127,11 +127,12 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
   private lazy val (nameExprs, valExprs) =
     children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
 
-  private lazy val names = nameExprs.map(_.eval(EmptyRow).toString)
+  private lazy val names = nameExprs.map(_.eval(EmptyRow))
 
   override lazy val dataType: StructType = {
     val fields = names.zip(valExprs).map { case (name, valExpr) =>
-      StructField(name, valExpr.dataType, valExpr.nullable, Metadata.empty)
+      StructField(name.asInstanceOf[UTF8String].toString,
+        valExpr.dataType, valExpr.nullable, Metadata.empty)
     }
     StructType(fields)
   }
@@ -144,14 +145,15 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
     if (children.size % 2 != 0) {
       TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
     } else {
-      val invalidNames =
-        nameExprs.filterNot(e => e.foldable && e.dataType == StringType && !nullable)
+      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
       if (invalidNames.nonEmpty) {
         TypeCheckResult.TypeCheckFailure(
-          s"Odd position only allow foldable and not-null StringType expressions, got :" +
+          s"Only foldable StringType expressions are allowed to appear at odd position , got :" +
             s" ${invalidNames.mkString(",")}")
-      } else {
+      } else if (names.forall(_ != null)){
         TypeCheckResult.TypeCheckSuccess
+      } else {
+        TypeCheckResult.TypeCheckFailure("Field name should not be null")
       }
     }
   }

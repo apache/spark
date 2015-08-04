@@ -35,11 +35,13 @@ trait HashSemiJoin {
   protected[this] def supportUnsafe: Boolean = {
     (self.codegenEnabled && UnsafeProjection.canSupport(leftKeys)
       && UnsafeProjection.canSupport(rightKeys)
-      && UnsafeProjection.canSupport(left.schema))
+      && UnsafeProjection.canSupport(left.schema)
+      && UnsafeProjection.canSupport(right.schema))
   }
 
-  override def outputsUnsafeRows: Boolean = right.outputsUnsafeRows
+  override def outputsUnsafeRows: Boolean = supportUnsafe
   override def canProcessUnsafeRows: Boolean = supportUnsafe
+  override def canProcessSafeRows: Boolean = !supportUnsafe
 
   @transient protected lazy val leftKeyGenerator: Projection =
     if (supportUnsafe) {
@@ -85,14 +87,6 @@ trait HashSemiJoin {
       val key = joinKeys(current)
       !key.anyNull && hashSet.contains(key)
     })
-  }
-
-  protected def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
-    if (supportUnsafe) {
-      UnsafeHashedRelation(buildIter, rightKeys, right)
-    } else {
-      HashedRelation(buildIter, newProjection(rightKeys, right.output))
-    }
   }
 
   protected def hashSemiJoin(
