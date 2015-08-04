@@ -368,7 +368,7 @@ class DirectKafkaStreamSuite
     def sendDataAndWaitForReceive(data: Seq[Int]) {
       val strings = data.map { _.toString}
       kafkaTestUtils.sendMessages(topic, strings.map { _ -> 1}.toMap)
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(20 seconds), interval(50 milliseconds)) {
         assert(strings.forall { collectedData.flatten.contains })
       }
     }
@@ -402,7 +402,7 @@ class DirectKafkaStreamSuite
     ssc.start()
 
     // Send some data and wait for them to be received
-    sendDataAndWaitForReceive((1 to 100))
+    sendDataAndWaitForReceive((1 to 400))
 
     // Assert that rate estimator values are used to determine maxMessagesPerPartition
     assert(collectedData.exists(_.size == 10) === true) // maxRatePerPartition 100 * .1 secs
