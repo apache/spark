@@ -179,6 +179,7 @@ object FunctionRegistry {
     expression[Decode]("decode"),
     expression[FindInSet]("find_in_set"),
     expression[FormatNumber]("format_number"),
+    expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
