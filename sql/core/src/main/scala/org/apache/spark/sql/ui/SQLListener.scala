@@ -196,7 +196,6 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener {
 
     val executionUIData = SQLExecutionUIData(executionId, description, details,
       physicalPlanDescription, physicalPlanGraph, metrics.toMap, time)
-
     synchronized {
       activeExecutions(executionId) = executionUIData
       executionIdToData(executionId) = executionUIData
@@ -256,7 +255,7 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener {
                taskMetrics <- stageMetrics.taskIdToMetricUpdates.values;
                accumulatorUpdate <- taskMetrics.accumulatorUpdates.toSeq)
             yield accumulatorUpdate
-        }
+        }.filter { case (id, _) => executionUIData.accumulatorMetrics.keySet(id) }
         mergeAccumulatorUpdates(accumulatorUpdates, accumulatorId =>
           executionUIData.accumulatorMetrics(accumulatorId).accumulatorParam)
       case None =>
