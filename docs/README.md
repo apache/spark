@@ -8,6 +8,16 @@ Read on to learn more about viewing documentation in plain text (i.e., markdown)
 documentation yourself. Why build it yourself? So that you have the docs that corresponds to
 whichever version of Spark you currently have checked out of revision control.
 
+## Prerequisites
+The Spark documenation build uses a number of tools to build HTML docs and API docs in Scala, Python
+and R. To get started you can run the following commands
+
+    $ sudo gem install jekyll
+    $ sudo gem install jekyll-redirect-from
+    $ sudo pip install Pygments
+    $ Rscript -e 'install.packages(c("knitr", "devtools"), repos="http://cran.stat.ucla.edu/")'
+
+
 ## Generating the Documentation HTML
 
 We include the Spark documentation as part of the source (as opposed to using a hosted wiki, such as

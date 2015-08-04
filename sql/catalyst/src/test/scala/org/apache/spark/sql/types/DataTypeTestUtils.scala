@@ -34,8 +34,9 @@ object DataTypeTestUtils {
    * decimal types.
    */
   val fractionalTypes: Set[FractionalType] = Set(
+    DecimalType.USER_DEFAULT,
+    DecimalType(20, 5),
     DecimalType.SYSTEM_DEFAULT,
-    DecimalType(2, 1),
     DoubleType,
     FloatType
   )

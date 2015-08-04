@@ -52,6 +52,17 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/extras/kinesis-asl/src/main/java/org/apache/spark/examples/streaming/JavaKinesisWordCountASL.java). Refer to the next subsection for instructions to run the example.
 
 	</div>
+	<div data-lang="python" markdown="1">
+		from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
+
+		kinesisStream = KinesisUtils.createStream(
+			streamingContext, [Kinesis app name], [Kinesis stream name], [endpoint URL],
+			[region name], [initial position], [checkpoint interval], StorageLevel.MEMORY_AND_DISK_2)
+
+	See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.kinesis.KinesisUtils)
+	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/extras/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py). Refer to the next subsection for instructions to run the example.
+
+	</div>
 	</div>
 
     - `streamingContext`: StreamingContext containg an application name used by Kinesis to tie this Kinesis application to the Kinesis stream
@@ -134,6 +145,14 @@ To run the example,
 	<div data-lang="java" markdown="1">
 
         bin/run-example streaming.JavaKinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
+
+	</div>
+	<div data-lang="python" markdown="1">
+
+        bin/spark-submit --jars extras/kinesis-asl/target/scala-*/\
+            spark-streaming-kinesis-asl-assembly_*.jar \
+            extras/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py \
+            [Kinesis app name] [Kinesis stream name] [endpoint URL] [region name]
 
 	</div>
 	</div>

@@ -110,7 +110,7 @@ final class DecisionTreeRegressionModel private[ml] (
   def this(rootNode: Node) = this(Identifiable.randomUID("dtr"), rootNode)
 
   override protected def predict(features: Vector): Double = {
-    rootNode.predict(features)
+    rootNode.predictImpl(features).prediction
   }
 
   override def copy(extra: ParamMap): DecisionTreeRegressionModel = {

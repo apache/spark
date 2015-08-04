@@ -129,17 +129,24 @@ object EvaluatePython {
       val values = new Array[Any](row.numFields)
       var i = 0
       while (i < row.numFields) {
-        values(i) = toJava(row(i), struct.fields(i).dataType)
+        values(i) = toJava(row.get(i, struct.fields(i).dataType), struct.fields(i).dataType)
         i += 1
       }
       new GenericInternalRowWithSchema(values, struct)
 
-    case (seq: Seq[Any], array: ArrayType) =>
-      seq.map(x => toJava(x, array.elementType)).asJava
+    case (a: ArrayData, array: ArrayType) =>
+      val values = new java.util.ArrayList[Any](a.numElements())
+      a.foreach(array.elementType, (_, e) => {
+        values.add(toJava(e, array.elementType))
+      })
+      values
 
-    case (obj: Map[_, _], mt: MapType) => obj.map {
-      case (k, v) => (toJava(k, mt.keyType), toJava(v, mt.valueType))
-    }.asJava
+    case (map: MapData, mt: MapType) =>
+      val jmap = new java.util.HashMap[Any, Any](map.numElements())
+      map.foreach(mt.keyType, mt.valueType, (k, v) => {
+        jmap.put(toJava(k, mt.keyType), toJava(v, mt.valueType))
+      })
+      jmap
 
     case (ud, udt: UserDefinedType[_]) => toJava(ud, udt.sqlType)
 
@@ -190,14 +197,15 @@ object EvaluatePython {
     case (c, BinaryType) if c.getClass.isArray && c.getClass.getComponentType.getName == "byte" => c
 
     case (c: java.util.List[_], ArrayType(elementType, _)) =>
-      c.map { e => fromJava(e, elementType)}.toSeq
+      new GenericArrayData(c.map { e => fromJava(e, elementType)}.toArray)
 
     case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
-      c.asInstanceOf[Array[_]].map(e => fromJava(e, elementType)).toSeq
+      new GenericArrayData(c.asInstanceOf[Array[_]].map(e => fromJava(e, elementType)))
 
-    case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) => c.map {
-      case (key, value) => (fromJava(key, keyType), fromJava(value, valueType))
-    }.toMap
+    case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) =>
+      val keys = c.keysIterator.map(fromJava(_, keyType)).toArray
+      val values = c.valuesIterator.map(fromJava(_, valueType)).toArray
+      ArrayBasedMapData(keys, values)
 
     case (c, StructType(fields)) if c.getClass.isArray =>
       new GenericInternalRow(c.asInstanceOf[Array[_]].zip(fields).map {
@@ -267,7 +275,6 @@ object EvaluatePython {
           pickler.save(row.values(i))
           i += 1
         }
-        row.values.foreach(pickler.save)
         out.write(Opcodes.TUPLE)
         out.write(Opcodes.REDUCE)
       }

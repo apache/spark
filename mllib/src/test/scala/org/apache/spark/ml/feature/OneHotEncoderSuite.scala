@@ -86,8 +86,8 @@ class OneHotEncoderSuite extends SparkFunSuite with MLlibTestSparkContext {
     val output = encoder.transform(df)
     val group = AttributeGroup.fromStructField(output.schema("encoded"))
     assert(group.size === 2)
-    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("size_is_small").withIndex(0))
-    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("size_is_medium").withIndex(1))
+    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("small").withIndex(0))
+    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("medium").withIndex(1))
   }
 
   test("input column without ML attribute") {
@@ -98,7 +98,7 @@ class OneHotEncoderSuite extends SparkFunSuite with MLlibTestSparkContext {
     val output = encoder.transform(df)
     val group = AttributeGroup.fromStructField(output.schema("encoded"))
     assert(group.size === 2)
-    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("index_is_0").withIndex(0))
-    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("index_is_1").withIndex(1))
+    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("0").withIndex(0))
+    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("1").withIndex(1))
   }
 }

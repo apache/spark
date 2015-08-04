@@ -18,12 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.DecimalFormat
+import java.util.Arrays
 import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -52,7 +55,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val evals = children.map(_.gen(ctx))
     val inputs = evals.map { eval =>
-      s"${eval.isNull} ? (UTF8String)null : ${eval.primitive}"
+      s"${eval.isNull} ? null : ${eval.primitive}"
     }.mkString(", ")
     evals.map(_.code).mkString("\n") + s"""
       boolean ${ev.isNull} = false;
@@ -93,7 +96,7 @@ case class ConcatWs(children: Seq[Expression])
     val flatInputs = children.flatMap { child =>
       child.eval(input) match {
         case s: UTF8String => Iterator(s)
-        case arr: Seq[_] => arr.asInstanceOf[Seq[UTF8String]]
+        case arr: ArrayData => arr.toArray[UTF8String](StringType)
         case null => Iterator(null.asInstanceOf[UTF8String])
       }
     }
@@ -106,7 +109,7 @@ case class ConcatWs(children: Seq[Expression])
       val evals = children.map(_.gen(ctx))
 
       val inputs = evals.map { eval =>
-        s"${eval.isNull} ? (UTF8String)null : ${eval.primitive}"
+        s"${eval.isNull} ? (UTF8String) null : ${eval.primitive}"
       }.mkString(", ")
 
       evals.map(_.code).mkString("\n") + s"""
@@ -161,32 +164,51 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression with CodegenFallback {
 
-  // replace the _ with .{1} exactly match 1 time of any character
-  // replace the % with .*, match 0 or more times with any character
-  override def escape(v: String): String =
-    if (!v.isEmpty) {
-      "(?s)" + (' ' +: v.init).zip(v).flatMap {
-        case (prev, '\\') => ""
-        case ('\\', c) =>
-          c match {
-            case '_' => "_"
-            case '%' => "%"
-            case _ => Pattern.quote("\\" + c)
-          }
-        case (prev, c) =>
-          c match {
-            case '_' => "."
-            case '%' => ".*"
-            case _ => Pattern.quote(Character.toString(c))
-          }
-      }.mkString
-    } else {
-      v
-    }
+  override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
   override def toString: String = s"$left LIKE $right"
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val patternClass = classOf[Pattern].getName
+    val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
+    val pattern = ctx.freshName("pattern")
+
+    if (right.foldable) {
+      val rVal = right.eval()
+      if (rVal != null) {
+        val regexStr =
+          StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
+        ctx.addMutableState(patternClass, pattern,
+          s"""$pattern = ${patternClass}.compile("$regexStr");""")
+
+        // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
+        val eval = left.gen(ctx)
+        s"""
+          ${eval.code}
+          boolean ${ev.isNull} = ${eval.isNull};
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            ${ev.primitive} = $pattern.matcher(${eval.primitive}.toString()).matches();
+          }
+        """
+      } else {
+        s"""
+          boolean ${ev.isNull} = true;
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+        """
+      }
+    } else {
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        s"""
+          String rightStr = ${eval2}.toString();
+          ${patternClass} $pattern = ${patternClass}.compile($escapeFunc(rightStr));
+          ${ev.primitive} = $pattern.matcher(${eval1}.toString()).matches();
+        """
+      })
+    }
+  }
 }
 
 
@@ -196,6 +218,45 @@ case class RLike(left: Expression, right: Expression)
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
   override def toString: String = s"$left RLIKE $right"
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val patternClass = classOf[Pattern].getName
+    val pattern = ctx.freshName("pattern")
+
+    if (right.foldable) {
+      val rVal = right.eval()
+      if (rVal != null) {
+        val regexStr =
+          StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
+        ctx.addMutableState(patternClass, pattern,
+          s"""$pattern = ${patternClass}.compile("$regexStr");""")
+
+        // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
+        val eval = left.gen(ctx)
+        s"""
+          ${eval.code}
+          boolean ${ev.isNull} = ${eval.isNull};
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            ${ev.primitive} = $pattern.matcher(${eval.primitive}.toString()).find(0);
+          }
+        """
+      } else {
+        s"""
+          boolean ${ev.isNull} = true;
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+        """
+      }
+    } else {
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        s"""
+          String rightStr = ${eval2}.toString();
+          ${patternClass} $pattern = ${patternClass}.compile(rightStr);
+          ${ev.primitive} = $pattern.matcher(${eval1}.toString()).find(0);
+        """
+      })
+    }
+  }
 }
 
 
@@ -214,6 +275,9 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 /**
  * A function that converts the characters of a string to uppercase.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns str with all characters changed to uppercase",
+  extended = "> SELECT _FUNC_('SparkSql');\n 'SPARKSQL'")
 case class Upper(child: Expression)
   extends UnaryExpression with String2StringExpression {
 
@@ -227,6 +291,9 @@ case class Upper(child: Expression)
 /**
  * A function that converts the characters of a string to lowercase.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns str with all characters changed to lowercase",
+  extended = "> SELECT _FUNC_('SparkSql');\n'sparksql'")
 case class Lower(child: Expression) extends UnaryExpression with String2StringExpression {
 
   override def convert(v: UTF8String): UTF8String = v.toLowerCase
@@ -356,19 +423,42 @@ case class StringInstr(str: Expression, substr: Expression)
 }
 
 /**
+ * Returns the substring from string str before count occurrences of the delimiter delim.
+ * If count is positive, everything the left of the final delimiter (counting from left) is
+ * returned. If count is negative, every to the right of the final delimiter (counting from the
+ * right) is returned. substring_index performs a case-sensitive match when searching for delim.
+ */
+case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
+ extends TernaryExpression with ImplicitCastInputTypes {
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  override def children: Seq[Expression] = Seq(strExpr, delimExpr, countExpr)
+  override def prettyName: String = "substring_index"
+
+  override def nullSafeEval(str: Any, delim: Any, count: Any): Any = {
+    str.asInstanceOf[UTF8String].subStringIndex(
+      delim.asInstanceOf[UTF8String],
+      count.asInstanceOf[Int])
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
+  }
+}
+
+/**
  * A function that returns the position of the first occurrence of substr
  * in given string after position pos.
  */
 case class StringLocate(substr: Expression, str: Expression, start: Expression)
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends TernaryExpression with ImplicitCastInputTypes with CodegenFallback {
 
   def this(substr: Expression, str: Expression) = {
     this(substr, str, Literal(0))
   }
 
   override def children: Seq[Expression] = substr :: str :: start :: Nil
-  override def foldable: Boolean = children.forall(_.foldable)
-  override def nullable: Boolean = substr.nullable || str.nullable
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
 
@@ -401,60 +491,18 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
  * Returns str, left-padded with pad to a length of len.
  */
 case class StringLPad(str: Expression, len: Expression, pad: Expression)
-  extends Expression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = str :: len :: pad :: Nil
-  override def foldable: Boolean = children.forall(_.foldable)
-  override def nullable: Boolean = children.exists(_.nullable)
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, StringType)
 
-  override def eval(input: InternalRow): Any = {
-    val s = str.eval(input)
-    if (s == null) {
-      null
-    } else {
-      val l = len.eval(input)
-      if (l == null) {
-        null
-      } else {
-        val p = pad.eval(input)
-        if (p == null) {
-          null
-        } else {
-          val len = l.asInstanceOf[Int]
-          val str = s.asInstanceOf[UTF8String]
-          val pad = p.asInstanceOf[UTF8String]
-
-          str.lpad(len, pad)
-        }
-      }
-    }
+  override def nullSafeEval(str: Any, len: Any, pad: Any): Any = {
+    str.asInstanceOf[UTF8String].lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val lenGen = len.gen(ctx)
-    val strGen = str.gen(ctx)
-    val padGen = pad.gen(ctx)
-
-    s"""
-      ${lenGen.code}
-      boolean ${ev.isNull} = ${lenGen.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${strGen.code}
-        if (!${strGen.isNull}) {
-          ${padGen.code}
-          if (!${padGen.isNull}) {
-            ${ev.primitive} = ${strGen.primitive}.lpad(${lenGen.primitive}, ${padGen.primitive});
-          } else {
-            ${ev.isNull} = true;
-          }
-        } else {
-          ${ev.isNull} = true;
-        }
-      }
-     """
+    defineCodeGen(ctx, ev, (str, len, pad) => s"$str.lpad($len, $pad)")
   }
 
   override def prettyName: String = "lpad"
@@ -464,60 +512,18 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
  * Returns str, right-padded with pad to a length of len.
  */
 case class StringRPad(str: Expression, len: Expression, pad: Expression)
-  extends Expression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = str :: len :: pad :: Nil
-  override def foldable: Boolean = children.forall(_.foldable)
-  override def nullable: Boolean = children.exists(_.nullable)
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, StringType)
 
-  override def eval(input: InternalRow): Any = {
-    val s = str.eval(input)
-    if (s == null) {
-      null
-    } else {
-      val l = len.eval(input)
-      if (l == null) {
-        null
-      } else {
-        val p = pad.eval(input)
-        if (p == null) {
-          null
-        } else {
-          val len = l.asInstanceOf[Int]
-          val str = s.asInstanceOf[UTF8String]
-          val pad = p.asInstanceOf[UTF8String]
-
-          str.rpad(len, pad)
-        }
-      }
-    }
+  override def nullSafeEval(str: Any, len: Any, pad: Any): Any = {
+    str.asInstanceOf[UTF8String].rpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val lenGen = len.gen(ctx)
-    val strGen = str.gen(ctx)
-    val padGen = pad.gen(ctx)
-
-    s"""
-      ${lenGen.code}
-      boolean ${ev.isNull} = ${lenGen.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${strGen.code}
-        if (!${strGen.isNull}) {
-          ${padGen.code}
-          if (!${padGen.isNull}) {
-            ${ev.primitive} = ${strGen.primitive}.rpad(${lenGen.primitive}, ${padGen.primitive});
-          } else {
-            ${ev.isNull} = true;
-          }
-        } else {
-          ${ev.isNull} = true;
-        }
-      }
-     """
+    defineCodeGen(ctx, ev, (str, len, pad) => s"$str.rpad($len, $pad)")
   }
 
   override def prettyName: String = "rpad"
@@ -592,6 +598,23 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 }
 
 /**
+ * Returns string, with the first letter of each word in uppercase.
+ * Words are delimited by whitespace.
+ */
+case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def dataType: DataType = StringType
+
+  override def nullSafeEval(string: Any): Any = {
+    string.asInstanceOf[UTF8String].toTitleCase
+  }
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, str => s"$str.toTitleCase()")
+  }
+}
+
+/**
  * Returns the string which repeat the given string value n times.
  */
 case class StringRepeat(str: Expression, times: Expression)
@@ -660,85 +683,84 @@ case class StringSplit(str: Expression, pattern: Expression)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   override def nullSafeEval(string: Any, regex: Any): Any = {
-    string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1).toSeq
+    val strings = string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1)
+    new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, (str, pattern) =>
-      s"""${ev.primitive} = scala.collection.JavaConversions.asScalaBuffer(
-            java.util.Arrays.asList($str.split($pattern, -1)));""")
+      // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
+      s"""${ev.primitive} = new $arrayClass($str.split($pattern, -1));""")
   }
 
   override def prettyName: String = "split"
 }
 
+object Substring {
+  def subStringBinarySQL(bytes: Array[Byte], pos: Int, len: Int): Array[Byte] = {
+    if (pos > bytes.length) {
+      return Array[Byte]()
+    }
+
+    var start = if (pos > 0) {
+      pos - 1
+    } else if (pos < 0) {
+      bytes.length + pos
+    } else {
+      0
+    }
+
+    val end = if ((bytes.length - start) < len) {
+      bytes.length
+    } else {
+      start + len
+    }
+
+    start = Math.max(start, 0)  // underflow
+    if (start < end) {
+      Arrays.copyOfRange(bytes, start, end)
+    } else {
+      Array[Byte]()
+    }
+  }
+}
 /**
  * A function that takes a substring of its first argument starting at a given position.
  * Defined for String and Binary types.
  */
 case class Substring(str: Expression, pos: Expression, len: Expression)
-  extends Expression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes {
 
   def this(str: Expression, pos: Expression) = {
     this(str, pos, Literal(Integer.MAX_VALUE))
   }
 
-  override def foldable: Boolean = str.foldable && pos.foldable && len.foldable
-  override def nullable: Boolean = str.nullable || pos.nullable || len.nullable
+  override def dataType: DataType = str.dataType
 
-  override def dataType: DataType = StringType
-
-  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
 
   override def children: Seq[Expression] = str :: pos :: len :: Nil
 
-  override def eval(input: InternalRow): Any = {
-    val stringEval = str.eval(input)
-    if (stringEval != null) {
-      val posEval = pos.eval(input)
-      if (posEval != null) {
-        val lenEval = len.eval(input)
-        if (lenEval != null) {
-          stringEval.asInstanceOf[UTF8String]
-            .substringSQL(posEval.asInstanceOf[Int], lenEval.asInstanceOf[Int])
-        } else {
-          null
-        }
-      } else {
-        null
-      }
-    } else {
-      null
+  override def nullSafeEval(string: Any, pos: Any, len: Any): Any = {
+    str.dataType match {
+      case StringType => string.asInstanceOf[UTF8String]
+        .substringSQL(pos.asInstanceOf[Int], len.asInstanceOf[Int])
+      case BinaryType => Substring.subStringBinarySQL(string.asInstanceOf[Array[Byte]],
+        pos.asInstanceOf[Int], len.asInstanceOf[Int])
     }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val strGen = str.gen(ctx)
-    val posGen = pos.gen(ctx)
-    val lenGen = len.gen(ctx)
 
-    val start = ctx.freshName("start")
-    val end = ctx.freshName("end")
-
-    s"""
-      ${strGen.code}
-      boolean ${ev.isNull} = ${strGen.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${posGen.code}
-        if (!${posGen.isNull}) {
-          ${lenGen.code}
-          if (!${lenGen.isNull}) {
-            ${ev.primitive} = ${strGen.primitive}
-              .substringSQL(${posGen.primitive}, ${lenGen.primitive});
-          } else {
-            ${ev.isNull} = true;
-          }
-        } else {
-          ${ev.isNull} = true;
-        }
+    val cls = classOf[Substring].getName
+    defineCodeGen(ctx, ev, (string, pos, len) => {
+      str.dataType match {
+        case StringType => s"$string.substringSQL($pos, $len)"
+        case BinaryType => s"$cls.subStringBinarySQL($string, $pos, $len)"
       }
-     """
+    })
   }
 }
 
@@ -771,13 +793,28 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
   override def dataType: DataType = IntegerType
-
   protected override def nullSafeEval(leftValue: Any, rightValue: Any): Any =
     leftValue.asInstanceOf[UTF8String].levenshteinDistance(rightValue.asInstanceOf[UTF8String])
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (left, right) =>
       s"${ev.primitive} = $left.levenshteinDistance($right);")
+  }
+}
+
+/**
+ * A function that return soundex code of the given string expression.
+ */
+case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+
+  override def dataType: DataType = StringType
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+
+  override def nullSafeEval(input: Any): Any = input.asInstanceOf[UTF8String].soundex()
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, c => s"$c.soundex()")
   }
 }
 
@@ -919,7 +956,7 @@ case class Encode(value: Expression, charset: Expression)
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression)
-  extends Expression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes {
 
   // last regex in string, we will update the pattern iff regexp value changed.
   @transient private var lastRegex: UTF8String = _
@@ -931,40 +968,26 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   // result buffer write by Matcher
   @transient private val result: StringBuffer = new StringBuffer
 
-  override def nullable: Boolean = subject.nullable || regexp.nullable || rep.nullable
-  override def foldable: Boolean = subject.foldable && regexp.foldable && rep.foldable
-
-  override def eval(input: InternalRow): Any = {
-    val s = subject.eval(input)
-    if (null != s) {
-      val p = regexp.eval(input)
-      if (null != p) {
-        val r = rep.eval(input)
-        if (null != r) {
-          if (!p.equals(lastRegex)) {
-            // regex value changed
-            lastRegex = p.asInstanceOf[UTF8String]
-            pattern = Pattern.compile(lastRegex.toString)
-          }
-          if (!r.equals(lastReplacementInUTF8)) {
-            // replacement string changed
-            lastReplacementInUTF8 = r.asInstanceOf[UTF8String]
-            lastReplacement = lastReplacementInUTF8.toString
-          }
-          val m = pattern.matcher(s.toString())
-          result.delete(0, result.length())
-
-          while (m.find) {
-            m.appendReplacement(result, lastReplacement)
-          }
-          m.appendTail(result)
-
-          return UTF8String.fromString(result.toString)
-        }
-      }
+  override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
+    if (!p.equals(lastRegex)) {
+      // regex value changed
+      lastRegex = p.asInstanceOf[UTF8String].clone()
+      pattern = Pattern.compile(lastRegex.toString)
     }
+    if (!r.equals(lastReplacementInUTF8)) {
+      // replacement string changed
+      lastReplacementInUTF8 = r.asInstanceOf[UTF8String].clone()
+      lastReplacement = lastReplacementInUTF8.toString
+    }
+    val m = pattern.matcher(s.toString())
+    result.delete(0, result.length())
 
-    null
+    while (m.find) {
+      m.appendReplacement(result, lastReplacement)
+    }
+    m.appendTail(result)
+
+    UTF8String.fromString(result.toString)
   }
 
   override def dataType: DataType = StringType
@@ -981,59 +1004,43 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
     val termResult = ctx.freshName("result")
 
-    val classNameUTF8String = classOf[UTF8String].getCanonicalName
     val classNamePattern = classOf[Pattern].getCanonicalName
-    val classNameString = classOf[java.lang.String].getCanonicalName
     val classNameStringBuffer = classOf[java.lang.StringBuffer].getCanonicalName
 
-    ctx.addMutableState(classNameUTF8String,
+    ctx.addMutableState("UTF8String",
       termLastRegex, s"${termLastRegex} = null;")
     ctx.addMutableState(classNamePattern,
       termPattern, s"${termPattern} = null;")
-    ctx.addMutableState(classNameString,
+    ctx.addMutableState("String",
       termLastReplacement, s"${termLastReplacement} = null;")
-    ctx.addMutableState(classNameUTF8String,
+    ctx.addMutableState("UTF8String",
       termLastReplacementInUTF8, s"${termLastReplacementInUTF8} = null;")
     ctx.addMutableState(classNameStringBuffer,
       termResult, s"${termResult} = new $classNameStringBuffer();")
 
-    val evalSubject = subject.gen(ctx)
-    val evalRegexp = regexp.gen(ctx)
-    val evalRep = rep.gen(ctx)
-
+    nullSafeCodeGen(ctx, ev, (subject, regexp, rep) => {
     s"""
-      ${evalSubject.code}
-      boolean ${ev.isNull} = ${evalSubject.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${evalSubject.isNull}) {
-        ${evalRegexp.code}
-        if (!${evalRegexp.isNull}) {
-          ${evalRep.code}
-          if (!${evalRep.isNull}) {
-            if (!${evalRegexp.primitive}.equals(${termLastRegex})) {
-              // regex value changed
-              ${termLastRegex} = ${evalRegexp.primitive};
-              ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
-            }
-            if (!${evalRep.primitive}.equals(${termLastReplacementInUTF8})) {
-              // replacement string changed
-              ${termLastReplacementInUTF8} = ${evalRep.primitive};
-              ${termLastReplacement} = ${termLastReplacementInUTF8}.toString();
-            }
-            ${termResult}.delete(0, ${termResult}.length());
-            ${classOf[java.util.regex.Matcher].getCanonicalName} m =
-                                   ${termPattern}.matcher(${evalSubject.primitive}.toString());
-
-            while (m.find()) {
-              m.appendReplacement(${termResult}, ${termLastReplacement});
-            }
-            m.appendTail(${termResult});
-            ${ev.primitive} = ${classNameUTF8String}.fromString(${termResult}.toString());
-            ${ev.isNull} = false;
-          }
-        }
+      if (!$regexp.equals(${termLastRegex})) {
+        // regex value changed
+        ${termLastRegex} = $regexp.clone();
+        ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
       }
+      if (!$rep.equals(${termLastReplacementInUTF8})) {
+        // replacement string changed
+        ${termLastReplacementInUTF8} = $rep.clone();
+        ${termLastReplacement} = ${termLastReplacementInUTF8}.toString();
+      }
+      ${termResult}.delete(0, ${termResult}.length());
+      java.util.regex.Matcher m = ${termPattern}.matcher($subject.toString());
+
+      while (m.find()) {
+        m.appendReplacement(${termResult}, ${termLastReplacement});
+      }
+      m.appendTail(${termResult});
+      ${ev.primitive} = UTF8String.fromString(${termResult}.toString());
+      ${ev.isNull} = false;
     """
+    })
   }
 }
 
@@ -1043,7 +1050,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
-  extends Expression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
 
   // last regex in string, we will update the pattern iff regexp value changed.
@@ -1051,32 +1058,19 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   // last regex pattern, we cache it for performance concern
   @transient private var pattern: Pattern = _
 
-  override def nullable: Boolean = subject.nullable || regexp.nullable || idx.nullable
-  override def foldable: Boolean = subject.foldable && regexp.foldable && idx.foldable
-
-  override def eval(input: InternalRow): Any = {
-    val s = subject.eval(input)
-    if (null != s) {
-      val p = regexp.eval(input)
-      if (null != p) {
-        val r = idx.eval(input)
-        if (null != r) {
-          if (!p.equals(lastRegex)) {
-            // regex value changed
-            lastRegex = p.asInstanceOf[UTF8String]
-            pattern = Pattern.compile(lastRegex.toString)
-          }
-          val m = pattern.matcher(s.toString())
-          if (m.find) {
-            val mr: MatchResult = m.toMatchResult
-            return UTF8String.fromString(mr.group(r.asInstanceOf[Int]))
-          }
-          return UTF8String.EMPTY_UTF8
-        }
-      }
+  override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
+    if (!p.equals(lastRegex)) {
+      // regex value changed
+      lastRegex = p.asInstanceOf[UTF8String].clone()
+      pattern = Pattern.compile(lastRegex.toString)
     }
-
-    null
+    val m = pattern.matcher(s.toString())
+    if (m.find) {
+      val mr: MatchResult = m.toMatchResult
+      UTF8String.fromString(mr.group(r.asInstanceOf[Int]))
+    } else {
+      UTF8String.EMPTY_UTF8
+    }
   }
 
   override def dataType: DataType = StringType
@@ -1087,44 +1081,29 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val termLastRegex = ctx.freshName("lastRegex")
     val termPattern = ctx.freshName("pattern")
-    val classNameUTF8String = classOf[UTF8String].getCanonicalName
     val classNamePattern = classOf[Pattern].getCanonicalName
 
-    ctx.addMutableState(classNameUTF8String, termLastRegex, s"${termLastRegex} = null;")
+    ctx.addMutableState("UTF8String", termLastRegex, s"${termLastRegex} = null;")
     ctx.addMutableState(classNamePattern, termPattern, s"${termPattern} = null;")
 
-    val evalSubject = subject.gen(ctx)
-    val evalRegexp = regexp.gen(ctx)
-    val evalIdx = idx.gen(ctx)
-
-    s"""
-      ${ctx.javaType(dataType)} ${ev.primitive} = null;
-      boolean ${ev.isNull} = true;
-      ${evalSubject.code}
-      if (!${evalSubject.isNull}) {
-        ${evalRegexp.code}
-        if (!${evalRegexp.isNull}) {
-          ${evalIdx.code}
-          if (!${evalIdx.isNull}) {
-            if (!${evalRegexp.primitive}.equals(${termLastRegex})) {
-              // regex value changed
-              ${termLastRegex} = ${evalRegexp.primitive};
-              ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
-            }
-            ${classOf[java.util.regex.Matcher].getCanonicalName} m =
-                                   ${termPattern}.matcher(${evalSubject.primitive}.toString());
-            if (m.find()) {
-              ${classOf[java.util.regex.MatchResult].getCanonicalName} mr = m.toMatchResult();
-              ${ev.primitive} = ${classNameUTF8String}.fromString(mr.group(${evalIdx.primitive}));
-              ${ev.isNull} = false;
-            } else {
-              ${ev.primitive} = ${classNameUTF8String}.EMPTY_UTF8;
-              ${ev.isNull} = false;
-            }
-          }
-        }
+    nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
+      s"""
+      if (!$regexp.equals(${termLastRegex})) {
+        // regex value changed
+        ${termLastRegex} = $regexp.clone();
+        ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
       }
-    """
+      java.util.regex.Matcher m =
+        ${termPattern}.matcher($subject.toString());
+      if (m.find()) {
+        java.util.regex.MatchResult mr = m.toMatchResult();
+        ${ev.primitive} = UTF8String.fromString(mr.group($idx));
+        ${ev.isNull} = false;
+      } else {
+        ${ev.primitive} = UTF8String.EMPTY_UTF8;
+        ${ev.isNull} = false;
+      }"""
+    })
   }
 }
 
@@ -1134,7 +1113,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
  * fractional part.
  */
 case class FormatNumber(x: Expression, d: Expression)
-  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
+  extends BinaryExpression with ExpectsInputTypes {
 
   override def left: Expression = x
   override def right: Expression = d
@@ -1241,4 +1220,3 @@ case class FormatNumber(x: Expression, d: Expression)
 
   override def prettyName: String = "format_number"
 }
-
