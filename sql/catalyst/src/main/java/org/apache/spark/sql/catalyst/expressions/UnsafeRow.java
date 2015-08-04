@@ -59,7 +59,7 @@ public final class UnsafeRow extends MutableRow {
   //////////////////////////////////////////////////////////////////////////////
 
   public static int calculateBitSetWidthInBytes(int numFields) {
-    return ((numFields / 64) + (numFields % 64 == 0 ? 0 : 1)) * 8;
+    return ((numFields + 63)/ 64) * 8;
   }
 
   /**
@@ -85,6 +85,14 @@ public final class UnsafeRow extends MutableRow {
         })));
   }
 
+  public static boolean isFixedLength(DataType dt) {
+    if (dt instanceof DecimalType) {
+      return ((DecimalType) dt).precision() < Decimal.MAX_LONG_DIGITS();
+    } else {
+      return settableFieldTypes.contains(dt);
+    }
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Private fields and methods
   //////////////////////////////////////////////////////////////////////////////
@@ -108,6 +116,11 @@ public final class UnsafeRow extends MutableRow {
 
   private long getFieldOffset(int ordinal) {
     return baseOffset + bitSetWidthInBytes + ordinal * 8L;
+  }
+
+  private void assertIndexIsValid(int index) {
+    assert index >= 0 : "index (" + index + ") should >= 0";
+    assert index < numFields : "index (" + index + ") should < " + numFields;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -144,9 +157,15 @@ public final class UnsafeRow extends MutableRow {
     this.sizeInBytes = sizeInBytes;
   }
 
-  private void assertIndexIsValid(int index) {
-    assert index >= 0 : "index (" + index + ") should >= 0";
-    assert index < numFields : "index (" + index + ") should < " + numFields;
+  /**
+   * Update this UnsafeRow to point to the underlying byte array.
+   *
+   * @param buf byte array to point to
+   * @param numFields the number of fields in this row
+   * @param sizeInBytes the number of bytes valid in the byte array
+   */
+  public void pointTo(byte[] buf, int numFields, int sizeInBytes) {
+    pointTo(buf, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
   }
 
   @Override
@@ -235,7 +254,7 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
-  public Object get(int ordinal) {
+  public Object genericGet(int ordinal) {
     throw new UnsupportedOperationException();
   }
 
@@ -272,6 +291,10 @@ public final class UnsafeRow extends MutableRow {
       return getInterval(ordinal);
     } else if (dataType instanceof StructType) {
       return getStruct(ordinal, ((StructType) dataType).size());
+    } else if (dataType instanceof ArrayType) {
+      return getArray(ordinal);
+    } else if (dataType instanceof MapType) {
+      return getMap(ordinal);
     } else {
       throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
     }
@@ -327,7 +350,6 @@ public final class UnsafeRow extends MutableRow {
 
   @Override
   public Decimal getDecimal(int ordinal, int precision, int scale) {
-    assertIndexIsValid(ordinal);
     if (isNullAt(ordinal)) {
       return null;
     }
@@ -343,8 +365,11 @@ public final class UnsafeRow extends MutableRow {
 
   @Override
   public UTF8String getUTF8String(int ordinal) {
-    assertIndexIsValid(ordinal);
-    return isNullAt(ordinal) ? null : UTF8String.fromBytes(getBinary(ordinal));
+    if (isNullAt(ordinal)) return null;
+    final long offsetAndSize = getLong(ordinal);
+    final int offset = (int) (offsetAndSize >> 32);
+    final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+    return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
   }
 
   @Override
@@ -352,7 +377,6 @@ public final class UnsafeRow extends MutableRow {
     if (isNullAt(ordinal)) {
       return null;
     } else {
-      assertIndexIsValid(ordinal);
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) (offsetAndSize & ((1L << 32) - 1));
@@ -387,7 +411,6 @@ public final class UnsafeRow extends MutableRow {
     if (isNullAt(ordinal)) {
       return null;
     } else {
-      assertIndexIsValid(ordinal);
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) (offsetAndSize & ((1L << 32) - 1));
@@ -397,11 +420,33 @@ public final class UnsafeRow extends MutableRow {
     }
   }
 
+  @Override
+  public ArrayData getArray(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      final long offsetAndSize = getLong(ordinal);
+      final int offset = (int) (offsetAndSize >> 32);
+      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      return UnsafeReaders.readArray(baseObject, baseOffset + offset, size);
+    }
+  }
+
+  @Override
+  public MapData getMap(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      final long offsetAndSize = getLong(ordinal);
+      final int offset = (int) (offsetAndSize >> 32);
+      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      return UnsafeReaders.readMap(baseObject, baseOffset + offset, size);
+    }
+  }
+
   /**
    * Copies this row, returning a self-contained UnsafeRow that stores its data in an internal
    * byte array rather than referencing data stored in a data page.
-   * <p>
-   * This method is only supported on UnsafeRows that do not use ObjectPools.
    */
   @Override
   public UnsafeRow copy() {
@@ -416,6 +461,38 @@ public final class UnsafeRow extends MutableRow {
     );
     rowCopy.pointTo(rowDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
     return rowCopy;
+  }
+
+  /**
+   * Creates an empty UnsafeRow from a byte array with specified numBytes and numFields.
+   * The returned row is invalid until we call copyFrom on it.
+   */
+  public static UnsafeRow createFromByteArray(int numBytes, int numFields) {
+    final UnsafeRow row = new UnsafeRow();
+    row.pointTo(new byte[numBytes], numFields, numBytes);
+    return row;
+  }
+
+  /**
+   * Copies the input UnsafeRow to this UnsafeRow, and resize the underlying byte[] when the
+   * input row is larger than this row.
+   */
+  public void copyFrom(UnsafeRow row) {
+    // copyFrom is only available for UnsafeRow created from byte array.
+    assert (baseObject instanceof byte[]) && baseOffset == PlatformDependent.BYTE_ARRAY_OFFSET;
+    if (row.sizeInBytes > this.sizeInBytes) {
+      // resize the underlying byte[] if it's not large enough.
+      this.baseObject = new byte[row.sizeInBytes];
+    }
+    PlatformDependent.copyMemory(
+      row.baseObject,
+      row.baseOffset,
+      this.baseObject,
+      this.baseOffset,
+      row.sizeInBytes
+    );
+    // update the sizeInBytes.
+    this.sizeInBytes = row.sizeInBytes;
   }
 
   /**
@@ -484,7 +561,8 @@ public final class UnsafeRow extends MutableRow {
   public String toString() {
     StringBuilder build = new StringBuilder("[");
     for (int i = 0; i < sizeInBytes; i += 8) {
-      build.append(PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + i));
+      build.append(java.lang.Long.toHexString(
+        PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + i)));
       build.append(',');
     }
     build.append(']');

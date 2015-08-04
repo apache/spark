@@ -59,20 +59,21 @@ final class UnsafeExternalRowSorter {
       StructType schema,
       Ordering<InternalRow> ordering,
       PrefixComparator prefixComparator,
-      PrefixComputer prefixComputer) throws IOException {
+      PrefixComputer prefixComputer,
+      long pageSizeBytes) throws IOException {
     this.schema = schema;
     this.prefixComputer = prefixComputer;
     final SparkEnv sparkEnv = SparkEnv.get();
     final TaskContext taskContext = TaskContext.get();
-    sorter = new UnsafeExternalSorter(
+    sorter = UnsafeExternalSorter.create(
       taskContext.taskMemoryManager(),
       sparkEnv.shuffleMemoryManager(),
       sparkEnv.blockManager(),
       taskContext,
       new RowComparator(ordering, schema.length()),
       prefixComparator,
-      4096,
-      sparkEnv.conf()
+      /* initialSize */ 4096,
+      pageSizeBytes
     );
   }
 
@@ -103,6 +104,13 @@ final class UnsafeExternalRowSorter {
   @VisibleForTesting
   void spill() throws IOException {
     sorter.spill();
+  }
+
+  /**
+   * Return the peak memory used so far, in bytes.
+   */
+  public long getPeakMemoryUsage() {
+    return sorter.getPeakMemoryUsedBytes();
   }
 
   private void cleanupResources() {

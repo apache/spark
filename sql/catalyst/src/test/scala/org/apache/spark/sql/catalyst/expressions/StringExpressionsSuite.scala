@@ -185,6 +185,50 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(s.substr(0), "example", row)
     checkEvaluation(s.substring(0, 2), "ex", row)
     checkEvaluation(s.substring(0), "example", row)
+
+    val bytes = Array[Byte](1, 2, 3, 4)
+    checkEvaluation(Substring(bytes, 0, 2), Array[Byte](1, 2))
+    checkEvaluation(Substring(bytes, 1, 2), Array[Byte](1, 2))
+    checkEvaluation(Substring(bytes, 2, 2), Array[Byte](2, 3))
+    checkEvaluation(Substring(bytes, 3, 2), Array[Byte](3, 4))
+    checkEvaluation(Substring(bytes, 4, 2), Array[Byte](4))
+    checkEvaluation(Substring(bytes, 8, 2), Array[Byte]())
+    checkEvaluation(Substring(bytes, -1, 2), Array[Byte](4))
+    checkEvaluation(Substring(bytes, -2, 2), Array[Byte](3, 4))
+    checkEvaluation(Substring(bytes, -3, 2), Array[Byte](2, 3))
+    checkEvaluation(Substring(bytes, -4, 2), Array[Byte](1, 2))
+    checkEvaluation(Substring(bytes, -5, 2), Array[Byte](1))
+    checkEvaluation(Substring(bytes, -8, 2), Array[Byte]())
+  }
+
+  test("string substring_index function") {
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(3)), "www.apache.org")
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(2)), "www.apache")
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(1)), "www")
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(0)), "")
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(-3)), "www.apache.org")
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(-2)), "apache.org")
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(-1)), "org")
+    checkEvaluation(
+      SubstringIndex(Literal(""), Literal("."), Literal(-2)), "")
+    checkEvaluation(
+      SubstringIndex(Literal.create(null, StringType), Literal("."), Literal(-2)), null)
+    checkEvaluation(SubstringIndex(
+        Literal("www.apache.org"), Literal.create(null, StringType), Literal(-2)), null)
+    // non ascii chars
+    // scalastyle:off
+    checkEvaluation(
+      SubstringIndex(Literal("大千世界大千世界"), Literal( "千"), Literal(2)), "大千世界大")
+    // scalastyle:on
+    checkEvaluation(
+      SubstringIndex(Literal("www||apache||org"), Literal( "||"), Literal(2)), "www||apache")
   }
 
   test("LIKE literal Regular Expression") {
@@ -332,6 +376,18 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Decode(Literal.create(null, BinaryType), Literal("utf-8")), null)
     checkEvaluation(Decode(b, Literal.create(null, StringType)), null, create_row(null))
   }
+
+  test("initcap unit test") {
+    checkEvaluation(InitCap(Literal.create(null, StringType)), null)
+    checkEvaluation(InitCap(Literal("a b")), "A B")
+    checkEvaluation(InitCap(Literal(" a")), " A")
+    checkEvaluation(InitCap(Literal("the test")), "The Test")
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    checkEvaluation(InitCap(Literal("世界")), "世界")
+    // scalastyle:on
+  }
+
 
   test("Levenshtein distance") {
     checkEvaluation(Levenshtein(Literal.create(null, StringType), Literal("")), null)

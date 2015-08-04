@@ -92,6 +92,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
         private $exprType[] expressions;
         private $mutableRowType mutableRow;
         ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
 
         public SpecificProjection($exprType[] expr) {
           expressions = expr;

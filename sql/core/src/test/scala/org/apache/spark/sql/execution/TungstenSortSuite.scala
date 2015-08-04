@@ -21,11 +21,15 @@ import scala.util.Random
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row, SQLConf}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 
+/**
+ * A test suite that generates randomized data to test the [[TungstenSort]] operator.
+ */
 class TungstenSortSuite extends SparkPlanTest with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
@@ -56,10 +60,20 @@ class TungstenSortSuite extends SparkPlanTest with BeforeAndAfterAll {
     )
   }
 
+  test("sorting updates peak execution memory") {
+    val sc = TestSQLContext.sparkContext
+    AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "unsafe external sort") {
+      checkThatPlansAgree(
+        (1 to 100).map(v => Tuple1(v)).toDF("a"),
+        (child: SparkPlan) => TungstenSort('a.asc :: Nil, true, child),
+        (child: SparkPlan) => Sort('a.asc :: Nil, global = true, child),
+        sortAnswers = false)
+    }
+  }
+
   // Test sorting on different data types
   for (
-    dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType)
-    if !dataType.isInstanceOf[DecimalType]; // We don't have an unsafe representation for decimals
+    dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType);
     nullable <- Seq(true, false);
     sortOrder <- Seq('a.asc :: Nil, 'a.desc :: Nil);
     randomDataGenerator <- RandomDataGenerator.forType(dataType, nullable)

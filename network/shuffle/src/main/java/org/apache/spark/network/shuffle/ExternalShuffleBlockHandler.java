@@ -65,7 +65,13 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   @Override
   public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
     BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteArray(message);
+    handleMessage(msgObj, client, callback);
+  }
 
+  protected void handleMessage(
+      BlockTransferMessage msgObj,
+      TransportClient client,
+      RpcResponseCallback callback) {
     if (msgObj instanceof OpenBlocks) {
       OpenBlocks msg = (OpenBlocks) msgObj;
       List<ManagedBuffer> blocks = Lists.newArrayList();

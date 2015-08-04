@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.DecimalFormat
+import java.util.Arrays
 import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
@@ -95,7 +96,7 @@ case class ConcatWs(children: Seq[Expression])
     val flatInputs = children.flatMap { child =>
       child.eval(input) match {
         case s: UTF8String => Iterator(s)
-        case arr: ArrayData => arr.toArray().map(_.asInstanceOf[UTF8String])
+        case arr: ArrayData => arr.toArray[UTF8String](StringType)
         case null => Iterator(null.asInstanceOf[UTF8String])
       }
     }
@@ -422,6 +423,31 @@ case class StringInstr(str: Expression, substr: Expression)
 }
 
 /**
+ * Returns the substring from string str before count occurrences of the delimiter delim.
+ * If count is positive, everything the left of the final delimiter (counting from left) is
+ * returned. If count is negative, every to the right of the final delimiter (counting from the
+ * right) is returned. substring_index performs a case-sensitive match when searching for delim.
+ */
+case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
+ extends TernaryExpression with ImplicitCastInputTypes {
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  override def children: Seq[Expression] = Seq(strExpr, delimExpr, countExpr)
+  override def prettyName: String = "substring_index"
+
+  override def nullSafeEval(str: Any, delim: Any, count: Any): Any = {
+    str.asInstanceOf[UTF8String].subStringIndex(
+      delim.asInstanceOf[UTF8String],
+      count.asInstanceOf[Int])
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
+  }
+}
+
+/**
  * A function that returns the position of the first occurrence of substr
  * in given string after position pos.
  */
@@ -572,6 +598,23 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 }
 
 /**
+ * Returns string, with the first letter of each word in uppercase.
+ * Words are delimited by whitespace.
+ */
+case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def dataType: DataType = StringType
+
+  override def nullSafeEval(string: Any): Any = {
+    string.asInstanceOf[UTF8String].toTitleCase
+  }
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, str => s"$str.toTitleCase()")
+  }
+}
+
+/**
  * Returns the string which repeat the given string value n times.
  */
 case class StringRepeat(str: Expression, times: Expression)
@@ -654,6 +697,34 @@ case class StringSplit(str: Expression, pattern: Expression)
   override def prettyName: String = "split"
 }
 
+object Substring {
+  def subStringBinarySQL(bytes: Array[Byte], pos: Int, len: Int): Array[Byte] = {
+    if (pos > bytes.length) {
+      return Array[Byte]()
+    }
+
+    var start = if (pos > 0) {
+      pos - 1
+    } else if (pos < 0) {
+      bytes.length + pos
+    } else {
+      0
+    }
+
+    val end = if ((bytes.length - start) < len) {
+      bytes.length
+    } else {
+      start + len
+    }
+
+    start = Math.max(start, 0)  // underflow
+    if (start < end) {
+      Arrays.copyOfRange(bytes, start, end)
+    } else {
+      Array[Byte]()
+    }
+  }
+}
 /**
  * A function that takes a substring of its first argument starting at a given position.
  * Defined for String and Binary types.
@@ -665,18 +736,31 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     this(str, pos, Literal(Integer.MAX_VALUE))
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = str.dataType
 
-  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
 
   override def children: Seq[Expression] = str :: pos :: len :: Nil
 
   override def nullSafeEval(string: Any, pos: Any, len: Any): Any = {
-    string.asInstanceOf[UTF8String].substringSQL(pos.asInstanceOf[Int], len.asInstanceOf[Int])
+    str.dataType match {
+      case StringType => string.asInstanceOf[UTF8String]
+        .substringSQL(pos.asInstanceOf[Int], len.asInstanceOf[Int])
+      case BinaryType => Substring.subStringBinarySQL(string.asInstanceOf[Array[Byte]],
+        pos.asInstanceOf[Int], len.asInstanceOf[Int])
+    }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, (str, pos, len) => s"$str.substringSQL($pos, $len)")
+
+    val cls = classOf[Substring].getName
+    defineCodeGen(ctx, ev, (string, pos, len) => {
+      str.dataType match {
+        case StringType => s"$string.substringSQL($pos, $len)"
+        case BinaryType => s"$cls.subStringBinarySQL($string, $pos, $len)"
+      }
+    })
   }
 }
 
@@ -887,12 +971,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
     if (!p.equals(lastRegex)) {
       // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String]
+      lastRegex = p.asInstanceOf[UTF8String].clone()
       pattern = Pattern.compile(lastRegex.toString)
     }
     if (!r.equals(lastReplacementInUTF8)) {
       // replacement string changed
-      lastReplacementInUTF8 = r.asInstanceOf[UTF8String]
+      lastReplacementInUTF8 = r.asInstanceOf[UTF8String].clone()
       lastReplacement = lastReplacementInUTF8.toString
     }
     val m = pattern.matcher(s.toString())
@@ -938,12 +1022,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     s"""
       if (!$regexp.equals(${termLastRegex})) {
         // regex value changed
-        ${termLastRegex} = $regexp;
+        ${termLastRegex} = $regexp.clone();
         ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
       }
       if (!$rep.equals(${termLastReplacementInUTF8})) {
         // replacement string changed
-        ${termLastReplacementInUTF8} = $rep;
+        ${termLastReplacementInUTF8} = $rep.clone();
         ${termLastReplacement} = ${termLastReplacementInUTF8}.toString();
       }
       ${termResult}.delete(0, ${termResult}.length());
@@ -977,7 +1061,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
     if (!p.equals(lastRegex)) {
       // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String]
+      lastRegex = p.asInstanceOf[UTF8String].clone()
       pattern = Pattern.compile(lastRegex.toString)
     }
     val m = pattern.matcher(s.toString())
@@ -1006,7 +1090,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
       s"""
       if (!$regexp.equals(${termLastRegex})) {
         // regex value changed
-        ${termLastRegex} = $regexp;
+        ${termLastRegex} = $regexp.clone();
         ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
       }
       java.util.regex.Matcher m =
@@ -1136,4 +1220,3 @@ case class FormatNumber(x: Expression, d: Expression)
 
   override def prettyName: String = "format_number"
 }
-

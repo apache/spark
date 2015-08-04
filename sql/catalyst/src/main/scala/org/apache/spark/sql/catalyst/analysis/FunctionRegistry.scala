@@ -178,6 +178,7 @@ object FunctionRegistry {
     expression[Encode]("encode"),
     expression[Decode]("decode"),
     expression[FormatNumber]("format_number"),
+    expression[InitCap]("initcap"),
     expression[Lower]("lcase"),
     expression[Lower]("lower"),
     expression[Length]("length"),
@@ -199,6 +200,7 @@ object FunctionRegistry {
     expression[StringSplit]("split"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
+    expression[SubstringIndex]("substring_index"),
     expression[StringTrim]("trim"),
     expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),
@@ -209,6 +211,7 @@ object FunctionRegistry {
     expression[AddMonths]("add_months"),
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
+    expression[DateDiff]("datediff"),
     expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
     expression[DateSub]("date_sub"),
@@ -216,6 +219,7 @@ object FunctionRegistry {
     expression[DayOfYear]("dayofyear"),
     expression[DayOfMonth]("dayofmonth"),
     expression[FromUnixTime]("from_unixtime"),
+    expression[FromUTCTimestamp]("from_utc_timestamp"),
     expression[Hour]("hour"),
     expression[LastDay]("last_day"),
     expression[Minute]("minute"),
@@ -225,6 +229,7 @@ object FunctionRegistry {
     expression[Quarter]("quarter"),
     expression[Second]("second"),
     expression[ToDate]("to_date"),
+    expression[ToUTCTimestamp]("to_utc_timestamp"),
     expression[TruncDate]("trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
     expression[WeekOfYear]("weekofyear"),
@@ -232,6 +237,7 @@ object FunctionRegistry {
 
     // collection functions
     expression[Size]("size"),
+    expression[SortArray]("sort_array"),
 
     // misc functions
     expression[Crc32]("crc32"),

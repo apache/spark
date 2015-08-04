@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.DoublePrefixComparator
@@ -35,6 +36,14 @@ case class SortOrder(child: Expression, direction: SortDirection)
 
   /** Sort order is not foldable because we don't have an eval for it. */
   override def foldable: Boolean = false
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (RowOrdering.isOrderable(dataType)) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(s"cannot sort data type ${dataType.simpleString}")
+    }
+  }
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
@@ -61,10 +70,25 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
         (Long.MinValue, s"$input ? 1L : 0L")
       case _: IntegralType =>
         (Long.MinValue, s"(long) $input")
+      case DateType | TimestampType =>
+        (Long.MinValue, s"(long) $input")
       case FloatType | DoubleType =>
         (DoublePrefixComparator.computePrefix(Double.NegativeInfinity),
           s"$DoublePrefixCmp.computePrefix((double)$input)")
       case StringType => (0L, s"$input.getPrefix()")
+      case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
+        val prefix = if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
+          s"$input.toUnscaledLong()"
+        } else {
+          // reduce the scale to fit in a long
+          val p = Decimal.MAX_LONG_DIGITS
+          val s = p - (dt.precision - dt.scale)
+          s"$input.changePrecision($p, $s) ? $input.toUnscaledLong() : ${Long.MinValue}L"
+        }
+        (Long.MinValue, prefix)
+      case dt: DecimalType =>
+        (DoublePrefixComparator.computePrefix(Double.NegativeInfinity),
+          s"$DoublePrefixCmp.computePrefix($input.toDouble())")
       case _ => (0L, "0L")
     }
 

@@ -1279,6 +1279,15 @@ setMethod("join",
             dataFrame(sdf)
           })
 
+#' rdname merge
+#' aliases join
+setMethod("merge",
+          signature(x = "DataFrame", y = "DataFrame"),
+          function(x, y, joinExpr = NULL, joinType = NULL, ...) {
+            join(x, y, joinExpr, joinType)
+          })
+
+
 #' UnionAll
 #'
 #' Return a new DataFrame containing the union of rows in this DataFrame
@@ -1523,6 +1532,19 @@ setMethod("describe",
             sdf <- callJMethod(x@sdf, "describe", listToSeq(colList))
             dataFrame(sdf)
           })
+
+#' @title Summary
+#'
+#' @description Computes statistics for numeric columns of the DataFrame
+#'
+#' @rdname summary
+#' @aliases describe
+setMethod("summary",
+          signature(x = "DataFrame"),
+          function(x) {
+            describe(x)
+          })
+
 
 #' dropna
 #'
