@@ -29,7 +29,8 @@ import org.apache.spark.sql.types._
  *
  * Note: The returned UnsafeRow will be pointed to a scratch buffer inside the projection.
  */
-object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafeProjection] {
+object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafeProjection]
+    with ExpressionCodeGen[Expression, UnsafeProjection] {
 
   private val StringWriter = classOf[UnsafeRowWriters.UTF8StringWriter].getName
   private val BinaryWriter = classOf[UnsafeRowWriters.BinaryWriter].getName
@@ -423,12 +424,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val exprTypes = expressions.map(_.dataType)
     createCodeForStruct(ctx, "i", exprEvals, exprTypes)
   }
-
-  protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
-    in.map(ExpressionCanonicalizer.execute)
-
-  protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
-    in.map(BindReferences.bindReference(_, inputSchema))
 
   protected def create(expressions: Seq[Expression]): UnsafeProjection = {
     val ctx = newCodeGenContext()

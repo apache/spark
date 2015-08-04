@@ -44,12 +44,6 @@ abstract class AbstractGenerateProjection[OutType <: AnyRef]
 
   private[this] def input(prefix: String) = inputNames.map(n => s"$prefix$n").mkString(", ")
 
-  protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
-    in.map(ExpressionCanonicalizer.execute)
-
-  protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
-    in.map(BindReferences.bindReference(_, inputSchema))
-
   // Make Mutablility optional...
   protected def create(expressions: Seq[Expression]): OutType = {
     val ctx = newCodeGenContext()
@@ -250,12 +244,14 @@ abstract class AbstractGenerateProjection[OutType <: AnyRef]
   }
 }
 
-object GenerateProjection extends AbstractGenerateProjection[BaseProjection] {
+object GenerateProjection extends AbstractGenerateProjection[BaseProjection]
+    with ExpressionCodeGen[Expression, BaseProjection] {
   override protected def projectionType = classOf[BaseProjection].getName
   override protected def inputNames = Seq("i")
 }
 
-object GenerateJoinedProjection extends AbstractGenerateProjection[BaseJoinedProjection] {
+object GenerateJoinedProjection extends AbstractGenerateProjection[BaseJoinedProjection]
+    with JoinedExpressionCodeGen[BaseJoinedProjection] {
   override protected def projectionType = classOf[BaseJoinedProjection].getName
   override protected def inputNames = Seq("left", "right")
 }

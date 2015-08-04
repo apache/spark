@@ -41,12 +41,6 @@ abstract class AbstractGenerateMutableProjection[OutType <: AnyRef]
 
   private[this] def input(prefix: String) = inputNames.map(n => s"$prefix$n").mkString(", ")
 
-  protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
-    in.map(ExpressionCanonicalizer.execute)
-
-  protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
-    in.map(BindReferences.bindReference(_, inputSchema))
-
   protected def create(expressions: Seq[Expression]): (() => OutType) = {
     val ctx = newCodeGenContext()
     val projectionCodes = expressions.zipWithIndex.map {
@@ -124,13 +118,15 @@ abstract class AbstractGenerateMutableProjection[OutType <: AnyRef]
 }
 
 object GenerateMutableProjection
-    extends AbstractGenerateMutableProjection[BaseMutableProjection] {
+    extends AbstractGenerateMutableProjection[BaseMutableProjection]
+    with ExpressionCodeGen[Expression, () => BaseMutableProjection] {
   override protected def projectionType = classOf[BaseMutableProjection].getName
   override protected def inputNames = Seq("i")
 }
 
 object GenerateMutableJoinedProjection
-    extends AbstractGenerateMutableProjection[BaseMutableJoinedProjection] {
+    extends AbstractGenerateMutableProjection[BaseMutableJoinedProjection]
+    with JoinedExpressionCodeGen[() => BaseMutableJoinedProjection] {
   override protected def projectionType = classOf[BaseMutableJoinedProjection].getName
   override protected def inputNames = Seq("left", "right")
 }
