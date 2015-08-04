@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 import getpass
 import logging
 import signal
@@ -458,6 +458,7 @@ class SchedulerJob(BaseJob):
         executor.start()
         i = 0
         while (not self.test_mode) or i < 1:
+            loop_start_dttm = datetime.now()
             try:
                 self.prioritize_queued(executor=executor, dagbag=dagbag)
             except Exception as e:
@@ -491,8 +492,19 @@ class SchedulerJob(BaseJob):
                     self.manage_slas(dag)
                 except Exception as e:
                     logging.exception(e)
-            logging.debug(
+            logging.info(
                 "Done queuing tasks, calling the executor's heartbeat")
+            duration_sec = (loop_start_dttm - datetime.now()).total_seconds()
+            logging.info("Loop took: {} seconds".format(duration_sec))
+            try:
+                dag_sizes = sorted(
+                    [(sys.getsizeof(dag), dag.dag_id) for dag in dags],
+                    key=lambda x: x[0],
+                    reverse=True,
+                )
+                logging.debug("DAG sizes: " + str(dag_sizes))
+            except:
+                logging.error("Failed at getting DAG sizes")
             try:
                 # We really just want the scheduler to never ever stop.
                 executor.heartbeat()
