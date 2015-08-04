@@ -23,7 +23,9 @@ import java.util.*;
 import java.util.Map.Entry;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Charsets;
 import com.google.common.collect.Lists;
+import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.AuxiliaryService;
@@ -33,6 +35,10 @@ import org.apache.hadoop.yarn.server.api.ContainerInitializationContext;
 import org.apache.hadoop.yarn.server.api.ContainerTerminationContext;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
+import org.fusesource.leveldbjni.JniDBFactory;
+import org.fusesource.leveldbjni.internal.NativeDB.DBException;
+import org.iq80.leveldb.DB;
+import org.iq80.leveldb.Options;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -221,12 +227,12 @@ public class YarnShuffleService extends AuxiliaryService {
 
   private File findRegisteredExecutorFile(String[] localDirs) {
     for (String dir: localDirs) {
-      File f = new File(dir, "registeredExecutors.bin");
+      File f = new File(dir, "registeredExecutors.ldb");
       if (f.exists()) {
         return f;
       }
     }
-    return new File(localDirs[0], "registeredExecutors.bin");
+    return new File(localDirs[0], "registeredExecutors.ldb");
   }
 
   /**
@@ -263,22 +269,37 @@ public class YarnShuffleService extends AuxiliaryService {
 
   @VisibleForTesting
   static Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> reloadRegisteredExecutors(
-      File file
-  ) throws IOException, ClassNotFoundException {
+      File file) throws IOException, ClassNotFoundException {
     Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> result = new HashMap<>();
-    ObjectInputStream in = new ObjectInputStream(new FileInputStream(file));
-    Map<AppExecId, ExecutorShuffleInfo> registeredExecutors =
-      (Map<AppExecId, ExecutorShuffleInfo>) in.readObject();
-    for (Entry<AppExecId, ExecutorShuffleInfo> e: registeredExecutors.entrySet()) {
-      List<Map.Entry<AppExecId, ExecutorShuffleInfo>> executorsForApp =
-        result.get(e.getKey().appId);
-      if (executorsForApp == null) {
-        executorsForApp = new ArrayList<>();
-        result.put(e.getKey().appId, executorsForApp);
+    Options options = new Options();
+    options.createIfMissing(true);
+    JniDBFactory factory = new JniDBFactory();
+    DB db = null;
+    try {
+      db = factory.open(file, options);
+      ObjectInputStream in = new ObjectInputStream(new ByteArrayInputStream(
+        db.get("registeredExecutors".getBytes(Charsets.UTF_8))));
+      Map<AppExecId, ExecutorShuffleInfo> registeredExecutors =
+        (Map<AppExecId, ExecutorShuffleInfo>) in.readObject();
+      for (Entry<AppExecId, ExecutorShuffleInfo> e: registeredExecutors.entrySet()) {
+        List<Map.Entry<AppExecId, ExecutorShuffleInfo>> executorsForApp =
+          result.get(e.getKey().appId);
+        if (executorsForApp == null) {
+          executorsForApp = new ArrayList<>();
+          result.put(e.getKey().appId, executorsForApp);
+        }
+        executorsForApp.add(new AbstractMap.SimpleImmutableEntry<>(e.getKey(), e.getValue()));
       }
-      executorsForApp.add(new AbstractMap.SimpleImmutableEntry<>(e.getKey(), e.getValue()));
+      in.close();
+    } catch (DBException dbe) {
+      // blow the corrupt db away, so we can still write out OK data for future executors
+      FileUtils.deleteDirectory(file);
+      throw dbe;
+    } finally {
+      if (db != null) {
+        db.close();
+      }
     }
-    in.close();
     return result;
   }
 

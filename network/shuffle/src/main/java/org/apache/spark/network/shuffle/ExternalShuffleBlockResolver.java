@@ -25,9 +25,13 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Charsets;
 import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
 import com.google.common.io.Files;
+import org.fusesource.leveldbjni.JniDBFactory;
+import org.iq80.leveldb.DB;
+import org.iq80.leveldb.Options;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -272,11 +276,22 @@ public class ExternalShuffleBlockResolver {
    */
   private void saveRegisteredExecutors() throws IOException {
     if (registeredExecutorFile != null) {
-      File tmp = File.createTempFile("registeredExecutors",".bin");
-      ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(tmp));
-      out.writeObject(executors);
-      out.close();
-      Files.move(tmp, registeredExecutorFile);
+      Options options = new Options();
+      options.createIfMissing(true);
+      JniDBFactory factory = new JniDBFactory();
+      DB db = null;
+      try {
+        db = factory.open(registeredExecutorFile, options);
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        ObjectOutputStream out = new ObjectOutputStream(bytes);
+        out.writeObject(executors);
+        out.close();
+        db.put("registeredExecutors".getBytes(Charsets.UTF_8), bytes.toByteArray());
+      } finally {
+        if (db != null) {
+          db.close();
+        }
+      }
       logger.info("Saving registered executors to {}", registeredExecutorFile);
     }
   }

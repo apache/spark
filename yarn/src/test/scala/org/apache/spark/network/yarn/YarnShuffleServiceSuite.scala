@@ -171,7 +171,9 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     // make a corrupt registeredExecutor File
     s1.stop()
 
-    val out = new DataOutputStream(new FileOutputStream(execStateFile))
+    execStateFile.listFiles().foreach{_.delete()}
+
+    val out = new DataOutputStream(new FileOutputStream(execStateFile + "/CURRENT"))
     out.writeInt(42)
     out.close()
 
@@ -193,6 +195,18 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     resolver2.registerExecutor(app2Id.toString, "exec-2", shuffleInfo2)
     ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", resolver2) should be (Some(shuffleInfo2))
     s2.stop()
+
+    // another stop & restart should be fine though (eg., we recover from previous corruption)
+    s3 = new YarnShuffleService
+    s3.init(yarnConfig)
+    s3.registeredExecutorFile should be (execStateFile)
+    val handler3 = s3.blockHandler
+    val resolver3 = ShuffleTestAccessor.getBlockResolver(handler3)
+
+    s3.initializeApplication(app2Data)
+    ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", resolver3) should be (Some(shuffleInfo2))
+    s3.stop()
+
   }
 
 }
