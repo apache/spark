@@ -600,8 +600,4 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       System.setErr(currentErr)
     }
   }
-
-  private[deploy] def isNonEmptyArg(arg: String): Boolean = {
-    arg != null && arg.nonEmpty
-  }
 }

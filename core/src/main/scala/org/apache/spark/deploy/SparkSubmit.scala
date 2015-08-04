@@ -82,8 +82,6 @@ object SparkSubmit {
   private val PYSPARK_SHELL = "pyspark-shell"
   private val SPARKR_SHELL = "sparkr-shell"
   private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
-  // contains R packages designed to run with SparkR for distribution in Yarn cluster mode
-  private val SPARKR_EXTRAS_ARCHIVE = "sparkr-extras.zip"
 
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
@@ -282,13 +280,13 @@ object SparkSubmit {
       SparkSubmitUtils.resolveMavenCoordinates(
         args.packages, Option(args.repositories), Option(args.ivyRepoPath))
     if (resolvedMavenCoordinates.trim.nonEmpty) {
-      if (!args.isNonEmptyArg(args.jars)) {
+      if (!StringUtils.isEmpty(args.jars)) {
         args.jars = resolvedMavenCoordinates
       } else {
         args.jars += s",$resolvedMavenCoordinates"
       }
       if (args.isPython) {
-        if (!args.isNonEmptyArg(args.pyFiles)) {
+        if (!StringUtils.isEmpty(args.pyFiles)) {
           args.pyFiles = resolvedMavenCoordinates
         } else {
           args.pyFiles += s",$resolvedMavenCoordinates"
@@ -371,13 +369,12 @@ object SparkSubmit {
       if (rPackagePath.isEmpty) {
         printErrorAndExit("SPARK_HOME does not exist for R application in YARN mode.")
       }
-      val rPackageFile = new File(rPackagePath.get, SPARKR_PACKAGE_ARCHIVE)
+      val rPackageFile =
+        RPackageUtils.zipRLibraries(new File(rPackagePath.get), SPARKR_PACKAGE_ARCHIVE)
       if (!rPackageFile.exists()) {
         printErrorAndExit(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in YARN mode.")
       }
       val localURI = Utils.resolveURI(rPackageFile.getAbsolutePath)
-      // val rExtras = RPackageUtils.zipRLibraries(new File(rPackagePath.get), SPARKR_EXTRAS_ARCHIVE)
-      // val extrasURI = Utils.resolveURI(rExtras.getAbsolutePath).toString + "#sparkr-extras"
 
       // Assigns a symbol link name "sparkr" to the shipped package.
       args.archives = mergeFileLists(args.archives, localURI.toString + "#sparkr")

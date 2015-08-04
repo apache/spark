@@ -197,7 +197,7 @@ private[deploy] object RPackageUtils extends Logging {
       if (dir.isDirectory) {
         val subDir = dir.listFiles(new FilenameFilter {
           override def accept(dir: File, name: String): Boolean = {
-            !dir.getAbsolutePath.contains("SparkR") && !name.contains(".zip")
+            !name.contains(".zip")
           }
         })
         subDir.flatMap(listFilesRecursively).toSet

@@ -21,13 +21,18 @@ import java.io.{PrintStream, OutputStream, File}
 import java.net.URI
 import java.util.jar.Attributes.Name
 import java.util.jar.{JarFile, Manifest}
+import java.util.zip.{ZipEntry, ZipFile}
+
+import org.scalatest.BeforeAndAfterEach
+import scala.collection.JavaConversions._
+import scala.collection.mutable.ArrayBuffer
+
+import com.google.common.io.Files
+import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
-import org.scalatest.BeforeAndAfterEach
-
-import scala.collection.mutable.ArrayBuffer
 
 class RPackageUtilsSuite extends SparkFunSuite with BeforeAndAfterEach {
 
@@ -119,6 +124,33 @@ class RPackageUtilsSuite extends SparkFunSuite with BeforeAndAfterEach {
         verbose = true)
       val output = lineBuffer.mkString("\n")
       assert(output.contains(RPackageUtils.RJarDoc))
+    }
+  }
+
+  test("SparkR zipping works properly") {
+    val tempDir = Files.createTempDir()
+    try {
+      IvyTestUtils.writeFile(tempDir, "test.R", "abc")
+      val fakeSparkRDir = new File(tempDir, "SparkR")
+      assert(fakeSparkRDir.mkdirs())
+      IvyTestUtils.writeFile(fakeSparkRDir, "abc.R", "abc")
+      IvyTestUtils.writeFile(fakeSparkRDir, "DESCRIPTION", "abc")
+      IvyTestUtils.writeFile(tempDir, "package.zip", "abc") // fake zip file :)
+      val fakePackageDir = new File(tempDir, "packageTest")
+      assert(fakePackageDir.mkdirs())
+      IvyTestUtils.writeFile(fakePackageDir, "def.R", "abc")
+      IvyTestUtils.writeFile(fakePackageDir, "DESCRIPTION", "abc")
+      val finalZip = RPackageUtils.zipRLibraries(tempDir, "sparkr.zip")
+      assert(finalZip.exists())
+      val entries = new ZipFile(finalZip).entries().toSeq.map(_.getName)
+      assert(entries.contains("/test.R"))
+      assert(entries.contains("/SparkR/abc.R"))
+      assert(entries.contains("/SparkR/DESCRIPTION"))
+      assert(!entries.contains("/package.zip"))
+      assert(entries.contains("/packageTest/def.R"))
+      assert(entries.contains("/packageTest/DESCRIPTION"))
+    } finally {
+      FileUtils.deleteDirectory(tempDir)
     }
   }
 }

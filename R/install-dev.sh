@@ -44,6 +44,5 @@ R CMD INSTALL --library=$LIB_DIR $FWDIR/pkg/
 
 # Zip the SparkR package so that it can be distributed to worker nodes on YARN
 cd $LIB_DIR
-jar cfM "$LIB_DIR/sparkr.zip" SparkR
 
 popd > /dev/null

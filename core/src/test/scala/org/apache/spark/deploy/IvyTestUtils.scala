@@ -77,7 +77,7 @@ private[deploy] object IvyTestUtils {
   }
 
   /** Write the contents to a file to the supplied directory. */
-  private def writeFile(dir: File, fileName: String, contents: String): File = {
+  private[deploy] def writeFile(dir: File, fileName: String, contents: String): File = {
     val outputFile = new File(dir, fileName)
     val outputStream = new FileOutputStream(outputFile)
     outputStream.write(contents.toCharArray.map(_.toByte))
