@@ -52,18 +52,18 @@ case class ShuffledHashOuterJoin(
         case LeftOuter =>
           val hashed = HashedRelation(rightIter, buildKeyGenerator)
           val keyGenerator = streamedKeyGenerator
-          leftIter.flatMap( currentRow => {
+          leftIter.flatMap { currentRow =>
             val rowKey = keyGenerator(currentRow)
             leftOuterIterator(rowKey, joinedRow.withLeft(currentRow), hashed.get(rowKey))
-          })
+          }
 
         case RightOuter =>
           val hashed = HashedRelation(leftIter, buildKeyGenerator)
           val keyGenerator = streamedKeyGenerator
-          rightIter.flatMap ( currentRow => {
+          rightIter.flatMap { currentRow =>
             val rowKey = keyGenerator(currentRow)
             rightOuterIterator(rowKey, hashed.get(rowKey), joinedRow.withRight(currentRow))
-          })
+          }
 
         case FullOuter =>
           // TODO(davies): use UnsafeRow
