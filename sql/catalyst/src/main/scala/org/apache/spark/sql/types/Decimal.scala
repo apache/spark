@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import java.math.{RoundingMode, MathContext}
+
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -137,9 +139,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toBigDecimal: BigDecimal = {
     if (decimalVal.ne(null)) {
-      decimalVal
+      decimalVal(Decimal.MATH_CONTEXT)
     } else {
-      BigDecimal(longVal, _scale)
+      BigDecimal(longVal, _scale)(Decimal.MATH_CONTEXT)
     }
   }
 
@@ -261,10 +263,23 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def isZero: Boolean = if (decimalVal.ne(null)) decimalVal == BIG_DEC_ZERO else longVal == 0
 
-  def + (that: Decimal): Decimal = Decimal(toBigDecimal + that.toBigDecimal)
+  def + (that: Decimal): Decimal = {
+    if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
+      Decimal(longVal + that.longVal, Math.max(precision, that.precision), scale)
+    } else {
+      Decimal(toBigDecimal + that.toBigDecimal, precision, scale)
+    }
+  }
 
-  def - (that: Decimal): Decimal = Decimal(toBigDecimal - that.toBigDecimal)
+  def - (that: Decimal): Decimal = {
+    if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
+      Decimal(longVal - that.longVal, Math.max(precision, that.precision), scale)
+    } else {
+      Decimal(toBigDecimal - that.toBigDecimal, precision, scale)
+    }
+  }
 
+  // HiveTypeCoercion will take care of the precision, scale of result
   def * (that: Decimal): Decimal = Decimal(toBigDecimal * that.toBigDecimal)
 
   def / (that: Decimal): Decimal =
@@ -277,13 +292,13 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def unary_- : Decimal = {
     if (decimalVal.ne(null)) {
-      Decimal(-decimalVal)
+      Decimal(-decimalVal, precision, scale)
     } else {
       Decimal(-longVal, precision, scale)
     }
   }
 
-  def abs: Decimal = if (this.compare(Decimal(0)) < 0) this.unary_- else this
+  def abs: Decimal = if (this.compare(Decimal.ZERO) < 0) this.unary_- else this
 }
 
 object Decimal {
@@ -291,10 +306,16 @@ object Decimal {
 
   /** Maximum number of decimal digits a Long can represent */
   val MAX_LONG_DIGITS = 18
+  val MAX_PRECISION = DecimalType.MAX_PRECISION
 
   private val POW_10 = Array.tabulate[Long](MAX_LONG_DIGITS + 1)(i => math.pow(10, i).toLong)
 
   private val BIG_DEC_ZERO = BigDecimal(0)
+
+  private[types] val MATH_CONTEXT = new MathContext(MAX_PRECISION, RoundingMode.HALF_EVEN)
+
+  val ZERO = Decimal(0)
+  val ONE = Decimal(1)
 
   def apply(value: Double): Decimal = new Decimal().set(value)
 
@@ -307,6 +328,9 @@ object Decimal {
   def apply(value: java.math.BigDecimal): Decimal = new Decimal().set(value)
 
   def apply(value: BigDecimal, precision: Int, scale: Int): Decimal =
+    new Decimal().set(value, precision, scale)
+
+  def apply(value: java.math.BigDecimal, precision: Int, scale: Int): Decimal =
     new Decimal().set(value, precision, scale)
 
   def apply(unscaled: Long, precision: Int, scale: Int): Decimal =

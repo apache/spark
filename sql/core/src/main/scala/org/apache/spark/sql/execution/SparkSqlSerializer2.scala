@@ -412,7 +412,8 @@ private[sql] object SparkSqlSerializer2 {
                 // Then, read the scale.
                 val scale = in.readInt()
                 // Finally, create the Decimal object and set it in the row.
-                mutableRow.update(i, Decimal(new BigDecimal(unscaledVal, scale)))
+                mutableRow.update(i,
+                  Decimal(new BigDecimal(unscaledVal, scale), decimal.precision, decimal.scale))
               }
           }
           i += 1

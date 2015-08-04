@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{StructType, DataType, StructField}
 import org.apache.spark.util.{CircularBuffer, RedirectThread, Utils}
 
 /**
@@ -103,6 +103,9 @@ case class ScriptTransformation(
       @Nullable val (outputSerde, outputSoi) = {
         ioschema.initOutputSerDe(output).getOrElse((null, null))
       }
+
+      val schema = StructType(output.map(a => new StructField("", a.dataType, true)))
+      val converter = CatalystTypeConverters.createToCatalystConverter(schema)
 
       val reader = new BufferedReader(new InputStreamReader(inputStream))
       val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] with HiveInspectors {
@@ -178,11 +181,11 @@ case class ScriptTransformation(
             if (!ioschema.schemaLess) {
               new GenericInternalRow(
                 prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-                  .map(CatalystTypeConverters.convertToCatalyst))
+                  .map(converter))
             } else {
               new GenericInternalRow(
                 prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
-                  .map(CatalystTypeConverters.convertToCatalyst))
+                  .map(converter))
             }
           } else {
             val ret = deserialize()

@@ -442,8 +442,8 @@ object HiveTypeCoercion {
    * Changes numeric values to booleans so that expressions like true = 1 can be evaluated.
    */
   object BooleanEquality extends Rule[LogicalPlan] {
-    private val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1))
-    private val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, Decimal(0))
+    private val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, Decimal.ONE)
+    private val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, Decimal.ZERO)
 
     private def buildCaseKeyWhen(booleanExpr: Expression, numericExpr: Expression) = {
       CaseKeyWhen(numericExpr, Seq(
