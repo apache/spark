@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.kafka
 
+import org.apache.spark.streaming.scheduler.rate.RateEstimator
+
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -29,7 +31,7 @@ import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
-import org.apache.spark.streaming.scheduler.StreamInputInfo
+import org.apache.spark.streaming.scheduler.{RateController, StreamInputInfo}
 
 /**
  *  A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
@@ -70,6 +72,18 @@ class DirectKafkaInputDStream[
 
   protected[streaming] override val checkpointData =
     new DirectKafkaInputDStreamCheckpointData
+
+
+  /**
+   * Asynchronously maintains & sends new rate limits to the receiver through the receiver tracker.
+   */
+  override protected[streaming] val rateController: Option[RateController] = {
+    if (RateController.isBackPressureEnabled(ssc.conf)) {
+      RateEstimator.create(ssc.conf).map { new DirectKafkaRateController(id, _) }
+    } else {
+      None
+    }
+  }
 
   protected val kc = new KafkaCluster(kafkaParams)
 
@@ -182,6 +196,14 @@ class DirectKafkaInputDStream[
             context.sparkContext, kafkaParams, b.map(OffsetRange(_)), leaders, messageHandler)
       }
     }
+  }
+
+  /**
+   * A RateController that sends the new rate to receivers, via the receiver tracker.
+   */
+  private[streaming] class DirectKafkaRateController(id: Int, estimator: RateEstimator)
+    extends RateController(id, estimator) {
+    override def publish(rate: Long): Unit = ()
   }
 
 }
