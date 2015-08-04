@@ -313,9 +313,9 @@ class SQLListenerSuite extends SparkFunSuite {
       assert(sqlContext.listener.getCompletedExecutions.size <= 50)
       assert(sqlContext.listener.getFailedExecutions.size <= 50)
       // 50 for successful executions and 50 for failed executions
-      assert(sqlContext.listener.executionIdToDataSize <= 100)
-      assert(sqlContext.listener.jobIdToExecutionIdSize <= 100)
-      assert(sqlContext.listener.stageIdToStageMetricsSize <= 100)
+      assert(sqlContext.listener.executionIdToData.size <= 100)
+      assert(sqlContext.listener.jobIdToExecutionId.size <= 100)
+      assert(sqlContext.listener.stageIdToStageMetrics.size <= 100)
     } finally {
       sc.stop()
     }
