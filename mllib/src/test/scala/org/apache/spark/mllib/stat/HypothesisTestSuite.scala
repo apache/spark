@@ -26,7 +26,7 @@ import org.apache.commons.math3.stat.inference.{KolmogorovSmirnovTest => CommonM
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.stat.test.ChiSqTest
+import org.apache.spark.mllib.stat.test.{ChiSqTest, KolmogorovSmirnovTest}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
@@ -352,52 +352,67 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(kSCompResult.pValue ~== rKSPval relTol 1e-2)
   }
 
-  test("2 sample Kolmogorov-Smirnov test: partitions with no data") {
+  test("2 sample Kolmogorov-Smirnov test: helper functions in case partitions have no data") {
     // we use the R data provided in the prior test
-    // We request a number of partitions larger than the number of elements in the data sets
-    // wich
-    val rData1 = sc.parallelize(
-      Array(
+    // Once we have combined and sorted we partitino with a larger number than
+    // the number of elements to guarantee we have empty partitions.
+    // We test various critical package private functions in this circumstance.
+    val rData1 = Array(
         1.1626852897838, -0.585924465893051, 1.78546500331661, -1.33259371048501,
         -0.446566766553219, 0.569606122374976, -2.88971761441412, -0.869018343326555,
         -0.461702683149641, -0.555540910137444, -0.0201353678515895, -0.150382224136063,
         -0.628126755843964, 1.32322085193283, -1.52135057001199, -0.437427868856691,
         0.970577579543399, 0.0282226444247749, -0.0857821886527593, 0.389214404984942
-      ), 40)
+      )
 
-    val rData2 = sc.parallelize(
-      Array(
+    val rData2 = Array(
         0.236687367712904, -0.144440226694072, 0.722229700806146, 0.369906857410192,
         -0.242066314481781, -1.47206331842053, -0.596159545765696, -1.1467001312186,
         -2.47463643305885, -0.613508578410268, -0.216311514038102, 1.5901457684867,
         1.55614327565194, 1.10845089348356, -1.09734184488477, -1.86060571637755,
         -0.913578847977252, 1.24556891198713, 0.0878547183607045, 0.423481895050245
-      ), 40)
+      )
+
+
+    val n1 = rData1.length
+    val n2 = rData2.length
+    val unioned = (rData1.map((_, true)) ++ rData2.map((_, false))).sortBy(_._1)
+    val parallel = sc.parallelize(unioned, 100)
+    // verify that there are empty partitions
+    assert(parallel.mapPartitions(x => Array(x.size).iterator).collect().contains(0))
+    val localExtrema = parallel.mapPartitions(
+      KolmogorovSmirnovTest.searchTwoSampleCandidates(_, n1, n2)
+    ).collect()
+    val ksCompStat = KolmogorovSmirnovTest.searchTwoSampleStatistic(localExtrema, n1 * n2)
 
     val rKSStat = 0.15
-    val rKSPval = 0.9831
-    val kSCompResult = Statistics.kolmogorovSmirnovTest2Sample(rData1, rData2)
-    assert(kSCompResult.statistic ~== rKSStat relTol 1e-4)
+    assert(ksCompStat ~== rKSStat relTol 1e-4)
   }
 
-  test("2 sample Kolmogorov-Smirnov test: partitions with just data from one sample") {
-    // Creating 2 samples that don't overlap, so we are guaranteed to have some partitions
-    // that only include values from sample 1 and some that only include values from sample 2
-    val n = 1000
-    val nonOverlap1L = (1 to n).toArray.map(_.toDouble)
-    val nonOverlap2L = (n + 1 to 2 * n).toArray.map(_.toDouble)
-    val nonOverlap1P = sc.parallelize(nonOverlap1L, 20)
-    val nonOverlap2P = sc.parallelize(nonOverlap2L, 20)
+  test("2 sample Kolmogorov-Smirnov test: helper functions in case partitions have only 1 sample") {
+    // Creating 2 samples that don't overlap and request a large number of partitions to guarantee
+    // that there will be partitions with only data from 1 sample. We test critical helper
+    // functions in these circumstances.
+    val n = 100
+    val lower = (1 to n).toArray.map(_.toDouble)
+    val upper = (1 to n).toArray.map(n + _.toDouble * 100)
+
+    val unioned = (lower.map((_, true)) ++ upper.map((_, false))).sortBy(_._1)
+    val parallel = sc.parallelize(unioned, 200)
+    // verify that there is at least 1 partition with only 1 sample
+    assert(parallel.mapPartitions(x =>
+      Array(x.toArray.map(_._1).distinct.length).iterator
+      ).collect().contains(1)
+    )
+    val localExtrema = parallel.mapPartitions(
+      KolmogorovSmirnovTest.searchTwoSampleCandidates(_, n, n)
+    ).collect()
+    val ksCompStat = KolmogorovSmirnovTest.searchTwoSampleStatistic(localExtrema, n * n)
 
     // Use apache math commons local KS test to verify calculations
     val ksTest = new CommonMathKolmogorovSmirnovTest()
-    val pThreshold = 0.05
 
-    val result4 = Statistics.kolmogorovSmirnovTest2Sample(nonOverlap1P, nonOverlap2P)
-    val refStat4 = ksTest.kolmogorovSmirnovStatistic(nonOverlap1L, nonOverlap2L)
-    val refP4 = ksTest.kolmogorovSmirnovTest(nonOverlap1L, nonOverlap2L)
-    assert(result4.statistic ~== refStat4 relTol 1e-3)
-    assert(result4.pValue ~== refP4 relTol 1e-3)
-    assert(result4.pValue < pThreshold) // reject H0
+    val refStat4 = ksTest.kolmogorovSmirnovStatistic(lower, upper)
+    assert(ksCompStat ~== refStat4 relTol 1e-3)
   }
 }
