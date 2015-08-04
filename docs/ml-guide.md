@@ -561,7 +561,7 @@ test = sc.parallelize([(4L, "spark i j k"),
 prediction = model.transform(test)
 selected = prediction.select("id", "text", "prediction")
 for row in selected.collect():
-    print row
+    print(row)
 
 sc.stop()
 {% endhighlight %}

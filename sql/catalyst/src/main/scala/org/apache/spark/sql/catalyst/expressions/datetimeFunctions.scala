@@ -619,6 +619,53 @@ case class TimeAdd(start: Expression, interval: Expression)
 }
 
 /**
+ * Assumes given timestamp is UTC and converts to given timezone.
+ */
+case class FromUTCTimestamp(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
+  override def dataType: DataType = TimestampType
+  override def prettyName: String = "from_utc_timestamp"
+
+  override def nullSafeEval(time: Any, timezone: Any): Any = {
+    DateTimeUtils.fromUTCTime(time.asInstanceOf[Long],
+      timezone.asInstanceOf[UTF8String].toString)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    if (right.foldable) {
+      val tz = right.eval()
+      if (tz == null) {
+        s"""
+           |boolean ${ev.isNull} = true;
+           |long ${ev.primitive} = 0;
+         """.stripMargin
+      } else {
+        val tzTerm = ctx.freshName("tz")
+        val tzClass = classOf[TimeZone].getName
+        ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $tzClass.getTimeZone("$tz");""")
+        val eval = left.gen(ctx)
+        s"""
+           |${eval.code}
+           |boolean ${ev.isNull} = ${eval.isNull};
+           |long ${ev.primitive} = 0;
+           |if (!${ev.isNull}) {
+           |  ${ev.primitive} = ${eval.primitive} +
+           |   ${tzTerm}.getOffset(${eval.primitive} / 1000) * 1000L;
+           |}
+         """.stripMargin
+      }
+    } else {
+      defineCodeGen(ctx, ev, (timestamp, format) => {
+        s"""$dtu.fromUTCTime($timestamp, $format.toString())"""
+      })
+    }
+  }
+}
+
+/**
  * Subtracts an interval from timestamp.
  */
 case class TimeSub(start: Expression, interval: Expression)
@@ -697,6 +744,53 @@ case class MonthsBetween(date1: Expression, date2: Expression)
 }
 
 /**
+ * Assumes given timestamp is in given timezone and converts to UTC.
+ */
+case class ToUTCTimestamp(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
+  override def dataType: DataType = TimestampType
+  override def prettyName: String = "to_utc_timestamp"
+
+  override def nullSafeEval(time: Any, timezone: Any): Any = {
+    DateTimeUtils.toUTCTime(time.asInstanceOf[Long],
+      timezone.asInstanceOf[UTF8String].toString)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    if (right.foldable) {
+      val tz = right.eval()
+      if (tz == null) {
+        s"""
+           |boolean ${ev.isNull} = true;
+           |long ${ev.primitive} = 0;
+         """.stripMargin
+      } else {
+        val tzTerm = ctx.freshName("tz")
+        val tzClass = classOf[TimeZone].getName
+        ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $tzClass.getTimeZone("$tz");""")
+        val eval = left.gen(ctx)
+        s"""
+           |${eval.code}
+           |boolean ${ev.isNull} = ${eval.isNull};
+           |long ${ev.primitive} = 0;
+           |if (!${ev.isNull}) {
+           |  ${ev.primitive} = ${eval.primitive} -
+           |   ${tzTerm}.getOffset(${eval.primitive} / 1000) * 1000L;
+           |}
+         """.stripMargin
+      }
+    } else {
+      defineCodeGen(ctx, ev, (timestamp, format) => {
+        s"""$dtu.toUTCTime($timestamp, $format.toString())"""
+      })
+    }
+  }
+}
+
+/**
  * Returns the date part of a timestamp or string.
  */
 case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
@@ -714,7 +808,7 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
   }
 }
 
-/*
+/**
  * Returns date truncated to the unit specified by the format.
  */
 case class TruncDate(date: Expression, format: Expression)
@@ -726,15 +820,16 @@ case class TruncDate(date: Expression, format: Expression)
   override def dataType: DataType = DateType
   override def prettyName: String = "trunc"
 
-  lazy val minItemConst = DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
+  private lazy val truncLevel: Int =
+    DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
 
   override def eval(input: InternalRow): Any = {
-    val minItem = if (format.foldable) {
-      minItemConst
+    val level = if (format.foldable) {
+      truncLevel
     } else {
       DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
     }
-    if (minItem == -1) {
+    if (level == -1) {
       // unknown format
       null
     } else {
@@ -742,7 +837,7 @@ case class TruncDate(date: Expression, format: Expression)
       if (d == null) {
         null
       } else {
-        DateTimeUtils.truncDate(d.asInstanceOf[Int], minItem)
+        DateTimeUtils.truncDate(d.asInstanceOf[Int], level)
       }
     }
   }
@@ -751,7 +846,7 @@ case class TruncDate(date: Expression, format: Expression)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
 
     if (format.foldable) {
-      if (minItemConst == -1) {
+      if (truncLevel == -1) {
         s"""
           boolean ${ev.isNull} = true;
           ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
@@ -763,7 +858,7 @@ case class TruncDate(date: Expression, format: Expression)
           boolean ${ev.isNull} = ${d.isNull};
           ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.primitive} = $dtu.truncDate(${d.primitive}, $minItemConst);
+            ${ev.primitive} = $dtu.truncDate(${d.primitive}, $truncLevel);
           }
         """
       }
@@ -780,5 +875,25 @@ case class TruncDate(date: Expression, format: Expression)
         """
       })
     }
+  }
+}
+
+/**
+ * Returns the number of days from startDate to endDate.
+ */
+case class DateDiff(endDate: Expression, startDate: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def left: Expression = endDate
+  override def right: Expression = startDate
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
+  override def dataType: DataType = IntegerType
+
+  override def nullSafeEval(end: Any, start: Any): Any = {
+    end.asInstanceOf[Int] - start.asInstanceOf[Int]
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, (end, start) => s"$end - $start")
   }
 }

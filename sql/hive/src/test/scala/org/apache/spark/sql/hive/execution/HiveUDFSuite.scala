@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.io.Writable
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
 import org.apache.spark.sql.hive.test.TestHive
 
 import org.apache.spark.util.Utils
@@ -91,6 +91,47 @@ class HiveUDFSuite extends QueryTest {
     sql(s"CREATE TEMPORARY FUNCTION testUDF AS '${classOf[PairUDF].getName}'")
     sql("SELECT testUDF(pair) FROM hiveUDFTestTable")
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDF")
+  }
+
+  test("Max/Min on named_struct") {
+    def testOrderInStruct(): Unit = {
+      checkAnswer(sql(
+        """
+          |SELECT max(named_struct(
+          |           "key", key,
+          |           "value", value)).value FROM src
+        """.stripMargin), Seq(Row("val_498")))
+      checkAnswer(sql(
+        """
+          |SELECT min(named_struct(
+          |           "key", key,
+          |           "value", value)).value FROM src
+        """.stripMargin), Seq(Row("val_0")))
+
+      // nested struct cases
+      checkAnswer(sql(
+        """
+          |SELECT max(named_struct(
+          |           "key", named_struct(
+                              "key", key,
+                              "value", value),
+          |           "value", value)).value FROM src
+        """.stripMargin), Seq(Row("val_498")))
+      checkAnswer(sql(
+        """
+          |SELECT min(named_struct(
+          |           "key", named_struct(
+                             "key", key,
+                             "value", value),
+          |           "value", value)).value FROM src
+        """.stripMargin), Seq(Row("val_0")))
+    }
+    val codegenDefault = TestHive.getConf(SQLConf.CODEGEN_ENABLED)
+    TestHive.setConf(SQLConf.CODEGEN_ENABLED, true)
+    testOrderInStruct()
+    TestHive.setConf(SQLConf.CODEGEN_ENABLED, false)
+    testOrderInStruct()
+    TestHive.setConf(SQLConf.CODEGEN_ENABLED, codegenDefault)
   }
 
   test("SPARK-6409 UDAFAverage test") {

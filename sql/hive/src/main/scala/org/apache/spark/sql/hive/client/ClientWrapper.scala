@@ -38,7 +38,6 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.util.{CircularBuffer, Utils}
 
-
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
  * Note that this class is typically loaded with an internal classloader for each instantiation,
@@ -114,6 +113,10 @@ private[hive] class ClientWrapper(
 
   /** Returns the configuration for the current session. */
   def conf: HiveConf = SessionState.get().getConf
+
+  override def getConf(key: String, defaultValue: String): String = {
+    conf.get(key, defaultValue)
+  }
 
   // TODO: should be a def?s
   // When we create this val client, the HiveConf of it (conf) is the one associated with state.

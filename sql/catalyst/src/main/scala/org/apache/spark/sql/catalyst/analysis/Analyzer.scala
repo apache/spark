@@ -79,7 +79,6 @@ class Analyzer(
       ExtractWindowExpressions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
-      RemoveEvaluationFromSort ::
       HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
@@ -347,7 +346,7 @@ class Analyzer(
             val newOutput = oldVersion.generatorOutput.map(_.newInstance())
             (oldVersion, oldVersion.copy(generatorOutput = newOutput))
 
-          case oldVersion @ Window(_, windowExpressions, _, child)
+          case oldVersion @ Window(_, windowExpressions, _, _, child)
               if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
                 .nonEmpty =>
             (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
@@ -825,7 +824,7 @@ class Analyzer(
         }.asInstanceOf[NamedExpression]
       }
 
-      // Second, we group extractedWindowExprBuffer based on their Window Spec.
+      // Second, we group extractedWindowExprBuffer based on their Partition and Order Specs.
       val groupedWindowExpressions = extractedWindowExprBuffer.groupBy { expr =>
         val distinctWindowSpec = expr.collect {
           case window: WindowExpression => window.windowSpec
@@ -841,7 +840,8 @@ class Analyzer(
           failAnalysis(s"$expr has multiple Window Specifications ($distinctWindowSpec)." +
             s"Please file a bug report with this error message, stack trace, and the query.")
         } else {
-          distinctWindowSpec.head
+          val spec = distinctWindowSpec.head
+          (spec.partitionSpec, spec.orderSpec)
         }
       }.toSeq
 
@@ -850,9 +850,15 @@ class Analyzer(
       var currentChild = child
       var i = 0
       while (i < groupedWindowExpressions.size) {
-        val (windowSpec, windowExpressions) = groupedWindowExpressions(i)
+        val ((partitionSpec, orderSpec), windowExpressions) = groupedWindowExpressions(i)
         // Set currentChild to the newly created Window operator.
-        currentChild = Window(currentChild.output, windowExpressions, windowSpec, currentChild)
+        currentChild =
+          Window(
+            currentChild.output,
+            windowExpressions,
+            partitionSpec,
+            orderSpec,
+            currentChild)
 
         // Move to next Window Spec.
         i += 1
@@ -946,63 +952,6 @@ class Analyzer(
         }
         val newChild = Project(p.child.output ++ nondeterministicExprs.values, p.child)
         Project(p.output, newPlan.withNewChildren(newChild :: Nil))
-    }
-  }
-
-  /**
-   * Removes all still-need-evaluate ordering expressions from sort and use an inner project to
-   * materialize them, finally use a outer project to project them away to keep the result same.
-   * Then we can make sure we only sort by [[AttributeReference]]s.
-   *
-   * As an example,
-   * {{{
-   *   Sort('a, 'b + 1,
-   *     Relation('a, 'b))
-   * }}}
-   * will be turned into:
-   * {{{
-   *   Project('a, 'b,
-   *     Sort('a, '_sortCondition,
-   *       Project('a, 'b, ('b + 1).as("_sortCondition"),
-   *         Relation('a, 'b))))
-   * }}}
-   */
-  object RemoveEvaluationFromSort extends Rule[LogicalPlan] {
-    private def hasAlias(expr: Expression) = {
-      expr.find {
-        case a: Alias => true
-        case _ => false
-      }.isDefined
-    }
-
-    override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      // The ordering expressions have no effect to the output schema of `Sort`,
-      // so `Alias`s in ordering expressions are unnecessary and we should remove them.
-      case s @ Sort(ordering, _, _) if ordering.exists(hasAlias) =>
-        val newOrdering = ordering.map(_.transformUp {
-          case Alias(child, _) => child
-        }.asInstanceOf[SortOrder])
-        s.copy(order = newOrdering)
-
-      case s @ Sort(ordering, global, child)
-        if s.expressions.forall(_.resolved) && s.childrenResolved && !s.hasNoEvaluation =>
-
-        val (ref, needEval) = ordering.partition(_.child.isInstanceOf[AttributeReference])
-
-        val namedExpr = needEval.map(_.child match {
-          case n: NamedExpression => n
-          case e => Alias(e, "_sortCondition")()
-        })
-
-        val newOrdering = ref ++ needEval.zip(namedExpr).map { case (order, ne) =>
-          order.copy(child = ne.toAttribute)
-        }
-
-        // Add still-need-evaluate ordering expressions into inner project and then project
-        // them away after the sort.
-        Project(child.output,
-          Sort(newOrdering, global,
-            Project(child.output ++ namedExpr, child)))
     }
   }
 }

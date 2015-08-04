@@ -461,6 +461,92 @@ for binarized_feature, in binarizedFeatures.collect():
 </div>
 </div>
 
+## PCA
+
+[PCA](http://en.wikipedia.org/wiki/Principal_component_analysis) is a statistical procedure that uses an orthogonal transformation to convert a set of observations of possibly correlated variables into a set of values of linearly uncorrelated variables called principal components. A [PCA](api/scala/index.html#org.apache.spark.ml.feature.PCA) class trains a model to project vectors to a low-dimensional space using PCA. The example below shows how to project 5-dimensional feature vectors into 3-dimensional principal components.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+See the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.feature.PCA) for API details.
+{% highlight scala %}
+import org.apache.spark.ml.feature.PCA
+import org.apache.spark.mllib.linalg.Vectors
+
+val data = Array(
+  Vectors.sparse(5, Seq((1, 1.0), (3, 7.0))),
+  Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
+  Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
+)
+val df = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
+val pca = new PCA()
+  .setInputCol("features")
+  .setOutputCol("pcaFeatures")
+  .setK(3)
+  .fit(df)
+val pcaDF = pca.transform(df)
+val result = pcaDF.select("pcaFeatures")
+result.show()
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+See the [Java API documentation](api/java/org/apache/spark/ml/feature/PCA.html) for API details.
+{% highlight java %}
+import com.google.common.collect.Lists;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.ml.feature.PCA
+import org.apache.spark.ml.feature.PCAModel
+import org.apache.spark.mllib.linalg.VectorUDT;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+JavaSparkContext jsc = ...
+SQLContext jsql = ...
+JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
+  RowFactory.create(Vectors.sparse(5, new int[]{1, 3}, new double[]{1.0, 7.0})),
+  RowFactory.create(Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0)),
+  RowFactory.create(Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0))
+));
+StructType schema = new StructType(new StructField[] {
+  new StructField("features", new VectorUDT(), false, Metadata.empty()),
+});
+DataFrame df = jsql.createDataFrame(data, schema);
+PCAModel pca = new PCA()
+  .setInputCol("features")
+  .setOutputCol("pcaFeatures")
+  .setK(3)
+  .fit(df);
+DataFrame result = pca.transform(df).select("pcaFeatures");
+result.show();
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+See the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.feature.PCA) for API details.
+{% highlight python %}
+from pyspark.ml.feature import PCA
+from pyspark.mllib.linalg import Vectors
+
+data = [(Vectors.sparse(5, [(1, 1.0), (3, 7.0)]),),
+  (Vectors.dense([2.0, 0.0, 3.0, 4.0, 5.0]),),
+  (Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0]),)]
+df = sqlContext.createDataFrame(data,["features"])
+pca = PCA(k=3, inputCol="features", outputCol="pcaFeatures")
+model = pca.fit(df)
+result = model.transform(df).select("pcaFeatures")
+result.show(truncate=False)
+{% endhighlight %}
+</div>
+</div>
+
 ## PolynomialExpansion
 
 [Polynomial expansion](http://en.wikipedia.org/wiki/Polynomial_expansion) is the process of expanding your features into a polynomial space, which is formulated by an n-degree combination of original dimensions. A [PolynomialExpansion](api/scala/index.html#org.apache.spark.ml.feature.PolynomialExpansion) class provides this functionality.  The example below shows how to expand your features into a 3-degree polynomial space.

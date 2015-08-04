@@ -34,7 +34,7 @@ public class MemoryBlock extends MemoryLocation {
    */
   int pageNumber = -1;
 
-  MemoryBlock(@Nullable Object obj, long offset, long length) {
+  public MemoryBlock(@Nullable Object obj, long offset, long length) {
     super(obj, offset);
     this.length = length;
   }

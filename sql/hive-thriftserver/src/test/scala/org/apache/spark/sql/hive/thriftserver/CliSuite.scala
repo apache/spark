@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
 import scala.sys.process.{Process, ProcessLogger}
+import scala.util.Failure
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
@@ -37,31 +38,46 @@ import org.apache.spark.util.Utils
 class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
+  val scratchDirPath = Utils.createTempDir()
 
   before {
-      warehousePath.delete()
-      metastorePath.delete()
+    warehousePath.delete()
+    metastorePath.delete()
+    scratchDirPath.delete()
   }
 
   after {
-      warehousePath.delete()
-      metastorePath.delete()
+    warehousePath.delete()
+    metastorePath.delete()
+    scratchDirPath.delete()
   }
 
+  /**
+   * Run a CLI operation and expect all the queries and expected answers to be returned.
+   * @param timeout maximum time for the commands to complete
+   * @param extraArgs any extra arguments
+   * @param errorResponses a sequence of strings whose presence in the stdout of the forked process
+   *                       is taken as an immediate error condition. That is: if a line beginning
+   *                       with one of these strings is found, fail the test immediately.
+   *                       The default value is `Seq("Error:")`
+   *
+   * @param queriesAndExpectedAnswers one or more tupes of query + answer
+   */
   def runCliWithin(
       timeout: FiniteDuration,
-      extraArgs: Seq[String] = Seq.empty)(
+      extraArgs: Seq[String] = Seq.empty,
+      errorResponses: Seq[String] = Seq("Error:"))(
       queriesAndExpectedAnswers: (String, String)*): Unit = {
 
     val (queries, expectedAnswers) = queriesAndExpectedAnswers.unzip
-    val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
-
     val command = {
+      val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
       val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
       s"""$cliScript
          |  --master local
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
+         |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
 
@@ -81,6 +97,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
         if (next == expectedAnswers.size) {
           foundAllExpectedAnswers.trySuccess(())
         }
+      } else {
+        errorResponses.foreach( r => {
+          if (line.startsWith(r)) {
+            foundAllExpectedAnswers.tryFailure(
+              new RuntimeException(s"Failed with error line '$line'"))
+          }})
       }
     }
 
@@ -88,16 +110,44 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     val process = (Process(command, None) #< queryStream).run(
       ProcessLogger(captureOutput("stdout"), captureOutput("stderr")))
 
+    // catch the output value
+    class exitCodeCatcher extends Runnable {
+      var exitValue = 0
+
+      override def run(): Unit = {
+        try {
+          exitValue = process.exitValue()
+        } catch {
+          case rte: RuntimeException =>
+            // ignored as it will get triggered when the process gets destroyed
+            logDebug("Ignoring exception while waiting for exit code", rte)
+        }
+        if (exitValue != 0) {
+          // process exited: fail fast
+          foundAllExpectedAnswers.tryFailure(
+            new RuntimeException(s"Failed with exit code $exitValue"))
+        }
+      }
+    }
+    // spin off the code catche thread. No attempt is made to kill this
+    // as it will exit once the launched process terminates.
+    val codeCatcherThread = new Thread(new exitCodeCatcher())
+    codeCatcherThread.start()
+
     try {
-      Await.result(foundAllExpectedAnswers.future, timeout)
+      Await.ready(foundAllExpectedAnswers.future, timeout)
+      foundAllExpectedAnswers.future.value match {
+        case Some(Failure(t)) => throw t
+        case _ =>
+      }
     } catch { case cause: Throwable =>
-      logError(
+      val message =
         s"""
            |=======================
            |CliSuite failure output
            |=======================
            |Spark SQL CLI command line: ${command.mkString(" ")}
-           |
+           |Exception: $cause
            |Executed query $next "${queries(next)}",
            |But failed to capture expected output "${expectedAnswers(next)}" within $timeout.
            |
@@ -105,8 +155,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
            |===========================
            |End CliSuite failure output
            |===========================
-         """.stripMargin, cause)
-      throw cause
+         """.stripMargin
+      logError(message, cause)
+      fail(message, cause)
     } finally {
       process.destroy()
     }
@@ -137,7 +188,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   }
 
   test("Single command with --database") {
-    runCliWithin(1.minute)(
+    runCliWithin(2.minute)(
       "CREATE DATABASE hive_test_db;"
         -> "OK",
       "USE hive_test_db;"
@@ -148,7 +199,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
         -> "Time taken: "
     )
 
-    runCliWithin(1.minute, Seq("--database", "hive_test_db", "-e", "SHOW TABLES;"))(
+    runCliWithin(2.minute, Seq("--database", "hive_test_db", "-e", "SHOW TABLES;"))(
       ""
         -> "OK",
       ""

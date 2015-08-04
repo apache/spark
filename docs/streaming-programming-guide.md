@@ -1525,7 +1525,7 @@ def getSqlContextInstance(sparkContext):
 words = ... # DStream of strings
 
 def process(time, rdd):
-    print "========= %s =========" % str(time)
+    print("========= %s =========" % str(time))
     try:
         # Get the singleton instance of SQLContext
         sqlContext = getSqlContextInstance(rdd.context)

@@ -40,7 +40,6 @@ private class KinesisTestUtils extends Logging {
 
   val endpointUrl = "https://kinesis.us-west-2.amazonaws.com"
   val regionName = RegionUtils.getRegionByEndpoint(endpointUrl).getName()
-
   val streamShardCount = 2
 
   private val createStreamTimeoutSeconds = 300
@@ -110,6 +109,13 @@ private class KinesisTestUtils extends Logging {
 
     logInfo(s"Pushed $testData:\n\t ${shardIdToSeqNumbers.mkString("\n\t")}")
     shardIdToSeqNumbers.toMap
+  }
+
+  /**
+   * Expose a Python friendly API.
+   */
+  def pushData(testData: java.util.List[Int]): Unit = {
+    pushData(scala.collection.JavaConversions.asScalaBuffer(testData))
   }
 
   def deleteStream(): Unit = {
