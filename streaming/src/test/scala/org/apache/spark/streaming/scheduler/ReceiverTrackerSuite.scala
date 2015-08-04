@@ -52,7 +52,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
         eventually(timeout(5 seconds)) {
           assert(activeReceiver.getDefaultBlockGeneratorRateLimit() === newRateLimit,
             "default block generator did not receive rate update")
-          assert(activeReceiver.getOtherBlockGeneratorRateLimit() === newRateLimit,
+          assert(activeReceiver.getCustomBlockGeneratorRateLimit() === newRateLimit,
             "other block generator did not receive rate update")
         }
       } finally {
@@ -62,14 +62,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
   }
 }
 
-/**
- * An input DStream with a hard-coded receiver that gives access to internals for testing.
- *
- * @note Make sure to call {{{SingletonDummyReceiver.reset()}}} before using this in a test,
- *       or otherwise you may get {{{NotSerializableException}}} when trying to serialize
- *       the receiver.
- * @see [[[SingletonDummyReceiver]]].
- */
+/** An input DStream with for testing rate controlling */
 private[streaming] class RateTestInputDStream(@transient ssc_ : StreamingContext)
   extends ReceiverInputDStream[Int](ssc_) {
 
@@ -87,9 +80,7 @@ private[streaming] class RateTestInputDStream(@transient ssc_ : StreamingContext
   }
 }
 
-/**
- * Dummy receiver implementation
- */
+/** A receiver implementation for testing rate controlling */
 private[streaming] class RateTestReceiver(receiverId: Int, host: Option[String] = None)
   extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
 
@@ -119,7 +110,7 @@ private[streaming] class RateTestReceiver(receiverId: Int, host: Option[String] 
     supervisor.getCurrentRateLimit
   }
 
-  def getOtherBlockGeneratorRateLimit(): Long = {
+  def getCustomBlockGeneratorRateLimit(): Long = {
     customBlockGenerator.getCurrentLimit
   }
 }
