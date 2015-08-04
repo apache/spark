@@ -247,8 +247,9 @@ abstract class AggregationIterator(
         val finalAlgebraicMergeProjection =
           newMutableJoinedProjection(
             mergeExpressions,
-            aggregationBufferSchema ++ groupingAttributesAndDistinctColumns,
-            nonCompleteAggregateFunctions.flatMap(_.cloneBufferAttributes))()
+            aggregationBufferSchema,
+            groupingAttributesAndDistinctColumns ++
+              nonCompleteAggregateFunctions.flatMap(_.cloneBufferAttributes))()
 
         val updateExpressions =
           finalOffsetExpressions ++ completeAggregateFunctions.flatMap {

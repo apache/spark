@@ -82,6 +82,7 @@ abstract class AbstractGenerateMutableProjection[OutType <: AnyRef]
         private $mutableRowType mutableRow;
         ${declareMutableStates(ctx)}
         ${declareAddedFunctions(ctx)}
+        ${declareJoinedRow(ctx)}
 
         public SpecificMutableProjection($exprType[] expr) {
           expressions = expr;
@@ -101,7 +102,9 @@ abstract class AbstractGenerateMutableProjection[OutType <: AnyRef]
 
         public Object apply(${input("Object _")}) {
           ${inputNames.map(n => s"InternalRow $n = (InternalRow) _$n;\n").mkString}
+          ${initJoinedRow(ctx)}
           $allProjections
+
 
           return mutableRow;
         }
@@ -121,12 +124,10 @@ object GenerateMutableProjection
     extends AbstractGenerateMutableProjection[BaseMutableProjection]
     with ExpressionCodeGen[Expression, () => BaseMutableProjection] {
   override protected def projectionType = classOf[BaseMutableProjection].getName
-  override protected def inputNames = Seq("i")
 }
 
 object GenerateMutableJoinedProjection
     extends AbstractGenerateMutableProjection[BaseMutableJoinedProjection]
     with JoinedExpressionCodeGen[() => BaseMutableJoinedProjection] {
   override protected def projectionType = classOf[BaseMutableJoinedProjection].getName
-  override protected def inputNames = Seq("left", "right")
 }

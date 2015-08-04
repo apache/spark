@@ -327,6 +327,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected val exprType: String = classOf[Expression].getName
   protected val mutableRowType: String = classOf[MutableRow].getName
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
+  protected val joinedRowType: String = classOf[JoinedRow].getName
 
   protected def declareMutableStates(ctx: CodeGenContext): String = {
     ctx.mutableStates.map { case (javaType, variableName, _) =>
@@ -341,6 +342,12 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected def declareAddedFunctions(ctx: CodeGenContext): String = {
     ctx.addedFuntions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
   }
+
+  protected def declareJoinedRow(ctx: CodeGenContext): String = ""
+
+  protected def initJoinedRow(ctx: CodeGenContext): String = ""
+
+  protected def joinedRowArg(ctx: CodeGenContext, prefix: String): String = ""
 
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
@@ -439,6 +446,8 @@ trait ExpressionCodeGen[InType <: Expression, OutType <: AnyRef] {
 
   override protected def canonicalize(in: Seq[InType]): Seq[InType] =
     in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[InType])
+
+  protected def inputNames = Seq("i")
 }
 
 trait JoinedExpressionCodeGen[OutType <: AnyRef] {
@@ -454,4 +463,24 @@ trait JoinedExpressionCodeGen[OutType <: AnyRef] {
 
   override protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
+
+  override protected def declareJoinedRow(ctx: CodeGenContext): String = {
+    if (ctx.references.nonEmpty) {
+      s"private $joinedRowType i = new $joinedRowType();"
+    } else ""
+  }
+
+  override protected def initJoinedRow(ctx: CodeGenContext): String = {
+    if (ctx.references.nonEmpty) {
+      "i.apply(left, right);"
+    } else ""
+  }
+
+  override protected def joinedRowArg(ctx: CodeGenContext, prefix: String): String = {
+    if (ctx.references.nonEmpty) {
+      s"$prefix i"
+    } else ""
+  }
+
+  protected def inputNames = Seq("left", "right")
 }

@@ -31,13 +31,13 @@ import org.apache.spark.sql.types._
 abstract class AbstractBoundReference extends LeafExpression with NamedExpression {
   val ordinal: Int
 
-  protected[this] def prefix: String = ""
+  protected[this] def prefix: String = "input"
 
   protected[this] def genCodeInput = "i"
 
   protected[this] def unwrap(input: InternalRow): InternalRow = input
 
-  override def toString: String = s"${prefix}input[$ordinal, $dataType]"
+  override def toString: String = s"$prefix[$ordinal, $dataType]"
 
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(i: InternalRow): Any = {
@@ -62,7 +62,7 @@ abstract class AbstractBoundReference extends LeafExpression with NamedExpressio
     }
   }
 
-  override def name: String = s"i[$ordinal]"
+  override def name: String = s"$prefix[$ordinal]"
 
   override def toAttribute: Attribute = throw new UnsupportedOperationException
 

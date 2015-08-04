@@ -42,7 +42,7 @@ abstract class AbstractGenerateProjection[OutType <: AnyRef]
 
   protected def inputNames: Seq[String]
 
-  private[this] def input(prefix: String) = inputNames.map(n => s"$prefix$n").mkString(", ")
+  protected def input(prefix: String) = inputNames.map(n => s"$prefix$n").mkString(", ")
 
   // Make Mutablility optional...
   protected def create(expressions: Seq[Expression]): OutType = {
@@ -165,6 +165,7 @@ abstract class AbstractGenerateProjection[OutType <: AnyRef]
       private $exprType[] expressions;
       ${declareMutableStates(ctx)}
       ${declareAddedFunctions(ctx)}
+      ${declareJoinedRow(ctx)}
 
       public SpecificProjection($exprType[] expr) {
         expressions = expr;
@@ -173,14 +174,15 @@ abstract class AbstractGenerateProjection[OutType <: AnyRef]
 
       @Override
       public Object apply(${input("Object ")}) {
-        return new SpecificRow(${input("(InternalRow) ")});
+        ${initJoinedRow(ctx)}
+        return new SpecificRow(${input("(InternalRow) ")}${joinedRowArg(ctx, ",")});
       }
 
       final class SpecificRow extends ${classOf[CodeGenMutableRow].getName} {
 
         $columns
 
-        public SpecificRow(${input("InternalRow ")}) {
+        public SpecificRow(${input("InternalRow ")}${joinedRowArg(ctx, s", $joinedRowType")}) {
           $initColumns
         }
 
@@ -247,11 +249,9 @@ abstract class AbstractGenerateProjection[OutType <: AnyRef]
 object GenerateProjection extends AbstractGenerateProjection[BaseProjection]
     with ExpressionCodeGen[Expression, BaseProjection] {
   override protected def projectionType = classOf[BaseProjection].getName
-  override protected def inputNames = Seq("i")
 }
 
 object GenerateJoinedProjection extends AbstractGenerateProjection[BaseJoinedProjection]
     with JoinedExpressionCodeGen[BaseJoinedProjection] {
   override protected def projectionType = classOf[BaseJoinedProjection].getName
-  override protected def inputNames = Seq("left", "right")
 }
