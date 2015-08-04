@@ -214,4 +214,3 @@ object FromUnsafeProjection {
     GenerateSafeProjection.generate(exprs)
   }
 }
-
