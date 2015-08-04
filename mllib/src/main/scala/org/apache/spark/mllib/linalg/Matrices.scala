@@ -260,18 +260,12 @@ class DenseMatrix(
   def this(numRows: Int, numCols: Int, values: Array[Double]) =
     this(numRows, numCols, values, false)
 
-  /**
-   * @since 1.4.0
-   */
   override def equals(o: Any): Boolean = o match {
     case m: DenseMatrix =>
       m.numRows == numRows && m.numCols == numCols && Arrays.equals(toArray, m.toArray)
     case _ => false
   }
 
-  /**
-   * @since 1.4.0
-   */
   override def hashCode: Int = {
     com.google.common.base.Objects.hashCode(numRows : Integer, numCols: Integer, toArray)
   }
@@ -351,8 +345,14 @@ class DenseMatrix(
     }
   }
 
+  /**
+   * @since 1.5.0
+   */
   override def numNonzeros: Int = values.count(_ != 0)
 
+  /**
+   * @since 1.5.0
+   */
   override def numActives: Int = values.length
 
   /**
@@ -395,7 +395,7 @@ object DenseMatrix {
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of zeros
-   * @since 1.2.0
+   * @since 1.3.0
    */
   def zeros(numRows: Int, numCols: Int): DenseMatrix = {
     require(numRows.toLong * numCols <= Int.MaxValue,
@@ -408,7 +408,7 @@ object DenseMatrix {
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of ones
-   * @since 1.2.0
+   * @since 1.3.0
    */
   def ones(numRows: Int, numCols: Int): DenseMatrix = {
     require(numRows.toLong * numCols <= Int.MaxValue,
@@ -420,7 +420,7 @@ object DenseMatrix {
    * Generate an Identity Matrix in `DenseMatrix` format.
    * @param n number of rows and columns of the matrix
    * @return `DenseMatrix` with size `n` x `n` and values of ones on the diagonal
-   * @since 1.2.0
+   * @since 1.3.0
    */
   def eye(n: Int): DenseMatrix = {
     val identity = DenseMatrix.zeros(n, n)
@@ -438,7 +438,7 @@ object DenseMatrix {
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
-   * @since 1.2.0
+   * @since 1.3.0
    */
   def rand(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
     require(numRows.toLong * numCols <= Int.MaxValue,
@@ -452,7 +452,7 @@ object DenseMatrix {
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
-   * @since 1.2.0
+   * @since 1.3.0
    */
   def randn(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
     require(numRows.toLong * numCols <= Int.MaxValue,
@@ -465,7 +465,7 @@ object DenseMatrix {
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `DenseMatrix` with size `values.length` x `values.length` and `values`
    *         on the diagonal
-   * @since 1.2.0
+   * @since 1.3.0
    */
   def diag(vector: Vector): DenseMatrix = {
     val n = vector.size
@@ -645,8 +645,14 @@ class SparseMatrix(
     new DenseMatrix(numRows, numCols, toArray)
   }
 
+  /**
+   * @since 1.5.0
+   */
   override def numNonzeros: Int = values.count(_ != 0)
 
+  /**
+   * @since 1.5.0
+   */
   override def numActives: Int = values.length
 
 }

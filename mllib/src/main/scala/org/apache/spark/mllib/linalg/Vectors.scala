@@ -367,7 +367,7 @@ object Vectors {
    * @param vector input vector.
    * @param p norm.
    * @return norm in L^p^ space.
-   * @since 1.2.0
+   * @since 1.3.0
    */
   def norm(vector: Vector, p: Double): Double = {
     require(p >= 1.0, "To compute the p-norm of the vector, we require that you specify a p>=1. " +
@@ -539,16 +539,31 @@ object Vectors {
 @SQLUserDefinedType(udt = classOf[VectorUDT])
 class DenseVector(val values: Array[Double]) extends Vector {
 
+  /**
+   * @since 1.0.0
+   */
   override def size: Int = values.length
 
+  /**
+   * @since 1.0.0
+   */
   override def toString: String = values.mkString("[", ",", "]")
 
+  /**
+   * @since 1.0.0
+   */
   override def toArray: Array[Double] = values
 
   private[spark] override def toBreeze: BV[Double] = new BDV[Double](values)
 
+  /**
+   * @since 1.0.0
+   */
   override def apply(i: Int): Double = values(i)
 
+  /**
+   * @since 1.1.0
+   */
   override def copy: DenseVector = {
     new DenseVector(values.clone())
   }
@@ -564,9 +579,6 @@ class DenseVector(val values: Array[Double]) extends Vector {
     }
   }
 
-  /**
-   * @since 1.4.0
-   */
   override def hashCode(): Int = {
     var result: Int = 31 + size
     var i = 0
@@ -583,6 +595,9 @@ class DenseVector(val values: Array[Double]) extends Vector {
     result
   }
 
+  /**
+   * @since 1.4.0
+   */
   override def numActives: Int = size
 
   /**
@@ -618,7 +633,7 @@ class DenseVector(val values: Array[Double]) extends Vector {
   }
 
   /**
-   * @since 1.4.0
+   * @since 1.5.0
    */
   override def argmax: Int = {
     if (size == 0) {
@@ -706,9 +721,6 @@ class SparseVector(
     }
   }
 
-  /**
-   * @since 1.2.2
-   */
   override def hashCode(): Int = {
     var result: Int = 31 + size
     val end = values.length
@@ -772,7 +784,7 @@ class SparseVector(
   }
 
   /**
-   * @since 1.4.0
+   * @since 1.5.0
    */
   override def argmax: Int = {
     if (size == 0) {
