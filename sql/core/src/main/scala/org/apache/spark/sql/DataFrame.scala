@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 import java.util.Properties
 
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.unsafe.types.UTF8String
 
 import scala.language.implicitConversions
@@ -53,7 +54,6 @@ private[sql] object DataFrame {
     new DataFrame(sqlContext, logicalPlan)
   }
 }
-
 
 /**
  * :: Experimental ::

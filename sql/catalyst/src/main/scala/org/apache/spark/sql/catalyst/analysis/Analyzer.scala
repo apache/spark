@@ -91,7 +91,8 @@ class Analyzer(
    */
   object CTESubstitution extends Rule[LogicalPlan] {
     // TODO allow subquery to define CTE
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform  {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p if p.analyzed => p // Skip already analyzed sub-plans
       case With(child, relations) => substituteCTE(child, relations)
       case other => other
     }
@@ -121,6 +122,8 @@ class Analyzer(
       // Lookup WindowSpecDefinitions. This rule works with unresolved children.
       case WithWindowDefinition(windowDefinitions, child) =>
         child.transform {
+          case p if p.analyzed => p // Skip already analyzed sub-plans
+
           case plan => plan.transformExpressions {
             case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
               val errorMessage =
@@ -158,6 +161,8 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case p if p.analyzed => p // Skip already analyzed sub-plans
+
       case Aggregate(groups, aggs, child)
         if child.resolved && aggs.exists(_.isInstanceOf[UnresolvedAlias]) =>
         Aggregate(groups, assignAliases(aggs), child)
@@ -200,6 +205,8 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p if p.analyzed => p // Skip already analyzed sub-plans
+
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
       case a: Cube =>
         GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
@@ -263,6 +270,8 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p if p.analyzed => p // Skip already analyzed sub-plans
+
       case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
         i.copy(table = EliminateSubQueries(getTable(u)))
       case u: UnresolvedRelation =>
@@ -276,6 +285,8 @@ class Analyzer(
    */
   object ResolveReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case p if p.analyzed => p // Skip already analyzed sub-plans
+
       case p: LogicalPlan if !p.childrenResolved => p
 
       // If the projection list contains Stars, expand it.
@@ -446,6 +457,8 @@ class Analyzer(
    */
   object ResolveSortReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case p if p.analyzed => p // Skip already analyzed sub-plans
+
       case s @ Sort(ordering, global, p @ Project(projectList, child))
           if !s.resolved && p.resolved =>
         val (newOrdering, missing) = resolveAndFindMissing(ordering, p, child)
@@ -521,6 +534,8 @@ class Analyzer(
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p if p.analyzed => p // Skip already analyzed sub-plans
+
       case q: LogicalPlan =>
         q transformExpressions {
           case u @ UnresolvedFunction(name, children, isDistinct) =>
@@ -553,6 +568,8 @@ class Analyzer(
    */
   object GlobalAggregates extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p if p.analyzed => p // Skip already analyzed sub-plans
+
       case Project(projectList, child) if containsAggregates(projectList) =>
         Aggregate(Nil, projectList, child)
     }
@@ -573,6 +590,8 @@ class Analyzer(
    */
   object UnresolvedHavingClauseAttributes extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case p if p.analyzed => p // Skip already analyzed sub-plans
+
       case filter @ Filter(havingCondition, aggregate @ Aggregate(_, originalAggExprs, _))
           if aggregate.resolved && containsAggregate(havingCondition) =>
 
@@ -603,6 +622,8 @@ class Analyzer(
    */
   object ResolveGenerate extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p if p.analyzed => p // Skip already analyzed sub-plans
+
       case p: Generate if !p.child.resolved || !p.generator.resolved => p
       case g: Generate if !g.resolved =>
         g.copy(generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
@@ -873,6 +894,8 @@ class Analyzer(
     // We have to use transformDown at here to make sure the rule of
     // "Aggregate with Having clause" will be triggered.
     def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+      case p if p.analyzed => p // Skip already analyzed sub-plans
+
       // Aggregate with Having clause. This rule works with an unresolved Aggregate because
       // a resolved Aggregate will not have Window Functions.
       case f @ Filter(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
@@ -929,6 +952,8 @@ class Analyzer(
    */
   object PullOutNondeterministic extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p if p.analyzed => p // Skip already analyzed sub-plans
+
       case p: Project => p
       case f: Filter => f
 
@@ -983,6 +1008,8 @@ class Analyzer(
     }
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p if p.analyzed => p // Skip already analyzed sub-plans
+
       // The ordering expressions have no effect to the output schema of `Sort`,
       // so `Alias`s in ordering expressions are unnecessary and we should remove them.
       case s @ Sort(ordering, _, _) if ordering.exists(hasAlias) =>
