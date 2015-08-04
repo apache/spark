@@ -126,47 +126,46 @@ class JoinSuite extends QueryTest with SQLTestUtils with BeforeAndAfterEach {
   test("broadcasted hash join operator selection") {
     ctx.cacheManager.clearCache()
     ctx.sql("CACHE TABLE testData")
-
-    Seq(
-      ("SELECT * FROM testData join testData2 ON key = a", classOf[BroadcastHashJoin]),
-      ("SELECT * FROM testData join testData2 ON key = a and key = 2", classOf[BroadcastHashJoin]),
-      ("SELECT * FROM testData join testData2 ON key = a where key = 2",
-        classOf[BroadcastHashJoin])
-    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true") {
-      Seq(
-        ("SELECT * FROM testData join testData2 ON key = a", classOf[BroadcastHashJoin]),
-        ("SELECT * FROM testData join testData2 ON key = a and key = 2",
-          classOf[BroadcastHashJoin]),
-        ("SELECT * FROM testData join testData2 ON key = a where key = 2",
-          classOf[BroadcastHashJoin])
-      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    for (sortMergeJoinEnabled <- Seq(true, false)) {
+      withClue(s"sortMergeJoinEnabled=$sortMergeJoinEnabled") {
+        withSQLConf(SQLConf.SORTMERGE_JOIN.key -> s"$sortMergeJoinEnabled") {
+          Seq(
+            ("SELECT * FROM testData join testData2 ON key = a",
+              classOf[BroadcastHashJoin]),
+            ("SELECT * FROM testData join testData2 ON key = a and key = 2",
+              classOf[BroadcastHashJoin]),
+            ("SELECT * FROM testData join testData2 ON key = a where key = 2",
+              classOf[BroadcastHashJoin])
+          ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+        }
+      }
     }
-
     ctx.sql("UNCACHE TABLE testData")
   }
 
   test("broadcasted hash outer join operator selection") {
     ctx.cacheManager.clearCache()
     ctx.sql("CACHE TABLE testData")
-
-    Seq(
-      ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[SortMergeOuterJoin]),
-      ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
-        classOf[SortMergeOuterJoin]),
-      ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
-        classOf[SortMergeOuterJoin])
-    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
+    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true") {
       Seq(
-        ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[ShuffledHashOuterJoin]),
+        ("SELECT * FROM testData LEFT JOIN testData2 ON key = a",
+          classOf[SortMergeOuterJoin]),
         ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
           classOf[BroadcastHashOuterJoin]),
         ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
           classOf[BroadcastHashOuterJoin])
       ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     }
-
+    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
+      Seq(
+        ("SELECT * FROM testData LEFT JOIN testData2 ON key = a",
+          classOf[ShuffledHashOuterJoin]),
+        ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
+          classOf[BroadcastHashOuterJoin]),
+        ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
+          classOf[BroadcastHashOuterJoin])
+      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    }
     ctx.sql("UNCACHE TABLE testData")
   }
 
