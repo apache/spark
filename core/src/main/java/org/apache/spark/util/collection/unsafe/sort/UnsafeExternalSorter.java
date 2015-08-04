@@ -428,7 +428,7 @@ public final class UnsafeExternalSorter {
 
   public UnsafeSorterIterator getSortedIterator() throws IOException {
     assert(inMemSorter != null);
-    final UnsafeSorterIterator inMemoryIterator = inMemSorter.getSortedIterator();
+    final UnsafeInMemorySorter.SortedIterator inMemoryIterator = inMemSorter.getSortedIterator();
     int numIteratorsToMerge = spillWriters.size() + (inMemoryIterator.hasNext() ? 1 : 0);
     if (spillWriters.isEmpty()) {
       return inMemoryIterator;
