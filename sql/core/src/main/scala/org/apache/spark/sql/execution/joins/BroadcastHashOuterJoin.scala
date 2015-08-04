@@ -44,7 +44,7 @@ case class BroadcastHashOuterJoin(
     joinType: JoinType,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryNode with HashOuterJoin {
+    right: SparkPlan) extends BinaryNode with OuterJoin {
 
   val timeout = {
     val timeoutValue = sqlContext.conf.broadcastTimeout

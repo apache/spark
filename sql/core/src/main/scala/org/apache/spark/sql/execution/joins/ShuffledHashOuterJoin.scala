@@ -40,7 +40,7 @@ case class ShuffledHashOuterJoin(
     joinType: JoinType,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryNode with HashOuterJoin {
+    right: SparkPlan) extends BinaryNode with OuterJoin {
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil

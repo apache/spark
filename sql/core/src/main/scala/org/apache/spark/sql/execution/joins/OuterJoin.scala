@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.util.collection.CompactBuffer
 
 @DeveloperApi
-trait HashOuterJoin {
+trait OuterJoin {
   self: SparkPlan =>
 
   val leftKeys: Seq[Expression]
