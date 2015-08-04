@@ -327,8 +327,8 @@ def shiftRight(col, numBits):
 def shiftRightUnsigned(col, numBits):
     """Unsigned shift the the given value numBits right.
 
-    >>> sqlContext.createDataFrame([(-42,)], ['a']).select(shiftRightUnsigned('a', 1).alias('r'))\
-    .collect()
+    >>> df = sqlContext.createDataFrame([(-42,)], ['a'])
+    >>> df.select(shiftRightUnsigned('a', 1).alias('r')).collect()
     [Row(r=9223372036854775787)]
     """
     sc = SparkContext._active_spark_context
@@ -379,6 +379,7 @@ def struct(*cols):
     return Column(jc)
 
 
+@since(1.5)
 def greatest(*cols):
     """
     Returns the greatest value of the list of column names, skipping null values.
@@ -394,6 +395,7 @@ def greatest(*cols):
     return Column(sc._jvm.functions.greatest(_to_seq(sc, cols, _to_java_column)))
 
 
+@since(1.5)
 def least(*cols):
     """
     Returns the least value of the list of column names, skipping null values.
@@ -822,7 +824,6 @@ def last_day(date):
 
 
 @since(1.5)
-@ignore_unicode_prefix
 def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
     """
     Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
@@ -837,13 +838,10 @@ def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
 def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
     """
     Convert time string with given pattern ('yyyy-MM-dd HH:mm:ss', by default)
-    to Unix time stamp (in seconds)
+    to Unix time stamp (in seconds), using the default timezone and the default
+    locale, return null if fail.
 
     if `timestamp` is None, then it returns current timestamp.
-
-    >>> df = sqlContext.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(unix_timestamp(df.t).alias('t')).collect()
-    [Row(t=857154600)]
     """
     sc = SparkContext._active_spark_context
     if timestamp is None:
@@ -878,7 +876,6 @@ def to_utc_timestamp(timestamp, tz):
 
 
 # ---------------------------- misc functions ----------------------------------
-
 
 @since(1.5)
 @ignore_unicode_prefix
@@ -1000,13 +997,13 @@ def decode(col, charset):
 
 
 @since(1.5)
-def decode(col, charset):
+def encode(col, charset):
     """
     Computes the first argument into a binary from a string using the provided character set
     (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.decode(_to_java_column(col), charset))
+    return Column(sc._jvm.functions.encode(_to_java_column(col), charset))
 
 
 @ignore_unicode_prefix
@@ -1421,7 +1418,7 @@ def udf(f, returnType=StringType()):
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
 __all__ = [k for k, v in globals().items()
-           if not k.startswith('_') and k[0].islower() and k not in blacklist]
+           if not k.startswith('_') and k[0].islower() and callable(v) and k not in blacklist]
 __all__.sort()
 
 
