@@ -325,10 +325,6 @@ private[joins] final class UnsafeHashedRelation(
       }
       i += 1
     }
-
-    // scalastyle:off println
-    println(s"deserialize UnsafeHashedRelation with ${binaryMap.numElements()} items")
-    // scalastyle:on println
   }
 }
 
