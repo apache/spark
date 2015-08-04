@@ -82,16 +82,16 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
     Seq.empty)
 
   createPruningTest("Column pruning - non-trivial top project with aliases",
-    "SELECT c1 * 2 AS double FROM (SELECT key AS c1 FROM src WHERE key > 10) t1 LIMIT 3",
-    Seq("double"),
+    "SELECT c1 * 2 AS dbl FROM (SELECT key AS c1 FROM src WHERE key > 10) t1 LIMIT 3",
+    Seq("dbl"),
     Seq("key"),
     Seq.empty)
 
   // Partition pruning tests
 
   createPruningTest("Partition pruning - non-partitioned, non-trivial project",
-    "SELECT key * 2 AS double FROM src WHERE value IS NOT NULL",
-    Seq("double"),
+    "SELECT key * 2 AS dbl FROM src WHERE value IS NOT NULL",
+    Seq("dbl"),
     Seq("key", "value"),
     Seq.empty)
 
