@@ -27,6 +27,7 @@ import java.util.concurrent.Executors;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
+import com.google.common.io.Files;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -275,9 +276,7 @@ public class ExternalShuffleBlockResolver {
       ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(tmp));
       out.writeObject(executors);
       out.close();
-      if (!tmp.renameTo(registeredExecutorFile)) {
-        logger.error("Failed to move registered executors to {}", registeredExecutorFile);
-      }
+      Files.move(tmp, registeredExecutorFile);
       logger.info("Saving registered executors to {}", registeredExecutorFile);
     }
   }
