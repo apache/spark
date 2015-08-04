@@ -406,7 +406,7 @@ class DirectKafkaStreamSuite
     // Send some data and wait for them to be received
     sendDataAndWaitForReceive((1 to 400))
 
-    def dataToString: String = collectedData.map(_.mkString("[",",","]")).mkString("{",", ","}")
+    def dataToString: String = collectedData.map(_.mkString("[", ",", "]")).mkString("{", ", ", "}")
 
     // Assert that rate estimator values are used to determine maxMessagesPerPartition
     assert(collectedData.exists(_.size == 10), dataToString)  // maxRatePerPartition 100 * .1 secs
