@@ -419,6 +419,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val k = this.k
     val vocabSize = this.vocabSize
     val expElogbeta = exp(LDAUtils.dirichletExpectation(lambda)).t
+    val expElogbetaBc = batch.sparkContext.broadcast(expElogbeta)
     val alpha = this.alpha.toBreeze
     val gammaShape = this.gammaShape
 
@@ -433,13 +434,14 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
           case v: SparseVector => v.indices.toList
         }
         val (gammad, sstats) = OnlineLDAOptimizer.variationalTopicInference(
-          termCounts, expElogbeta, alpha, gammaShape, k)
+          termCounts, expElogbetaBc.value, alpha, gammaShape, k)
         stat(::, ids) := stat(::, ids).toDenseMatrix + sstats
         gammaPart = gammad :: gammaPart
       }
       Iterator((stat, gammaPart))
     }
     val statsSum: BDM[Double] = stats.map(_._1).reduce(_ += _)
+    expElogbetaBc.unpersist()
     val gammat: BDM[Double] = breeze.linalg.DenseMatrix.vertcat(
       stats.map(_._2).reduce(_ ++ _).map(_.toDenseMatrix): _*)
     val batchResult = statsSum :* expElogbeta.t

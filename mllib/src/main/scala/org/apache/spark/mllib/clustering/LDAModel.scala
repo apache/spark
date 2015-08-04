@@ -27,6 +27,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaPairRDD
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.graphx.{Edge, EdgeContext, Graph, VertexId}
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
@@ -271,19 +272,21 @@ class LocalLDAModel private[clustering] (
     // transpose because dirichletExpectation normalizes by row and we need to normalize
     // by topic (columns of lambda)
     val Elogbeta = LDAUtils.dirichletExpectation(lambda.t).t
+    val ElogbetaBc = documents.sparkContext.broadcast(Elogbeta)
 
     // Sum bound components for each document:
     //  component for prob(tokens) + component for prob(document-topic distribution)
     val corpusPart =
       documents.filter(_._2.numNonzeros > 0).map { case (id: Long, termCounts: Vector) =>
+        val localElogbeta = ElogbetaBc.value
         var docBound = 0.0D
         val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
-          termCounts, exp(Elogbeta), brzAlpha, gammaShape, k)
+          termCounts, exp(localElogbeta), brzAlpha, gammaShape, k)
         val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
 
         // E[log p(doc | theta, beta)]
         termCounts.foreachActive { case (idx, count) =>
-          docBound += count * LDAUtils.logSumExp(Elogthetad + Elogbeta(idx, ::).t)
+          docBound += count * LDAUtils.logSumExp(Elogthetad + localElogbeta(idx, ::).t)
         }
         // E[log p(theta | alpha) - log q(theta | gamma)]
         docBound += sum((brzAlpha - gammad) :* Elogthetad)
@@ -318,6 +321,7 @@ class LocalLDAModel private[clustering] (
     // Double transpose because dirichletExpectation normalizes by row and we need to normalize
     // by topic (columns of lambda)
     val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t)
+    val expElogbetaBc = documents.sparkContext.broadcast(expElogbeta)
     val docConcentrationBrz = this.docConcentration.toBreeze
     val gammaShape = this.gammaShape
     val k = this.k
@@ -328,7 +332,7 @@ class LocalLDAModel private[clustering] (
       } else {
         val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts,
-          expElogbeta,
+          expElogbetaBc.value,
           docConcentrationBrz,
           gammaShape,
           k)
