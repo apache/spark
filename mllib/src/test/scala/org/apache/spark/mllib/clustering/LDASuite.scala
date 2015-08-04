@@ -287,8 +287,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
        > -31.4413908227
      */
 
-    assert(ldaModel.fullLogLikelihood(docsSingleWord) ~== -25.971 relTol 1E-3D)
-    assert(ldaModel.fullLogLikelihood(docsRepeatedWord) ~== -31.441  relTol 1E-3D)
+    assert(ldaModel.logLikelihood(docsSingleWord) ~== -25.971 relTol 1E-3D)
+    assert(ldaModel.logLikelihood(docsRepeatedWord) ~== -31.441  relTol 1E-3D)
   }
 
   test("LocalLDAModel logPerplexity") {
