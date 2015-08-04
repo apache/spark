@@ -79,9 +79,8 @@ case class BroadcastHashOuterJoin(
     }(BroadcastHashOuterJoin.broadcastHashOuterJoinExecutionContext)
   }
 
-  protected override lazy val doPrepare: Unit = {
+  protected override def doPrepare(): Unit = {
     broadcastFuture
-    children.foreach(_.prepare())
   }
 
   override def doExecute(): RDD[InternalRow] = {

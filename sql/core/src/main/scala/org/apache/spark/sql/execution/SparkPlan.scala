@@ -59,6 +59,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     false
   }
 
+  /**
+   * Whether the "prepare" method is called.
+   */
+  private var prepareCalled = false
+
   /** Overridden make copy also propogates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): this.type = {
     SparkPlan.currentContext.set(sqlContext)
@@ -127,10 +132,14 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Prepare a SparkPlan for execution.
+   * Prepare a SparkPlan for execution. It's idempotent.
    */
   final def prepare(): Unit = {
-    doPrepare
+    if (!prepareCalled) {
+      prepareCalled = true
+      doPrepare
+      children.foreach(_.prepare())
+    }
   }
 
   /**
@@ -138,11 +147,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * `execute` of SparkPlan. This is helpful if we want to set up some state before executing the
    * query, e.g., `BroadcastHashJoin` uses it to broadcast asynchronously.
    *
-   * This is lazy to make sure running doPrepare is called only once for each SparkPlan.
+   * Note: the prepare method has already walked down the tree, so the implementation doesn't need
+   * to call children's prepare methods.
    */
-  protected lazy val doPrepare: Unit = {
-    children.foreach(_.prepare())
-  }
+  protected def doPrepare(): Unit = {}
 
   /**
    * Overridden by concrete implementations of SparkPlan.
