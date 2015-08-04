@@ -28,17 +28,16 @@ import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 
-import org.apache.spark.{TaskContext, Logging}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
-import org.apache.spark.sql.types.{StructType, DataType, StructField}
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, RedirectThread, Utils}
+import org.apache.spark.{Logging, TaskContext}
 
 /**
  * Transforms the input by forking and running the specified script.
@@ -103,9 +102,6 @@ case class ScriptTransformation(
       @Nullable val (outputSerde, outputSoi) = {
         ioschema.initOutputSerDe(output).getOrElse((null, null))
       }
-
-      val schema = StructType(output.map(a => new StructField("", a.dataType, true)))
-      val converter = CatalystTypeConverters.createToCatalystConverter(schema)
 
       val reader = new BufferedReader(new InputStreamReader(inputStream))
       val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] with HiveInspectors {
@@ -181,11 +177,11 @@ case class ScriptTransformation(
             if (!ioschema.schemaLess) {
               new GenericInternalRow(
                 prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-                  .map(converter))
+                  .map(CatalystTypeConverters.convertToCatalyst))
             } else {
               new GenericInternalRow(
                 prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
-                  .map(converter))
+                  .map(CatalystTypeConverters.convertToCatalyst))
             }
           } else {
             val ret = deserialize()
