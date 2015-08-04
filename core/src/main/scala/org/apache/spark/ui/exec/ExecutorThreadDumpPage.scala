@@ -61,7 +61,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
         }
       }.map { thread =>
         val onClickEvent = s"$$('#${thread.threadId + "_stacktrace"}').toggleClass('hidden'); " +
-          s"$$('#stacktrace_column').toggleClass('hidden')"
+          s"$$('#stacktrace_column').addClass('hidden')"
         <tr class="accordion-heading" onclick={onClickEvent}>
           <td>{thread.threadId}</td><td>{thread.threadName}</td><td>{thread.threadState}</td>
           <td id={thread.threadId + "_stacktrace"} class="accordion-body hidden">
