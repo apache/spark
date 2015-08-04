@@ -359,7 +359,7 @@ private[spark] class CoarseMesosSchedulerBackend(
         if (slaveIdToTaskId.contains(slaveId)) {
           val taskId: Int = slaveIdToTaskId.get(slaveId)
           taskIdToSlaveId.remove(taskId)
-          removeExecutor(sparkExecutorId(slaveId, taskId.toString), reason)
+          removeExecutor(sparkExecutorId(slaveId, taskId.toString), SlaveLost(reason))
         }
         // TODO: This assumes one Spark executor per Mesos slave,
         // which may no longer be true after SPARK-5095

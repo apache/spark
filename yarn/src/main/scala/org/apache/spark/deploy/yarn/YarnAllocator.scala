@@ -39,7 +39,6 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 
 /**
@@ -68,7 +67,7 @@ private[yarn] class YarnAllocator(
 
   import YarnAllocator._
 
-  private val NORMAL_CONTAINER_EXIT_STATUS = ExecutorExitedNormally(0, "Executor exited normally.")
+  private val UNKNOWN_CONTAINER_EXIT_STATUS = ExecutorExitedAbnormally(-1, "Executor exited for an unknown reason.")
 
   // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
   if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
@@ -98,6 +97,7 @@ private[yarn] class YarnAllocator(
 
   private var numUnexpectedContainerRelease = 0L
   private val containerIdToExecutorId = new HashMap[ContainerId, String]
+  private val completedExecutorExitReasons = new HashMap[String, ExecutorLossReason]
 
   // Executor memory in MB.
   protected val executorMemory = args.executorMemory
@@ -198,19 +198,19 @@ private[yarn] class YarnAllocator(
       containerIdToExecutorId.remove(container.getId)
       internalReleaseContainer(container)
       numExecutorsRunning -= 1
-      killedExecutors += executorId
     } else {
       logWarning(s"Attempted to kill unknown executor $executorId!")
     }
   }
 
+  /**
+   * Gets the executor loss reason for a disconnected executor.
+   * Note that this method is expected to be called exactly once per executor ID.
+   */
   def getExecutorLossReason(executorId: String): ExecutorLossReason = synchronized {
     allocateResources()
-    if (killedExecutors.contains(executorId)) {
-        NORMAL_CONTAINER_EXIT_STATUS
-    } else {
-      completedNonZeroContainerExitCodes.getOrElse(executorIdToContainer(executorId).getId, NORMAL_CONTAINER_EXIT_STATUS)
-    }
+    // Expect to be asked for a loss reason once and exactly once.
+    completedExecutorExitReasons.remove(executorId).getOrElse(executorId, UNKNOWN_CONTAINER_EXIT_STATUS)
   }
 
   /**
@@ -437,7 +437,7 @@ private[yarn] class YarnAllocator(
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
       val alreadyReleased = releasedContainers.remove(containerId)
-      if (!alreadyReleased) {
+      val exitReason = if (!alreadyReleased) {
         // Decrement the number of executors running. The next iteration of
         // the ApplicationMaster's reporting thread will take care of allocating.
         numExecutorsRunning -= 1
@@ -475,16 +475,16 @@ private[yarn] class YarnAllocator(
           containerExitReason = s"Container $containerId exited abnormally with exit status $exitStatus, and was marked as failed."
         }
 
-        if (exitStatus != 0) {
-          val exitReason = {
-            if (isExecutorNonZeroExitNormal) {
-              ExecutorExitedNormally(completedContainer.getExitStatus, containerExitReason)
-            } else {
-              ExecutorExitedAbnormally(completedContainer.getExitStatus, containerExitReason)
-            }
-          }
-          completedNonZeroContainerExitCodes.put(containerId, exitReason)
+        if (exitStatus == 0) {
+          ExecutorExitedNormally(0, s"Executor for container $containerId exited normally.")
+        } else if (isExecutorNonZeroExitNormal) {
+          ExecutorExitedNormally(completedContainer.getExitStatus, containerExitReason)
+        } else {
+          ExecutorExitedAbnormally(completedContainer.getExitStatus, containerExitReason)
         }
+      } else {
+        ExecutorExitedNormally(completedContainer.getExitStatus,
+          s"Container $containerId exited from explicit termination request.")
       }
 
       if (allocatedContainerToHostMap.containsKey(containerId)) {
@@ -503,13 +503,13 @@ private[yarn] class YarnAllocator(
 
       containerIdToExecutorId.remove(containerId).foreach { eid =>
         executorIdToContainer.remove(eid)
+        completedExecutorExitReasons.put(eid, exitReason)
 
         if (!alreadyReleased) {
           // The executor could have gone away (like no route to host, node failure, etc)
           // Notify backend about the failure of the executor
           numUnexpectedContainerRelease += 1
-          driverRef.send(RemoveExecutor(eid,
-            s"Yarn deallocated the executor $eid (container $containerId)"))
+          driverRef.send(RemoveExecutor(eid, exitReason))
         }
       }
     }
