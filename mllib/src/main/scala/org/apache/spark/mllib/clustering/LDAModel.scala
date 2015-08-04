@@ -214,29 +214,61 @@ class LocalLDAModel private[clustering] (
       gammaShape)
   }
 
+  /**
+   * Calculates a lower bound on the log likelihood of the entire corpus and inferred topics.
+   * Note that this bound sums 2 parts:
+   *  - a bound on the log likelihood of the corpus, which scales with corpus size.
+   *    See [[logLikelihood()]].
+   *  - a bound on the log likelihood of the estimated topics (topic-term distributions),
+   *    which does not scale with corpus size.
+   *    See [[topicsLogLikelihood()]].
+   *
+   * See Equation (16) in original Online LDA paper.
+   *
+   * @param documents test corpus to use for calculating log likelihood
+   * @return variational lower bound on the log likelihood of the entire corpus and inferred topics
+   */
+  def fullLogLikelihood(documents: RDD[(Long, Vector)]): Double = {
+    logLikelihood(documents) + topicsLogLikelihood()
+  }
+
   // TODO: declare in LDAModel and override once implemented in DistributedLDAModel
   /**
-   * Calculates a lower bound on the log likelihood of the entire corpus.
+   * Calculates a lower bound on the log likelihood of the entire corpus, not including topics.
+   *
+   * Unlike [[fullLogLikelihood()]], this method only return the bound for the corpus, not
+   * the inferred topics.  This scales with corpus size.
+   *
    * @param documents test corpus to use for calculating log likelihood
-   * @return variational lower bound on the log likelihood of the entire corpus
+   * @return variational lower bound on the log likelihood of the corpus
    */
-  def logLikelihood(documents: RDD[(Long, Vector)]): Double = bound(documents,
+  def logLikelihood(documents: RDD[(Long, Vector)]): Double = corpusBound(documents,
     docConcentration, topicConcentration, topicsMatrix.toBreeze.toDenseMatrix, gammaShape, k,
     vocabSize)
 
   /**
-   * Calculate an upper bound bound on perplexity. See Equation (16) in original Online
-   * LDA paper.
+   * Lower bound on the log likelihood of the inferred topics.
+   *
+   * @see [[fullLogLikelihood()]]
+   */
+  def topicsLogLikelihood(): Double = {
+    topicsBound(topicConcentration, topicsMatrix.toBreeze.toDenseMatrix)
+  }
+
+  /**
+   * Calculate an upper bound bound on perplexity.  (Lower is better.)
+   * See Equation (16) in original Online LDA paper.
    * @param documents test corpus to use for calculating perplexity
-   * @return variational upper bound on log perplexity per word
+   * @return Variational upper bound on log perplexity per token.
+   *         This is the negation of [[fullLogLikelihood()]], normalized by the number of tokens.
+   *         Note that this means the log likelihood of the inferred topics is normalized by
+   *         the number of tokens; this definition matches that from gensim.
    */
   def logPerplexity(documents: RDD[(Long, Vector)]): Double = {
-    val corpusWords = documents
+    val corpusTokenCount = documents
       .map { case (_, termCounts) => termCounts.toArray.sum }
       .sum()
-    val perWordBound = -logLikelihood(documents) / corpusWords
-
-    perWordBound
+    -fullLogLikelihood(documents) / corpusTokenCount
   }
 
   /**
@@ -244,17 +276,22 @@ class LocalLDAModel private[clustering] (
    *    log p(documents) >= E_q[log p(documents)] - E_q[log q(documents)]
    * This bound is derived by decomposing the LDA model to:
    *    log p(documents) = E_q[log p(documents)] - E_q[log q(documents)] + D(q|p)
-   * and noting that the KL-divergence D(q|p) >= 0. See Equation (16) in original Online LDA paper.
+   * and noting that the KL-divergence D(q|p) >= 0.
+   *
+   * See Equation (16) in original Online LDA paper, as well as Appendix A.3 in the JMLR version of
+   * the original LDA paper.
+   * NOTE: This excludes the bound for the inferred topics (topic-term distributions).
+   *       To get the bound used in the cited LDA papers, add this to [[topicsBound()]].
    * @param documents a subset of the test corpus
    * @param alpha document-topic Dirichlet prior parameters
-   * @param eta topic-word Dirichlet prior parameters
+   * @param eta topic-word Dirichlet prior parameter
    * @param lambda parameters for variational q(beta | lambda) topic-word distributions
    * @param gammaShape shape parameter for random initialization of variational q(theta | gamma)
    *                   topic mixture distributions
    * @param k number of topics
    * @param vocabSize number of unique terms in the entire test corpus
    */
-  private def bound(
+  private def corpusBound(
       documents: RDD[(Long, Vector)],
       alpha: Vector,
       eta: Double,
@@ -267,32 +304,43 @@ class LocalLDAModel private[clustering] (
     // by topic (columns of lambda)
     val Elogbeta = LDAUtils.dirichletExpectation(lambda.t).t
 
-    var score = documents.filter(_._2.numNonzeros > 0).map { case (id: Long, termCounts: Vector) =>
-      var docScore = 0.0D
-      val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
-        termCounts, exp(Elogbeta), brzAlpha, gammaShape, k)
-      val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
+    // Sum bounds for each document:
+    //  bounds for prob(tokens) + bounds for prob(document-topic distribution)
+    documents.filter(_._2.numNonzeros > 0).map {
+      case (id: Long, termCounts: Vector) =>
+        var docBound = 0.0D
+        val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
+          termCounts, exp(Elogbeta), brzAlpha, gammaShape, k)
+        val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
 
-      // E[log p(doc | theta, beta)]
-      termCounts.foreachActive { case (idx, count) =>
-        docScore += count * LDAUtils.logSumExp(Elogthetad + Elogbeta(idx, ::).t)
-      }
-      // E[log p(theta | alpha) - log q(theta | gamma)]; assumes alpha is a vector
-      docScore += sum((brzAlpha - gammad) :* Elogthetad)
-      docScore += sum(lgamma(gammad) - lgamma(brzAlpha))
-      docScore += lgamma(sum(brzAlpha)) - lgamma(sum(gammad))
+        // E[log p(doc | theta, beta)]
+        termCounts.foreachActive { case (idx, count) =>
+          docBound += count * LDAUtils.logSumExp(Elogthetad + Elogbeta(idx, ::).t)
+        }
+        // E[log p(theta | alpha) - log q(theta | gamma)]
+        docBound += sum((brzAlpha - gammad) :* Elogthetad)
+        docBound += sum(lgamma(gammad) - lgamma(brzAlpha))
+        docBound += lgamma(sum(brzAlpha)) - lgamma(sum(gammad))
 
-      docScore
+        docBound
     }.sum()
+  }
 
-    // E[log p(beta | eta) - log q (beta | lambda)]; assumes eta is a scalar
-    score += sum((eta - lambda) :* Elogbeta)
-    score += sum(lgamma(lambda) - lgamma(eta))
-
+  /**
+   * Bound for prob(topic-term distributions):
+   *   E[log p(beta | eta) - log q(beta | lambda)]
+   *
+   * See Equation (16) in original Online LDA paper, as well as Appendix A.3 in the JMLR version of
+   * the original LDA paper.
+   * @param eta topic-word Dirichlet prior parameter
+   * @param lambda parameters for variational q(beta | lambda) topic-word distributions
+   */
+  private def topicsBound(eta: Double, lambda: BDM[Double]): Double = {
+    val Elogbeta = LDAUtils.dirichletExpectation(lambda.t).t
     val sumEta = eta * vocabSize
-    score += sum(lgamma(sumEta) - lgamma(sum(lambda(::, breeze.linalg.*))))
-
-    score
+    sum((eta - lambda) :* Elogbeta) +
+      sum(lgamma(lambda) - lgamma(eta)) +
+      sum(lgamma(sumEta) - lgamma(sum(lambda(::, breeze.linalg.*))))
   }
 
   /**
