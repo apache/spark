@@ -165,39 +165,11 @@ class AnalysisSuite extends AnalysisTest {
 
   test("pull out nondeterministic expressions from Sort") {
     val plan = Sort(Seq(SortOrder(Rand(33), Ascending)), false, testRelation)
-    val analyzed = caseSensitiveAnalyzer.execute(plan)
-    analyzed.transform {
-      case s: Sort if s.expressions.exists(!_.deterministic) =>
-        fail("nondeterministic expressions are not allowed in Sort")
-    }
-  }
-
-  test("remove still-need-evaluate ordering expressions from sort") {
-    val a = testRelation2.output(0)
-    val b = testRelation2.output(1)
-
-    def makeOrder(e: Expression): SortOrder = SortOrder(e, Ascending)
-
-    val noEvalOrdering = makeOrder(a)
-    val noEvalOrderingWithAlias = makeOrder(Alias(Alias(b, "name1")(), "name2")())
-
-    val needEvalExpr = Coalesce(Seq(a, Literal("1")))
-    val needEvalExpr2 = Coalesce(Seq(a, b))
-    val needEvalOrdering = makeOrder(needEvalExpr)
-    val needEvalOrdering2 = makeOrder(needEvalExpr2)
-
-    val plan = Sort(
-      Seq(noEvalOrdering, noEvalOrderingWithAlias, needEvalOrdering, needEvalOrdering2),
-      false, testRelation2)
-
-    val evaluatedOrdering = makeOrder(AttributeReference("_sortCondition", StringType)())
-    val materializedExprs = Seq(needEvalExpr, needEvalExpr2).map(e => Alias(e, "_sortCondition")())
-
+    val projected = Alias(Rand(33), "_nondeterministic")()
     val expected =
-      Project(testRelation2.output,
-        Sort(Seq(makeOrder(a), makeOrder(b), evaluatedOrdering, evaluatedOrdering), false,
-          Project(testRelation2.output ++ materializedExprs, testRelation2)))
-
+      Project(testRelation.output,
+        Sort(Seq(SortOrder(projected.toAttribute, Ascending)), false,
+          Project(testRelation.output :+ projected, testRelation)))
     checkAnalysis(plan, expected)
   }
 }
