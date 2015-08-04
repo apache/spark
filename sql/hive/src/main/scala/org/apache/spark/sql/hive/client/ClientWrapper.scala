@@ -85,7 +85,9 @@ private[hive] class ClientWrapper(
 
       try {
         val shimsField = classOf[ShimLoader].getDeclaredField("hadoopShims")
+        // scalastyle:off classforname
         val shimsClass = Class.forName(shimClassName)
+        // scalastyle:on classforname
         val shims = classOf[HadoopShims].cast(shimsClass.newInstance())
         shimsField.setAccessible(true)
         shimsField.set(null, shims)
