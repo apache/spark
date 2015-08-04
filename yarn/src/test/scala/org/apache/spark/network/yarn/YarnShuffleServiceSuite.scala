@@ -35,7 +35,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
 
   override def beforeEach(): Unit = {
-    yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle");
+    yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
       "org.apache.spark.network.yarn.YarnShuffleService");
 
