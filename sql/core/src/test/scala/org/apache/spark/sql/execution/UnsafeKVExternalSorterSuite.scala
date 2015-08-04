@@ -76,7 +76,8 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite {
         taskAttemptId = 98456,
         attemptNumber = 0,
         taskMemoryManager = taskMemMgr,
-        metricsSystem = null))
+        metricsSystem = null,
+        internalAccumulators = Seq.empty))
 
       // Create the data converters
       val kExternalConverter = CatalystTypeConverters.createToCatalystConverter(keySchema)
