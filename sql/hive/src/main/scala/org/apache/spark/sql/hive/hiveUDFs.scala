@@ -581,6 +581,9 @@ private[hive] case class HiveGenericUDTF(
     collector.collectRows()
   }
 
+  override def makeCopy(children: Seq[Expression]): Generator =
+    new HiveGenericUDTF(funcWrapper = this.funcWrapper, children)
+
   override def toString: String = {
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }

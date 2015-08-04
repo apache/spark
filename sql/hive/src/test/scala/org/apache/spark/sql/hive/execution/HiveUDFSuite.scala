@@ -22,10 +22,10 @@ import java.util
 import java.util.Properties
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFAverage, GenericUDF}
+import org.apache.hadoop.hive.ql.udf.generic.{GenericUDTF, GenericUDAFAverage, GenericUDF}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.{PrimitiveObjectInspectorUtils, PrimitiveObjectInspectorFactory}
+import org.apache.hadoop.hive.serde2.objectinspector.{StructObjectInspector, ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.io.Writable
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
@@ -41,6 +41,7 @@ case class Fields(f1: Int, f2: Int, f3: Int, f4: Int, f5: Int)
 case class IntegerCaseClass(i: Int)
 case class ListListIntCaseClass(lli: Seq[(Int, Int, Int)])
 case class StringCaseClass(s: String)
+case class IntStringCaseClass(i: Int, s: String)
 case class ListStringCaseClass(l: Seq[String])
 
 /**
@@ -297,6 +298,21 @@ class HiveUDFSuite extends QueryTest {
 
     TestHive.reset()
   }
+
+  test("hive UDTF has a star") {
+    val testData = TestHive.sparkContext.parallelize(
+      IntStringCaseClass(1, "data1") :: IntStringCaseClass(2, "data2") :: Nil).toDF()
+    testData.registerTempTable("inputTable")
+
+    sql(s"CREATE TEMPORARY FUNCTION testUDTF AS '${classOf[TestUDTF].getName}'")
+    checkAnswer(
+      sql("SELECT testUDTF(*) FROM inputTable"),
+      Seq(Row(1, "data1"), Row(2, "data2"))
+    )
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDTF")
+
+    TestHive.reset()
+  }
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {
@@ -360,4 +376,21 @@ class PairUDF extends GenericUDF {
   }
 
   override def getDisplayString(p1: Array[String]): String = ""
+}
+
+class TestUDTF extends GenericUDTF {
+  val idOI = PrimitiveObjectInspectorFactory.javaIntObjectInspector
+  val valueOI = PrimitiveObjectInspectorFactory.javaStringObjectInspector
+
+  override def initialize(p1: Array[ObjectInspector]): StructObjectInspector = {
+    ObjectInspectorFactory.getStandardStructObjectInspector(Seq("id", "data"), Seq(idOI, valueOI))
+  }
+
+  override def process(args: Array[AnyRef]): Unit = {
+    val id = PrimitiveObjectInspectorUtils.getInt(args(0), idOI)
+    val value = PrimitiveObjectInspectorUtils.getString(args(1), valueOI)
+    forward(Array(id, value))
+  }
+
+  override def close(): Unit = {}
 }

@@ -672,6 +672,15 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("explode() cannot take a star") {
+    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}], "b":"test"}"""))
+    read.json(rdd).registerTempTable("data")
+    val errMsg = intercept[AnalysisException] {
+      sql("SELECT explode(*) AS val FROM data")
+    }
+    assert(errMsg.getMessage === "cannot resolve 'explode(*)'; line 1 pos 7")
+  }
+
   // TGF with non-TGF in project is allowed in Spark SQL, but not in Hive
   test("TGF with non-TGF in projection") {
     val rdd = sparkContext.makeRDD( """{"a": "1", "b":"1"}""" :: Nil)

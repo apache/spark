@@ -142,6 +142,17 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
       Row("a", Seq("a"), 1) :: Nil)
   }
 
+  test("explode cannot take a star") {
+    val df = Seq(("1", "1,2"), ("2", "4"), ("3", "7,8,9")).toDF("prefix", "csv")
+    val errMsg = intercept[AnalysisException] {
+      df.explode($"*") { case Row(prefix: String, csv: String) =>
+        csv.split(",").map(v => Tuple1(prefix + ":" + v))
+      }
+    }
+    assert(errMsg.getMessage === "'Generate UserDefinedGenerator(*), true, false, None, ['_1] " +
+      "cannot have a star in expressions;")
+  }
+
   test("selectExpr") {
     checkAnswer(
       testData.selectExpr("abs(key)", "value"),
