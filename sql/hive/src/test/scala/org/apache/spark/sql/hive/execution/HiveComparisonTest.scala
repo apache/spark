@@ -348,9 +348,6 @@ abstract class HiveComparisonTest
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          // scalastyle:off println
-          println("Run :" + queryString)
-          // scalastyle:on println
           val query = new TestHive.QueryExecution(queryString)
           try { (query, prepareAnswer(query, query.stringResult())) } catch {
             case e: Throwable =>

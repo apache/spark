@@ -17,17 +17,15 @@
 
 package org.apache.spark.sql.execution.joins
 
-import scala.concurrent._
 import scala.concurrent.duration._
 
-import org.apache.spark.{InternalAccumulator, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.{InternalAccumulator, TaskContext}
 
 /**
  * :: DeveloperApi ::
@@ -59,16 +57,11 @@ case class BroadcastHashJoin(
   override def requiredChildDistribution: Seq[Distribution] =
     UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
 
-  @transient
-  private val broadcastFuture = future {
+  protected override def doExecute(): RDD[InternalRow] = {
     // Note that we use .execute().collect() because we don't want to convert data to Scala types
     val input: Array[InternalRow] = buildPlan.execute().map(_.copy()).collect()
     val hashed = HashedRelation(input.iterator, buildSideKeyGenerator, input.size)
-    sparkContext.broadcast(hashed)
-  }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
-
-  protected override def doExecute(): RDD[InternalRow] = {
-    val broadcastRelation = Await.result(broadcastFuture, timeout)
+    val broadcastRelation = sparkContext.broadcast(hashed)
 
     streamedPlan.execute().mapPartitions { streamedIter =>
       val hashedRelation = broadcastRelation.value
@@ -81,10 +74,4 @@ case class BroadcastHashJoin(
       hashJoin(streamedIter, hashedRelation)
     }
   }
-}
-
-object BroadcastHashJoin {
-
-  private val broadcastHashJoinExecutionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("broadcast-hash-join", 128))
 }

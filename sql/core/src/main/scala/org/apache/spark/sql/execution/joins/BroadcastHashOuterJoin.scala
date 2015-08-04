@@ -17,18 +17,16 @@
 
 package org.apache.spark.sql.execution.joins
 
-import scala.concurrent._
 import scala.concurrent.duration._
 
-import org.apache.spark.{InternalAccumulator, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, Distribution, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.{InternalAccumulator, TaskContext}
 
 /**
  * :: DeveloperApi ::
@@ -60,16 +58,11 @@ case class BroadcastHashOuterJoin(
 
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
-  @transient
-  private val broadcastFuture = future {
+  override def doExecute(): RDD[InternalRow] = {
     // Note that we use .execute().collect() because we don't want to convert data to Scala types
     val input: Array[InternalRow] = buildPlan.execute().map(_.copy()).collect()
     val hashed = HashedRelation(input.iterator, buildKeyGenerator, input.size)
-    sparkContext.broadcast(hashed)
-  }(BroadcastHashOuterJoin.broadcastHashOuterJoinExecutionContext)
-
-  override def doExecute(): RDD[InternalRow] = {
-    val broadcastRelation = Await.result(broadcastFuture, timeout)
+    val broadcastRelation = sparkContext.broadcast(hashed)
 
     streamedPlan.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow()
@@ -83,19 +76,20 @@ case class BroadcastHashOuterJoin(
         case _ =>
       }
 
+      val resultProj = resultProjection
       joinType match {
         case LeftOuter =>
           streamedIter.flatMap(currentRow => {
             val rowKey = keyGenerator(currentRow)
             joinedRow.withLeft(currentRow)
-            leftOuterIterator(rowKey, joinedRow, hashTable.get(rowKey))
+            leftOuterIterator(rowKey, joinedRow, hashTable.get(rowKey), resultProj)
           })
 
         case RightOuter =>
           streamedIter.flatMap(currentRow => {
             val rowKey = keyGenerator(currentRow)
             joinedRow.withRight(currentRow)
-            rightOuterIterator(rowKey, hashTable.get(rowKey), joinedRow)
+            rightOuterIterator(rowKey, hashTable.get(rowKey), joinedRow, resultProj)
           })
 
         case x =>
@@ -104,10 +98,4 @@ case class BroadcastHashOuterJoin(
       }
     }
   }
-}
-
-object BroadcastHashOuterJoin {
-
-  private val broadcastHashOuterJoinExecutionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("broadcast-hash-outer-join", 128))
 }

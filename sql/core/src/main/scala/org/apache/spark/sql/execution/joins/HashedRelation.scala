@@ -359,10 +359,6 @@ private[joins] object UnsafeHashedRelation {
       }
     }
 
-    // scalastyle:off println
-    println(s"Build UnsafeHashedRelation with ${hashTable.size()} items")
-    // scalastyle:on println
-
     new UnsafeHashedRelation(hashTable)
   }
 }
