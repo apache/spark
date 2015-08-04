@@ -451,22 +451,23 @@ private[classification] class MultiClassSummarizer extends Serializable {
 }
 
 /**
- * Abstract for multinomial Logistic regression training results.
- * @param predictions dataframe outputted by the model's `transform` method.
- * @param probabilityCol field in "predictions" which gives the calibrated probability of
- *                       each sample as a vector.
- * @param labelCol field in "predictions" which gives the true label of each sample.
- * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
+ * Abstraction for multinomial Logistic Regression Training results.
  */
-private [classification] class LogisticRegressionTrainingSummary private[classification] (
-    predictions: DataFrame,
-    probabilityCol: String,
-    labelCol: String,
-    val objectiveHistory: Array[Double])
-  extends LogisticRegressionSummary(predictions, probabilityCol, labelCol) {
+sealed trait LogisticRegressionTrainingSummary extends Serializable {
+
+  /** objective function (scaled loss + regularization) at each iteration. */
+  val objectiveHistory: Array[Double]
 
   /** Number of training iterations until termination */
-  val totalIterations = objectiveHistory.length
+  val totalIterations: Int = objectiveHistory.length
+
+}
+
+/**
+ * Abstraction for Logistic Regression Results for a given model.
+ */
+sealed trait LogisticRegressionSummary extends Serializable {
+
 }
 
 /**
@@ -484,23 +485,8 @@ class BinaryLogisticRegressionTrainingSummary private[classification] (
     probabilityCol: String,
     labelCol: String,
     val objectiveHistory: Array[Double])
-  extends BinaryLogisticRegressionSummary(predictions, probabilityCol, labelCol) {
-
-  /** Number of training iterations until termination */
-  val totalIterations = objectiveHistory.length
-}
-
-/**
- * Abstraction for Multiclass logistic regression results for a given model.
- * @param predictions dataframe outputted by the model's `transform` method.
- * @param probabilityCol field in "predictions" which gives the calibrated probability of
- *                       each sample.
- * @param labelCol field in "predictions" which gives the true label of each sample.
- */
-private [classification] class LogisticRegressionSummary private [classification] (
-  @transient val predictions: DataFrame,
-  val probabilityCol: String,
-  val labelCol: String) extends Serializable {
+  extends BinaryLogisticRegressionSummary(predictions, probabilityCol, labelCol)
+  with LogisticRegressionTrainingSummary {
 
 }
 
@@ -514,10 +500,9 @@ private [classification] class LogisticRegressionSummary private [classification
  */
 @Experimental
 class BinaryLogisticRegressionSummary private[classification] (
-    @transient override val predictions: DataFrame,
-    override val probabilityCol: String,
-    override val labelCol: String)
-  extends LogisticRegressionSummary(predictions, probabilityCol, labelCol) {
+    @transient val predictions: DataFrame,
+    val probabilityCol: String,
+    val labelCol: String) extends LogisticRegressionSummary {
 
   private val sqlContext = predictions.sqlContext
   import sqlContext.implicits._
