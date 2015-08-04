@@ -107,9 +107,10 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
     val numInputRows = accumulator[Long]("numInputRows")
     val numOutputRows = accumulator[Long]("numOutputRows")
     child.execute().mapPartitions { iter =>
+      val predicate = newPredicate(condition, child.output)
       iter.filter { row =>
         numInputRows += 1
-        val r = newPredicate(condition, child.output)(row)
+        val r = predicate(row)
         if (r) numOutputRows += 1
         r
       }
