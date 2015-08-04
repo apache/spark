@@ -43,6 +43,8 @@ abstract class AggregationIterator(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+    newMutableJoinedProjection:
+      (Seq[Expression], Seq[Attribute], Seq[Attribute]) => (() => MutableJoinedProjection),
     outputsUnsafeRows: Boolean)
   extends Iterator[InternalRow] with Logging {
 
@@ -156,7 +158,6 @@ abstract class AggregationIterator(
 
   // Initializing functions used to process a row.
   protected val processRow: (MutableRow, InternalRow) => Unit = {
-    val rowToBeProcessed = new JoinedRow
     val aggregationBufferSchema = allAggregateFunctions.flatMap(_.bufferAttributes)
     aggregationMode match {
       // Partial-only
@@ -166,12 +167,15 @@ abstract class AggregationIterator(
           case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
         }
         val algebraicUpdateProjection =
-          newMutableProjection(updateExpressions, aggregationBufferSchema ++ valueAttributes)()
+          newMutableJoinedProjection(
+            updateExpressions,
+            aggregationBufferSchema,
+            valueAttributes)()
 
         (currentBuffer: MutableRow, row: InternalRow) => {
           algebraicUpdateProjection.target(currentBuffer)
           // Process all algebraic aggregate functions.
-          algebraicUpdateProjection(rowToBeProcessed(currentBuffer, row))
+          algebraicUpdateProjection(currentBuffer, row)
           // Process all non-algebraic aggregate functions.
           var i = 0
           while (i < nonCompleteNonAlgebraicAggregateFunctions.length) {
@@ -199,13 +203,14 @@ abstract class AggregationIterator(
         }
         // This projection is used to merge buffer values for all AlgebraicAggregates.
         val algebraicMergeProjection =
-          newMutableProjection(
+          newMutableJoinedProjection(
             mergeExpressions,
-            aggregationBufferSchema ++ inputAggregationBufferSchema)()
+            aggregationBufferSchema,
+            inputAggregationBufferSchema)()
 
         (currentBuffer: MutableRow, row: InternalRow) => {
           // Process all algebraic aggregate functions.
-          algebraicMergeProjection.target(currentBuffer)(rowToBeProcessed(currentBuffer, row))
+          algebraicMergeProjection.target(currentBuffer)(currentBuffer, row)
           // Process all non-algebraic aggregate functions.
           var i = 0
           while (i < nonCompleteNonAlgebraicAggregateFunctions.length) {
@@ -234,17 +239,16 @@ abstract class AggregationIterator(
         val finalOffsetExpressions =
           Seq.fill(nonCompleteAggregateFunctions.map(_.bufferAttributes.length).sum)(NoOp)
 
-        val mergeInputSchema =
-          aggregationBufferSchema ++
-            groupingAttributesAndDistinctColumns ++
-            nonCompleteAggregateFunctions.flatMap(_.cloneBufferAttributes)
         val mergeExpressions =
           nonCompleteAggregateFunctions.flatMap {
             case ae: AlgebraicAggregate => ae.mergeExpressions
             case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
           } ++ completeOffsetExpressions
         val finalAlgebraicMergeProjection =
-          newMutableProjection(mergeExpressions, mergeInputSchema)()
+          newMutableJoinedProjection(
+            mergeExpressions,
+            aggregationBufferSchema ++ groupingAttributesAndDistinctColumns,
+            nonCompleteAggregateFunctions.flatMap(_.cloneBufferAttributes))()
 
         val updateExpressions =
           finalOffsetExpressions ++ completeAggregateFunctions.flatMap {
@@ -252,12 +256,15 @@ abstract class AggregationIterator(
             case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
           }
         val completeAlgebraicUpdateProjection =
-          newMutableProjection(updateExpressions, aggregationBufferSchema ++ valueAttributes)()
+          newMutableJoinedProjection(
+            updateExpressions,
+            aggregationBufferSchema,
+            valueAttributes)()
 
         (currentBuffer: MutableRow, row: InternalRow) => {
-          val input = rowToBeProcessed(currentBuffer, row)
+          //val input = rowToBeProcessed(currentBuffer, row)
           // For all aggregate functions with mode Complete, update buffers.
-          completeAlgebraicUpdateProjection.target(currentBuffer)(input)
+          completeAlgebraicUpdateProjection.target(currentBuffer)(currentBuffer, row)
           var i = 0
           while (i < completeNonAlgebraicAggregateFunctions.length) {
             completeNonAlgebraicAggregateFunctions(i).update(currentBuffer, row)
@@ -265,7 +272,7 @@ abstract class AggregationIterator(
           }
 
           // For all aggregate functions with mode Final, merge buffers.
-          finalAlgebraicMergeProjection.target(currentBuffer)(input)
+          finalAlgebraicMergeProjection.target(currentBuffer)(currentBuffer, row)
           i = 0
           while (i < nonCompleteNonAlgebraicAggregateFunctions.length) {
             nonCompleteNonAlgebraicAggregateFunctions(i).merge(currentBuffer, row)
@@ -289,12 +296,14 @@ abstract class AggregationIterator(
             case agg: AggregateFunction2 => Seq.fill(agg.bufferAttributes.length)(NoOp)
           }
         val completeAlgebraicUpdateProjection =
-          newMutableProjection(updateExpressions, aggregationBufferSchema ++ valueAttributes)()
+          newMutableJoinedProjection(
+            updateExpressions,
+            aggregationBufferSchema,
+            valueAttributes)()
 
         (currentBuffer: MutableRow, row: InternalRow) => {
-          val input = rowToBeProcessed(currentBuffer, row)
           // For all aggregate functions with mode Complete, update buffers.
-          completeAlgebraicUpdateProjection.target(currentBuffer)(input)
+          completeAlgebraicUpdateProjection.target(currentBuffer)(currentBuffer, row)
           var i = 0
           while (i < completeNonAlgebraicAggregateFunctions.length) {
             completeNonAlgebraicAggregateFunctions(i).update(currentBuffer, row)
@@ -314,7 +323,6 @@ abstract class AggregationIterator(
 
   // Initializing the function used to generate the output row.
   protected val generateOutput: (InternalRow, MutableRow) => InternalRow = {
-    val rowToBeEvaluated = new JoinedRow
     val safeOutoutRow = new GenericMutableRow(resultExpressions.length)
     val mutableOutput = if (outputsUnsafeRows) {
       UnsafeProjection.create(resultExpressions.map(_.dataType).toArray).apply(safeOutoutRow)
@@ -328,16 +336,17 @@ abstract class AggregationIterator(
       case (Some(Partial), None) | (Some(PartialMerge), None) =>
         // Because we cannot copy a joinedRow containing a UnsafeRow (UnsafeRow does not
         // support generic getter), we create a mutable projection to output the
-        // JoinedRow(currentGroupingKey, currentBuffer)
+        // JoinedRow(currentGroupingKey, currentBuffer) TODO does this hold?
         val bufferSchema = nonCompleteAggregateFunctions.flatMap(_.bufferAttributes)
         val resultProjection =
-          newMutableProjection(
+          newMutableJoinedProjection(
             groupingKeyAttributes ++ bufferSchema,
-            groupingKeyAttributes ++ bufferSchema)()
+            groupingKeyAttributes,
+            bufferSchema)()
         resultProjection.target(mutableOutput)
 
         (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
-          resultProjection(rowToBeEvaluated(currentGroupingKey, currentBuffer))
+          resultProjection(currentGroupingKey, currentBuffer)
           // rowToBeEvaluated(currentGroupingKey, currentBuffer)
         }
 
@@ -355,8 +364,10 @@ abstract class AggregationIterator(
         // TODO: Use unsafe row.
         val aggregateResult = new GenericMutableRow(aggregateResultSchema.length)
         val resultProjection =
-          newMutableProjection(
-            resultExpressions, groupingKeyAttributes ++ aggregateResultSchema)()
+          newMutableJoinedProjection(
+            resultExpressions,
+            groupingKeyAttributes,
+            aggregateResultSchema)()
         resultProjection.target(mutableOutput)
 
         (currentGroupingKey: InternalRow, currentBuffer: MutableRow) => {
@@ -370,7 +381,7 @@ abstract class AggregationIterator(
               allNonAlgebraicAggregateFunctions(i).eval(currentBuffer))
             i += 1
           }
-          resultProjection(rowToBeEvaluated(currentGroupingKey, aggregateResult))
+          resultProjection(currentGroupingKey, aggregateResult)
         }
 
       // Grouping-only: we only output values of grouping expressions.

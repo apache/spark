@@ -204,15 +204,16 @@ case class Window(
    * @return the final resulting projection.
    */
   private[this] def createResultProjection(
-      expressions: Seq[Expression]): MutableProjection = {
+      expressions: Seq[Expression]): MutableJoinedProjection = {
     val unboundToAttr = expressions.map {
       e => (e, AttributeReference("windowResult", e.dataType, e.nullable)())
     }
     val unboundToAttrMap = unboundToAttr.toMap
     val patchedWindowExpression = windowExpression.map(_.transform(unboundToAttrMap))
-    newMutableProjection(
+    newMutableJoinedProjection(
       projectList ++ patchedWindowExpression,
-      child.output ++ unboundToAttr.map(_._2))()
+      child.output,
+      unboundToAttr.map(_._2))()
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -301,7 +302,6 @@ case class Window(
         var rowsSize = 0
         override final def hasNext: Boolean = rowIndex < rowsSize || nextRowAvailable
 
-        val join = new JoinedRow
         val windowFunctionResult = new GenericMutableRow(unboundExpressions.size)
         override final def next(): InternalRow = {
           // Load the next partition if we need to.
@@ -318,11 +318,11 @@ case class Window(
             }
 
             // 'Merge' the input row with the window function result
-            join(rows(rowIndex), windowFunctionResult)
+            val row = rows(rowIndex)
             rowIndex += 1
 
             // Return the projection.
-            result(join)
+            result(row, windowFunctionResult)
           } else throw new NoSuchElementException
         }
       }
