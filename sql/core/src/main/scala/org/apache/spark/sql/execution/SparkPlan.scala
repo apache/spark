@@ -68,12 +68,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Return all accumulators containing metrics of this SparkPlan.
    */
-  def accumulators: Map[String, Accumulator[_]] = Map.empty
+  private[sql] def accumulators: Map[String, Accumulator[_]] = Map.empty
 
   /**
    * Return the accumulator according to the name.
    */
-  def accumulator[T](name: String): Accumulator[T] =
+  private[sql] def accumulator[T](name: String): Accumulator[T] =
     accumulators(name).asInstanceOf[Accumulator[T]]
 
   // TODO: Move to `DistributedPlan`

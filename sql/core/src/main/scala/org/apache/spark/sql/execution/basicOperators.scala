@@ -41,7 +41,7 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
 
   @transient lazy val buildProjection = newMutableProjection(projectList, child.output)
 
-  override lazy val accumulators = Map(
+  private[sql] override lazy val accumulators = Map(
     "numRows" -> sparkContext.internalAccumulator(0L, "number of rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -70,7 +70,7 @@ case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) 
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  override lazy val accumulators = Map(
+  private[sql] override lazy val accumulators = Map(
     "numRows" -> sparkContext.internalAccumulator(0L, "number of rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -99,7 +99,7 @@ case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) 
 case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  override lazy val accumulators = Map(
+  private[sql] override lazy val accumulators = Map(
     "numInputRows" -> sparkContext.internalAccumulator(0L, "number of input rows"),
     "numOutputRows" -> sparkContext.internalAccumulator(0L, "number of output rows"))
 
