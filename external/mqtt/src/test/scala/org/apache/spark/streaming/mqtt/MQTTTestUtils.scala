@@ -100,9 +100,11 @@ private class MQTTTestUtils extends Logging {
         }
       }
     } finally {
-      client.disconnect()
-      client.close()
-      client = null
+      if (client != null) {
+        client.disconnect()
+        client.close()
+        client = null
+      }
     }
   }
 

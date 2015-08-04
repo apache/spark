@@ -35,12 +35,12 @@ class MQTTStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter 
   private val topic = "def"
 
   private var ssc: StreamingContext = _
-  private var MQTTTestUtils: MQTTTestUtils = _
+  private var mqttTestUtils: MQTTTestUtils = _
 
   before {
     ssc = new StreamingContext(master, framework, batchDuration)
-    MQTTTestUtils = new MQTTTestUtils
-    MQTTTestUtils.setup()
+    mqttTestUtils = new MQTTTestUtils
+    mqttTestUtils.setup()
   }
 
   after {
@@ -48,15 +48,15 @@ class MQTTStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter 
       ssc.stop()
       ssc = null
     }
-    if (MQTTTestUtils != null) {
-      MQTTTestUtils.teardown()
-      MQTTTestUtils = null
+    if (mqttTestUtils != null) {
+      mqttTestUtils.teardown()
+      mqttTestUtils = null
     }
   }
 
   test("mqtt input stream") {
     val sendMessage = "MQTT demo for spark streaming"
-    val receiveStream = MQTTUtils.createStream(ssc, "tcp://" + MQTTTestUtils.brokerUri, topic,
+    val receiveStream = MQTTUtils.createStream(ssc, "tcp://" + mqttTestUtils.brokerUri, topic,
       StorageLevel.MEMORY_ONLY)
 
     @volatile var receiveMessage: List[String] = List()
@@ -71,7 +71,7 @@ class MQTTStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter 
 
     // Retry it because we don't know when the receiver will start.
     eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
-      MQTTTestUtils.publishData(topic, sendMessage)
+      mqttTestUtils.publishData(topic, sendMessage)
       assert(sendMessage.equals(receiveMessage(0)))
     }
     ssc.stop()
