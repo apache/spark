@@ -50,7 +50,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * @param rule the function use to transform this nodes children
    */
   def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
-    // Only apply the rule if our child has not been resolved.
     if (!analyzed) {
       val afterRuleOnChildren = transformChildren(rule, (t, r) => t.resolveOperators(r))
       if (this fastEquals afterRuleOnChildren) {
