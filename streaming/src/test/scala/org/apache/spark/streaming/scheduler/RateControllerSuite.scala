@@ -29,7 +29,7 @@ class RateControllerSuite extends TestSuiteBase {
 
   override def useManualClock: Boolean = false
 
-  override def batchDuration = Milliseconds(50)
+  override def batchDuration: Duration = Milliseconds(50)
 
   test("RateController - rate controller publishes updates after batches complete") {
     val ssc = new StreamingContext(conf, batchDuration)

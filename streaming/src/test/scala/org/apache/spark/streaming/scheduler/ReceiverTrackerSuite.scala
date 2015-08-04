@@ -93,12 +93,14 @@ private[streaming] class RateTestInputDStream(@transient ssc_ : StreamingContext
 private[streaming] class RateTestReceiver(receiverId: Int, host: Option[String] = None)
   extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
 
-  private lazy val customBlockGenerator = supervisor.createBlockGenerator(new BlockGeneratorListener {
-    override def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]): Unit = {}
-    override def onError(message: String, throwable: Throwable): Unit = {}
-    override def onGenerateBlock(blockId: StreamBlockId): Unit = {}
-    override def onAddData(data: Any, metadata: Any): Unit = {}
-  })
+  private lazy val customBlockGenerator = supervisor.createBlockGenerator(
+    new BlockGeneratorListener {
+      override def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]): Unit = {}
+      override def onError(message: String, throwable: Throwable): Unit = {}
+      override def onGenerateBlock(blockId: StreamBlockId): Unit = {}
+      override def onAddData(data: Any, metadata: Any): Unit = {}
+    }
+  )
 
   setReceiverId(receiverId)
 

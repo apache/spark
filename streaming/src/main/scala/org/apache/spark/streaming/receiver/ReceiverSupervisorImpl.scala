@@ -192,7 +192,7 @@ private[streaming] class ReceiverSupervisorImpl(
 
   override def createBlockGenerator(
       blockGeneratorListener: BlockGeneratorListener): BlockGenerator = {
-    val newBlockGenerator = new BlockGenerator(blockGeneratorListener,  streamId, env.conf)
+    val newBlockGenerator = new BlockGenerator(blockGeneratorListener, streamId, env.conf)
     registeredBlockGenerators += newBlockGenerator
     newBlockGenerator
   }

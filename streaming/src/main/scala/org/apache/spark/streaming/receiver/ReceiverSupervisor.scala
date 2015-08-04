@@ -95,6 +95,9 @@ private[streaming] abstract class ReceiverSupervisor(
   /**
    * Create a custom [[BlockGenerator]] that the receiver implementation can directly control
    * using their provided [[BlockGeneratorListener]].
+   *
+   * Note: Do not explicitly start or stop the `BlockGenerator`, the `ReceiverSupervisorImpl`
+   * will take care of it.
    */
   def createBlockGenerator(blockGeneratorListener: BlockGeneratorListener): BlockGenerator
 
