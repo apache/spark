@@ -35,7 +35,7 @@ class DataFramePivotSuite extends QueryTest {
   test("pivot year") {
     checkAnswer(
       courseSales.pivot(Seq($"course"), $"year", Seq("2012", "2013"), sum($"earnings")),
-      Row("dotNet", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
+      Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
     )
   }
 
