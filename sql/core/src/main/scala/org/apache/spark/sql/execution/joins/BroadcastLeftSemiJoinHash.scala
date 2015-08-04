@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.spark.{InternalAccumulator, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -51,7 +52,14 @@ case class BroadcastLeftSemiJoinHash(
       val broadcastedRelation = sparkContext.broadcast(hashRelation)
 
       left.execute().mapPartitions { streamIter =>
-        hashSemiJoin(streamIter, broadcastedRelation.value)
+        val hashedRelation = broadcastedRelation.value
+        hashedRelation match {
+          case unsafe: UnsafeHashedRelation =>
+            TaskContext.get().internalMetricsToAccumulators(
+              InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getUnsafeSize)
+          case _ =>
+        }
+        hashSemiJoin(streamIter, hashedRelation)
       }
     }
   }

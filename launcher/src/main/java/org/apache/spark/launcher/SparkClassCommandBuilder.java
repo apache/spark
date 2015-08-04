@@ -69,7 +69,8 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
     } else if (className.equals("org.apache.spark.executor.MesosExecutorBackend")) {
       javaOptsKeys.add("SPARK_EXECUTOR_OPTS");
       memKey = "SPARK_EXECUTOR_MEMORY";
-    } else if (className.equals("org.apache.spark.deploy.ExternalShuffleService")) {
+    } else if (className.equals("org.apache.spark.deploy.ExternalShuffleService") ||
+        className.equals("org.apache.spark.deploy.mesos.MesosExternalShuffleService")) {
       javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
       javaOptsKeys.add("SPARK_SHUFFLE_OPTS");
       memKey = "SPARK_DAEMON_MEMORY";

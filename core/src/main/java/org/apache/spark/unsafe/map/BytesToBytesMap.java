@@ -505,7 +505,7 @@ public final class BytesToBytesMap {
       // Here, we'll copy the data into our data pages. Because we only store a relative offset from
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
-      // (8 byte key length) (key) (8 byte value length) (value)
+      // (8 byte key length) (key) (value)
       final long requiredSize = 8 + keyLengthBytes + valueLengthBytes;
 
       // --- Figure out where to insert the new record ---------------------------------------------
@@ -655,7 +655,10 @@ public final class BytesToBytesMap {
     return pageSizeBytes;
   }
 
-  /** Returns the total amount of memory, in bytes, consumed by this map's managed structures. */
+  /**
+   * Returns the total amount of memory, in bytes, consumed by this map's managed structures.
+   * Note that this is also the peak memory used by this map, since the map is append-only.
+   */
   public long getTotalMemoryConsumption() {
     long totalDataPagesSize = 0L;
     for (MemoryBlock dataPage : dataPages) {
@@ -673,7 +676,6 @@ public final class BytesToBytesMap {
     }
     return timeSpentResizingNs;
   }
-
 
   /**
    * Returns the average number of probes per key lookup.
