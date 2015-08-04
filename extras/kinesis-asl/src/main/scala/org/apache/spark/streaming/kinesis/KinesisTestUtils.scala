@@ -186,6 +186,8 @@ private[kinesis] object KinesisTestUtils {
   lazy val shouldRunTests = {
     val isEnvSet = sys.env.get(envVarNameForEnablingTests) == Some("1")
     if (isEnvSet) {
+      // scalastyle:off println
+      // Print this so that they are easily visible on the console and not hidden in the log4j logs.
       println(
         s"""
           |Kinesis tests that actually send data has been enabled by setting the environment
@@ -196,13 +198,17 @@ private[kinesis] object KinesisTestUtils {
           |$endVarNameForEndpoint to the desired endpoint URL
           |(e.g. $endVarNameForEndpoint="https://kinesis.us-west-2.amazonaws.com").
         """.stripMargin)
+      // scalastyle:on println
     }
     isEnvSet
   }
 
   lazy val endpointUrl = {
     val url = sys.env.getOrElse(endVarNameForEndpoint, defaultEndpointUrl)
+    // scalastyle:off println
+    // Print this so that they are easily visible on the console and not hidden in the log4j logs.
     println(s"Using endpoint URL $url for creating Kinesis streams for tests.")
+    // scalastyle:on println
     url
   }
 
