@@ -46,6 +46,14 @@ pyspark.mllib.linalg module
     :undoc-members:
     :show-inheritance:
 
+pyspark.mllib.linalg.distributed module
+---------------------------------------
+
+.. automodule:: pyspark.mllib.linalg.distributed
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 pyspark.mllib.random module
 ---------------------------
 
