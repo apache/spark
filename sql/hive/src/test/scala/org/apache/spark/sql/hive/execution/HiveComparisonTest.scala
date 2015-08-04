@@ -235,7 +235,7 @@ abstract class HiveComparisonTest
       return
     }
 
-    test(testCaseName) {
+    test(testCaseName + " " + (new java.util.Random().nextInt()) ) {
       logDebug(s"=== HIVE TEST: $testCaseName ===")
 
       // Clear old output for this testcase.
@@ -348,6 +348,9 @@ abstract class HiveComparisonTest
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
+          // scalastyle:off println
+          println("Run :" + queryString)
+          // scalastyle:on println
           val query = new TestHive.QueryExecution(queryString)
           try { (query, prepareAnswer(query, query.stringResult())) } catch {
             case e: Throwable =>

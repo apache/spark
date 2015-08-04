@@ -76,6 +76,9 @@ trait HashSemiJoin {
         }
       }
     }
+    // scalastyle:off println
+    println(s"Build HashSet with ${hashSet.size()} items")
+    // scalastyle:on println
     hashSet
   }
 

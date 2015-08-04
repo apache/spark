@@ -59,7 +59,9 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
         runAll) {
         // Build a test case and submit it to scala test framework...
         val queriesString = fileToString(testCaseFile)
-        createQueryTest(testCaseName, queriesString)
+        if (testCaseName == "semijoin") {
+          (1 to 100).foreach(x => createQueryTest(testCaseName, queriesString))
+        }
       } else {
         // Only output warnings for the built in whitelist as this clutters the output when the user
         // trying to execute a single test from the commandline.
