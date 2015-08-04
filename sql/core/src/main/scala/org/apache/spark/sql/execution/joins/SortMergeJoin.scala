@@ -67,7 +67,7 @@ case class SortMergeJoin(
       UnknownPartitioning(streamedPlan.outputPartitioning.numPartitions)
     case Inner =>
       PartitioningCollection(Seq(streamedPlan.outputPartitioning, bufferedPlan.outputPartitioning))
-    case LeftOuter | rightOuter =>
+    case LeftOuter | RightOuter =>
       streamedPlan.outputPartitioning
     case x =>
       throw new IllegalStateException(s"SortMergeJoin should not take $x as the JoinType")
