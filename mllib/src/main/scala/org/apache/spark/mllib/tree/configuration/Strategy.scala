@@ -193,4 +193,8 @@ object Strategy {
       new Strategy(algo = Regression, impurity = Variance, maxDepth = 10,
         numClasses = 0)
   }
+
+  @deprecated("Use Strategy.defaultStrategy instead.", "1.5.0")
+  def defaultStategy(algo: Algo): Strategy = defaultStrategy(algo)
+
 }
