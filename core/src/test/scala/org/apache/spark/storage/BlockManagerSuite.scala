@@ -449,12 +449,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store2 = makeBlockManager(8000)
     val list1 = List(new Array[Byte](4000))
     store2.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    val list1get = store.getRemote("list1")
-    assert(list1get.isDefined, "list1get expected to be fetched")
-    //simulate block manager crash
+    val list1Get = store.getRemote("list1")
+    assert(list1Get.isDefined, "list1get expected to be fetched")
+    // simulate block manager crashed
     store2.stop()
-    val list1getagain = store.getRemoteBytes("list1")
-    assert(!list1getagain.isDefined, "list1getagain expected to be not fetched")
+    val list1GetAgain = store.getRemoteBytes("list1")
+    assert(!list1GetAgain.isDefined, "list1getagain expected to be not fetched")
     conf.set("spark.network.timeout", "120s")
   }
 
