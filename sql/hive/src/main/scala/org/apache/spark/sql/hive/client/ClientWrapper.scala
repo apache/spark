@@ -72,13 +72,15 @@ private[hive] class ClientWrapper(
   // Internally, Hive `ShimLoader` tries to load different versions of Hadoop shims by checking
   // version information gathered from Hadoop jar files.  If the major version number is 1,
   // `Hadoop20SShims` will be loaded.  Otherwise, if the major version number is 2, `Hadoop23Shims`
-  // will be chosen.  However, CDH Hadoop versions like 2.0.0-mr1-cdh4.1.1 have 2 as major version
-  // number, but contain Hadoop 1 code.  This confuses Hive `ShimLoader` and loads wrong version of
-  // shims.
+  // will be chosen.
+  //
+  // However, part of APIs in Hadoop 2.0.x and 2.1.x versions were in flux due to historical reasons.
+  // So CDH Hadoop versions like 2.0.0-mr1-cdh4.1.1 are more Hadoop-1-like, but have a major version
+  // of 2.  This confuses Hive `ShimLoader` and loads wrong version of shims.
   //
   // Here we check for existence of the `Path.getPathWithoutSchemeAndAuthority` method, which
-  // doesn't exist in Hadoop 1 (it's also the method that reveals this shims loading issue), and
-  // load `Hadoop20SShims` when it doesn't exist.
+  // doesn't exist in Hadoop 1 and 2.0.x (it's also the method that reveals this shims loading
+  // issue), and load `Hadoop20SShims` when it doesn't exist.
   private def overrideHadoopShims(): Unit = {
     if (!classOf[Path].getDeclaredMethods.exists(_.getName == "getPathWithoutSchemeAndAuthority")) {
       val shimClassName = "org.apache.hadoop.hive.shims.Hadoop20SShims"
