@@ -183,7 +183,26 @@ private[joins] final class UnsafeHashedRelation(
   private[joins] def this() = this(null)  // Needed for serialization
 
   // Use BytesToBytesMap in executor for better performance (it's created when deserialization)
+  // This is used in broadcast joins and distributed mode only
   @transient private[this] var binaryMap: BytesToBytesMap = _
+
+  /**
+   * Return the size of the unsafe map on the executors.
+   *
+   * For broadcast joins, this hashed relation is bigger on the driver because it is
+   * represented as a Java hash map there. While serializing the map to the executors,
+   * however, we rehash the contents in a binary map to reduce the memory footprint on
+   * the executors.
+   *
+   * For non-broadcast joins or in local mode, return 0.
+   */
+  def getUnsafeSize: Long = {
+    if (binaryMap != null) {
+      binaryMap.getTotalMemoryConsumption
+    } else {
+      0
+    }
+  }
 
   override def get(key: InternalRow): Seq[InternalRow] = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
@@ -214,7 +233,7 @@ private[joins] final class UnsafeHashedRelation(
       }
 
     } else {
-      // Use the JavaHashMap in Local mode or ShuffleHashJoin
+      // Use the Java HashMap in local mode or for non-broadcast joins (e.g. ShuffleHashJoin)
       hashTable.get(unsafeKey)
     }
   }
@@ -316,6 +335,7 @@ private[joins] object UnsafeHashedRelation {
       keyGenerator: UnsafeProjection,
       sizeEstimate: Int): HashedRelation = {
 
+    // Use a Java hash table here because unsafe maps expect fixed size records
     val hashTable = new JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]](sizeEstimate)
 
     // Create a mapping of buildKeys -> rows

@@ -209,6 +209,14 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
+   * The memory used by this map's managed structures, in bytes.
+   * Note that this is also the peak memory used by this map, since the map is append-only.
+   */
+  public long getMemoryUsage() {
+    return map.getTotalMemoryConsumption();
+  }
+
+  /**
    * Free the memory associated with this map. This is idempotent and can be called multiple times.
    */
   public void free() {

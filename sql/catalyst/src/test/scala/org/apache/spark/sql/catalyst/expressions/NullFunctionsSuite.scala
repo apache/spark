@@ -77,7 +77,7 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("AtLeastNNonNullNans") {
+  test("AtLeastNNonNulls") {
     val mix = Seq(Literal("x"),
       Literal.create(null, StringType),
       Literal.create(null, DoubleType),
@@ -96,46 +96,11 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal(Float.MaxValue),
       Literal(false))
 
-    checkEvaluation(AtLeastNNonNullNans(0, mix), true, EmptyRow)
-    checkEvaluation(AtLeastNNonNullNans(2, mix), true, EmptyRow)
-    checkEvaluation(AtLeastNNonNullNans(3, mix), false, EmptyRow)
-    checkEvaluation(AtLeastNNonNullNans(0, nanOnly), true, EmptyRow)
-    checkEvaluation(AtLeastNNonNullNans(3, nanOnly), true, EmptyRow)
-    checkEvaluation(AtLeastNNonNullNans(4, nanOnly), false, EmptyRow)
-    checkEvaluation(AtLeastNNonNullNans(0, nullOnly), true, EmptyRow)
-    checkEvaluation(AtLeastNNonNullNans(3, nullOnly), true, EmptyRow)
-    checkEvaluation(AtLeastNNonNullNans(4, nullOnly), false, EmptyRow)
-  }
-
-  test("AtLeastNNull") {
-    val mix = Seq(Literal("x"),
-      Literal.create(null, StringType),
-      Literal.create(null, DoubleType),
-      Literal(Double.NaN),
-      Literal(5f))
-
-    val nanOnly = Seq(Literal("x"),
-      Literal(10.0),
-      Literal(Float.NaN),
-      Literal(math.log(-2)),
-      Literal(Double.MaxValue))
-
-    val nullOnly = Seq(Literal("x"),
-      Literal.create(null, DoubleType),
-      Literal.create(null, DecimalType.USER_DEFAULT),
-      Literal(Float.MaxValue),
-      Literal(false))
-
-    checkEvaluation(AtLeastNNulls(0, mix), true, EmptyRow)
-    checkEvaluation(AtLeastNNulls(1, mix), true, EmptyRow)
-    checkEvaluation(AtLeastNNulls(2, mix), true, EmptyRow)
-    checkEvaluation(AtLeastNNulls(3, mix), false, EmptyRow)
-    checkEvaluation(AtLeastNNulls(0, nanOnly), true, EmptyRow)
-    checkEvaluation(AtLeastNNulls(1, nanOnly), false, EmptyRow)
-    checkEvaluation(AtLeastNNulls(2, nanOnly), false, EmptyRow)
-    checkEvaluation(AtLeastNNulls(0, nullOnly), true, EmptyRow)
-    checkEvaluation(AtLeastNNulls(1, nullOnly), true, EmptyRow)
-    checkEvaluation(AtLeastNNulls(2, nullOnly), true, EmptyRow)
-    checkEvaluation(AtLeastNNulls(3, nullOnly), false, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(2, mix), true, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(3, mix), false, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(3, nanOnly), true, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(4, nanOnly), false, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(3, nullOnly), true, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(4, nullOnly), false, EmptyRow)
   }
 }

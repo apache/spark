@@ -59,7 +59,7 @@ public final class UnsafeRow extends MutableRow {
   //////////////////////////////////////////////////////////////////////////////
 
   public static int calculateBitSetWidthInBytes(int numFields) {
-    return ((numFields / 64) + (numFields % 64 == 0 ? 0 : 1)) * 8;
+    return ((numFields + 63)/ 64) * 8;
   }
 
   /**
@@ -461,6 +461,38 @@ public final class UnsafeRow extends MutableRow {
     );
     rowCopy.pointTo(rowDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
     return rowCopy;
+  }
+
+  /**
+   * Creates an empty UnsafeRow from a byte array with specified numBytes and numFields.
+   * The returned row is invalid until we call copyFrom on it.
+   */
+  public static UnsafeRow createFromByteArray(int numBytes, int numFields) {
+    final UnsafeRow row = new UnsafeRow();
+    row.pointTo(new byte[numBytes], numFields, numBytes);
+    return row;
+  }
+
+  /**
+   * Copies the input UnsafeRow to this UnsafeRow, and resize the underlying byte[] when the
+   * input row is larger than this row.
+   */
+  public void copyFrom(UnsafeRow row) {
+    // copyFrom is only available for UnsafeRow created from byte array.
+    assert (baseObject instanceof byte[]) && baseOffset == PlatformDependent.BYTE_ARRAY_OFFSET;
+    if (row.sizeInBytes > this.sizeInBytes) {
+      // resize the underlying byte[] if it's not large enough.
+      this.baseObject = new byte[row.sizeInBytes];
+    }
+    PlatformDependent.copyMemory(
+      row.baseObject,
+      row.baseOffset,
+      this.baseObject,
+      this.baseOffset,
+      row.sizeInBytes
+    );
+    // update the sizeInBytes.
+    this.sizeInBytes = row.sizeInBytes;
   }
 
   /**
