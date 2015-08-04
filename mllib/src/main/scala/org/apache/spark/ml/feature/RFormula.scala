@@ -88,7 +88,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     val takenNames = mutable.Set(dataset.columns: _*)
     val interactionTerms = resolvedFormula.interactions.map { interaction =>
       val outputCol = {
-        var tmp = interaction.term
+        var tmp = interaction.mkString(":")
         while (takenNames.contains(tmp)) {
           tmp += "_"
         }
@@ -96,7 +96,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
       }
       takenNames.add(outputCol)
       encoderStages += new Interaction()
-        .setInputCols(interaction.inputs)
+        .setInputCols(interaction)
         .setOutputCol(outputCol)
       outputCol
     }

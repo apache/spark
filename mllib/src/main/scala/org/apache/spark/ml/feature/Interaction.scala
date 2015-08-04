@@ -19,27 +19,31 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
+import org.apache.spark.mllib.linalg.VectorUDT
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
 @Experimental
 class Interaction(override val uid: String) extends Estimator[PipelineModel]
   with HasInputCols with HasOutputCol {
+
   def this() = this(Identifiable.randomUID("interaction"))
 
   /** @group setParam */
-  def setInputCols(values: Array[String]): this.type = set(inputCols, value)
+  def setInputCols(values: Array[String]): this.type = set(inputCols, values)
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def fit(dataset: DataFrame): InteractionModel = {
-    require(isDefined(inputCols), "Input cols must be defined first.")
-    require(isDefined(outputCol), "Output col must be defined first.")
-    require($(inputCols).length > 0, "Input cols must have non-zero length.")
-
+  override def fit(dataset: DataFrame): PipelineModel = {
+    checkParams()
     val encoderStages = ArrayBuffer[PipelineStage]()
     val tempColumns = ArrayBuffer[String]()
     val (factorCols, nonFactorCols) = $(inputCols)
@@ -55,14 +59,14 @@ class Interaction(override val uid: String) extends Estimator[PipelineModel]
           tempColumns += output
           output
         }
-        val combinedIndexCol = "combined_idx_" + uid
-        tempColumns += combinedIndexCol
+        val combinedIndex = "combined_idx_" + uid
+        tempColumns += combinedIndex
         val encodedCol = if (nonFactorCols.length > 0) {
           "factors_" + uid
         } else {
           $(outputCol)
         }
-        encoderStages += new IndexCombiner(indexedCols, combinedIndexCol)
+        encoderStages += new IndexCombiner(indexedCols, combinedIndex)
         encoderStages += new OneHotEncoder()
           .setInputCol(combinedIndex)
           .setOutputCol(encodedCol)
@@ -82,6 +86,24 @@ class Interaction(override val uid: String) extends Estimator[PipelineModel]
       .fit(dataset)
       .setParent(this)
   }
+
+  // optimistic schema; does not contain any ML attributes
+  override def transformSchema(schema: StructType): StructType = {
+    checkParams()
+    if ($(inputCols).exists(col => schema(col).dataType == StringType)) {
+      StructType(schema.fields :+ StructField($(outputCol), new VectorUDT, false))
+    } else {
+      StructType(schema.fields :+ StructField($(outputCol), DoubleType, false))
+    }
+  }
+
+  override def copy(extra: ParamMap): Interaction = defaultCopy(extra)
+
+  private def checkParams(): Unit = {
+    require(isDefined(inputCols), "Input cols must be defined first.")
+    require(isDefined(outputCol), "Output col must be defined first.")
+    require($(inputCols).length > 0, "Input cols must have non-zero length.")
+  }
 }
 
 private class IndexCombiner(inputCols: Array[String], outputCol: String) extends Transformer {
@@ -89,10 +111,11 @@ private class IndexCombiner(inputCols: Array[String], outputCol: String) extends
 
   override def transform(dataset: DataFrame): DataFrame = {
     val cardinalities = inputCols.map(col =>
-      Attribute.fromStructField(dataset.schema(col)).asInstanceOf[NominalAttribute].values.length)
-    val combiner = udf { cols: Array[Double] =>
+      Attribute.fromStructField(dataset.schema(col))
+        .asInstanceOf[NominalAttribute].values.get.length)
+    val combiner = udf { cols: Seq[Double] =>
       var offset = 1
-      var res = cols(0)
+      var res = 0.0
       var i = 0
       while (i < cols.length) {
         res += cols(i) * offset
@@ -101,12 +124,12 @@ private class IndexCombiner(inputCols: Array[String], outputCol: String) extends
       }
       res
     }
-    dataset.select("*", combiner(array(inputCols.map(dataset): _*)).as(outputCol))
+    dataset.select(col("*"), combiner(array(inputCols.map(dataset(_)): _*)).as(outputCol))
   }
 
   override def transformSchema(schema: StructType): StructType = {
     StructType(schema.fields :+ StructField(outputCol, DoubleType, false))
   }
 
-  override def copy(extra: ParamMap): ColumnPruner = defaultCopy(extra)
+  override def copy(extra: ParamMap): IndexCombiner = defaultCopy(extra)
 }

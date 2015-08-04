@@ -51,7 +51,7 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
         }
       case _: Intercept =>
     }
-    ResolvedRFormula(label.value, includedTerms.distinct)
+    ResolvedRFormula(label.value, includedTerms.distinct, Nil)
   }
 
   /** Whether this formula specifies fitting with an intercept term. */
@@ -79,7 +79,8 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
 /**
  * Represents a fully evaluated and simplified R formula.
  */
-private[ml] case class ResolvedRFormula(label: String, terms: Seq[String])
+private[ml] case class ResolvedRFormula(
+  label: String, terms: Seq[String], interactions: Seq[Array[String]])
 
 /**
  * R formula terms. See the R formula docs here for more information:
