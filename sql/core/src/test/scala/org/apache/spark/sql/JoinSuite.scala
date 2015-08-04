@@ -56,6 +56,7 @@ class JoinSuite extends QueryTest with SQLTestUtils with BeforeAndAfterEach {
       case j: BroadcastNestedLoopJoin => j
       case j: BroadcastLeftSemiJoinHash => j
       case j: SortMergeJoin => j
+      case j: SortMergeOuterJoin => j
     }
 
     assert(operators.size === 1)
@@ -83,12 +84,12 @@ class JoinSuite extends QueryTest with SQLTestUtils with BeforeAndAfterEach {
       ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoin]),
       ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[SortMergeJoin]),
       ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin]),
-      ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[SortMergeJoin]),
+      ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[SortMergeOuterJoin]),
       ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
-        classOf[SortMergeJoin]),
+        classOf[SortMergeOuterJoin]),
       ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
-        classOf[SortMergeJoin]),
-      ("SELECT * FROM testData full outer join testData2 ON key = a", classOf[SortMergeJoin]),
+        classOf[SortMergeOuterJoin]),
+      ("SELECT * FROM testData full outer join testData2 ON key = a", classOf[SortMergeOuterJoin]),
       ("SELECT * FROM testData left JOIN testData2 ON (key * a != key + a)",
         classOf[BroadcastNestedLoopJoin]),
       ("SELECT * FROM testData right JOIN testData2 ON (key * a != key + a)",
@@ -150,11 +151,11 @@ class JoinSuite extends QueryTest with SQLTestUtils with BeforeAndAfterEach {
     ctx.sql("CACHE TABLE testData")
 
     Seq(
-      ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[SortMergeJoin]),
+      ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[SortMergeOuterJoin]),
       ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
-        classOf[SortMergeJoin]),
+        classOf[SortMergeOuterJoin]),
       ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
-        classOf[SortMergeJoin])
+        classOf[SortMergeOuterJoin])
     ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
       Seq(

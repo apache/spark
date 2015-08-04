@@ -23,6 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.util.collection.CompactBuffer
 
@@ -37,7 +38,7 @@ trait HashOuterJoin {
   val left: SparkPlan
   val right: SparkPlan
 
-  override def output: Seq[Attribute] = {
+  final override def output: Seq[Attribute] = {
     joinType match {
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
@@ -46,8 +47,18 @@ trait HashOuterJoin {
       case FullOuter =>
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
       case x =>
-        throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
+        throw new IllegalArgumentException(
+          s"${getClass.getSimpleName} should not take $x as the JoinType")
     }
+  }
+
+  override def outputPartitioning: Partitioning = joinType match {
+    case LeftOuter => left.outputPartitioning
+    case RightOuter => right.outputPartitioning
+    case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
+    case x =>
+      throw new IllegalArgumentException(
+        s"${getClass.getSimpleName}  should not take $x as the JoinType")
   }
 
   protected[this] lazy val (buildPlan, streamedPlan) = joinType match {
@@ -55,7 +66,7 @@ trait HashOuterJoin {
     case LeftOuter => (right, left)
     case x =>
       throw new IllegalArgumentException(
-        s"HashOuterJoin should not take $x as the JoinType")
+        s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
   protected[this] lazy val (buildKeys, streamedKeys) = joinType match {
@@ -63,7 +74,7 @@ trait HashOuterJoin {
     case LeftOuter => (rightKeys, leftKeys)
     case x =>
       throw new IllegalArgumentException(
-        s"HashOuterJoin should not take $x as the JoinType")
+        s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
   protected[this] def isUnsafeMode: Boolean = {
