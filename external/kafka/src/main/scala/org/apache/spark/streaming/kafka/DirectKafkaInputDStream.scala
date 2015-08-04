@@ -17,8 +17,6 @@
 
 package org.apache.spark.streaming.kafka
 
-import org.apache.spark.streaming.scheduler.rate.RateEstimator
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -32,6 +30,7 @@ import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.scheduler.{RateController, StreamInputInfo}
+import org.apache.spark.streaming.scheduler.rate.RateEstimator
 
 /**
  *  A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
@@ -79,7 +78,7 @@ class DirectKafkaInputDStream[
    */
   override protected[streaming] val rateController: Option[RateController] = {
     if (RateController.isBackPressureEnabled(ssc.conf)) {
-      RateEstimator.create(ssc.conf).map { new DirectKafkaRateController(id, _) }
+      Some(new DirectKafkaRateController(id, RateEstimator.create(ssc.conf, ssc_.graph.batchDuration)))
     } else {
       None
     }
@@ -87,15 +86,15 @@ class DirectKafkaInputDStream[
 
   protected val kc = new KafkaCluster(kafkaParams)
 
-  private val ratePerPartition: Int = context.sparkContext.getConf.getInt(
+  private val maxRateLimitPerPartition: Int = context.sparkContext.getConf.getInt(
       "spark.streaming.kafka.maxRatePerPartition", 0)
   protected def maxMessagesPerPartition: Option[Long] = {
     val estimatedRate = rateController.map(_.getLatestRate().toInt).getOrElse(-1)
     val numPartitions = currentOffsets.keys.size
     val effectiveRatePerPartition = if (estimatedRate > 0) {
-      Math.min(ratePerPartition, (estimatedRate / numPartitions))
+      Math.min(maxRateLimitPerPartition, (estimatedRate / numPartitions))
     } else {
-      ratePerPartition
+      maxRateLimitPerPartition
     }
     if (effectiveRatePerPartition > 0) {
       val secsPerBatch = context.graph.batchDuration.milliseconds.toDouble / 1000
