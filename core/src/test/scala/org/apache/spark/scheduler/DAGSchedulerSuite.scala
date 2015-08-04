@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import java.util.Properties
+
 import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
@@ -262,9 +264,10 @@ class DAGSchedulerSuite
       rdd: RDD[_],
       partitions: Array[Int],
       func: (TaskContext, Iterator[_]) => _ = jobComputeFunc,
-      listener: JobListener = jobListener): Int = {
+      listener: JobListener = jobListener,
+      properties: Properties = null): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener))
+    runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener, properties))
     jobId
   }
 
@@ -1319,6 +1322,43 @@ class DAGSchedulerSuite
 
     assert(listener1.failureMessage === s"Job aborted due to stage failure: $stageFailureMessage")
     assert(listener2.failureMessage === s"Job aborted due to stage failure: $stageFailureMessage")
+    assertDataStructuresEmpty()
+  }
+
+  /**
+   * Makes sure that tasks for a stage used by multiple jobs are submitted with the properties of a
+   * later, active job if they were previously run under a job that is no longer active
+   */
+  test("stage used by two jobs, the first no longer active") {
+    val baseRdd = new MyRDD(sc, 1, Nil)
+    val finalRdd1 = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd)))
+    val finalRdd2 = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd)))
+    val job1Properties = new Properties()
+    val job2Properties = new Properties()
+    job1Properties.setProperty("testProperty", "job1")
+    job2Properties.setProperty("testProperty", "job2")
+
+    // run job1
+    val jobId1 = submit(finalRdd1, Array(0), properties = job1Properties)
+    assert(scheduler.activeJobs.nonEmpty)
+    val testProperty1 = scheduler.jobIdToActiveJob(jobId1).properties.getProperty("testProperty")
+
+    // remove job1 as an ActiveJob
+    cancel(jobId1)
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(sparkListener.failedStages.contains(0))
+    assert(sparkListener.failedStages.size === 1)
+    assert(scheduler.activeJobs.isEmpty)
+
+    // run job2
+    val jobId2 = submit(finalRdd2, Array(0), properties = job2Properties)
+    assert(scheduler.activeJobs.nonEmpty)
+    val testProperty2 = scheduler.jobIdToActiveJob(jobId2).properties.getProperty("testProperty")
+    assert(testProperty1 != testProperty2)
+    complete(taskSets(1), Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    assert(scheduler.activeJobs.isEmpty)
+
     assertDataStructuresEmpty()
   }
 
