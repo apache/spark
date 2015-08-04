@@ -306,23 +306,22 @@ class LocalLDAModel private[clustering] (
 
     // Sum bounds for each document:
     //  bounds for prob(tokens) + bounds for prob(document-topic distribution)
-    documents.filter(_._2.numNonzeros > 0).map {
-      case (id: Long, termCounts: Vector) =>
-        var docBound = 0.0D
-        val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
-          termCounts, exp(Elogbeta), brzAlpha, gammaShape, k)
-        val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
+    documents.filter(_._2.numNonzeros > 0).map { case (id: Long, termCounts: Vector) =>
+      var docBound = 0.0D
+      val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
+        termCounts, exp(Elogbeta), brzAlpha, gammaShape, k)
+      val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
 
-        // E[log p(doc | theta, beta)]
-        termCounts.foreachActive { case (idx, count) =>
-          docBound += count * LDAUtils.logSumExp(Elogthetad + Elogbeta(idx, ::).t)
-        }
-        // E[log p(theta | alpha) - log q(theta | gamma)]
-        docBound += sum((brzAlpha - gammad) :* Elogthetad)
-        docBound += sum(lgamma(gammad) - lgamma(brzAlpha))
-        docBound += lgamma(sum(brzAlpha)) - lgamma(sum(gammad))
+      // E[log p(doc | theta, beta)]
+      termCounts.foreachActive { case (idx, count) =>
+        docBound += count * LDAUtils.logSumExp(Elogthetad + Elogbeta(idx, ::).t)
+      }
+      // E[log p(theta | alpha) - log q(theta | gamma)]
+      docBound += sum((brzAlpha - gammad) :* Elogthetad)
+      docBound += sum(lgamma(gammad) - lgamma(brzAlpha))
+      docBound += lgamma(sum(brzAlpha)) - lgamma(sum(gammad))
 
-        docBound
+      docBound
     }.sum()
   }
 
