@@ -49,6 +49,7 @@ object DefaultOptimizer extends Optimizer {
       ColumnPruning,
       // Operator combine
       ProjectCollapsing,
+      EliminateOuterJoinBeforeProject,
       CombineFilters,
       CombineLimits,
       // Constant folding
@@ -262,6 +263,30 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
         }).asInstanceOf[Seq[NamedExpression]]
 
         Project(substitutedProjection, child)
+      }
+  }
+}
+
+/**
+ * Eliminates [[LeftOuter]] and [[RightOuter]] joins when followed by a [[Project]] that keeps only
+ * the left or right columns, respectively.
+ */
+object EliminateOuterJoinBeforeProject extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p @ Project(projectList,
+      j @ Join(left, right, joinType @ (LeftOuter | RightOuter), condition)) =>
+      val projectReferences = AttributeSet(projectList)
+
+      val child = joinType match {
+        case LeftOuter => left
+        case RightOuter => right
+      }
+      val joinList = child.outputSet
+
+      if (projectReferences.subsetOf(joinList)) {
+        Project(projectList, child)
+      } else {
+        p
       }
   }
 }
