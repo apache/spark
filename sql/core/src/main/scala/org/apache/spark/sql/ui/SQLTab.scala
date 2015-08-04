@@ -24,7 +24,6 @@ import org.apache.spark.ui.{SparkUI, SparkUITab}
 private[sql] class SQLTab(sqlContext: SQLContext, sparkUI: SparkUI)
   extends SparkUITab(sparkUI, "sql") with Logging {
 
-  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/ui/static"
 
   val parent = sparkUI
   val listener = sqlContext.listener
@@ -33,5 +32,10 @@ private[sql] class SQLTab(sqlContext: SQLContext, sparkUI: SparkUI)
   attachPage(new ExecutionPage(this))
   parent.attachTab(this)
 
-  parent.addStaticHandler(STATIC_RESOURCE_DIR, "/static/sql")
+  parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
+}
+
+private[sql] object SQLTab {
+
+  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/ui/static"
 }
