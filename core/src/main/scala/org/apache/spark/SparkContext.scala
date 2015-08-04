@@ -1248,7 +1248,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   private[spark] def internalAccumulator[T](initialValue: T, name: String)(
     implicit param: AccumulatorParam[T]): Accumulator[T] = {
-    val acc = new Accumulator(initialValue, param, Some(name), true)
+    val acc = new Accumulator(initialValue, param, Some(name), internal = true)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
   }

@@ -84,22 +84,22 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener {
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-    val executionId = jobStart.properties.getProperty(SQLExecution.EXECUTION_ID_KEY)
-    if (executionId == null) {
+    val executionIdString = jobStart.properties.getProperty(SQLExecution.EXECUTION_ID_KEY)
+    if (executionIdString == null) {
       // This is not a job created by SQL
       return
     }
+    val executionId = executionIdString.toLong
     val jobId = jobStart.jobId
     val stageIds = jobStart.stageIds
 
     synchronized {
-      activeExecutions.get(executionId.toLong).foreach { executionUIData =>
+      activeExecutions.get(executionId).foreach { executionUIData =>
         executionUIData.jobs(jobId) = JobExecutionStatus.RUNNING
         executionUIData.stages ++= stageIds
-        // attemptId must be 0. Right?
         stageIds.foreach(stageId =>
           stageIdToStageMetrics(stageId) = SQLStageMetrics(stageAttemptId = 0))
-        jobIdToExecutionId(jobId) = executionUIData.executionId
+        jobIdToExecutionId(jobId) = executionId
       }
     }
   }
@@ -123,7 +123,7 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener {
   override def onExecutorMetricsUpdate(
       executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = synchronized {
     for ((taskId, stageId, stageAttemptID, metrics) <- executorMetricsUpdate.taskMetrics) {
-      updateTaskMetrics(taskId, stageId, stageAttemptID, metrics, false)
+      updateTaskMetrics(taskId, stageId, stageAttemptID, metrics, finishTask = false)
     }
   }
 
@@ -136,7 +136,11 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener {
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     updateTaskMetrics(
-      taskEnd.taskInfo.taskId, taskEnd.stageId, taskEnd.stageAttemptId, taskEnd.taskMetrics, true)
+      taskEnd.taskInfo.taskId,
+      taskEnd.stageId,
+      taskEnd.stageAttemptId,
+      taskEnd.taskMetrics,
+      finishTask = true)
   }
 
   private def updateTaskMetrics(
@@ -165,7 +169,7 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener {
               if (finishTask) {
                 taskMetrics.finished = true
                 taskMetrics.accumulatorUpdates = metrics.accumulatorUpdates()
-              } else if (!taskMetrics.finished){
+              } else if (!taskMetrics.finished) {
                 // If a task is finished, we should not override with accumulator updates from
                 // heartbeat reports
                 taskMetrics.accumulatorUpdates = metrics.accumulatorUpdates()
@@ -253,8 +257,9 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener {
           for (stageId <- executionUIData.stages;
                stageMetrics <- stageIdToStageMetrics.get(stageId).toIterable;
                taskMetrics <- stageMetrics.taskIdToMetricUpdates.values;
-               accumulatorUpdate <- taskMetrics.accumulatorUpdates.toSeq)
-            yield accumulatorUpdate
+               accumulatorUpdate <- taskMetrics.accumulatorUpdates.toSeq) yield {
+            accumulatorUpdate
+          }
         }.filter { case (id, _) => executionUIData.accumulatorMetrics.keySet(id) }
         mergeAccumulatorUpdates(accumulatorUpdates, accumulatorId =>
           executionUIData.accumulatorMetrics(accumulatorId).accumulatorParam)
@@ -265,8 +270,8 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener {
   }
 
   private def mergeAccumulatorUpdates(
-     accumulatorUpdates: Seq[(Long, Any)],
-     paramFunc: Long => AccumulatorParam[Any]): Map[Long, Any] = {
+      accumulatorUpdates: Seq[(Long, Any)],
+      paramFunc: Long => AccumulatorParam[Any]): Map[Long, Any] = {
     accumulatorUpdates.groupBy(_._1).map { case (accumulatorId, values) =>
       val param = paramFunc(accumulatorId)
       (accumulatorId, values.map(_._2).reduceLeft(param.addInPlace))
@@ -291,12 +296,12 @@ private[ui] case class SQLExecutionUIData(
     stages: mutable.ArrayBuffer[Int] = mutable.ArrayBuffer()) {
 
   /**
-   * Return if there is no running job.
+   * Return whether there are running jobs in this execution.
    */
   def hasRunningJobs: Boolean = jobs.values.exists(_ == JobExecutionStatus.RUNNING)
 
   /**
-   * Return if there is any failed job.
+   * Return whether there are any failed jobs in this execution.
    */
   def isFailed: Boolean = jobs.values.exists(_ == JobExecutionStatus.FAILED)
 

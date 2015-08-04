@@ -55,7 +55,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   /**
    * Create a test SQLContext with the SparkUI enabled.
    */
-  private def newSparkStreamingContext(): SQLContext = {
+  private def newSQLContext(): SQLContext = {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
@@ -65,7 +65,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   }
 
   test("sql tab") {
-    val sqlContext = newSparkStreamingContext()
+    val sqlContext = newSQLContext()
     try {
       import sqlContext.implicits._
 

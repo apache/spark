@@ -120,7 +120,7 @@ class DataFrame private[sql](
     @DeveloperApi @transient val queryExecution: SQLContext#QueryExecution) extends Serializable {
 
   // Note for Spark contributors: if adding or updating any action in `DataFrame`, please make sure
-  // you wrap it with `withNewExecution` if this actions doesn't call other action.
+  // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
 
   /**
    * A constructor that automatically analyzes the logical plan.
@@ -1359,7 +1359,7 @@ class DataFrame private[sql](
    * @group rdd
    * @since 1.3.0
    */
-  def foreach(f: Row => Unit): Unit = withNewExecution {
+  def foreach(f: Row => Unit): Unit = withNewExecutionId {
     rdd.foreach(f)
   }
 
@@ -1368,7 +1368,7 @@ class DataFrame private[sql](
    * @group rdd
    * @since 1.3.0
    */
-  def foreachPartition(f: Iterator[Row] => Unit): Unit = withNewExecution {
+  def foreachPartition(f: Iterator[Row] => Unit): Unit = withNewExecutionId {
     rdd.foreachPartition(f)
   }
 
@@ -1384,7 +1384,7 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def collect(): Array[Row] = withNewExecution {
+  def collect(): Array[Row] = withNewExecutionId {
     queryExecution.executedPlan.executeCollect()
   }
 
@@ -1393,7 +1393,7 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def collectAsList(): java.util.List[Row] = withNewExecution {
+  def collectAsList(): java.util.List[Row] = withNewExecutionId {
     java.util.Arrays.asList(rdd.collect() : _*)
   }
 
@@ -1878,7 +1878,7 @@ class DataFrame private[sql](
    * Wrap a DataFrame action to track all Spark jobs in the body so that we can connect them with
    * an execution.
    */
-  private[sql] def withNewExecution[T](body: => T): T = {
+  private[sql] def withNewExecutionId[T](body: => T): T = {
     SQLExecution.withNewExecutionId(sqlContext, this)(body)
   }
 

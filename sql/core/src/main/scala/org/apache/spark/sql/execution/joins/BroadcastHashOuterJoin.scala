@@ -60,10 +60,8 @@ case class BroadcastHashOuterJoin(
 
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
-  /**
-   * Use lazy so that we won't do broadcast when calling explain but still cache the broadcast value
-   * for the same query.
-   */
+  // Use lazy so that we won't do broadcast when calling explain but still cache the broadcast value
+  // for the same query.
   @transient
   private lazy val broadcastFuture = {
     // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.

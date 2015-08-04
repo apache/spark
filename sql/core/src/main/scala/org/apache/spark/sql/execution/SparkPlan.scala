@@ -127,7 +127,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Do the preparation for SparkPlan.
+   * Prepare a SparkPlan for execution.
    */
   final def prepare(): Unit = {
     doPrepare
@@ -135,8 +135,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   /**
    * Overridden by concrete implementations of SparkPlan. It is guaranteed to run before any
-   * `execute` of SparkPlan. This is helpful when we want to launch some background works, e.g.,
-   * `BroadcastHashJoin` uses it to broadcast asynchronously.
+   * `execute` of SparkPlan. This is helpful if we want to set up some state before executing the
+   * query, e.g., `BroadcastHashJoin` uses it to broadcast asynchronously.
    *
    * This is lazy to make sure running doPrepare is called only once for each SparkPlan.
    */

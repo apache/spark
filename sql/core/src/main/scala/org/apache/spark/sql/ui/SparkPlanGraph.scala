@@ -88,13 +88,20 @@ private[ui] case class SparkPlanGraphNode(
     id: Long, name: String, desc: String, metrics: Seq[SQLPlanMetric]) {
 
   def makeDotNode(metricsValue: Map[Long, Any]): String = {
-    val values =
+    val values = {
       for (metric <- metrics;
-           value <- metricsValue.get(metric.accumulatorId))
-        yield metric.name + ": " + value
+           value <- metricsValue.get(metric.accumulatorId)) yield {
+        metric.name + ": " + value
+      }
+    }
     val label = if (values.isEmpty) {
         name
       } else {
+        // If there are metrics, display all metrics in a separate line. We should use an escaped
+        // "\n" here to follow the dot syntax.
+        //
+        // Note: whitespace between two "\n"s is to create an empty line between the name of
+        // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
         name + "\\n \\n" + values.mkString("\\n")
       }
     s"""  $id [label="$label"];"""

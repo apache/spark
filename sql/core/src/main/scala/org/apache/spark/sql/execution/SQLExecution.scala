@@ -63,14 +63,14 @@ private[sql] object SQLExecution {
       }
       r
     } else {
-      // Don't support nested `withNewExecution`. This is an example of the nested
-      // `withNewExecution`:
+      // Don't support nested `withNewExecutionId`. This is an example of the nested
+      // `withNewExecutionId`:
       //
       // class DataFrame {
-      //   def foo: T = withNewExecution { something.createNewDataFrame().collect() }
+      //   def foo: T = withNewExecutionId { something.createNewDataFrame().collect() }
       // }
       //
-      // Note: `collect` will call withNewExecution
+      // Note: `collect` will call withNewExecutionId
       // In this case, only the "executedPlan" for "collect" will be executed. The "executedPlan"
       // for the outer DataFrame won't be executed. So it's meaningless to create a new Execution
       // for the outer DataFrame. Even if we track it, since its "executedPlan" doesn't run,
@@ -81,6 +81,11 @@ private[sql] object SQLExecution {
     }
   }
 
+  /**
+   * Wrap an action with a known executionId. When running a different action in a different
+   * thread from the original one, this method can be used to connect the Spark jobs in this action
+   * with the known executionId, e.g., `BroadcastHashJoin.broadcastFuture`.
+   */
   def withExecutionId[T](sc: SparkContext, executionId: String)(body: => T): T = {
     val oldExecutionId = sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     try {

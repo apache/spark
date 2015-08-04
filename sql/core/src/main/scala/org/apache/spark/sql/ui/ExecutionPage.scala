@@ -105,7 +105,6 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
   private def planVisualization(metrics: Map[Long, Any], graph: SparkPlanGraph): Seq[Node] = {
     val metadata = graph.nodes.flatMap { node =>
       val nodeId = s"plan-meta-data-${node.id}"
-
       <div id={nodeId}>{node.desc}</div>
     }
 

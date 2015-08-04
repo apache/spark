@@ -141,7 +141,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def save(): Unit = df.withNewExecution {
+  def save(): Unit = df.withNewExecutionId {
     ResolvedDataSource(
       df.sqlContext,
       source,
@@ -191,7 +191,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     saveAsTable(new SqlParser().parseTableIdentifier(tableName))
   }
 
-  private def saveAsTable(tableIdent: TableIdentifier): Unit = df.withNewExecution {
+  private def saveAsTable(tableIdent: TableIdentifier): Unit = df.withNewExecutionId {
     val tableExists = df.sqlContext.catalog.tableExists(tableIdent.toSeq)
 
     (tableExists, mode) match {

@@ -19,6 +19,7 @@ package org.apache.spark.sql.ui
 
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.mutable
 import scala.xml.Node
 
 import org.apache.commons.lang3.StringEscapeUtils
@@ -33,7 +34,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
   override def render(request: HttpServletRequest): Seq[Node] = {
     val currentTime = System.currentTimeMillis()
     val content = listener.synchronized {
-      var _content: Seq[Node] = Nil
+      var _content = mutable.ListBuffer[Node]()
       if (listener.getRunningExecutions.nonEmpty) {
         _content ++=
           new RunningExecutionTable(
@@ -130,6 +131,8 @@ private[ui] abstract class ExecutionTable(
       <div class="stage-details collapsed">
         <pre>{execution.details}</pre>
       </div>
+    } else {
+      Nil
     }
 
     val desc = {
@@ -151,7 +154,7 @@ private[ui] abstract class ExecutionTable(
       // scalastyle:off
       <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
             class="expand-details">
-        + details
+        +details
       </span> ++
         <div class="stacktrace-details collapsed">
           <pre>{physicalPlan}</pre>
@@ -193,7 +196,7 @@ private[ui] class RunningExecutionTable(
     showSucceededJobs = true,
     showFailedJobs = true) {
 
-  protected def header: Seq[String] =
+  override protected def header: Seq[String] =
     baseHeader ++ Seq("Running Jobs", "Succeeded Jobs", "Failed Jobs", "Detail")
 }
 
@@ -212,7 +215,7 @@ private[ui] class CompletedExecutionTable(
     showSucceededJobs = true,
     showFailedJobs = false) {
 
-  protected def header: Seq[String] = baseHeader ++ Seq("Jobs", "Detail")
+  override protected def header: Seq[String] = baseHeader ++ Seq("Jobs", "Detail")
 }
 
 private[ui] class FailedExecutionTable(
@@ -230,6 +233,6 @@ private[ui] class FailedExecutionTable(
     showSucceededJobs = true,
     showFailedJobs = true) {
 
-  protected def header: Seq[String] =
+  override protected def header: Seq[String] =
     baseHeader ++ Seq("Succeeded Jobs", "Failed Jobs", "Detail")
 }
