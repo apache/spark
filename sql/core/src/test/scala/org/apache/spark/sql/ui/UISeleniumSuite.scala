@@ -64,7 +64,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     new SQLContext(sc)
   }
 
-  test("sql tab") {
+  ignore("sql tab") {
     val sqlContext = newSQLContext()
     try {
       import sqlContext.implicits._

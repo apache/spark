@@ -285,7 +285,7 @@ class SQLListenerSuite extends SparkFunSuite {
     assert(executionUIData.failedJobs === Seq(0))
   }
 
-  test("no memory leak") {
+  ignore("no memory leak") {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
