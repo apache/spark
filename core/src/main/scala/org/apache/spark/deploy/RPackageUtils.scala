@@ -190,17 +190,17 @@ private[deploy] object RPackageUtils extends Logging {
     }
   }
 
-  private def listFilesRecursively(dir: File): Set[File] = {
+  private def listFilesRecursively(dir: File, excludePatterns: Seq[String]): Set[File] = {
     if (!dir.exists()) {
       Set.empty[File]
     } else {
       if (dir.isDirectory) {
         val subDir = dir.listFiles(new FilenameFilter {
           override def accept(dir: File, name: String): Boolean = {
-            !name.contains(".zip")
+            !excludePatterns.map(name.contains).reduce(_ || _) // exclude files with given pattern
           }
         })
-        subDir.flatMap(listFilesRecursively).toSet
+        subDir.flatMap(listFilesRecursively(_, excludePatterns)).toSet
       } else {
         Set(dir)
       }
@@ -209,7 +209,7 @@ private[deploy] object RPackageUtils extends Logging {
 
   /** Zips all the libraries found with SparkR in the R/lib directory for distribution with Yarn. */
   private[deploy] def zipRLibraries(dir: File, name: String): File = {
-    val filesToBundle = listFilesRecursively(dir)
+    val filesToBundle = listFilesRecursively(dir, Seq(".zip"))
     // create a zip file from scratch, do not append to existing file.
     val zipFile = new File(dir, name)
     zipFile.delete()
