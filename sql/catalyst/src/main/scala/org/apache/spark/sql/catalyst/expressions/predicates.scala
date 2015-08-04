@@ -104,7 +104,7 @@ case class Not(child: Expression)
 case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   override def children: Seq[Expression] = value +: list
 
-  override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
+  override def nullable: Boolean = false // TODO: Figure out correct nullability semantics of IN.
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
   override def eval(input: InternalRow): Any = {
@@ -113,32 +113,24 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    if (list.isEmpty) {
+    val valueGen = value.gen(ctx)
+    val listGen = list.map(_.gen(ctx))
+    val listCode = listGen.map(x =>
       s"""
-        ${ev.primitive} = false;
-        ${ev.isNull} = false;
-       """
-    } else {
-      val valueGen = value.gen(ctx)
-      val listGen = list.map(_.gen(ctx))
-      val listCode = listGen.map(x =>
-        s"""
-          if (!${ev.primitive}) {
-            ${x.code}
-            if (${classOf[Objects].getName}.equals(${valueGen.primitive}, ${x.primitive})) {
-              ${ev.primitive} = true;
-            }
+        if (!${ev.primitive}) {
+          ${x.code}
+          if (${ctx.genEqual(value.dataType, valueGen.primitive, x.primitive)}) {
+            ${ev.primitive} = true;
           }
-         """).foldLeft("")((a, b) => a + "\n" + b)
-      s"""
+        }
+       """).foldLeft("")((a, b) => a + "\n" + b)
+    s"""
       ${valueGen.code}
       boolean ${ev.primitive} = false;
       boolean ${ev.isNull} = false;
       $listCode
-     """
-    }
+    """
   }
-
 }
 
 /**
@@ -147,22 +139,28 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
  */
 case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with Predicate {
 
-  override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
+  override def nullable: Boolean = false // TODO: Figure out correct nullability semantics of IN.
   override def toString: String = s"$child INSET ${hset.mkString("(", ",", ")")}"
 
   override def eval(input: InternalRow): Any = {
     hset.contains(child.eval(input))
   }
 
+  def getHSet(): Set[Any] = hset
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val setName = classOf[Set[Any]].getName
+    val InSetName = classOf[InSet].getName
     val childGen = child.gen(ctx)
-    ctx.references += hset
+    ctx.references += this
+    val hsetTerm = ctx.freshName("hset")
+    ctx.addMutableState(setName, hsetTerm,
+      s"$hsetTerm = (($InSetName)expressions[${ctx.references.size - 1}]).getHSet();")
     s"""
       ${childGen.code}
       boolean ${ev.isNull} = false;
       boolean ${ev.primitive} =
-        ((${setName})expressions[${ctx.references.size - 1}]).contains(${childGen.primitive});
+        $hsetTerm.contains(${childGen.primitive});
      """
   }
 }

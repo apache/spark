@@ -43,7 +43,7 @@ class OptimizeInSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
 
-  test("OptimizedIn test: In clause not optimized to InSet when less than 50 items") {
+  test("OptimizedIn test: In clause not optimized to InSet when less than 10 items") {
     val originalQuery =
       testRelation
         .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2))))
@@ -53,16 +53,16 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, originalQuery)
   }
 
-  test("OptimizedIn test: In clause optimized to InSet when more than 50 items") {
+  test("OptimizedIn test: In clause optimized to InSet when more than 10 items") {
     val originalQuery =
       testRelation
-        .where(In(UnresolvedAttribute("a"), (1 to 51).map(Literal(_))))
+        .where(In(UnresolvedAttribute("a"), (1 to 11).map(Literal(_))))
         .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .where(InSet(UnresolvedAttribute("a"), (1 to 51).toSet))
+        .where(InSet(UnresolvedAttribute("a"), (1 to 11).toSet))
         .analyze
 
     comparePlans(optimized, correctAnswer)
