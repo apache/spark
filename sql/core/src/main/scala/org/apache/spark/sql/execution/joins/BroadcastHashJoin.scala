@@ -57,14 +57,17 @@ case class BroadcastHashJoin(
   override def requiredChildDistribution: Seq[Distribution] =
     UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
 
-  protected override def doExecute(): RDD[InternalRow] = {
+  private lazy val broadcastedRelation = {
     // Note that we use .execute().collect() because we don't want to convert data to Scala types
     val input: Array[InternalRow] = buildPlan.execute().map(_.copy()).collect()
     val hashed = HashedRelation(input.iterator, buildSideKeyGenerator, input.size)
-    val broadcastRelation = sparkContext.broadcast(hashed)
+    sparkContext.broadcast(hashed)
+  }
 
+  protected override def doExecute(): RDD[InternalRow] = {
+    val hashedRelation = broadcastedRelation
     streamedPlan.execute().mapPartitions { streamedIter =>
-      val hashedRelation = broadcastRelation.value
+      val hashedRelation = hashedRelation.value
       hashedRelation match {
         case unsafe: UnsafeHashedRelation =>
           TaskContext.get().internalMetricsToAccumulators(

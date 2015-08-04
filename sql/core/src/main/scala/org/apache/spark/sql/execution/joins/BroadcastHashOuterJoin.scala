@@ -58,15 +58,18 @@ case class BroadcastHashOuterJoin(
 
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
-  override def doExecute(): RDD[InternalRow] = {
+  private lazy val broadcastRelation = {
     // Note that we use .execute().collect() because we don't want to convert data to Scala types
     val input: Array[InternalRow] = buildPlan.execute().map(_.copy()).collect()
     val hashed = HashedRelation(input.iterator, buildKeyGenerator, input.size)
-    val broadcastRelation = sparkContext.broadcast(hashed)
+    sparkContext.broadcast(hashed)
+  }
 
+  override def doExecute(): RDD[InternalRow] = {
+    val hashedRelation = broadcastRelation
     streamedPlan.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow()
-      val hashTable = broadcastRelation.value
+      val hashTable = hashedRelation.value
       val keyGenerator = streamedKeyGenerator
 
       hashTable match {
