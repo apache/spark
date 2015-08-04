@@ -144,7 +144,7 @@ object HiveTypeCoercion {
    * instances higher in the query tree.
    */
   object PropagateTypes extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperator {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
 
       // No propagation required for leaf nodes.
       case q: LogicalPlan if q.children.isEmpty => q
@@ -226,7 +226,7 @@ object HiveTypeCoercion {
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperator {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case p if p.analyzed => p
 
       case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
@@ -375,7 +375,7 @@ object HiveTypeCoercion {
       ChangeDecimalPrecision(Cast(e, dataType))
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperator {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
 
       // fix decimal precision for expressions
       case q => q.transformExpressions {

@@ -49,10 +49,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    *
    * @param rule the function use to transform this nodes children
    */
-  def resolveOperator(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
+  def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     // Only apply the rule if our child has not been resolved.
     if (!analyzed) {
-      val afterRuleOnChildren = transformChildren(rule, (t, r) => t.resolveOperator(r))
+      val afterRuleOnChildren = transformChildren(rule, (t, r) => t.resolveOperators(r))
       if (this fastEquals afterRuleOnChildren) {
         CurrentOrigin.withOrigin(origin) {
           rule.applyOrElse(this, identity[LogicalPlan])
@@ -72,7 +72,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * been analyzed.
    */
   def resolveExpressions(r: PartialFunction[Expression, Expression]): LogicalPlan = {
-    this resolveOperator  {
+    this resolveOperators  {
       case p => p transformExpressions(r)
     }
   }

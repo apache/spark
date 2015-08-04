@@ -38,7 +38,7 @@ class LogicalPlanSuite extends SparkFunSuite {
   test("resolveOperator runs on operators") {
     invocationCount = 0
     val plan = Project(Nil, testRelation)
-    plan resolveOperator function
+    plan resolveOperators function
 
     assert(invocationCount === 1)
   }
@@ -46,7 +46,7 @@ class LogicalPlanSuite extends SparkFunSuite {
   test("resolveOperator runs on operators recursively") {
     invocationCount = 0
     val plan = Project(Nil, Project(Nil, testRelation))
-    plan resolveOperator function
+    plan resolveOperators function
 
     assert(invocationCount === 2)
   }
@@ -55,7 +55,7 @@ class LogicalPlanSuite extends SparkFunSuite {
     invocationCount = 0
     val plan = Project(Nil, Project(Nil, testRelation))
     plan.foreach(_.setAnalyzed())
-    plan resolveOperator function
+    plan resolveOperators function
 
     assert(invocationCount === 0)
   }
@@ -65,7 +65,7 @@ class LogicalPlanSuite extends SparkFunSuite {
     val plan1 = Project(Nil, testRelation)
     val plan2 = Project(Nil, plan1)
     plan1.foreach(_.setAnalyzed())
-    plan2 resolveOperator function
+    plan2 resolveOperators function
 
     assert(invocationCount === 1)
   }
