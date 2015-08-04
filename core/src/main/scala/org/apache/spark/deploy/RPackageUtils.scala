@@ -18,18 +18,17 @@
 package org.apache.spark.deploy
 
 import java.io._
-import java.net.URI
 import java.util.jar.JarFile
 import java.util.logging.Level
 import java.util.zip.{ZipEntry, ZipOutputStream}
+
+import scala.collection.JavaConversions._
 
 import com.google.common.io.{ByteStreams, Files}
 
 import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.util.{RedirectThread, Utils}
-
-import scala.collection.JavaConversions._
 
 private[deploy] object RPackageUtils extends Logging {
 

@@ -365,7 +365,7 @@ class SparkSubmitSuite
   }
 
   test("correctly builds R packages included in a jar with --packages") {
-    // TODO: Building a package to $SPARK_HOME/R/lib is unavailable on Jenkins.
+    // TODO(SPARK-9603): Building a package to $SPARK_HOME/R/lib is unavailable on Jenkins.
     // It's hard to write the test in SparkR (because we can't create the repository dynamically)
     /*
     assume(RUtils.isRInstalled, "R isn't installed on this machine.")

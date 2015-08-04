@@ -22,9 +22,6 @@ import java.net.URL
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.deploy.IvyTestUtils
-import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 
