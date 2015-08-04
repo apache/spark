@@ -133,27 +133,20 @@ class DataFrameStatSuite extends QueryTest {
 
   test("Frequent Items 2") {
     val rows = sqlCtx.sparkContext.parallelize(Seq.empty[Int], 4)
-    // this is a regression test, where when merging partitions, we ommitted values with higher
-    // counts than those that existed in the map when the map was full.
+    // this is a regression test, where when merging partitions, we omitted values with higher
+    // counts than those that existed in the map when the map was full. This test should also fail
+    // if anything like SPARK-9614 is observed once again
     val df = rows.mapPartitionsWithIndex { (idx, iter) =>
       if (idx == 3) {
-        Iterator.tabulate(5){ i =>
-          println("adding 3")
-
-          "3"
-        }
+        Iterator.tabulate(5)(_ => "3")
       } else {
-        Iterator.tabulate(5) { i =>
-          println("adding " + (i * (idx + 1)).toString)
-          (i * (idx + 1)).toString
-        }
+        Iterator.tabulate(5)(i => (i * (idx + 1)).toString)
       }
     }.toDF("a")
-    println(s"num partitions: ${df.rdd.partitions.length}")
     val results = df.stat.freqItems(Array("a"), 0.25)
-    println(results.collect().head.getSeq[String](0))
-    val items = results.collect().head
-    items.getSeq[String](0) should contain ("3")
+    val items = results.collect().head.getSeq[String](0)
+    items should contain ("3")
+    items.length should equal(1)
   }
 
   test("sampleBy") {

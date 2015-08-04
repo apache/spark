@@ -20,40 +20,38 @@ package org.apache.spark.sql.execution.stat
 import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.{Row, Column, DataFrame}
 
 private[sql] object FrequentItems extends Logging {
 
   /** A helper class wrapping `MutableMap[Any, Long]` for simplicity. */
   private class FreqItemCounter(size: Int) extends Serializable {
     val baseMap: MutableMap[Any, Long] = MutableMap.empty[Any, Long]
-    var maxCount: Long = -1L
+    var minCount: Long = Long.MaxValue
     /**
      * Add a new example to the counts if it exists, otherwise deduct the count
      * from existing items.
      */
     def add(key: Any, count: Long): this.type = {
-      println(s"k: $key - c: $count, max: $maxCount")
       if (baseMap.contains(key))  {
         baseMap(key) += count
-        if (baseMap(key) > maxCount) maxCount = baseMap(key)
+        if (baseMap(key) < minCount) minCount = baseMap(key)
       } else {
         if (baseMap.size < size) {
           baseMap += key -> count
-          if (count > maxCount) maxCount = count
+          if (count < minCount) minCount = count
         } else {
-          val remainder = count - maxCount
-          if (remainder > 0) {
-            baseMap.clear()
-            baseMap += key -> remainder
-            maxCount = remainder
+          val remainder = count - minCount
+          if (remainder >= 0) {
+            baseMap += key -> count // something will get kicked out, so we can add this
+            baseMap.retain((k, v) => v > minCount)
+            baseMap.transform((k, v) => v - minCount)
+            minCount = baseMap.foldLeft(Long.MaxValue)((a, b) => math.min(a, b._2))
           } else {
-            baseMap.retain((k, v) => v > count)
             baseMap.transform((k, v) => v - count)
-            maxCount += remainder
+            minCount -= count
           }
         }
       }
@@ -65,9 +63,6 @@ private[sql] object FrequentItems extends Logging {
      * @param other The map containing the counts for that partition
      */
     def merge(other: FreqItemCounter): this.type = {
-      println("merging")
-      println(baseMap)
-      println(other.baseMap)
       other.baseMap.foreach { case (k, v) =>
         add(k, v)
       }
@@ -103,12 +98,12 @@ private[sql] object FrequentItems extends Logging {
       (name, originalSchema.fields(index).dataType)
     }.toArray
 
-    val freqItems = df.select(cols.map(Column(_)) : _*).queryExecution.toRdd.aggregate(countMaps)(
+    val freqItems = df.select(cols.map(Column(_)) : _*).rdd.aggregate(countMaps)(
       seqOp = (counts, row) => {
         var i = 0
         while (i < numCols) {
           val thisMap = counts(i)
-          val key = row.get(i, colInfo(i)._2)
+          val key = row.get(i)
           thisMap.add(key, 1L)
           i += 1
         }
@@ -123,13 +118,13 @@ private[sql] object FrequentItems extends Logging {
         baseCounts
       }
     )
-    val justItems = freqItems.map(m => m.baseMap.keys.toArray).map(new GenericArrayData(_))
-    val resultRow = InternalRow(justItems : _*)
+    val justItems = freqItems.map(m => m.baseMap.keys.toArray)
+    val resultRow = Row(justItems : _*)
     // append frequent Items to the column name for easy debugging
     val outputCols = colInfo.map { v =>
       StructField(v._1 + "_freqItems", ArrayType(v._2, false))
     }
     val schema = StructType(outputCols).toAttributes
-    new DataFrame(df.sqlContext, LocalRelation(schema, Seq(resultRow)))
+    new DataFrame(df.sqlContext, LocalRelation.fromExternalRows(schema, Seq(resultRow)))
   }
 }
