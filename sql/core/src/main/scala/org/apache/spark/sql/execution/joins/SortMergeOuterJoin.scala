@@ -71,8 +71,7 @@ case class SortMergeOuterJoin(
           val keyGenerator = streamedKeyGenerator
           leftIter.flatMap(currentRow => {
             val rowKey = keyGenerator(currentRow)
-            joinedRow.withLeft(currentRow)
-            leftOuterIterator(rowKey, joinedRow, hashed.get(rowKey))
+            leftOuterIterator(rowKey, joinedRow.withLeft(currentRow), hashed.get(rowKey))
           })
 
         case RightOuter =>
@@ -81,11 +80,11 @@ case class SortMergeOuterJoin(
           val keyGenerator = streamedKeyGenerator
           rightIter.flatMap(currentRow => {
             val rowKey = keyGenerator(currentRow)
-            joinedRow.withRight(currentRow)
-            rightOuterIterator(rowKey, hashed.get(rowKey), joinedRow)
+            rightOuterIterator(rowKey, hashed.get(rowKey), joinedRow.withRight(currentRow))
           })
 
         case FullOuter =>
+          // TODO(josh): handle this case efficiently in SMJ
           // TODO(davies): use UnsafeRow
           val leftHashTable = buildHashTable(leftIter, newProjection(leftKeys, left.output))
           val rightHashTable = buildHashTable(rightIter, newProjection(rightKeys, right.output))
