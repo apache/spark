@@ -360,7 +360,7 @@ object StringTranslate {
     val dict = new HashMap[Character, Character]()
     var i = 0
     while (i < matching.length()) {
-      val rep = if (i < replace.length()) replace.charAt(i) else '0'
+      val rep = if (i < replace.length()) replace.charAt(i) else '\0'
       if (null == dict.get(matching.charAt(i))) {
         dict.put(matching.charAt(i), rep)
       }
@@ -396,19 +396,19 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     val termLastMatching = ctx.freshName("lastMatching")
     val termLastReplace = ctx.freshName("lastReplace")
     val termDict = ctx.freshName("dict")
-    val classNameUTF8String = classOf[UTF8String].getCanonicalName
     val classNameDict = classOf[JMap[Character, Character]].getCanonicalName
 
-    ctx.addMutableState(classNameUTF8String, termLastMatching, s"${termLastMatching} = null;")
-    ctx.addMutableState(classNameUTF8String, termLastReplace, s"${termLastReplace} = null;")
+    ctx.addMutableState("UTF8String", termLastMatching, s"${termLastMatching} = null;")
+    ctx.addMutableState("UTF8String", termLastReplace, s"${termLastReplace} = null;")
     ctx.addMutableState(classNameDict, termDict, s"${termDict} = null;")
 
     nullSafeCodeGen(ctx, ev, (src, matching, replace) => {
-      s"""if (!${matching}.equals(${termLastMatching}) ||
+      s"""if (!(${matchingExpr.foldable} && ${replaceExpr.foldable} && ${termDict} != null) ||
+        !${matching}.equals(${termLastMatching}) ||
         !${replace}.equals(${termLastReplace})) {
-        // matching or replace value changed
-        ${termLastMatching} = ${matching};
-        ${termLastReplace} = ${replace};
+        // Not all of them is literal or matching or replace value changed
+        ${termLastMatching} = ${matching}.clone();
+        ${termLastReplace} = ${replace}.clone();
         ${termDict} = org.apache.spark.sql.catalyst.expressions.StringTranslate
           .buildDict(${termLastMatching}, ${termLastReplace});
       }

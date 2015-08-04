@@ -150,26 +150,26 @@ public class UTF8StringSuite {
       EMPTY_UTF8,
       concatWs(sep, EMPTY_UTF8));
     assertEquals(
-      fromString("ab"),
-      concatWs(sep, fromString("ab")));
+            fromString("ab"),
+            concatWs(sep, fromString("ab")));
     assertEquals(
-      fromString("a哈哈b"),
-      concatWs(sep, fromString("a"), fromString("b")));
+            fromString("a哈哈b"),
+            concatWs(sep, fromString("a"), fromString("b")));
     assertEquals(
-      fromString("a哈哈b哈哈c"),
-      concatWs(sep, fromString("a"), fromString("b"), fromString("c")));
+            fromString("a哈哈b哈哈c"),
+            concatWs(sep, fromString("a"), fromString("b"), fromString("c")));
     assertEquals(
-      fromString("a哈哈c"),
-      concatWs(sep, fromString("a"), null, fromString("c")));
+            fromString("a哈哈c"),
+            concatWs(sep, fromString("a"), null, fromString("c")));
     assertEquals(
-      fromString("a"),
-      concatWs(sep, fromString("a"), null, null));
+            fromString("a"),
+            concatWs(sep, fromString("a"), null, null));
     assertEquals(
-      EMPTY_UTF8,
-      concatWs(sep, null, null, null));
+            EMPTY_UTF8,
+            concatWs(sep, null, null, null));
     assertEquals(
-      fromString("数据哈哈砖头"),
-      concatWs(sep, fromString("数据"), fromString("砖头")));
+            fromString("数据哈哈砖头"),
+            concatWs(sep, fromString("数据"), fromString("砖头")));
   }
 
   @Test
@@ -400,17 +400,22 @@ public class UTF8StringSuite {
         'r', '1',
         'n', '2',
         'l', '3',
-        't', '0'
+        't', '\0'
       )));
     assertEquals(fromString("translate"),
       fromString("translate").translate(new HashMap<Character, Character>()));
     assertEquals(fromString("asae"),
       fromString("translate").translate(ImmutableMap.of(
-        'r', '0',
-        'n', '0',
-        'l', '0',
-        't', '0'
+        'r', '\0',
+        'n', '\0',
+        'l', '\0',
+        't', '\0'
       )));
+    assertEquals(fromString("aa世b"),
+        fromString("花花世界").translate(ImmutableMap.of(
+          '花', 'a',
+          '界', 'b'
+        )));
   }
 
   @Test

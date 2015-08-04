@@ -804,7 +804,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     for(int k = 0; k< srcStr.length(); k++) {
       if (null == dict.get(srcStr.charAt(k))) {
         sb.append(srcStr.charAt(k));
-      } else if ('0' != dict.get(srcStr.charAt(k))){
+      } else if ('\0' != dict.get(srcStr.charAt(k))){
         sb.append(dict.get(srcStr.charAt(k)));
       }
     }
