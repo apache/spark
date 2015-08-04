@@ -505,30 +505,34 @@ object DateTimeUtils {
     } else {
       if (isLeap && dayInYear > 60) dayInYear -= 1
 
-      if (dayInYear <= 31) {
-        (year, 1, dayInYear, 31 - dayInYear)
-      } else if (dayInYear <= 59) {
-        (year, 2, dayInYear - 31, if (isLeap) 60 - dayInYear else 59 - dayInYear)
-      } else if (dayInYear <= 90) {
-        (year, 3, dayInYear - 59, 90 - dayInYear)
-      } else if (dayInYear <= 120) {
-        (year, 4, dayInYear - 90, 120 - dayInYear)
-      } else if (dayInYear <= 151) {
-        (year, 5, dayInYear - 120, 151 - dayInYear)
-      } else if (dayInYear <= 181) {
-        (year, 6, dayInYear - 151, 181 - dayInYear)
-      } else if (dayInYear <= 212) {
-        (year, 7, dayInYear - 181, 212 - dayInYear)
-      } else if (dayInYear <= 243) {
-        (year, 8, dayInYear - 212, 243 - dayInYear)
-      } else if (dayInYear <= 273) {
-        (year, 9, dayInYear - 243, 273 - dayInYear)
-      } else if (dayInYear <= 304) {
-        (year, 10, dayInYear - 273, 304 - dayInYear)
-      } else if (dayInYear <= 334) {
-        (year, 11, dayInYear - 304, 334 - dayInYear)
+      if (dayInYear <= 181) {
+        if (dayInYear <= 31) {
+          (year, 1, dayInYear, 31 - dayInYear)
+        } else if (dayInYear <= 59) {
+          (year, 2, dayInYear - 31, if (isLeap) 60 - dayInYear else 59 - dayInYear)
+        } else if (dayInYear <= 90) {
+          (year, 3, dayInYear - 59, 90 - dayInYear)
+        } else if (dayInYear <= 120) {
+          (year, 4, dayInYear - 90, 120 - dayInYear)
+        } else if (dayInYear <= 151) {
+          (year, 5, dayInYear - 120, 151 - dayInYear)
+        } else {
+          (year, 6, dayInYear - 151, 181 - dayInYear)
+        }
       } else {
-        (year, 12, dayInYear - 334, 365 - dayInYear)
+        if (dayInYear <= 212) {
+          (year, 7, dayInYear - 181, 212 - dayInYear)
+        } else if (dayInYear <= 243) {
+          (year, 8, dayInYear - 212, 243 - dayInYear)
+        } else if (dayInYear <= 273) {
+          (year, 9, dayInYear - 243, 273 - dayInYear)
+        } else if (dayInYear <= 304) {
+          (year, 10, dayInYear - 273, 304 - dayInYear)
+        } else if (dayInYear <= 334) {
+          (year, 11, dayInYear - 304, 334 - dayInYear)
+        } else {
+          (year, 12, dayInYear - 334, 365 - dayInYear)
+        }
       }
     }
   }
@@ -538,7 +542,40 @@ object DateTimeUtils {
    * since 1.1.1970. January is month 1.
    */
   def getMonth(date: Int): Int = {
-    splitDate(date)._2
+    var (year, dayInYear) = getYearAndDayInYear(date)
+    if (isLeapYear(year)) {
+      if (dayInYear == 60) {
+        return 2
+      } else if (dayInYear > 60) {
+        dayInYear = dayInYear - 1
+      }
+    }
+
+    if (dayInYear <= 31) {
+      1
+    } else if (dayInYear <= 59) {
+      2
+    } else if (dayInYear <= 90) {
+      3
+    } else if (dayInYear <= 120) {
+      4
+    } else if (dayInYear <= 151) {
+      5
+    } else if (dayInYear <= 181) {
+      6
+    } else if (dayInYear <= 212) {
+      7
+    } else if (dayInYear <= 243) {
+      8
+    } else if (dayInYear <= 273) {
+      9
+    } else if (dayInYear <= 304) {
+      10
+    } else if (dayInYear <= 334) {
+      11
+    } else {
+      12
+    }
   }
 
   /**
@@ -546,7 +583,40 @@ object DateTimeUtils {
    * since 1.1.1970.
    */
   def getDayOfMonth(date: Int): Int = {
-    splitDate(date)._3
+    var (year, dayInYear) = getYearAndDayInYear(date)
+    if (isLeapYear(year)) {
+      if (dayInYear == 60) {
+        return 29
+      } else if (dayInYear > 60) {
+        dayInYear = dayInYear - 1
+      }
+    }
+
+    if (dayInYear <= 31) {
+      dayInYear
+    } else if (dayInYear <= 59) {
+      dayInYear - 31
+    } else if (dayInYear <= 90) {
+      dayInYear - 59
+    } else if (dayInYear <= 120) {
+      dayInYear - 90
+    } else if (dayInYear <= 151) {
+      dayInYear - 120
+    } else if (dayInYear <= 181) {
+      dayInYear - 151
+    } else if (dayInYear <= 212) {
+      dayInYear - 181
+    } else if (dayInYear <= 243) {
+      dayInYear - 212
+    } else if (dayInYear <= 273) {
+      dayInYear - 243
+    } else if (dayInYear <= 304) {
+      dayInYear - 273
+    } else if (dayInYear <= 334) {
+      dayInYear - 304
+    } else {
+      dayInYear - 334
+    }
   }
 
   /**
