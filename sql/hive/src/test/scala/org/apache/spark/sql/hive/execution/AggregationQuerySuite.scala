@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.execution.aggregate.Aggregate2Sort
+import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{SQLConf, AnalysisException, QueryTest, Row}
 import org.scalatest.BeforeAndAfterAll
 import test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 
-class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
+abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
 
   override val sqlContext = TestHive
   import sqlContext.implicits._
@@ -34,7 +34,7 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
 
   override def beforeAll(): Unit = {
     originalUseAggregate2 = sqlContext.conf.useSqlAggregate2
-    sqlContext.sql("set spark.sql.useAggregate2=true")
+    sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2.key, "true")
     val data1 = Seq[(Integer, Integer)](
       (1, 10),
       (null, -60),
@@ -81,7 +81,7 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
     sqlContext.sql("DROP TABLE IF EXISTS agg1")
     sqlContext.sql("DROP TABLE IF EXISTS agg2")
     sqlContext.dropTempTable("emptyTable")
-    sqlContext.sql(s"set spark.sql.useAggregate2=$originalUseAggregate2")
+    sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2.key, originalUseAggregate2.toString)
   }
 
   test("empty table") {
@@ -454,54 +454,86 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
   }
 
   test("error handling") {
-    sqlContext.sql(s"set spark.sql.useAggregate2=false")
-    var errorMessage = intercept[AnalysisException] {
-      sqlContext.sql(
+    withSQLConf("spark.sql.useAggregate2" -> "false") {
+      val errorMessage = intercept[AnalysisException] {
+        sqlContext.sql(
+          """
+            |SELECT
+            |  key,
+            |  sum(value + 1.5 * key),
+            |  mydoublesum(value),
+            |  mydoubleavg(value)
+            |FROM agg1
+            |GROUP BY key
+          """.stripMargin).collect()
+      }.getMessage
+      assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
+    }
+
+    // TODO: once we support Hive UDAF in the new interface,
+    // we can remove the following two tests.
+    withSQLConf("spark.sql.useAggregate2" -> "true") {
+      val errorMessage = intercept[AnalysisException] {
+        sqlContext.sql(
+          """
+            |SELECT
+            |  key,
+            |  mydoublesum(value + 1.5 * key),
+            |  stddev_samp(value)
+            |FROM agg1
+            |GROUP BY key
+          """.stripMargin).collect()
+      }.getMessage
+      assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
+
+      // This will fall back to the old aggregate
+      val newAggregateOperators = sqlContext.sql(
         """
           |SELECT
           |  key,
           |  sum(value + 1.5 * key),
-          |  mydoublesum(value),
-          |  mydoubleavg(value)
-          |FROM agg1
-          |GROUP BY key
-        """.stripMargin).collect()
-    }.getMessage
-    assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
-
-    // TODO: once we support Hive UDAF in the new interface,
-    // we can remove the following two tests.
-    sqlContext.sql(s"set spark.sql.useAggregate2=true")
-    errorMessage = intercept[AnalysisException] {
-      sqlContext.sql(
-        """
-          |SELECT
-          |  key,
-          |  mydoublesum(value + 1.5 * key),
           |  stddev_samp(value)
           |FROM agg1
           |GROUP BY key
-        """.stripMargin).collect()
-    }.getMessage
-    assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
-
-    // This will fall back to the old aggregate
-    val newAggregateOperators = sqlContext.sql(
-      """
-        |SELECT
-        |  key,
-        |  sum(value + 1.5 * key),
-        |  stddev_samp(value)
-        |FROM agg1
-        |GROUP BY key
-      """.stripMargin).queryExecution.executedPlan.collect {
-      case agg: Aggregate2Sort => agg
+        """.stripMargin).queryExecution.executedPlan.collect {
+        case agg: aggregate.Aggregate => agg
+      }
+      val message =
+        "We should fallback to the old aggregation code path if " +
+          "there is any aggregate function that cannot be converted to the new interface."
+      assert(newAggregateOperators.isEmpty, message)
     }
-    val message =
-      "We should fallback to the old aggregation code path if there is any aggregate function " +
-        "that cannot be converted to the new interface."
-    assert(newAggregateOperators.isEmpty, message)
+  }
+}
 
-    sqlContext.sql(s"set spark.sql.useAggregate2=true")
+class SortBasedAggregationQuerySuite extends AggregationQuerySuite {
+
+  var originalUnsafeEnabled: Boolean = _
+
+  override def beforeAll(): Unit = {
+    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "false")
+    super.beforeAll()
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+  }
+}
+
+class TungstenAggregationQuerySuite extends AggregationQuerySuite {
+
+  var originalUnsafeEnabled: Boolean = _
+
+  override def beforeAll(): Unit = {
+    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "true")
+    super.beforeAll()
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
   }
 }

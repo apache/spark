@@ -64,7 +64,7 @@ class ReceiverSchedulingPolicySuite extends SparkFunSuite {
 
   test("scheduleReceivers: " +
     "schedule receivers evenly when there are more receivers than executors") {
-    val receivers = (0 until 6).map(new DummyReceiver(_))
+    val receivers = (0 until 6).map(new RateTestReceiver(_))
     val executors = (10000 until 10003).map(port => s"localhost:${port}")
     val scheduledExecutors = receiverSchedulingPolicy.scheduleReceivers(receivers, executors)
     val numReceiversOnExecutor = mutable.HashMap[String, Int]()
@@ -79,7 +79,7 @@ class ReceiverSchedulingPolicySuite extends SparkFunSuite {
 
   test("scheduleReceivers: " +
     "schedule receivers evenly when there are more executors than receivers") {
-    val receivers = (0 until 3).map(new DummyReceiver(_))
+    val receivers = (0 until 3).map(new RateTestReceiver(_))
     val executors = (10000 until 10006).map(port => s"localhost:${port}")
     val scheduledExecutors = receiverSchedulingPolicy.scheduleReceivers(receivers, executors)
     val numReceiversOnExecutor = mutable.HashMap[String, Int]()
@@ -94,8 +94,8 @@ class ReceiverSchedulingPolicySuite extends SparkFunSuite {
   }
 
   test("scheduleReceivers: schedule receivers evenly when the preferredLocations are even") {
-    val receivers = (0 until 3).map(new DummyReceiver(_)) ++
-      (3 until 6).map(new DummyReceiver(_, Some("localhost")))
+    val receivers = (0 until 3).map(new RateTestReceiver(_)) ++
+      (3 until 6).map(new RateTestReceiver(_, Some("localhost")))
     val executors = (10000 until 10003).map(port => s"localhost:${port}") ++
       (10003 until 10006).map(port => s"localhost2:${port}")
     val scheduledExecutors = receiverSchedulingPolicy.scheduleReceivers(receivers, executors)
@@ -121,7 +121,7 @@ class ReceiverSchedulingPolicySuite extends SparkFunSuite {
   }
 
   test("scheduleReceivers: return empty scheduled executors if no executors") {
-    val receivers = (0 until 3).map(new DummyReceiver(_))
+    val receivers = (0 until 3).map(new RateTestReceiver(_))
     val scheduledExecutors = receiverSchedulingPolicy.scheduleReceivers(receivers, Seq.empty)
     scheduledExecutors.foreach { case (receiverId, executors) =>
       assert(executors.isEmpty)

@@ -145,20 +145,30 @@ class AnalysisSuite extends AnalysisTest {
         'e / 'e as 'div5))
     val pl = plan.asInstanceOf[Project].projectList
 
-    // StringType will be promoted into Double
     assert(pl(0).dataType == DoubleType)
     assert(pl(1).dataType == DoubleType)
     assert(pl(2).dataType == DoubleType)
-    assert(pl(3).dataType == DoubleType)
+    // StringType will be promoted into Decimal(38, 18)
+    assert(pl(3).dataType == DecimalType(38, 29))
     assert(pl(4).dataType == DoubleType)
   }
 
-  test("pull out nondeterministic expressions from unary LogicalPlan") {
+  test("pull out nondeterministic expressions from RepartitionByExpression") {
     val plan = RepartitionByExpression(Seq(Rand(33)), testRelation)
     val projected = Alias(Rand(33), "_nondeterministic")()
     val expected =
       Project(testRelation.output,
         RepartitionByExpression(Seq(projected.toAttribute),
+          Project(testRelation.output :+ projected, testRelation)))
+    checkAnalysis(plan, expected)
+  }
+
+  test("pull out nondeterministic expressions from Sort") {
+    val plan = Sort(Seq(SortOrder(Rand(33), Ascending)), false, testRelation)
+    val projected = Alias(Rand(33), "_nondeterministic")()
+    val expected =
+      Project(testRelation.output,
+        Sort(Seq(SortOrder(projected.toAttribute, Ascending)), false,
           Project(testRelation.output :+ projected, testRelation)))
     checkAnalysis(plan, expected)
   }

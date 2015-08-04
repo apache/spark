@@ -66,7 +66,7 @@ case class Rand(seed: Long) extends RDG {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
     ctx.addMutableState(className, rngTerm,
-      s"$rngTerm = new $className($seed + org.apache.spark.TaskContext.getPartitionId());")
+      s"$rngTerm = new $className(${seed}L + org.apache.spark.TaskContext.getPartitionId());")
     ev.isNull = "false"
     s"""
       final ${ctx.javaType(dataType)} ${ev.primitive} = $rngTerm.nextDouble();
@@ -89,7 +89,7 @@ case class Randn(seed: Long) extends RDG {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
     ctx.addMutableState(className, rngTerm,
-      s"$rngTerm = new $className($seed + org.apache.spark.TaskContext.getPartitionId());")
+      s"$rngTerm = new $className(${seed}L + org.apache.spark.TaskContext.getPartitionId());")
     ev.isNull = "false"
     s"""
       final ${ctx.javaType(dataType)} ${ev.primitive} = $rngTerm.nextGaussian();

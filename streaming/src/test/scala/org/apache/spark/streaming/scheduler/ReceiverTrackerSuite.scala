@@ -29,69 +29,100 @@ import org.apache.spark.storage.StorageLevel
 /** Testsuite for receiver scheduling */
 class ReceiverTrackerSuite extends TestSuiteBase {
   val sparkConf = new SparkConf().setMaster("local[8]").setAppName("test")
-  val ssc = new StreamingContext(sparkConf, Milliseconds(100))
 
   test("Receiver tracker - propagates rate limit") {
-    object ReceiverStartedWaiter extends StreamingListener {
-      @volatile
-      var started = false
+    withStreamingContext(new StreamingContext(sparkConf, Milliseconds(100))) { ssc =>
+      object ReceiverStartedWaiter extends StreamingListener {
+        @volatile
+        var started = false
 
-      override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
-        started = true
+        override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
+          started = true
+        }
       }
-    }
 
-    ssc.addStreamingListener(ReceiverStartedWaiter)
-    ssc.scheduler.listenerBus.start(ssc.sc)
+      ssc.addStreamingListener(ReceiverStartedWaiter)
+      ssc.scheduler.listenerBus.start(ssc.sc)
+      SingletonTestRateReceiver.reset()
 
-    val newRateLimit = 100L
-    val inputDStream = new RateLimitInputDStream(ssc)
-    val tracker = new ReceiverTracker(ssc)
-    tracker.start()
-
-    // we wait until the Receiver has registered with the tracker,
-    // otherwise our rate update is lost
-    eventually(timeout(5 seconds)) {
-      assert(ReceiverStartedWaiter.started)
-    }
-    tracker.sendRateUpdate(inputDStream.id, newRateLimit)
-    // this is an async message, we need to wait a bit for it to be processed
-    eventually(timeout(3 seconds)) {
-      assert(inputDStream.getCurrentRateLimit.get === newRateLimit)
+      val newRateLimit = 100L
+      val inputDStream = new RateLimitInputDStream(ssc)
+      val tracker = new ReceiverTracker(ssc)
+      tracker.start()
+      try {
+        // we wait until the Receiver has registered with the tracker,
+        // otherwise our rate update is lost
+        eventually(timeout(5 seconds)) {
+          assert(ReceiverStartedWaiter.started)
+        }
+        tracker.sendRateUpdate(inputDStream.id, newRateLimit)
+        // this is an async message, we need to wait a bit for it to be processed
+        eventually(timeout(3 seconds)) {
+          assert(inputDStream.getCurrentRateLimit.get === newRateLimit)
+        }
+      } finally {
+        tracker.stop(false)
+      }
     }
   }
 }
 
-/** An input DStream with a hard-coded receiver that gives access to internals for testing. */
-private class RateLimitInputDStream(@transient ssc_ : StreamingContext)
+/**
+ * An input DStream with a hard-coded receiver that gives access to internals for testing.
+ *
+ * @note Make sure to call {{{SingletonDummyReceiver.reset()}}} before using this in a test,
+ *       or otherwise you may get {{{NotSerializableException}}} when trying to serialize
+ *       the receiver.
+ * @see [[[SingletonDummyReceiver]]].
+ */
+private[streaming] class RateLimitInputDStream(@transient ssc_ : StreamingContext)
   extends ReceiverInputDStream[Int](ssc_) {
 
-  override def getReceiver(): DummyReceiver = SingletonDummyReceiver
+  override def getReceiver(): RateTestReceiver = SingletonTestRateReceiver
 
   def getCurrentRateLimit: Option[Long] = {
     invokeExecutorMethod.getCurrentRateLimit
+  }
+
+  @volatile
+  var publishCalls = 0
+
+  override val rateController: Option[RateController] = {
+    Some(new RateController(id, new ConstantEstimator(100.0)) {
+      override def publish(rate: Long): Unit = {
+        publishCalls += 1
+      }
+    })
   }
 
   private def invokeExecutorMethod: ReceiverSupervisor = {
     val c = classOf[Receiver[_]]
     val ex = c.getDeclaredMethod("executor")
     ex.setAccessible(true)
-    ex.invoke(SingletonDummyReceiver).asInstanceOf[ReceiverSupervisor]
+    ex.invoke(SingletonTestRateReceiver).asInstanceOf[ReceiverSupervisor]
   }
 }
 
 /**
- * A Receiver as an object so we can read its rate limit.
+ * A Receiver as an object so we can read its rate limit. Make sure to call `reset()` when
+ * reusing this receiver, otherwise a non-null `executor_` field will prevent it from being
+ * serialized when receivers are installed on executors.
  *
  * @note It's necessary to be a top-level object, or else serialization would create another
  *       one on the executor side and we won't be able to read its rate limit.
  */
-private object SingletonDummyReceiver extends DummyReceiver(0)
+private[streaming] object SingletonTestRateReceiver extends RateTestReceiver(0) {
+
+  /** Reset the object to be usable in another test. */
+  def reset(): Unit = {
+    executor_ = null
+  }
+}
 
 /**
  * Dummy receiver implementation
  */
-private class DummyReceiver(receiverId: Int, host: Option[String] = None)
+private[streaming] class RateTestReceiver(receiverId: Int, host: Option[String] = None)
   extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
 
   setReceiverId(receiverId)

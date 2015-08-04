@@ -45,6 +45,7 @@ object DateTimeUtils {
   final val to2001 = -11323
 
   // this is year -17999, calculation: 50 * daysIn400Year
+  final val YearZero = -17999
   final val toYearZero = to2001 + 7304850
 
   @transient lazy val defaultTimeZone = TimeZone.getDefault
@@ -493,6 +494,50 @@ object DateTimeUtils {
   }
 
   /**
+   * Split date (expressed in days since 1.1.1970) into four fields:
+   * year, month (Jan is Month 1), dayInMonth, daysToMonthEnd (0 if it's last day of month).
+   */
+  def splitDate(date: Int): (Int, Int, Int, Int) = {
+    var (year, dayInYear) = getYearAndDayInYear(date)
+    val isLeap = isLeapYear(year)
+    if (isLeap && dayInYear == 60) {
+      (year, 2, 29, 0)
+    } else {
+      if (isLeap && dayInYear > 60) dayInYear -= 1
+
+      if (dayInYear <= 181) {
+        if (dayInYear <= 31) {
+          (year, 1, dayInYear, 31 - dayInYear)
+        } else if (dayInYear <= 59) {
+          (year, 2, dayInYear - 31, if (isLeap) 60 - dayInYear else 59 - dayInYear)
+        } else if (dayInYear <= 90) {
+          (year, 3, dayInYear - 59, 90 - dayInYear)
+        } else if (dayInYear <= 120) {
+          (year, 4, dayInYear - 90, 120 - dayInYear)
+        } else if (dayInYear <= 151) {
+          (year, 5, dayInYear - 120, 151 - dayInYear)
+        } else {
+          (year, 6, dayInYear - 151, 181 - dayInYear)
+        }
+      } else {
+        if (dayInYear <= 212) {
+          (year, 7, dayInYear - 181, 212 - dayInYear)
+        } else if (dayInYear <= 243) {
+          (year, 8, dayInYear - 212, 243 - dayInYear)
+        } else if (dayInYear <= 273) {
+          (year, 9, dayInYear - 243, 273 - dayInYear)
+        } else if (dayInYear <= 304) {
+          (year, 10, dayInYear - 273, 304 - dayInYear)
+        } else if (dayInYear <= 334) {
+          (year, 11, dayInYear - 304, 334 - dayInYear)
+        } else {
+          (year, 12, dayInYear - 334, 365 - dayInYear)
+        }
+      }
+    }
+  }
+
+  /**
    * Returns the month value for the given date. The date is expressed in days
    * since 1.1.1970. January is month 1.
    */
@@ -575,6 +620,105 @@ object DateTimeUtils {
   }
 
   /**
+   * The number of days for each month (not leap year)
+   */
+  private val monthDays = Array(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+  /**
+   * Returns the date value for the first day of the given month.
+   * The month is expressed in months since year zero (17999 BC), starting from 0.
+   */
+  private def firstDayOfMonth(absoluteMonth: Int): Int = {
+    val absoluteYear = absoluteMonth / 12
+    var monthInYear = absoluteMonth - absoluteYear * 12
+    var date = getDateFromYear(absoluteYear)
+    if (monthInYear >= 2 && isLeapYear(absoluteYear + YearZero)) {
+      date += 1
+    }
+    while (monthInYear > 0) {
+      date += monthDays(monthInYear - 1)
+      monthInYear -= 1
+    }
+    date
+  }
+
+  /**
+   * Returns the date value for January 1 of the given year.
+   * The year is expressed in years since year zero (17999 BC), starting from 0.
+   */
+  private def getDateFromYear(absoluteYear: Int): Int = {
+    val absoluteDays = (absoluteYear * 365 + absoluteYear / 400 - absoluteYear / 100
+      + absoluteYear / 4)
+    absoluteDays - toYearZero
+  }
+
+  /**
+   * Add date and year-month interval.
+   * Returns a date value, expressed in days since 1.1.1970.
+   */
+  def dateAddMonths(days: Int, months: Int): Int = {
+    val (year, monthInYear, dayOfMonth, daysToMonthEnd) = splitDate(days)
+    val absoluteMonth = (year - YearZero) * 12 + monthInYear - 1 + months
+    val nonNegativeMonth = if (absoluteMonth >= 0) absoluteMonth else 0
+    val currentMonthInYear = nonNegativeMonth % 12
+    val currentYear = nonNegativeMonth / 12
+
+    val leapDay = if (currentMonthInYear == 1 && isLeapYear(currentYear + YearZero)) 1 else 0
+    val lastDayOfMonth = monthDays(currentMonthInYear) + leapDay
+
+    val currentDayInMonth = if (daysToMonthEnd == 0 || dayOfMonth >= lastDayOfMonth) {
+      // last day of the month
+      lastDayOfMonth
+    } else {
+      dayOfMonth
+    }
+    firstDayOfMonth(nonNegativeMonth) + currentDayInMonth - 1
+  }
+
+  /**
+   * Add timestamp and full interval.
+   * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
+   */
+  def timestampAddInterval(start: Long, months: Int, microseconds: Long): Long = {
+    val days = millisToDays(start / 1000L)
+    val newDays = dateAddMonths(days, months)
+    daysToMillis(newDays) * 1000L + start - daysToMillis(days) * 1000L + microseconds
+  }
+
+  /**
+   * Returns number of months between time1 and time2. time1 and time2 are expressed in
+   * microseconds since 1.1.1970.
+   *
+   * If time1 and time2 having the same day of month, or both are the last day of month,
+   * it returns an integer (time under a day will be ignored).
+   *
+   * Otherwise, the difference is calculated based on 31 days per month, and rounding to
+   * 8 digits.
+   */
+  def monthsBetween(time1: Long, time2: Long): Double = {
+    val millis1 = time1 / 1000L
+    val millis2 = time2 / 1000L
+    val date1 = millisToDays(millis1)
+    val date2 = millisToDays(millis2)
+    val (year1, monthInYear1, dayInMonth1, daysToMonthEnd1) = splitDate(date1)
+    val (year2, monthInYear2, dayInMonth2, daysToMonthEnd2) = splitDate(date2)
+
+    val months1 = year1 * 12 + monthInYear1
+    val months2 = year2 * 12 + monthInYear2
+
+    if (dayInMonth1 == dayInMonth2 || ((daysToMonthEnd1 == 0) && (daysToMonthEnd2 == 0))) {
+      return (months1 - months2).toDouble
+    }
+    // milliseconds is enough for 8 digits precision on the right side
+    val timeInDay1 = millis1 - daysToMillis(date1)
+    val timeInDay2 = millis2 - daysToMillis(date2)
+    val timesBetween = (timeInDay1 - timeInDay2).toDouble / MILLIS_PER_DAY
+    val diff = (months1 - months2).toDouble + (dayInMonth1 - dayInMonth2 + timesBetween) / 31.0
+    // rounding to 8 digits
+    math.round(diff * 1e8) / 1e8
+  }
+
+  /*
    * Returns day of week from String. Starting from Thursday, marked as 0.
    * (Because 1970-01-01 is Thursday).
    */
@@ -601,22 +745,66 @@ object DateTimeUtils {
   }
 
   /**
-   * number of days in a non-leap year.
-   */
-  private[this] val daysInNormalYear = Array(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-
-  /**
    * Returns last day of the month for the given date. The date is expressed in days
    * since 1.1.1970.
    */
   def getLastDayOfMonth(date: Int): Int = {
-    val dayOfMonth = getDayOfMonth(date)
-    val month = getMonth(date)
-    if (month == 2 && isLeapYear(getYear(date))) {
-      date + daysInNormalYear(month - 1) + 1 - dayOfMonth
+    val (_, _, _, daysToMonthEnd) = splitDate(date)
+    date + daysToMonthEnd
+  }
+
+  private val TRUNC_TO_YEAR = 1
+  private val TRUNC_TO_MONTH = 2
+  private val TRUNC_INVALID = -1
+
+  /**
+   * Returns the trunc date from original date and trunc level.
+   * Trunc level should be generated using `parseTruncLevel()`, should only be 1 or 2.
+   */
+  def truncDate(d: Int, level: Int): Int = {
+    if (level == TRUNC_TO_YEAR) {
+      d - DateTimeUtils.getDayInYear(d) + 1
+    } else if (level == TRUNC_TO_MONTH) {
+      d - DateTimeUtils.getDayOfMonth(d) + 1
     } else {
-      date + daysInNormalYear(month - 1) - dayOfMonth
+      // caller make sure that this should never be reached
+      sys.error(s"Invalid trunc level: $level")
     }
   }
 
+  /**
+   * Returns the truncate level, could be TRUNC_YEAR, TRUNC_MONTH, or TRUNC_INVALID,
+   * TRUNC_INVALID means unsupported truncate level.
+   */
+  def parseTruncLevel(format: UTF8String): Int = {
+    if (format == null) {
+      TRUNC_INVALID
+    } else {
+      format.toString.toUpperCase match {
+        case "YEAR" | "YYYY" | "YY" => TRUNC_TO_YEAR
+        case "MON" | "MONTH" | "MM" => TRUNC_TO_MONTH
+        case _ => TRUNC_INVALID
+      }
+    }
+  }
+
+  /**
+   * Returns a timestamp of given timezone from utc timestamp, with the same string
+   * representation in their timezone.
+   */
+  def fromUTCTime(time: Long, timeZone: String): Long = {
+    val tz = TimeZone.getTimeZone(timeZone)
+    val offset = tz.getOffset(time / 1000L)
+    time + offset * 1000L
+  }
+
+  /**
+   * Returns a utc timestamp from a given timestamp from a given timezone, with the same
+   * string representation in their timezone.
+   */
+  def toUTCTime(time: Long, timeZone: String): Long = {
+    val tz = TimeZone.getTimeZone(timeZone)
+    val offset = tz.getOffset(time / 1000L)
+    time - offset * 1000L
+  }
 }
