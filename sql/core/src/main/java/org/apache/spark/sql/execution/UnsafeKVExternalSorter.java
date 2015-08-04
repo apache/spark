@@ -134,7 +134,7 @@ public final class UnsafeKVExternalSorter {
       value.getBaseObject(), value.getBaseOffset(), value.getSizeInBytes(), prefix);
   }
 
-  public KVIterator<UnsafeRow, UnsafeRow> sortedIterator() throws IOException {
+  public KVSorterIterator sortedIterator() throws IOException {
     try {
       final UnsafeSorterIterator underlying = sorter.getSortedIterator();
       if (!underlying.hasNext()) {
@@ -142,58 +142,7 @@ public final class UnsafeKVExternalSorter {
         // here in order to prevent memory leaks.
         cleanupResources();
       }
-
-      return new KVIterator<UnsafeRow, UnsafeRow>() {
-        private UnsafeRow key = new UnsafeRow();
-        private UnsafeRow value = new UnsafeRow();
-        private int numKeyFields = keySchema.size();
-        private int numValueFields = valueSchema.size();
-
-        @Override
-        public boolean next() throws IOException {
-          try {
-            if (underlying.hasNext()) {
-              underlying.loadNext();
-
-              Object baseObj = underlying.getBaseObject();
-              long recordOffset = underlying.getBaseOffset();
-              int recordLen = underlying.getRecordLength();
-
-              // Note that recordLen = keyLen + valueLen + 4 bytes (for the keyLen itself)
-              int keyLen = PlatformDependent.UNSAFE.getInt(baseObj, recordOffset);
-              int valueLen = recordLen - keyLen - 4;
-
-              key.pointTo(baseObj, recordOffset + 4, numKeyFields, keyLen);
-              value.pointTo(baseObj, recordOffset + 4 + keyLen, numValueFields, valueLen);
-
-              return true;
-            } else {
-              key = null;
-              value = null;
-              cleanupResources();
-              return false;
-            }
-          } catch (IOException e) {
-            cleanupResources();
-            throw e;
-          }
-        }
-
-        @Override
-        public UnsafeRow getKey() {
-          return key;
-        }
-
-        @Override
-        public UnsafeRow getValue() {
-          return value;
-        }
-
-        @Override
-        public void close() {
-          cleanupResources();
-        }
-      };
+      return new KVSorterIterator(underlying);
     } catch (IOException e) {
       cleanupResources();
       throw e;
@@ -233,4 +182,61 @@ public final class UnsafeKVExternalSorter {
       return ordering.compare(row1, row2);
     }
   }
+
+  public class KVSorterIterator extends KVIterator<UnsafeRow, UnsafeRow> {
+    private UnsafeRow key = new UnsafeRow();
+    private UnsafeRow value = new UnsafeRow();
+    private final int numKeyFields = keySchema.size();
+    private final int numValueFields = valueSchema.size();
+    private final UnsafeSorterIterator underlying;
+
+    private KVSorterIterator(UnsafeSorterIterator underlying) {
+      this.underlying = underlying;
+    }
+
+    @Override
+    public boolean next() throws IOException {
+      try {
+        if (underlying.hasNext()) {
+          underlying.loadNext();
+
+          Object baseObj = underlying.getBaseObject();
+          long recordOffset = underlying.getBaseOffset();
+          int recordLen = underlying.getRecordLength();
+
+          // Note that recordLen = keyLen + valueLen + 4 bytes (for the keyLen itself)
+          int keyLen = PlatformDependent.UNSAFE.getInt(baseObj, recordOffset);
+          int valueLen = recordLen - keyLen - 4;
+
+          key.pointTo(baseObj, recordOffset + 4, numKeyFields, keyLen);
+          value.pointTo(baseObj, recordOffset + 4 + keyLen, numValueFields, valueLen);
+
+          return true;
+        } else {
+          key = null;
+          value = null;
+          cleanupResources();
+          return false;
+        }
+      } catch (IOException e) {
+        cleanupResources();
+        throw e;
+      }
+    }
+
+    @Override
+    public UnsafeRow getKey() {
+      return key;
+    }
+
+    @Override
+    public UnsafeRow getValue() {
+      return value;
+    }
+
+    @Override
+    public void close() {
+      cleanupResources();
+    }
+  };
 }
