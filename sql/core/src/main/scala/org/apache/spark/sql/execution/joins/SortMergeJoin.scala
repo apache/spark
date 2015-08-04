@@ -81,6 +81,11 @@ case class SortMergeJoin(
         // initialize iterator
         initialize()
 
+        private def initialize(): Unit = {
+          fetchLeft()
+          fetchRight()
+        }
+
         override final def hasNext: Boolean = nextMatchingPair()
 
         override final def next(): InternalRow = {
@@ -103,7 +108,7 @@ case class SortMergeJoin(
           }
         }
 
-        private def fetchLeft() = {
+        private def fetchLeft(): Unit = {
           if (leftIter.hasNext) {
             leftElement = leftIter.next()
             leftKey = leftKeyGenerator(leftElement)
@@ -112,18 +117,13 @@ case class SortMergeJoin(
           }
         }
 
-        private def fetchRight() = {
+        private def fetchRight(): Unit = {
           if (rightIter.hasNext) {
             rightElement = rightIter.next()
             rightKey = rightKeyGenerator(rightElement)
           } else {
             rightElement = null
           }
-        }
-
-        private def initialize() = {
-          fetchLeft()
-          fetchRight()
         }
 
         /**
