@@ -82,7 +82,6 @@ case class ScriptTransformation(
 
       // This nullability is a performance optimization in order to avoid an Option.foreach() call
       // inside of a loop
-
       @Nullable val (inputSerde, inputSoi) = ioschema.initInputSerDe(input).getOrElse((null, null))
 
       // This new thread will consume the ScriptTransformation's input rows and write them to the
@@ -309,10 +308,8 @@ case class HiveScriptIOSchema (
   }
 
   private def parseAttrs(attrs: Seq[Expression]): (Seq[String], Seq[DataType]) = {
-    val columns = attrs.zipWithIndex.map { e => s"${e._1.prettyName}_${e._2}" }
-
-    val columnTypes = attrs.map { _.dataType }
-
+    val columns = attrs.zipWithIndex.map(e => s"${e._1.prettyName}_${e._2}")
+    val columnTypes = attrs.map(_.dataType)
     (columns, columnTypes)
   }
 
