@@ -66,8 +66,8 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
     }
 
     def testPrefixComparison(x: Array[Byte], y: Array[Byte]): Unit = {
-      val s1Prefix = PrefixComparators.BINARY.computePrefix(x)
-      val s2Prefix = PrefixComparators.BINARY.computePrefix(y)
+      val s1Prefix = PrefixComparators.BinaryPrefixComparator.computePrefix(x)
+      val s2Prefix = PrefixComparators.BinaryPrefixComparator.computePrefix(y)
       val prefixComparisonResult =
         PrefixComparators.BINARY.compare(s1Prefix, s2Prefix)
       assert(

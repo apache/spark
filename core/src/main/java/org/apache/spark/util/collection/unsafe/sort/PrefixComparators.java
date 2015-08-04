@@ -17,12 +17,16 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
-import com.google.common.primitives.Longs;
 import com.google.common.primitives.UnsignedLongs;
 
 import org.apache.spark.annotation.Private;
+import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.util.Utils;
+
+import java.nio.ByteOrder;
+
+import static org.apache.spark.unsafe.PlatformDependent.*;
 
 @Private
 public class PrefixComparators {
@@ -61,18 +65,21 @@ public class PrefixComparators {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
 
-    public long computePrefix(byte[] bytes) {
+    public static long computePrefix(byte[] bytes) {
       if (bytes == null) {
         return 0L;
       } else {
-        byte[] padded = new byte[8];
-        byte[] uBytes = new byte[8];
-        int minLen = Math.min(bytes.length, 8);
-        for (int i = 0; i < minLen; ++i) {
-          uBytes[i] = (byte) ((128 + (int) bytes[i]) & 0xff);
+        /**
+         * TODO: If a wrapper for BinaryType is created (SPARK-8786),
+         * these codes below will be in the wrapper class.
+         */
+        final int minLen = Math.min(bytes.length, 8);
+        long p = 0;
+        for (int i = 1; i <= minLen; ++i) {
+          p |= (128L + PlatformDependent.UNSAFE.getByte(bytes, BYTE_ARRAY_OFFSET + i - 1))
+              << (64 - 8 * i);
         }
-        System.arraycopy(uBytes, 0, padded, 0, minLen);
-        return Longs.fromByteArray(padded);
+        return p;
       }
     }
   }
