@@ -126,7 +126,7 @@ private[sql] object JacksonParser {
         convertMap(factory, parser, kt)
 
       case (_, udt: UserDefinedType[_]) =>
-        udt.deserialize(convertField(factory, parser, udt.sqlType))
+        convertField(factory, parser, udt.sqlType)
     }
   }
 
