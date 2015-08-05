@@ -1196,8 +1196,8 @@ class DAGScheduler(
 
       // Clear failure count for this stage, now that it's succeeded.
       // We only limit consecutive failures of stage attempts,so that if a stage is
-      // re-used many times in a long-running job, unrelated failures that are spaced out in time
-      // don't eventually cause the stage to be aborted.
+      // re-used many times in a long-running job, unrelated failures don't eventually cause the
+      // stage to be aborted.
       stage.clearFailures()
     } else {
       stage.latestInfo.stageFailed(errorMessage.get)

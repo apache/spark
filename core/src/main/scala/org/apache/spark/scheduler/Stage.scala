@@ -23,7 +23,6 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.CallSite
 
-
 /**
  * A stage is a set of independent tasks all computing the same function that need to run as part
  * of a Spark job, where all the tasks have the same shuffle dependencies. Each DAG of tasks run
@@ -87,7 +86,7 @@ private[scheduler] abstract class Stage(
    * B) A failure has not yet been registered for this stage attempt. There may be multiple
    * concurrent failures for a sinlge stage since we may have multiple tasks executing at the same
    * time, one or many of which may fail. Also, even though there may only be one non-zombie stage
-   * attemp, zombie stages may still have running tasks.
+   * attempt, zombie stage attempts may still have running tasks.
    */
   private val attemptsFailedFromFetch = new HashSet[Int]
 
@@ -124,5 +123,5 @@ private[scheduler] abstract class Stage(
 
 private[scheduler] object Stage {
   // The maximum number of times to retry a stage before aborting
-  private[scheduler] val MAX_STAGE_FAILURES = 4
+  val MAX_STAGE_FAILURES = 4
 }

@@ -511,12 +511,13 @@ class DAGSchedulerSuite
    *
    * @param stageId - The current stageId
    * @param attemptIdx - The current attempt count
-   * @param numPartitions - The number of partitions in the next stage
+   * @param numShufflePartitions - The number of partitions in the next stage
    */
-  def completeNextShuffleMapSuccesfully(stageId: Int, attemptIdx: Int, numPartitions: Int): Unit = {
+  def completeNextShuffleMapSuccesfully(stageId: Int, attemptIdx: Int,
+      numShufflePartitions: Int): Unit = {
     val stageAttempt = taskSets.last
     checkStageId(stageId, attemptIdx, stageAttempt)
-    complete(stageAttempt, makeCompletions(stageAttempt, numPartitions))
+    complete(stageAttempt, makeCompletions(stageAttempt, numShufflePartitions))
   }
 
   /**
@@ -525,11 +526,11 @@ class DAGSchedulerSuite
    *
    * @param stageId - The current stageId
    * @param attemptIdx - The current attempt count
-   * @param shuffleId - The shuffleId of the stage with a fetch failure
+   * @param shuffleDep - The shuffle dependency of the stage with a fetch failure
    */
   def completeNextShuffleMapWithFailureAndSuccess(stageId: Int,
       attemptIdx: Int,
-      shuffleId: Int,
+      shuffleDep: ShuffleDependency[_,_,_],
       numPartitions: Int): Unit = {
     val stageAttempt = taskSets.last
     checkStageId(stageId, attemptIdx, stageAttempt)
@@ -537,7 +538,7 @@ class DAGSchedulerSuite
     val stageSuccesses = stageAttempt.tasks.tail.map { _ => (Success, makeMapStatus("hostB",
       numPartitions))}
     complete(stageAttempt,
-      Seq((FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null))
+      Seq((FetchFailed(makeBlockManagerId("hostA"), shuffleDep.shuffleId, 0, 0, "ignored"), null))
         ++ stageSuccesses
     )
   }
@@ -548,38 +549,39 @@ class DAGSchedulerSuite
    *
    * @param stageId - The current stageId
    * @param attemptIdx - The current attempt count
-   * @param shuffleId - The shuffleId of the stage with a fetch failure
+   * @param shuffleDep - The shuffle dependency of the stage with a fetch failure
    */
-  def completeNextShuffleMapWithFetchFailure(stageId: Int,
+  def completeNextStageWithFetchFailure(stageId: Int,
       attemptIdx: Int,
-      shuffleId: Int): Unit = {
+      shuffleDep: ShuffleDependency[_,_,_]): Unit = {
     val stageAttempt = taskSets.last
     checkStageId(stageId, attemptIdx, stageAttempt)
 
     complete(stageAttempt, stageAttempt.tasks.zipWithIndex.map{ case (task, idx) =>
-      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, idx, "ignored"), null)
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleDep.shuffleId, 0, idx, "ignored"), null)
     }.toSeq)
   }
 
   /**
-   * Common code to get the next stage attempt, confirm it's the one we expect, and complete it
-   * with a success where we return 42.
+   * Common code to get the next result stage attempt, confirm it's the one we expect, and
+   * complete it with a success where we return 42.
    *
    * @param stageId - The current stageId
    * @param attemptIdx - The current attempt count
    */
-  def completeNextShuffleMapWithSuccess_42 (stageId: Int, attemptIdx: Int): Unit = {
+  def completeNextResultStageWithSuccess (stageId: Int, attemptIdx: Int): Unit = {
     val stageAttempt = taskSets.last
     checkStageId(stageId, attemptIdx, stageAttempt)
+    assert(scheduler.stageIdToStage(stageId).isInstanceOf[ResultStage])
     complete(stageAttempt, stageAttempt.tasks.zipWithIndex.map(_ => (Success, 42)).toSeq)
   }
 
   /**
    * In this test we simulate a job failure where the first stage completes successfully and
    * the second stage fails due to a fetch failure. Multiple successive fetch failures of a stage
-   * trigger an overall stage abort to avoid endless retries.
+   * trigger an overall job abort to avoid endless retries.
    */
-  test("Multiple consecutive stage failures should lead to task being aborted.") {
+  test("Multiple consecutive stage failures should lead to job being aborted.") {
     setupStageAbortTest(sc)
 
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
@@ -590,11 +592,11 @@ class DAGSchedulerSuite
 
     for (attempt <- 0 until Stage.MAX_STAGE_FAILURES) {
       // Complete all the tasks for the current attempt of stage 0 successfully
-      completeNextShuffleMapSuccesfully(0, attempt, numPartitions = 2)
+      completeNextShuffleMapSuccesfully(0, attempt, numShufflePartitions = 2)
 
       // Now we should have a new taskSet, for a new attempt of stage 1.
       // We will have one fetch failure for this task set
-      completeNextShuffleMapWithFailureAndSuccess(1, attempt, shuffleId, 2)
+      completeNextStageWithFetchFailure(1, attempt, shuffleDep)
 
       // this will (potentially) trigger a resubmission of stage 0, since we've lost some of its
       // map output, for the next iteration through the loop
@@ -608,7 +610,11 @@ class DAGSchedulerSuite
         assertDataStructuresEmpty()
         sc.listenerBus.waitUntilEmpty(1000)
         assert(ended)
-        assert(jobResult.isInstanceOf[JobFailed])
+        jobResult match {
+          case JobFailed(reason) =>
+            assert(reason.getMessage.contains("ResultStage 1 () has failed the maximum"))
+          case other => fail(s"expected JobFailed, not $other")
+        }
       }
     }
   }
@@ -633,19 +639,18 @@ class DAGSchedulerSuite
     // stage 2 fails.
     for (attempt <- 0 until Stage.MAX_STAGE_FAILURES) {
       // Complete all the tasks for the current attempt of stage 0 successfully
-      completeNextShuffleMapSuccesfully(0, attempt, numPartitions = 2)
+      completeNextShuffleMapSuccesfully(0, attempt, numShufflePartitions = 2)
 
       if (attempt < Stage.MAX_STAGE_FAILURES/2) {
         // Now we should have a new taskSet, for a new attempt of stage 1.
         // We will have one fetch failure for this task set
-        completeNextShuffleMapWithFailureAndSuccess(1, attempt, shuffleDepOne.shuffleId,
-          numPartitions = 1)
+        completeNextStageWithFetchFailure(1, attempt, shuffleDepOne)
       } else {
-        completeNextShuffleMapSuccesfully(1, attempt, numPartitions = 1)
+        completeNextShuffleMapSuccesfully(1, attempt, numShufflePartitions = 1)
 
         // Fail stage 2
-        completeNextShuffleMapWithFetchFailure(2, attempt - Stage.MAX_STAGE_FAILURES / 2,
-          shuffleDepTwo.shuffleId)
+        completeNextStageWithFetchFailure(2, attempt - Stage.MAX_STAGE_FAILURES / 2,
+          shuffleDepTwo)
       }
 
       // this will (potentially) trigger a resubmission of stage 0, since we've lost some of its
@@ -653,11 +658,11 @@ class DAGSchedulerSuite
       scheduler.resubmitFailedStages()
     }
 
-    completeNextShuffleMapSuccesfully(0, 4, numPartitions = 2)
-    completeNextShuffleMapSuccesfully(1, 4, numPartitions = 1)
+    completeNextShuffleMapSuccesfully(0, 4, numShufflePartitions = 2)
+    completeNextShuffleMapSuccesfully(1, 4, numShufflePartitions = 1)
 
     // Succeed stage2 with a "42"
-    completeNextShuffleMapWithSuccess_42(2, Stage.MAX_STAGE_FAILURES/2)
+    completeNextResultStageWithSuccess(2, Stage.MAX_STAGE_FAILURES/2)
 
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty()
@@ -678,9 +683,9 @@ class DAGSchedulerSuite
     val reduceRdd = new MyRDD(sc, parts, List(shuffleDep))
     submit(reduceRdd, (0 until parts).toArray)
 
-    completeNextShuffleMapSuccesfully(0, 0, numPartitions = parts)
+    completeNextShuffleMapSuccesfully(0, 0, numShufflePartitions = parts)
 
-    completeNextShuffleMapWithFetchFailure(1, 0, shuffleId)
+    completeNextStageWithFetchFailure(1, 0, shuffleDep)
 
     // Resubmit and confirm that now all is well
     scheduler.resubmitFailedStages()
@@ -689,8 +694,8 @@ class DAGSchedulerSuite
     assert(!ended)
 
     // Complete stage 0 and then stage 1 with a "42"
-    completeNextShuffleMapSuccesfully(0, 1, numPartitions = parts)
-    completeNextShuffleMapWithSuccess_42(1, 1)
+    completeNextShuffleMapSuccesfully(0, 1, numShufflePartitions = parts)
+    completeNextResultStageWithSuccess(1, 1)
 
     // Confirm job finished succesfully
     sc.listenerBus.waitUntilEmpty(1000)
@@ -717,12 +722,11 @@ class DAGSchedulerSuite
 
     for (attempt <- 0 until Stage.MAX_STAGE_FAILURES-1) {
       // Make each task in stage 0 success
-      completeNextShuffleMapSuccesfully(0, attempt, numPartitions = 2)
+      completeNextShuffleMapSuccesfully(0, attempt, numShufflePartitions = 2)
 
       // Now we should have a new taskSet, for a new attempt of stage 1.
       // We will have one fetch failure for this task set
-      completeNextShuffleMapWithFailureAndSuccess(1, attempt, shuffleDepOne.shuffleId,
-        numPartitions = 1)
+      completeNextStageWithFetchFailure(1, attempt, shuffleDepOne)
 
       scheduler.resubmitFailedStages()
 
@@ -732,19 +736,19 @@ class DAGSchedulerSuite
     }
 
     // Rerun stage 0 and 1
-    completeNextShuffleMapSuccesfully(0, 3, numPartitions = 2)
-    completeNextShuffleMapSuccesfully(1, 3, numPartitions = 1)
+    completeNextShuffleMapSuccesfully(0, 3, numShufflePartitions = 2)
+    completeNextShuffleMapSuccesfully(1, 3, numShufflePartitions = 1)
 
     // Fail stage 2
-    completeNextShuffleMapWithFetchFailure(2, 0, shuffleDepTwo.shuffleId)
+    completeNextStageWithFetchFailure(2, 0, shuffleDepTwo)
 
     scheduler.resubmitFailedStages()
     // Rerun stage 0
-    completeNextShuffleMapSuccesfully(0, 4, numPartitions = 2)
+    completeNextShuffleMapSuccesfully(0, 4, numShufflePartitions = 2)
 
     // Now again, fail stage 1 (up to MAX_FAILURES) but confirm that this doesn't trigger an abort
     // since we succeeded in between
-    completeNextShuffleMapWithFailureAndSuccess(1, 4, shuffleDepOne.shuffleId, numPartitions = 1)
+    completeNextStageWithFetchFailure(1, 4, shuffleDepOne)
 
     scheduler.resubmitFailedStages()
 
@@ -754,11 +758,11 @@ class DAGSchedulerSuite
 
     // Next, succeed all and confirm output
     // Rerun stage 0 + 1
-    completeNextShuffleMapSuccesfully(0, 5, numPartitions = 2)
-    completeNextShuffleMapSuccesfully(1, 5, numPartitions = 1)
+    completeNextShuffleMapSuccesfully(0, 5, numShufflePartitions = 2)
+    completeNextShuffleMapSuccesfully(1, 5, numShufflePartitions = 1)
 
     // Succeed stage 2 and verify results
-    completeNextShuffleMapWithSuccess_42(2, 1)
+    completeNextResultStageWithSuccess(2, 1)
 
     assertDataStructuresEmpty()
     sc.listenerBus.waitUntilEmpty(1000)
