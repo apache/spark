@@ -206,8 +206,8 @@ class ExecutorAllocationManagerSuite
 
     val task2Info = createTaskInfo(1, 0, "executor-1")
     sc.listenerBus.postToAll(SparkListenerTaskStart(2, 0, task2Info))
-    sc.listenerBus.postToAll(SparkListenerTaskEnd(2, 0, null, null, task1Info, null))
-    sc.listenerBus.postToAll(SparkListenerTaskEnd(2, 0, null, null, task2Info, null))
+    sc.listenerBus.postToAll(SparkListenerTaskEnd(2, 0, null, Success, task1Info, null))
+    sc.listenerBus.postToAll(SparkListenerTaskEnd(2, 0, null, Success, task2Info, null))
 
     assert(adjustRequestedExecutors(manager) === -1)
   }
@@ -561,18 +561,22 @@ class ExecutorAllocationManagerSuite
     taskInfos.tail.foreach { info => sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, info)) }
     assert(addTime(manager) !== NOT_SET)
 
-    // Starting all remaining tasks should cancel the add timer
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, taskInfos.head))
-    assert(addTime(manager) === NOT_SET)
+    assert(addTime(manager) !== NOT_SET)
 
     // Start two different stages
-    // The add timer should be canceled only if all tasks in both stages start running
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(1, numTasks)))
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(2, numTasks)))
     assert(addTime(manager) !== NOT_SET)
     taskInfos.foreach { info => sc.listenerBus.postToAll(SparkListenerTaskStart(1, 0, info)) }
     assert(addTime(manager) !== NOT_SET)
     taskInfos.foreach { info => sc.listenerBus.postToAll(SparkListenerTaskStart(2, 0, info)) }
+    assert(addTime(manager) !== NOT_SET)
+
+    // The add timer should be canceled only if all stages are completed
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(createStageInfo(0, numTasks)))
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(createStageInfo(1, numTasks)))
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(createStageInfo(2, numTasks)))
     assert(addTime(manager) === NOT_SET)
   }
 
