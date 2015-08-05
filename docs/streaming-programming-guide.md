@@ -1141,7 +1141,7 @@ val joinedStream = stream1.join(stream2)
 {% highlight java %}
 JavaPairDStream<String, String> stream1 = ...
 JavaPairDStream<String, String> stream2 = ...
-JavaPairDStream<String, String> joinedStream = stream1.join(stream2);
+JavaPairDStream<String, Tuple2<String, String>> joinedStream = stream1.join(stream2);
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
@@ -1166,7 +1166,7 @@ val joinedStream = windowedStream1.join(windowedStream2)
 {% highlight java %}
 JavaPairDStream<String, String> windowedStream1 = stream1.window(Durations.seconds(20));
 JavaPairDStream<String, String> windowedStream2 = stream2.window(Durations.minutes(1));
-JavaPairDStream<String, String> joinedStream = windowedStream1.join(windowedStream2);
+JavaPairDStream<String, Tuple2<String, String>> joinedStream = windowedStream1.join(windowedStream2);
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">

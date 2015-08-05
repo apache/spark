@@ -38,6 +38,8 @@ case class ShuffledHashJoin(
     right: SparkPlan)
   extends BinaryNode with HashJoin {
 
+  override protected[sql] val trackNumOfRowsEnabled = true
+
   override def outputPartitioning: Partitioning =
     PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
 

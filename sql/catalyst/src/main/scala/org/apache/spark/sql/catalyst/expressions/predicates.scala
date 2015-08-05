@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -97,31 +100,79 @@ case class Not(child: Expression)
 /**
  * Evaluates to `true` if `list` contains `value`.
  */
-case class In(value: Expression, list: Seq[Expression]) extends Predicate with CodegenFallback {
+case class In(value: Expression, list: Seq[Expression]) extends Predicate
+    with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = value.dataType +: list.map(_.dataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (list.exists(l => l.dataType != value.dataType)) {
+      TypeCheckResult.TypeCheckFailure(
+        "Arguments must be same type")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
   override def children: Seq[Expression] = value +: list
 
-  override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
+  override def nullable: Boolean = false // TODO: Figure out correct nullability semantics of IN.
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
   override def eval(input: InternalRow): Any = {
     val evaluatedValue = value.eval(input)
     list.exists(e => e.eval(input) == evaluatedValue)
   }
-}
 
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val valueGen = value.gen(ctx)
+    val listGen = list.map(_.gen(ctx))
+    val listCode = listGen.map(x =>
+      s"""
+        if (!${ev.primitive}) {
+          ${x.code}
+          if (${ctx.genEqual(value.dataType, valueGen.primitive, x.primitive)}) {
+            ${ev.primitive} = true;
+          }
+        }
+       """).mkString("\n")
+    s"""
+      ${valueGen.code}
+      boolean ${ev.primitive} = false;
+      boolean ${ev.isNull} = false;
+      $listCode
+    """
+  }
+}
 
 /**
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
-case class InSet(child: Expression, hset: Set[Any])
-  extends UnaryExpression with Predicate with CodegenFallback {
+case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with Predicate {
 
-  override def nullable: Boolean = true // TODO: Figure out correct nullability semantics of IN.
+  override def nullable: Boolean = false // TODO: Figure out correct nullability semantics of IN.
   override def toString: String = s"$child INSET ${hset.mkString("(", ",", ")")}"
 
   override def eval(input: InternalRow): Any = {
     hset.contains(child.eval(input))
+  }
+
+  def getHSet(): Set[Any] = hset
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val setName = classOf[Set[Any]].getName
+    val InSetName = classOf[InSet].getName
+    val childGen = child.gen(ctx)
+    ctx.references += this
+    val hsetTerm = ctx.freshName("hset")
+    ctx.addMutableState(setName, hsetTerm,
+      s"$hsetTerm = (($InSetName)expressions[${ctx.references.size - 1}]).getHSet();")
+    s"""
+      ${childGen.code}
+      boolean ${ev.isNull} = false;
+      boolean ${ev.primitive} = $hsetTerm.contains(${childGen.primitive});
+     """
   }
 }
 

@@ -1239,6 +1239,21 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
+   * Create an [[org.apache.spark.Accumulator]] variable of a given type, with a name for display
+   * in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only the
+   * driver can access the accumulator's `value`. The latest local value of such accumulator will be
+   * sent back to the driver via heartbeats.
+   *
+   * @tparam T type that can be added to the accumulator, must be thread safe
+   */
+  private[spark] def internalAccumulator[T](initialValue: T, name: String)(
+    implicit param: AccumulatorParam[T]): Accumulator[T] = {
+    val acc = new Accumulator(initialValue, param, Some(name), internal = true)
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    acc
+  }
+
+  /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, to which tasks can add values
    * with `+=`. Only the driver can access the accumuable's `value`.
    * @tparam R accumulator result type

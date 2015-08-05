@@ -184,7 +184,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         public void setNullAt(int i) { nullBits[i] = true; }
         public boolean isNullAt(int i) { return nullBits[i]; }
 
-        public Object genericGet(int i) {
+        protected Object genericGet(int i) {
           if (isNullAt(i)) return null;
           switch (i) {
           $getCases

@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.Logging
+import org.apache.spark.{Accumulator, Logging}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.SQLContext
@@ -59,11 +61,38 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     false
   }
 
+  /**
+   * Whether the "prepare" method is called.
+   */
+  private val prepareCalled = new AtomicBoolean(false)
+
   /** Overridden make copy also propogates sqlContext to copied plan. */
-  override def makeCopy(newArgs: Array[AnyRef]): this.type = {
+  override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
     SparkPlan.currentContext.set(sqlContext)
     super.makeCopy(newArgs)
   }
+
+  /**
+   * Whether track the number of rows output by this SparkPlan
+   */
+  protected[sql] def trackNumOfRowsEnabled: Boolean = false
+
+  private lazy val numOfRowsAccumulator = sparkContext.internalAccumulator(0L, "number of rows")
+
+  /**
+   * Return all accumulators containing metrics of this SparkPlan.
+   */
+  private[sql] def accumulators: Map[String, Accumulator[_]] = if (trackNumOfRowsEnabled) {
+      Map("numRows" -> numOfRowsAccumulator)
+    } else {
+      Map.empty
+    }
+
+  /**
+   * Return the accumulator according to the name.
+   */
+  private[sql] def accumulator[T](name: String): Accumulator[T] =
+    accumulators(name).asInstanceOf[Accumulator[T]]
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
@@ -110,9 +139,38 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         "Operator will receive unsafe rows as input but cannot process unsafe rows")
     }
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
-      doExecute()
+      prepare()
+      if (trackNumOfRowsEnabled) {
+        val numRows = accumulator[Long]("numRows")
+        doExecute().map { row =>
+          numRows += 1
+          row
+        }
+      } else {
+        doExecute()
+      }
     }
   }
+
+  /**
+   * Prepare a SparkPlan for execution. It's idempotent.
+   */
+  final def prepare(): Unit = {
+    if (prepareCalled.compareAndSet(false, true)) {
+      doPrepare
+      children.foreach(_.prepare())
+    }
+  }
+
+  /**
+   * Overridden by concrete implementations of SparkPlan. It is guaranteed to run before any
+   * `execute` of SparkPlan. This is helpful if we want to set up some state before executing the
+   * query, e.g., `BroadcastHashJoin` uses it to broadcast asynchronously.
+   *
+   * Note: the prepare method has already walked down the tree, so the implementation doesn't need
+   * to call children's prepare methods.
+   */
+  protected def doPrepare(): Unit = {}
 
   /**
    * Overridden by concrete implementations of SparkPlan.
