@@ -48,7 +48,7 @@ import org.apache.spark.util.SerializableConfiguration
  * A new instance of this class with be instantiated each time a DDL call is made.
  */
 @DeveloperApi
-trait DataSourceRegister {
+trait DataSourceuRegister {
 
   /**
    * The string that represents the format that this data source provider uses. This is

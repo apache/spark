@@ -36,7 +36,6 @@ import org.apache.spark.sql.{Row, SQLContext}
  * A simple example [[HadoopFsRelationProvider]].
  */
 class SimpleTextSource extends HadoopFsRelationProvider {
-
   override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
@@ -135,7 +134,6 @@ class SimpleTextRelation(
  * A simple example [[HadoopFsRelationProvider]].
  */
 class CommitFailureTestSource extends HadoopFsRelationProvider {
-
   override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],

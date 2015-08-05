@@ -25,7 +25,6 @@ import org.apache.spark.sql.types._
 
 
 class FilteredScanSource extends RelationProvider {
-
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {

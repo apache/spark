@@ -27,7 +27,6 @@ import org.apache.spark.sql.types._
 class DefaultSource extends SimpleScanSource
 
 class SimpleScanSource extends RelationProvider {
-
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
@@ -45,7 +44,6 @@ case class SimpleScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
 }
 
 class AllDataTypesScanSource extends SchemaRelationProvider {
-
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String],
