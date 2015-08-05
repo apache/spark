@@ -163,6 +163,14 @@ public class ExternalShuffleBlockResolver {
         }
       }
     }
+    synchronized (executors) {
+      try {
+        saveRegisteredExecutors();
+      } catch (Exception e) {
+        logger.error("Error saving registered executors", e);
+      }
+    }
+
   }
 
   /**

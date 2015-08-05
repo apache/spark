@@ -41,9 +41,9 @@ object YarnTestAccessor {
   }
 
   def loadSavedExecutors(
-      service: YarnShuffleService
+      file: File
   ): JMap[String, JList[Entry[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo]]] = {
-    YarnShuffleService.reloadRegisteredExecutors(service.registeredExecutorFile)
+    YarnShuffleService.reloadRegisteredExecutors(file)
   }
 
 }
