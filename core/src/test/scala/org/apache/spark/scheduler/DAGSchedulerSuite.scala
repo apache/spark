@@ -522,29 +522,6 @@ class DAGSchedulerSuite
 
   /**
    * Common code to get the next stage attempt, confirm it's the one we expect, and complete it
-   * with an intermediate FetchFailure.
-   *
-   * @param stageId - The current stageId
-   * @param attemptIdx - The current attempt count
-   * @param shuffleDep - The shuffle dependency of the stage with a fetch failure
-   */
-  def completeNextShuffleMapWithFailureAndSuccess(stageId: Int,
-      attemptIdx: Int,
-      shuffleDep: ShuffleDependency[_,_,_],
-      numPartitions: Int): Unit = {
-    val stageAttempt = taskSets.last
-    checkStageId(stageId, attemptIdx, stageAttempt)
-
-    val stageSuccesses = stageAttempt.tasks.tail.map { _ => (Success, makeMapStatus("hostB",
-      numPartitions))}
-    complete(stageAttempt,
-      Seq((FetchFailed(makeBlockManagerId("hostA"), shuffleDep.shuffleId, 0, 0, "ignored"), null))
-        ++ stageSuccesses
-    )
-  }
-
-  /**
-   * Common code to get the next stage attempt, confirm it's the one we expect, and complete it
    * with all FetchFailure.
    *
    * @param stageId - The current stageId
