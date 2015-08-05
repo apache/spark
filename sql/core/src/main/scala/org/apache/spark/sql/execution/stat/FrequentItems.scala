@@ -29,7 +29,6 @@ private[sql] object FrequentItems extends Logging {
   /** A helper class wrapping `MutableMap[Any, Long]` for simplicity. */
   private class FreqItemCounter(size: Int) extends Serializable {
     val baseMap: MutableMap[Any, Long] = MutableMap.empty[Any, Long]
-    var minCount: Long = Long.MaxValue
     /**
      * Add a new example to the counts if it exists, otherwise deduct the count
      * from existing items.
@@ -37,21 +36,18 @@ private[sql] object FrequentItems extends Logging {
     def add(key: Any, count: Long): this.type = {
       if (baseMap.contains(key))  {
         baseMap(key) += count
-        if (baseMap(key) < minCount) minCount = baseMap(key)
       } else {
         if (baseMap.size < size) {
           baseMap += key -> count
-          if (count < minCount) minCount = count
         } else {
+          val minCount = baseMap.values.min
           val remainder = count - minCount
           if (remainder >= 0) {
             baseMap += key -> count // something will get kicked out, so we can add this
             baseMap.retain((k, v) => v > minCount)
             baseMap.transform((k, v) => v - minCount)
-            minCount = baseMap.foldLeft(Long.MaxValue)((a, b) => math.min(a, b._2))
           } else {
             baseMap.transform((k, v) => v - count)
-            minCount -= count
           }
         }
       }
