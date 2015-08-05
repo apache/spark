@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.{Decimal, DataType, StructType, AtomicType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * An extended interface to [[InternalRow]] that allows the values for each column to be updated.
@@ -76,13 +76,13 @@ class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
  * Note that, while the array is not copied, and thus could technically be mutated after creation,
  * this is not allowed.
  */
-class GenericInternalRow(protected[sql] val values: Array[Any]) extends InternalRow {
+class GenericInternalRow(private[sql] val values: Array[Any]) extends InternalRow {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
 
   def this(size: Int) = this(new Array[Any](size))
 
-  override def genericGet(ordinal: Int): Any = values(ordinal)
+  override protected def genericGet(ordinal: Int) = values(ordinal)
 
   override def toSeq: Seq[Any] = values
 
@@ -103,13 +103,13 @@ class GenericInternalRowWithSchema(values: Array[Any], val schema: StructType)
   def fieldIndex(name: String): Int = schema.fieldIndex(name)
 }
 
-class GenericMutableRow(val values: Array[Any]) extends MutableRow {
+class GenericMutableRow(values: Array[Any]) extends MutableRow {
   /** No-arg constructor for serialization. */
   protected def this() = this(null)
 
   def this(size: Int) = this(new Array[Any](size))
 
-  override def genericGet(ordinal: Int): Any = values(ordinal)
+  override protected def genericGet(ordinal: Int) = values(ordinal)
 
   override def toSeq: Seq[Any] = values
 

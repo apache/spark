@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.{DataType, MapData, ArrayData, Decimal}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * An abstract class for row used internal in Spark SQL, which only contain the columns as
  * internal types.
  */
-// todo: make InternalRow just extends SpecializedGetters, remove generic getter
-abstract class InternalRow extends GenericSpecializedGetters with Serializable {
+abstract class InternalRow extends SpecializedGetters with Serializable {
 
   def numFields: Int
 
@@ -49,6 +49,31 @@ abstract class InternalRow extends GenericSpecializedGetters with Serializable {
     }
     false
   }
+
+  // Subclasses of InternalRow should implement all special getters and equals/hashCode,
+  // or implement this genericGet.
+  protected def genericGet(ordinal: Int): Any = throw new IllegalStateException(
+    "Concrete internal rows should implement genericGet, " +
+      "or implement all special getters and equals/hashCode")
+
+  // default implementation (slow)
+  private def getAs[T](ordinal: Int) = genericGet(ordinal).asInstanceOf[T]
+  override def isNullAt(ordinal: Int): Boolean = getAs[AnyRef](ordinal) eq null
+  override def get(ordinal: Int, dataType: DataType): AnyRef = getAs(ordinal)
+  override def getBoolean(ordinal: Int): Boolean = getAs(ordinal)
+  override def getByte(ordinal: Int): Byte = getAs(ordinal)
+  override def getShort(ordinal: Int): Short = getAs(ordinal)
+  override def getInt(ordinal: Int): Int = getAs(ordinal)
+  override def getLong(ordinal: Int): Long = getAs(ordinal)
+  override def getFloat(ordinal: Int): Float = getAs(ordinal)
+  override def getDouble(ordinal: Int): Double = getAs(ordinal)
+  override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal = getAs(ordinal)
+  override def getUTF8String(ordinal: Int): UTF8String = getAs(ordinal)
+  override def getBinary(ordinal: Int): Array[Byte] = getAs(ordinal)
+  override def getArray(ordinal: Int): ArrayData = getAs(ordinal)
+  override def getInterval(ordinal: Int): CalendarInterval = getAs(ordinal)
+  override def getMap(ordinal: Int): MapData = getAs(ordinal)
+  override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)
 
   override def equals(o: Any): Boolean = {
     if (!o.isInstanceOf[InternalRow]) {
@@ -159,15 +184,15 @@ abstract class InternalRow extends GenericSpecializedGetters with Serializable {
 
 object InternalRow {
   /**
-   * This method can be used to construct a [[Row]] with the given values.
+   * This method can be used to construct a [[InternalRow]] with the given values.
    */
   def apply(values: Any*): InternalRow = new GenericInternalRow(values.toArray)
 
   /**
-   * This method can be used to construct a [[Row]] from a [[Seq]] of values.
+   * This method can be used to construct a [[InternalRow]] from a [[Seq]] of values.
    */
   def fromSeq(values: Seq[Any]): InternalRow = new GenericInternalRow(values.toArray)
 
-  /** Returns an empty row. */
+  /** Returns an empty [[InternalRow]]. */
   val empty = apply()
 }
