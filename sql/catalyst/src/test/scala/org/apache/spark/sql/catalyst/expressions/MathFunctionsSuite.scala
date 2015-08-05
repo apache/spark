@@ -30,6 +30,8 @@ import org.apache.spark.sql.types._
 
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
+  import IntegralLiteralTestUtils._
+
   /**
    * Used for testing leaf math expressions.
    *
@@ -110,35 +112,17 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(c(Literal(1.0), Literal.create(null, DoubleType)), null, create_row(null))
   }
 
-  test("conv") {
-    checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2)), "11")
-    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16)), "-F")
-    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(16)), "FFFFFFFFFFFFFFF1")
-    checkEvaluation(Conv(Literal("big"), Literal(36), Literal(16)), "3A48")
-    checkEvaluation(Conv(Literal.create(null, StringType), Literal(36), Literal(16)), null)
-    checkEvaluation(Conv(Literal("3"), Literal.create(null, IntegerType), Literal(16)), null)
-    checkEvaluation(
-      Conv(Literal("1234"), Literal(10), Literal(37)), null)
-    checkEvaluation(
-      Conv(Literal(""), Literal(10), Literal(16)), null)
-    checkEvaluation(
-      Conv(Literal("9223372036854775807"), Literal(36), Literal(16)), "FFFFFFFFFFFFFFFF")
-    // If there is an invalid digit in the number, the longest valid prefix should be converted.
-    checkEvaluation(
-      Conv(Literal("11abc"), Literal(10), Literal(16)), "B")
-  }
-
   private def checkNaN(
-      expression: Expression, inputRow: InternalRow = EmptyRow): Unit = {
+    expression: Expression, inputRow: InternalRow = EmptyRow): Unit = {
     checkNaNWithoutCodegen(expression, inputRow)
     checkNaNWithGeneratedProjection(expression, inputRow)
     checkNaNWithOptimization(expression, inputRow)
   }
 
   private def checkNaNWithoutCodegen(
-      expression: Expression,
-      expected: Any,
-      inputRow: InternalRow = EmptyRow): Unit = {
+    expression: Expression,
+    expected: Any,
+    inputRow: InternalRow = EmptyRow): Unit = {
     val actual = try evaluate(expression, inputRow) catch {
       case e: Exception => fail(s"Exception evaluating $expression", e)
     }
@@ -148,7 +132,6 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         s"expected: NaN")
     }
   }
-
 
   private def checkNaNWithGeneratedProjection(
     expression: Expression,
@@ -170,6 +153,25 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
     val optimizedPlan = DefaultOptimizer.execute(plan)
     checkNaNWithoutCodegen(optimizedPlan.expressions.head, inputRow)
+  }
+
+  test("conv") {
+    checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2)), "11")
+    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16)), "-F")
+    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(16)), "FFFFFFFFFFFFFFF1")
+    checkEvaluation(Conv(Literal("big"), Literal(36), Literal(16)), "3A48")
+    checkEvaluation(Conv(Literal.create(null, StringType), Literal(36), Literal(16)), null)
+    checkEvaluation(Conv(Literal("3"), Literal.create(null, IntegerType), Literal(16)), null)
+    checkEvaluation(Conv(Literal("3"), Literal(16), Literal.create(null, IntegerType)), null)
+    checkEvaluation(
+      Conv(Literal("1234"), Literal(10), Literal(37)), null)
+    checkEvaluation(
+      Conv(Literal(""), Literal(10), Literal(16)), null)
+    checkEvaluation(
+      Conv(Literal("9223372036854775807"), Literal(36), Literal(16)), "FFFFFFFFFFFFFFFF")
+    // If there is an invalid digit in the number, the longest valid prefix should be converted.
+    checkEvaluation(
+      Conv(Literal("11abc"), Literal(10), Literal(16)), "B")
   }
 
   test("e") {
@@ -293,6 +295,9 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Bin(l3), java.lang.Long.toBinaryString(123), row)
     checkEvaluation(Bin(l4), java.lang.Long.toBinaryString(1234), row)
     checkEvaluation(Bin(l5), java.lang.Long.toBinaryString(-123), row)
+
+    checkEvaluation(Bin(positiveLongLit), java.lang.Long.toBinaryString(positiveLong))
+    checkEvaluation(Bin(negativeLongLit), java.lang.Long.toBinaryString(negativeLong))
   }
 
   test("log2") {
@@ -324,6 +329,15 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(ShiftLeft(Literal(21.toLong), Literal(1)), 42.toLong)
     checkEvaluation(ShiftLeft(Literal(-21.toLong), Literal(1)), -42.toLong)
+
+    checkEvaluation(ShiftLeft(positiveIntLit, positiveIntLit), positiveInt << positiveInt)
+    checkEvaluation(ShiftLeft(positiveIntLit, negativeIntLit), positiveInt << negativeInt)
+    checkEvaluation(ShiftLeft(negativeIntLit, positiveIntLit), negativeInt << positiveInt)
+    checkEvaluation(ShiftLeft(negativeIntLit, negativeIntLit), negativeInt << negativeInt)
+    checkEvaluation(ShiftLeft(positiveLongLit, positiveIntLit), positiveLong << positiveInt)
+    checkEvaluation(ShiftLeft(positiveLongLit, negativeIntLit), positiveLong << negativeInt)
+    checkEvaluation(ShiftLeft(negativeLongLit, positiveIntLit), negativeLong << positiveInt)
+    checkEvaluation(ShiftLeft(negativeLongLit, negativeIntLit), negativeLong << negativeInt)
   }
 
   test("shift right") {
@@ -335,6 +349,15 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(ShiftRight(Literal(42.toLong), Literal(1)), 21.toLong)
     checkEvaluation(ShiftRight(Literal(-42.toLong), Literal(1)), -21.toLong)
+
+    checkEvaluation(ShiftRight(positiveIntLit, positiveIntLit), positiveInt >> positiveInt)
+    checkEvaluation(ShiftRight(positiveIntLit, negativeIntLit), positiveInt >> negativeInt)
+    checkEvaluation(ShiftRight(negativeIntLit, positiveIntLit), negativeInt >> positiveInt)
+    checkEvaluation(ShiftRight(negativeIntLit, negativeIntLit), negativeInt >> negativeInt)
+    checkEvaluation(ShiftRight(positiveLongLit, positiveIntLit), positiveLong >> positiveInt)
+    checkEvaluation(ShiftRight(positiveLongLit, negativeIntLit), positiveLong >> negativeInt)
+    checkEvaluation(ShiftRight(negativeLongLit, positiveIntLit), negativeLong >> positiveInt)
+    checkEvaluation(ShiftRight(negativeLongLit, negativeIntLit), negativeLong >> negativeInt)
   }
 
   test("shift right unsigned") {
@@ -346,6 +369,23 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(ShiftRightUnsigned(Literal(42.toLong), Literal(1)), 21.toLong)
     checkEvaluation(ShiftRightUnsigned(Literal(-42.toLong), Literal(1)), 9223372036854775787L)
+
+    checkEvaluation(ShiftRightUnsigned(positiveIntLit, positiveIntLit),
+      positiveInt >>> positiveInt)
+    checkEvaluation(ShiftRightUnsigned(positiveIntLit, negativeIntLit),
+      positiveInt >>> negativeInt)
+    checkEvaluation(ShiftRightUnsigned(negativeIntLit, positiveIntLit),
+      negativeInt >>> positiveInt)
+    checkEvaluation(ShiftRightUnsigned(negativeIntLit, negativeIntLit),
+      negativeInt >>> negativeInt)
+    checkEvaluation(ShiftRightUnsigned(positiveLongLit, positiveIntLit),
+      positiveLong >>> positiveInt)
+    checkEvaluation(ShiftRightUnsigned(positiveLongLit, negativeIntLit),
+      positiveLong >>> negativeInt)
+    checkEvaluation(ShiftRightUnsigned(negativeLongLit, positiveIntLit),
+      negativeLong >>> positiveInt)
+    checkEvaluation(ShiftRightUnsigned(negativeLongLit, negativeIntLit),
+      negativeLong >>> negativeInt)
   }
 
   test("hex") {
@@ -417,7 +457,7 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("round") {
-    val domain = -6 to 6
+    val scales = -6 to 6
     val doublePi: Double = math.Pi
     val shortPi: Short = 31415
     val intPi: Int = 314159265
@@ -437,17 +477,16 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       31415926535900000L, 31415926535898000L, 31415926535897900L, 31415926535897930L) ++
       Seq.fill(7)(31415926535897932L)
 
-    val bdResults: Seq[BigDecimal] = Seq(BigDecimal(3.0), BigDecimal(3.1), BigDecimal(3.14),
-      BigDecimal(3.142), BigDecimal(3.1416), BigDecimal(3.14159),
-      BigDecimal(3.141593), BigDecimal(3.1415927))
-
-    domain.zipWithIndex.foreach { case (scale, i) =>
+    scales.zipWithIndex.foreach { case (scale, i) =>
       checkEvaluation(Round(doublePi, scale), doubleResults(i), EmptyRow)
       checkEvaluation(Round(shortPi, scale), shortResults(i), EmptyRow)
       checkEvaluation(Round(intPi, scale), intResults(i), EmptyRow)
       checkEvaluation(Round(longPi, scale), longResults(i), EmptyRow)
     }
 
+    val bdResults: Seq[BigDecimal] = Seq(BigDecimal(3.0), BigDecimal(3.1), BigDecimal(3.14),
+      BigDecimal(3.142), BigDecimal(3.1416), BigDecimal(3.14159),
+      BigDecimal(3.141593), BigDecimal(3.1415927))
     // round_scale > current_scale would result in precision increase
     // and not allowed by o.a.s.s.types.Decimal.changePrecision, therefore null
     (0 to 7).foreach { i =>
@@ -455,6 +494,12 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     (8 to 10).foreach { scale =>
       checkEvaluation(Round(bdPi, scale), null, EmptyRow)
+    }
+
+    DataTypeTestUtils.numericTypes.foreach { dataType =>
+      checkEvaluation(Round(Literal.create(null, dataType), Literal(2)), null)
+      checkEvaluation(Round(Literal.create(null, dataType),
+        Literal.create(null, IntegerType)), null)
     }
   }
 }

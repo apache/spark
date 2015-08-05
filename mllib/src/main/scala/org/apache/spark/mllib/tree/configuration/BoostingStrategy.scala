@@ -36,7 +36,8 @@ import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
  *                     learning rate should be between in the interval (0, 1]
  * @param validationTol Useful when runWithValidation is used. If the error rate on the
  *                      validation input between two iterations is less than the validationTol
- *                      then stop. Ignored when [[run]] is used.
+ *                      then stop.  Ignored when
+ *                      [[org.apache.spark.mllib.tree.GradientBoostedTrees.run()]] is used.
  */
 @Experimental
 case class BoostingStrategy(
@@ -89,7 +90,7 @@ object BoostingStrategy {
    * @return Configuration for boosting algorithm
    */
   def defaultParams(algo: Algo): BoostingStrategy = {
-    val treeStrategy = Strategy.defaultStategy(algo)
+    val treeStrategy = Strategy.defaultStrategy(algo)
     treeStrategy.maxDepth = 3
     algo match {
       case Algo.Classification =>

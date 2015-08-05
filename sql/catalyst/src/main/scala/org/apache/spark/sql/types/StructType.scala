@@ -24,7 +24,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute, RowOrdering}
 
 
 /**
@@ -300,8 +300,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
     StructType(newFields)
   }
-}
 
+  private[sql] val ordering = RowOrdering.forSchema(this.fields.map(_.dataType))
+}
 
 object StructType extends AbstractDataType {
 

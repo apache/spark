@@ -21,7 +21,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
 /**
@@ -38,9 +38,12 @@ case class ShuffledHashJoin(
     right: SparkPlan)
   extends BinaryNode with HashJoin {
 
-  override def outputPartitioning: Partitioning = left.outputPartitioning
+  override protected[sql] val trackNumOfRowsEnabled = true
 
-  override def requiredChildDistribution: Seq[ClusteredDistribution] =
+  override def outputPartitioning: Partitioning =
+    PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
+
+  override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = {

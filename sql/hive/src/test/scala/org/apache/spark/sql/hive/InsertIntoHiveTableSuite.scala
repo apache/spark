@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import org.apache.hadoop.hive.conf.HiveConf
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -113,6 +114,8 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
   test("SPARK-4203:random partition directory order") {
     sql("CREATE TABLE tmp_table (key int, value string)")
     val tmpDir = Utils.createTempDir()
+    val stagingDir = new HiveConf().getVar(HiveConf.ConfVars.STAGINGDIR)
+
     sql(
       s"""
          |CREATE TABLE table_with_partition(c1 string)
@@ -145,7 +148,7 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
       """.stripMargin)
     def listFolders(path: File, acc: List[String]): List[List[String]] = {
       val dir = path.listFiles()
-      val folders = dir.filter(_.isDirectory).toList
+      val folders = dir.filter { e => e.isDirectory && !e.getName().startsWith(stagingDir) }.toList
       if (folders.isEmpty) {
         List(acc.reverse)
       } else {
@@ -158,7 +161,7 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
       "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=1"::Nil ,
       "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=4"::Nil
     )
-    assert(listFolders(tmpDir, List()).sortBy(_.toString()) == expected.sortBy(_.toString))
+    assert(listFolders(tmpDir, List()).sortBy(_.toString()) === expected.sortBy(_.toString))
     sql("DROP TABLE table_with_partition")
     sql("DROP TABLE tmp_table")
   }

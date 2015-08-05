@@ -531,8 +531,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     val dynamicAllocationEnabled = _conf.getBoolean("spark.dynamicAllocation.enabled", false)
     _executorAllocationManager =
       if (dynamicAllocationEnabled) {
-        assert(supportDynamicAllocation,
-          "Dynamic allocation of executors is currently only supported in YARN and Mesos mode")
         Some(new ExecutorAllocationManager(this, listenerBus, _conf))
       } else {
         None
@@ -1194,7 +1192,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   protected[spark] def checkpointFile[T: ClassTag](path: String): RDD[T] = withScope {
-    new CheckpointRDD[T](this, path)
+    new ReliableCheckpointRDD[T](this, path)
   }
 
   /** Build the union of a list of RDDs. */
@@ -1236,6 +1234,21 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
     val acc = new Accumulator(initialValue, param, Some(name))
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    acc
+  }
+
+  /**
+   * Create an [[org.apache.spark.Accumulator]] variable of a given type, with a name for display
+   * in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only the
+   * driver can access the accumulator's `value`. The latest local value of such accumulator will be
+   * sent back to the driver via heartbeats.
+   *
+   * @tparam T type that can be added to the accumulator, must be thread safe
+   */
+  private[spark] def internalAccumulator[T](initialValue: T, name: String)(
+    implicit param: AccumulatorParam[T]): Accumulator[T] = {
+    val acc = new Accumulator(initialValue, param, Some(name), internal = true)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
   }
@@ -1362,17 +1375,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Return whether dynamically adjusting the amount of resources allocated to
-   * this application is supported. This is currently only available for YARN
-   * and Mesos coarse-grained mode.
-   */
-  private[spark] def supportDynamicAllocation: Boolean = {
-    (master.contains("yarn")
-      || master.contains("mesos")
-      || _conf.getBoolean("spark.dynamicAllocation.testing", false))
-  }
-
-  /**
    * :: DeveloperApi ::
    * Register a listener to receive up-calls from events that happen during execution.
    */
@@ -1400,8 +1402,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       localityAwareTasks: Int,
       hostToLocalTaskCount: scala.collection.immutable.Map[String, Int]
     ): Boolean = {
-    assert(supportDynamicAllocation,
-      "Requesting executors is currently only supported in YARN and Mesos modes")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.requestTotalExecutors(numExecutors, localityAwareTasks, hostToLocalTaskCount)
@@ -1414,12 +1414,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * :: DeveloperApi ::
    * Request an additional number of executors from the cluster manager.
-   * This is currently only supported in YARN mode. Return whether the request is received.
+   * @return whether the request is received.
    */
   @DeveloperApi
   override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
-    assert(supportDynamicAllocation,
-      "Requesting executors is currently only supported in YARN and Mesos modes")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.requestExecutors(numAdditionalExecutors)
@@ -1438,12 +1436,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * through this method with new ones, it should follow up explicitly with a call to
    * {{SparkContext#requestExecutors}}.
    *
-   * This is currently only supported in YARN mode. Return whether the request is received.
+   * @return whether the request is received.
    */
   @DeveloperApi
   override def killExecutors(executorIds: Seq[String]): Boolean = {
-    assert(supportDynamicAllocation,
-      "Killing executors is currently only supported in YARN and Mesos modes")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.killExecutors(executorIds)
@@ -1462,7 +1458,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * through this method with a new one, it should follow up explicitly with a call to
    * {{SparkContext#requestExecutors}}.
    *
-   * This is currently only supported in YARN mode. Return whether the request is received.
+   * @return whether the request is received.
    */
   @DeveloperApi
   override def killExecutor(executorId: String): Boolean = super.killExecutor(executorId)
@@ -1479,7 +1475,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * can steal the window of opportunity and acquire this application's resources in the
    * mean time.
    *
-   * This is currently only supported in YARN mode. Return whether the request is received.
+   * @return whether the request is received.
    */
   private[spark] def killAndReplaceExecutor(executorId: String): Boolean = {
     schedulerBackend match {
@@ -1689,33 +1685,57 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       Utils.removeShutdownHook(_shutdownHookRef)
     }
 
-    postApplicationEnd()
-    _ui.foreach(_.stop())
+    Utils.tryLogNonFatalError {
+      postApplicationEnd()
+    }
+    Utils.tryLogNonFatalError {
+      _ui.foreach(_.stop())
+    }
     if (env != null) {
-      env.metricsSystem.report()
+      Utils.tryLogNonFatalError {
+        env.metricsSystem.report()
+      }
     }
     if (metadataCleaner != null) {
-      metadataCleaner.cancel()
+      Utils.tryLogNonFatalError {
+        metadataCleaner.cancel()
+      }
     }
-    _cleaner.foreach(_.stop())
-    _executorAllocationManager.foreach(_.stop())
+    Utils.tryLogNonFatalError {
+      _cleaner.foreach(_.stop())
+    }
+    Utils.tryLogNonFatalError {
+      _executorAllocationManager.foreach(_.stop())
+    }
     if (_dagScheduler != null) {
-      _dagScheduler.stop()
+      Utils.tryLogNonFatalError {
+        _dagScheduler.stop()
+      }
       _dagScheduler = null
     }
     if (_listenerBusStarted) {
-      listenerBus.stop()
-      _listenerBusStarted = false
+      Utils.tryLogNonFatalError {
+        listenerBus.stop()
+        _listenerBusStarted = false
+      }
     }
-    _eventLogger.foreach(_.stop())
+    Utils.tryLogNonFatalError {
+      _eventLogger.foreach(_.stop())
+    }
     if (env != null && _heartbeatReceiver != null) {
-      env.rpcEnv.stop(_heartbeatReceiver)
+      Utils.tryLogNonFatalError {
+        env.rpcEnv.stop(_heartbeatReceiver)
+      }
     }
-    _progressBar.foreach(_.stop())
+    Utils.tryLogNonFatalError {
+      _progressBar.foreach(_.stop())
+    }
     _taskScheduler = null
     // TODO: Cache.stop()?
     if (_env != null) {
-      _env.stop()
+      Utils.tryLogNonFatalError {
+        _env.stop()
+      }
       SparkEnv.set(null)
     }
     SparkContext.clearActiveContext()
@@ -2653,7 +2673,7 @@ object SparkContext extends Logging {
         val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", false)
         val url = mesosUrl.stripPrefix("mesos://") // strip scheme from raw Mesos URLs
         val backend = if (coarseGrained) {
-          new CoarseMesosSchedulerBackend(scheduler, sc, url)
+          new CoarseMesosSchedulerBackend(scheduler, sc, url, sc.env.securityManager)
         } else {
           new MesosSchedulerBackend(scheduler, sc, url)
         }

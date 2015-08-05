@@ -48,6 +48,8 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
       class SpecificPredicate extends ${classOf[Predicate].getName} {
         private final $exprType[] expressions;
         ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
+
         public SpecificPredicate($exprType[] expr) {
           expressions = expr;
           ${initMutableStates(ctx)}

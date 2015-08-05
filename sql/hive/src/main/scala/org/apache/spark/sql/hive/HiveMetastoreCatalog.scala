@@ -391,7 +391,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
    */
   object ParquetConversions extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = {
-      if (!plan.resolved) {
+      if (!plan.resolved || plan.analyzed) {
         return plan
       }
 
@@ -418,8 +418,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           (relation, parquetRelation, attributedRewrites)
 
         // Read path
-        case p @ PhysicalOperation(_, _, relation: MetastoreRelation)
-            if hive.convertMetastoreParquet &&
+        case relation: MetastoreRelation if hive.convertMetastoreParquet &&
               relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
           val parquetRelation = convertToParquetRelation(relation)
           val attributedRewrites = relation.output.zip(parquetRelation.output)
@@ -649,11 +648,12 @@ private[hive] case class MetastoreRelation
     table.outputFormat.foreach(sd.setOutputFormat)
 
     val serdeInfo = new org.apache.hadoop.hive.metastore.api.SerDeInfo
-    sd.setSerdeInfo(serdeInfo)
     table.serde.foreach(serdeInfo.setSerializationLib)
+    sd.setSerdeInfo(serdeInfo)
+
     val serdeParameters = new java.util.HashMap[String, String]()
-    serdeInfo.setParameters(serdeParameters)
     table.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
+    serdeInfo.setParameters(serdeParameters)
 
     new Table(tTable)
   }

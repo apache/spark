@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.parquet
 
+import java.io.File
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, Row, SQLConf}
+import org.apache.spark.util.Utils
 
 /**
  * A test suite that tests various Parquet queries.
@@ -123,6 +126,30 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
     }
   }
 
+  test("Enabling/disabling merging partfiles when merging parquet schema") {
+    def testSchemaMerging(expectedColumnNumber: Int): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        sqlContext.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+        sqlContext.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=2").toString)
+        // delete summary files, so if we don't merge part-files, one column will not be included.
+        Utils.deleteRecursively(new File(basePath + "/foo=1/_metadata"))
+        Utils.deleteRecursively(new File(basePath + "/foo=1/_common_metadata"))
+        assert(sqlContext.read.parquet(basePath).columns.length === expectedColumnNumber)
+      }
+    }
+
+    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true") {
+      testSchemaMerging(2)
+    }
+
+    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false") {
+      testSchemaMerging(3)
+    }
+  }
+
   test("Enabling/disabling schema merging") {
     def testSchemaMerging(expectedColumnNumber: Int): Unit = {
       withTempDir { dir =>
@@ -160,6 +187,19 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
           sqlContext.read.option("mergeSchema", "true").parquet(basePath).columns.length
         }
       }
+    }
+  }
+
+  test("SPARK-9119 Decimal should be correctly written into parquet") {
+    withTempPath { dir =>
+      val basePath = dir.getCanonicalPath
+      val schema = StructType(Array(StructField("name", DecimalType(10, 5), false)))
+      val rowRDD = sqlContext.sparkContext.parallelize(Array(Row(Decimal("67123.45"))))
+      val df = sqlContext.createDataFrame(rowRDD, schema)
+      df.write.parquet(basePath)
+
+      val decimal = sqlContext.read.parquet(basePath).first().getDecimal(0)
+      assert(Decimal("67123.45") === Decimal(decimal))
     }
   }
 }
