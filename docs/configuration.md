@@ -824,7 +824,7 @@ Apart from these, the following properties are also available, and may be useful
     <td><code>spark.inputFormat.cache.enabled</code></td>
     <td>false</td>
     <td>
-      Whether to cache the inputFormat of a RDD. If set to false (default), all tasks will has it's
+      Whether to cache the inputFormat of a RDD. If set to false (default), all tasks will has its
       own InputFormat object. If set to true, all tasks of a RDD will use one InputFormat object,
       so the InputFormat should be thread-safety.
     </td>
