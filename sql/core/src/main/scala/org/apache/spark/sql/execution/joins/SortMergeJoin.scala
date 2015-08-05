@@ -38,6 +38,8 @@ case class SortMergeJoin(
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode {
 
+  override protected[sql] val trackNumOfRowsEnabled = true
+
   override def output: Seq[Attribute] = left.output ++ right.output
 
   override def outputPartitioning: Partitioning =
