@@ -47,6 +47,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   private val conf = new SparkConf(false)
   var store: BlockManager = null
   var store2: BlockManager = null
+  var store3: BlockManager = null
   var rpcEnv: RpcEnv = null
   var master: BlockManagerMaster = null
   conf.set("spark.authenticate", "false")
@@ -98,6 +99,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     if (store2 != null) {
       store2.stop()
       store2 = null
+    }
+    if (store3 != null) {
+      store3.stop()
+      store3 = null
     }
     rpcEnv.shutdown()
     rpcEnv.awaitTermination()
@@ -443,19 +448,35 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(list2DiskGet.get.readMethod === DataReadMethod.Disk)
   }
 
-  test("block manager crash test") {
-    conf.set("spark.network.timeout", "5s")
-    store = makeBlockManager(8000)
-    store2 = makeBlockManager(8000)
-    val list1 = List(new Array[Byte](4000))
-    store2.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    val list1Get = store.getRemote("list1")
-    assert(list1Get.isDefined, "list1get expected to be fetched")
-    // simulate block manager crashed
-    store2.stop()
-    val list1GetAgain = store.getRemoteBytes("list1")
-    assert(!list1GetAgain.isDefined, "list1getagain expected to be not fetched")
-    conf.set("spark.network.timeout", "120s")
+  test("(SPARK-9591)getRemoteBytes from another location when  IOException throw") {
+    try {
+      conf.set("spark.network.timeout", "2s")
+      store = makeBlockManager(8000, "excutor1")
+      store2 = makeBlockManager(8000, "excutor2")
+      store3 = makeBlockManager(8000, "executor3")
+      val list1 = List(new Array[Byte](4000))
+      store2.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+      store3.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+
+      var list1Get = store.getRemoteBytes("list1")
+      assert(list1Get.isDefined, "list1Get expected to be fetched")
+      // block manager exit
+      store2.stop()
+      store2 = null
+      list1Get = store.getRemoteBytes("list1")
+
+      // get `list1` block
+      assert(list1Get.isDefined, "list1Get expected to be fetched")
+
+      store3.stop()
+      store3 = null
+      // exception throw because there is no locations
+      intercept[java.io.IOException] {
+        list1Get = store.getRemoteBytes("list1")
+      }
+    } finally {
+      conf.remove("spark.network.timeout")
+    }
   }
 
   test("in-memory LRU storage") {
