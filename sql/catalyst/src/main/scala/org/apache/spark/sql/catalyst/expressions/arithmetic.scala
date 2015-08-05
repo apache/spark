@@ -511,6 +511,6 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
 
   private def pmod(a: Decimal, n: Decimal): Decimal = {
     val r = a % n
-    if (r.compare(Decimal(0)) < 0) {(r + n) % n} else r
+    if (r.compare(Decimal.ZERO) < 0) {(r + n) % n} else r
   }
 }

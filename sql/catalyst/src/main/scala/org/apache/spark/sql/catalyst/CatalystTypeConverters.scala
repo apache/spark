@@ -317,17 +317,22 @@ object CatalystTypeConverters {
 
   private class DecimalConverter(dataType: DecimalType)
     extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
-    override def toCatalystImpl(scalaValue: Any): Decimal = scalaValue match {
-      case d: BigDecimal => Decimal(d)
-      case d: JavaBigDecimal => Decimal(d)
-      case d: Decimal => d
+    override def toCatalystImpl(scalaValue: Any): Decimal = {
+      val decimal = scalaValue match {
+        case d: BigDecimal => Decimal(d)
+        case d: JavaBigDecimal => Decimal(d)
+        case d: Decimal => d
+      }
+      if (decimal.changePrecision(dataType.precision, dataType.scale)) {
+        decimal
+      } else {
+        null
+      }
     }
     override def toScala(catalystValue: Decimal): JavaBigDecimal = catalystValue.toJavaBigDecimal
     override def toScalaImpl(row: InternalRow, column: Int): JavaBigDecimal =
       row.getDecimal(column, dataType.precision, dataType.scale).toJavaBigDecimal
   }
-
-  private object BigDecimalConverter extends DecimalConverter(DecimalType.SYSTEM_DEFAULT)
 
   private abstract class PrimitiveConverter[T] extends CatalystTypeConverter[T, Any, Any] {
     final override def toScala(catalystValue: Any): Any = catalystValue
@@ -413,8 +418,8 @@ object CatalystTypeConverters {
     case s: String => StringConverter.toCatalyst(s)
     case d: Date => DateConverter.toCatalyst(d)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
-    case d: BigDecimal => BigDecimalConverter.toCatalyst(d)
-    case d: JavaBigDecimal => BigDecimalConverter.toCatalyst(d)
+    case d: BigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
+    case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
     case arr: Array[Any] => new GenericArrayData(arr.map(convertToCatalyst))

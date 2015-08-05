@@ -73,8 +73,6 @@ class JsonSuite extends QueryTest with TestJsonData {
 
     val doubleNumber: Double = 1.7976931348623157E308d
     checkTypePromotion(doubleNumber.toDouble, enforceCorrectType(doubleNumber, DoubleType))
-    checkTypePromotion(
-      Decimal(doubleNumber), enforceCorrectType(doubleNumber, DecimalType.SYSTEM_DEFAULT))
 
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(intNumber)),
         enforceCorrectType(intNumber, TimestampType))
@@ -150,7 +148,7 @@ class JsonSuite extends QueryTest with TestJsonData {
 
     // DoubleType
     checkDataType(DoubleType, DoubleType, DoubleType)
-    checkDataType(DoubleType, DecimalType.SYSTEM_DEFAULT, DecimalType.SYSTEM_DEFAULT)
+    checkDataType(DoubleType, DecimalType.SYSTEM_DEFAULT, DoubleType)
     checkDataType(DoubleType, StringType, StringType)
     checkDataType(DoubleType, ArrayType(IntegerType), StringType)
     checkDataType(DoubleType, StructType(Nil), StringType)
@@ -241,7 +239,7 @@ class JsonSuite extends QueryTest with TestJsonData {
     val jsonDF = ctx.read.json(primitiveFieldAndType)
 
     val expectedSchema = StructType(
-      StructField("bigInteger", DecimalType.SYSTEM_DEFAULT, true) ::
+      StructField("bigInteger", DecimalType(20, 0), true) ::
       StructField("boolean", BooleanType, true) ::
       StructField("double", DoubleType, true) ::
       StructField("integer", LongType, true) ::
@@ -271,7 +269,7 @@ class JsonSuite extends QueryTest with TestJsonData {
     val expectedSchema = StructType(
       StructField("arrayOfArray1", ArrayType(ArrayType(StringType, true), true), true) ::
       StructField("arrayOfArray2", ArrayType(ArrayType(DoubleType, true), true), true) ::
-      StructField("arrayOfBigInteger", ArrayType(DecimalType.SYSTEM_DEFAULT, true), true) ::
+      StructField("arrayOfBigInteger", ArrayType(DecimalType(21, 0), true), true) ::
       StructField("arrayOfBoolean", ArrayType(BooleanType, true), true) ::
       StructField("arrayOfDouble", ArrayType(DoubleType, true), true) ::
       StructField("arrayOfInteger", ArrayType(LongType, true), true) ::
@@ -285,7 +283,7 @@ class JsonSuite extends QueryTest with TestJsonData {
           StructField("field3", StringType, true) :: Nil), true), true) ::
       StructField("struct", StructType(
         StructField("field1", BooleanType, true) ::
-        StructField("field2", DecimalType.SYSTEM_DEFAULT, true) :: Nil), true) ::
+        StructField("field2", DecimalType(20, 0), true) :: Nil), true) ::
       StructField("structWithArrayFields", StructType(
         StructField("field1", ArrayType(LongType, true), true) ::
         StructField("field2", ArrayType(StringType, true), true) :: Nil), true) :: Nil)
@@ -386,7 +384,7 @@ class JsonSuite extends QueryTest with TestJsonData {
     val expectedSchema = StructType(
       StructField("num_bool", StringType, true) ::
       StructField("num_num_1", LongType, true) ::
-      StructField("num_num_2", DecimalType.SYSTEM_DEFAULT, true) ::
+      StructField("num_num_2", DoubleType, true) ::
       StructField("num_num_3", DoubleType, true) ::
       StructField("num_str", StringType, true) ::
       StructField("str_bool", StringType, true) :: Nil)
@@ -398,11 +396,9 @@ class JsonSuite extends QueryTest with TestJsonData {
     checkAnswer(
       sql("select * from jsonTable"),
       Row("true", 11L, null, 1.1, "13.1", "str1") ::
-        Row("12", null, new java.math.BigDecimal("21474836470.9"), null, null, "true") ::
-        Row("false", 21474836470L,
-          new java.math.BigDecimal("92233720368547758070"), 100, "str1", "false") ::
-        Row(null, 21474836570L,
-          new java.math.BigDecimal("1.1"), 21474836470L, "92233720368547758070", null) :: Nil
+        Row("12", null, 21474836470.9, null, null, "true") ::
+        Row("false", 21474836470L, 92233720368547758070d, 100, "str1", "false") ::
+        Row(null, 21474836570L, 1.1, 21474836470L, "92233720368547758070", null) :: Nil
     )
 
     // Number and Boolean conflict: resolve the type as number in this query.
@@ -425,8 +421,8 @@ class JsonSuite extends QueryTest with TestJsonData {
     // Widening to DecimalType
     checkAnswer(
       sql("select num_num_2 + 1.3 from jsonTable where num_num_2 > 1.1"),
-      Row(BigDecimal("21474836472.2")) ::
-        Row(BigDecimal("92233720368547758071.3")) :: Nil
+      Row(21474836472.2) ::
+        Row(92233720368547758071.3) :: Nil
     )
 
     // Widening to Double
@@ -611,7 +607,7 @@ class JsonSuite extends QueryTest with TestJsonData {
     val jsonDF = ctx.read.json(path)
 
     val expectedSchema = StructType(
-      StructField("bigInteger", DecimalType.SYSTEM_DEFAULT, true) ::
+      StructField("bigInteger", DecimalType(20, 0), true) ::
       StructField("boolean", BooleanType, true) ::
       StructField("double", DoubleType, true) ::
       StructField("integer", LongType, true) ::
