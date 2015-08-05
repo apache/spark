@@ -27,18 +27,25 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.test.MyTestSQLContext
 
-
 /**
  * Base class for writing tests for individual physical operators. For an example of how this
  * class's test helper methods can be used, see [[SortSuite]].
  */
-abstract class SparkPlanTest extends SparkFunSuite with MyTestSQLContext {
+private[sql] abstract class SparkPlanTest extends AbstractSparkPlanTest with MyTestSQLContext {
+  protected override def _sqlContext: SQLContext = sqlContext
+}
+
+/**
+ * Helper class for testing individual physical operators with a pluggable [[SQLContext]].
+ */
+private[sql] abstract class AbstractSparkPlanTest extends SparkFunSuite {
+  protected def _sqlContext: SQLContext
 
   /**
    * Creates a DataFrame from a local Seq of Product.
    */
   implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder = {
-    sqlContext.implicits.localSeqToDataFrameHolder(data)
+    _sqlContext.implicits.localSeqToDataFrameHolder(data)
   }
 
   /**
@@ -99,7 +106,7 @@ abstract class SparkPlanTest extends SparkFunSuite with MyTestSQLContext {
       planFunction: Seq[SparkPlan] => SparkPlan,
       expectedAnswer: Seq[Row],
       sortAnswers: Boolean = true): Unit = {
-    SparkPlanTest.checkAnswer(input, planFunction, expectedAnswer, sortAnswers, sqlContext) match {
+    SparkPlanTest.checkAnswer(input, planFunction, expectedAnswer, sortAnswers, _sqlContext) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
@@ -123,7 +130,7 @@ abstract class SparkPlanTest extends SparkFunSuite with MyTestSQLContext {
       expectedPlanFunction: SparkPlan => SparkPlan,
       sortAnswers: Boolean = true): Unit = {
     SparkPlanTest.checkAnswer(
-        input, planFunction, expectedPlanFunction, sortAnswers, sqlContext) match {
+        input, planFunction, expectedPlanFunction, sortAnswers, _sqlContext) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
@@ -150,13 +157,13 @@ object SparkPlanTest {
       planFunction: SparkPlan => SparkPlan,
       expectedPlanFunction: SparkPlan => SparkPlan,
       sortAnswers: Boolean,
-      sqlContext: SQLContext): Option[String] = {
+      _sqlContext: SQLContext): Option[String] = {
 
     val outputPlan = planFunction(input.queryExecution.sparkPlan)
     val expectedOutputPlan = expectedPlanFunction(input.queryExecution.sparkPlan)
 
     val expectedAnswer: Seq[Row] = try {
-      executePlan(expectedOutputPlan, sqlContext)
+      executePlan(expectedOutputPlan, _sqlContext)
     } catch {
       case NonFatal(e) =>
         val errorMessage =
@@ -171,7 +178,7 @@ object SparkPlanTest {
     }
 
     val actualAnswer: Seq[Row] = try {
-      executePlan(outputPlan, sqlContext)
+      executePlan(outputPlan, _sqlContext)
     } catch {
       case NonFatal(e) =>
         val errorMessage =
@@ -211,12 +218,12 @@ object SparkPlanTest {
       planFunction: Seq[SparkPlan] => SparkPlan,
       expectedAnswer: Seq[Row],
       sortAnswers: Boolean,
-      sqlContext: SQLContext): Option[String] = {
+      _sqlContext: SQLContext): Option[String] = {
 
     val outputPlan = planFunction(input.map(_.queryExecution.sparkPlan))
 
     val sparkAnswer: Seq[Row] = try {
-      executePlan(outputPlan, sqlContext)
+      executePlan(outputPlan, _sqlContext)
     } catch {
       case NonFatal(e) =>
         val errorMessage =
@@ -279,10 +286,10 @@ object SparkPlanTest {
     }
   }
 
-  private def executePlan(outputPlan: SparkPlan, sqlContext: SQLContext): Seq[Row] = {
+  private def executePlan(outputPlan: SparkPlan, _sqlContext: SQLContext): Seq[Row] = {
     // A very simple resolver to make writing tests easier. In contrast to the real resolver
     // this is always case sensitive and does not try to handle scoping or complex type resolution.
-    val resolvedPlan = sqlContext.prepareForExecution.execute(
+    val resolvedPlan = _sqlContext.prepareForExecution.execute(
       outputPlan transform {
         case plan: SparkPlan =>
           val inputMap = plan.children.flatMap(_.output).map(a => (a.name, a)).toMap

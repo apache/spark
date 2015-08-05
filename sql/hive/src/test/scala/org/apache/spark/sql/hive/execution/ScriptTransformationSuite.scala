@@ -24,15 +24,12 @@ import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.execution.{UnaryNode, SparkPlan, SparkPlanTest}
-import org.apache.spark.sql.hive.test.TestHiveContext
+import org.apache.spark.sql.execution.{UnaryNode, SparkPlan}
+import org.apache.spark.sql.hive.test.HiveSparkPlanTest
 import org.apache.spark.sql.types.StringType
 
-class ScriptTransformationSuite extends SparkPlanTest {
-
-  // Use a hive context instead
-  switchSQLContext(() => new TestHiveContext)
-  private val ctx = sqlContext.asInstanceOf[TestHiveContext]
+class ScriptTransformationSuite extends HiveSparkPlanTest {
+  private val ctx = hiveContext
 
   private val noSerdeIOSchema = HiveScriptIOSchema(
     inputRowFormat = Seq.empty,

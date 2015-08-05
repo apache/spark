@@ -25,7 +25,7 @@ import org.apache.spark.sql.test.MyTestSQLContext
 
 
 class JoinSuite extends QueryTest with BeforeAndAfterEach with MyTestSQLContext {
-  private val ctx = sqlContextWithData
+  private val ctx = sqlContext
   import ctx.implicits._
   import ctx._
 

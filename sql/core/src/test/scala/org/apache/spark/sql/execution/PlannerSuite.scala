@@ -28,7 +28,7 @@ import org.apache.spark.sql.{execution, Row, SQLConf}
 
 
 class PlannerSuite extends SparkFunSuite with SQLTestUtils {
-  private val ctx = sqlContextWithData
+  private val ctx = sqlContext
   import ctx.implicits._
   import ctx.planner._
   import ctx._

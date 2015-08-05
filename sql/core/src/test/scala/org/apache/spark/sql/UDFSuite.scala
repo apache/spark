@@ -22,7 +22,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 private case class FunctionResult(f1: String, f2: String)
 
 class UDFSuite extends QueryTest with SQLTestUtils {
-  private val ctx = sqlContextWithData
+  private val ctx = sqlContext
   import ctx.implicits._
   import ctx._
 

@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class JsonSuite extends QueryTest with TestJsonData with MyTestSQLContext {
-  private val _ctx = sqlContextWithData
+  private val _ctx = sqlContext
   import _ctx.implicits._
   import _ctx._
 

@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.SQLTestUtils
 
 class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
-  private val ctx = sqlContextWithData
+  private val ctx = sqlContext
   import ctx.implicits._
   import ctx._
 

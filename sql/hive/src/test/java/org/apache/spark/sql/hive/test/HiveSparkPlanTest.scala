@@ -15,19 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.debug
+package org.apache.spark.sql.hive.test
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.execution.AbstractSparkPlanTest
+import org.apache.spark.sql.SQLContext
 
-class DebuggingSuite extends SparkFunSuite with MyTestSQLContext {
-  private val ctx = sqlContext
+/**
+ * Base class for writing tests for individual physical operators in hive.
+ * This is analogous to [[org.apache.spark.sql.execution.SparkPlanTest]].
+ */
+private[sql] abstract class HiveSparkPlanTest
+  extends AbstractSparkPlanTest
+  with MyTestHiveContext {
 
-  test("DataFrame.debug()") {
-    ctx.testData.debug()
-  }
-
-  test("DataFrame.typeCheck()") {
-    ctx.testData.typeCheck()
-  }
+  protected override def _sqlContext: SQLContext = hiveContext
 }

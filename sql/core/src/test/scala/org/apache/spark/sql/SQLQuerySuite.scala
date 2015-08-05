@@ -33,7 +33,7 @@ import org.apache.spark.sql.types._
 class MyDialect extends DefaultParserDialect
 
 class SQLQuerySuite extends QueryTest with SQLTestUtils {
-  private val ctx = sqlContextWithData
+  private val ctx = sqlContext
   import ctx.implicits._
   import ctx._
 

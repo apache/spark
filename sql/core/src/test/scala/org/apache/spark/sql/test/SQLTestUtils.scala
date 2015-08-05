@@ -26,6 +26,9 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
+/**
+ * General helper trait for common functionality in SQL tests.
+ */
 private[spark] trait SQLTestUtils
   extends SparkFunSuite
   with AbstractSQLTestUtils
@@ -34,6 +37,9 @@ private[spark] trait SQLTestUtils
   protected final override def _sqlContext = sqlContext
 }
 
+/**
+ * Abstract helper trait for SQL tests with a pluggable [[SQLContext]].
+ */
 private[spark] trait AbstractSQLTestUtils { this: SparkFunSuite =>
   protected def _sqlContext: SQLContext
 

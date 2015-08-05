@@ -24,7 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.test.MyTestSQLContext
 
 class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfter with MyTestSQLContext {
-  private val ctx = sqlContextWithData
+  private val ctx = sqlContext
   import ctx.implicits._
   import ctx._
 

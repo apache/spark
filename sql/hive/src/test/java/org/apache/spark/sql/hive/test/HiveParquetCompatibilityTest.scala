@@ -15,19 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.debug
+package org.apache.spark.sql.hive.test
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.parquet.AbstractParquetCompatibilityTest
 
-class DebuggingSuite extends SparkFunSuite with MyTestSQLContext {
-  private val ctx = sqlContext
-
-  test("DataFrame.debug()") {
-    ctx.testData.debug()
-  }
-
-  test("DataFrame.typeCheck()") {
-    ctx.testData.typeCheck()
-  }
-}
+/**
+ * Helper class for testing Parquet compatibility in hive.
+ * This is analogous to [[org.apache.spark.sql.parquet.ParquetCompatibilityTest]].
+ */
+private[hive] abstract class HiveParquetCompatibilityTest
+  extends AbstractParquetCompatibilityTest
+  with HiveParquetTest

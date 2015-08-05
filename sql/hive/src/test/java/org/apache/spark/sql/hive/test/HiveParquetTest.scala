@@ -15,19 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.debug
+package org.apache.spark.sql.hive.test
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.parquet.AbstractParquetTest
 
-class DebuggingSuite extends SparkFunSuite with MyTestSQLContext {
-  private val ctx = sqlContext
+/**
+ * Helper trait for Parquet tests analogous to [[org.apache.spark.sql.parquet.ParquetTest]].
+ */
+private[hive] trait HiveParquetTest extends AbstractParquetTest with HiveTestUtils
 
-  test("DataFrame.debug()") {
-    ctx.testData.debug()
-  }
-
-  test("DataFrame.typeCheck()") {
-    ctx.testData.typeCheck()
-  }
-}

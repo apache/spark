@@ -23,7 +23,7 @@ import org.apache.spark.sql.types.DecimalType
 
 
 class DataFrameAggregateSuite extends QueryTest with MyTestSQLContext {
-  private val ctx = sqlContextWithData
+  private val ctx = sqlContext
   import ctx.implicits._
   import ctx._
 

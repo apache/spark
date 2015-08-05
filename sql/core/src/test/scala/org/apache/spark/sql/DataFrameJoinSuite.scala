@@ -22,7 +22,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.MyTestSQLContext
 
 class DataFrameJoinSuite extends QueryTest with MyTestSQLContext {
-  private val ctx = sqlContextWithData
+  private val ctx = sqlContext
   import ctx.implicits._
   import ctx._
 

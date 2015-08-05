@@ -64,34 +64,25 @@ private[spark] class MyLocalSQLContext(sc: SparkContext) extends SQLContext(sc) 
 private[spark] trait MyTestSQLContext extends SparkFunSuite with BeforeAndAfterAll {
 
   /**
-   * The [[SQLContext]] to use for all tests in this suite.
+   * The [[MyLocalSQLContext]] to use for all tests in this suite.
    *
    * By default, the underlying [[SparkContext]] will be run in local mode with the default
    * test configurations.
    */
-  private var _ctx: SQLContext = new MyLocalSQLContext
-
-  /** The [[SQLContext]] to use for all tests in this suite. */
-  protected def sqlContext: SQLContext = _ctx
+  private var _ctx: MyLocalSQLContext = new MyLocalSQLContext
 
   /**
    * The [[MyLocalSQLContext]] to use for all tests in this suite.
-   * This one comes with all the data prepared in advance.
    */
-  protected def sqlContextWithData: MyLocalSQLContext = {
-    _ctx match {
-      case local: MyLocalSQLContext => local
-      case _ => fail("this SQLContext does not have data prepared in advance")
-    }
-  }
+  protected def sqlContext: MyLocalSQLContext = _ctx
 
   /**
-   * Switch to the provided [[SQLContext]].
+   * Switch to the provided [[MyLocalSQLContext]].
    *
    * This stops the underlying [[SparkContext]] and expects a new one to be created.
    * This is needed because only one [[SparkContext]] is allowed per JVM.
    */
-  protected def switchSQLContext(newContext: () => SQLContext): Unit = {
+  protected def switchSQLContext(newContext: () => MyLocalSQLContext): Unit = {
     if (_ctx != null) {
       _ctx.sparkContext.stop()
       _ctx = newContext()
@@ -99,10 +90,10 @@ private[spark] trait MyTestSQLContext extends SparkFunSuite with BeforeAndAfterA
   }
 
   /**
-   * Execute the given block of code with a custom [[SQLContext]].
-   * At the end of the method, a [[MyLocalSQLContext]] will be restored.
+   * Execute the given block of code with a custom [[MyLocalSQLContext]].
+   * At the end of the method, the default [[MyLocalSQLContext]] will be restored.
    */
-  protected def withSQLContext[T](newContext: () => SQLContext)(body: => T) {
+  protected def withSQLContext[T](newContext: () => MyLocalSQLContext)(body: => T) {
     switchSQLContext(newContext)
     try {
       body

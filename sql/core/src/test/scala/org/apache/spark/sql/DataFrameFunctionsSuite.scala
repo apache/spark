@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
  * Test suite for functions in [[org.apache.spark.sql.functions]].
  */
 class DataFrameFunctionsSuite extends QueryTest with MyTestSQLContext {
-  private val ctx = sqlContextWithData
+  private val ctx = sqlContext
   import ctx.implicits._
   import ctx._
 

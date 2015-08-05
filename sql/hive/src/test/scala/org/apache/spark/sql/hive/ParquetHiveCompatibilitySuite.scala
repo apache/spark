@@ -19,16 +19,14 @@ package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.conf.HiveConf
 
-import org.apache.spark.sql.hive.test.TestHiveContext
+import org.apache.spark.sql.hive.test.HiveParquetCompatibilityTest
 import org.apache.spark.sql.parquet.ParquetCompatibilityTest
 import org.apache.spark.sql.{Row, SQLConf}
 
-class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest {
+class ParquetHiveCompatibilitySuite extends HiveParquetCompatibilityTest {
   import ParquetCompatibilityTest.makeNullable
 
-  // Use a hive context instead
-  switchSQLContext(() => new TestHiveContext)
-  private val ctx = sqlContext
+  private val ctx = hiveContext
 
   /**
    * Set the staging directory (and hence path to ignore Parquet files under)

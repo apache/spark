@@ -16,10 +16,12 @@
  */
 
 package org.apache.spark.sql.parquet
+
 import java.io.File
 
 import scala.collection.JavaConversions._
 
+import org.scalatest.BeforeAndAfterAll
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.schema.MessageType
@@ -27,7 +29,22 @@ import org.apache.parquet.schema.MessageType
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.util.Utils
 
-abstract class ParquetCompatibilityTest extends QueryTest with ParquetTest {
+/**
+ * Helper class for testing Parquet compatibility.
+ */
+private[sql] abstract class ParquetCompatibilityTest
+  extends AbstractParquetCompatibilityTest
+  with ParquetTest
+
+/**
+ * Abstract helper class for testing Parquet compatibility with a pluggable
+ * [[org.apache.spark.sql.SQLContext]].
+ */
+private[sql] abstract class AbstractParquetCompatibilityTest
+  extends QueryTest
+  with AbstractParquetTest
+  with BeforeAndAfterAll {
+
   protected var parquetStore: File = _
 
   /**

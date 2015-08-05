@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.AbstractSQLTestUtils
 
 /**
- * This is analogous to [[org.apache.spark.sql.test.SQLTestUtils]] but for hive tests.
+ * Helper trait analogous to [[org.apache.spark.sql.test.SQLTestUtils]] but for hive tests.
  */
 private[spark] trait HiveTestUtils
   extends SparkFunSuite
