@@ -193,7 +193,7 @@ private[streaming] class ReceiverSupervisorImpl(
   override def createBlockGenerator(
       blockGeneratorListener: BlockGeneratorListener): BlockGenerator = {
     // Cleanup BlockGenerators that have already been stopped
-    registeredBlockGenerators. --= registeredBlockGenerators.filter{ _.isStopped() }
+    registeredBlockGenerators --= registeredBlockGenerators.filter{ _.isStopped() }
 
     val newBlockGenerator = new BlockGenerator(blockGeneratorListener, streamId, env.conf)
     registeredBlockGenerators += newBlockGenerator
