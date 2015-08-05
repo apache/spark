@@ -110,21 +110,27 @@ private class IndexCombiner(inputCols: Array[String], outputCol: String) extends
   override val uid = Identifiable.randomUID("indexCombiner")
 
   override def transform(dataset: DataFrame): DataFrame = {
-    val cardinalities = inputCols.map(col =>
-      Attribute.fromStructField(dataset.schema(col))
-        .asInstanceOf[NominalAttribute].values.get.length)
-    val combiner = udf { cols: Seq[Double] =>
+    val inputMetadata = inputCols.map(col =>
+      Attribute.fromStructField(dataset.schema(col)).asInstanceOf[NominalAttribute])
+    val cardinalities = inputMetadata.map(_.values.get.length)
+    val combiner = udf { values: Seq[Double] =>
       var offset = 1
       var res = 0.0
       var i = 0
-      while (i < cols.length) {
-        res += cols(i) * offset
+      while (i < values.length) {
+        res += values(i) * offset
         offset *= cardinalities(i)
         i += 1
       }
       res
     }
-    dataset.select(col("*"), combiner(array(inputCols.map(dataset(_)): _*)).as(outputCol))
+    val metadata = NominalAttribute.defaultAttr
+      .withName(outputCol)
+      .withValues(combineLabels(inputMetadata.map(_.values.get)))
+      .toMetadata()
+    dataset.select(
+      col("*"),
+      combiner(array(inputCols.map(dataset(_)): _*)).as(outputCol, metadata))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -132,4 +138,14 @@ private class IndexCombiner(inputCols: Array[String], outputCol: String) extends
   }
 
   override def copy(extra: ParamMap): IndexCombiner = defaultCopy(extra)
+
+  private def combineLabels(labels: Array[Array[String]]): Array[String] = {
+    if (labels.length <= 1) {
+      labels.head
+    } else {
+      combineLabels(labels.tail).flatMap { rest =>
+        labels.head.map(l => l + ":" + rest)
+      }
+    }
+  }
 }
