@@ -30,6 +30,8 @@ import org.apache.spark.sql.types._
 
 class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
+  import IntegralLiteralTestUtils._
+
   /**
    * Used for testing leaf math expressions.
    *
@@ -293,6 +295,9 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Bin(l3), java.lang.Long.toBinaryString(123), row)
     checkEvaluation(Bin(l4), java.lang.Long.toBinaryString(1234), row)
     checkEvaluation(Bin(l5), java.lang.Long.toBinaryString(-123), row)
+
+    checkEvaluation(Bin(positiveLongLit), java.lang.Long.toBinaryString(positiveLong))
+    checkEvaluation(Bin(negativeLongLit), java.lang.Long.toBinaryString(negativeLong))
   }
 
   test("log2") {
@@ -324,6 +329,15 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(ShiftLeft(Literal(21.toLong), Literal(1)), 42.toLong)
     checkEvaluation(ShiftLeft(Literal(-21.toLong), Literal(1)), -42.toLong)
+
+    checkEvaluation(ShiftLeft(positiveIntLit, positiveIntLit), positiveInt << positiveInt)
+    checkEvaluation(ShiftLeft(positiveIntLit, negativeIntLit), positiveInt << negativeInt)
+    checkEvaluation(ShiftLeft(negativeIntLit, positiveIntLit), negativeInt << positiveInt)
+    checkEvaluation(ShiftLeft(negativeIntLit, negativeIntLit), negativeInt << negativeInt)
+    checkEvaluation(ShiftLeft(positiveLongLit, positiveIntLit), positiveLong << positiveInt)
+    checkEvaluation(ShiftLeft(positiveLongLit, negativeIntLit), positiveLong << negativeInt)
+    checkEvaluation(ShiftLeft(negativeLongLit, positiveIntLit), negativeLong << positiveInt)
+    checkEvaluation(ShiftLeft(negativeLongLit, negativeIntLit), negativeLong << negativeInt)
   }
 
   test("shift right") {
@@ -335,6 +349,15 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(ShiftRight(Literal(42.toLong), Literal(1)), 21.toLong)
     checkEvaluation(ShiftRight(Literal(-42.toLong), Literal(1)), -21.toLong)
+
+    checkEvaluation(ShiftRight(positiveIntLit, positiveIntLit), positiveInt >> positiveInt)
+    checkEvaluation(ShiftRight(positiveIntLit, negativeIntLit), positiveInt >> negativeInt)
+    checkEvaluation(ShiftRight(negativeIntLit, positiveIntLit), negativeInt >> positiveInt)
+    checkEvaluation(ShiftRight(negativeIntLit, negativeIntLit), negativeInt >> negativeInt)
+    checkEvaluation(ShiftRight(positiveLongLit, positiveIntLit), positiveLong >> positiveInt)
+    checkEvaluation(ShiftRight(positiveLongLit, negativeIntLit), positiveLong >> negativeInt)
+    checkEvaluation(ShiftRight(negativeLongLit, positiveIntLit), negativeLong >> positiveInt)
+    checkEvaluation(ShiftRight(negativeLongLit, negativeIntLit), negativeLong >> negativeInt)
   }
 
   test("shift right unsigned") {
@@ -346,6 +369,23 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(ShiftRightUnsigned(Literal(42.toLong), Literal(1)), 21.toLong)
     checkEvaluation(ShiftRightUnsigned(Literal(-42.toLong), Literal(1)), 9223372036854775787L)
+
+    checkEvaluation(ShiftRightUnsigned(positiveIntLit, positiveIntLit),
+      positiveInt >>> positiveInt)
+    checkEvaluation(ShiftRightUnsigned(positiveIntLit, negativeIntLit),
+      positiveInt >>> negativeInt)
+    checkEvaluation(ShiftRightUnsigned(negativeIntLit, positiveIntLit),
+      negativeInt >>> positiveInt)
+    checkEvaluation(ShiftRightUnsigned(negativeIntLit, negativeIntLit),
+      negativeInt >>> negativeInt)
+    checkEvaluation(ShiftRightUnsigned(positiveLongLit, positiveIntLit),
+      positiveLong >>> positiveInt)
+    checkEvaluation(ShiftRightUnsigned(positiveLongLit, negativeIntLit),
+      positiveLong >>> negativeInt)
+    checkEvaluation(ShiftRightUnsigned(negativeLongLit, positiveIntLit),
+      negativeLong >>> positiveInt)
+    checkEvaluation(ShiftRightUnsigned(negativeLongLit, negativeIntLit),
+      negativeLong >>> negativeInt)
   }
 
   test("hex") {
