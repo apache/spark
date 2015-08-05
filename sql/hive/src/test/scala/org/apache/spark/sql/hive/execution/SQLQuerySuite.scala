@@ -751,6 +751,16 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
         .queryExecution.toRdd.count())
   }
 
+  test("test script transform data type") {
+    val data = (1 to 5).map { i => (i, i) }
+    data.toDF("key", "value").registerTempTable("test")
+    checkAnswer(
+      sql("""FROM
+          |(FROM test SELECT TRANSFORM(key, value) USING 'cat' AS (thing1 int, thing2 string)) t
+          |SELECT thing1 + 1
+        """.stripMargin), (2 to 6).map(i => Row(i)))
+  }
+
   test("window function: udaf with aggregate expressin") {
     val data = Seq(
       WindowData(1, "a", 5),
