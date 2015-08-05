@@ -19,17 +19,42 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
+  test("params") {
+    val slicer = new VectorSlicer
+    ParamsSuite.checkParams(slicer)
+    assert(slicer.getSelectedIndices.length === 0)
+    assert(slicer.getSelectedNames.length === 0)
+    withClue("VectorSlicer should not have any features selected by default") {
+      intercept[IllegalArgumentException] {
+        slicer.validateParams()
+      }
+    }
+  }
+
+  test("feature validity checks") {
+    import VectorSlicer._
+    assert(validIndices(Array(0, 1, 8, 2)))
+    assert(validIndices(Array.empty[Int]))
+    assert(!validIndices(Array(-1)))
+    assert(!validIndices(Array(1, 2, 1)))
+
+    assert(validNames(Array("a", "b")))
+    assert(validNames(Array.empty[String]))
+    assert(!validNames(Array("", "b")))
+    assert(!validNames(Array("a", "b", "a")))
+  }
+
   test("Test vector slicer") {
     val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
 
     val data = Array(
       Vectors.sparse(5, Seq((0, -2.0), (1, 2.3))),
@@ -39,8 +64,9 @@ class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.sparse(5, Seq())
     )
 
-    val result = Array(
-      Vectors.sparse(2, Seq((1, 2.3))),
+    // Expected after selecting indices 1, 4
+    val expected = Array(
+      Vectors.sparse(2, Seq((0, 2.3))),
       Vectors.dense(2.3, 1.0),
       Vectors.dense(0.0, 0.0),
       Vectors.dense(-1.1, 3.3),
@@ -48,47 +74,46 @@ class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
 
     val attrs = Array(
-      NumericAttribute.defaultAttr.withIndex(0).withName("first"),
-      NumericAttribute.defaultAttr.withIndex(1).withName("second"),
-      NumericAttribute.defaultAttr.withIndex(2).withName("third"),
-      NumericAttribute.defaultAttr.withIndex(3).withName("fourth"),
-      NumericAttribute.defaultAttr.withIndex(4).withName("fifth")
+      NumericAttribute.defaultAttr.withIndex(0).withName("f0"),
+      NumericAttribute.defaultAttr.withIndex(1).withName("f1"),
+      NumericAttribute.defaultAttr.withIndex(2).withName("f2"),
+      NumericAttribute.defaultAttr.withIndex(3).withName("f3"),
+      NumericAttribute.defaultAttr.withIndex(4).withName("f4")
     )
 
     val resultAttrs = Array(
-      NumericAttribute.defaultAttr.withIndex(1).withName("second"),
-      NumericAttribute.defaultAttr.withIndex(4).withName("fifth")
+      NumericAttribute.defaultAttr.withIndex(0).withName("f1"),
+      NumericAttribute.defaultAttr.withIndex(1).withName("f4")
     )
 
     val attrGroup = new AttributeGroup("features", attrs.asInstanceOf[Array[Attribute]])
+    val resultAttrGroup = new AttributeGroup("expected", resultAttrs.asInstanceOf[Array[Attribute]])
 
-    val resultAttrGroup = new AttributeGroup("result", resultAttrs.asInstanceOf[Array[Attribute]])
-
-    val rowRDD = sc.parallelize(data.zip(result)).toDF("features", "result").map(row => row)
-
-    val df = sqlContext.createDataFrame(
-      rowRDD,
+    val rdd = sc.parallelize(data.zip(expected)).map { case (a,b) => Row(a, b) }
+    val df = sqlContext.createDataFrame(rdd,
       StructType(Array(attrGroup.toStructField(), resultAttrGroup.toStructField())))
 
-    val vectorSlicer = new VectorSlicer().setInputCol("features")
+    val vectorSlicer = new VectorSlicer().setInputCol("features").setOutputCol("result")
 
-    vectorSlicer
-      .setOutputCol("expected1")
-      .setSelectedIndices(Array(1, 4))
-      .setSelectedNames(Array("fifth"))
-      .transform(df).select("expected1", "result").collect().foreach {
-        case Row(vec1: Vector, vec2: Vector) =>
-          assert(vec1 ~== vec2 absTol 1e-5)
+    def validateResults(df: DataFrame): Unit = {
+      df.select("result", "expected").collect().foreach { case Row(vec1: Vector, vec2: Vector) =>
+        assert(vec1 === vec2)
       }
+      val resultMetadata = AttributeGroup.fromStructField(df.schema("result"))
+      val expectedMetadata = AttributeGroup.fromStructField(df.schema("expected"))
+      assert(resultMetadata.numAttributes === expectedMetadata.numAttributes)
+      resultMetadata.attributes.get.zip(expectedMetadata.attributes.get).foreach { case (a, b) =>
+        assert(a === b)
+      }
+    }
 
-    vectorSlicer
-      .setOutputCol("expected2")
-      .setSelectedNames(Array("fifth"))
-      .setSelectedIndices(Array(1))
-      .transform(df).select("expected2", "result").collect().foreach {
-        case Row(vec1: Vector, vec2: Vector) =>
-          assert(vec1 ~== vec2 absTol 1e-5)
-      }
+    vectorSlicer.setSelectedIndices(Array(1, 4)).setSelectedNames(Array.empty)
+    validateResults(vectorSlicer.transform(df))
+
+    vectorSlicer.setSelectedIndices(Array(1)).setSelectedNames(Array("f4"))
+    validateResults(vectorSlicer.transform(df))
+
+    vectorSlicer.setSelectedIndices(Array.empty).setSelectedNames(Array("f1", "f4"))
+    validateResults(vectorSlicer.transform(df))
   }
 }
-

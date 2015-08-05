@@ -22,6 +22,7 @@ import java.lang.{Double => JavaDouble, Integer => JavaInteger, Iterable => Java
 
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
+import scala.collection.generic.Sorted
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
@@ -765,6 +766,28 @@ class SparseVector(
 
       maxIdx
     }
+  }
+
+  /**
+   * Create a slice of this vector based on the given indices.
+   * @param selectedIndices Sorted list of indices into the vector. This does NOT do bound checking.
+   * @return  New SparseVector with values in the order specified by the given indices.
+   *
+   * NOTE: The API needs to be discussed before making this public.
+   */
+  private[spark] def slice(selectedIndices: Array[Int]): SparseVector = {
+    var currentIdx = 0
+    val (sliceInds, sliceVals) = selectedIndices.flatMap { origIdx =>
+      val iIdx = java.util.Arrays.binarySearch(this.indices, origIdx)
+      val i_v = if (iIdx >= 0) {
+        Iterator((currentIdx, this.values(iIdx)))
+      } else {
+        Iterator()
+      }
+      currentIdx += 1
+      i_v
+    }.unzip
+    new SparseVector(selectedIndices.length, sliceInds.toArray, sliceVals.toArray)
   }
 }
 

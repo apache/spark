@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.param.{IntArrayParam, ParamMap, StringArrayParam}
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
@@ -30,8 +30,12 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * :: Experimental ::
- * Given either indices or names, it takes a vector column and output a vector column with the
- * specified subset of features. Note that the vector column should contain ML [[Attribute]].
+ * This class takes a feature vector and outputs a new feature vector with a subarray of the
+ * original features.
+ * The subset of features can be specified with either indices ([[setSelectedIndices()]])
+ * or names ([[setSelectedNames()]]).  At least one feature must be selected.
+ * The output vector will order features with the selected indices first (in the order given),
+ * followed by the selected names (in the order given).
  */
 @Experimental
 final class VectorSlicer(override val uid: String)
@@ -41,11 +45,12 @@ final class VectorSlicer(override val uid: String)
 
   /**
    * An array of indices to select features from a vector column.
+   * There can be no overlap with [[selectedNames]].
    * @group param
    */
   val selectedIndices = new IntArrayParam(this, "selectedIndices",
-    "An array of indices to select features from a vector column",
-    (x: Array[Int]) => if (x.isEmpty) true else x.min >= 0)
+    "An array of indices to select features from a vector column." +
+      " There can be no overlap with selectedNames.", VectorSlicer.validIndices)
 
   setDefault(selectedIndices -> Array.empty[Int])
 
@@ -57,10 +62,13 @@ final class VectorSlicer(override val uid: String)
 
   /**
    * An array of feature names to select features from a vector column.
+   * These names must be specified by ML [[org.apache.spark.ml.attribute.Attribute]]s.
+   * There can be no overlap with [[selectedIndices]].
    * @group param
    */
   val selectedNames = new StringArrayParam(this, "selectedNames",
-    "An array of feature names to select features from a vector column")
+    "An array of feature names to select features from a vector column." +
+      " There can be no overlap with selectedIndices.", VectorSlicer.validNames)
 
   setDefault(selectedNames -> Array.empty[String])
 
@@ -79,75 +87,96 @@ final class VectorSlicer(override val uid: String)
   /**
    * Slice a dense vector with an array of indices.
    */
-  private def selectColumns(indices: Array[Int], features: DenseVector): Vector = {
+  private[feature] def selectColumns(indices: Array[Int], features: DenseVector): Vector = {
     Vectors.dense(indices.map(features.apply))
   }
 
   /**
    * Slice a sparse vector with a set of indices.
    */
-  private def selectColumns(indices: Set[Int], features: SparseVector): Vector = {
-    Vectors.sparse(
-      indices.size, features.indices.zip(features.values).filter(x => indices.contains(x._1)))
+  private[feature] def selectColumns(indices: Array[Int], features: SparseVector): Vector = {
+    features.slice(indices)
   }
 
-  private def getFeatureIndicesFromNames(inputAttr: AttributeGroup): Array[Int] = {
-    $(selectedNames).map(name => inputAttr.getAttr(name).index.get)
-  }
-
-  private def merge(xs: List[Int], ys: List[Int]): List[Int] = {
-    (xs, ys) match {
-      case (Nil, ys) => ys
-      case (xs, Nil) => xs
-      case (x :: xs1, y :: ys1) =>
-        if (x < y) x :: merge(xs1, ys)
-        else y :: merge(xs, ys1)
-    }
-  }
-
-  /**
-   * Union feature indices from user specified indices and indices that transformed from user
-   * specified feature names. After the union process, indices are sorted ASC and any potential
-   * duplicates are removed.
-   */
-  private def unionFeatureIndices(first: Array[Int], second: Array[Int]): Array[Int] = {
-    merge(first.sorted.toList, second.sorted.toList).distinct.toArray
+  override def validateParams(): Unit = {
+    require($(selectedIndices).length > 0 || $(selectedNames).length > 0,
+      s"VectorSlicer requires that at least one feature be selected.")
   }
 
   override def transform(dataset: DataFrame): DataFrame = {
+    // Validity checks
     transformSchema(dataset.schema)
+    val inputAttr = AttributeGroup.fromStructField(dataset.schema($(inputCol)))
+    inputAttr.numAttributes.foreach { numFeatures =>
+      val maxIndex = $(selectedIndices).max
+      require(maxIndex < numFeatures,
+        s"Selected feature index $maxIndex invalid for only $numFeatures input features.")
+    }
 
-    val indices = $(selectedIndices)
+    // Prepare output attributes
+    val indices = getSelectedFeatureIndices(dataset.schema)
+    val selectedAttrs: Option[Array[Attribute]] = inputAttr.attributes.map { attrs =>
+      indices.map(index => attrs(index))
+    }
+    val outputAttr = selectedAttrs match {
+      case Some(attrs) => new AttributeGroup($(outputCol), attrs)
+      case None => new AttributeGroup($(outputCol), indices.length)
+    }
+
+    // Select features
+    val indicesSet = indices.toSet
     val slicer = udf { vec: Vector =>
       vec match {
         case features: DenseVector => selectColumns(indices, features)
-        case features: SparseVector => selectColumns(indices.toSet, features)
+        case features: SparseVector => selectColumns(indices, features)
       }
     }
-    dataset.withColumn($(outputCol), slicer(dataset($(inputCol))))
+    dataset.withColumn($(outputCol),
+      slicer(dataset($(inputCol))).as($(outputCol), outputAttr.toMetadata()))
+  }
+
+  /** Get the feature indices in order: selectedIndices, selectedNames */
+  private def getSelectedFeatureIndices(schema: StructType): Array[Int] = {
+    val nameFeatures = SchemaUtils.getFeatureIndicesFromNames(schema($(inputCol)), $(selectedNames))
+    val indFeatures = $(selectedIndices)
+    val numDistinctFeatures = (nameFeatures ++ indFeatures).distinct.length
+    lazy val errMsg = "VectorSlicer requires selectedIndices and selectedNames to be disjoint" +
+      s" sets of features, but they overlap." +
+      s" selectedIndices: ${indFeatures.mkString("[", ",", "]")}." +
+      s" selectedNames: " +
+      nameFeatures.zip($(selectedNames)).map { case (i, n) => s"$i:$n" }.mkString("[", ",", "]")
+    require(nameFeatures.length + indFeatures.length == numDistinctFeatures, errMsg)
+    indFeatures ++ nameFeatures
   }
 
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
-    val inputAttr = AttributeGroup.fromStructField(schema($(inputCol)))
-    $(selectedNames).foreach { name =>
-      assert(inputAttr.hasAttr(name), s"Selected feature $name does not belong in the vector.")
-    }
-   assert($(selectedIndices).max < inputAttr.size, s"Selected index out of bound.")
-
-    val featureIndicesFromNames = getFeatureIndicesFromNames(inputAttr)
-    val unionIndices = unionFeatureIndices($(selectedIndices), featureIndicesFromNames)
-    set(selectedIndices, unionIndices)
-
-    val selectedAttrs = unionIndices.map(index => inputAttr.getAttr(index))
 
     if (schema.fieldNames.contains($(outputCol))) {
       throw new IllegalArgumentException(s"Output column ${$(outputCol)} already exists.")
     }
-    val outputAttr = new AttributeGroup($(outputCol), selectedAttrs)
+    val numFeaturesSelected = $(selectedIndices).length + $(selectedNames).length
+    val outputAttr = new AttributeGroup($(outputCol), numFeaturesSelected)
     val outputFields = schema.fields :+ outputAttr.toStructField()
     StructType(outputFields)
   }
 
   override def copy(extra: ParamMap): VectorSlicer = defaultCopy(extra)
+}
+
+private[feature] object VectorSlicer {
+
+  /** Return true if given feature indices are valid */
+  def validIndices(indices: Array[Int]): Boolean = {
+    if (indices.isEmpty) {
+      true
+    } else {
+      if (indices.length == indices.distinct.length && indices.forall(_ >= 0)) true else false
+    }
+  }
+
+  /** Return true if given feature names are valid */
+  def validNames(names: Array[String]): Boolean = {
+    names.forall(_.length > 0) && names.length == names.distinct.length
+  }
 }
