@@ -96,6 +96,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
         makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildLeft)
 
+      case ExtractEquiJoinKeys(
+      LeftOuter, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
+        joins.BroadcastHashOuterJoin(
+          leftKeys, rightKeys, LeftOuter, condition, planLater(left), planLater(right)) :: Nil
+
+      case ExtractEquiJoinKeys(
+      RightOuter, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
+        joins.BroadcastHashOuterJoin(
+          leftKeys, rightKeys, RightOuter, condition, planLater(left), planLater(right)) :: Nil
+
       // If the sort merge join option is set, we want to use sort merge join prior to hashjoin.
       // And for outer join, we can not put conditions outside of the join
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
@@ -113,16 +123,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val hashJoin = joins.ShuffledHashJoin(
           leftKeys, rightKeys, buildSide, planLater(left), planLater(right))
         condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
-
-      case ExtractEquiJoinKeys(
-             LeftOuter, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
-        joins.BroadcastHashOuterJoin(
-          leftKeys, rightKeys, LeftOuter, condition, planLater(left), planLater(right)) :: Nil
-
-      case ExtractEquiJoinKeys(
-             RightOuter, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
-        joins.BroadcastHashOuterJoin(
-          leftKeys, rightKeys, RightOuter, condition, planLater(left), planLater(right)) :: Nil
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right) =>
         joins.ShuffledHashOuterJoin(
