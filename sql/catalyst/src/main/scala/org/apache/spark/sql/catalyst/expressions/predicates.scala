@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.Objects
-
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -101,7 +100,20 @@ case class Not(child: Expression)
 /**
  * Evaluates to `true` if `list` contains `value`.
  */
-case class In(value: Expression, list: Seq[Expression]) extends Predicate {
+case class In(value: Expression, list: Seq[Expression]) extends Predicate
+    with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = value.dataType +: list.map(_.dataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (list.exists(l => l.dataType != value.dataType)) {
+      TypeCheckResult.TypeCheckFailure(
+        "Arguments must be same type")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
   override def children: Seq[Expression] = value +: list
 
   override def nullable: Boolean = false // TODO: Figure out correct nullability semantics of IN.
@@ -123,7 +135,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
             ${ev.primitive} = true;
           }
         }
-       """).foldLeft("")((a, b) => a + "\n" + b)
+       """).mkString("\n")
     s"""
       ${valueGen.code}
       boolean ${ev.primitive} = false;
@@ -159,8 +171,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     s"""
       ${childGen.code}
       boolean ${ev.isNull} = false;
-      boolean ${ev.primitive} =
-        $hsetTerm.contains(${childGen.primitive});
+      boolean ${ev.primitive} = $hsetTerm.contains(${childGen.primitive});
      """
   }
 }
