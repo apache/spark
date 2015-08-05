@@ -201,7 +201,8 @@ private[joins] class SortMergeJoinScanner(
         if (buildRow != null) {
           // The build iterator could still contain matching rows, so we'll need to walk through it
           // until we either find matches or pass where they would be found.
-          var comp = if (buildRowKey.anyNull) 1 else keyOrdering.compare(streamedRowKey, buildRowKey)
+          var comp =
+            if (buildRowKey.anyNull) 1 else keyOrdering.compare(streamedRowKey, buildRowKey)
           while (comp > 0 && advanceBuild()) {
             comp = if (buildRowKey.anyNull) 1 else keyOrdering.compare(streamedRowKey, buildRowKey)
           }
@@ -213,7 +214,7 @@ private[joins] class SortMergeJoinScanner(
           }
         }
       }
-      // If there is a streamed input, then we always return true since outer join always returns a row.
+      // If there is a streamed input, then we always return true
       true
     } else {
       // End of streamed input, hence no more results.
