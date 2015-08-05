@@ -17,13 +17,48 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Expression, LessThan}
-import org.apache.spark.sql.catalyst.plans.{FullOuter, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
 
 class OuterJoinSuite extends SparkPlanTest {
+
+  private def testOuterJoin(
+      testName: String,
+      leftRows: DataFrame,
+      rightRows: DataFrame,
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression],
+      joinType: JoinType,
+      condition: Option[Expression],
+      expectedAnswer: Seq[Product]): Unit = {
+    // Precondition: leftRows and rightRows should be sorted according to the join keys.
+
+    test(s"$testName with ShuffledHashOuterJoin") {
+      checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+        ShuffledHashOuterJoin(leftKeys, rightKeys, joinType, condition, left, right),
+        expectedAnswer.map(Row.fromTuple),
+        sortAnswers = false)
+    }
+
+    if (joinType != FullOuter) {
+      test(s"$testName with BroadcastHashOuterJoin") {
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          BroadcastHashOuterJoin(leftKeys, rightKeys, joinType, condition, left, right),
+          expectedAnswer.map(Row.fromTuple),
+          sortAnswers = false)
+      }
+    }
+
+    test(s"$testName with SortMergeOuterJoin") {
+      checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+        SortMergeOuterJoin(leftKeys, rightKeys, joinType, condition, left, right),
+        expectedAnswer.map(Row.fromTuple),
+        sortAnswers = false)
+    }
+  }
 
   val left = Seq(
     (1, 2.0),
@@ -41,49 +76,50 @@ class OuterJoinSuite extends SparkPlanTest {
   val rightKeys: List[Expression] = 'c :: Nil
   val condition = Some(LessThan('b, 'd))
 
-  test("shuffled hash outer join") {
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      ShuffledHashOuterJoin(leftKeys, rightKeys, LeftOuter, condition, left, right),
-      Seq(
-        (1, 2.0, null, null),
-        (2, 1.0, 2, 3.0),
-        (3, 3.0, null, null)
-      ).map(Row.fromTuple))
+  testOuterJoin(
+    "basic left outer join",
+    left,
+    right,
+    leftKeys,
+    rightKeys,
+    LeftOuter,
+    condition,
+    Seq(
+      (1, 2.0, null, null),
+      (2, 1.0, 2, 3.0),
+      (3, 3.0, null, null)
+    )
+  )
 
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      ShuffledHashOuterJoin(leftKeys, rightKeys, RightOuter, condition, left, right),
-      Seq(
-        (2, 1.0, 2, 3.0),
-        (null, null, 3, 2.0),
-        (null, null, 4, 1.0)
-      ).map(Row.fromTuple))
+  testOuterJoin(
+    "basic right outer join",
+    left,
+    right,
+    leftKeys,
+    rightKeys,
+    RightOuter,
+    condition,
+    Seq(
+      (2, 1.0, 2, 3.0),
+      (null, null, 3, 2.0),
+      (null, null, 4, 1.0)
+    )
+  )
 
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      ShuffledHashOuterJoin(leftKeys, rightKeys, FullOuter, condition, left, right),
-      Seq(
-        (1, 2.0, null, null),
-        (2, 1.0, 2, 3.0),
-        (3, 3.0, null, null),
-        (null, null, 3, 2.0),
-        (null, null, 4, 1.0)
-      ).map(Row.fromTuple))
-  }
-
-  test("broadcast hash outer join") {
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      BroadcastHashOuterJoin(leftKeys, rightKeys, LeftOuter, condition, left, right),
-      Seq(
-        (1, 2.0, null, null),
-        (2, 1.0, 2, 3.0),
-        (3, 3.0, null, null)
-      ).map(Row.fromTuple))
-
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      BroadcastHashOuterJoin(leftKeys, rightKeys, RightOuter, condition, left, right),
-      Seq(
-        (2, 1.0, 2, 3.0),
-        (null, null, 3, 2.0),
-        (null, null, 4, 1.0)
-      ).map(Row.fromTuple))
-  }
+  testOuterJoin(
+    "basic full outer join",
+    left,
+    right,
+    leftKeys,
+    rightKeys,
+    FullOuter,
+    condition,
+    Seq(
+      (1, 2.0, null, null),
+      (2, 1.0, 2, 3.0),
+      (3, 3.0, null, null),
+      (null, null, 3, 2.0),
+      (null, null, 4, 1.0)
+    )
+  )
 }
