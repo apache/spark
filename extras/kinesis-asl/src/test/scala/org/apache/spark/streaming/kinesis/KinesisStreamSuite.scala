@@ -22,6 +22,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
 
+import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
@@ -30,6 +31,7 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming._
+import org.apache.spark.streaming.kinesis.KinesisTestUtils._
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.util.Utils
@@ -40,11 +42,15 @@ class KinesisStreamSuite extends KinesisFunSuite
 
   // This is the name that KCL will use to save metadata to DynamoDB
   private val appName = s"KinesisStreamSuite-${math.abs(Random.nextLong())}"
-
   private val batchDuration = Seconds(1)
 
-  private var testUtils: KinesisTestUtils = null
+  // Dummy parameters for API testing
+  private val dummyEndpointUrl = defaultEndpointUrl
+  private val dummyRegionName = RegionUtils.getRegionByEndpoint(dummyEndpointUrl).getName()
+  private val dummyAWSAccessKey = "dummyAccessKey"
+  private val dummyAWSSecretKey = "dummySecretKey"
 
+  private var testUtils: KinesisTestUtils = null
   private var ssc: StreamingContext = null
   private var sc: SparkContext = null
 
@@ -90,26 +96,23 @@ class KinesisStreamSuite extends KinesisFunSuite
   }
 
   test("KinesisUtils API") {
-
     // Tests the API, does not actually test data receiving
     val kinesisStream1 = KinesisUtils.createStream(ssc, "mySparkStream",
-      "https://kinesis.us-west-2.amazonaws.com", Seconds(2),
+      dummyEndpointUrl, Seconds(2),
       InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2)
     val kinesisStream2 = KinesisUtils.createStream(ssc, "myAppNam", "mySparkStream",
-      "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
+      dummyEndpointUrl, dummyRegionName,
       InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2)
     val kinesisStream3 = KinesisUtils.createStream(ssc, "myAppNam", "mySparkStream",
-      "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
+      dummyEndpointUrl, dummyRegionName,
       InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2,
-      "awsAccessKey", "awsSecretKey")
+      dummyAWSAccessKey, dummyAWSSecretKey)
   }
 
   test("RDD generation") {
-    val awsAccessKey = "qqq"
-    val awsSecretKey = "zzz"
-    val inputStream = KinesisUtils.createStream(ssc, appName, "mySparkStream",
-      testUtils.endpointUrl, testUtils.regionName, InitialPositionInStream.LATEST, Seconds(2),
-      StorageLevel.MEMORY_AND_DISK_2, awsAccessKey, awsSecretKey)
+    val inputStream = KinesisUtils.createStream(ssc, appName, "dummyStream",
+      dummyEndpointUrl, dummyRegionName, InitialPositionInStream.LATEST, Seconds(2),
+      StorageLevel.MEMORY_AND_DISK_2, dummyAWSAccessKey, dummyAWSSecretKey)
     assert(inputStream.isInstanceOf[KinesisInputDStream])
 
     val kinesisStream = inputStream.asInstanceOf[KinesisInputDStream]
@@ -133,11 +136,11 @@ class KinesisStreamSuite extends KinesisFunSuite
     val nonEmptyRDD = kinesisStream.createBlockRDD(time, blockInfos)
     nonEmptyRDD shouldBe a [KinesisBackedBlockRDD]
     val kinesisRDD = nonEmptyRDD.asInstanceOf[KinesisBackedBlockRDD]
-    assert(kinesisRDD.regionName === testUtils.regionName)
-    assert(kinesisRDD.endpointUrl === testUtils.endpointUrl)
+    assert(kinesisRDD.regionName === dummyRegionName)
+    assert(kinesisRDD.endpointUrl === dummyEndpointUrl)
     assert(kinesisRDD.retryTimeoutMs === batchDuration.milliseconds)
     assert(kinesisRDD.awsCredentialsOption ===
-      Some(SerializableAWSCredentials(awsAccessKey, awsSecretKey)))
+      Some(SerializableAWSCredentials(dummyAWSAccessKey, dummyAWSSecretKey)))
     assert(nonEmptyRDD.partitions.size === blockInfos.size)
     nonEmptyRDD.partitions.foreach { _ shouldBe a [KinesisBackedBlockRDDPartition] }
     val partitions = nonEmptyRDD.partitions.map {
