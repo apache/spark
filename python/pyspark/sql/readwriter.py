@@ -77,7 +77,7 @@ class DataFrameReader(object):
     def option(self, key, value):
         """Adds an input option for the underlying data source.
         """
-        self._jreader = self._jreader.option(key, str(value))
+        self._jreader = self._jreader.option(key, str(value).lower())
         return self
 
     @since(1.4)
@@ -85,7 +85,7 @@ class DataFrameReader(object):
         """Adds input options for the underlying data source.
         """
         for k in options:
-            self._jreader = self._jreader.option(k, str(options[k]))
+            self._jreader = self._jreader.option(k, str(options[k]).lower())
         return self
 
     @since(1.4)
@@ -97,8 +97,8 @@ class DataFrameReader(object):
         :param schema: optional :class:`StructType` for the input schema.
         :param options: all other string options
 
-        >>> df = sqlContext.read.load('python/test_support/sql/parquet_partitioned', opt1 = True,
-        ...     opt2 = 1, opt3 = 'str')
+        >>> df = sqlContext.read.load('python/test_support/sql/parquet_partitioned', opt1=True,
+        ...     opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
