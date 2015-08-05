@@ -68,5 +68,25 @@ function expandOrCollapseAllThreadStackTrace(expandOrCollapse) {
 
 // inOrOut - true: over, false: out
 function onMouseOverAndOut(threadId) {
-    $("#" + threadId + "_tr").toggleClass("threaddump-td-mouseover");
+    $("#" + threadId + "_td_id").toggleClass("threaddump-td-mouseover");
+    $("#" + threadId + "_td_name").toggleClass("threaddump-td-mouseover");
+    $("#" + threadId + "_td_state").toggleClass("threaddump-td-mouseover");
+}
+
+function grep() {
+    var grepExp = $("#grepexp").val();
+    if (grepExp != "") {
+        var url = location.href
+        if (url.indexOf("&grepexp=") == -1) {
+            location.href = url + "&grepexp=" + grepExp;
+        } else {
+            location.href = url.replace(/grep=(.*)&+/g, "grep=" + grepExp + "&");
+        }
+    } else {
+        alert("input cannot be empty");
+    }
+}
+
+function viewAll() {
+    location.href = location.href.replace(/grep=(.*)&+/g, "");
 }

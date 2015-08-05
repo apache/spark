@@ -48,7 +48,17 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
     val time = System.currentTimeMillis()
     val maybeThreadDump = sc.get.getExecutorThreadDump(executorId)
 
-    val content = maybeThreadDump.map { threadDump =>
+    val grepExp = Option(request.getParameter("grepexp"))
+
+    val filteredContent = maybeThreadDump.map { threadDump =>
+      threadDump.filter(thread =>
+        if (!grepExp.isDefined) {
+          true
+        } else {
+          thread.stackTrace.filter(_ >= ' ').matches(grepExp.get)
+        }
+      )
+    }.map { threadDump =>
       val dumpRows = threadDump.sortWith {
         case (threadTrace1, threadTrace2) => {
           val v1 = if (threadTrace1.threadName.contains("Executor task launch")) 1 else 0
@@ -61,11 +71,13 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
         }
       }.map { thread =>
         val threadId = thread.threadId
-        <tr id={threadId + "_tr"} class="accordion-heading"
+        <tr class="accordion-heading"
             onclick={s"toggleThreadStackTrace($threadId)"}
             onmouseover={s"onMouseOverAndOut($threadId)"}
             onmouseout={s"onMouseOverAndOut($threadId)"}>
-          <td>{threadId}</td><td>{thread.threadName}</td><td>{thread.threadState}</td>
+          <td id={s"${threadId}_td_id"}>{threadId}</td>
+          <td id={s"${threadId}_td_name"}>{thread.threadName}</td>
+          <td id={s"${threadId}_td_state"}>{thread.threadState}</td>
           <td id={threadId + "_stacktrace"} class="accordion-body hidden">
             <pre>{thread.stackTrace}</pre>
           </td>
@@ -82,6 +94,19 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
         <p><a class="expandbutton hidden" onClick="expandOrCollapseAllThreadStackTrace(false)">
           Collapse All
         </a></p>
+        <table style="vertical-align: bottom">
+        <tr>
+          <td>
+            <input type="text" id="grepexp" name="fname" class="form-control"></input>
+          </td>
+          <td>
+            <button class="btn btn-default" onclick="grep()">Search</button>
+          </td>
+          <td>
+            <button class="btn btn-default" onclick="viewAll()">View All</button>
+          </td>
+        </tr>
+        </table>
         // scalastyle:on
       }
       <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
@@ -95,6 +120,6 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
       </table>
     </div>
     }.getOrElse(Text("Error fetching thread dump"))
-    UIUtils.headerSparkPage(s"Thread dump for executor $executorId", content, parent)
+    UIUtils.headerSparkPage(s"Thread dump for executor $executorId", filteredContent, parent)
   }
 }
