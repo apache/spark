@@ -29,6 +29,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SQLTestUtils {
   import ctx.implicits._
   import ctx._
 
+  ctx.loadTestData()
+
   test("simple columnar query") {
     val plan = ctx.executePlan(testData.logicalPlan).executedPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)

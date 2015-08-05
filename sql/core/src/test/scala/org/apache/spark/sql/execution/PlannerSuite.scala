@@ -33,6 +33,8 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
   import ctx.planner._
   import ctx._
 
+  ctx.loadTestData()
+
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val plannedOption = HashAggregation(query).headOption.orElse(Aggregation(query).headOption)
     val planned =

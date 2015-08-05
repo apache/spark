@@ -23,7 +23,7 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 /**
  * A collection of sample data used in SQL tests.
  */
-private[sql] trait TestSQLData {
+private[sql] trait SQLTestData {
   protected val _sqlContext: SQLContext
   import _sqlContext.implicits._
 
@@ -226,6 +226,35 @@ private[sql] trait TestSQLData {
       Nil).toDF()
     df.registerTempTable("complexData")
     df
+  }
+
+  /**
+   * Initialize all test data such that all temp tables are properly registered.
+   */
+  def loadTestData(): Unit = {
+    assert(_sqlContext != null, "attempted to initialize test data before SQLContext.")
+    testData
+    testData2
+    testData3
+    negativeData
+    largeAndSmallInts
+    decimalData
+    binaryData
+    upperCaseData
+    lowerCaseData
+    arrayData
+    mapData
+    repeatedData
+    nullableRepeatedData
+    nullInts
+    allNulls
+    nullStrings
+    tableName
+    unparsedStrings
+    withEmptyParts
+    person
+    salary
+    complexData
   }
 
   /* ------------------------------ *

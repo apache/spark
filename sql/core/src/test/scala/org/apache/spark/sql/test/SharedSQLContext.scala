@@ -40,6 +40,11 @@ private[sql] trait SharedSQLContext extends SparkFunSuite with BeforeAndAfterAll
   protected def sqlContext: TestSQLContext = _ctx
 
   /**
+   * Initialize all test data such that all temp tables are properly registered.
+   */
+  protected final def loadTestData(): Unit = _ctx.loadTestData()
+
+  /**
    * Switch to a custom [[TestSQLContext]].
    *
    * This stops the underlying [[org.apache.spark.SparkContext]] and expects a new one

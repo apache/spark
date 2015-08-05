@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils
 /**
  * General helper trait for common functionality in SQL tests.
  */
-private[spark] trait SQLTestUtils
+private[sql] trait SQLTestUtils
   extends SparkFunSuite
   with AbstractSQLTestUtils
   with SharedSQLContext {
@@ -42,7 +42,7 @@ private[spark] trait SQLTestUtils
 /**
  * Abstract helper trait for SQL tests with a pluggable [[SQLContext]].
  */
-private[spark] trait AbstractSQLTestUtils { this: SparkFunSuite =>
+private[sql] trait AbstractSQLTestUtils { this: SparkFunSuite =>
   protected def _sqlContext: SQLContext
 
   protected def configuration = _sqlContext.sparkContext.hadoopConfiguration

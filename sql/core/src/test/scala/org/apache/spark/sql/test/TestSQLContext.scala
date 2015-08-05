@@ -23,7 +23,7 @@ import org.apache.spark.sql.{SQLConf, SQLContext}
 /**
  * A special [[SQLContext]] prepared for testing.
  */
-private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) with TestSQLData {
+private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) with SQLTestData {
 
   def this() {
     this(new SparkContext("local[2]", "test-sql-context",
@@ -34,7 +34,7 @@ private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) with 
   protected override val _sqlContext: SQLContext = this
 
   // Use fewer paritions to speed up testing
-  override protected[sql] def createSession(): SQLSession = new this.SQLSession()
+  protected[sql] override def createSession(): SQLSession = new this.SQLSession()
 
   /** A special [[SQLSession]] that uses fewer shuffle partitions than normal. */
   protected[sql] class SQLSession extends super.SQLSession {

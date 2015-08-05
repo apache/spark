@@ -338,8 +338,6 @@ object Hive {
     javaOptions += "-XX:MaxPermSize=256m",
     // Specially disable assertions since some Hive tests fail them
     javaOptions in Test := (javaOptions in Test).value.filterNot(_ == "-ea"),
-    // TODO: re-enable this now that we've gotten rid of the TestHive singleton?
-    parallelExecution in Test := false,
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
     // only for this subproject.
     scalacOptions <<= scalacOptions map { currentOpts: Seq[String] =>

@@ -34,12 +34,13 @@ import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
+import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.types.*;
 import static org.apache.spark.sql.functions.*;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext jsc;
-  private transient SQLContext context;
+  private transient TestSQLContext context;
 
   @Before
   public void setUp() {
@@ -47,7 +48,8 @@ public class JavaDataFrameSuite {
     // TODO: restore the test data here somehow: TestData$.MODULE$.testData();
     SparkContext sc = new SparkContext("local[*]", "testing");
     jsc = new JavaSparkContext(sc);
-    context = new SQLContext(sc);
+    context = new TestSQLContext(sc);
+    context.loadTestData();
   }
 
   @After

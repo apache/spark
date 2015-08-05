@@ -29,6 +29,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach with SQLTestUtils {
   import ctx.implicits._
   import ctx._
 
+  ctx.loadTestData()
+
   test("equi-join is hash-join") {
     val x = testData2.as("x")
     val y = testData2.as("y")

@@ -37,6 +37,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   import ctx.implicits._
   import ctx._
 
+  ctx.loadTestData()
+
   test("having clause") {
     Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v").registerTempTable("hav")
     checkAnswer(
