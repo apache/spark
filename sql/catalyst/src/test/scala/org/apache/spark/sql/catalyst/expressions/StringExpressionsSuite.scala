@@ -670,7 +670,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(FormatNumber(Literal(123123324123L), Literal(-1)), null)
     checkEvaluation(
       FormatNumber(
-        Literal(Decimal(12312332412300000L, 38, 5) * Decimal(123123.21234d, 38, 5)), Literal(4)),
+        Literal(Decimal(123123324123L) * Decimal(123123.21234d)), Literal(4)),
       "15,159,339,180,002,773.2778")
     checkEvaluation(FormatNumber(Literal.create(null, IntegerType), Literal(3)), null)
     checkEvaluation(FormatNumber(Literal.create(null, NullType), Literal(3)), null)

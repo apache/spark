@@ -30,7 +30,7 @@ import org.apache.spark.annotation.DeveloperApi
  * - Otherwise, the decimal value is longVal / (10 ** _scale)
  */
 final class Decimal extends Ordered[Decimal] with Serializable {
-  import org.apache.spark.sql.types.Decimal.{BIG_DEC_ZERO, MAX_LONG_DIGITS, POW_10, ROUNDING_MODE}
+  import org.apache.spark.sql.types.Decimal._
 
   private var decimalVal: BigDecimal = null
   private var longVal: Long = 0L
@@ -139,9 +139,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toBigDecimal: BigDecimal = {
     if (decimalVal.ne(null)) {
-      decimalVal(Decimal.MATH_CONTEXT)
+      decimalVal(MATH_CONTEXT)
     } else {
-      BigDecimal(longVal, _scale)(Decimal.MATH_CONTEXT)
+      BigDecimal(longVal, _scale)(MATH_CONTEXT)
     }
   }
 
@@ -306,16 +306,15 @@ object Decimal {
 
   /** Maximum number of decimal digits a Long can represent */
   val MAX_LONG_DIGITS = 18
-  val MAX_PRECISION = DecimalType.MAX_PRECISION
 
   private val POW_10 = Array.tabulate[Long](MAX_LONG_DIGITS + 1)(i => math.pow(10, i).toLong)
 
   private val BIG_DEC_ZERO = BigDecimal(0)
 
-  private[types] val MATH_CONTEXT = new MathContext(MAX_PRECISION, RoundingMode.HALF_EVEN)
+  private val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION, RoundingMode.HALF_UP)
 
-  val ZERO = Decimal(0)
-  val ONE = Decimal(1)
+  private[sql] val ZERO = Decimal(0)
+  private[sql] val ONE = Decimal(1)
 
   def apply(value: Double): Decimal = new Decimal().set(value)
 
