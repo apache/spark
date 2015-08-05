@@ -61,11 +61,11 @@ class ColumnStatsSuite extends SparkFunSuite {
       val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#InternalType]]
       val stats = columnStats.collectedStatistics
 
-      assertResult(values.min(ordering), "Wrong lower bound")(stats.genericGet(0))
-      assertResult(values.max(ordering), "Wrong upper bound")(stats.genericGet(1))
-      assertResult(10, "Wrong null count")(stats.genericGet(2))
-      assertResult(20, "Wrong row count")(stats.genericGet(3))
-      assertResult(stats.genericGet(4), "Wrong size in bytes") {
+      assertResult(values.min(ordering), "Wrong lower bound")(stats.get(0, null))
+      assertResult(values.max(ordering), "Wrong upper bound")(stats.get(1, null))
+      assertResult(10, "Wrong null count")(stats.get(2, null))
+      assertResult(20, "Wrong row count")(stats.get(3, null))
+      assertResult(stats.get(4, null), "Wrong size in bytes") {
         rows.map { row =>
           if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
         }.sum
@@ -96,11 +96,11 @@ class ColumnStatsSuite extends SparkFunSuite {
       val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#InternalType]]
       val stats = columnStats.collectedStatistics
 
-      assertResult(values.min(ordering), "Wrong lower bound")(stats.genericGet(0))
-      assertResult(values.max(ordering), "Wrong upper bound")(stats.genericGet(1))
-      assertResult(10, "Wrong null count")(stats.genericGet(2))
-      assertResult(20, "Wrong row count")(stats.genericGet(3))
-      assertResult(stats.genericGet(4), "Wrong size in bytes") {
+      assertResult(values.min(ordering), "Wrong lower bound")(stats.get(0, null))
+      assertResult(values.max(ordering), "Wrong upper bound")(stats.get(1, null))
+      assertResult(10, "Wrong null count")(stats.get(2, null))
+      assertResult(20, "Wrong row count")(stats.get(3, null))
+      assertResult(stats.get(4, null), "Wrong size in bytes") {
         rows.map { row =>
           if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
         }.sum
