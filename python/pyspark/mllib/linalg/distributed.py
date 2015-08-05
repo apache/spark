@@ -593,7 +593,7 @@ def _convert_to_matrix_block_tuple(block):
         raise TypeError("Cannot convert type %s into a sub-matrix block tuple" % type(block))
 
 
-class BlockMatrix(object):
+class BlockMatrix(DistributedMatrix):
     """
     .. note:: Experimental
 
