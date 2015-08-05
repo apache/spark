@@ -85,12 +85,8 @@ public final class UnsafeKVExternalSorter {
       // We will use the number of elements in the map as the initialSize of the
       // UnsafeInMemorySorter. Because UnsafeInMemorySorter does not accept 0 as the initialSize,
       // we will use 1 as its initial size if the map is empty.
-      int initialSoeterSize = map.numElements();
-      if (initialSoeterSize == 0) {
-        initialSoeterSize = 1;
-      }
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
-        taskMemoryManager, recordComparator, prefixComparator, initialSoeterSize);
+        taskMemoryManager, recordComparator, prefixComparator, Math.max(1, map.numElements()));
 
       final int numKeyFields = keySchema.size();
       BytesToBytesMap.BytesToBytesMapIterator iter = map.iterator();

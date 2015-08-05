@@ -206,12 +206,13 @@ public final class UnsafeExternalSorter {
         spillWriter.write(baseObject, baseOffset, recordLength, sortedRecords.getKeyPrefix());
       }
       spillWriter.close();
-      final long spillSize = freeMemory();
-      // Note that this is more-or-less going to be a multiple of the page size, so wasted space in
-      // pages will currently be counted as memory spilled even though that space isn't actually
-      // written to disk. This also counts the space needed to store the sorter's pointer array.
-      taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
     }
+
+    final long spillSize = freeMemory();
+    // Note that this is more-or-less going to be a multiple of the page size, so wasted space in
+    // pages will currently be counted as memory spilled even though that space isn't actually
+    // written to disk. This also counts the space needed to store the sorter's pointer array.
+    taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
 
     initializeForWriting();
   }

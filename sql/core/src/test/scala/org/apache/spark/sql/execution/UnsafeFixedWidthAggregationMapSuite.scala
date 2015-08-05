@@ -300,11 +300,11 @@ class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
     )
 
     (1 to 10).foreach { i =>
-      val buf = map.getAggregationBuffer(InternalRow(0))
+      val buf = map.getAggregationBuffer(UnsafeRow.createFromByteArray(0, 0))
       assert(buf != null)
     }
 
-    // Convert the map into a sorter
+    // Convert the map into a sorter. Right now, it contains one record.
     val sorter = map.destructAndCreateExternalSorter()
 
     withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
@@ -332,6 +332,7 @@ class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
       count += 1;
     }
 
+    // 1 record was from the map and 4096 records were explicitly inserted.
     assert(count === 4097)
 
     map.free()
