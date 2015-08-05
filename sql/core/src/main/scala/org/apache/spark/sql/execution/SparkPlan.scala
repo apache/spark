@@ -67,7 +67,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   private val prepareCalled = new AtomicBoolean(false)
 
   /** Overridden make copy also propogates sqlContext to copied plan. */
-  override def makeCopy(newArgs: Array[AnyRef]): this.type = {
+  override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
     SparkPlan.currentContext.set(sqlContext)
     super.makeCopy(newArgs)
   }
