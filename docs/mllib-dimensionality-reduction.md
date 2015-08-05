@@ -85,7 +85,7 @@ a dependency.
 
 </div>
 <div data-lang="python" markdown="1">
-{% highlight scala %}
+{% highlight python %}
 from pyspark.mllib.linalg import Matrix
 from pyspark.mllib.linalg.distributed import RowMatrix
 from numpy.random import RandomState
@@ -161,8 +161,8 @@ rng = RandomState(0)
 mat = sc.parallelize(rng.randn(50, 30))
 rm = RowMatrix(mat)
 
-# Compute the top 10 principal components.
-pc = rm.computePrincipalComponents(10)  # Principal components are stored in a local dense matrix.
+# Compute the top 10 principal components stored in a local dense matrix.
+pc = rm.computePrincipalComponents(10)
 
 # Project the rows to the linear space spanned by the top 10 principal components.
 projected = rm.multiply(pc)

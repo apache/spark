@@ -28,7 +28,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark import RDD, since
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import _convert_to_vector, Matrix, QRDecomposition
+from pyspark.mllib.linalg import _convert_to_vector, DenseMatrix, Matrix, QRDecomposition
 from pyspark.mllib.stat import MultivariateStatisticalSummary
 from pyspark.storagelevel import StorageLevel
 
@@ -364,12 +364,18 @@ class RowMatrix(DistributedMatrix):
 
     def multiply(self, matrix):
         """
-        Multiplies the given row matrix with another matrix.
+        Multiplies the given RowMatrix with another matrix.
 
         :param matrix: Matrix to multiply with.
         :returns: RowMatrix
+
+        >>> rm = RowMatrix(sc.parallelize([[0, 1], [2, 3]]))
+        >>> rm.multiply(DenseMatrix(2, 2, [0, 2, 1, 3])).rows.collect()
+        [DenseVector([2.0, 3.0]), DenseVector([6.0, 11.0])]
         """
-        return RowMatrix(self._java_matrix_wrapper.call("multiply", matrix))
+        # TODO: Only DenseMatrices are supported on the Scala side.
+        j_model = self._java_matrix_wrapper.call("multiply", matrix)
+        return RowMatrix(j_model)
 
 
 class SingularValueDecomposition(JavaModelWrapper):
@@ -378,12 +384,18 @@ class SingularValueDecomposition(JavaModelWrapper):
     @property
     def U(self):
         """
-        Returns a RowMatrix whose columns are the left singular vectors of the
+        Returns a distributed matrix whose columns are the left singular vectors of the
         SingularValueDecomposition if computeU was set to be True.
         """
         u = self.call("U")
         if u is not None:
-            return RowMatrix(u)
+            mat_name = u.getClass().getSimpleName()
+            if mat_name == "RowMatrix":
+                return RowMatrix(u)
+            elif mat_name == "IndexedRowMatrix":
+                return IndexedRowMatrix(u)
+            else:
+                raise TypeError("Expected RowMatrix/IndexedRowMatrix got %s" % mat_name)
 
     @property
     def s(self):
@@ -627,6 +639,56 @@ class IndexedRowMatrix(DistributedMatrix):
                                                            rowsPerBlock,
                                                            colsPerBlock)
         return BlockMatrix(java_block_matrix, rowsPerBlock, colsPerBlock)
+
+    def computeSVD(self, k, computeU=False, rCond=1e-9):
+        """
+        Computes the singular value decomposition of the IndexedRowMatrix.
+
+        The given row matrix A of dimension (m X n) is decomposed into U * s * V'T where
+
+        * U: (m X k) (left singular vectors) is a IndexedRowMatrix whose columns are the
+             eigenvectors of (A X A')
+        * s: DenseVector consisting of square root of the eigenvalues (singular values)
+             in descending order.
+        * v: (n X k) (right singular vectors) is a Matrix whose columns are the
+             eigenvectors of (A' X A)
+
+        For more specific details on implementation, please refer the scala documentation.
+
+        :param k: Set the number of singular values to keep.
+        :param computeU: Whether of not to compute U. If set to be True, then U is computed
+                         by A * V * s^-1
+        :param rCond: Reciprocal condition number. All singular values smaller than
+                      rCond * s[0] are treated as zero, where s[0] is the largest
+                      singular value.
+        :returns: SingularValueDecomposition object
+
+        >>> data = [(0, (3, 1, 1)), (1, (-1, 3, 1))]
+        >>> irm = IndexedRowMatrix(sc.parallelize(data))
+        >>> svd_model = irm.computeSVD(2, True)
+        >>> svd_model.U.rows.collect() # doctest: +NORMALIZE_WHITESPACE
+        [IndexedRow(0, [-0.707106781187,0.707106781187]),\
+        IndexedRow(1, [-0.707106781187,-0.707106781187])]
+        >>> svd_model.s
+        DenseVector([3.4641, 3.1623])
+        >>> svd_model.V
+        DenseMatrix(3, 2, [-0.4082, -0.8165, -0.4082, 0.8944, -0.4472, 0.0], 0)
+        """
+        j_model = self._java_matrix_wrapper.call("computeSVD", int(k), computeU, float(rCond))
+        return SingularValueDecomposition(j_model)
+
+    def multiply(self, matrix):
+        """
+        Multiplies the given IndexedRowMatrix with another matrix.
+
+        :param matrix: Matrix to multiply with.
+        :returns: IndexedRowMatrix
+
+        >>> data = IndexedRowMatrix(sc.parallelize([(0, (0, 1)), (1, (2, 3))]))
+        >>> data.multiply(DenseMatrix(2, 2, [0, 2, 1, 3])).rows.collect()
+        [IndexedRow(0, [2.0,3.0]), IndexedRow(1, [6.0,11.0])]
+        """
+        return IndexedRowMatrix(self._java_matrix_wrapper.call("multiply", matrix))
 
 
 class MatrixEntry(object):
