@@ -119,6 +119,8 @@ private[deploy] class Master(
   private var appScheduler: SchedulingAlgorithm = schedulingSetting.mode match {
     case SchedulingMode.FIFO =>
       new FIFOSchedulingAlgorithm(this)
+    case SchedulingMode.PRIORITY =>
+      new PrioritySchedulingAlgorithm(this)
     case _ =>
       // Just a placeholder, we shouldn't reach here
       throw new SparkException("Unknown Scheduling Algorithm")

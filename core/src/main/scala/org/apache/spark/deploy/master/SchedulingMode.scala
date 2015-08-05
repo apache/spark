@@ -23,7 +23,7 @@ package org.apache.spark.deploy.master
 object SchedulingMode extends Enumeration {
 
   type SchedulingMode = Value
-  val FIFO = Value
+  val FIFO, PRIORITY = Value
 }
 
 case class SchedulingSetting(

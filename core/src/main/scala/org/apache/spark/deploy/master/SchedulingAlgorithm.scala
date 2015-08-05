@@ -173,3 +173,13 @@ private[spark] class FIFOSchedulingAlgorithm(val master: Master) extends Schedul
     assignedCores
   }
 }
+
+private[spark] class PrioritySchedulingAlgorithm(val master: Master) extends SchedulingAlgorithm {
+  def startExecutorsOnWorkers(
+      waitingApps: Array[ApplicationInfo],
+      workers: Array[WorkerInfo]): Unit = { }
+  def scheduleExecutorsOnWorkers(
+      app: ApplicationInfo,
+      usableWorkers: Array[WorkerInfo],
+      spreadOutApps: Boolean): Array[Int] = { Array[Int]() }
+}
