@@ -37,7 +37,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
   override def beforeEach(): Unit = {
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
-      "org.apache.spark.network.yarn.YarnShuffleService");
+      classOf[YarnShuffleService].getCanonicalName);
 
     yarnConfig.get("yarn.nodemanager.local-dirs").split(",").foreach { dir =>
       val d = new File(dir)
@@ -75,7 +75,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     val execStateFile = s1.registeredExecutorFile
     execStateFile should not be (null)
-    execStateFile.exists() should be (false)
     val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, "sort")
     val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, "hash")
 

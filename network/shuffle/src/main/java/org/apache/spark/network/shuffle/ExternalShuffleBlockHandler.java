@@ -122,4 +122,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   public void reregisterExecutor(AppExecId appExecId, ExecutorShuffleInfo executorInfo) {
     blockManager.registerExecutor(appExecId.appId, appExecId.execId, executorInfo);
   }
+
+  public void close() {
+    blockManager.close();
+  }
 }

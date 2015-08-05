@@ -28,7 +28,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
 import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
-import com.google.common.io.Files;
 import org.fusesource.leveldbjni.JniDBFactory;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.Options;
@@ -65,6 +64,7 @@ public class ExternalShuffleBlockResolver {
 
   @VisibleForTesting
   final File registeredExecutorFile;
+  private final DB db;
 
   public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile) {
     this(conf, registeredExecutorFile, Executors.newSingleThreadExecutor(
@@ -80,6 +80,21 @@ public class ExternalShuffleBlockResolver {
       Executor directoryCleaner) {
     this.conf = conf;
     this.registeredExecutorFile = registeredExecutorFile;
+    if (registeredExecutorFile != null) {
+      Options options = new Options();
+      options.createIfMissing(true);
+      JniDBFactory factory = new JniDBFactory();
+      DB tmpDb;
+      try {
+        tmpDb = factory.open(registeredExecutorFile, options);
+      } catch (IOException e) {
+        logger.info("Error opening leveldb file {}", registeredExecutorFile, e);
+        tmpDb = null;
+      }
+      db = tmpDb;
+    } else {
+      db = null;
+    }
     this.executors = Maps.newConcurrentMap();
     this.directoryCleaner = directoryCleaner;
   }
@@ -237,6 +252,16 @@ public class ExternalShuffleBlockResolver {
     return new File(new File(localDir, String.format("%02x", subDirId)), filename);
   }
 
+  void close() {
+    if (db != null) {
+      try {
+        db.close();
+      } catch (IOException e) {
+        logger.error("Exception closing leveldb with registered executors", e);
+      }
+    }
+  }
+
   /** Simply encodes an executor's full ID, which is appId + execId. */
   public static class AppExecId implements Serializable {
     public final String appId;
@@ -275,24 +300,12 @@ public class ExternalShuffleBlockResolver {
    * You must have a lock on executors when calling this
    */
   private void saveRegisteredExecutors() throws IOException {
-    if (registeredExecutorFile != null) {
-      Options options = new Options();
-      options.createIfMissing(true);
-      JniDBFactory factory = new JniDBFactory();
-      DB db = null;
-      try {
-        db = factory.open(registeredExecutorFile, options);
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        ObjectOutputStream out = new ObjectOutputStream(bytes);
-        out.writeObject(executors);
-        out.close();
-        db.put("registeredExecutors".getBytes(Charsets.UTF_8), bytes.toByteArray());
-      } finally {
-        if (db != null) {
-          db.close();
-        }
-      }
-      logger.info("Saving registered executors to {}", registeredExecutorFile);
+    if (db != null) {
+      ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+      ObjectOutputStream out = new ObjectOutputStream(bytes);
+      out.writeObject(executors);
+      out.close();
+      db.put("registeredExecutors".getBytes(Charsets.UTF_8), bytes.toByteArray());
     }
   }
 }

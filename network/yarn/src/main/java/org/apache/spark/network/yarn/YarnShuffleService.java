@@ -244,6 +244,9 @@ public class YarnShuffleService extends AuxiliaryService {
       if (shuffleServer != null) {
         shuffleServer.close();
       }
+      if (blockHandler != null) {
+        blockHandler.close();
+      }
     } catch (Exception e) {
       logger.error("Exception when stopping service", e);
     }
