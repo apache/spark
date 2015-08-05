@@ -22,7 +22,6 @@ import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribut
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
@@ -31,8 +30,8 @@ class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("params") {
     val slicer = new VectorSlicer
     ParamsSuite.checkParams(slicer)
-    assert(slicer.getSelectedIndices.length === 0)
-    assert(slicer.getSelectedNames.length === 0)
+    assert(slicer.getIndices.length === 0)
+    assert(slicer.getNames.length === 0)
     withClue("VectorSlicer should not have any features selected by default") {
       intercept[IllegalArgumentException] {
         slicer.validateParams()
@@ -73,20 +72,11 @@ class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.sparse(2, Seq())
     )
 
-    val attrs = Array(
-      NumericAttribute.defaultAttr.withIndex(0).withName("f0"),
-      NumericAttribute.defaultAttr.withIndex(1).withName("f1"),
-      NumericAttribute.defaultAttr.withIndex(2).withName("f2"),
-      NumericAttribute.defaultAttr.withIndex(3).withName("f3"),
-      NumericAttribute.defaultAttr.withIndex(4).withName("f4")
-    )
-
-    val resultAttrs = Array(
-      NumericAttribute.defaultAttr.withIndex(0).withName("f1"),
-      NumericAttribute.defaultAttr.withIndex(1).withName("f4")
-    )
-
+    val defaultAttr = NumericAttribute.defaultAttr
+    val attrs = Array("f0", "f1", "f2", "f3", "f4").map(defaultAttr.withName)
     val attrGroup = new AttributeGroup("features", attrs.asInstanceOf[Array[Attribute]])
+
+    val resultAttrs = Array("f1", "f4").map(defaultAttr.withName)
     val resultAttrGroup = new AttributeGroup("expected", resultAttrs.asInstanceOf[Array[Attribute]])
 
     val rdd = sc.parallelize(data.zip(expected)).map { case (a, b) => Row(a, b) }
@@ -107,13 +97,13 @@ class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext {
       }
     }
 
-    vectorSlicer.setSelectedIndices(Array(1, 4)).setSelectedNames(Array.empty)
+    vectorSlicer.setIndices(Array(1, 4)).setNames(Array.empty)
     validateResults(vectorSlicer.transform(df))
 
-    vectorSlicer.setSelectedIndices(Array(1)).setSelectedNames(Array("f4"))
+    vectorSlicer.setIndices(Array(1)).setNames(Array("f4"))
     validateResults(vectorSlicer.transform(df))
 
-    vectorSlicer.setSelectedIndices(Array.empty).setSelectedNames(Array("f1", "f4"))
+    vectorSlicer.setIndices(Array.empty).setNames(Array("f1", "f4"))
     validateResults(vectorSlicer.transform(df))
   }
 }
