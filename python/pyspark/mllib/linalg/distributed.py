@@ -325,7 +325,7 @@ class IndexedRowMatrix(DistributedMatrix):
 
     def toBlockMatrix(self, rowsPerBlock=1024, colsPerBlock=1024):
         """
-        Convert this matrix to BlockMatrix.
+        Convert this matrix to a BlockMatrix.
 
         :param rowsPerBlock: Number of rows that make up each block.
                              The blocks forming the final rows are not
@@ -344,8 +344,6 @@ class IndexedRowMatrix(DistributedMatrix):
         >>> print(mat.numRows())
         7
 
-        >>> # This IndexedRowMatrix will have 3 columns, and the
-        >>> # ensuing BlockMatrix will have 3 columns as well.
         >>> print(mat.numCols())
         3
         """
@@ -551,7 +549,7 @@ class CoordinateMatrix(DistributedMatrix):
 
     def toBlockMatrix(self, rowsPerBlock=1024, colsPerBlock=1024):
         """
-        Convert this matrix to BlockMatrix.
+        Convert this matrix to a BlockMatrix.
 
         :param rowsPerBlock: Number of rows that make up each block.
                              The blocks forming the final rows are not
@@ -583,8 +581,9 @@ class CoordinateMatrix(DistributedMatrix):
 
 
 def _convert_to_matrix_block_tuple(block):
-    if isinstance(block, tuple) and len(block) == 2 and len(block[0]) == 2 \
-            and isinstance(block[1], Matrix):
+    if (isinstance(block, tuple) and len(block) == 2
+            and isinstance(block[0], tuple) and len(block[0]) == 2
+            and isinstance(block[1], Matrix)):
         blockRowIndex = int(block[0][0])
         blockColIndex = int(block[0][1])
         subMatrix = block[1]
@@ -662,7 +661,7 @@ class BlockMatrix(DistributedMatrix):
               and blocks.getClass().getSimpleName() == "BlockMatrix"):
             java_matrix = blocks
         else:
-            raise TypeError("blocks should be an RDD of sub-matrix blocks as"
+            raise TypeError("blocks should be an RDD of sub-matrix blocks as "
                             "((int, int), matrix) tuples, got %s" % type(blocks))
 
         self._java_matrix_wrapper = JavaModelWrapper(java_matrix)
