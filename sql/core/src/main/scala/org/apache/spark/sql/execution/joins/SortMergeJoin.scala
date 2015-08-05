@@ -59,11 +59,7 @@ case class SortMergeJoin(
     keys.map(SortOrder(_, Ascending))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // TODO(josh): why is this copying necessary?
-    val leftResults = left.execute().map(_.copy())
-    val rightResults = right.execute().map(_.copy())
-
-    leftResults.zipPartitions(rightResults) { (leftIter, rightIter) =>
+    left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       new Iterator[InternalRow] {
         private[this] var currentLeftRow: InternalRow = _
         private[this] var currentRightMatches: CompactBuffer[InternalRow] = _
@@ -171,9 +167,8 @@ private[joins] class SortMergeJoinScanner(
         matchedJoinKey = leftJoinKey
         rightMatches = new CompactBuffer[InternalRow]()
         do {
-          // TODO(josh): if we move the row copying further down, we would do it here:
           // TODO(josh): could maybe avoid a copy for case where all rows have exactly one match
-          rightMatches += rightRow
+          rightMatches += rightRow.copy() // need to copy mutable rows before buffering them
           advanceRight()
         } while (rightRow != null && keyOrdering.compare(leftJoinKey, rightJoinKey) == 0)
         true

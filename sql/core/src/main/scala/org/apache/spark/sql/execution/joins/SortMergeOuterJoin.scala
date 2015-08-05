@@ -59,11 +59,8 @@ case class SortMergeOuterJoin(
     keys.map(SortOrder(_, Ascending))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // TODO(josh): why is this copying necessary?
-    val leftResults = left.execute().map(_.copy())
-    val rightResults = right.execute().map(_.copy())
     val joinedRow = new JoinedRow()
-    leftResults.zipPartitions(rightResults) { (leftIter, rightIter) =>
+    left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       joinType match {
         case LeftOuter =>
           // TODO(josh): for SMJ we would buffer keys here:
