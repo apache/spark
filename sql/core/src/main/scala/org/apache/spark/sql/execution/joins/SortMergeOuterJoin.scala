@@ -63,12 +63,20 @@ case class SortMergeOuterJoin(
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       joinType match {
         case LeftOuter =>
-          // TODO(josh): for SMJ we would buffer keys here:
-          val hashed = HashedRelation(rightIter, buildKeyGenerator)
-          val keyGenerator = streamedKeyGenerator
-          leftIter.flatMap { currentRow =>
-            val rowKey = keyGenerator(currentRow)
-            leftOuterIterator(rowKey, joinedRow.withLeft(currentRow), hashed.get(rowKey))
+          val smjScanner = new SortMergeJoinScanner(
+            streamedKeyGenerator,
+            buildKeyGenerator,
+            keyOrdering,
+            leftIter,
+            rightIter  // TODO(josh): streamed vs. right/left terminology; may be more explicit to
+                       // just call these arguments with name = value syntax and continue to use
+                       // left and right terminology here.
+          )
+          // TODO(josh): this is a little terse and needs explanation:
+          Iterator.continually(0).takeWhile(_ => smjScanner.findNextOuterJoinRows()).flatMap { _ =>
+            leftOuterIterator(
+              joinedRow.withLeft(smjScanner.getLeftRow),
+              smjScanner.getRightMatches)
           }
 
         case RightOuter =>

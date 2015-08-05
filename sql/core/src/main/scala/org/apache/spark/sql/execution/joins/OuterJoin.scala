@@ -122,25 +122,20 @@ trait OuterJoin {
   // iterator for performance purpose.
 
   protected[this] def leftOuterIterator(
-      key: InternalRow,
       joinedRow: JoinedRow,
       rightIter: Iterable[InternalRow]): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
-      if (!key.anyNull) {
-        val temp = if (rightIter != null) {
-          rightIter.collect {
-            case r if boundCondition(joinedRow.withRight(r)) => resultProjection(joinedRow).copy()
-          }
-        } else {
-          List.empty
-        }
-        if (temp.isEmpty) {
-          resultProjection(joinedRow.withRight(rightNullRow)).copy :: Nil
-        } else {
-          temp
+      val temp = if (rightIter != null) {
+        rightIter.collect {
+          case r if boundCondition(joinedRow.withRight(r)) => resultProjection(joinedRow).copy()
         }
       } else {
+        List.empty
+      }
+      if (temp.isEmpty) {
         resultProjection(joinedRow.withRight(rightNullRow)).copy :: Nil
+      } else {
+        temp
       }
     }
     ret.iterator

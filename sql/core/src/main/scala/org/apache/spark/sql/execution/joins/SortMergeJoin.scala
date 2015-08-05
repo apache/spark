@@ -106,6 +106,8 @@ case class SortMergeJoin(
 /**
  * Helper class that is used to implement [[SortMergeJoin]] and [[SortMergeOuterJoin]].
  */
+// TODO(josh): rename to build and probe terminology, which should be easy now that the projection
+// building has been moved out of here
 private[joins] class SortMergeJoinScanner(
     leftKeyGenerator: Projection,
     rightKeyGenerator: Projection,
@@ -117,9 +119,9 @@ private[joins] class SortMergeJoinScanner(
   private[this] var rightRow: InternalRow = _
   private[this] var rightJoinKey: InternalRow = _
    /** The join key for the rows buffered in `rightMatches`, or null if `rightMatches` is empty */
-  private[this] var matchedJoinKey: InternalRow = _
-  /** Buffered rows from the right side of the join. This is never null. */
-  private[this] var rightMatches: CompactBuffer[InternalRow] = new CompactBuffer[InternalRow]()
+  private[this] var matchJoinKey: InternalRow = _
+  /** Buffered rows from the right side of the join. This is null if there are no matches */
+  private[this] var rightMatches: CompactBuffer[InternalRow] = _
 
   // Initialization (note: do _not_ want to advance left here).
   advanceRight()
@@ -136,7 +138,7 @@ private[joins] class SortMergeJoinScanner(
     if (leftRow == null) {
       // We have consumed the entire left iterator, so there can be no more matches.
       false
-    } else if (matchedJoinKey != null && keyOrdering.compare(leftJoinKey, matchedJoinKey) == 0) {
+    } else if (matchJoinKey != null && keyOrdering.compare(leftJoinKey, matchJoinKey) == 0) {
       // The new left row has the same join key as the previous row, so return the same matches.
       true
     } else if (rightRow == null) {
@@ -164,46 +166,106 @@ private[joins] class SortMergeJoinScanner(
         // The left and right rows have matching join keys, so scan through the right iterator to
         // buffer all matching rows.
         assert(comp == 0)
-        matchedJoinKey = leftJoinKey
-        rightMatches = new CompactBuffer[InternalRow]()
-        do {
-          // TODO(josh): could maybe avoid a copy for case where all rows have exactly one match
-          rightMatches += rightRow.copy() // need to copy mutable rows before buffering them
-          advanceRight()
-        } while (rightRow != null && keyOrdering.compare(leftJoinKey, rightJoinKey) == 0)
+        bufferMatchingRightRows()
         true
       }
     }
   }
 
-  def getRightMatches: CompactBuffer[InternalRow] = rightMatches
+  /**
+   * Advances the left input iterator and buffers all rows from the right input with matching keys.
+   * @return true if the left iterator returned a row, false otherwise. If this returns true, then
+   *         [[getLeftRow]] and [[getRightMatches]] can be called to produce the outer join results.
+   */
+  final def findNextOuterJoinRows(): Boolean = {
+    if (advanceLeft()) {
+      if (leftJoinKey.anyNull) {
+        // Since at least one join column is null, the left row has no matches.
+        matchJoinKey = null
+        rightMatches = null
+      } else if (matchJoinKey != null && keyOrdering.compare(leftJoinKey, matchJoinKey) == 0) {
+        // Matches the current group, so do nothing.
+      } else {
+        // The left row does not match the current group.
+        matchJoinKey = null
+        rightMatches = null
+        if (rightRow != null) {
+          // The right iterator could still contain matching rows, so we'll need to scan through it
+          // until we either find matches or pass where they would be found.
+          var comp = if (rightJoinKey.anyNull) 1 else keyOrdering.compare(leftJoinKey, rightJoinKey)
+          while (comp > 0 && advanceRight()) {
+            comp = if (rightJoinKey.anyNull) 1 else keyOrdering.compare(leftJoinKey, rightJoinKey)
+          }
+          if (comp == 0) {
+            // We have found matches, so buffer them (this updates matchJoinKey)
+            bufferMatchingRightRows()
+          } else {
+            // We have overshot the position where the row would be found, hence no matches.
+          }
+        }
+      }
+      // If there is a left input, then we always return true since outer join always returns a row.
+      true
+    } else {
+      // End of left input, hence no more results.
+      false
+    }
+  }
+
   def getLeftRow: InternalRow = leftRow
+  def getRightMatches: CompactBuffer[InternalRow] = rightMatches
 
   // --- Private methods --------------------------------------------------------------------------
 
   /**
    * Advance the left iterator and compute the new row's join key.
+   * @return true if the left iterator returned a row and false otherwise.
    */
-  private def advanceLeft(): Unit = {
+  private def advanceLeft(): Boolean = {
     if (leftIter.hasNext) {
       leftRow = leftIter.next()
       leftJoinKey = leftKeyGenerator(leftRow)
+      true
     } else {
       leftRow = null
       leftJoinKey = null
+      false
     }
   }
 
   /**
    * Advance the right iterator and compute the new row's join key.
+   * @return true if the right iterator returned a row and false otherwise.
    */
-  private def advanceRight(): Unit = {
+  private def advanceRight(): Boolean = {
     if (rightIter.hasNext) {
       rightRow = rightIter.next()
       rightJoinKey = rightKeyGenerator(rightRow)
+      true
     } else {
       rightRow = null
       rightJoinKey = null
+      false
     }
+  }
+
+  /** Called when the left and right join keys match in order to buffer the matching right rows. */
+  private def bufferMatchingRightRows(): Unit = {
+    assert(leftJoinKey != null)
+    assert(!leftJoinKey.anyNull)
+    assert(rightJoinKey != null)
+    assert(!rightJoinKey.anyNull)
+    assert(keyOrdering.compare(leftJoinKey, rightJoinKey) == 0)
+    matchJoinKey = leftJoinKey.copy()
+    rightMatches = new CompactBuffer[InternalRow]
+    do {
+      // TODO(josh): could maybe avoid a copy for case where all rows have exactly one match
+      rightMatches += rightRow.copy() // need to copy mutable rows before buffering them
+      advanceRight()
+    } while (
+      rightRow != null &&
+      !rightJoinKey.anyNull &&
+      keyOrdering.compare(leftJoinKey, rightJoinKey) == 0
+    )
   }
 }
