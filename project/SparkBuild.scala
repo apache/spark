@@ -333,11 +333,12 @@ object SQL {
 
 object Hive {
 
+  // TODO: check me, will this work?
   lazy val settings = Seq(
     javaOptions += "-XX:MaxPermSize=256m",
     // Specially disable assertions since some Hive tests fail them
     javaOptions in Test := (javaOptions in Test).value.filterNot(_ == "-ea"),
-    // Multiple queries rely on the TestHive singleton. See comments there for more details.
+    // TODO: re-enable this now that we've gotten rid of the TestHive singleton?
     parallelExecution in Test := false,
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
     // only for this subproject.
@@ -356,8 +357,6 @@ object Hive {
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.functions._
         |import org.apache.spark.sql.hive._
-        |import org.apache.spark.sql.hive.test.TestHive._
-        |import org.apache.spark.sql.hive.test.TestHive.implicits._
         |import org.apache.spark.sql.types._""".stripMargin,
     cleanupCommands in console := "sparkContext.stop()",
     // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce

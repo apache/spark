@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 
-import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
+import org.scalatest.GivenWhenThen
 
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.DescribeCommand
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.MyTestHiveContext
 
 /**
  * Allows the creations of tests that execute the same query against both hive
@@ -40,7 +40,12 @@ import org.apache.spark.sql.hive.test.TestHive
  * configured using system properties.
  */
 abstract class HiveComparisonTest
-  extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
+  extends SparkFunSuite
+  with GivenWhenThen
+  with MyTestHiveContext
+  with Logging {
+
+  protected val ctx = hiveContext
 
   /**
    * When set, any cache files that result in test failures will be deleted.  Used when the test
@@ -129,7 +134,7 @@ abstract class HiveComparisonTest
   }
 
   protected def prepareAnswer(
-    hiveQuery: TestHive.type#QueryExecution,
+    hiveQuery: ctx.type#QueryExecution,
     answer: Seq[String]): Seq[String] = {
 
     def isSorted(plan: LogicalPlan): Boolean = plan match {
@@ -269,7 +274,7 @@ abstract class HiveComparisonTest
 
       try {
         if (reset) {
-          TestHive.reset()
+          ctx.reset()
         }
 
         val hiveCacheFiles = queryList.zipWithIndex.map {
@@ -298,7 +303,7 @@ abstract class HiveComparisonTest
             hiveCachedResults
           } else {
 
-            val hiveQueries = queryList.map(new TestHive.QueryExecution(_))
+            val hiveQueries = queryList.map(new ctx.QueryExecution(_))
             // Make sure we can at least parse everything before attempting hive execution.
             // Note this must only look at the logical plan as we might not be able to analyze if
             // other DDL has not been executed yet.
@@ -318,7 +323,7 @@ abstract class HiveComparisonTest
                     case _: ExplainCommand =>
                       // No need to execute EXPLAIN queries as we don't check the output.
                       Nil
-                    case _ => TestHive.runSqlHive(queryString)
+                    case _ => ctx.runSqlHive(queryString)
                   }
 
                   // We need to add a new line to non-empty answers so we can differentiate Seq()
@@ -341,14 +346,14 @@ abstract class HiveComparisonTest
                     fail(errorMessage)
                 }
             }.toSeq
-            if (reset) { TestHive.reset() }
+            if (reset) { ctx.reset() }
 
             computedResults
           }
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          val query = new TestHive.QueryExecution(queryString)
+          val query = new ctx.QueryExecution(queryString)
           try { (query, prepareAnswer(query, query.stringResult())) } catch {
             case e: Throwable =>
               val errorMessage =
@@ -408,8 +413,8 @@ abstract class HiveComparisonTest
             // okay by running a simple query. If this fails then we halt testing since
             // something must have gone seriously wrong.
             try {
-              new TestHive.QueryExecution("SELECT key FROM src").stringResult()
-              TestHive.runSqlHive("SELECT key FROM src")
+              new ctx.QueryExecution("SELECT key FROM src").stringResult()
+              ctx.runSqlHive("SELECT key FROM src")
             } catch {
               case e: Exception =>
                 logError(s"FATAL ERROR: Canary query threw $e This implies that the " +

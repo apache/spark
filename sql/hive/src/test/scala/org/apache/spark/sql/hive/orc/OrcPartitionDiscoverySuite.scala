@@ -18,18 +18,15 @@
 package org.apache.spark.sql.hive.orc
 
 import java.io.File
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.util.Utils
-import org.scalatest.BeforeAndAfterAll
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
+
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+
+import org.apache.spark.sql._
+import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
 case class OrcParData(intField: Int, stringField: String)
@@ -38,7 +35,11 @@ case class OrcParData(intField: Int, stringField: String)
 case class OrcParDataWithKey(intField: Int, pi: Int, stringField: String, ps: String)
 
 // TODO This test suite duplicates ParquetPartitionDiscoverySuite a lot
-class OrcPartitionDiscoverySuite extends QueryTest with BeforeAndAfterAll {
+class OrcPartitionDiscoverySuite extends QueryTest with MyTestHiveContext {
+  private val ctx = hiveContext
+  import ctx.implicits._
+  import ctx._
+
   val defaultPartitionName = ConfVars.DEFAULTPARTITIONNAME.defaultStrVal
 
   def withTempDir(f: File => Unit): Unit = {
@@ -58,7 +59,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   protected def withTempTable(tableName: String)(f: => Unit): Unit = {
-    try f finally TestHive.dropTempTable(tableName)
+    try f finally ctx.dropTempTable(tableName)
   }
 
   protected def makePartitionDir(

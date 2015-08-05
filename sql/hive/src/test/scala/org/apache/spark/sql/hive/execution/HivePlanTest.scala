@@ -21,11 +21,12 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.MyTestHiveContext
 
-class HivePlanTest extends QueryTest {
-  import TestHive._
-  import TestHive.implicits._
+class HivePlanTest extends QueryTest with MyTestHiveContext {
+  private val ctx = hiveContext
+  import ctx.implicits._
+  import ctx._
 
   test("udf constant folding") {
     Seq.empty[Tuple1[Int]].toDF("a").registerTempTable("t")

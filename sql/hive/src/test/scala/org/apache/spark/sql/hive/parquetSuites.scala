@@ -23,9 +23,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
 import org.apache.spark.sql.hive.execution.HiveTableScan
-import org.apache.spark.sql.hive.test.TestHiveContext
+import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHiveContext}
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -54,7 +53,7 @@ case class ParquetDataWithKeyAndComplexTypes(
  * built in parquet support.
  */
 class ParquetMetastoreSuite extends ParquetPartitioningTest {
-  private val ctx = sqlContext.asInstanceOf[TestHiveContext]
+  private val ctx = hiveContext
   import ctx._
 
   override def beforeAll(): Unit = {
@@ -535,7 +534,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
  * A suite of tests for the Parquet support through the data sources API.
  */
 class ParquetSourceSuite extends ParquetPartitioningTest {
-  private val ctx = sqlContext.asInstanceOf[TestHiveContext]
+  private val ctx = hiveContext
   import ctx.implicits._
   import ctx._
 
@@ -632,7 +631,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
              """.stripMargin)
 
           checkAnswer(
-            sqlContext.read.parquet(path),
+            ctx.read.parquet(path),
             Row("1st", "2nd", Seq(Row("val_a", "val_b"))))
         }
       }
@@ -687,11 +686,8 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
 /**
  * A collection of tests for parquet data with various forms of partitioning.
  */
-abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with MyTestSQLContext {
-
-  // Use a hive context instead
-  switchSQLContext(() => new TestHiveContext)
-  private val ctx = sqlContext
+abstract class ParquetPartitioningTest extends QueryTest with HiveTestUtils {
+  private val ctx = hiveContext
   import ctx.implicits._
   import ctx._
 

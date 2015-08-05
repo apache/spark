@@ -18,12 +18,15 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.MyTestHiveContext
 
 /**
  * A set of tests that validates support for Hive Explain command.
  */
-class HiveExplainSuite extends QueryTest {
+class HiveExplainSuite extends QueryTest with MyTestHiveContext {
+  private val ctx = hiveContext
+  import ctx._
+
   test("explain extended command") {
     checkExistence(sql(" explain   select * from src where key=123 "), true,
                    "== Physical Plan ==")

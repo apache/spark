@@ -18,10 +18,12 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.{Row, QueryTest}
-import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.test.MyTestHiveContext
 
 
-class HiveDataFrameJoinSuite extends QueryTest {
+class HiveDataFrameJoinSuite extends QueryTest with MyTestHiveContext {
+  private val ctx = hiveContext
+  import ctx.implicits._
 
   // We should move this into SQL package if we make case sensitivity configurable in SQL.
   test("join - self join auto resolve ambiguity with case insensitivity") {

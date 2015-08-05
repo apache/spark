@@ -18,8 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.test.TestHive.{read, sparkContext, jsonRDD, sql}
-import org.apache.spark.sql.hive.test.TestHive.implicits._
 
 case class Nested(a: Int, B: Int)
 case class Data(a: Int, B: Int, n: Nested, nestedArray: Seq[Nested])
@@ -29,6 +27,8 @@ case class Data(a: Int, B: Int, n: Nested, nestedArray: Seq[Nested])
  * included in the hive distribution.
  */
 class HiveResolutionSuite extends HiveComparisonTest {
+  import ctx.implicits._
+  import ctx._
 
   test("SPARK-3698: case insensitive test for nested data") {
     read.json(sparkContext.makeRDD(

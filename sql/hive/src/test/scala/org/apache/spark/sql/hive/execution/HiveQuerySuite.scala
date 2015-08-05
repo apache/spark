@@ -30,9 +30,7 @@ import org.apache.spark.{SparkFiles, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.MyTestHiveContext
 
 case class TestData(a: Int, b: String)
 
@@ -40,14 +38,15 @@ case class TestData(a: Int, b: String)
  * A set of test cases expressed in Hive QL that are not covered by the tests
  * included in the hive distribution.
  */
-class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
+class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter with MyTestHiveContext {
+  import ctx.implicits._
+  import ctx._
+
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
 
-  import org.apache.spark.sql.hive.test.TestHive.implicits._
-
   override def beforeAll() {
-    TestHive.cacheTables = true
+    cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
@@ -55,7 +54,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   override def afterAll() {
-    TestHive.cacheTables = false
+    cacheTables = false
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
     sql("DROP TEMPORARY FUNCTION udtf_count2")
@@ -623,7 +622,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("case sensitivity: registered table") {
     val testData =
-      TestHive.sparkContext.parallelize(
+      sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(2, "str2") :: Nil)
     testData.toDF().registerTempTable("REGisteredTABle")
@@ -645,20 +644,20 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     val df = sql("explain select key, count(value) from src group by key")
     assert(isExplanation(df))
 
-    TestHive.reset()
+    reset()
   }
 
   test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
     val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
       .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
-    TestHive.sparkContext.parallelize(fixture).toDF().registerTempTable("having_test")
+    sparkContext.parallelize(fixture).toDF().registerTempTable("having_test")
     val results =
       sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
       .collect()
       .map(x => Pair(x.getString(0), x.getInt(1)))
 
     assert(results === Array(Pair("foo", 4)))
-    TestHive.reset()
+    reset()
   }
 
   test("SPARK-2180: HAVING with non-boolean clause raises no exceptions") {
@@ -708,7 +707,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     assert(isExplanation(sql(s"EXPLAIN SELECT key, COUNT(*) FROM src GROUP BY key")))
 
-    TestHive.reset()
+    reset()
   }
 
   test("Exactly once semantics for DDL and command statements") {
@@ -796,7 +795,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     // Describe a registered temporary table.
     val testData =
-      TestHive.sparkContext.parallelize(
+      sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(1, "str2") :: Nil)
     testData.toDF().registerTempTable("test_describe_commands2")
@@ -823,7 +822,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   test("ADD JAR command") {
-    val testJar = TestHive.getHiveFile("data/files/TestSerDe.jar").getCanonicalPath
+    val testJar = getHiveFile("data/files/TestSerDe.jar").getCanonicalPath
     sql("CREATE TABLE alter1(a INT, b INT)")
     intercept[Exception] {
       sql(
@@ -836,8 +835,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("ADD JAR command 2") {
     // this is a test case from mapjoin_addjar.q
-    val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
-    val testData = TestHive.getHiveFile("data/files/sample.json").getCanonicalPath
+    val testJar = getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
+    val testData = getHiveFile("data/files/sample.json").getCanonicalPath
     sql(s"ADD JAR $testJar")
     sql(
       """CREATE TABLE t1(a string, b string)
@@ -848,7 +847,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   test("ADD FILE command") {
-    val testFile = TestHive.getHiveFile("data/files/v1.txt").getCanonicalFile
+    val testFile = getHiveFile("data/files/v1.txt").getCanonicalFile
     sql(s"ADD FILE $testFile")
 
     val checkAddFileRDD = sparkContext.parallelize(1 to 2, 1).mapPartitions { _ =>

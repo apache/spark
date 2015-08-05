@@ -17,24 +17,19 @@
 
 package org.apache.spark.sql.hive
 
-import org.scalatest.BeforeAndAfterAll
-
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.{Row, SQLConf, QueryTest}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.hive.test.MyTestHiveContext
 
-class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
-
-  private lazy val ctx: HiveContext = {
-    val ctx = org.apache.spark.sql.hive.test.TestHive
-    ctx.reset()
-    ctx.cacheTables = false
-    ctx
-  }
-
+class StatisticsSuite extends QueryTest with MyTestHiveContext {
+  private val ctx = hiveContext
   import ctx.sql
+
+  ctx.reset()
+  ctx.cacheTables = false
 
   test("parse analyze commands") {
     def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {

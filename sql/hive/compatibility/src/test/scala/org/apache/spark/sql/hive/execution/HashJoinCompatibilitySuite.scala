@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 
 import org.apache.spark.sql.SQLConf
-import org.apache.spark.sql.hive.test.TestHive
 
 /**
  * Runs the test cases that are included in the hive distribution with hash joins.
@@ -28,11 +27,11 @@ import org.apache.spark.sql.hive.test.TestHive
 class HashJoinCompatibilitySuite extends HiveCompatibilitySuite {
   override def beforeAll() {
     super.beforeAll()
-    TestHive.setConf(SQLConf.SORTMERGE_JOIN, false)
+    ctx.setConf(SQLConf.SORTMERGE_JOIN, false)
   }
 
   override def afterAll() {
-    TestHive.setConf(SQLConf.SORTMERGE_JOIN, true)
+    ctx.setConf(SQLConf.SORTMERGE_JOIN, true)
     super.afterAll()
   }
 

@@ -22,12 +22,14 @@ import scala.util.Try
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.test.MyTestHiveContext
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 
 
-class ErrorPositionSuite extends QueryTest with BeforeAndAfter {
+class ErrorPositionSuite extends QueryTest with BeforeAndAfter with MyTestHiveContext {
+  private val ctx = hiveContext
+  import ctx.implicits._
+  import ctx._
 
   before {
     Seq((1, 1, 1)).toDF("a", "a", "b").registerTempTable("dupAttributes")

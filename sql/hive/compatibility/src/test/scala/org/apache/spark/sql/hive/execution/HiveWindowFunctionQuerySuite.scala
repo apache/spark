@@ -22,8 +22,6 @@ import java.util.{Locale, TimeZone}
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.util.Utils
 
 /**
@@ -33,12 +31,14 @@ import org.apache.spark.util.Utils
  * files, every `createQueryTest` calls should explicitly set `reset` to `false`.
  */
 class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfter {
+  import ctx._
+  
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
   private val testTempDir = Utils.createTempDir()
 
   override def beforeAll() {
-    TestHive.cacheTables = true
+    ctx.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
@@ -59,7 +59,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
         |  p_retailprice DOUBLE,
         |  p_comment STRING)
       """.stripMargin)
-    val testData1 = TestHive.getHiveFile("data/files/part_tiny.txt").getCanonicalPath
+    val testData1 = ctx.getHiveFile("data/files/part_tiny.txt").getCanonicalPath
     sql(
       s"""
         |LOAD DATA LOCAL INPATH '$testData1' overwrite into table part
@@ -83,7 +83,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
         |row format delimited
         |fields terminated by '|'
       """.stripMargin)
-    val testData2 = TestHive.getHiveFile("data/files/over1k").getCanonicalPath
+    val testData2 = ctx.getHiveFile("data/files/over1k").getCanonicalPath
     sql(
       s"""
         |LOAD DATA LOCAL INPATH '$testData2' overwrite into table over1k
@@ -100,10 +100,10 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
   }
 
   override def afterAll() {
-    TestHive.cacheTables = false
+    ctx.cacheTables = false
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
-    TestHive.reset()
+    ctx.reset()
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -766,7 +766,7 @@ class HiveWindowFunctionQueryFileSuite
   private val testTempDir = Utils.createTempDir()
 
   override def beforeAll() {
-    TestHive.cacheTables = true
+    ctx.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
@@ -783,10 +783,10 @@ class HiveWindowFunctionQueryFileSuite
   }
 
   override def afterAll() {
-    TestHive.cacheTables = false
+    ctx.cacheTables = false
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
-    TestHive.reset()
+    ctx.reset()
   }
 
   override def blackList: Seq[String] = Seq(

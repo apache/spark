@@ -22,62 +22,60 @@ import java.io.File
 import org.apache.hadoop.hive.conf.HiveConf
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.{QueryTest, _}
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.hive.test.MyTestHiveContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-
-/* Implicits */
-import org.apache.spark.sql.hive.test.TestHive._
 
 case class TestData(key: Int, value: String)
 
 case class ThreeCloumntable(key: Int, value: String, key1: String)
 
-class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
-  import org.apache.spark.sql.hive.test.TestHive.implicits._
+class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter with MyTestHiveContext {
+  private val ctx = hiveContext
+  import ctx.implicits._
+  import ctx._
 
-
-  val testData = TestHive.sparkContext.parallelize(
+  private val _testData = sparkContext.parallelize(
     (1 to 100).map(i => TestData(i, i.toString))).toDF()
 
   before {
     // Since every we are doing tests for DDL statements,
     // it is better to reset before every test.
-    TestHive.reset()
+    reset()
     // Register the testData, which will be used in every test.
-    testData.registerTempTable("testData")
+    _testData.registerTempTable("testData")
   }
 
   test("insertInto() HiveTable") {
     sql("CREATE TABLE createAndInsertTest (key int, value string)")
 
     // Add some data.
-    testData.write.mode(SaveMode.Append).insertInto("createAndInsertTest")
+    _testData.write.mode(SaveMode.Append).insertInto("createAndInsertTest")
 
     // Make sure the table has also been updated.
     checkAnswer(
       sql("SELECT * FROM createAndInsertTest"),
-      testData.collect().toSeq
+      _testData.collect().toSeq
     )
 
     // Add more data.
-    testData.write.mode(SaveMode.Append).insertInto("createAndInsertTest")
+    _testData.write.mode(SaveMode.Append).insertInto("createAndInsertTest")
 
     // Make sure the table has been updated.
     checkAnswer(
       sql("SELECT * FROM createAndInsertTest"),
-      testData.toDF().collect().toSeq ++ testData.toDF().collect().toSeq
+      _testData.toDF().collect().toSeq ++ _testData.toDF().collect().toSeq
     )
 
     // Now overwrite.
-    testData.write.mode(SaveMode.Overwrite).insertInto("createAndInsertTest")
+    _testData.write.mode(SaveMode.Overwrite).insertInto("createAndInsertTest")
 
     // Make sure the registered table has also been updated.
     checkAnswer(
       sql("SELECT * FROM createAndInsertTest"),
-      testData.collect().toSeq
+      _testData.collect().toSeq
     )
   }
 
@@ -96,9 +94,9 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
 
   test("SPARK-4052: scala.collection.Map as value type of MapType") {
     val schema = StructType(StructField("m", MapType(StringType, StringType), true) :: Nil)
-    val rowRDD = TestHive.sparkContext.parallelize(
+    val rowRDD = sparkContext.parallelize(
       (1 to 100).map(i => Row(scala.collection.mutable.HashMap(s"key$i" -> s"value$i"))))
-    val df = TestHive.createDataFrame(rowRDD, schema)
+    val df = createDataFrame(rowRDD, schema)
     df.registerTempTable("tableWithMapValue")
     sql("CREATE TABLE hiveTableWithMapValue(m MAP <STRING, STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithMapValue SELECT m FROM tableWithMapValue")
@@ -169,8 +167,8 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
   test("Insert ArrayType.containsNull == false") {
     val schema = StructType(Seq(
       StructField("a", ArrayType(StringType, containsNull = false))))
-    val rowRDD = TestHive.sparkContext.parallelize((1 to 100).map(i => Row(Seq(s"value$i"))))
-    val df = TestHive.createDataFrame(rowRDD, schema)
+    val rowRDD = sparkContext.parallelize((1 to 100).map(i => Row(Seq(s"value$i"))))
+    val df = createDataFrame(rowRDD, schema)
     df.registerTempTable("tableWithArrayValue")
     sql("CREATE TABLE hiveTableWithArrayValue(a Array <STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithArrayValue SELECT a FROM tableWithArrayValue")
@@ -185,9 +183,9 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
   test("Insert MapType.valueContainsNull == false") {
     val schema = StructType(Seq(
       StructField("m", MapType(StringType, StringType, valueContainsNull = false))))
-    val rowRDD = TestHive.sparkContext.parallelize(
+    val rowRDD = sparkContext.parallelize(
       (1 to 100).map(i => Row(Map(s"key$i" -> s"value$i"))))
-    val df = TestHive.createDataFrame(rowRDD, schema)
+    val df = createDataFrame(rowRDD, schema)
     df.registerTempTable("tableWithMapValue")
     sql("CREATE TABLE hiveTableWithMapValue(m Map <STRING, STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithMapValue SELECT m FROM tableWithMapValue")
@@ -202,9 +200,9 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
   test("Insert StructType.fields.exists(_.nullable == false)") {
     val schema = StructType(Seq(
       StructField("s", StructType(Seq(StructField("f", StringType, nullable = false))))))
-    val rowRDD = TestHive.sparkContext.parallelize(
+    val rowRDD = sparkContext.parallelize(
       (1 to 100).map(i => Row(Row(s"value$i"))))
-    val df = TestHive.createDataFrame(rowRDD, schema)
+    val df = createDataFrame(rowRDD, schema)
     df.registerTempTable("tableWithStructValue")
     sql("CREATE TABLE hiveTableWithStructValue(s Struct <f: STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithStructValue SELECT s FROM tableWithStructValue")
@@ -217,11 +215,11 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
   }
 
   test("SPARK-5498:partition schema does not match table schema") {
-    val testData = TestHive.sparkContext.parallelize(
+    val testData = sparkContext.parallelize(
       (1 to 10).map(i => TestData(i, i.toString))).toDF()
     testData.registerTempTable("testData")
 
-    val testDatawithNull = TestHive.sparkContext.parallelize(
+    val testDatawithNull = sparkContext.parallelize(
       (1 to 10).map(i => ThreeCloumntable(i, i.toString, null))).toDF()
 
     val tmpDir = Utils.createTempDir()

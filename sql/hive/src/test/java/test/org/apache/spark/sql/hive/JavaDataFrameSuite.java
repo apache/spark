@@ -30,7 +30,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.expressions.Window;
 import org.apache.spark.sql.hive.HiveContext;
-import org.apache.spark.sql.hive.test.TestHive$;
+import org.apache.spark.sql.hive.test.TestHiveContext;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext sc;
@@ -47,7 +47,7 @@ public class JavaDataFrameSuite {
 
   @Before
   public void setUp() throws IOException {
-    hc = TestHive$.MODULE$;
+    hc = new TestHiveContext();
     sc = new JavaSparkContext(hc.sparkContext());
 
     List<String> jsonObjects = new ArrayList<String>(10);

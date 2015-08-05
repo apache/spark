@@ -17,19 +17,18 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.scalatest.BeforeAndAfterAll
-
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.MyTestHiveContext
 
 /**
  * A set of tests that validates support for Hive SerDe.
  */
-class HiveSerDeSuite extends HiveComparisonTest with BeforeAndAfterAll {
+class HiveSerDeSuite extends HiveComparisonTest with MyTestHiveContext {
+  import org.apache.hadoop.hive.serde2.RegexSerDe
+  import ctx._
+
   override def beforeAll(): Unit = {
-    import TestHive._
-    import org.apache.hadoop.hive.serde2.RegexSerDe
-      super.beforeAll()
-    TestHive.cacheTables = false
+    super.beforeAll()
+    ctx.cacheTables = false
     sql(s"""CREATE TABLE IF NOT EXISTS sales (key STRING, value INT)
        |ROW FORMAT SERDE '${classOf[RegexSerDe].getCanonicalName}'
        |WITH SERDEPROPERTIES ("input.regex" = "([^ ]*)\t([^ ]*)")

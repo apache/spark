@@ -42,30 +42,12 @@ import org.apache.spark.{SparkConf, SparkContext}
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
-// TODO: remove it
-object TestHive
-  extends TestHiveContext(
-    new SparkContext(
-      System.getProperty("spark.sql.test.master", "local[32]"),
-      "TestSQLContext",
-      new SparkConf()
-        .set("spark.sql.test", "")
-        .set("spark.sql.hive.metastore.barrierPrefixes",
-          "org.apache.spark.sql.hive.execution.PairSerDe")
-        .set("spark.buffer.pageSize", "4m")
-        // SPARK-8910
-        .set("spark.ui.enabled", "false")))
-
 /**
  * A locally running test instance of Spark's Hive execution engine.
  *
  * Data from [[testTables]] will be automatically loaded whenever a query is run over those tables.
  * Calling [[reset]] will delete all tables and other state in the database, leaving the database
  * in a "clean" state.
- *
- * TestHive is singleton object version of this class because instantiating multiple copies of the
- * hive metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of
- * test cases that rely on TestHive must be serialized.
  */
 class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   self =>

@@ -17,16 +17,13 @@
 
 package org.apache.spark.sql.hive
 
-import org.scalatest.BeforeAndAfterAll
+import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.hive.test.MyTestHiveContext
 
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.Row
-
-class ListTablesSuite extends QueryTest with BeforeAndAfterAll {
-
-  import org.apache.spark.sql.hive.test.TestHive.implicits._
+class ListTablesSuite extends QueryTest with MyTestHiveContext {
+  private val ctx = hiveContext
+  import ctx.implicits._
+  import ctx._
 
   val df =
     sparkContext.parallelize((1 to 10).map(i => (i, s"str$i"))).toDF("key", "value")

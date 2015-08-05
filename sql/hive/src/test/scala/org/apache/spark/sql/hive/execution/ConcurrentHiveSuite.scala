@@ -17,19 +17,24 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.sql.hive.test.TestHiveContext
-import org.scalatest.BeforeAndAfterAll
 
 class ConcurrentHiveSuite extends SparkFunSuite with BeforeAndAfterAll {
   ignore("multiple instances not supported") {
     test("Multiple Hive Instances") {
       (1 to 10).map { i =>
-        val ts =
-          new TestHiveContext(new SparkContext("local", s"TestSQLContext$i", new SparkConf()))
-        ts.executeSql("SHOW TABLES").toRdd.collect()
-        ts.executeSql("SELECT * FROM src").toRdd.collect()
-        ts.executeSql("SHOW TABLES").toRdd.collect()
+        val sc = new SparkContext("local", s"TestSQLContext$i", new SparkConf())
+        try {
+          val ts = new TestHiveContext(sc)
+          ts.executeSql("SHOW TABLES").toRdd.collect()
+          ts.executeSql("SELECT * FROM src").toRdd.collect()
+          ts.executeSql("SHOW TABLES").toRdd.collect()
+        } finally {
+          sc.stop()
+        }
       }
     }
   }

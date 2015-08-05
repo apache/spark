@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo}
 import org.apache.spark.sql.execution.Project
-import org.apache.spark.sql.hive.test.TestHive
 
 /**
  * A set of tests that validate type promotion and coercion rules.
@@ -43,7 +42,7 @@ class HiveTypeCoercionSuite extends HiveComparisonTest {
 
   test("[SPARK-2210] boolean cast on boolean value should be removed") {
     val q = "select cast(cast(key=0 as boolean) as boolean) from src"
-    val project = TestHive.sql(q).queryExecution.executedPlan.collect { case e: Project => e }.head
+    val project = ctx.sql(q).queryExecution.executedPlan.collect { case e: Project => e }.head
 
     // No cast expression introduced
     project.transformAllExpressions { case c: Cast =>

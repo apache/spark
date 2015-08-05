@@ -23,41 +23,41 @@ import java.util.{Locale, TimeZone}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.SQLConf
-import org.apache.spark.sql.hive.test.TestHive
 
 /**
  * Runs the test cases that are included in the hive distribution.
  */
 class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
+
   // TODO: bundle in jar files... get from classpath
-  private lazy val hiveQueryDir = TestHive.getHiveFile(
+  private lazy val hiveQueryDir = ctx.getHiveFile(
     "ql/src/test/queries/clientpositive".split("/").mkString(File.separator))
 
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
-  private val originalColumnBatchSize = TestHive.conf.columnBatchSize
-  private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
+  private val originalColumnBatchSize = ctx.conf.columnBatchSize
+  private val originalInMemoryPartitionPruning = ctx.conf.inMemoryPartitionPruning
 
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
   override def beforeAll() {
-    TestHive.cacheTables = true
+  ctx.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
     // Set a relatively small column batch size for testing purposes
-    TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, 5)
+    ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, 5)
     // Enable in-memory partition pruning for testing purposes
-    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
+    ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
   }
 
   override def afterAll() {
-    TestHive.cacheTables = false
+    ctx.cacheTables = false
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
-    TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
-    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
+    ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
+    ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */

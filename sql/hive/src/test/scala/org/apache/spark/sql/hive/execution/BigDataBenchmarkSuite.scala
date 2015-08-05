@@ -19,17 +19,19 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 
-import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.MyTestHiveContext
 
 /**
  * A set of test cases based on the big-data-benchmark.
  * https://amplab.cs.berkeley.edu/benchmark/
  */
-class BigDataBenchmarkSuite extends HiveComparisonTest {
-  val testDataDirectory = new File("target" + File.separator + "big-data-benchmark-testdata")
+class BigDataBenchmarkSuite extends HiveComparisonTest with MyTestHiveContext {
+  import ctx._
 
-  val userVisitPath = new File(testDataDirectory, "uservisits").getCanonicalPath
-  val testTables = Seq(
+  private val testDataDirectory =
+    new File("target" + File.separator + "big-data-benchmark-testdata")
+  private val userVisitPath = new File(testDataDirectory, "uservisits").getCanonicalPath
+  private val testTables = Seq(
     TestTable(
       "rankings",
       s"""

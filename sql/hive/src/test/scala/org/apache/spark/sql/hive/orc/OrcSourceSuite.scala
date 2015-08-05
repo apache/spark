@@ -19,14 +19,16 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfterAll
-
-import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.hive.test.MyTestHiveContext
 
 case class OrcData(intField: Int, stringField: String)
 
-abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
+abstract class OrcSuite extends QueryTest with MyTestHiveContext {
+  protected val ctx = hiveContext
+  import ctx.implicits._
+  import ctx._
+
   var orcTableDir: File = null
   var orcTableAsDir: File = null
 
@@ -41,7 +43,6 @@ abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
     orcTableDir = File.createTempFile("orctests", "sparksql")
     orcTableDir.delete()
     orcTableDir.mkdir()
-    import org.apache.spark.sql.hive.test.TestHive.implicits._
 
     sparkContext
       .makeRDD(1 to 10)
@@ -124,6 +125,8 @@ abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
 }
 
 class OrcSourceSuite extends OrcSuite {
+  import ctx._
+
   override def beforeAll(): Unit = {
     super.beforeAll()
 
