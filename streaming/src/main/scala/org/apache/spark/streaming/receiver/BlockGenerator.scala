@@ -81,6 +81,22 @@ private[streaming] class BlockGenerator(
 
   private case class Block(id: StreamBlockId, buffer: ArrayBuffer[Any])
 
+  /**
+   * The BlockGenerator can be in 5 possible states, in the order as follows.
+   * - Initialized: Nothing has been started
+   * - Active: start() has been called, and it is generating blocks on added data.
+   * - StoppedAddingData: stop() has been called, the adding of data has been stopped,
+   *                      but blocks are still being generated and pushed.
+   * - StoppedGeneratingBlocks: Generating of blocks has been stopped, but
+   *                            they are still being pushed.
+   * - StoppedAll: Everything has stopped, and the BlockGenerator object can be GCed.
+   */
+  private object GeneratorState extends Enumeration {
+    type GeneratorState = Value
+    val Initialized, Active, StoppedAddingData, StoppedGeneratingBlocks, StoppedAll = Value
+  }
+  import GeneratorState._
+
   private val clock = new SystemClock()
   private val blockIntervalMs = conf.getTimeAsMs("spark.streaming.blockInterval", "200ms")
   require(blockIntervalMs > 0, s"'spark.streaming.blockInterval' should be a positive value")
@@ -92,11 +108,12 @@ private[streaming] class BlockGenerator(
   private val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
 
   @volatile private var currentBuffer = new ArrayBuffer[Any]
-  @volatile private var stopped = false
+  @volatile private var state = Initialized
 
   /** Start block generating and pushing threads. */
-  def start(): Unit = {
-    if (!stopped) {
+  def start(): Unit = synchronized {
+    if (state == Initialized) {
+      state = Active
       blockIntervalTimer.start()
       blockPushingThread.start()
       logInfo("Started BlockGenerator")
@@ -105,27 +122,40 @@ private[streaming] class BlockGenerator(
     }
   }
 
-  /** Stop all threads. */
+  /**
+   * Stop everything in the right order such that all the data added is pushed out correctly.
+   * - First, stop adding data to the current buffer.
+   * - Second, stop generating blocks.
+   * - Finally, wait for queue of to-be-pushed blocks to be drained.
+   */
   def stop(): Unit = {
-    if (!stopped) {
-      // First stop generating block, then mark it as non-active and wait for pushing thread to stop
-      logInfo("Stopping BlockGenerator")
-      blockIntervalTimer.stop(interruptTimer = false)
-      stopped = true
-      logInfo("Waiting for block pushing thread")
-      blockPushingThread.join()
-      logInfo("Stopped BlockGenerator")
-    } else {
-      logWarning("BlockGenerator not started")
+    // Set the state to stop adding data
+    synchronized {
+      if (state == Active) {
+        state = StoppedAddingData
+      } else {
+        logWarning("BlockGenerator not started")
+        return
+      }
     }
+
+    // Stop generating blocks and set the state for block pushing thread to start draining the queue
+    logInfo("Stopping BlockGenerator")
+    blockIntervalTimer.stop(interruptTimer = false)
+    synchronized { state = StoppedGeneratingBlocks }
+
+    // Wait for the queue to drain and mark generated as stopped
+    logInfo("Waiting for block pushing thread to terminate")
+    blockPushingThread.join()
+    logInfo("Stopped BlockGenerator")
+    synchronized { state = StoppedAll }
   }
 
   /**
-   * Push a single data item into the buffer. All received data items
-   * will be periodically pushed into BlockManager.
+   * Push a single data item into the buffer.
    */
   def addData(data: Any): Unit = synchronized {
-    if (!stopped) {
+    if (state == Active) {
       waitToPush()
       currentBuffer += data
     } else {
@@ -136,11 +166,10 @@ private[streaming] class BlockGenerator(
 
   /**
    * Push a single data item into the buffer. After buffering the data, the
-   * `BlockGeneratorListener.onAddData` callback will be called. All received data items
-   * will be periodically pushed into BlockManager.
+   * `BlockGeneratorListener.onAddData` callback will be called.
    */
   def addDataWithCallback(data: Any, metadata: Any): Unit = synchronized {
-    if (!stopped) {
+    if (state == Active) {
       waitToPush()
       currentBuffer += data
       listener.onAddData(data, metadata)
@@ -152,12 +181,11 @@ private[streaming] class BlockGenerator(
 
   /**
    * Push multiple data items into the buffer. After buffering the data, the
-   * `BlockGeneratorListener.onAddData` callback will be called. All received data items
-   * will be periodically pushed into BlockManager. Note that all the data items is guaranteed
-   * to be present in a single block.
+   * `BlockGeneratorListener.onAddData` callback will be called. Note that all the data items
+   * are atomically added to the buffer, and are hence guaranteed to be present in a single block.
    */
   def addMultipleDataWithCallback(dataIterator: Iterator[Any], metadata: Any): Unit = synchronized {
-    if (!stopped) {
+    if (state == Active) {
       dataIterator.foreach { data =>
         waitToPush()
         currentBuffer += data
@@ -169,7 +197,7 @@ private[streaming] class BlockGenerator(
     }
   }
 
-  def isStopped(): Boolean = stopped
+  def isStopped(): Boolean = state == StoppedAll
 
   /** Change the buffer to which single records are added to. */
   private def updateCurrentBuffer(time: Long): Unit = synchronized {
@@ -194,18 +222,21 @@ private[streaming] class BlockGenerator(
   /** Keep pushing blocks to the BlockManager. */
   private def keepPushingBlocks() {
     logInfo("Started block pushing thread")
+
+    def isGeneratingBlocks = synchronized { state == Active || state == StoppedAddingData }
     try {
-      while (!stopped) {
-        Option(blocksForPushing.poll(100, TimeUnit.MILLISECONDS)) match {
+      while (isGeneratingBlocks) {
+        Option(blocksForPushing.poll(10, TimeUnit.MILLISECONDS)) match {
           case Some(block) => pushBlock(block)
           case None =>
         }
       }
-      // Push out the blocks that are still left
+
+      // At this point, state is StoppedGeneratingBlock. So drain the queue of to-be-pushed blocks.
       logInfo("Pushing out the last " + blocksForPushing.size() + " blocks")
       while (!blocksForPushing.isEmpty) {
-        logDebug("Getting block ")
         val block = blocksForPushing.take()
+        logDebug(s"Pushing block $block")
         pushBlock(block)
         logInfo("Blocks left to push " + blocksForPushing.size())
       }
