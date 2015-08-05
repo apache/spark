@@ -1069,6 +1069,7 @@ class Airflow(BaseView):
 
     @expose('/graph')
     @login_required
+    @wwwutils.gzipped
     def graph(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
