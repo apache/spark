@@ -44,9 +44,6 @@ case class SortMergeJoin(
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
-  // this is to manually construct an ordering that can be used to compare keys from both sides
-  private val keyOrdering: RowOrdering = RowOrdering.forSchema(leftKeys.map(_.dataType))
-
   override def outputOrdering: Seq[SortOrder] = requiredOrders(leftKeys)
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
@@ -55,12 +52,16 @@ case class SortMergeJoin(
   @transient protected lazy val leftKeyGenerator = newProjection(leftKeys, left.output)
   @transient protected lazy val rightKeyGenerator = newProjection(rightKeys, right.output)
 
-  private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] =
+  private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] = {
+    // This must be ascending in order to agree with the `keyOrdering` defined in `doExecute()`.
     keys.map(SortOrder(_, Ascending))
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       new Iterator[InternalRow] {
+        // An ordering that can be used to compare keys from both sides.
+        private[this] val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
         private[this] var currentLeftRow: InternalRow = _
         private[this] var currentRightMatches: CompactBuffer[InternalRow] = _
         private[this] var currentMatchIdx: Int = -1
@@ -118,7 +119,7 @@ case class SortMergeJoin(
 private[joins] class SortMergeJoinScanner(
     streamedKeyGenerator: Projection,
     buildKeyGenerator: Projection,
-    keyOrdering: RowOrdering,
+    keyOrdering: Ordering[InternalRow],
     streamedIter: Iterator[InternalRow],
     buildIter: Iterator[InternalRow]) {
   private[this] var streamedRow: InternalRow = _

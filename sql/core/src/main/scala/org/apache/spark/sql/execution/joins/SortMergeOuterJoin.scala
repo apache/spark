@@ -44,9 +44,6 @@ case class SortMergeOuterJoin(
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
-  // this is to manually construct an ordering that can be used to compare keys from both sides
-  private val keyOrdering: RowOrdering = RowOrdering.forSchema(leftKeys.map(_.dataType))
-
   override def outputOrdering: Seq[SortOrder] = joinType match {
     case FullOuter => Nil // when doing Full Outer join, NULL rows from both sides are not ordered.
     case _ => requiredOrders(leftKeys)
@@ -55,12 +52,16 @@ case class SortMergeOuterJoin(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     requiredOrders(leftKeys) :: requiredOrders(rightKeys) :: Nil
 
-  private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] =
+  private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] = {
+    // This must be ascending in order to agree with the `keyOrdering` defined in `doExecute()`.
     keys.map(SortOrder(_, Ascending))
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val joinedRow = new JoinedRow()
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
+      // An ordering that can be used to compare keys from both sides.
+      val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
       joinType match {
         case LeftOuter =>
           val smjScanner = new SortMergeJoinScanner(
