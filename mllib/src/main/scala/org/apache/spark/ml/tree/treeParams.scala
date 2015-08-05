@@ -163,7 +163,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
       oldAlgo: OldAlgo.Algo,
       oldImpurity: OldImpurity,
       subsamplingRate: Double): OldStrategy = {
-    val strategy = OldStrategy.defaultStategy(oldAlgo)
+    val strategy = OldStrategy.defaultStrategy(oldAlgo)
     strategy.impurity = oldImpurity
     strategy.checkpointInterval = getCheckpointInterval
     strategy.maxBins = getMaxBins
