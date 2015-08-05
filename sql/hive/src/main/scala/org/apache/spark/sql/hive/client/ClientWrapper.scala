@@ -33,6 +33,7 @@ import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.ql.{Driver, metadata}
 import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
+import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -67,36 +68,45 @@ private[hive] class ClientWrapper(
 
   // !! HACK ALERT !!
   //
-  // This method is used to workaround CDH Hadoop versions like 2.0.0-mr1-cdh4.1.1.
+  // This method is a surgical fix for Hadoop version 2.0.0-mr1-cdh4.1.1, which is used by Spark EC2
+  // scripts.  We should remove this after upgrading Spark EC2 scripts to some more recent Hadoop
+  // version in the future.
   //
   // Internally, Hive `ShimLoader` tries to load different versions of Hadoop shims by checking
   // version information gathered from Hadoop jar files.  If the major version number is 1,
   // `Hadoop20SShims` will be loaded.  Otherwise, if the major version number is 2, `Hadoop23Shims`
   // will be chosen.
   //
-  // However, part of APIs in Hadoop 2.0.x and 2.1.x versions were in flux due to historical reasons.
-  // So CDH Hadoop versions like 2.0.0-mr1-cdh4.1.1 are more Hadoop-1-like, but have a major version
-  // of 2.  This confuses Hive `ShimLoader` and loads wrong version of shims.
+  // However, part of APIs in Hadoop 2.0.x and 2.1.x versions were in flux due to historical
+  // reasons. So 2.0.0-mr1-cdh4.1.1 is actually more Hadoop-1-like and should be used together with
+  // `Hadoop20SShims`, but `Hadoop20SShims` is chose because the major version number here is 2.
   //
-  // Here we check for existence of the `Path.getPathWithoutSchemeAndAuthority` method, which
-  // doesn't exist in Hadoop 1 and 2.0.x (it's also the method that reveals this shims loading
-  // issue), and load `Hadoop20SShims` when it doesn't exist.
+  // Here we check for this specific version and loads `Hadoop20SShims` via reflection.  Note that
+  // we can't check for string literal "2.0.0-mr1-cdh4.1.1" because the obtained version string
+  // comes from Maven artifact org.apache.hadoop:hadoop-common:2.0.0-cdh4.1.1, which doesn't have
+  // the "mr1" tag in its version string.
   private def overrideHadoopShims(): Unit = {
-    if (!classOf[Path].getDeclaredMethods.exists(_.getName == "getPathWithoutSchemeAndAuthority")) {
-      val shimClassName = "org.apache.hadoop.hive.shims.Hadoop20SShims"
+    val VersionPattern = """2\.0\.0.*cdh4.*""".r
 
-      try {
-        val shimsField = classOf[ShimLoader].getDeclaredField("hadoopShims")
-        // scalastyle:off classforname
-        val shimsClass = Class.forName(shimClassName)
-        // scalastyle:on classforname
-        val shims = classOf[HadoopShims].cast(shimsClass.newInstance())
-        shimsField.setAccessible(true)
-        shimsField.set(null, shims)
-      } catch { case cause: Throwable =>
-        logError(s"Failed to load $shimClassName")
-        // Falls back to normal Hive `ShimLoader` logic
-      }
+    VersionInfo.getVersion match {
+      case VersionPattern() =>
+        val shimClassName = "org.apache.hadoop.hive.shims.Hadoop20SShims"
+        logInfo(s"Loading Hadoop shims $shimClassName")
+
+        try {
+          val shimsField = classOf[ShimLoader].getDeclaredField("hadoopShims")
+          // scalastyle:off classforname
+          val shimsClass = Class.forName(shimClassName)
+          // scalastyle:on classforname
+          val shims = classOf[HadoopShims].cast(shimsClass.newInstance())
+          shimsField.setAccessible(true)
+          shimsField.set(null, shims)
+        } catch { case cause: Throwable =>
+          logError(s"Failed to load $shimClassName")
+          // Falls back to normal Hive `ShimLoader` logic
+        }
+
+      case _ =>
     }
   }
 
