@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+import org.apache.spark.sql.types.DataType
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Accumulator, Logging}
@@ -309,12 +311,21 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
             throw e
           } else {
             log.error("Failed to generate ordering, fallback to interpreted", e)
-            new RowOrdering(order, inputSchema)
+            new InterpretedOrdering(order, inputSchema)
           }
       }
     } else {
-      new RowOrdering(order, inputSchema)
+      new InterpretedOrdering(order, inputSchema)
     }
+  }
+  /**
+   * Creates a row ordering for the given schema, in natural ascending order.
+   */
+  protected def newNaturalAscendingOrdering(dataTypes: Seq[DataType]): Ordering[InternalRow] = {
+    val order: Seq[SortOrder] = dataTypes.zipWithIndex.map {
+      case (dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    }
+    newOrdering(order, Seq.empty)
   }
 }
 
