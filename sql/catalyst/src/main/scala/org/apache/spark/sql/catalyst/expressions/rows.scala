@@ -51,7 +51,7 @@ trait BaseGenericInternalRow extends InternalRow {
 
   override def toString(): String = {
     if (numFields == 0) {
-      "[ empty row ]"
+      "[empty row]"
     } else {
       val sb = new StringBuilder
       sb.append("[")
