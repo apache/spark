@@ -32,6 +32,74 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
 
   override def sqlContext(): SQLContext = ctx
 
+  test("column names with space") {
+    val df = Seq((1, "a")).toDF("name with space", "name.with.dot")
+
+    checkAnswer(
+      df.select(df("name with space")),
+      Row(1) :: Nil)
+
+    checkAnswer(
+      df.select($"name with space"),
+      Row(1) :: Nil)
+
+    checkAnswer(
+      df.select(col("name with space")),
+      Row(1) :: Nil)
+
+    checkAnswer(
+      df.select("name with space"),
+      Row(1) :: Nil)
+
+    checkAnswer(
+      df.select(expr("`name with space`")),
+      Row(1) :: Nil)
+  }
+
+  test("column names with dot") {
+    val df = Seq((1, "a")).toDF("name with space", "name.with.dot").as("a")
+
+    checkAnswer(
+      df.select(df("`name.with.dot`")),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select($"`name.with.dot`"),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select(col("`name.with.dot`")),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select("`name.with.dot`"),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select(expr("`name.with.dot`")),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select(df("a.`name.with.dot`")),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select($"a.`name.with.dot`"),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select(col("a.`name.with.dot`")),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select("a.`name.with.dot`"),
+      Row("a") :: Nil)
+
+    checkAnswer(
+      df.select(expr("a.`name.with.dot`")),
+      Row("a") :: Nil)
+  }
+
   test("alias") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     assert(df.select(df("a").as("b")).columns.head === "b")
