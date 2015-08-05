@@ -280,7 +280,7 @@ public class ExternalShuffleBlockResolver {
    */
   private void saveRegisteredExecutors() throws IOException {
     if (registeredExecutorFile != null) {
-      File tmp = File.createTempFile("registeredExecutors",".bin");
+      File tmp = new File(registeredExecutorFile.getAbsolutePath() + ".tmp");
       ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(tmp));
       out.writeObject(executors);
       out.close();

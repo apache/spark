@@ -51,7 +51,6 @@ abstract class BaseYarnClusterSuite
   private var hadoopConfDir: File = _
   private var logConfDir: File = _
 
-
   def yarnConfig: YarnConfiguration
 
   override def beforeAll() {

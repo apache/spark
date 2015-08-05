@@ -127,7 +127,7 @@ public class YarnShuffleService extends AuxiliaryService {
     // If we don't find one, then we choose a file to use to save the state next time.  However, we
     // do *not* immediately register all the executors in that file, just in case the application
     // was terminated while the NM was restarting.  We wait until yarn tells the service about the
-    // app again via #initializeApplication, so we know its still running.  That is important
+    // app again via #initializeApplication, so we know it's still running.  That is important
     // for preventing a leak where the app data would stick around *forever*.  This does leave
     // a small race -- if the NM restarts *again*, after only some of the existing apps have been
     // re-registered, the info of the remaining apps is lost.
@@ -266,19 +266,25 @@ public class YarnShuffleService extends AuxiliaryService {
       File file
   ) throws IOException, ClassNotFoundException {
     Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> result = new HashMap<>();
-    ObjectInputStream in = new ObjectInputStream(new FileInputStream(file));
-    Map<AppExecId, ExecutorShuffleInfo> registeredExecutors =
-      (Map<AppExecId, ExecutorShuffleInfo>) in.readObject();
-    for (Entry<AppExecId, ExecutorShuffleInfo> e: registeredExecutors.entrySet()) {
-      List<Map.Entry<AppExecId, ExecutorShuffleInfo>> executorsForApp =
-        result.get(e.getKey().appId);
-      if (executorsForApp == null) {
-        executorsForApp = new ArrayList<>();
-        result.put(e.getKey().appId, executorsForApp);
+    ObjectInputStream in = null;
+    try {
+      in = new ObjectInputStream(new FileInputStream(file));
+      Map<AppExecId, ExecutorShuffleInfo> registeredExecutors =
+        (Map<AppExecId, ExecutorShuffleInfo>) in.readObject();
+      for (Entry<AppExecId, ExecutorShuffleInfo> e : registeredExecutors.entrySet()) {
+        List<Map.Entry<AppExecId, ExecutorShuffleInfo>> executorsForApp =
+          result.get(e.getKey().appId);
+        if (executorsForApp == null) {
+          executorsForApp = new ArrayList<>();
+          result.put(e.getKey().appId, executorsForApp);
+        }
+        executorsForApp.add(new AbstractMap.SimpleImmutableEntry<>(e.getKey(), e.getValue()));
       }
-      executorsForApp.add(new AbstractMap.SimpleImmutableEntry<>(e.getKey(), e.getValue()));
+    } finally {
+      if (in != null) {
+        in.close();
+      }
     }
-    in.close();
     return result;
   }
 
