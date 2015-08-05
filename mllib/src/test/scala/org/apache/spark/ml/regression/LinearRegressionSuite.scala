@@ -145,7 +145,6 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert(modelWithoutIntercept.intercept ~== 0 absTol 1E-3)
     assert(modelWithoutIntercept.weights ~= weightsWithoutInterceptR relTol 1E-3)
-
   }
 
   test("linear regression with intercept with L1 regularization") {

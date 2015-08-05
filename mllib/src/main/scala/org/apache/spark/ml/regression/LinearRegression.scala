@@ -823,4 +823,3 @@ private class HuberCostFun(
     (loss, gradient.toBreeze.asInstanceOf[BDV[Double]])
   }
 }
-
