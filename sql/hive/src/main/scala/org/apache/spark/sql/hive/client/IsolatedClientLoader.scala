@@ -127,7 +127,8 @@ private[hive] class IsolatedClientLoader(
     name.startsWith("org.apache.hadoop.") ||
     name.startsWith("scala.") ||
     (name.startsWith("com.google") && !name.startsWith("com.google.cloud")) ||
-    name.startsWith("java.") ||
+    name.startsWith("java.lang.") ||
+    name.startsWith("java.net") ||
     sharedPrefixes.exists(name.startsWith)
 
   /** True if `name` refers to a spark class that must see specific version of Hive. */
