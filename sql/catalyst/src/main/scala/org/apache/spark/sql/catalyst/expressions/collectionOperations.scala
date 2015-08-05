@@ -156,7 +156,10 @@ case class ArrayContains(left: Expression, right: Expression)
       if (value == null) {
         false
       } else {
-        arr.asInstanceOf[ArrayData].toArray[Any](right.dataType).contains(value)
+        arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
+          if (v == value) return true
+        )
+        false
       }
     }
   }
