@@ -23,6 +23,7 @@ from pyspark.sql.types import *
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
 
+
 def to_str(value):
     """
     A wrapper over str(), but convert bool values to lower case string
@@ -31,6 +32,7 @@ def to_str(value):
         return str(value).lower()
     else:
         return str(value)
+
 
 class DataFrameReader(object):
     """
