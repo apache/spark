@@ -82,7 +82,8 @@ class TungstenAggregationIterator(
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
     originalInputAttributes: Seq[Attribute],
-    inputIter: Iterator[UnsafeRow])
+    inputIter: Iterator[UnsafeRow],
+    testFallbackStartsAt: Option[Int])
   extends Iterator[UnsafeRow] with Logging {
 
   ///////////////////////////////////////////////////////////////////////////
@@ -349,7 +350,7 @@ class TungstenAggregationIterator(
   // it first uses hash-based aggregation by putting groups and their buffers in
   // hashMap. If we could not allocate more memory for the map, we switch to
   // sort-based aggregation (by calling switchToSortBasedAggregation).
-  protected def processInputs(): Unit = {
+  private def processInputs(): Unit = {
     while (!sortBased && inputIter.hasNext) {
       val newInput = inputIter.next()
       val groupingKey = groupProjection.apply(newInput)
@@ -361,6 +362,30 @@ class TungstenAggregationIterator(
       } else {
         processRow(buffer, newInput)
       }
+    }
+  }
+
+  // This function is only used for testing. It basically the same as processInputs except
+  // that it switch to sort-based aggregation after `fallbackStartsAt` input rows have
+  // been processed.
+  private def processInputsWithControlledFallback(fallbackStartsAt: Int): Unit = {
+    var i = 0
+    while (!sortBased && inputIter.hasNext) {
+      val newInput = inputIter.next()
+      val groupingKey = groupProjection.apply(newInput)
+      val buffer: UnsafeRow = if (i < fallbackStartsAt) {
+        hashMap.getAggregationBuffer(groupingKey)
+      } else {
+        null
+      }
+      if (buffer == null) {
+        // buffer == null means that we could not allocate more memory.
+        // Now, we need to spill the map and switch to sort-based aggregation.
+        switchToSortBasedAggregation(groupingKey, newInput)
+      } else {
+        processRow(buffer, newInput)
+      }
+      i += 1
     }
   }
 
@@ -552,7 +577,15 @@ class TungstenAggregationIterator(
   ///////////////////////////////////////////////////////////////////////////
 
   // Starts to process input rows.
-  processInputs()
+  testFallbackStartsAt match {
+    case None =>
+      processInputs()
+    case Some(fallbackStartsAt) =>
+      // This is the testing path. processInputsWithControlledFallback is same as processInputs
+      // except that it switches to sort-based aggregation after `fallbackStartsAt` input rows
+      // have been processed.
+      processInputsWithControlledFallback(fallbackStartsAt)
+  }
 
   // If we did not switch to sort-based aggregation in processInputs,
   // we pre-load the first key-value pair from the map (to make hasNext idempotent).

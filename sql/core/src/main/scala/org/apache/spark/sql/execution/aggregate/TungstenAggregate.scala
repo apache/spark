@@ -51,6 +51,15 @@ case class TungstenAggregate(
     }
   }
 
+  // This is for testing. We force TungstenAggregationIterator to fall back to sort-based
+  // aggregation once it has processed a given number of input rows.
+  private val testFallbackStartsAt: Option[Int] = {
+    sqlContext.getConf("spark.sql.TungstenAggregate.testFallbackStartsAt", null) match {
+      case null | "" => None
+      case fallbackStartsAt => Some(fallbackStartsAt.toInt)
+    }
+  }
+
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
       val hasInput = iter.hasNext
@@ -68,7 +77,8 @@ case class TungstenAggregate(
             resultExpressions,
             newMutableProjection,
             child.output,
-            iter.asInstanceOf[Iterator[UnsafeRow]])
+            iter.asInstanceOf[Iterator[UnsafeRow]],
+            testFallbackStartsAt)
 
         if (!hasInput && groupingExpressions.isEmpty) {
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
@@ -81,6 +91,12 @@ case class TungstenAggregate(
 
   override def simpleString: String = {
     val allAggregateExpressions = nonCompleteAggregateExpressions ++ completeAggregateExpressions
-    s"""TungstenAggregate ${groupingExpressions} ${allAggregateExpressions}"""
+
+    testFallbackStartsAt match {
+      case None => s"TungstenAggregate ${groupingExpressions} ${allAggregateExpressions}"
+      case Some(fallbackStartsAt) =>
+        s"TungstenAggregateWithControlledFallback ${groupingExpressions} " +
+          s"${allAggregateExpressions} fallbackStartsAt=$fallbackStartsAt"
+    }
   }
 }

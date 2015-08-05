@@ -21,9 +21,9 @@ import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.sql.{SQLConf, AnalysisException, QueryTest, Row}
+import org.apache.spark.sql._
 import org.scalatest.BeforeAndAfterAll
-import test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
+import _root_.test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 
 abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
 
@@ -562,5 +562,60 @@ class TungstenAggregationQuerySuite extends AggregationQuerySuite {
   override def afterAll(): Unit = {
     super.afterAll()
     sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+  }
+}
+
+class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
+
+  var originalUnsafeEnabled: Boolean = _
+
+  override def beforeAll(): Unit = {
+    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "true")
+    super.beforeAll()
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+    sqlContext.conf.unsetConf("spark.sql.TungstenAggregate.testFallbackStartsAt")
+  }
+
+  override protected def checkAnswer(actual: DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    (0 to 2).foreach { fallbackStartsAt =>
+      sqlContext.setConf(
+        "spark.sql.TungstenAggregate.testFallbackStartsAt",
+        fallbackStartsAt.toString)
+
+      // Create a new df to make sure its physical operator picks up
+      // spark.sql.TungstenAggregate.testFallbackStartsAt.
+      val newActual = DataFrame(sqlContext, actual.logicalPlan)
+
+      QueryTest.checkAnswer(newActual, expectedAnswer) match {
+        case Some(errorMessage) =>
+          val newErrorMessage =
+            s"""
+              |The following aggregation query failed when using TungstenAggregate with
+              |controlled fallback (it falls back to sort-based aggregation once it has processed
+              |$fallbackStartsAt input rows). The query is
+              |${actual.queryExecution}
+              |
+              |$errorMessage
+            """.stripMargin
+
+          fail(newErrorMessage)
+        case None =>
+      }
+    }
+  }
+
+  // Override it to make sure we call the actually overridden checkAnswer.
+  override protected def checkAnswer(df: DataFrame, expectedAnswer: Row): Unit = {
+    checkAnswer(df, Seq(expectedAnswer))
+  }
+
+  // Override it to make sure we call the actually overridden checkAnswer.
+  override protected def checkAnswer(df: DataFrame, expectedAnswer: DataFrame): Unit = {
+    checkAnswer(df, expectedAnswer.collect())
   }
 }
