@@ -30,8 +30,6 @@ class DefaultSource extends SimpleScanSource
 
 class SimpleScanSource extends RelationProvider {
 
-  override def format(): String = "test format"
-
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
@@ -49,8 +47,6 @@ case class SimpleScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
 }
 
 class AllDataTypesScanSource extends SchemaRelationProvider {
-
-  override def format(): String = "test format"
 
   override def createRelation(
       sqlContext: SQLContext,

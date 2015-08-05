@@ -32,9 +32,9 @@ import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 private[sql] class DefaultSource
   extends RelationProvider
   with SchemaRelationProvider
-  with CreatableRelationProvider {
+  with CreatableRelationProvider with DataSourceRegister {
 
-  override def format(): String = "json"
+  def format(): String = "json"
 
   private def checkPath(parameters: Map[String, String]): String = {
     parameters.getOrElse("path", sys.error("'path' must be specified for json data."))

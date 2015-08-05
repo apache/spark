@@ -39,23 +39,23 @@ import org.apache.spark.util.SerializableConfiguration
 
 /**
  * ::DeveloperApi::
- * Base trait for all relation providers. All relation providers need to provide a string
- * representing the format they load. ex: parquet.DefaultSource.format = "parquet".
- * This allows users to specify that string as the format to read / write instead of providing
- * the entire class.
+ * Data sources should implement this trait so that they can register an alias to their data source.
+ * This allows users to give the data source alias as the format type over the fully qualified
+ * class name.
+ *
+ * ex: parquet.DefaultSource.format = "parquet".
  *
  * A new instance of this class with be instantiated each time a DDL call is made.
  */
 @DeveloperApi
-trait DataSourceProvider {
+trait DataSourceRegister {
 
   /**
-   * The string that represents the format that this data source provider uses. By default, it is
-   * the name of the class, ex: "org.apache.spark.sql.parquet.DefaultSource". This should be
+   * The string that represents the format that this data source provider uses. This is
    * overridden by children to provide a nice alias for the data source,
    * ex: override def format(): String = "parquet"
    */
-  def format(): String = getClass.getName
+  def format(): String
 }
 
 /**
@@ -74,7 +74,7 @@ trait DataSourceProvider {
  * @since 1.3.0
  */
 @DeveloperApi
-trait RelationProvider extends DataSourceProvider {
+trait RelationProvider {
   /**
    * Returns a new base relation with the given parameters.
    * Note: the parameters' keywords are case insensitive and this insensitivity is enforced
@@ -105,7 +105,7 @@ trait RelationProvider extends DataSourceProvider {
  * @since 1.3.0
  */
 @DeveloperApi
-trait SchemaRelationProvider extends DataSourceProvider {
+trait SchemaRelationProvider {
   /**
    * Returns a new base relation with the given parameters and user defined schema.
    * Note: the parameters' keywords are case insensitive and this insensitivity is enforced
@@ -141,7 +141,7 @@ trait SchemaRelationProvider extends DataSourceProvider {
  * @since 1.4.0
  */
 @Experimental
-trait HadoopFsRelationProvider extends DataSourceProvider {
+trait HadoopFsRelationProvider {
   /**
    * Returns a new base relation with the given parameters, a user defined schema, and a list of
    * partition columns. Note: the parameters' keywords are case insensitive and this insensitivity
@@ -161,7 +161,7 @@ trait HadoopFsRelationProvider extends DataSourceProvider {
  * @since 1.3.0
  */
 @DeveloperApi
-trait CreatableRelationProvider extends DataSourceProvider {
+trait CreatableRelationProvider {
   /**
     * Creates a relation with the given parameters based on the contents of the given
     * DataFrame. The mode specifies the expected behavior of createRelation when

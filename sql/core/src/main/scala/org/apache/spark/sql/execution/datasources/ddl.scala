@@ -197,7 +197,7 @@ private[sql] class DDLParser(
 private[sql] object ResolvedDataSource extends Logging {
 
   private lazy val loader = Utils.getContextOrSparkClassLoader
-  private lazy val serviceLoader = ServiceLoader.load(classOf[DataSourceProvider], loader)
+  private lazy val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
 
   /** Tries to load the particular class */
   private def tryLoad(provider: String): Option[Class[_]] = try {
@@ -213,9 +213,8 @@ private[sql] object ResolvedDataSource extends Logging {
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String): Class[_] = {
     serviceLoader.iterator().filter(_.format() == provider).toList match {
-      case Nil => tryLoad(provider).orElse(tryLoad(s"$provider.DefaultSource")).getOrElse {
-        sys.error(s"Failed to load class for data source: $provider")
-      }
+      case Nil => tryLoad(provider).orElse(tryLoad(s"$provider.DefaultSource"))
+        .getOrElse(sys.error(s"Failed to load class for data source: $provider"))
       case head :: Nil => head.getClass
       case sources => sys.error(s"Multiple sources found for $provider, " +
         s"(${sources.map(_.getClass.getName).mkString(", ")}), " +

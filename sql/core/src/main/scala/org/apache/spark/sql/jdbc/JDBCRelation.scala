@@ -77,9 +77,9 @@ private[sql] object JDBCRelation {
   }
 }
 
-private[sql] class DefaultSource extends RelationProvider {
+private[sql] class DefaultSource extends RelationProvider with DataSourceRegister {
 
-  override def format(): String = "jdbc"
+  def format(): String = "jdbc"
 
   /** Returns a new base relation with the given parameters. */
   override def createRelation(

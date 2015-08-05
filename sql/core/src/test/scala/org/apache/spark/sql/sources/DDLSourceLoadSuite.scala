@@ -20,22 +20,9 @@ package org.apache.spark.sql.sources
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
-class FakeSourceOne extends RelationProvider {
+class FakeSourceOne extends RelationProvider with DataSourceRegister {
 
-  override def format(): String = "Fluet da Bomb"
-
-  override def createRelation(cont: SQLContext, param: Map[String, String]): BaseRelation =
-    new BaseRelation {
-      override def sqlContext: SQLContext = cont
-
-      override def schema: StructType =
-        StructType(Seq(StructField("stringType", StringType, nullable = false)))
-    }
-}
-
-class FakeSourceTwo extends RelationProvider {
-
-  override def format(): String = "Fluet da Bomb"
+  def format(): String = "Fluet da Bomb"
 
   override def createRelation(cont: SQLContext, param: Map[String, String]): BaseRelation =
     new BaseRelation {
@@ -46,9 +33,22 @@ class FakeSourceTwo extends RelationProvider {
     }
 }
 
-class FakeSourceThree extends RelationProvider {
+class FakeSourceTwo extends RelationProvider  with DataSourceRegister {
 
-  override def format(): String = "gathering quorum"
+  def format(): String = "Fluet da Bomb"
+
+  override def createRelation(cont: SQLContext, param: Map[String, String]): BaseRelation =
+    new BaseRelation {
+      override def sqlContext: SQLContext = cont
+
+      override def schema: StructType =
+        StructType(Seq(StructField("stringType", StringType, nullable = false)))
+    }
+}
+
+class FakeSourceThree extends RelationProvider with DataSourceRegister {
+
+  def format(): String = "gathering quorum"
 
   override def createRelation(cont: SQLContext, param: Map[String, String]): BaseRelation =
     new BaseRelation {
