@@ -96,6 +96,9 @@ private[sql] case class LogicalRDD(
 private[sql] case class PhysicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow]) extends LeafNode {
+
+  override protected[sql] val trackNumOfRowsEnabled = true
+
   protected override def doExecute(): RDD[InternalRow] = rdd
 }
 
