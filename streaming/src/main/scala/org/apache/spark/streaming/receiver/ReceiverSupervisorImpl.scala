@@ -96,9 +96,9 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Divides received data records into data blocks for pushing in BlockManager. */
   private val defaultBlockGeneratorListener = new BlockGeneratorListener {
-    def onAddData(data: Any, metadata: Any): Unit = {}
+    def onAddData(data: Any, metadata: Any): Unit = { }
 
-    def onGenerateBlock(blockId: StreamBlockId): Unit = {}
+    def onGenerateBlock(blockId: StreamBlockId): Unit = { }
 
     def onError(message: String, throwable: Throwable) {
       reportError(message, throwable)
@@ -120,7 +120,7 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def pushArrayBuffer(
-      arrayBuffer: mutable.ArrayBuffer[_],
+      arrayBuffer: ArrayBuffer[_],
       metadataOption: Option[Any],
       blockIdOption: Option[StreamBlockId]
     ) {
@@ -192,9 +192,11 @@ private[streaming] class ReceiverSupervisorImpl(
 
   override def createBlockGenerator(
       blockGeneratorListener: BlockGeneratorListener): BlockGenerator = {
+    // Cleanup BlockGenerators that have already been stopped
+    registeredBlockGenerators. --= registeredBlockGenerators.filter{ _.isStopped() }
+
     val newBlockGenerator = new BlockGenerator(blockGeneratorListener, streamId, env.conf)
     registeredBlockGenerators += newBlockGenerator
-    registeredBlockGenerators --= registeredBlockGenerators.filter{ _.isStopped() }
     newBlockGenerator
   }
 
