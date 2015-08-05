@@ -1015,6 +1015,54 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertRaises(Py4JJavaError, rdd.pipe('grep 4', checkCode=True).collect)
         self.assertEqual([], rdd.pipe('grep 4').collect())
 
+    def test_seqop_mutate(self):
+        # Regression test for SPARK-6551
+        def inc_mutate(counter, item):
+            counter[0] += 1
+            return counter
+
+        def inc_pure(counter, item):
+            return [counter[0] + 1]
+
+        def merge_mutate(c1, c2):
+            c1[0] += c2[0]
+            return c1
+
+        def merge_pure(c1, c2):
+            return [c1[0] + c2[0]]
+
+        # correct answer, when neither function mutates their arguments
+        init = [0]
+        self.assertEqual(
+            [10],
+            self.sc.parallelize(range(10)).aggregate(
+                init, inc_pure, merge_pure))
+        self.assertEqual([0], init)
+
+        # incorrect answer if seqOp mutates its first argument
+        init = [0]
+        self.assertEqual(
+            [10],
+            self.sc.parallelize(range(10)).aggregate(
+                init, inc_mutate, merge_pure))
+        self.assertEqual([0], init)
+
+        # zero value is modified if combOp mutates its first argument
+        init = [0]
+        self.assertEqual(
+            [10],
+            self.sc.parallelize(range(10)).aggregate(
+                init, inc_pure, merge_mutate))
+        self.assertEqual([0], init)
+
+        # for completeness
+        init = [0]
+        self.assertEqual(
+            [10],
+            self.sc.parallelize(range(10)).aggregate(
+                init, inc_mutate, merge_mutate))
+        self.assertEqual([0], init)
+
 
 class ProfilerTests(PySparkTestCase):
 
