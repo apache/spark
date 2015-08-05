@@ -132,11 +132,11 @@ private[spark] class YarnClientSchedulerBackend(
   }
 
   /**
-   * We create this class at SPARK-9519. Basically when we interrupt the monitor thread it's
+   * We create this class for SPARK-9519. Basically when we interrupt the monitor thread it's
    * because the SparkContext is being shut down(sc.stop() called by user code), but if
    * monitorApplication return, it means the Yarn application finished before sc.stop() was called,
-   * which means we should call sc.stop() here, and we don't allow the monitor being interrupt
-   * before SparkContext stop successfully.
+   * which means we should call sc.stop() here, and we don't allow the monitor to be interrupted
+   * before SparkContext stops successfully.
    */
   private class MonitorThread extends Thread {
     private var allowInterrupt = true
