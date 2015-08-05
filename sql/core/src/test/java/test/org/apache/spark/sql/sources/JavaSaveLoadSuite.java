@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -70,6 +71,13 @@ public class JavaSaveLoadSuite {
     JavaRDD<String> rdd = sc.parallelize(jsonObjects);
     df = sqlContext.read().json(rdd);
     df.registerTempTable("jsonTable");
+  }
+
+  @After
+  public void tearDown() {
+    sqlContext.sparkContext().stop();
+    sqlContext = null;
+    sc = null;
   }
 
   @Test

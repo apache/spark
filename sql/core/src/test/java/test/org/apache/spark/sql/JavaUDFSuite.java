@@ -47,6 +47,9 @@ public class JavaUDFSuite implements Serializable {
 
   @After
   public void tearDown() {
+    sqlContext.sparkContext().stop();
+    sqlContext = null;
+    sc = null;
   }
 
   @SuppressWarnings("unchecked")

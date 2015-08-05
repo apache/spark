@@ -55,8 +55,9 @@ public class JavaApplySchemaSuite implements Serializable {
 
   @After
   public void tearDown() {
-    javaCtx = null;
+    sqlContext.sparkContext().stop();
     sqlContext = null;
+    javaCtx = null;
   }
 
   public static class Person implements Serializable {

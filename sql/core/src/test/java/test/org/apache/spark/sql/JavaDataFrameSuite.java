@@ -52,8 +52,9 @@ public class JavaDataFrameSuite {
 
   @After
   public void tearDown() {
-    jsc = null;
+    context.sparkContext().stop();
     context = null;
+    jsc = null;
   }
 
   @Test
