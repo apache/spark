@@ -776,9 +776,9 @@ class StringIndexerModel(JavaModel):
 
 class StringIndexerInverse(JavaTransformer):
     """
-    Transform a provided column back to the original input types using either
-    the metadata on the input column.
-    Note: By default we keep the original columns during this transformation,
+    Transform a provided column back to the original input types using the metadata on
+    the input column.
+    Note: By default we keep the original columns during StringIndexerModel's transformation,
     so the inverse should only be used on new columns such as predicted labels.
     """
 
