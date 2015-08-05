@@ -1289,6 +1289,7 @@ def length(col):
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.length(_to_java_column(col)))
 
+
 @ignore_unicode_prefix
 @since(1.5)
 def translate(srcCol, matching, replace):
@@ -1296,7 +1297,6 @@ def translate(srcCol, matching, replace):
     The characters in `replace` is corresponding to the characters in `matching`.
     The translate will happen when any character in the string matching with the character
     in the `matching`.
-
 
     >>> sqlContext.createDataFrame([('translate',)], ['a']).select(translate('a', "rnlt", "123")\
     .alias('r')).collect()
