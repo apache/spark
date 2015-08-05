@@ -46,13 +46,18 @@ class HiveExplainSuite extends QueryTest {
                    "Limit",
                    "src")
 
-    checkExistence(sql("explain extended create table temp__b as select * from src limit 2"), true,
+    checkExistence(
+      sql("explain extended create table temp__b as select key, 1+4 from src limit 2"), true,
       "== Parsed Logical Plan ==",
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
       "== Physical Plan ==",
       "CreateTableAsSelect",
       "InsertIntoHiveTable",
+      "Project [unresolvedalias('key),unresolvedalias((1 + 4))", // parsed plan
+      "(1 + 4) AS", // analyzed plan
+      "5 AS", // optimized plan
+      "ExecutedCommand [cmd:CreateTableAsSelect [", // physical plan
       "Limit",
       "src")
 
