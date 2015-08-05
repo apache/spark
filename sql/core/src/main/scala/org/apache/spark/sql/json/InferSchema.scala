@@ -113,8 +113,12 @@ private[sql] object InferSchema {
           case INT | LONG => LongType
           // Since we do not have a data type backed by BigInteger,
           // when we see a Java BigInteger, we use DecimalType.
-          case BIG_INTEGER | BIG_DECIMAL => DecimalType.Unlimited
-          case FLOAT | DOUBLE => DoubleType
+          case BIG_INTEGER | BIG_DECIMAL =>
+            val v = parser.getDecimalValue
+            DecimalType(v.precision(), v.scale())
+          case FLOAT | DOUBLE =>
+            // TODO(davies): Should we use decimal if possible?
+            DoubleType
         }
 
       case VALUE_TRUE | VALUE_FALSE => BooleanType
@@ -125,7 +129,7 @@ private[sql] object InferSchema {
    * Convert NullType to StringType and remove StructTypes with no fields
    */
   private def canonicalizeType: DataType => Option[DataType] = {
-    case at@ArrayType(elementType, _) =>
+    case at @ ArrayType(elementType, _) =>
       for {
         canonicalType <- canonicalizeType(elementType)
       } yield {
@@ -168,8 +172,22 @@ private[sql] object InferSchema {
     HiveTypeCoercion.findTightestCommonTypeOfTwo(t1, t2).getOrElse {
       // t1 or t2 is a StructType, ArrayType, or an unexpected type.
       (t1, t2) match {
-        case (other: DataType, NullType) => other
-        case (NullType, other: DataType) => other
+        // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
+        // in most case, also have better precision.
+        case (DoubleType, t: DecimalType) =>
+          DoubleType
+        case (t: DecimalType, DoubleType) =>
+          DoubleType
+        case (t1: DecimalType, t2: DecimalType) =>
+          val scale = math.max(t1.scale, t2.scale)
+          val range = math.max(t1.precision - t1.scale, t2.precision - t2.scale)
+          if (range + scale > 38) {
+            // DecimalType can't support precision > 38
+            DoubleType
+          } else {
+            DecimalType(range + scale, scale)
+          }
+
         case (StructType(fields1), StructType(fields2)) =>
           val newFields = (fields1 ++ fields2).groupBy(field => field.name).map {
             case (name, fieldTypes) =>

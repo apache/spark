@@ -17,162 +17,14 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.types.{StructType, MapType, ArrayType}
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
  */
 object Utils {
-  // Right now, we do not support complex types in the grouping key schema.
-  private def supportsGroupingKeySchema(aggregate: Aggregate): Boolean = {
-    val hasComplexTypes = aggregate.groupingExpressions.map(_.dataType).exists {
-      case array: ArrayType => true
-      case map: MapType => true
-      case struct: StructType => true
-      case _ => false
-    }
-
-    !hasComplexTypes
-  }
-
-  private def tryConvert(plan: LogicalPlan): Option[Aggregate] = plan match {
-    case p: Aggregate if supportsGroupingKeySchema(p) =>
-      val converted = p.transformExpressionsDown {
-        case expressions.Average(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Average(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Count(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Count(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        // We do not support multiple COUNT DISTINCT columns for now.
-        case expressions.CountDistinct(children) if children.length == 1 =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Count(children.head),
-            mode = aggregate.Complete,
-            isDistinct = true)
-
-        case expressions.First(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.First(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Last(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Last(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Max(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Max(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Min(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Min(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Sum(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Sum(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.SumDistinct(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Sum(child),
-            mode = aggregate.Complete,
-            isDistinct = true)
-      }
-      // Check if there is any expressions.AggregateExpression1 left.
-      // If so, we cannot convert this plan.
-      val hasAggregateExpression1 = converted.aggregateExpressions.exists { expr =>
-        // For every expressions, check if it contains AggregateExpression1.
-        expr.find {
-          case agg: expressions.AggregateExpression1 => true
-          case other => false
-        }.isDefined
-      }
-
-      // Check if there are multiple distinct columns.
-      val aggregateExpressions = converted.aggregateExpressions.flatMap { expr =>
-        expr.collect {
-          case agg: AggregateExpression2 => agg
-        }
-      }.toSet.toSeq
-      val functionsWithDistinct = aggregateExpressions.filter(_.isDistinct)
-      val hasMultipleDistinctColumnSets =
-        if (functionsWithDistinct.map(_.aggregateFunction.children).distinct.length > 1) {
-          true
-        } else {
-          false
-        }
-
-      if (!hasAggregateExpression1 && !hasMultipleDistinctColumnSets) Some(converted) else None
-
-    case other => None
-  }
-
-  private def checkInvalidAggregateFunction2(aggregate: Aggregate): Unit = {
-    // If the plan cannot be converted, we will do a final round check to if the original
-    // logical.Aggregate contains both AggregateExpression1 and AggregateExpression2. If so,
-    // we need to throw an exception.
-    val aggregateFunction2s = aggregate.aggregateExpressions.flatMap { expr =>
-      expr.collect {
-        case agg: AggregateExpression2 => agg.aggregateFunction
-      }
-    }.distinct
-    if (aggregateFunction2s.nonEmpty) {
-      // For functions implemented based on the new interface, prepare a list of function names.
-      val invalidFunctions = {
-        if (aggregateFunction2s.length > 1) {
-          s"${aggregateFunction2s.tail.map(_.nodeName).mkString(",")} " +
-            s"and ${aggregateFunction2s.head.nodeName} are"
-        } else {
-          s"${aggregateFunction2s.head.nodeName} is"
-        }
-      }
-      val errorMessage =
-        s"${invalidFunctions} implemented based on the new Aggregate Function " +
-          s"interface and it cannot be used with functions implemented based on " +
-          s"the old Aggregate Function interface."
-      throw new AnalysisException(errorMessage)
-    }
-  }
-
-  def tryConvert(
-      plan: LogicalPlan,
-      useNewAggregation: Boolean,
-      codeGenEnabled: Boolean): Option[Aggregate] = plan match {
-    case p: Aggregate if useNewAggregation && codeGenEnabled =>
-      val converted = tryConvert(p)
-      if (converted.isDefined) {
-        converted
-      } else {
-        checkInvalidAggregateFunction2(p)
-        None
-      }
-    case p: Aggregate =>
-      checkInvalidAggregateFunction2(p)
-      None
-    case other => None
-  }
-
   def planAggregateWithoutDistinct(
       groupingExpressions: Seq[Expression],
       aggregateExpressions: Seq[AggregateExpression2],
@@ -191,27 +43,24 @@ object Utils {
     }
     val groupExpressionMap = namedGroupingExpressions.toMap
     val namedGroupingAttributes = namedGroupingExpressions.map(_._2.toAttribute)
-    val partialAggregateExpressions = aggregateExpressions.map {
-      case AggregateExpression2(aggregateFunction, mode, isDistinct) =>
-        AggregateExpression2(aggregateFunction, Partial, isDistinct)
-    }
+    val partialAggregateExpressions = aggregateExpressions.map(_.copy(mode = Partial))
     val partialAggregateAttributes = partialAggregateExpressions.flatMap { agg =>
       agg.aggregateFunction.bufferAttributes
     }
     val partialAggregate =
-      Aggregate2Sort(
-        None: Option[Seq[Expression]],
-        namedGroupingExpressions.map(_._2),
-        partialAggregateExpressions,
-        partialAggregateAttributes,
-        namedGroupingAttributes ++ partialAggregateAttributes,
-        child)
+      Aggregate(
+        requiredChildDistributionExpressions = None: Option[Seq[Expression]],
+        groupingExpressions = namedGroupingExpressions.map(_._2),
+        nonCompleteAggregateExpressions = partialAggregateExpressions,
+        nonCompleteAggregateAttributes = partialAggregateAttributes,
+        completeAggregateExpressions = Nil,
+        completeAggregateAttributes = Nil,
+        initialInputBufferOffset = 0,
+        resultExpressions = namedGroupingAttributes ++ partialAggregateAttributes,
+        child = child)
 
     // 2. Create an Aggregate Operator for final aggregations.
-    val finalAggregateExpressions = aggregateExpressions.map {
-      case AggregateExpression2(aggregateFunction, mode, isDistinct) =>
-        AggregateExpression2(aggregateFunction, Final, isDistinct)
-    }
+    val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Final))
     val finalAggregateAttributes =
       finalAggregateExpressions.map {
         expr => aggregateFunctionMap(expr.aggregateFunction, expr.isDistinct)
@@ -228,13 +77,17 @@ object Utils {
           }.getOrElse(expression)
       }.asInstanceOf[NamedExpression]
     }
-    val finalAggregate = Aggregate2Sort(
-      Some(namedGroupingAttributes),
-      namedGroupingAttributes,
-      finalAggregateExpressions,
-      finalAggregateAttributes,
-      rewrittenResultExpressions,
-      partialAggregate)
+    val finalAggregate =
+      Aggregate(
+        requiredChildDistributionExpressions = Some(namedGroupingAttributes),
+        groupingExpressions = namedGroupingAttributes,
+        nonCompleteAggregateExpressions = finalAggregateExpressions,
+        nonCompleteAggregateAttributes = finalAggregateAttributes,
+        completeAggregateExpressions = Nil,
+        completeAggregateAttributes = Nil,
+        initialInputBufferOffset = namedGroupingAttributes.length,
+        resultExpressions = rewrittenResultExpressions,
+        child = partialAggregate)
 
     finalAggregate :: Nil
   }
@@ -283,14 +136,21 @@ object Utils {
     val partialAggregateAttributes = partialAggregateExpressions.flatMap { agg =>
       agg.aggregateFunction.bufferAttributes
     }
+    val partialAggregateGroupingExpressions =
+      (namedGroupingExpressions ++ namedDistinctColumnExpressions).map(_._2)
+    val partialAggregateResult =
+      namedGroupingAttributes ++ distinctColumnAttributes ++ partialAggregateAttributes
     val partialAggregate =
-      Aggregate2Sort(
-        None: Option[Seq[Expression]],
-        (namedGroupingExpressions ++ namedDistinctColumnExpressions).map(_._2),
-        partialAggregateExpressions,
-        partialAggregateAttributes,
-        namedGroupingAttributes ++ distinctColumnAttributes ++ partialAggregateAttributes,
-        child)
+      Aggregate(
+        requiredChildDistributionExpressions = None: Option[Seq[Expression]],
+        groupingExpressions = partialAggregateGroupingExpressions,
+        nonCompleteAggregateExpressions = partialAggregateExpressions,
+        nonCompleteAggregateAttributes = partialAggregateAttributes,
+        completeAggregateExpressions = Nil,
+        completeAggregateAttributes = Nil,
+        initialInputBufferOffset = 0,
+        resultExpressions = partialAggregateResult,
+        child = child)
 
     // 2. Create an Aggregate Operator for partial merge aggregations.
     val partialMergeAggregateExpressions = functionsWithoutDistinct.map {
@@ -298,17 +158,22 @@ object Utils {
         AggregateExpression2(aggregateFunction, PartialMerge, false)
     }
     val partialMergeAggregateAttributes =
-      partialMergeAggregateExpressions.map {
-        expr => aggregateFunctionMap(expr.aggregateFunction, expr.isDistinct)
+      partialMergeAggregateExpressions.flatMap { agg =>
+        agg.aggregateFunction.bufferAttributes
       }
+    val partialMergeAggregateResult =
+      namedGroupingAttributes ++ distinctColumnAttributes ++ partialMergeAggregateAttributes
     val partialMergeAggregate =
-      Aggregate2Sort(
-        Some(namedGroupingAttributes),
-        namedGroupingAttributes ++ distinctColumnAttributes,
-        partialMergeAggregateExpressions,
-        partialMergeAggregateAttributes,
-        namedGroupingAttributes ++ distinctColumnAttributes ++ partialMergeAggregateAttributes,
-        partialAggregate)
+      Aggregate(
+        requiredChildDistributionExpressions = Some(namedGroupingAttributes),
+        groupingExpressions = namedGroupingAttributes ++ distinctColumnAttributes,
+        nonCompleteAggregateExpressions = partialMergeAggregateExpressions,
+        nonCompleteAggregateAttributes = partialMergeAggregateAttributes,
+        completeAggregateExpressions = Nil,
+        completeAggregateAttributes = Nil,
+        initialInputBufferOffset = (namedGroupingAttributes ++ distinctColumnAttributes).length,
+        resultExpressions = partialMergeAggregateResult,
+        child = partialAggregate)
 
     // 3. Create an Aggregate Operator for partial merge aggregations.
     val finalAggregateExpressions = functionsWithoutDistinct.map {
@@ -349,15 +214,17 @@ object Utils {
           }.getOrElse(expression)
       }.asInstanceOf[NamedExpression]
     }
-    val finalAndCompleteAggregate = FinalAndCompleteAggregate2Sort(
-      namedGroupingAttributes ++ distinctColumnAttributes,
-      namedGroupingAttributes,
-      finalAggregateExpressions,
-      finalAggregateAttributes,
-      completeAggregateExpressions,
-      completeAggregateAttributes,
-      rewrittenResultExpressions,
-      partialMergeAggregate)
+    val finalAndCompleteAggregate =
+      Aggregate(
+        requiredChildDistributionExpressions = Some(namedGroupingAttributes),
+        groupingExpressions = namedGroupingAttributes,
+        nonCompleteAggregateExpressions = finalAggregateExpressions,
+        nonCompleteAggregateAttributes = finalAggregateAttributes,
+        completeAggregateExpressions = completeAggregateExpressions,
+        completeAggregateAttributes = completeAggregateAttributes,
+        initialInputBufferOffset = (namedGroupingAttributes ++ distinctColumnAttributes).length,
+        resultExpressions = rewrittenResultExpressions,
+        child = partialMergeAggregate)
 
     finalAndCompleteAggregate :: Nil
   }

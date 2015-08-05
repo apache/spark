@@ -30,6 +30,8 @@ private[sql] case class LocalTableScan(
     output: Seq[Attribute],
     rows: Seq[InternalRow]) extends LeafNode {
 
+  override protected[sql] val trackNumOfRowsEnabled = true
+
   private lazy val rdd = sqlContext.sparkContext.parallelize(rows)
 
   protected override def doExecute(): RDD[InternalRow] = rdd

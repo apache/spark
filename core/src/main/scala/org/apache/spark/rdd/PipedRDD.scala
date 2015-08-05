@@ -133,6 +133,7 @@ private[spark] class PipedRDD[T: ClassTag](
     // Start a thread to feed the process input from our parent's iterator
     new Thread("stdin writer for " + command) {
       override def run() {
+        TaskContext.setTaskContext(context)
         val out = new PrintWriter(proc.getOutputStream)
 
         // scalastyle:off println

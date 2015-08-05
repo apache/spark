@@ -336,16 +336,16 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
       // first attempt -- its successful
       val writer1 = manager.getWriter[Int, Int](shuffleHandle, 0, 0,
-        new TaskContextImpl(0, 0, 0L, 0, taskMemoryManager, metricsSystem, false,
-          stageAttemptId = 0, taskMetrics = new TaskMetrics))
+        new TaskContextImpl(0, 0, 0L, 0, taskMemoryManager, metricsSystem,
+          InternalAccumulator.create, false, stageAttemptId = 0, taskMetrics = new TaskMetrics))
       val data1 = (1 to 10).map { x => x -> x}
 
       // second attempt -- also successful.  We'll write out different data,
       // just to simulate the fact that the records may get written differently
       // depending on what gets spilled, what gets combined, etc.
       val writer2 = manager.getWriter[Int, Int](shuffleHandle, 0, 1,
-        new TaskContextImpl(0, 0, 1L, 0, taskMemoryManager, metricsSystem, false,
-          stageAttemptId = 1, taskMetrics = new TaskMetrics))
+        new TaskContextImpl(0, 0, 1L, 0, taskMemoryManager, metricsSystem,
+          InternalAccumulator.create, false, stageAttemptId = 1, taskMetrics = new TaskMetrics))
       val data2 = (11 to 20).map { x => x -> x}
 
       // interleave writes of both attempts -- we want to test that both attempts can occur
@@ -359,8 +359,8 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       // register the output from attempt 1, and try to read it
       mapOutput1.foreach { mapStatus => mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))}
       val reader1 = manager.getReader[Int, Int](shuffleHandle, 0, 1,
-        new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, metricsSystem, false,
-          taskMetrics = new TaskMetrics))
+        new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, metricsSystem,
+          InternalAccumulator.create, false, taskMetrics = new TaskMetrics))
       reader1.read().toIndexedSeq should be (data1.toIndexedSeq)
 
       // now for attempt 2 (registeringMapOutputs always blows away all previous outputs, so we
@@ -368,8 +368,8 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       mapOutput2.foreach { mapStatus => mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))}
 
       val reader2 = manager.getReader[Int, Int](shuffleHandle, 0, 1,
-        new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, metricsSystem, false,
-          taskMetrics = new TaskMetrics))
+        new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, metricsSystem,
+          InternalAccumulator.create, false, taskMetrics = new TaskMetrics))
       reader2.read().toIndexedSeq should be(data2.toIndexedSeq)
 
 

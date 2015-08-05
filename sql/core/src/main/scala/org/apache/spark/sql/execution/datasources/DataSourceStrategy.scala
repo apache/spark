@@ -60,6 +60,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // Scanning partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation))
         if t.partitionSpec.partitionColumns.nonEmpty =>
+      t.refresh()
       val selectedPartitions = prunePartitions(filters, t.partitionSpec).toArray
 
       logInfo {
@@ -87,6 +88,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
     // Scanning non-partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation)) =>
+      t.refresh()
       // See buildPartitionedTableScan for the reason that we need to create a shard
       // broadcast HadoopConf.
       val sharedHadoopConf = SparkHadoopUtil.get.conf
@@ -170,6 +172,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     execution.PhysicalRDD(projections.map(_.toAttribute), unionedRows)
   }
 
+  // TODO: refactor this thing. It is very complicated because it does projection internally.
+  // We should just put a project on top of this.
   private def mergeWithPartitionValues(
       schema: StructType,
       requiredColumns: Array[String],
@@ -185,15 +189,17 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         // To see whether the `index`-th column is a partition column...
         val i = partitionColumns.indexOf(name)
         if (i != -1) {
+          val dt = schema(partitionColumns(i)).dataType
           // If yes, gets column value from partition values.
           (mutableRow: MutableRow, dataRow: InternalRow, ordinal: Int) => {
-            mutableRow(ordinal) = partitionValues(i)
+            mutableRow(ordinal) = partitionValues.get(i, dt)
           }
         } else {
           // Otherwise, inherits the value from scanned data.
           val i = nonPartitionColumns.indexOf(name)
+          val dt = schema(nonPartitionColumns(i)).dataType
           (mutableRow: MutableRow, dataRow: InternalRow, ordinal: Int) => {
-            mutableRow(ordinal) = dataRow(i)
+            mutableRow(ordinal) = dataRow.get(i, dt)
           }
         }
       }
@@ -206,7 +212,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         val mutableRow = new SpecificMutableRow(dataTypes)
         iterator.map { dataRow =>
           var i = 0
-          while (i < mutableRow.length) {
+          while (i < mutableRow.numFields) {
             mergers(i)(mutableRow, dataRow, i)
             i += 1
           }
@@ -315,7 +321,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     if (relation.relation.needConversion) {
       execution.RDDConversions.rowToRowRdd(rdd, output.map(_.dataType))
     } else {
-      rdd.map(_.asInstanceOf[InternalRow])
+      rdd.asInstanceOf[RDD[InternalRow]]
     }
   }
 

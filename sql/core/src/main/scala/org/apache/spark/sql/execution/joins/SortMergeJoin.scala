@@ -38,9 +38,12 @@ case class SortMergeJoin(
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode {
 
+  override protected[sql] val trackNumOfRowsEnabled = true
+
   override def output: Seq[Attribute] = left.output ++ right.output
 
-  override def outputPartitioning: Partitioning = left.outputPartitioning
+  override def outputPartitioning: Partitioning =
+    PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
@@ -66,7 +69,7 @@ case class SortMergeJoin(
     leftResults.zipPartitions(rightResults) { (leftIter, rightIter) =>
       new Iterator[InternalRow] {
         // Mutable per row objects.
-        private[this] val joinRow = new JoinedRow5
+        private[this] val joinRow = new JoinedRow
         private[this] var leftElement: InternalRow = _
         private[this] var rightElement: InternalRow = _
         private[this] var leftKey: InternalRow = _

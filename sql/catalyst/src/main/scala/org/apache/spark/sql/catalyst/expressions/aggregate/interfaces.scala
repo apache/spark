@@ -23,18 +23,18 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCod
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
-/** The mode of an [[AggregateFunction1]]. */
+/** The mode of an [[AggregateFunction2]]. */
 private[sql] sealed trait AggregateMode
 
 /**
- * An [[AggregateFunction1]] with [[Partial]] mode is used for partial aggregation.
+ * An [[AggregateFunction2]] with [[Partial]] mode is used for partial aggregation.
  * This function updates the given aggregation buffer with the original input of this
  * function. When it has processed all input rows, the aggregation buffer is returned.
  */
 private[sql] case object Partial extends AggregateMode
 
 /**
- * An [[AggregateFunction1]] with [[PartialMerge]] mode is used to merge aggregation buffers
+ * An [[AggregateFunction2]] with [[PartialMerge]] mode is used to merge aggregation buffers
  * containing intermediate results for this function.
  * This function updates the given aggregation buffer by merging multiple aggregation buffers.
  * When it has processed all input rows, the aggregation buffer is returned.
@@ -42,15 +42,15 @@ private[sql] case object Partial extends AggregateMode
 private[sql] case object PartialMerge extends AggregateMode
 
 /**
- * An [[AggregateFunction1]] with [[PartialMerge]] mode is used to merge aggregation buffers
- * containing intermediate results for this function and the generate final result.
+ * An [[AggregateFunction2]] with [[Final]] mode is used to merge aggregation buffers
+ * containing intermediate results for this function and then generate final result.
  * This function updates the given aggregation buffer by merging multiple aggregation buffers.
  * When it has processed all input rows, the final result of this function is returned.
  */
 private[sql] case object Final extends AggregateMode
 
 /**
- * An [[AggregateFunction2]] with [[Partial]] mode is used to evaluate this function directly
+ * An [[AggregateFunction2]] with [[Complete]] mode is used to evaluate this function directly
  * from original input rows without any partial aggregation.
  * This function updates the given aggregation buffer with the original input of this
  * function. When it has processed all input rows, the final result of this function is returned.
@@ -63,10 +63,6 @@ private[sql] case object Complete extends AggregateMode
  */
 private[sql] case object NoOp extends Expression with Unevaluable {
   override def nullable: Boolean = true
-  override def eval(input: InternalRow): Any = {
-    throw new TreeNodeException(
-      this, s"No function to evaluate expression. type: ${this.nodeName}")
-  }
   override def dataType: DataType = NullType
   override def children: Seq[Expression] = Nil
 }
@@ -89,12 +85,12 @@ private[sql] case class AggregateExpression2(
   override def nullable: Boolean = aggregateFunction.nullable
 
   override def references: AttributeSet = {
-    val childReferemces = mode match {
+    val childReferences = mode match {
       case Partial | Complete => aggregateFunction.references.toSeq
       case PartialMerge | Final => aggregateFunction.bufferAttributes
     }
 
-    AttributeSet(childReferemces)
+    AttributeSet(childReferences)
   }
 
   override def toString: String = s"(${aggregateFunction}2,mode=$mode,isDistinct=$isDistinct)"
@@ -103,15 +99,42 @@ private[sql] case class AggregateExpression2(
 abstract class AggregateFunction2
   extends Expression with ImplicitCastInputTypes {
 
-  self: Product =>
-
   /** An aggregate function is not foldable. */
-  override def foldable: Boolean = false
+  final override def foldable: Boolean = false
 
   /**
-   * The offset of this function's buffer in the underlying buffer shared with other functions.
+   * The offset of this function's start buffer value in the
+   * underlying shared mutable aggregation buffer.
+   * For example, we have two aggregate functions `avg(x)` and `avg(y)`, which share
+   * the same aggregation buffer. In this shared buffer, the position of the first
+   * buffer value of `avg(x)` will be 0 and the position of the first buffer value of `avg(y)`
+   * will be 2.
    */
-  var bufferOffset: Int = 0
+  protected var mutableBufferOffset: Int = 0
+
+  def withNewMutableBufferOffset(newMutableBufferOffset: Int): Unit = {
+    mutableBufferOffset = newMutableBufferOffset
+  }
+
+  /**
+   * The offset of this function's start buffer value in the
+   * underlying shared input aggregation buffer. An input aggregation buffer is used
+   * when we merge two aggregation buffers and it is basically the immutable one
+   * (we merge an input aggregation buffer and a mutable aggregation buffer and
+   * then store the new buffer values to the mutable aggregation buffer).
+   * Usually, an input aggregation buffer also contain extra elements like grouping
+   * keys at the beginning. So, mutableBufferOffset and inputBufferOffset are often
+   * different.
+   * For example, we have a grouping expression `key``, and two aggregate functions
+   * `avg(x)` and `avg(y)`. In this shared input aggregation buffer, the position of the first
+   * buffer value of `avg(x)` will be 1 and the position of the first buffer value of `avg(y)`
+   * will be 3 (position 0 is used for the value of key`).
+   */
+  protected var inputBufferOffset: Int = 0
+
+  def withNewInputBufferOffset(newInputBufferOffset: Int): Unit = {
+    inputBufferOffset = newInputBufferOffset
+  }
 
   /** The schema of the aggregation buffer. */
   def bufferSchema: StructType
@@ -151,8 +174,7 @@ abstract class AggregateFunction2
 /**
  * A helper class for aggregate functions that can be implemented in terms of catalyst expressions.
  */
-abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable {
-  self: Product =>
+abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable with Unevaluable {
 
   val initialValues: Seq[Expression]
   val updateExpressions: Seq[Expression]
@@ -181,26 +203,19 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable {
   override def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
 
   override def initialize(buffer: MutableRow): Unit = {
-    var i = 0
-    while (i < bufferAttributes.size) {
-      buffer(i + bufferOffset) = initialValues(i).eval()
-      i += 1
-    }
+    throw new UnsupportedOperationException(
+      "AlgebraicAggregate's initialize should not be called directly")
   }
 
-  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+  override final def update(buffer: MutableRow, input: InternalRow): Unit = {
     throw new UnsupportedOperationException(
       "AlgebraicAggregate's update should not be called directly")
   }
 
-  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+  override final def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
     throw new UnsupportedOperationException(
       "AlgebraicAggregate's merge should not be called directly")
   }
 
-  override def eval(buffer: InternalRow): Any = {
-    throw new UnsupportedOperationException(
-      "AlgebraicAggregate's eval should not be called directly")
-  }
 }
 

@@ -417,6 +417,10 @@ trait Row extends Serializable {
             if (!o2.isInstanceOf[Double] || ! java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
               return false
             }
+          case d1: java.math.BigDecimal if o2.isInstanceOf[java.math.BigDecimal] =>
+            if (d1.compareTo(o2.asInstanceOf[java.math.BigDecimal]) != 0) {
+              return false
+            }
           case _ => if (o1 != o2) {
             return false
           }
