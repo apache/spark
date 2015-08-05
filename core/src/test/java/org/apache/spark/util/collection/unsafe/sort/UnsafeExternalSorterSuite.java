@@ -143,13 +143,18 @@ public class UnsafeExternalSorterSuite {
 
   @After
   public void tearDown() {
-    long leakedUnsafeMemory = taskMemoryManager.cleanUpAllAllocatedMemory();
-    if (shuffleMemoryManager != null) {
-      long leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask();
-      shuffleMemoryManager = null;
-      assertEquals(0L, leakedShuffleMemory);
+    try {
+      long leakedUnsafeMemory = taskMemoryManager.cleanUpAllAllocatedMemory();
+      if (shuffleMemoryManager != null) {
+        long leakedShuffleMemory = shuffleMemoryManager.getMemoryConsumptionForThisTask();
+        shuffleMemoryManager = null;
+        assertEquals(0L, leakedShuffleMemory);
+      }
+      assertEquals(0, leakedUnsafeMemory);
+    } finally {
+      Utils.deleteRecursively(tempDir);
+      tempDir = null;
     }
-    assertEquals(0, leakedUnsafeMemory);
   }
 
   private void assertSpillFilesWereCleanedUp() {
