@@ -96,7 +96,7 @@ class Analyzer(
     }
 
     def substituteCTE(plan: LogicalPlan, cteRelations: Map[String, LogicalPlan]): LogicalPlan = {
-      plan resolveOperators {
+      plan transform {
         // In hive, if there is same table name in database and CTE definition,
         // hive will use the table in database, not the CTE one.
         // Taking into account the reasonableness and the implementation complexity,
@@ -872,7 +872,7 @@ class Analyzer(
     // We have to use transformDown at here to make sure the rule of
     // "Aggregate with Having clause" will be triggered.
     def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-      case p if p.analyzed => p // Skip already analyzed subtrees.
+
 
       // Aggregate with Having clause. This rule works with an unresolved Aggregate because
       // a resolved Aggregate will not have Window Functions.
