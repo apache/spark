@@ -42,11 +42,11 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourc
   def format(): String = "json"
 
   override def createRelation(
-                               sqlContext: SQLContext,
-                               paths: Array[String],
-                               dataSchema: Option[StructType],
-                               partitionColumns: Option[StructType],
-                               parameters: Map[String, String]): HadoopFsRelation = {
+      sqlContext: SQLContext,
+      paths: Array[String],
+      dataSchema: Option[StructType],
+      partitionColumns: Option[StructType],
+      parameters: Map[String, String]): HadoopFsRelation = {
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 
     new JSONRelation(None, samplingRatio, dataSchema, None, partitionColumns, paths)(sqlContext)
@@ -54,12 +54,12 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourc
 }
 
 private[sql] class JSONRelation(
-                                 val inputRDD: Option[RDD[String]],
-                                 val samplingRatio: Double,
-                                 val maybeDataSchema: Option[StructType],
-                                 val maybePartitionSpec: Option[PartitionSpec],
-                                 override val userDefinedPartitionColumns: Option[StructType],
-                                 override val paths: Array[String] = Array.empty[String])(@transient val sqlContext: SQLContext)
+    val inputRDD: Option[RDD[String]],
+    val samplingRatio: Double,
+    val maybeDataSchema: Option[StructType],
+    val maybePartitionSpec: Option[PartitionSpec],
+    override val userDefinedPartitionColumns: Option[StructType],
+    override val paths: Array[String] = Array.empty[String])(@transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec) {
 
   /** Constraints to be imposed on schema to be stored. */
@@ -109,9 +109,9 @@ private[sql] class JSONRelation(
   }
 
   override def buildScan(
-                          requiredColumns: Array[String],
-                          filters: Array[Filter],
-                          inputPaths: Array[FileStatus]): RDD[Row] = {
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputPaths: Array[FileStatus]): RDD[Row] = {
     JacksonParser(
       inputRDD.getOrElse(createBaseRdd(inputPaths)),
       StructType(requiredColumns.map(dataSchema(_))),
@@ -142,9 +142,9 @@ private[sql] class JSONRelation(
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
     new OutputWriterFactory {
       override def newInstance(
-                                path: String,
-                                dataSchema: StructType,
-                                context: TaskAttemptContext): OutputWriter = {
+          path: String,
+          dataSchema: StructType,
+          context: TaskAttemptContext): OutputWriter = {
         new JsonOutputWriter(path, dataSchema, context)
       }
     }
@@ -152,9 +152,9 @@ private[sql] class JSONRelation(
 }
 
 private[json] class JsonOutputWriter(
-                                      path: String,
-                                      dataSchema: StructType,
-                                      context: TaskAttemptContext)
+    path: String,
+    dataSchema: StructType,
+    context: TaskAttemptContext)
   extends OutputWriterInternal with SparkHadoopMapRedUtil with Logging {
 
   val writer = new CharArrayWriter()
