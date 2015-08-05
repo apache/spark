@@ -199,7 +199,7 @@ class DirectKafkaInputDStream[
   }
 
   /**
-   * A RateController that sends the new rate to receivers, via the receiver tracker.
+   * A RateController to retrieve the rate from RateEstimator.
    */
   private[streaming] class DirectKafkaRateController(id: Int, estimator: RateEstimator)
     extends RateController(id, estimator) {

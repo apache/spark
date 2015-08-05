@@ -353,7 +353,7 @@ class DirectKafkaStreamSuite
     ssc.stop()
   }
 
-  test("using rate controller"){
+  test("using rate controller") {
     val topic = "backpressure"
     val topicPartition = TopicAndPartition(topic, 0)
     kafkaTestUtils.createTopic(topic)
@@ -367,7 +367,7 @@ class DirectKafkaStreamSuite
     // Send data to Kafka and wait for it to be received
     def sendDataAndWaitForReceive(data: Seq[Int]) {
       val strings = data.map { _.toString}
-      kafkaTestUtils.sendMessages(topic, strings.map { _ -> 1}.toMap)
+      kafkaTestUtils.sendMessages(topic, strings.map { _ -> 1 }.toMap)
       eventually(timeout(20 seconds), interval(50 milliseconds)) {
         assert(strings.forall { collectedData.flatten.contains })
       }
