@@ -163,18 +163,23 @@ private class NumericInteraction(
     inputCols: Array[String], vectorCol: Option[String], outputCol: String)
   extends Transformer {
 
-  override val uid = Identifiable.randomUID("indexCombiner")
+  override val uid = Identifiable.randomUID("numericInteraction")
 
   override def transform(dataset: DataFrame): DataFrame = {
     if (vectorCol.isDefined) {
       val scale = udf { (vec: Vector, scalars: Seq[Double]) =>
-        val k = scalars.reduce(_ * _)
+        var x = 1.0
+        var i = 0
+        while (i < scalars.length) {
+          x *= scalars(i)
+          i += 1
+        }
         val indices = ArrayBuilder.make[Int]
         val values = ArrayBuilder.make[Double]
         vec.foreachActive { case (i, v) =>
           if (v != 0.0) {
             indices += i
-            values += v * k
+            values += v * x
           }
         }
         Vectors.sparse(vec.size, indices.result(), values.result()).compressed
@@ -191,7 +196,13 @@ private class NumericInteraction(
           array(inputCols.map(dataset(_).cast(DoubleType)): _*)).as(outputCol, metadata))
     } else {
       val multiply = udf { values: Seq[Double] =>
-        values.reduce(_ * _)
+        var x = 1.0
+        var i = 0
+        while (i < values.length) {
+          x *= values(i)
+          i += 1
+        }
+        x
       }
       val metadata = NumericAttribute.defaultAttr
         .withName(inputCols.mkString(":"))
@@ -210,5 +221,5 @@ private class NumericInteraction(
     }
   }
 
-  override def copy(extra: ParamMap): IndexCombiner = defaultCopy(extra)
+  override def copy(extra: ParamMap): NumericInteraction = defaultCopy(extra)
 }

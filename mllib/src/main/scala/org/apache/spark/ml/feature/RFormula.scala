@@ -99,17 +99,19 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
       tempColumns += outputCol
       outputCol
     }
-    val interactionTerms = resolvedFormula.interactions.map(encodeInteraction)
-    val standaloneTerms = resolvedFormula.terms.map { term =>
-      dataset.schema(term) match {
-        case column if column.dataType == StringType =>
-          encodeInteraction(Array(term))
-        case _ =>
-          term
-      }
+    val encodedCols = resolvedFormula.terms.map {
+      case ColumnInteraction(values) =>
+        encodeInteraction(values)
+      case ColumnRef(value) =>
+        dataset.schema(value) match {
+          case column if column.dataType == StringType =>
+            encodeInteraction(Array(value))
+          case _ =>
+            value
+        }
     }
     encoderStages += new VectorAssembler(uid)
-      .setInputCols((interactionTerms ++ standaloneTerms).toArray)
+      .setInputCols(encodedCols.toArray)
       .setOutputCol($(featuresCol))
     encoderStages += new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)

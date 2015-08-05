@@ -31,27 +31,30 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
    * of the special '.' term. Duplicate terms will be removed during resolution.
    */
   def resolve(schema: StructType): ResolvedRFormula = {
-    var includedTerms = Seq[String]()
+    var includedTerms = Seq[SimpleTerm]()
     terms.foreach {
+      case term: SimpleTerm =>
+        includedTerms :+= term
       case Dot =>
-        includedTerms ++= simpleTypes(schema).filter(_ != label.value)
-      case ColumnRef(value) =>
-        includedTerms :+= value
+        includedTerms ++= simpleTypes(schema).filter(_ != label.value).map(ColumnRef)
       case Deletion(term: Term) =>
         term match {
-          case ColumnRef(value) =>
-            includedTerms = includedTerms.filter(_ != value)
+          case inner: SimpleTerm =>
+            includedTerms = includedTerms.filter(_ != inner)
           case Dot =>
             // e.g. "- .", which removes all first-order terms
             val fromSchema = simpleTypes(schema)
-            includedTerms = includedTerms.filter(fromSchema.contains(_))
+            includedTerms = includedTerms.filter {
+              case t: ColumnRef => !includedTerms.contains(t.value)
+              case _ => true
+            }
           case _: Deletion =>
             assert(false, "Deletion terms cannot be nested")
           case _: Intercept =>
         }
       case _: Intercept =>
     }
-    ResolvedRFormula(label.value, includedTerms.distinct, Nil)
+    ResolvedRFormula(label.value, includedTerms.distinct)
   }
 
   /** Whether this formula specifies fitting with an intercept term. */
@@ -79,8 +82,7 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
 /**
  * Represents a fully evaluated and simplified R formula.
  */
-private[ml] case class ResolvedRFormula(
-  label: String, terms: Seq[String], interactions: Seq[Array[String]])
+private[ml] case class ResolvedRFormula(label: String, terms: Seq[SimpleTerm])
 
 /**
  * R formula terms. See the R formula docs here for more information:
@@ -88,11 +90,17 @@ private[ml] case class ResolvedRFormula(
  */
 private[ml] sealed trait Term
 
+/** A standalone term after formula simplification, e.g. single variable or interaction. */
+private[ml] sealed trait SimpleTerm
+
 /* R formula reference to all available columns, e.g. "." in a formula */
 private[ml] case object Dot extends Term
 
 /* R formula reference to a column, e.g. "+ Species" in a formula */
-private[ml] case class ColumnRef(value: String) extends Term
+private[ml] case class ColumnRef(value: String) extends Term with SimpleTerm
+
+/* R formula interaction of several columns, e.g. "Sepal_Length:Species" in a formula */
+private[ml] case class ColumnInteraction(values: Array[String]) extends Term with SimpleTerm
 
 /* R formula intercept toggle, e.g. "+ 0" in a formula */
 private[ml] case class Intercept(enabled: Boolean) extends Term
