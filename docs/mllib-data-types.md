@@ -494,6 +494,9 @@ rowMat = mat.toRowMatrix()
 
 # Convert to a CoordinateMatrix.
 coordinateMat = mat.toCoordinateMatrix()
+
+# Convert to a BlockMatrix.
+blockMat = mat.toBlockMatrix()
 {% endhighlight %}
 </div>
 
@@ -594,6 +597,9 @@ rowMat = mat.toRowMatrix()
 
 # Convert to an IndexedRowMatrix.
 indexedRowMat = mat.toIndexedRowMatrix()
+
+# Convert to a BlockMatrix.
+blockMat = mat.toBlockMatrix()
 {% endhighlight %}
 </div>
 
@@ -662,15 +668,15 @@ BlockMatrix ata = matA.transpose().multiply(matA);
 {% endhighlight %}
 </div>
 
-
 <div data-lang="python" markdown="1">
 
-A [`BlockMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.BlockMatrix) can be created
-from an `RDD` of sub-matrix blocks, where a sub-matrix block is a 
+A [`BlockMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.BlockMatrix) 
+can be created from an `RDD` of sub-matrix blocks, where a sub-matrix block is a 
 `((blockRowIndex, blockColIndex), sub-matrix)` tuple.
 
 {% highlight python %}
-from pyspark.mllib.linalg import BlockMatrix, Matrices
+from pyspark.mllib.linalg import Matrices
+from pyspark.mllib.linalg.distributed import BlockMatrix
 
 # Create an RDD of sub-matrix blocks.
 blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])), 
@@ -688,6 +694,12 @@ blocksRDD = mat.blocks
 
 # Convert to a LocalMatrix.
 localMat = mat.toLocalMatrix()
+
+# Convert to an IndexedRowMatrix.
+indexedRowMat = mat.toIndexedRowMatrix()
+
+# Convert to a CoordinateMatrix.
+coordinateMat = mat.toCoordinateMatrix()
 {% endhighlight %}
 </div>
 </div>

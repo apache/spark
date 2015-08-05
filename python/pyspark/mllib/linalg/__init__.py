@@ -37,15 +37,12 @@ else:
 
 import numpy as np
 
-from pyspark import RDD
-from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
     IntegerType, ByteType, BooleanType
 
 
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors',
-           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices',
-           'BlockMatrix']
+           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices']
 
 
 if sys.version_info[:2] == (2, 7):
@@ -1155,177 +1152,9 @@ class Matrices(object):
         return SparseMatrix(numRows, numCols, colPtrs, rowIndices, values)
 
 
-def _convert_to_matrix_block_tuple(block):
-    if isinstance(block, tuple) and len(block) == 2 and len(block[0]) == 2 \
-            and isinstance(block[1], Matrix):
-        blockRowIndex = int(block[0][0])
-        blockColIndex = int(block[0][1])
-        subMatrix = block[1]
-        return ((blockRowIndex, blockColIndex), subMatrix)
-    else:
-        raise TypeError("Cannot convert type %s into a sub-matrix block tuple" % type(block))
-
-
-class BlockMatrix(object):
-    """
-    .. note:: Experimental
-
-    Represents a distributed matrix in blocks of local matrices.
-
-     :param blocks: The RDD of sub-matrix blocks
-                    ((blockRowIndex, blockColIndex), sub-matrix) that
-                    form this distributed matrix. If multiple blocks
-                    with the same index exist, the results for
-                    operations like add and multiply will be
-                    unpredictable.
-     :param rowsPerBlock: Number of rows that make up each block.
-                          The blocks forming the final rows are not
-                          required to have the given number of rows.
-     :param colsPerBlock: Number of columns that make up each block.
-                          The blocks forming the final columns are not
-                          required to have the given number of columns.
-     :param numRows: Number of rows of this matrix. If the supplied
-                     value is less than or equal to zero, the number
-                     of rows will be calculated when `numRows` is
-                     invoked.
-     :param numCols: Number of columns of this matrix. If the supplied
-                     value is less than or equal to zero, the number
-                     of columns will be calculated when `numCols` is
-                     invoked.
-    """
-    def __init__(self, blocks, rowsPerBlock, colsPerBlock, numRows=0, numCols=0):
-        """Create a wrapper over a Java BlockMatrix."""
-        if not isinstance(blocks, RDD):
-            raise TypeError("entries should be an RDD of sub-matrix blocks as"
-                            "((int, int), matrix) tuples, got %s" % type(blocks))
-        blocks = blocks.map(_convert_to_matrix_block_tuple)
-
-        # We use DataFrames for serialization of sub-matrix blocks
-        # from Python, so first convert the RDD to a DataFrame on this
-        # side. We will convert back to
-        # ((blockRowIndex, blockColIndex), sub-matrix) tuples on the
-        # Scala side.
-        javaBlockMatrix = callMLlibFunc("createBlockMatrix", blocks.toDF(),
-                                        int(rowsPerBlock), int(colsPerBlock),
-                                        long(numRows), long(numCols))
-        self._jbm = JavaModelWrapper(javaBlockMatrix)
-        self._blocks = blocks
-        self._rowsPerBlock = rowsPerBlock
-        self._colsPerBlock = colsPerBlock
-
-    @property
-    def blocks(self):
-        """
-        The RDD of sub-matrix blocks
-        ((blockRowIndex, blockColIndex), sub-matrix) that form this
-        distributed matrix.
-        """
-        return self._blocks
-
-    @property
-    def rowsPerBlock(self):
-        """Number of rows that make up each block."""
-        return self._rowsPerBlock
-
-    @property
-    def colsPerBlock(self):
-        """Number of columns that make up each block."""
-        return self._colsPerBlock
-
-    @property
-    def numRowBlocks(self):
-        """
-        Number of rows of blocks in the BlockMatrix.
-
-        >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
-        ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
-        >>> bm = BlockMatrix(blocks, 3, 2)
-        >>> print(bm.numRowBlocks)
-        2
-        """
-        return self._jbm.call("numRowBlocks")
-
-    @property
-    def numColBlocks(self):
-        """
-        Number of columns of blocks in the BlockMatrix.
-
-        >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
-        ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
-        >>> bm = BlockMatrix(blocks, 3, 2)
-        >>> print(bm.numColBlocks)
-        1
-        """
-        return self._jbm.call("numColBlocks")
-
-    def numRows(self):
-        """
-        Get or compute the number of rows.
-
-        >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
-        ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
-
-        >>> bm = BlockMatrix(blocks, 3, 2)
-        >>> print(bm.numRows())
-        6
-
-        >>> bm = BlockMatrix(blocks, 3, 2, 7, 6)
-        >>> print(bm.numRows())
-        7
-        """
-        return self._jbm.call("numRows")
-
-    def numCols(self):
-        """
-        Get or compute the number of cols.
-
-        >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
-        ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
-
-        >>> bm = BlockMatrix(blocks, 3, 2)
-        >>> print(bm.numCols())
-        2
-
-        >>> bm = BlockMatrix(blocks, 3, 2, 7, 6)
-        >>> print(bm.numCols())
-        6
-        """
-        return self._jbm.call("numCols")
-
-    def toLocalMatrix(self):
-        """
-        Collect the distributed matrix on the driver as a DenseMatrix.
-
-        >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
-        ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
-
-        >>> # This BlockMatrix will have 6 effective rows, due to
-        >>> # having two sub-matrix blocks stacked, each with 3 rows.
-        >>> # The ensuing DenseMatrix will also have 6 rows.
-        >>> mat = BlockMatrix(blocks, 3, 2).toLocalMatrix()
-        >>> print(mat.numRows)
-        6
-
-        >>> # This BlockMatrix will have 2 effective columns, due to
-        >>> # having two sub-matrix blocks stacked, each with 2
-        >>> # columns. The ensuing DenseMatrix will also have 2 columns.
-        >>> mat = BlockMatrix(blocks, 3, 2).toLocalMatrix()
-        >>> print(mat.numCols)
-        2
-        """
-        return self._jbm.call("toLocalMatrix")
-
-
 def _test():
     import doctest
-    from pyspark import SparkContext
-    from pyspark.sql import SQLContext
-    import pyspark.mllib.linalg
-    globs = pyspark.mllib.linalg.__dict__.copy()
-    globs['sc'] = SparkContext('local[2]', 'PythonTest', batchSize=2)
-    globs['sqlContext'] = SQLContext(globs['sc'])
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
     if failure_count:
         exit(-1)
 
