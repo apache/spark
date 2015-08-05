@@ -2218,6 +2218,15 @@ object functions {
    */
   def sort_array(e: Column, asc: Boolean): Column = SortArray(e.expr, lit(asc).expr)
 
+  /**
+   * Returns true if the array contain the value
+   * @group collection_funcs
+   * @since 1.5.0
+   */
+  def array_contains(column: Column, value: Any): Column =
+    ArrayContains(column.expr, Literal(value))
+
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
 
