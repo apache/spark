@@ -24,6 +24,10 @@ import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.util.Utils;
 
+import java.nio.ByteOrder;
+
+import static org.apache.spark.unsafe.PlatformDependent.*;
+
 @Private
 public class PrefixComparators {
   private PrefixComparators() {}
