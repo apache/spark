@@ -64,8 +64,8 @@ private[stat] object KolmogorovSmirnovTest extends Logging {
   // Null hypothesis for the type of KS test to be included in the result.
   object NullHypothesis extends Enumeration {
     type NullHypothesis = Value
-    val OneSampleTwoSided = Value("Sample follows the theoretical distribution")
-    val TwoSampleTwoSided = Value("Both samples follow the same distribution")
+    val OneSampleTwoSided = Value("Sample follows theoretical distribution")
+    val TwoSampleTwoSided = Value("Both samples follow same distribution")
   }
 
   /**
