@@ -293,8 +293,8 @@ def round(col, scale=0):
     Round the value of `e` to `scale` decimal places if `scale` >= 0
     or at integral part when `scale` < 0.
 
-    >>> sqlContext.createDataFrame([(3.14159,)], ['a']).select(round('a', 1).alias('r')).collect()
-    [Row(r=3.1)]
+    >>> sqlContext.createDataFrame([(2.546,)], ['a']).select(round('a', 1).alias('r')).collect()
+    [Row(r=2.5)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.round(_to_java_column(col), scale))
