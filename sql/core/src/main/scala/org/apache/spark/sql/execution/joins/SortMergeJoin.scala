@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.joins
 
-import java.util.NoSuchElementException
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -67,104 +65,150 @@ case class SortMergeJoin(
 
     leftResults.zipPartitions(rightResults) { (leftIter, rightIter) =>
       new Iterator[InternalRow] {
-        // Mutable per row objects.
+        private[this] var currentLeftRow: InternalRow = _
+        private[this] var currentRightMatches: CompactBuffer[InternalRow] = _
+        private[this] var currentMatchIdx: Int = -1
+        private[this] val smjScanner = new SortMergeJoinScanner(
+          leftKeyGenerator,
+          rightKeyGenerator,
+          keyOrdering,
+          leftIter,
+          rightIter
+        )
         private[this] val joinRow = new JoinedRow
-        private[this] var leftElement: InternalRow = _
-        private[this] var rightElement: InternalRow = _
-        private[this] var leftKey: InternalRow = _
-        private[this] var rightKey: InternalRow = _
-        private[this] var rightMatches: CompactBuffer[InternalRow] = _
-        private[this] var rightPosition: Int = -1
-        private[this] var stop: Boolean = false
-        private[this] var matchKey: InternalRow = _
 
-        // initialize iterator
-        initialize()
+        override final def hasNext: Boolean =
+          (currentMatchIdx != -1 && currentMatchIdx < currentRightMatches.length) || fetchNext()
 
-        private def initialize(): Unit = {
-          fetchLeft()
-          fetchRight()
-        }
-
-        override final def hasNext: Boolean = nextMatchingPair()
-
-        override final def next(): InternalRow = {
-          if (hasNext) {
-            // we are using the buffered right rows and run down left iterator
-            val joinedRow = joinRow(leftElement, rightMatches(rightPosition))
-            rightPosition += 1
-            if (rightPosition >= rightMatches.size) {
-              rightPosition = 0
-              fetchLeft()
-              if (leftElement == null || keyOrdering.compare(leftKey, matchKey) != 0) {
-                stop = false
-                rightMatches = null
-              }
-            }
-            joinedRow
+        private[this] def fetchNext(): Boolean = {
+          if (smjScanner.findNextInnerJoinRows()) {
+            currentRightMatches = smjScanner.getRightMatches
+            currentLeftRow = smjScanner.getLeftRow
+            currentMatchIdx = 0
+            true
           } else {
-            // no more result
-            throw new NoSuchElementException
+            currentRightMatches = null
+            currentLeftRow = null
+            currentMatchIdx = -1
+            false
           }
         }
 
-        private def fetchLeft(): Unit = {
-          if (leftIter.hasNext) {
-            leftElement = leftIter.next()
-            leftKey = leftKeyGenerator(leftElement)
-          } else {
-            leftElement = null
+        override def next(): InternalRow = {
+          if (currentMatchIdx == -1 || currentMatchIdx == currentRightMatches.length) {
+            fetchNext()
           }
-        }
-
-        private def fetchRight(): Unit = {
-          if (rightIter.hasNext) {
-            rightElement = rightIter.next()
-            rightKey = rightKeyGenerator(rightElement)
-          } else {
-            rightElement = null
-          }
-        }
-
-        /**
-         * Searches the right iterator for the next rows that have matches in left side, and store
-         * them in a buffer.
-         *
-         * @return true if the search is successful, and false if the right iterator runs out of
-         *         tuples.
-         */
-        private def nextMatchingPair(): Boolean = {
-          if (!stop && rightElement != null) {
-            // run both side to get the first match pair
-            while (!stop && leftElement != null && rightElement != null) {
-              val comparing = keyOrdering.compare(leftKey, rightKey)
-              // for inner join, we need to filter those null keys
-              stop = comparing == 0 && !leftKey.anyNull
-              if (comparing > 0 || rightKey.anyNull) {
-                fetchRight()
-              } else if (comparing < 0 || leftKey.anyNull) {
-                fetchLeft()
-              }
-            }
-            rightMatches = new CompactBuffer[InternalRow]()
-            if (stop) {
-              stop = false
-              // iterate the right side to buffer all rows that matches
-              // as the records should be ordered, exit when we meet the first that not match
-              while (!stop && rightElement != null) {
-                rightMatches += rightElement
-                fetchRight()
-                stop = keyOrdering.compare(leftKey, rightKey) != 0
-              }
-              if (rightMatches.size > 0) {
-                rightPosition = 0
-                matchKey = leftKey
-              }
-            }
-          }
-          rightMatches != null && rightMatches.size > 0
+          val joinedRow = joinRow(currentLeftRow, currentRightMatches(currentMatchIdx))
+          currentMatchIdx += 1
+          joinedRow
         }
       }
+    }
+  }
+}
+
+/**
+ * Helper class that is used to implement [[SortMergeJoin]] and [[SortMergeOuterJoin]].
+ */
+private[joins] class SortMergeJoinScanner(
+    leftKeyGenerator: Projection,
+    rightKeyGenerator: Projection,
+    keyOrdering: RowOrdering,
+    leftIter: Iterator[InternalRow],
+    rightIter: Iterator[InternalRow]) {
+  private[this] var leftRow: InternalRow = _
+  private[this] var leftJoinKey: InternalRow = _
+  private[this] var rightRow: InternalRow = _
+  private[this] var rightJoinKey: InternalRow = _
+   /** The join key for the rows buffered in `rightMatches`, or null if `rightMatches` is empty */
+  private[this] var matchedJoinKey: InternalRow = _
+  /** Buffered rows from the right side of the join. This is never null. */
+  private[this] var rightMatches: CompactBuffer[InternalRow] = new CompactBuffer[InternalRow]()
+
+  // Initialization (note: do _not_ want to advance left here).
+  advanceRight()
+
+  // --- Public methods ---------------------------------------------------------------------------
+
+  /**
+   * Advances both input iterators, stopping when we have found rows with matching join keys.
+   * @return true if matching rows have been found and false otherwise. If this returns true, then
+   *         [[getLeftRow]] and [[getRightMatches]] can be called to produce the join results.
+   */
+  final def findNextInnerJoinRows(): Boolean = {
+    advanceLeft()
+    if (leftRow == null) {
+      // We have consumed the entire left iterator, so there can be no more matches.
+      false
+    } else if (matchedJoinKey != null && keyOrdering.compare(leftJoinKey, matchedJoinKey) == 0) {
+      // The new left row has the same join key as the previous row, so return the same matches.
+      true
+    } else if (rightRow == null) {
+      // The left row's join key does not match the current batch of right rows and there are no
+      // more rows to read from the right iterator, so there can be no more matches.
+      false
+    } else {
+      // Advance both the left and right iterators to find the next pair of matching rows.
+      var comp = 0
+      do {
+        if (leftJoinKey.anyNull) {
+          advanceLeft()
+        } else if (rightJoinKey.anyNull) {
+          advanceRight()
+        } else {
+          comp = keyOrdering.compare(leftJoinKey, rightJoinKey)
+          if (comp > 0) advanceRight()
+          else if (comp < 0) advanceLeft()
+        }
+      } while (leftRow != null && rightRow != null && comp != 0)
+      if (leftRow == null || rightRow == null) {
+        // We have either hit the end of one of the iterators, so there can be no more matches.
+        false
+      } else {
+        // The left and right rows have matching join keys, so scan through the right iterator to
+        // buffer all matching rows.
+        assert(comp == 0)
+        matchedJoinKey = leftJoinKey
+        rightMatches = new CompactBuffer[InternalRow]()
+        do {
+          // TODO(josh): if we move the row copying further down, we would do it here:
+          // TODO(josh): could maybe avoid a copy for case where all rows have exactly one match
+          rightMatches += rightRow
+          advanceRight()
+        } while (rightRow != null && keyOrdering.compare(leftJoinKey, rightJoinKey) == 0)
+        true
+      }
+    }
+  }
+
+  def getRightMatches: CompactBuffer[InternalRow] = rightMatches
+  def getLeftRow: InternalRow = leftRow
+
+  // --- Private methods --------------------------------------------------------------------------
+
+  /**
+   * Advance the left iterator and compute the new row's join key.
+   */
+  private def advanceLeft(): Unit = {
+    if (leftIter.hasNext) {
+      leftRow = leftIter.next()
+      leftJoinKey = leftKeyGenerator(leftRow)
+    } else {
+      leftRow = null
+      leftJoinKey = null
+    }
+  }
+
+  /**
+   * Advance the right iterator and compute the new row's join key.
+   */
+  private def advanceRight(): Unit = {
+    if (rightIter.hasNext) {
+      rightRow = rightIter.next()
+      rightJoinKey = rightKeyGenerator(rightRow)
+    } else {
+      rightRow = null
+      rightJoinKey = null
     }
   }
 }
