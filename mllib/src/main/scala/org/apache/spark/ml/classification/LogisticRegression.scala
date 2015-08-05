@@ -41,7 +41,39 @@ import org.apache.spark.storage.StorageLevel
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
-  with HasThreshold with HasStandardization
+  with HasStandardization {
+
+  /**
+   * Version of setThresholds() for binary classification, available for backwards
+   * compatibility.
+   *
+   * Calling this with threshold p will effectively call `setThresholds(Array(1-p, p))`.
+   *
+   * Default is effectively 0.5.
+   * @group setParam
+   */
+  def setThreshold(value: Double): this.type = set(thresholds, Array(1.0 - value, value))
+
+  /**
+   * Version of [[getThresholds()]] for binary classification, available for backwards
+   * compatibility.
+   *
+   * Param thresholds must have length 2 (or not be specified).
+   * This returns {{{1 / (1 + thresholds(0) / thresholds(1))}}}.
+   * @group getParam
+   */
+  def getThreshold: Double = {
+    if (isDefined(thresholds)) {
+      val thresholdValues = $(thresholds)
+      assert(thresholdValues.length == 2, "Logistic Regression getThreshold only applies to" +
+        " binary classification, but thresholds has length != 2." +
+        s"  thresholds: ${thresholdValues.mkString(",")}")
+      1.0 / (1.0 + thresholdValues(0) / thresholdValues(1))
+    } else {
+      0.5
+    }
+  }
+}
 
 /**
  * :: Experimental ::
@@ -110,9 +142,9 @@ class LogisticRegression(override val uid: String)
   def setStandardization(value: Boolean): this.type = set(standardization, value)
   setDefault(standardization -> true)
 
-  /** @group setParam */
-  def setThreshold(value: Double): this.type = set(threshold, value)
-  setDefault(threshold -> 0.5)
+  override def setThreshold(value: Double): this.type = super.setThreshold(value)
+
+  override def getThreshold: Double = super.getThreshold
 
   override protected def train(dataset: DataFrame): LogisticRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
@@ -270,8 +302,9 @@ class LogisticRegressionModel private[ml] (
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams {
 
-  /** @group setParam */
-  def setThreshold(value: Double): this.type = set(threshold, value)
+  override def setThreshold(value: Double): this.type = super.setThreshold(value)
+
+  override def getThreshold: Double = super.getThreshold
 
   /** Margin (rawPrediction) for class label 1.  For binary classification only. */
   private val margin: Vector => Double = (features) => {
@@ -288,7 +321,7 @@ class LogisticRegressionModel private[ml] (
 
   /**
    * Predict label for the given feature vector.
-   * The behavior of this can be adjusted using [[threshold]].
+   * The behavior of this can be adjusted using [[thresholds]].
    */
   override protected def predict(features: Vector): Double = {
     if (score(features) > getThreshold) 1 else 0

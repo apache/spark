@@ -231,6 +231,6 @@ class MyJavaLogisticRegressionModel
   @Override
   public MyJavaLogisticRegressionModel copy(ParamMap extra) {
     return copyValues(new MyJavaLogisticRegressionModel(uid(), weights_), extra)
-            .setParent(parent());
+             .setParent(parent());
   }
 }

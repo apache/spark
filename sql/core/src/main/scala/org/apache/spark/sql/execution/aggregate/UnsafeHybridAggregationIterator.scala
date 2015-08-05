@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.sql.execution.{UnsafeKeyValueSorter, UnsafeFixedWidthAggregationMap}
 import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.execution.{UnsafeKVExternalSorter, UnsafeFixedWidthAggregationMap}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -230,7 +230,7 @@ class UnsafeHybridAggregationIterator(
     }
 
     // Step 5: Get the sorted iterator from the externalSorter.
-    val sortedKVIterator: KVIterator[UnsafeRow, UnsafeRow] = externalSorter.sortedIterator()
+    val sortedKVIterator: UnsafeKVExternalSorter#KVSorterIterator = externalSorter.sortedIterator()
 
     // Step 6: We now create a SortBasedAggregationIterator based on sortedKVIterator.
     // For a aggregate function with mode Partial, its mode in the SortBasedAggregationIterator
@@ -359,32 +359,6 @@ object UnsafeHybridAggregationIterator {
       groupingExprs.map(_.toAttribute),
       inputAttributes,
       AggregationIterator.unsafeKVIterator(groupingExprs, inputAttributes, inputIter),
-      nonCompleteAggregateExpressions,
-      nonCompleteAggregateAttributes,
-      completeAggregateExpressions,
-      completeAggregateAttributes,
-      initialInputBufferOffset,
-      resultExpressions,
-      newMutableProjection,
-      outputsUnsafeRows)
-  }
-
-  def createFromKVIterator(
-      groupingKeyAttributes: Seq[Attribute],
-      valueAttributes: Seq[Attribute],
-      inputKVIterator: KVIterator[UnsafeRow, InternalRow],
-      nonCompleteAggregateExpressions: Seq[AggregateExpression2],
-      nonCompleteAggregateAttributes: Seq[Attribute],
-      completeAggregateExpressions: Seq[AggregateExpression2],
-      completeAggregateAttributes: Seq[Attribute],
-      initialInputBufferOffset: Int,
-      resultExpressions: Seq[NamedExpression],
-      newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-      outputsUnsafeRows: Boolean): UnsafeHybridAggregationIterator = {
-    new UnsafeHybridAggregationIterator(
-      groupingKeyAttributes,
-      valueAttributes,
-      inputKVIterator,
       nonCompleteAggregateExpressions,
       nonCompleteAggregateAttributes,
       completeAggregateExpressions,

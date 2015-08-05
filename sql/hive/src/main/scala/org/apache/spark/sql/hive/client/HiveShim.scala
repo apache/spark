@@ -512,7 +512,7 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
       listBucketingEnabled: Boolean): Unit = {
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, holdDDLTime: JBoolean, listBucketingEnabled: JBoolean, JBoolean.FALSE,
-      0: JLong)
+      0L: JLong)
   }
 
 }
