@@ -340,9 +340,40 @@ class RowMatrix(DistributedMatrix):
         j_model = self._java_matrix_wrapper.call("computeSVD", int(k), computeU, float(rCond))
         return SingularValueDecomposition(j_model)
 
+    def computePrincipalComponents(self, k):
+        """
+        Computes the k principal components of the given row matrix
+
+        :param k: Number of principal components to keep.
+        :returns: DenseMatrix
+
+        >>> data = sc.parallelize([[1, 2, 3], [2, 4, 5], [3, 6, 1]])
+        >>> rm = RowMatrix(data)
+
+        >>> # Returns the two principal components of rm
+        >>> pca = rm.computePrincipalComponents(2)
+        >>> pca
+        DenseMatrix(3, 2, [-0.349, -0.6981, 0.6252, -0.2796, -0.5592, -0.7805], 0)
+
+        >>> # Transform into new dimensions with the greatest variance.
+        >>> rm.multiply(pca).rows.collect() # doctest: +NORMALIZE_WHITESPACE
+        [DenseVector([0.1305, -3.7394]), DenseVector([-0.3642, -6.6983]), \
+        DenseVector([-4.6102, -4.9745])]
+        """
+        return self._java_matrix_wrapper.call("computePrincipalComponents", k)
+
+    def multiply(self, matrix):
+        """
+        Multiplies the given row matrix with another matrix.
+
+        :param matrix: Matrix to multiply with.
+        :returns: RowMatrix
+        """
+        return RowMatrix(self._java_matrix_wrapper.call("multiply", matrix))
+
 
 class SingularValueDecomposition(JavaModelWrapper):
-    """Wrapper around the SingularValueDecomposition Java case class"""
+    """Wrapper around the SingularValueDecomposition scala case class"""
 
     @property
     def U(self):
