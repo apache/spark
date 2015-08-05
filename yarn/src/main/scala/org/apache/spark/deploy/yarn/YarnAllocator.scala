@@ -86,7 +86,7 @@ private[yarn] class YarnAllocator(
   private var executorIdCounter = 0
   @volatile private var numExecutorsFailed = 0
 
-  @volatile private var targetNumExecutors = args.numExecutors
+  @volatile private var targetNumExecutors = sparkConf.get("spark.executor.instances").toInt
 
   // Keep track of which container is running which executor to remove the executors later
   // Visible for testing.

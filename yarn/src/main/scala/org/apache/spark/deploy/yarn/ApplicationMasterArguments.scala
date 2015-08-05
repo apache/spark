@@ -29,7 +29,6 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var userArgs: Seq[String] = Nil
   var executorMemory = 1024
   var executorCores = 1
-  var numExecutors = DEFAULT_NUMBER_EXECUTORS
   var propertiesFile: String = null
 
   parseArgs(args.toList)

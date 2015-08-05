@@ -476,6 +476,23 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
         }
       }
     }
+
+    sys.env.get("SPARK_WORKER_INSTANCES").foreach { value =>
+      val warning =
+        s"""
+           |SPARK_WORKER_INSTANCES was detected (set to '$value').
+           |This is deprecated in Spark 1.0+.
+           |
+           |Please instead use:
+           | - ./spark-submit with --num-executors to specify the number of executors
+           | - Or set SPARK_EXECUTOR_INSTANCES
+           | - spark.executor.instances to configure the number of instances in the spark config.
+        """.stripMargin
+      logWarning(warning)
+
+      set("spark.executor.instances", value.toString())
+
+    }
   }
 
   /**
