@@ -124,7 +124,7 @@ private[streaming] class BlockGenerator(
    * Push a single data item into the buffer. All received data items
    * will be periodically pushed into BlockManager.
    */
-  def addData (data: Any): Unit = synchronized {
+  def addData(data: Any): Unit = synchronized {
     if (!stopped) {
       waitToPush()
       currentBuffer += data
@@ -169,7 +169,7 @@ private[streaming] class BlockGenerator(
     }
   }
 
-  def isStopped() = stopped
+  def isStopped(): Boolean = stopped
 
   /** Change the buffer to which single records are added to. */
   private def updateCurrentBuffer(time: Long): Unit = synchronized {
