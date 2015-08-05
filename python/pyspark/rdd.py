@@ -889,8 +889,9 @@ class RDD(object):
         >>> sc.parallelize([]).aggregate((0, 0), seqOp, combOp)
         (0, 0)
         """
+        zero_copy = copy.deepcopy(zeroValue)
         def func(iterator):
-            acc = copy.deepcopy(zeroValue)
+            acc = zero_copy
             for obj in iterator:
                 acc = seqOp(acc, obj)
             yield acc
@@ -898,7 +899,7 @@ class RDD(object):
         # zeroValue provided to each partition is unique from the one provided
         # to the final reduce call
         vals = self.mapPartitions(func).collect()
-        return reduce(combOp, vals, copy.deepcopy(zeroValue))
+        return reduce(combOp, vals, zero_copy)
 
     def treeAggregate(self, zeroValue, seqOp, combOp, depth=2):
         """
