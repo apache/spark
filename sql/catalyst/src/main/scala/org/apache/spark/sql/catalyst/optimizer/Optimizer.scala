@@ -393,7 +393,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
 object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) =>
+      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) && list.size > 10 =>
         val hSet = list.map(e => e.eval(EmptyRow))
         InSet(v, HashSet() ++ hSet)
     }
