@@ -72,7 +72,7 @@ public final class UnsafeFixedWidthAggregationMap {
    */
   public static boolean supportsAggregationBufferSchema(StructType schema) {
     for (StructField field: schema.fields()) {
-      if (!UnsafeRow.isFixedLength(field.dataType())) {
+      if (!UnsafeRow.isSettable(field.dataType())) {
         return false;
       }
     }
