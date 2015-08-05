@@ -20,6 +20,7 @@ package org.apache.spark.launcher;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -36,7 +37,53 @@ public class SparkLauncherSuite {
   private static final Logger LOG = LoggerFactory.getLogger(SparkLauncherSuite.class);
 
   @Test
+  public void testSparkArgumentHandling() throws Exception {
+    SparkLauncher launcher = new SparkLauncher()
+      .setSparkHome(System.getProperty("spark.test.home"));
+    SparkSubmitOptionParser opts = new SparkSubmitOptionParser();
+
+    launcher.addSparkArg(opts.HELP);
+    try {
+      launcher.addSparkArg(opts.PROXY_USER);
+      fail("Expected IllegalArgumentException.");
+    } catch (IllegalArgumentException e) {
+      // Expected.
+    }
+
+    launcher.addSparkArg(opts.PROXY_USER, "someUser");
+    try {
+      launcher.addSparkArg(opts.HELP, "someValue");
+      fail("Expected IllegalArgumentException.");
+    } catch (IllegalArgumentException e) {
+      // Expected.
+    }
+
+    launcher.addSparkArg("--future-argument");
+    launcher.addSparkArg("--future-argument", "someValue");
+
+    launcher.addSparkArg(opts.MASTER, "myMaster");
+    assertEquals("myMaster", launcher.builder.master);
+
+    launcher.addJar("foo");
+    launcher.addSparkArg(opts.JARS, "bar");
+    assertEquals(Arrays.asList("bar"), launcher.builder.jars);
+
+    launcher.addFile("foo");
+    launcher.addSparkArg(opts.FILES, "bar");
+    assertEquals(Arrays.asList("bar"), launcher.builder.files);
+
+    launcher.addPyFile("foo");
+    launcher.addSparkArg(opts.PY_FILES, "bar");
+    assertEquals(Arrays.asList("bar"), launcher.builder.pyFiles);
+
+    launcher.setConf("spark.foo", "foo");
+    launcher.addSparkArg(opts.CONF, "spark.foo=bar");
+    assertEquals("bar", launcher.builder.conf.get("spark.foo"));
+  }
+
+  @Test
   public void testChildProcLauncher() throws Exception {
+    SparkSubmitOptionParser opts = new SparkSubmitOptionParser();
     Map<String, String> env = new HashMap<String, String>();
     env.put("SPARK_PRINT_LAUNCH_COMMAND", "1");
 
@@ -44,9 +91,12 @@ public class SparkLauncherSuite {
       .setSparkHome(System.getProperty("spark.test.home"))
       .setMaster("local")
       .setAppResource("spark-internal")
+      .addSparkArg(opts.CONF,
+        String.format("%s=-Dfoo=ShouldBeOverriddenBelow", SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS))
       .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
         "-Dfoo=bar -Dtest.name=-testChildProcLauncher")
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
+      .addSparkArg(opts.CLASS, "ShouldBeOverriddenBelow")
       .setMainClass(SparkLauncherTestApp.class.getName())
       .addAppArgs("proc");
     final Process app = launcher.launch();
