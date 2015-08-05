@@ -997,11 +997,7 @@ def search_kinesis_asl_assembly_jar():
         os.path.join(kinesis_asl_assembly_dir,
                      "target/scala-*/spark-streaming-kinesis-asl-assembly-*.jar"))
     if not jars:
-        raise Exception(
-            ("Failed to find Spark Streaming Kinesis ASL assembly jar in %s. " %
-             kinesis_asl_assembly_dir) + "You need to build Spark with "
-            "'build/sbt -Pkinesis-asl assembly/assembly streaming-kinesis-asl-assembly/assembly' "
-            "or 'build/mvn -Pkinesis-asl package' before running this test")
+        return None
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Kinesis ASL assembly JARs in %s; please "
                          "remove all but one") % kinesis_asl_assembly_dir)
@@ -1013,7 +1009,22 @@ if __name__ == "__main__":
     kafka_assembly_jar = search_kafka_assembly_jar()
     flume_assembly_jar = search_flume_assembly_jar()
     kinesis_asl_assembly_jar = search_kinesis_asl_assembly_jar()
-    jars = "%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, kinesis_asl_assembly_jar)
+    if kinesis_asl_assembly_jar is None:
+        kinesis_jar_present = False
+        jars = "%s,%s" % (kafka_assembly_jar, flume_assembly_jar)
+    else:
+        kinesis_jar_present = True
+        jars = "%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, kinesis_asl_assembly_jar)
 
+    print kinesis_jar_present, jars
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
-    unittest.main()
+    testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, \
+        CheckpointTests, KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests]
+    if kinesis_jar_present is True:
+        testcases.append(KinesisStreamTests)
+
+    sys.stderr.write("Running tests %s\n" % (str(testcases)))
+    for testcase in testcases:
+        print "[", testcase, "]"
+        tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
+        unittest.TextTestRunner(verbosity=2).run(tests)
