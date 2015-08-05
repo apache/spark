@@ -1129,6 +1129,21 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Wrapper around BlockMatrix constructor.
+   */
+  def createBlockMatrix(blocks: DataFrame, rowsPerBlock: Int, colsPerBlock: Int,
+                        numRows: Long, numCols: Long): BlockMatrix = {
+    // We use DataFrames for serialization of sub-matrix blocks from
+    // Python, so map each Row in the DataFrame back to a
+    // ((blockRowIndex, blockColIndex), sub-matrix) tuple.
+    val blockTuples = blocks.map {
+      case Row(Row(blockRowIndex: Long, blockColIndex: Long), subMatrix: Matrix) =>
+        ((blockRowIndex.toInt, blockColIndex.toInt), subMatrix)
+    }
+    new BlockMatrix(blockTuples, rowsPerBlock, colsPerBlock, numRows, numCols)
+  }
+
+  /**
    * Return the rows of an IndexedRowMatrix.
    */
   def getIndexedRows(indexedRowMatrix: IndexedRowMatrix): DataFrame = {
@@ -1146,6 +1161,16 @@ private[python] class PythonMLLibAPI extends Serializable {
     // Python, so return a DataFrame.
     val sqlContext = new SQLContext(coordinateMatrix.entries.sparkContext)
     sqlContext.createDataFrame(coordinateMatrix.entries)
+  }
+
+  /**
+   * Return the sub-matrix blocks of a BlockMatrix.
+   */
+  def getMatrixBlocks(blockMatrix: BlockMatrix): DataFrame = {
+    // We use DataFrames for serialization of sub-matrix blocks to
+    // Python, so return a DataFrame.
+    val sqlContext = new SQLContext(blockMatrix.blocks.sparkContext)
+    sqlContext.createDataFrame(blockMatrix.blocks)
   }
 }
 
