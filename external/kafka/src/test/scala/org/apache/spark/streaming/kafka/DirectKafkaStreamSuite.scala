@@ -362,26 +362,20 @@ class DirectKafkaStreamSuite
       "auto.offset.reset" -> "smallest"
     )
 
-    val collectedData =
-      new mutable.ArrayBuffer[Array[String]]() with mutable.SynchronizedBuffer[Array[String]]
-    // Send data to Kafka and wait for it to be received
-    def sendDataAndWaitForReceive(data: Seq[Int]) {
-      val strings = data.map { _.toString}
-      kafkaTestUtils.sendMessages(topic, strings.map { _ -> 1 }.toMap)
-      eventually(timeout(20 seconds), interval(50 milliseconds)) {
-        assert(strings.forall { collectedData.flatten.contains })
-      }
-    }
+    val batchIntervalMilliseconds = 100
+    val estimator = new ConstantEstimator(100)
+    val messageKeys = (1 to 200).map(_.toString)
+    val messages = messageKeys.map((_, 1)).toMap
 
     val sparkConf = new SparkConf()
       // Safe, even with streaming, because we're using the direct API.
-      // Using 1 core is necessary to make the test more predictable.
+      // Using 1 core is useful to make the test more predictable.
       .setMaster("local[1]")
       .setAppName(this.getClass.getSimpleName)
       .set("spark.streaming.kafka.maxRatePerPartition", "100")
 
     // Setup the streaming context
-    ssc = new StreamingContext(sparkConf, Milliseconds(100))
+    ssc = new StreamingContext(sparkConf, Milliseconds(batchIntervalMilliseconds))
 
     val kafkaStream = withClue("Error creating direct stream") {
       val kc = new KafkaCluster(kafkaParams)
@@ -391,10 +385,18 @@ class DirectKafkaStreamSuite
 
       new DirectKafkaInputDStream[String, String, StringDecoder, StringDecoder, (String, String)](
         ssc, kafkaParams, m, messageHandler) {
-        override protected[streaming] val rateController = Some(new DirectKafkaRateController(id,
-          new ConstantEstimator(60.0, 40.0, 20.0)))
+        override protected[streaming] val rateController =
+          Some(new DirectKafkaRateController(id, estimator))
       }
     }
+
+    val collectedData =
+      new mutable.ArrayBuffer[Array[String]]() with mutable.SynchronizedBuffer[Array[String]]
+
+    // Used for assertion failure messages.
+    def dataToString: String =
+      collectedData.map(_.mkString("[", ",", "]")).mkString("{", ", ", "}")
+
     // This is to collect the raw data received from Kafka
     kafkaStream.foreachRDD { (rdd: RDD[(String, String)], time: Time) =>
       val data = rdd.map { _._2 }.collect()
@@ -403,15 +405,21 @@ class DirectKafkaStreamSuite
 
     ssc.start()
 
-    // Send some data and wait for them to be received
-    sendDataAndWaitForReceive((1 to 400))
-
-    def dataToString: String = collectedData.map(_.mkString("[", ",", "]")).mkString("{", ", ", "}")
-
-    // Assert that rate estimator values are used to determine maxMessagesPerPartition
-    assert(collectedData.exists(_.size ==  6), dataToString)  // rate estimator 60.0 * .1 secs
-    assert(collectedData.exists(_.size ==  4), dataToString)  // rate estimator 40.0 * .1 secs
-    assert(collectedData.exists(_.size ==  2), dataToString)  // rate estimator 20.0 * .1 secs
+    // Try different rate limits.
+    // Send data to Kafka and wait for arrays of data to appear matching the rate.
+    Seq(100, 50, 20).foreach { rate =>
+      collectedData.clear()       // Empty this buffer on each pass.
+      estimator.updateRate(rate)  // Set a new rate.
+      // Expect blocks of data equal to "rate", scaled by the interval length in secs.
+      val expectedSize = Math.round(rate * batchIntervalMilliseconds * 0.001)
+      kafkaTestUtils.sendMessages(topic, messages)
+      eventually(timeout(5.seconds), interval(batchIntervalMilliseconds.milliseconds)) {
+        // Assert that rate estimator values are used to determine maxMessagesPerPartition.
+        // Funky "-" in message makes the complete assertion message read better.
+        assert(collectedData.exists(_.size == expectedSize),
+          s" - No arrays of size $expectedSize for rate $rate found in $dataToString")
+      }
+    }
 
     ssc.stop()
   }
@@ -448,19 +456,17 @@ object DirectKafkaStreamSuite {
   }
 }
 
-private[streaming] class ConstantEstimator(rates: Double*) extends RateEstimator {
-  private var idx: Int = 0
+private[streaming] class ConstantEstimator(@volatile private var rate: Long)
+  extends RateEstimator {
 
-  private def nextRate(): Double = {
-    val rate = rates(idx)
-    idx = (idx + 1) % rates.size
-    rate
+  def updateRate(newRate: Long): Unit = {
+    rate = newRate
   }
 
   def compute(
-               time: Long,
-               elements: Long,
-               processingDelay: Long,
-               schedulingDelay: Long): Option[Double] = Some(nextRate())
+      time: Long,
+      elements: Long,
+      processingDelay: Long,
+      schedulingDelay: Long): Option[Double] = Some(rate)
 }
 
