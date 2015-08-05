@@ -26,7 +26,7 @@ import org.apache.spark.sql.test.AbstractSQLTestUtils
 private[spark] trait HiveTestUtils
   extends SparkFunSuite
   with AbstractSQLTestUtils
-  with MyTestHiveContext {
+  with SharedHiveContext {
 
   protected final override def _sqlContext = hiveContext
 }

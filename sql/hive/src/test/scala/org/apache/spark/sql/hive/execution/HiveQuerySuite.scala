@@ -30,7 +30,7 @@ import org.apache.spark.{SparkFiles, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
 case class TestData(a: Int, b: String)
 
@@ -38,7 +38,7 @@ case class TestData(a: Int, b: String)
  * A set of test cases expressed in Hive QL that are not covered by the tests
  * included in the hive distribution.
  */
-class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter with MyTestHiveContext {
+class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter with SharedHiveContext {
   import ctx.implicits._
   import ctx._
 

@@ -23,28 +23,30 @@ import org.apache.spark.SparkFunSuite
 
 
 /**
- * A scalatest trait for test suites where all tests share a single
- * [[org.apache.spark.sql.hive.HiveContext]].
+ * Helper trait for hive test suites where all tests share a single [[TestHiveContext]].
+ * This is analogous to [[org.apache.spark.sql.test.SharedSQLContext]].
  */
-private[spark] trait MyTestHiveContext extends SparkFunSuite with BeforeAndAfterAll {
+private[spark] trait SharedHiveContext extends SparkFunSuite with BeforeAndAfterAll {
 
   /**
    * The [[TestHiveContext]] to use for all tests in this suite.
    *
-   * By default, the underlying [[org.apache.spark.SparkContext]] will be run in local mode
-   * with the default test configurations.
+   * By default, the underlying [[org.apache.spark.SparkContext]] will be run in local
+   * mode with the default test configurations.
    */
   private var _ctx: TestHiveContext = new TestHiveContext
 
-  /** The [[TestHiveContext]] to use for all tests in this suite. */
+  /**
+   * The [[TestHiveContext]] to use for all tests in this suite.
+   */
   protected def hiveContext: TestHiveContext = _ctx
 
   /**
-   * Switch to the provided [[org.apache.spark.sql.hive.HiveContext]].
+   * Switch a custom [[TestHiveContext]].
    *
-   * This stops the underlying [[org.apache.spark.SparkContext]] and expects a new one to
-   * be created. This is needed because only one [[org.apache.spark.SparkContext]] is
-   * allowed per JVM.
+   * This stops the underlying [[org.apache.spark.SparkContext]] and expects a new one
+   * to be created. This is needed because only one [[org.apache.spark.SparkContext]]
+   * is allowed per JVM.
    */
   protected def switchHiveContext(newContext: () => TestHiveContext): Unit = {
     if (_ctx != null) {
@@ -55,7 +57,7 @@ private[spark] trait MyTestHiveContext extends SparkFunSuite with BeforeAndAfter
 
   /**
    * Execute the given block of code with a custom [[TestHiveContext]].
-   * At the end of the method, a [[TestHiveContext]] will be restored.
+   * At the end of the method, the default [[TestHiveContext]] will be restored.
    */
   protected def withHiveContext[T](newContext: () => TestHiveContext)(body: => T) {
     switchHiveContext(newContext)
@@ -67,7 +69,10 @@ private[spark] trait MyTestHiveContext extends SparkFunSuite with BeforeAndAfter
   }
 
   protected override def afterAll(): Unit = {
-    switchHiveContext(() => null)
+    if (_ctx != null) {
+      _ctx.sparkContext.stop()
+      _ctx = null
+    }
     super.afterAll()
   }
 

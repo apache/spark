@@ -19,9 +19,9 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 
-class DataFrameJoinSuite extends QueryTest with MyTestSQLContext {
+class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
   private val ctx = sqlContext
   import ctx.implicits._
   import ctx._

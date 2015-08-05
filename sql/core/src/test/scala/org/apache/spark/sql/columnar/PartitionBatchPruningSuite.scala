@@ -21,9 +21,9 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 
-class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfter with MyTestSQLContext {
+class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
   private val ctx = sqlContext
   import ctx.implicits._
   import ctx._

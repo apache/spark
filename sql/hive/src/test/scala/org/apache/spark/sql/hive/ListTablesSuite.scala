@@ -18,9 +18,9 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
-class ListTablesSuite extends QueryTest with MyTestHiveContext {
+class ListTablesSuite extends QueryTest with SharedHiveContext {
   private val ctx = hiveContext
   import ctx.implicits._
   import ctx._

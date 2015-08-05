@@ -19,13 +19,13 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 
-import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
 /**
  * A set of test cases based on the big-data-benchmark.
  * https://amplab.cs.berkeley.edu/benchmark/
  */
-class BigDataBenchmarkSuite extends HiveComparisonTest with MyTestHiveContext {
+class BigDataBenchmarkSuite extends HiveComparisonTest with SharedHiveContext {
   import ctx._
 
   private val testDataDirectory =

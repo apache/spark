@@ -18,10 +18,10 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.{Row, QueryTest}
-import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
 
-class HiveDataFrameJoinSuite extends QueryTest with MyTestHiveContext {
+class HiveDataFrameJoinSuite extends QueryTest with SharedHiveContext {
   private val ctx = hiveContext
   import ctx.implicits._
 

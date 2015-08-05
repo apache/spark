@@ -21,9 +21,9 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
-class HivePlanTest extends QueryTest with MyTestHiveContext {
+class HivePlanTest extends QueryTest with SharedHiveContext {
   private val ctx = hiveContext
   import ctx.implicits._
   import ctx._

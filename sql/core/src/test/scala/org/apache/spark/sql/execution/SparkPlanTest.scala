@@ -25,13 +25,13 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, DataFrameHolder, Row, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 
 /**
  * Base class for writing tests for individual physical operators. For an example of how this
  * class's test helper methods can be used, see [[SortSuite]].
  */
-private[sql] abstract class SparkPlanTest extends AbstractSparkPlanTest with MyTestSQLContext {
+private[sql] abstract class SparkPlanTest extends AbstractSparkPlanTest with SharedSQLContext {
   protected override def _sqlContext: SQLContext = sqlContext
 }
 

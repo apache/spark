@@ -18,12 +18,12 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{Row, QueryTest}
-import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
 /**
  * A set of tests that validates commands can also be queried by like a table
  */
-class HiveOperatorQueryableSuite extends QueryTest with MyTestHiveContext {
+class HiveOperatorQueryableSuite extends QueryTest with SharedHiveContext {
   private val ctx = hiveContext
   import ctx._
 

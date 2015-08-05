@@ -25,7 +25,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.sql.hive.test.SharedHiveContext
 import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
@@ -35,7 +35,7 @@ case class OrcParData(intField: Int, stringField: String)
 case class OrcParDataWithKey(intField: Int, pi: Int, stringField: String, ps: String)
 
 // TODO This test suite duplicates ParquetPartitionDiscoverySuite a lot
-class OrcPartitionDiscoverySuite extends QueryTest with MyTestHiveContext {
+class OrcPartitionDiscoverySuite extends QueryTest with SharedHiveContext {
   private val ctx = hiveContext
   import ctx.implicits._
   import ctx._

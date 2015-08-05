@@ -28,7 +28,7 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.sql.hive.test.{TestHiveContext, MyTestHiveContext}
+import org.apache.spark.sql.hive.test.{TestHiveContext, SharedHiveContext}
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 /**
@@ -39,7 +39,7 @@ class HiveSparkSubmitSuite
   with Matchers
   with ResetSystemProperties
   with Timeouts
-  with MyTestHiveContext {
+  with SharedHiveContext {
 
   private val ctx = hiveContext
   import ctx._

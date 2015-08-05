@@ -26,7 +26,7 @@ import org.apache.spark.sql.SQLContext
  */
 private[sql] abstract class HiveSparkPlanTest
   extends AbstractSparkPlanTest
-  with MyTestHiveContext {
+  with SharedHiveContext {
 
   protected override def _sqlContext: SQLContext = hiveContext
 }

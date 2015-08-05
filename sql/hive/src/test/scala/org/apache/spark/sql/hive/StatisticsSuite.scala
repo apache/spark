@@ -22,9 +22,9 @@ import scala.reflect.ClassTag
 import org.apache.spark.sql.{Row, SQLConf, QueryTest}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
-class StatisticsSuite extends QueryTest with MyTestHiveContext {
+class StatisticsSuite extends QueryTest with SharedHiveContext {
   private val ctx = hiveContext
   import ctx.sql
 

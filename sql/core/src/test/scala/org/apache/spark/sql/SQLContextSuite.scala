@@ -18,9 +18,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 
-class SQLContextSuite extends SparkFunSuite with MyTestSQLContext {
+class SQLContextSuite extends SparkFunSuite with SharedSQLContext {
   private val ctx = sqlContext
 
   override def afterAll(): Unit = {

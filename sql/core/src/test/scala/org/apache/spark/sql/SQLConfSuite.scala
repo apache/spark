@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 
 
-class SQLConfSuite extends QueryTest with MyTestSQLContext {
+class SQLConfSuite extends QueryTest with SharedSQLContext {
   private val ctx = sqlContext
   private val testKey = "test.key.0"
   private val testVal = "test.val.0"

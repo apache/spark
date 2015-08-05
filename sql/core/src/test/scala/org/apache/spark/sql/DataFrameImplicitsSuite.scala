@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 
-class DataFrameImplicitsSuite extends QueryTest with MyTestSQLContext {
+class DataFrameImplicitsSuite extends QueryTest with SharedSQLContext {
   private val ctx = sqlContext
   import ctx.implicits._
 

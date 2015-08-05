@@ -25,11 +25,11 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.Accumulators
 import org.apache.spark.sql.columnar._
 import org.apache.spark.storage.{StorageLevel, RDDBlockId}
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 
 private case class BigData(s: String)
 
-class CachedTableSuite extends QueryTest with MyTestSQLContext {
+class CachedTableSuite extends QueryTest with SharedSQLContext {
   private val ctx = sqlContext
   import ctx.implicits._
   import ctx._

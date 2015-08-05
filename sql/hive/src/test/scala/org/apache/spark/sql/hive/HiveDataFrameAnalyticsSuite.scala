@@ -19,12 +19,12 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
 // TODO ideally we should put the test suite into the package `sql`, as
 // `hive` package is optional in compiling, however, `SQLContext.sql` doesn't
 // support the `cube` or `rollup` yet.
-class HiveDataFrameAnalyticsSuite extends QueryTest with MyTestHiveContext {
+class HiveDataFrameAnalyticsSuite extends QueryTest with SharedHiveContext {
   private val ctx = hiveContext
   import ctx.implicits._
   import ctx._

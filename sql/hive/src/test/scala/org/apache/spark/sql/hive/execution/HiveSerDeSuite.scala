@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
 /**
  * A set of tests that validates support for Hive SerDe.
  */
-class HiveSerDeSuite extends HiveComparisonTest with MyTestHiveContext {
+class HiveSerDeSuite extends HiveComparisonTest with SharedHiveContext {
   import org.apache.hadoop.hive.serde2.RegexSerDe
   import ctx._
 

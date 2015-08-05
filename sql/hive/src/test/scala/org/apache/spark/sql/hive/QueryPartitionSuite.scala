@@ -19,12 +19,12 @@ package org.apache.spark.sql.hive
 
 import com.google.common.io.Files
 
-import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.sql.hive.test.SharedHiveContext
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.util.Utils
 
 
-class QueryPartitionSuite extends QueryTest with MyTestHiveContext {
+class QueryPartitionSuite extends QueryTest with SharedHiveContext {
   private val ctx = hiveContext
   import ctx.implicits._
   import ctx.sql

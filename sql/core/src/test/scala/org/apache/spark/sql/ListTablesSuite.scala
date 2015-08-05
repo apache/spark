@@ -19,10 +19,10 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BooleanType, StringType, StructField, StructType}
 
-class ListTablesSuite extends QueryTest with BeforeAndAfter with MyTestSQLContext {
+class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContext {
   private val ctx = sqlContext
   import ctx.implicits._
 

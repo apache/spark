@@ -20,9 +20,9 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.{Row, QueryTest}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
-class HiveDataFrameWindowSuite extends QueryTest with MyTestHiveContext {
+class HiveDataFrameWindowSuite extends QueryTest with SharedHiveContext {
   private val ctx = hiveContext
   import ctx.implicits._
   import ctx._

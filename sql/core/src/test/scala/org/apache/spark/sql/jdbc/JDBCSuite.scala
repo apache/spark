@@ -25,11 +25,11 @@ import org.h2.jdbc.JdbcSQLException
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends SparkFunSuite with BeforeAndAfter with MyTestSQLContext {
+class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
   private val ctx = sqlContext
   import ctx.implicits._
   import ctx._

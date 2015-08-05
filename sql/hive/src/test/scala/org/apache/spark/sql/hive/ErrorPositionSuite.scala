@@ -22,11 +22,11 @@ import scala.util.Try
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.sql.hive.test.SharedHiveContext
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 
 
-class ErrorPositionSuite extends QueryTest with BeforeAndAfter with MyTestHiveContext {
+class ErrorPositionSuite extends QueryTest with BeforeAndAfter with SharedHiveContext {
   private val ctx = hiveContext
   import ctx.implicits._
   import ctx._

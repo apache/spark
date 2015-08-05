@@ -22,9 +22,9 @@ import java.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 
-class DataFrameStatSuite extends QueryTest with MyTestSQLContext {
+class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   private val ctx = sqlContext
   import ctx.implicits._
 

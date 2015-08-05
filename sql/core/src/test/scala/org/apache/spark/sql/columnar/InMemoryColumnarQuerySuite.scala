@@ -19,12 +19,12 @@ package org.apache.spark.sql.columnar
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.test.MyTestSQLContext
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 
-class InMemoryColumnarQuerySuite extends QueryTest with MyTestSQLContext {
+class InMemoryColumnarQuerySuite extends QueryTest with SQLTestUtils {
   private val ctx = sqlContext
   import ctx.implicits._
   import ctx._

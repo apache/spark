@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.DescribeCommand
-import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
 /**
  * Allows the creations of tests that execute the same query against both hive
@@ -42,7 +42,7 @@ import org.apache.spark.sql.hive.test.MyTestHiveContext
 abstract class HiveComparisonTest
   extends SparkFunSuite
   with GivenWhenThen
-  with MyTestHiveContext
+  with SharedHiveContext
   with Logging {
 
   protected val ctx = hiveContext

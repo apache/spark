@@ -19,11 +19,11 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.{Logging, SparkFunSuite}
 
-import org.apache.spark.sql.hive.test.MyTestHiveContext
+import org.apache.spark.sql.hive.test.SharedHiveContext
 import org.apache.spark.sql.test.ExamplePointUDT
 import org.apache.spark.sql.types.StructType
 
-class HiveMetastoreCatalogSuite extends SparkFunSuite with MyTestHiveContext with Logging {
+class HiveMetastoreCatalogSuite extends SparkFunSuite with SharedHiveContext with Logging {
   private val ctx = hiveContext
 
   test("struct field should accept underscore in sub-column name") {

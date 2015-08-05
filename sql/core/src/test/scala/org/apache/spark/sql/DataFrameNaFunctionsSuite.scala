@@ -19,10 +19,10 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConversions._
 
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 
 
-class DataFrameNaFunctionsSuite extends QueryTest with MyTestSQLContext {
+class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
   private val ctx = sqlContext
   import ctx.implicits._
 

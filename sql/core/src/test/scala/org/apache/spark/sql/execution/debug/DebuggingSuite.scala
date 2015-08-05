@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.debug
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 
-class DebuggingSuite extends SparkFunSuite with MyTestSQLContext {
+class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
   private val ctx = sqlContext
 
   test("DataFrame.debug()") {

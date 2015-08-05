@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 
 case class ReflectData(
     stringField: String,
@@ -72,7 +72,7 @@ case class ComplexReflectData(
     mapFieldContainsNull: Map[Int, Option[Long]],
     dataField: Data)
 
-class ScalaReflectionRelationSuite extends SparkFunSuite with MyTestSQLContext {
+class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSQLContext {
   private val ctx = sqlContext
   import ctx.implicits._
 

@@ -21,10 +21,10 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.execution.joins._
-import org.apache.spark.sql.test.MyTestSQLContext
+import org.apache.spark.sql.test.SQLTestUtils
 
 
-class JoinSuite extends QueryTest with BeforeAndAfterEach with MyTestSQLContext {
+class JoinSuite extends QueryTest with BeforeAndAfterEach with SQLTestUtils {
   private val ctx = sqlContext
   import ctx.implicits._
   import ctx._

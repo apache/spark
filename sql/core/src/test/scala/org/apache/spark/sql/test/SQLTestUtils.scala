@@ -21,9 +21,11 @@ import java.io.File
 import java.util.UUID
 
 import scala.util.Try
+import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.util.Utils
 
 /**
@@ -32,7 +34,7 @@ import org.apache.spark.util.Utils
 private[spark] trait SQLTestUtils
   extends SparkFunSuite
   with AbstractSQLTestUtils
-  with MyTestSQLContext {
+  with SharedSQLContext {
 
   protected final override def _sqlContext = sqlContext
 }
@@ -127,5 +129,14 @@ private[spark] trait AbstractSQLTestUtils { this: SparkFunSuite =>
   protected def activateDatabase(db: String)(f: => Unit): Unit = {
     _sqlContext.sql(s"USE $db")
     try f finally _sqlContext.sql(s"USE default")
+  }
+
+
+  /**
+   * Turn a logical plan into a [[DataFrame]]. This should be removed once we have an easier
+   * way to construct [[DataFrame]] directly out of local data without relying on implicits.
+   */
+  protected[sql] implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
+    DataFrame(_sqlContext, plan)
   }
 }
