@@ -21,7 +21,7 @@ import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{SparkException, Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.SystemClock
@@ -72,7 +72,6 @@ private[streaming] trait BlockGeneratorListener {
  *
  * Note: Do not create BlockGenerator instances directly inside receivers. Use
  * `ReceiverSupervisor.createBlockGenerator` to create a BlockGenerator and use it.
- *
  */
 private[streaming] class BlockGenerator(
     listener: BlockGeneratorListener,
@@ -96,20 +95,29 @@ private[streaming] class BlockGenerator(
   @volatile private var stopped = false
 
   /** Start block generating and pushing threads. */
-  def start() {
-    blockIntervalTimer.start()
-    blockPushingThread.start()
-    logInfo("Started BlockGenerator")
+  def start(): Unit = {
+    if (!stopped) {
+      blockIntervalTimer.start()
+      blockPushingThread.start()
+      logInfo("Started BlockGenerator")
+    } else {
+      throw new SparkException("Cannot start BlockGenerator as already stopped")
+    }
   }
 
   /** Stop all threads. */
-  def stop() {
-    logInfo("Stopping BlockGenerator")
-    blockIntervalTimer.stop(interruptTimer = false)
-    stopped = true
-    logInfo("Waiting for block pushing thread")
-    blockPushingThread.join()
-    logInfo("Stopped BlockGenerator")
+  def stop(): Unit = {
+    if (!stopped) {
+      // First stop generating block, then mark it as non-active and wait for pushing thread to stop
+      logInfo("Stopping BlockGenerator")
+      blockIntervalTimer.stop(interruptTimer = false)
+      stopped = true
+      logInfo("Waiting for block pushing thread")
+      blockPushingThread.join()
+      logInfo("Stopped BlockGenerator")
+    } else {
+      logWarning("BlockGenerator not started")
+    }
   }
 
   /**
@@ -117,8 +125,13 @@ private[streaming] class BlockGenerator(
    * will be periodically pushed into BlockManager.
    */
   def addData (data: Any): Unit = synchronized {
-    waitToPush()
-    currentBuffer += data
+    if (!stopped) {
+      waitToPush()
+      currentBuffer += data
+    } else {
+      throw new SparkException(
+        "Cannot add data as BlockGenerator has not been started or has been stopped")
+    }
   }
 
   /**
@@ -127,9 +140,14 @@ private[streaming] class BlockGenerator(
    * will be periodically pushed into BlockManager.
    */
   def addDataWithCallback(data: Any, metadata: Any): Unit = synchronized {
-    waitToPush()
-    currentBuffer += data
-    listener.onAddData(data, metadata)
+    if (!stopped) {
+      waitToPush()
+      currentBuffer += data
+      listener.onAddData(data, metadata)
+    } else {
+      throw new SparkException(
+        "Cannot add data as BlockGenerator has not been started or has been stopped")
+    }
   }
 
   /**
@@ -139,12 +157,19 @@ private[streaming] class BlockGenerator(
    * to be present in a single block.
    */
   def addMultipleDataWithCallback(dataIterator: Iterator[Any], metadata: Any): Unit = synchronized {
-    dataIterator.foreach { data =>
-      waitToPush()
-      currentBuffer += data
+    if (!stopped) {
+      dataIterator.foreach { data =>
+        waitToPush()
+        currentBuffer += data
+      }
+      listener.onAddData(dataIterator, metadata)
+    } else {
+      throw new SparkException(
+        "Cannot add data as BlockGenerator has not been started or has been stopped")
     }
-    listener.onAddData(dataIterator, metadata)
   }
+
+  def isStopped() = stopped
 
   /** Change the buffer to which single records are added to. */
   private def updateCurrentBuffer(time: Long): Unit = synchronized {

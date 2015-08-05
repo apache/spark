@@ -44,8 +44,8 @@ private[streaming] abstract class ReceiverSupervisor(
   }
   import ReceiverState._
 
-  // Attach the executor to the receiver
-  receiver.attachExecutor(this)
+  // Attach the supervisor to the receiver
+  receiver.attachSupervisor(this)
 
   private val futureExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("receiver-supervisor-future", 128))
