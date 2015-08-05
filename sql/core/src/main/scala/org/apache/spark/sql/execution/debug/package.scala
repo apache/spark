@@ -156,8 +156,8 @@ package object debug {
     def typeCheck(data: Any, schema: DataType): Unit = (data, schema) match {
       case (null, _) =>
 
-      case (row: InternalRow, StructType(fields)) =>
-        row.toSeq.zip(fields.map(_.dataType)).foreach { case(d, t) => typeCheck(d, t) }
+      case (row: InternalRow, s: StructType) =>
+        row.toSeq(s).zip(s.map(_.dataType)).foreach { case(d, t) => typeCheck(d, t) }
       case (a: ArrayData, ArrayType(elemType, _)) =>
         a.foreach(elemType, (_, e) => {
           typeCheck(e, elemType)

@@ -23,8 +23,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
- * An extended version of [[InternalRow]] that implements all special getters and equals/hashCode
- * by `genericGet`.
+ * An extended version of [[InternalRow]] that implements all special getters, toString
+ * and equals/hashCode by `genericGet`.
  */
 trait BaseGenericInternalRow extends InternalRow {
 
@@ -48,6 +48,25 @@ trait BaseGenericInternalRow extends InternalRow {
   override def getInterval(ordinal: Int): CalendarInterval = getAs(ordinal)
   override def getMap(ordinal: Int): MapData = getAs(ordinal)
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)
+
+  override def toString(): String = {
+    if (numFields == 0) {
+      "[ empty row ]"
+    } else {
+      val sb = new StringBuilder
+      sb.append("[")
+      sb.append(genericGet(0))
+      val len = numFields
+      var i = 1
+      while (i < len) {
+        sb.append(",")
+        sb.append(genericGet(i))
+        i += 1
+      }
+      sb.append("]")
+      sb.toString()
+    }
+  }
 
   override def equals(o: Any): Boolean = {
     if (!o.isInstanceOf[BaseGenericInternalRow]) {
@@ -189,7 +208,7 @@ class GenericInternalRow(private[sql] val values: Array[Any]) extends BaseGeneri
 
   override protected def genericGet(ordinal: Int) = values(ordinal)
 
-  override def toSeq: Seq[Any] = values
+  override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = values
 
   override def numFields: Int = values.length
 
@@ -216,7 +235,7 @@ class GenericMutableRow(values: Array[Any]) extends MutableRow with BaseGenericI
 
   override protected def genericGet(ordinal: Int) = values(ordinal)
 
-  override def toSeq: Seq[Any] = values
+  override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = values
 
   override def numFields: Int = values.length
 

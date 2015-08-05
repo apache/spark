@@ -214,8 +214,6 @@ final class SpecificMutableRow(val values: Array[MutableValue])
 
   override def numFields: Int = values.length
 
-  override def toSeq: Seq[Any] = values.map(_.boxed)
-
   override def setNullAt(i: Int): Unit = {
     values(i).isNull = true
   }

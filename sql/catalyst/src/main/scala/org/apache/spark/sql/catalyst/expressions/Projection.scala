@@ -203,7 +203,11 @@ class JoinedRow extends InternalRow {
     this
   }
 
-  override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
+  override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = {
+    assert(fieldTypes.length == row1.numFields + row2.numFields)
+    val (left, right) = fieldTypes.splitAt(row1.numFields)
+    row1.toSeq(left) ++ row2.toSeq(right)
+  }
 
   override def numFields: Int = row1.numFields + row2.numFields
 
@@ -276,11 +280,11 @@ class JoinedRow extends InternalRow {
     if ((row1 eq null) && (row2 eq null)) {
       "[ empty row ]"
     } else if (row1 eq null) {
-      row2.mkString("[", ",", "]")
+      row2.toString
     } else if (row2 eq null) {
-      row1.mkString("[", ",", "]")
+      row1.toString
     } else {
-      mkString("[", ",", "]")
+      s"{${row1.toString} + ${row2.toString}}"
     }
   }
 }

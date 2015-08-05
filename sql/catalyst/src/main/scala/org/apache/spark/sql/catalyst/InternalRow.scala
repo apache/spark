@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * An abstract class for row used internal in Spark SQL, which only contain the columns as
@@ -29,8 +30,6 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
 
   // This is only use for test and will throw a null pointer exception if the position is null.
   def getString(ordinal: Int): String = getUTF8String(ordinal).toString
-
-  override def toString: String = mkString("[", ",", "]")
 
   /**
    * Make a copy of the current [[InternalRow]] object.
@@ -53,29 +52,20 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
   /**
    * Return a Scala Seq representing the row. Elements are placed in the same order in the Seq.
    */
-  // todo: remove this as it needs the generic getter
-  def toSeq: Seq[Any] = {
-    val n = numFields
-    val values = new Array[Any](n)
+  def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = {
+    val len = numFields
+    assert(len == fieldTypes.length)
+
+    val values = new Array[Any](len)
     var i = 0
-    while (i < n) {
-      values.update(i, get(i, null))
+    while (i < len) {
+      values(i) = get(i, fieldTypes(i))
       i += 1
     }
     values
   }
 
-  /** Displays all elements of this sequence in a string (without a separator). */
-  def mkString: String = toSeq.mkString
-
-  /** Displays all elements of this sequence in a string using a separator string. */
-  def mkString(sep: String): String = toSeq.mkString(sep)
-
-  /**
-   * Displays all elements of this traversable or iterator in a string using
-   * start, end, and separator strings.
-   */
-  def mkString(start: String, sep: String, end: String): String = toSeq.mkString(start, sep, end)
+  def toSeq(schema: StructType): Seq[Any] = toSeq(schema.map(_.dataType))
 }
 
 object InternalRow {
