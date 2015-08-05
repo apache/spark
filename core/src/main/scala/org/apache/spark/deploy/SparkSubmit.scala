@@ -292,6 +292,12 @@ object SparkSubmit {
       }
     }
 
+    // install any R packages that may have been passed through --jars or --packages.
+    // Spark Packages may contain R source code inside the jar.
+    if (args.isR && !StringUtils.isBlank(args.jars)) {
+      RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
+    }
+
     // Require all python files to be local, so we can add them to the PYTHONPATH
     // In YARN cluster mode, python files are distributed as regular files, which can be non-local
     if (args.isPython && !isYarnCluster) {
@@ -361,7 +367,8 @@ object SparkSubmit {
       if (rPackagePath.isEmpty) {
         printErrorAndExit("SPARK_HOME does not exist for R application in YARN mode.")
       }
-      val rPackageFile = new File(rPackagePath.get, SPARKR_PACKAGE_ARCHIVE)
+      val rPackageFile =
+        RPackageUtils.zipRLibraries(new File(rPackagePath.get), SPARKR_PACKAGE_ARCHIVE)
       if (!rPackageFile.exists()) {
         printErrorAndExit(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in YARN mode.")
       }
@@ -987,11 +994,9 @@ private[spark] object SparkSubmitUtils {
         addExclusionRules(ivySettings, ivyConfName, md)
         // add all supplied maven artifacts as dependencies
         addDependenciesToIvy(md, artifacts, ivyConfName)
-
         exclusions.foreach { e =>
           md.addExcludeRule(createExclusion(e + ":*", ivySettings, ivyConfName))
         }
-
         // resolve dependencies
         val rr: ResolveReport = ivy.resolve(md, resolveOptions)
         if (rr.hasError) {

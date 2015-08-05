@@ -232,7 +232,7 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     new GenericInternalRow(newValues)
   }
 
-  override def genericGet(i: Int): Any = values(i).boxed
+  override protected def genericGet(i: Int): Any = values(i).boxed
 
   override def update(ordinal: Int, value: Any) {
     if (value == null) {
