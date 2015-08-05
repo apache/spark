@@ -50,29 +50,6 @@ trait SQLTestUtils { this: SparkFunSuite =>
   }
 
   /**
-   * Generates a temporary path without creating the actual file/directory, then pass it to `f`. If
-   * a file/directory is created there by `f`, it will be delete after `f` returns.
-   *
-   * @todo Probably this method should be moved to a more general place
-   */
-  protected def withTempPath(f: File => Unit): Unit = {
-    val path = Utils.createTempDir()
-    path.delete()
-    try f(path) finally Utils.deleteRecursively(path)
-  }
-
-  /**
-   * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
-   * returns.
-   *
-   * @todo Probably this method should be moved to a more general place
-   */
-  protected def withTempDir(f: File => Unit): Unit = {
-    val dir = Utils.createTempDir().getCanonicalFile
-    try f(dir) finally Utils.deleteRecursively(dir)
-  }
-
-  /**
    * Drops temporary table `tableName` after calling `f`.
    */
   protected def withTempTable(tableNames: String*)(f: => Unit): Unit = {

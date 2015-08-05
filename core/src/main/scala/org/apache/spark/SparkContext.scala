@@ -17,6 +17,11 @@
 
 package org.apache.spark
 
+import org.apache.avro.Schema
+import org.apache.avro.generic.GenericRecord
+import org.apache.avro.mapred.{AvroJob, AvroWrapper, AvroInputFormat}
+import org.apache.avro.specific.SpecificRecordBase
+
 import scala.language.implicitConversions
 
 import java.io._
@@ -791,6 +796,30 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     assertNotStopped()
     val indexToPrefs = seq.zipWithIndex.map(t => (t._2, t._1._2)).toMap
     new ParallelCollectionRDD[T](this, seq.map(_._1), seq.size, indexToPrefs)
+  }
+
+  /**
+   * Reads in a directory of Avro files from HDFS, a local file system (available on all nodes), or
+   * any Hadoop-supported file system URI. The records are read in as Generic Avro records and the
+   * schema in registered with Kryo.
+   */
+  def avroFile(path: String, schema: Schema): RDD[GenericRecord] = {
+    conf.registerAvroSchemas(schema)
+    hadoopFile[AvroWrapper[GenericRecord], NullWritable, AvroInputFormat[GenericRecord]](path)
+      .map(_._1.datum).setName(path)
+  }
+
+  /**
+   * Reads in a directory of Avro files from HDFS, a local file system (availavble on all nodes), or
+   * any Hadoop-supported file system URI. The second parameter determines what type of RDD is
+   * created.
+   */
+  def avroFile[T: ClassTag](path: String, schema: Class[T]): RDD[T] = {
+    val jobConf = new JobConf()
+    FileInputFormat.setInputPaths(jobConf, path)
+    AvroJob.setInputReflect(jobConf)
+    hadoopRDD(jobConf, classOf[AvroInputFormat[T]], classOf[AvroWrapper[T]], classOf[NullWritable])
+      .map(_._1.datum)
   }
 
   /**
