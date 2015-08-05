@@ -75,9 +75,9 @@ public class PrefixComparators {
          */
         final int minLen = Math.min(bytes.length, 8);
         long p = 0;
-        for (int i = 1; i <= minLen; ++i) {
-          p |= (128L + PlatformDependent.UNSAFE.getByte(bytes, BYTE_ARRAY_OFFSET + i - 1))
-              << (64 - 8 * i);
+        for (int i = 0; i < minLen; ++i) {
+          p |= (128L + PlatformDependent.UNSAFE.getByte(bytes, BYTE_ARRAY_OFFSET + i))
+              << (56 - 8 * i);
         }
         return p;
       }
