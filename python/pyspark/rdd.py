@@ -890,6 +890,7 @@ class RDD(object):
         (0, 0)
         """
         zero_copy = copy.deepcopy(zeroValue)
+
         def func(iterator):
             acc = zero_copy
             for obj in iterator:
