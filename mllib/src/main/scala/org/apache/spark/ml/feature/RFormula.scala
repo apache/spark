@@ -81,14 +81,12 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     require(isDefined(formula), "Formula must be defined first.")
     val parsedFormula = RFormulaParser.parse($(formula))
     val resolvedFormula = parsedFormula.resolve(dataset.schema)
-    // StringType terms and terms representing interactions need to be encoded before assembly.
-    // TODO(ekl) add support for feature interactions
     val encoderStages = ArrayBuffer[PipelineStage]()
     val tempColumns = ArrayBuffer[String]()
     val takenNames = mutable.Set(dataset.columns: _*)
-    val interactionTerms = resolvedFormula.interactions.map { interaction =>
+    def encodeInteraction(terms: Array[String]): String = {
       val outputCol = {
-        var tmp = interaction.mkString(":")
+        var tmp = terms.mkString(":")
         while (takenNames.contains(tmp)) {
           tmp += "_"
         }
@@ -96,28 +94,16 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
       }
       takenNames.add(outputCol)
       encoderStages += new Interaction()
-        .setInputCols(interaction)
+        .setInputCols(terms)
         .setOutputCol(outputCol)
+      tempColumns += outputCol
       outputCol
     }
+    val interactionTerms = resolvedFormula.interactions.map(encodeInteraction)
     val standaloneTerms = resolvedFormula.terms.map { term =>
       dataset.schema(term) match {
         case column if column.dataType == StringType =>
-          val indexCol = term + "_idx_" + uid
-          val encodedCol = {
-            var tmp = term
-            while (takenNames.contains(tmp)) {
-              tmp += "_"
-            }
-            tmp
-          }
-          takenNames.add(indexCol)
-          takenNames.add(encodedCol)
-          encoderStages += new StringIndexer().setInputCol(term).setOutputCol(indexCol)
-          encoderStages += new OneHotEncoder().setInputCol(indexCol).setOutputCol(encodedCol)
-          tempColumns += indexCol
-          tempColumns += encodedCol
-          encodedCol
+          encodeInteraction(Array(term))
         case _ =>
           term
       }

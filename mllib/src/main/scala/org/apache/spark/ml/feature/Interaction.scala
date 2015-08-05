@@ -17,15 +17,15 @@
 
 package org.apache.spark.ml.feature
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, ArrayBuilder}
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
-import org.apache.spark.mllib.linalg.VectorUDT
+import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -66,7 +66,7 @@ class Interaction(override val uid: String) extends Estimator[PipelineModel]
         } else {
           $(outputCol)
         }
-        encoderStages += new IndexCombiner(indexedCols, combinedIndex)
+        encoderStages += new IndexCombiner(indexedCols, factorCols, combinedIndex)
         encoderStages += new OneHotEncoder()
           .setInputCol(combinedIndex)
           .setOutputCol(encodedCol)
@@ -76,8 +76,10 @@ class Interaction(override val uid: String) extends Estimator[PipelineModel]
       }
 
     if (nonFactorCols.length > 0) {
-      // TODO(ekl) scale encodedFactors if exists by these cols
-      ???
+      encoderStages += new NumericInteraction(nonFactorCols, encodedFactors, $(outputCol))
+      if (encodedFactors.isDefined) {
+        tempColumns += encodedFactors.get
+      }
     }
 
     encoderStages += new ColumnPruner(tempColumns.toSet)
@@ -91,9 +93,9 @@ class Interaction(override val uid: String) extends Estimator[PipelineModel]
   override def transformSchema(schema: StructType): StructType = {
     checkParams()
     if ($(inputCols).exists(col => schema(col).dataType == StringType)) {
-      StructType(schema.fields :+ StructField($(outputCol), new VectorUDT, false))
+      StructType(schema.fields :+ StructField($(outputCol), new VectorUDT, true))
     } else {
-      StructType(schema.fields :+ StructField($(outputCol), DoubleType, false))
+      StructType(schema.fields :+ StructField($(outputCol), DoubleType, true))
     }
   }
 
@@ -103,10 +105,14 @@ class Interaction(override val uid: String) extends Estimator[PipelineModel]
     require(isDefined(inputCols), "Input cols must be defined first.")
     require(isDefined(outputCol), "Output col must be defined first.")
     require($(inputCols).length > 0, "Input cols must have non-zero length.")
+    require($(inputCols).distinct.length == $(inputCols).length, "Input cols must be distinct.")
   }
 }
 
-private class IndexCombiner(inputCols: Array[String], outputCol: String) extends Transformer {
+private class IndexCombiner(
+    inputCols: Array[String], attrNames: Array[String], outputCol: String)
+  extends Transformer {
+
   override val uid = Identifiable.randomUID("indexCombiner")
 
   override def transform(dataset: DataFrame): DataFrame = {
@@ -126,7 +132,7 @@ private class IndexCombiner(inputCols: Array[String], outputCol: String) extends
     }
     val metadata = NominalAttribute.defaultAttr
       .withName(outputCol)
-      .withValues(combineLabels(inputMetadata.map(_.values.get)))
+      .withValues(generateAttrNames(inputMetadata, attrNames))
       .toMetadata()
     dataset.select(
       col("*"),
@@ -134,18 +140,75 @@ private class IndexCombiner(inputCols: Array[String], outputCol: String) extends
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    StructType(schema.fields :+ StructField(outputCol, DoubleType, false))
+    StructType(schema.fields :+ StructField(outputCol, DoubleType, true))
   }
 
   override def copy(extra: ParamMap): IndexCombiner = defaultCopy(extra)
 
-  private def combineLabels(labels: Array[Array[String]]): Array[String] = {
-    if (labels.length <= 1) {
-      labels.head
+  private def generateAttrNames(
+      attrs: Array[NominalAttribute], names: Array[String]): Array[String] = {
+    val colName = names.head
+    val attrNames = attrs.head.values.get.map(colName + "_" + _)
+    if (attrs.length <= 1) {
+      attrNames
     } else {
-      combineLabels(labels.tail).flatMap { rest =>
-        labels.head.map(l => l + ":" + rest)
+      generateAttrNames(attrs.tail, names.tail).flatMap { rest =>
+        attrNames.map(n => n + ":" + rest)
       }
     }
   }
+}
+
+private class NumericInteraction(
+    inputCols: Array[String], vectorCol: Option[String], outputCol: String)
+  extends Transformer {
+
+  override val uid = Identifiable.randomUID("indexCombiner")
+
+  override def transform(dataset: DataFrame): DataFrame = {
+    if (vectorCol.isDefined) {
+      val scale = udf { (vec: Vector, scalars: Seq[Double]) =>
+        val k = scalars.reduce(_ * _)
+        val indices = ArrayBuilder.make[Int]
+        val values = ArrayBuilder.make[Double]
+        vec.foreachActive { case (i, v) =>
+          if (v != 0.0) {
+            indices += i
+            values += v * k
+          }
+        }
+        Vectors.sparse(vec.size, indices.result(), values.result()).compressed
+      }
+      val group = AttributeGroup.fromStructField(dataset.schema(vectorCol.get))
+      val attrs = group.attributes.get.map { attr =>
+        attr.withName(attr.name.get + ":" + inputCols.mkString(":"))
+      }
+      val metadata = new AttributeGroup(outputCol, attrs).toMetadata()
+      dataset.select(
+        col("*"),
+        scale(
+          col(vectorCol.get),
+          array(inputCols.map(dataset(_).cast(DoubleType)): _*)).as(outputCol, metadata))
+    } else {
+      val multiply = udf { values: Seq[Double] =>
+        values.reduce(_ * _)
+      }
+      val metadata = NumericAttribute.defaultAttr
+        .withName(inputCols.mkString(":"))
+        .toMetadata()
+      dataset.select(
+        col("*"),
+        multiply(array(inputCols.map(dataset(_).cast(DoubleType)): _*)).as(outputCol, metadata))
+    }
+  }
+
+  override def transformSchema(schema: StructType): StructType = {
+    if (vectorCol.isDefined) {
+      StructType(schema.fields :+ StructField(outputCol, new VectorUDT, true))
+    } else {
+      StructType(schema.fields :+ StructField(outputCol, DoubleType, true))
+    }
+  }
+
+  override def copy(extra: ParamMap): IndexCombiner = defaultCopy(extra)
 }

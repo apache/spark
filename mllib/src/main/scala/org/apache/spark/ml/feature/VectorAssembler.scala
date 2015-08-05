@@ -71,12 +71,12 @@ class VectorAssembler(override val uid: String)
           if (group.attributes.isDefined) {
             // If attributes are defined, copy them with updated names.
             group.attributes.get.map { attr =>
-              if (attr.name.isDefined) {
-                // TODO: Define a rigorous naming scheme.
-                attr.withName(c + "_" + attr.name.get)
-              } else {
+//              if (attr.name.isDefined) {
+//                // TODO: Define a rigorous naming scheme.
+//                attr.withName(c + "_" + attr.name.get)
+//              } else {
                 attr
-              }
+//              }
             }
           } else {
             // Otherwise, treat all attributes as numeric. If we cannot get the number of attributes
