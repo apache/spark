@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 import java.util.Properties
 
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.unsafe.types.UTF8String
 
 import scala.language.implicitConversions
@@ -53,7 +54,6 @@ private[sql] object DataFrame {
     new DataFrame(sqlContext, logicalPlan)
   }
 }
-
 
 /**
  * :: Experimental ::
@@ -690,9 +690,7 @@ class DataFrame private[sql](
       case Column(explode: Explode) => MultiAlias(explode, Nil)
       case Column(expr: Expression) => Alias(expr, expr.prettyString)()
     }
-    // When user continuously call `select`, speed up analysis by collapsing `Project`
-    import org.apache.spark.sql.catalyst.optimizer.ProjectCollapsing
-    Project(namedExpressions.toSeq, ProjectCollapsing(logicalPlan))
+    Project(namedExpressions.toSeq, logicalPlan)
   }
 
   /**
