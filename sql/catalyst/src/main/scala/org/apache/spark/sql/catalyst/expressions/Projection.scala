@@ -207,8 +207,8 @@ class JoinedRow extends InternalRow {
 
   override def numFields: Int = row1.numFields + row2.numFields
 
-  override def genericGet(i: Int): Any =
-    if (i < row1.numFields) row1.genericGet(i) else row2.genericGet(i - row1.numFields)
+  override def get(i: Int, dt: DataType): AnyRef =
+    if (i < row1.numFields) row1.get(i, dt) else row2.get(i - row1.numFields, dt)
 
   override def isNullAt(i: Int): Boolean =
     if (i < row1.numFields) row1.isNullAt(i) else row2.isNullAt(i - row1.numFields)

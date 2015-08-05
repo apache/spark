@@ -660,7 +660,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("resolve udtf in projection #2") {
     val rdd = sparkContext.makeRDD((1 to 2).map(i => s"""{"a":[$i, ${i + 1}]}"""))
-    jsonRDD(rdd).registerTempTable("data")
+    read.json(rdd).registerTempTable("data")
     checkAnswer(sql("SELECT explode(map(1, 1)) FROM data LIMIT 1"), Row(1, 1) :: Nil)
     checkAnswer(sql("SELECT explode(map(1, 1)) as (k1, k2) FROM data LIMIT 1"), Row(1, 1) :: Nil)
     intercept[AnalysisException] {
@@ -675,7 +675,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   // TGF with non-TGF in project is allowed in Spark SQL, but not in Hive
   test("TGF with non-TGF in projection") {
     val rdd = sparkContext.makeRDD( """{"a": "1", "b":"1"}""" :: Nil)
-    jsonRDD(rdd).registerTempTable("data")
+    read.json(rdd).registerTempTable("data")
     checkAnswer(
       sql("SELECT explode(map(a, b)) as (k1, k2), a, b FROM data"),
       Row("1", "1", "1", "1") :: Nil)
@@ -749,6 +749,16 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     assert(0 ===
       sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat 1>&2' AS (a,b,c) FROM script_trans")
         .queryExecution.toRdd.count())
+  }
+
+  test("test script transform data type") {
+    val data = (1 to 5).map { i => (i, i) }
+    data.toDF("key", "value").registerTempTable("test")
+    checkAnswer(
+      sql("""FROM
+          |(FROM test SELECT TRANSFORM(key, value) USING 'cat' AS (thing1 int, thing2 string)) t
+          |SELECT thing1 + 1
+        """.stripMargin), (2 to 6).map(i => Row(i)))
   }
 
   test("window function: udaf with aggregate expressin") {

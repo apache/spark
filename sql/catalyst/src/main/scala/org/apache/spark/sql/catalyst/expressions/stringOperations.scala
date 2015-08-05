@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.DecimalFormat
-import java.util.Arrays
-import java.util.Locale
+import java.util.{Arrays, Locale}
 import java.util.regex.{MatchResult, Pattern}
 
 import org.apache.commons.lang3.StringEscapeUtils
@@ -348,6 +347,28 @@ case class EndsWith(left: Expression, right: Expression)
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
   }
+}
+
+/**
+ * A function that returns the index (1-based) of the given string (left) in the comma-
+ * delimited list (right). Returns 0, if the string wasn't found or if the given
+ * string (left) contains a comma.
+ */
+case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
+    with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+
+  override protected def nullSafeEval(word: Any, set: Any): Any =
+    set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String])
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (word, set) =>
+      s"${ev.primitive} = $set.findInSet($word);"
+    )
+  }
+
+  override def dataType: DataType = IntegerType
 }
 
 /**

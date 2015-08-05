@@ -38,7 +38,7 @@ import org.apache.hive.service.cli.thrift.TCLIService.Client
 import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{Ignore, BeforeAndAfterAll}
 
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.hive.HiveContext
@@ -53,6 +53,7 @@ object TestData {
   val smallKvWithNull = getTestDataFilePath("small_kv_with_null.txt")
 }
 
+@Ignore // SPARK-9606
 class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.binary
 
@@ -379,6 +380,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 }
 
+@Ignore // SPARK-9606
 class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.http
 
