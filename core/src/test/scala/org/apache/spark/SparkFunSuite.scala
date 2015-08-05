@@ -21,8 +21,9 @@ package org.apache.spark
 
 import java.io.File
 
-import org.apache.spark.util.Utils
 import org.scalatest.{FunSuite, Outcome}
+
+import org.apache.spark.util.Utils
 
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.

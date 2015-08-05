@@ -22,15 +22,16 @@ import java.util.concurrent.TimeUnit
 
 import com.google.common.base.Charsets._
 import com.google.common.io.Files
+
 import org.apache.avro.Schema
 import org.apache.avro.file.DataFileWriter
 import org.apache.avro.generic.{GenericData, GenericRecord, GenericDatumWriter}
 import org.apache.avro.reflect.{ReflectData, ReflectDatumWriter}
 import org.apache.avro.specific.SpecificDatumWriter
-
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
+
 import org.apache.spark.avro.{Income, Rating}
 import org.apache.spark.util.Utils
 

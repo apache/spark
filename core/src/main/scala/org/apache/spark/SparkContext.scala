@@ -17,11 +17,6 @@
 
 package org.apache.spark
 
-import org.apache.avro.Schema
-import org.apache.avro.generic.GenericRecord
-import org.apache.avro.mapred.{AvroJob, AvroWrapper, AvroInputFormat}
-import org.apache.avro.specific.SpecificRecordBase
-
 import scala.language.implicitConversions
 
 import java.io._
@@ -38,6 +33,9 @@ import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
 
+import org.apache.avro.Schema
+import org.apache.avro.generic.GenericRecord
+import org.apache.avro.mapred.{AvroJob, AvroWrapper, AvroInputFormat}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
@@ -800,11 +798,22 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Reads in a directory of Avro files from HDFS, a local file system (available on all nodes), or
-   * any Hadoop-supported file system URI. The records are read in as Generic Avro records and the
-   * schema in registered with Kryo.
+   * any Hadoop-supported file system URI. The records are read in as Generic Avro records. This
+   * also allows a user to register a schema with Kryo, if they so choose to.
+   *
+   * You can do the following if you know the schema ahead of time:
+   * {{{
+   *   val schema = new Schema.Parser().parse(schemaString)
+   *   sc.avroFile("/input-path", schema)
+   * }}}
+   *
+   * or just:
+   * {{{
+   *   sc.avroFile("/input-path")
+   * }}}
    */
-  def avroFile(path: String, schema: Schema): RDD[GenericRecord] = {
-    conf.registerAvroSchemas(schema)
+  def avroFile(path: String, schemas: Schema*): RDD[GenericRecord] = {
+    conf.registerAvroSchemas(schemas : _*)
     hadoopFile[AvroWrapper[GenericRecord], NullWritable, AvroInputFormat[GenericRecord]](path)
       .map(_._1.datum).setName(path)
   }
@@ -812,7 +821,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Reads in a directory of Avro files from HDFS, a local file system (availavble on all nodes), or
    * any Hadoop-supported file system URI. The second parameter determines what type of RDD is
-   * created.
+   * created. This is used for Specific or Reflect Avro records.
+   *
+   * {{{
+   *   sc.avroFile("/input-path", classOf[CustomSpecificRecord])
+   * }}}
    */
   def avroFile[T: ClassTag](path: String, schema: Class[T]): RDD[T] = {
     val jobConf = new JobConf()
