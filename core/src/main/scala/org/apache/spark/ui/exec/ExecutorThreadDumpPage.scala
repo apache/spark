@@ -60,11 +60,10 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
           }
         }
       }.map { thread =>
-        val onClickEvent = s"$$('#${thread.threadId + "_stacktrace"}').toggleClass('hidden'); " +
-          s"$$('#stacktrace_column').addClass('hidden')"
-        <tr class="accordion-heading" onclick={onClickEvent}>
-          <td>{thread.threadId}</td><td>{thread.threadName}</td><td>{thread.threadState}</td>
-          <td id={thread.threadId + "_stacktrace"} class="accordion-body hidden">
+        val threadId = thread.threadId
+        <tr class="accordion-heading" onclick={s"toggleThreadStackTrace($threadId)"}>
+          <td>{threadId}</td><td>{thread.threadName}</td><td>{thread.threadState}</td>
+          <td id={threadId + "_stacktrace"} class="accordion-body hidden">
             <pre>{thread.stackTrace}</pre>
           </td>
         </tr>
@@ -74,12 +73,10 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
       <p>Updated at {UIUtils.formatDate(time)}</p>
       {
         // scalastyle:off
-        <p><a class="expandbutton"
-              onClick="$('#stacktrace_column').removeClass('hidden'); $('.accordion-body').removeClass('hidden'); $('.expandbutton').toggleClass('hidden')">
+        <p><a class="expandbutton" onClick="expandOrCollapseAllThreadStackTrace(true)">
           Expand All
         </a></p>
-        <p><a class="expandbutton hidden"
-              onClick="$('#stacktrace_column').addClass('hidden'); $('.accordion-body').addClass('hidden'); $('.expandbutton').toggleClass('hidden')">
+        <p><a class="expandbutton hidden" onClick="expandOrCollapseAllThreadStackTrace(false)">
           Collapse All
         </a></p>
         // scalastyle:on
@@ -89,7 +86,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
           <th>Thread ID</th>
           <th>Thread Name</th>
           <th>Thread State</th>
-          <th id='stacktrace_column' class="hidden">Thread Stacktrace</th>
+          <th id='stacktrace_column' bind='0' class="hidden">Thread Stacktrace</th>
         </thead>
         <tbody>{dumpRows}</tbody>
       </table>

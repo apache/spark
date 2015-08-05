@@ -30,3 +30,38 @@ function stripeSummaryTable() {
        }
     });
 }
+
+function toggleThreadStackTrace(threadId) {
+    var threadCell = $("#" + threadId + "_stacktrace");
+    var columnHeader = $('#stacktrace_column');
+    var bindNum = parseInt(columnHeader.attr('bind'));
+    if (threadCell.hasClass('hidden')) {
+        // expand thread cell
+        columnHeader.attr("bind", bindNum + 1);
+        columnHeader.removeClass("hidden");
+        threadCell.removeClass('hidden');
+    } else {
+        // collapse thread cell
+        columnHeader.attr("bind", bindNum - 1);
+        if (bindNum - 1 == 0) {
+            columnHeader.addClass("hidden");
+        }
+        threadCell.addClass('hidden');
+    }
+}
+
+// expandOrCollapse - true: expand, false: collapse
+function expandOrCollapseAllThreadStackTrace(expandOrCollapse) {
+    var columnHeader = $('#stacktrace_column');
+    if (expandOrCollapse) {
+        columnHeader.removeClass('hidden');
+        $('.accordion-body').removeClass('hidden');
+        columnHeader.attr("bind", $('.accordion-body').length);
+        $('.expandbutton').toggleClass('hidden')
+    } else {
+        columnHeader.addClass('hidden');
+        $('.accordion-body').addClass('hidden');
+        columnHeader.attr("bind", 0);
+        $('.expandbutton').toggleClass('hidden');
+    }
+}
