@@ -321,11 +321,6 @@ private[spark] object SQLConf {
     defaultValue = Some(5 * 60),
     doc = "Timeout in seconds for the broadcast wait time in broadcast joins.")
 
-  val HIVE_WRITE_DATASOURCE_SCHEMA = booleanConf("spark.sql.hive.writeDataSourceSchema",
-    defaultValue = Some(true),
-    doc = "When true, will write the metastore information to Hive Metastore for " +
-      "Spark SQL DataSource Updating/Insertion, so Hive can access the Spark SQL data seamlessly.")
-
   // Options that control which operators can be chosen by the query planner.  These should be
   // considered hints and may be ignored by future versions of Spark SQL.
   val EXTERNAL_SORT = booleanConf("spark.sql.planner.externalSort",
@@ -474,8 +469,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
   private[spark] def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
-
-  private[spark] def writeSchemaToHiveMetastore = getConf(HIVE_WRITE_DATASOURCE_SCHEMA)
 
   private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT)
 

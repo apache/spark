@@ -32,6 +32,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -261,8 +262,8 @@ private[hive] object HiveQl extends Logging {
   /**
    * Returns the HiveConf
    */
-  private[this] def hiveConf(): HiveConf = {
-    val ss = SessionState.get() // SessionState is lazy initializaion, it can be null here
+  private[this] def hiveConf: HiveConf = {
+    val ss = SessionState.get() // SessionState is lazy initialization, it can be null here
     if (ss == null) {
       new HiveConf()
     } else {
@@ -607,7 +608,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       // default storage type abbreviation (e.g. RCFile, ORC, PARQUET etc.)
       val defaultStorageType = hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT)
       // handle the default format for the storage type abbreviation
-      val hiveSerDe = HiveSerDe.sourceToSerDe(defaultStorageType, hiveConf, true).get
+      val hiveSerDe = HiveSerDe.sourceToSerDe(defaultStorageType, hiveConf).getOrElse {
+        HiveSerDe(
+          inputFormat = Option("org.apache.hadoop.mapred.TextInputFormat"),
+          outputFormat = Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
+      }
 
       hiveSerDe.inputFormat.foreach(f => tableDesc = tableDesc.copy(inputFormat = Some(f)))
       hiveSerDe.outputFormat.foreach(f => tableDesc = tableDesc.copy(outputFormat = Some(f)))
