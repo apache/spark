@@ -23,6 +23,14 @@ from pyspark.sql.types import *
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
 
+def to_str(value):
+    """
+    A wrapper over str(), but convert bool values to lower case string
+    """
+    if isinstance(value, bool):
+        return str(value).lower()
+    else:
+        return str(value)
 
 class DataFrameReader(object):
     """
@@ -77,7 +85,7 @@ class DataFrameReader(object):
     def option(self, key, value):
         """Adds an input option for the underlying data source.
         """
-        self._jreader = self._jreader.option(key, str(value).lower())
+        self._jreader = self._jreader.option(key, to_str(value))
         return self
 
     @since(1.4)
@@ -85,7 +93,7 @@ class DataFrameReader(object):
         """Adds input options for the underlying data source.
         """
         for k in options:
-            self._jreader = self._jreader.option(k, str(options[k]).lower())
+            self._jreader = self._jreader.option(k, to_str(options[k]))
         return self
 
     @since(1.4)
