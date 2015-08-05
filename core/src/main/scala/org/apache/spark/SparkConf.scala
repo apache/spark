@@ -389,6 +389,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     val driverOptsKey = "spark.driver.extraJavaOptions"
     val driverClassPathKey = "spark.driver.extraClassPath"
     val driverLibraryPathKey = "spark.driver.extraLibraryPath"
+    val sparkExecutorInstances = "spark.executor.instances"
 
     // Used by Yarn in 1.1 and before
     sys.props.get("spark.driver.libraryPath").foreach { value =>
@@ -477,21 +478,22 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
       }
     }
 
-    sys.env.get("SPARK_WORKER_INSTANCES").foreach { value =>
-      val warning =
-        s"""
-           |SPARK_WORKER_INSTANCES was detected (set to '$value').
-           |This is deprecated in Spark 1.0+.
-           |
-           |Please instead use:
-           | - ./spark-submit with --num-executors to specify the number of executors
-           | - Or set SPARK_EXECUTOR_INSTANCES
-           | - spark.executor.instances to configure the number of instances in the spark config.
+    if (getOption(sparkExecutorInstances).isEmpty) {
+      sys.env.get("SPARK_WORKER_INSTANCES").foreach { value =>
+        val warning =
+          s"""
+             |SPARK_WORKER_INSTANCES was detected (set to '$value').
+             |This is deprecated in Spark 1.0+.
+             |
+             |Please instead use:
+             | - ./spark-submit with --num-executors to specify the number of executors
+             | - Or set SPARK_EXECUTOR_INSTANCES
+             | - spark.executor.instances to configure the number of instances in the spark config.
         """.stripMargin
-      logWarning(warning)
+        logWarning(warning)
 
-      set("spark.executor.instances", value.toString())
-
+        set("spark.executor.instances", value.toString())
+      }
     }
   }
 

@@ -65,7 +65,7 @@ private[spark] class ApplicationMaster(
   // Default to numExecutors * 2, with minimum of 3
   private val maxNumExecutorFailures = sparkConf.getInt("spark.yarn.max.executor.failures",
     sparkConf.getInt("spark.yarn.max.worker.failures",
-      math.max(sparkConf.get("spark.executor.instances").toInt * 2, 3)))
+      math.max(sparkConf.getInt("spark.executor.instances", 0) *  2, 3)))
 
   @volatile private var exitCode = 0
   @volatile private var unregistered = false

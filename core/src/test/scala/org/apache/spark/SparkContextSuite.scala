@@ -290,7 +290,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
         .set("spark.dynamicAllocation.enabled", "true").set("spark.executor.instances", "6"))
       assert(sc.executorAllocationManager.isEmpty)
-      assert(sc.getConf.get("spark.executor.instances").toInt === 6)
+      assert(sc.getConf.getInt("spark.executor.instances", 0) === 6)
     }
   }
 }
