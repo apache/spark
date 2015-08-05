@@ -530,7 +530,7 @@ class DAGSchedulerSuite
    */
   def completeNextStageWithFetchFailure(stageId: Int,
       attemptIdx: Int,
-      shuffleDep: ShuffleDependency[_,_,_]): Unit = {
+      shuffleDep: ShuffleDependency[_, _, _]): Unit = {
     val stageAttempt = taskSets.last
     checkStageId(stageId, attemptIdx, stageAttempt)
 
