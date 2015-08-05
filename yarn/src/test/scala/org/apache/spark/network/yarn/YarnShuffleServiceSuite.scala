@@ -23,7 +23,7 @@ import scala.annotation.tailrec
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.server.api.ApplicationInitializationContext
+import org.apache.hadoop.yarn.server.api.{ApplicationTerminationContext, ApplicationInitializationContext}
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.SparkFunSuite
@@ -54,10 +54,17 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
   var s3: YarnShuffleService = null
 
   override def afterEach(): Unit = {
-    Seq(s1, s2, s3).foreach { service =>
-      if (service != null) {
-        service.stop()
-      }
+    if (s1 != null) {
+      s1.stop()
+      s1 = null
+    }
+    if (s2 != null) {
+      s2.stop()
+      s2 = null
+    }
+    if (s3 != null) {
+      s3.stop()
+      s3 = null
     }
   }
 
@@ -146,6 +153,39 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     ShuffleTestAccessor.getExecutorInfo(app1Id, "exec-1", resolver3) should be (Some(shuffleInfo1))
     ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", resolver3) should be (None)
     s3.stop()
+  }
+
+  test("removed applications should not be in registered executor file") {
+    s1 = new YarnShuffleService
+    s1.init(yarnConfig)
+    val app1Id = ApplicationId.newInstance(0, 1)
+    val app1Data: ApplicationInitializationContext =
+      new ApplicationInitializationContext("user", app1Id, null)
+    s1.initializeApplication(app1Data)
+    val app2Id = ApplicationId.newInstance(0, 2)
+    val app2Data: ApplicationInitializationContext =
+      new ApplicationInitializationContext("user", app2Id, null)
+    s1.initializeApplication(app2Data)
+
+    val execStateFile = s1.registeredExecutorFile
+    execStateFile should not be (null)
+    execStateFile.exists() should be (false)
+    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, "sort")
+    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, "hash")
+
+    val blockHandler = s1.blockHandler
+    val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
+    ShuffleTestAccessor.registeredExecutorFile(blockResolver) should be (execStateFile)
+
+    blockResolver.registerExecutor(app1Id.toString, "exec-1", shuffleInfo1)
+    blockResolver.registerExecutor(app2Id.toString, "exec-2", shuffleInfo2)
+
+    YarnShuffleService.reloadRegisteredExecutors(execStateFile) should not be empty
+
+    s1.stopApplication(new ApplicationTerminationContext(app1Id))
+    s1.stopApplication(new ApplicationTerminationContext(app2Id))
+
+    YarnShuffleService.reloadRegisteredExecutors(execStateFile) shouldBe empty
   }
 
 

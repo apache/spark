@@ -45,14 +45,15 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     val shuffleServicePort = YarnTestAccessor.getShuffleServicePort
     val shuffleService = YarnTestAccessor.getShuffleServiceInstance
 
-    assert(!YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
+    val registeredExecFile = YarnTestAccessor.getRegisteredExecutorFile(shuffleService)
+    assert(!registeredExecFile.exists())
 
     logInfo("Shuffle service port = " + shuffleServicePort)
     val result = File.createTempFile("result", null, tempDir)
     runSpark(
       false,
       mainClassName(YarnExternalShuffleDriver.getClass),
-      appArgs = Seq(result.getAbsolutePath()),
+      appArgs = Seq(result.getAbsolutePath(), registeredExecFile.getAbsolutePath),
       extraConf = Map(
         "spark.shuffle.service.enabled" -> "true",
         "spark.shuffle.service.port" -> shuffleServicePort.toString
@@ -60,7 +61,6 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     )
     checkResult(result)
     assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
-    assert(!YarnTestAccessor.loadSavedExecutors(shuffleService).isEmpty)
   }
 }
 
@@ -69,13 +69,13 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
   val WAIT_TIMEOUT_MILLIS = 10000
 
   def main(args: Array[String]): Unit = {
-    if (args.length != 1) {
+    if (args.length != 2) {
       // scalastyle:off println
       System.err.println(
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
-        |Usage: ExternalShuffleDriver [result file]
+        |Usage: ExternalShuffleDriver [result file] [registed exec file]
         """.stripMargin)
       // scalastyle:on println
       System.exit(1)
@@ -85,6 +85,8 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
       .setAppName("External Shuffle Test"))
     val conf = sc.getConf
     val status = new File(args(0))
+    val registeredExecFile = new File(args(1))
+    logInfo("shuffle service executor file = " + registeredExecFile)
     var result = "failure"
     try {
       val data = sc.parallelize(0 until 100, 10).map { x => (x % 10) -> x }.reduceByKey{ _ + _ }.
@@ -92,6 +94,7 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
       sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
       data should be ((0 until 10).map{x => x -> (x * 10 + 450)}.toSet)
       result = "success"
+      assert(!YarnTestAccessor.loadSavedExecutors(registeredExecFile).isEmpty)
     } finally {
       sc.stop()
       Files.write(result, status, UTF_8)
