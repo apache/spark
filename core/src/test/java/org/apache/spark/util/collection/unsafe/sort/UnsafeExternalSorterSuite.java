@@ -101,7 +101,7 @@ public class UnsafeExternalSorterSuite {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     sparkConf = new SparkConf();
-    tempDir = new File(Utils.createTempDir$default$1());
+    tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
     shuffleMemoryManager = new ShuffleMemoryManager(Long.MAX_VALUE);
     spillFilesCreated.clear();
     taskContext = mock(TaskContext.class);
@@ -234,7 +234,7 @@ public class UnsafeExternalSorterSuite {
   public void spillingOccursInResponseToMemoryPressure() throws Exception {
     shuffleMemoryManager = new ShuffleMemoryManager(pageSizeBytes * 2);
     final UnsafeExternalSorter sorter = newSorter();
-    final int numRecords = 100000;
+    final int numRecords = (int) pageSizeBytes / 4;
     for (int i = 0; i <= numRecords; i++) {
       insertNumber(sorter, numRecords - i);
     }
