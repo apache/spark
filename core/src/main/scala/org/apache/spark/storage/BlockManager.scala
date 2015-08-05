@@ -94,12 +94,14 @@ private[spark] class BlockManager(
   // Port used by the external shuffle service. In Yarn mode, this may be already be
   // set through the Hadoop configuration as the server is launched in the Yarn NM.
   private val externalShuffleServicePort = {
-    val t = Utils.getSparkOrYarnConfig(conf, "spark.shuffle.service.port", "7337").toInt
-    if (t == 0) {
-      // this is just for testing, when the yarn conf is set to 0 to find an open port
+    val tmpPort = Utils.getSparkOrYarnConfig(conf, "spark.shuffle.service.port", "7337").toInt
+    if (tmpPort == 0) {
+      // for testing, we set "spark.shuffle.service.port" to 0 in the yarn config, so yarn finds
+      // an open port.  But we still need to tell our spark apps the right port to use.  So
+      // only if the yarn config has the port set to 0, we prefer the value in the spark config
       conf.get("spark.shuffle.service.port").toInt
     } else {
-      t
+      tmpPort
     }
   }
 
