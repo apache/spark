@@ -147,18 +147,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
              if canBeCodeGened(
                   allAggregates(partialComputation) ++
                   allAggregates(rewrittenAggregateExpressions)) &&
-               codegenEnabled &&
+               tungstenEnabled &&
                !canBeConvertedToNewAggregation(plan) =>
           execution.GeneratedAggregate(
             partial = false,
             namedGroupingAttributes,
             rewrittenAggregateExpressions,
-            unsafeEnabled,
             execution.GeneratedAggregate(
               partial = true,
               groupingExpressions,
               partialComputation,
-              unsafeEnabled,
               planLater(child))) :: Nil
 
       // Cases where some aggregate can not be codegened
@@ -183,7 +181,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     def canBeConvertedToNewAggregation(plan: LogicalPlan): Boolean = plan match {
       case a: logical.Aggregate =>
-        if (sqlContext.conf.useSqlAggregate2 && sqlContext.conf.codegenEnabled) {
+        if (sqlContext.conf.useSqlAggregate2 && sqlContext.conf.tungstenEnabled) {
           a.newAggregation.isDefined
         } else {
           Utils.checkInvalidAggregateFunction2(a)
@@ -210,7 +208,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case p: logical.Aggregate if sqlContext.conf.useSqlAggregate2 &&
-          sqlContext.conf.codegenEnabled =>
+                                   sqlContext.conf.tungstenEnabled =>
         val converted = p.newAggregation
         converted match {
           case None => Nil // Cannot convert to new aggregation code path.
@@ -328,8 +326,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      *               if necessary.
      */
     def getSortOperator(sortExprs: Seq[SortOrder], global: Boolean, child: SparkPlan): SparkPlan = {
-      if (sqlContext.conf.unsafeEnabled && sqlContext.conf.codegenEnabled &&
-        TungstenSort.supportsSchema(child.schema)) {
+      if (sqlContext.conf.tungstenEnabled && TungstenSort.supportsSchema(child.schema)) {
         execution.TungstenSort(sortExprs, global, child)
       } else if (sqlContext.conf.externalSortEnabled) {
         execution.ExternalSort(sortExprs, global, child)
@@ -355,7 +352,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Project(projectList, child) =>
         // If unsafe mode is enabled and we support these data types in Unsafe, use the
         // Tungsten project. Otherwise, use the normal project.
-        if (sqlContext.conf.unsafeEnabled &&
+        if (sqlContext.conf.tungstenEnabled &&
           UnsafeProjection.canSupport(projectList) && UnsafeProjection.canSupport(child.schema)) {
           execution.TungstenProject(projectList, planLater(child)) :: Nil
         } else {
@@ -366,7 +363,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case e @ logical.Expand(_, _, _, child) =>
         execution.Expand(e.projections, e.output, planLater(child)) :: Nil
       case a @ logical.Aggregate(group, agg, child) => {
-        val useNewAggregation = sqlContext.conf.useSqlAggregate2 && sqlContext.conf.codegenEnabled
+        val useNewAggregation = sqlContext.conf.useSqlAggregate2 && sqlContext.conf.tungstenEnabled
         if (useNewAggregation && a.newAggregation.isDefined) {
           // If this logical.Aggregate can be planned to use new aggregation code path
           // (i.e. it can be planned by the Strategy Aggregation), we will not use the old

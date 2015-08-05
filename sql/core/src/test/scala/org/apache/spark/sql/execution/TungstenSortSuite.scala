@@ -33,11 +33,11 @@ import org.apache.spark.sql.types._
 class TungstenSortSuite extends SparkPlanTest with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
-    TestSQLContext.conf.setConf(SQLConf.CODEGEN_ENABLED, true)
+    TestSQLContext.conf.setConf(SQLConf.TUNGSTEN_ENABLED, true)
   }
 
   override def afterAll(): Unit = {
-    TestSQLContext.conf.setConf(SQLConf.CODEGEN_ENABLED, SQLConf.CODEGEN_ENABLED.defaultValue.get)
+    TestSQLContext.conf.setConf(SQLConf.TUNGSTEN_ENABLED, SQLConf.TUNGSTEN_ENABLED.defaultValue.get)
   }
 
   test("sort followed by limit") {

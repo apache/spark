@@ -511,14 +511,14 @@ class SortBasedAggregationQuerySuite extends AggregationQuerySuite {
   var originalUnsafeEnabled: Boolean = _
 
   override def beforeAll(): Unit = {
-    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "false")
+    originalUnsafeEnabled = sqlContext.conf.tungstenEnabled
+    sqlContext.setConf(SQLConf.TUNGSTEN_ENABLED.key, "false")
     super.beforeAll()
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+    sqlContext.setConf(SQLConf.TUNGSTEN_ENABLED.key, originalUnsafeEnabled.toString)
   }
 }
 
@@ -527,13 +527,13 @@ class TungstenAggregationQuerySuite extends AggregationQuerySuite {
   var originalUnsafeEnabled: Boolean = _
 
   override def beforeAll(): Unit = {
-    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "true")
+    originalUnsafeEnabled = sqlContext.conf.tungstenEnabled
+    sqlContext.setConf(SQLConf.TUNGSTEN_ENABLED.key, "true")
     super.beforeAll()
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+    sqlContext.setConf(SQLConf.TUNGSTEN_ENABLED.key, originalUnsafeEnabled.toString)
   }
 }

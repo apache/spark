@@ -126,12 +126,12 @@ class HiveUDFSuite extends QueryTest {
           |           "value", value)).value FROM src
         """.stripMargin), Seq(Row("val_0")))
     }
-    val codegenDefault = TestHive.getConf(SQLConf.CODEGEN_ENABLED)
-    TestHive.setConf(SQLConf.CODEGEN_ENABLED, true)
+    val codegenDefault = TestHive.getConf(SQLConf.TUNGSTEN_ENABLED)
+    TestHive.setConf(SQLConf.TUNGSTEN_ENABLED, true)
     testOrderInStruct()
-    TestHive.setConf(SQLConf.CODEGEN_ENABLED, false)
+    TestHive.setConf(SQLConf.TUNGSTEN_ENABLED, false)
     testOrderInStruct()
-    TestHive.setConf(SQLConf.CODEGEN_ENABLED, codegenDefault)
+    TestHive.setConf(SQLConf.TUNGSTEN_ENABLED, codegenDefault)
   }
 
   test("SPARK-6409 UDAFAverage test") {

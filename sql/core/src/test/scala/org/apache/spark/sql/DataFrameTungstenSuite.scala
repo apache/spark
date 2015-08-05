@@ -33,14 +33,14 @@ class DataFrameTungstenSuite extends QueryTest with SQLTestUtils {
   import sqlContext.implicits._
 
   test("test simple types") {
-    withSQLConf(SQLConf.UNSAFE_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.TUNGSTEN_ENABLED.key -> "true") {
       val df = sqlContext.sparkContext.parallelize(Seq((1, 2))).toDF("a", "b")
       assert(df.select(struct("a", "b")).first().getStruct(0) === Row(1, 2))
     }
   }
 
   test("test struct type") {
-    withSQLConf(SQLConf.UNSAFE_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.TUNGSTEN_ENABLED.key -> "true") {
       val struct = Row(1, 2L, 3.0F, 3.0)
       val data = sqlContext.sparkContext.parallelize(Seq(Row(1, struct)))
 
@@ -59,7 +59,7 @@ class DataFrameTungstenSuite extends QueryTest with SQLTestUtils {
   }
 
   test("test nested struct type") {
-    withSQLConf(SQLConf.UNSAFE_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.TUNGSTEN_ENABLED.key -> "true") {
       val innerStruct = Row(1, "abcd")
       val outerStruct = Row(1, 2L, 3.0F, 3.0, innerStruct, "efg")
       val data = sqlContext.sparkContext.parallelize(Seq(Row(1, outerStruct)))

@@ -230,13 +230,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
   test("SPARK-8828 sum should return null if all input values are null") {
     withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "true") {
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.TUNGSTEN_ENABLED.key -> "true") {
         checkAnswer(
           sql("select sum(a), avg(a) from allNulls"),
           Seq(Row(null, null))
         )
       }
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.TUNGSTEN_ENABLED.key -> "false") {
         checkAnswer(
           sql("select sum(a), avg(a) from allNulls"),
           Seq(Row(null, null))
@@ -244,13 +244,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       }
     }
     withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.TUNGSTEN_ENABLED.key -> "true") {
         checkAnswer(
           sql("select sum(a), avg(a) from allNulls"),
           Seq(Row(null, null))
         )
       }
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.TUNGSTEN_ENABLED.key -> "false") {
         checkAnswer(
           sql("select sum(a), avg(a) from allNulls"),
           Seq(Row(null, null))
@@ -277,8 +277,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("aggregation with codegen") {
-    val originalValue = sqlContext.conf.codegenEnabled
-    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
+    val originalValue = sqlContext.conf.tungstenEnabled
+    sqlContext.setConf(SQLConf.TUNGSTEN_ENABLED, true)
     // Prepare a table that we can group some rows.
     sqlContext.table("testData")
       .unionAll(sqlContext.table("testData"))
@@ -356,7 +356,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
         Row(null, null, 0) :: Nil)
     } finally {
       sqlContext.dropTempTable("testData3x")
-      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
+      sqlContext.setConf(SQLConf.TUNGSTEN_ENABLED, originalValue)
     }
   }
 
@@ -592,14 +592,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
   test("SPARK-6927 sorting with codegen on") {
     withSQLConf(SQLConf.EXTERNAL_SORT.key -> "false",
-      SQLConf.CODEGEN_ENABLED.key -> "true") {
+      SQLConf.TUNGSTEN_ENABLED.key -> "true") {
       sortTest()
     }
   }
 
   test("SPARK-6927 external sorting with codegen on") {
     withSQLConf(SQLConf.EXTERNAL_SORT.key -> "true",
-      SQLConf.CODEGEN_ENABLED.key -> "true") {
+      SQLConf.TUNGSTEN_ENABLED.key -> "true") {
       sortTest()
     }
   }
@@ -1605,7 +1605,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
   test("aggregation with codegen updates peak execution memory") {
     withSQLConf(
-        (SQLConf.CODEGEN_ENABLED.key, "true"),
+        (SQLConf.TUNGSTEN_ENABLED.key, "true"),
         (SQLConf.USE_SQL_AGGREGATE2.key, "false")) {
       val sc = sqlContext.sparkContext
       AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "aggregation with codegen") {

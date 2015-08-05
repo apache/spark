@@ -856,9 +856,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     val sqlContext: SQLContext = self
 
-    def codegenEnabled: Boolean = self.conf.codegenEnabled
-
-    def unsafeEnabled: Boolean = self.conf.unsafeEnabled
+    def tungstenEnabled: Boolean = self.conf.tungstenEnabled
 
     def numPartitions: Int = self.conf.numShufflePartitions
 
