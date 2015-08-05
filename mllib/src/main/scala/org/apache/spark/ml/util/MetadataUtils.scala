@@ -17,11 +17,10 @@
 
 package org.apache.spark.ml.util
 
-import org.apache.spark.mllib.linalg.VectorUDT
-
 import scala.collection.immutable.HashMap
 
 import org.apache.spark.ml.attribute._
+import org.apache.spark.mllib.linalg.VectorUDT
 import org.apache.spark.sql.types.StructField
 
 
