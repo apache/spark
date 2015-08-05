@@ -1383,6 +1383,23 @@ def sort_array(col, asc=True):
 
 # ---------------------------- User Defined Function ----------------------------------
 
+@since(1.5)
+def array_contains(col, value):
+    """
+    Collection function: returns True if the array contains the given value. The collection
+    elements and value must be of the same type.
+
+    :param col: name of column containing array
+    :param value: value to check for in array
+
+    >>> df = sqlContext.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
+    >>> df.select(array_contains(df.data, "a")).collect()
+    [Row(array_contains(data,a)=True), Row(array_contains(data,a)=False)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
+
+
 class UserDefinedFunction(object):
     """
     User defined function in Python
