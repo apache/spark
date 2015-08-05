@@ -260,7 +260,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
 
       sqlContext.baseRelationToDataFrame(
         new ParquetRelation(
-          globbedPaths.map(_.toString), None, None, extraOptions.toMap)(sqlContext))
+          globbedPaths.map(_.toString), userSpecifiedSchema, None, extraOptions.toMap)(sqlContext))
     }
   }
 
