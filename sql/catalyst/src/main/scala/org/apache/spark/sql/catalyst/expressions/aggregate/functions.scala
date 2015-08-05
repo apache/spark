@@ -32,7 +32,7 @@ case class Average(child: Expression) extends AlgebraicAggregate {
 
   // Expected input data type.
   // TODO: Once we remove the old code path, we can use our analyzer to cast NullType
-  // to the default data type of the NumericType.
+  // to the default data type of the NumericType. So we will not have NullType at here.
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
 
   private val resultType = child.dataType match {
@@ -256,12 +256,16 @@ case class Sum(child: Expression) extends AlgebraicAggregate {
   override def dataType: DataType = resultType
 
   // Expected input data type.
+  // TODO: Once we remove the old code path, we can use our analyzer to cast NullType
+  // to the default data type of the NumericType. So we will not have NullType at here.
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(LongType, DoubleType, DecimalType, NullType))
 
   private val resultType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
       DecimalType.bounded(precision + 10, scale)
+    // TODO: Remove this line once we remove the NullType from inputTypes.
+    case NullType => IntegerType
     case _ => child.dataType
   }
 
