@@ -101,7 +101,8 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           }
         }
 
-      case logical.InsertIntoTable(LogicalRelation(r: HadoopFsRelation), part, _, _, _) =>
+      case logical.InsertIntoTable(
+        LogicalRelation(r: HadoopFsRelation), part, query, overwrite, _) =>
         // We need to make sure the partition columns specified by users do match partition
         // columns of the relation.
         val existingPartitionColumns = r.partitionColumns.fieldNames.toSet
@@ -111,6 +112,17 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
             s"(${specifiedPartitionColumns.mkString(", ")}) " +
             s"do not match the partition columns of the table. Please use " +
             s"(${existingPartitionColumns.mkString(", ")}) as the partition columns.")
+        } else {
+          // OK
+        }
+
+        // Get all input data source relations of the query.
+        val srcRelations = query.collect {
+          case LogicalRelation(src: BaseRelation) => src
+        }
+        if (srcRelations.contains(r)) {
+          failAnalysis(
+            "Cannot insert overwrite into table that is also being read from.")
         } else {
           // OK
         }
