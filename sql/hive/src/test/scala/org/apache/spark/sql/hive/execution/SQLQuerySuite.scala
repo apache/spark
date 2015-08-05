@@ -74,29 +74,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     checkAnswer(query, Row(1, 1) :: Row(1, 2) :: Row(1, 3) :: Nil)
   }
 
-  test("SPARK-7550: Support setting the right schema & serde when writing to Hive Metastore") {
-    val df = Seq((1, 1)).toDF("c1", "c2")
-
-    // test writing orc table via data source api, and read it in Hive
-    df.write.format("orc").saveAsTable("spark_7550_orc")
-    checkAnswer(sql("select * from spark_7550_orc"), Row(1, 1) :: Nil)   // run with spark
-    val hiveResult1 = runSqlHive("select * from spark_7550_orc limit 2") // run with hive
-    assert(hiveResult1.length === 1)
-    assert(hiveResult1(0) === "1\t1")
-
-    // test writing parquet table via data source api, and read it in Hive
-    df.write.format("parquet").saveAsTable("spark_7550_parquet")
-    checkAnswer(sql("select * from spark_7550_parquet"), Row(1, 1) :: Nil)   // run with spark
-    val hiveResult2 = runSqlHive("select * from spark_7550_parquet limit 2") // run with hive
-    assert(hiveResult2.length === 1)
-    assert(hiveResult2(0) === "1\t1")
-
-    // test writing json table via data source api
-    // will not throw exception, but will log warning,
-    // as Hive is not able to load data from this table
-    df.write.format("json").saveAsTable("spark_7550_json")
-  }
-
   test("SPARK-6851: Self-joined converted parquet tables") {
     val orders = Seq(
       Order(1, "Atlas", "MTB", 234, "2015-01-07", "John D", "Pacifica", "CA", 20151),
