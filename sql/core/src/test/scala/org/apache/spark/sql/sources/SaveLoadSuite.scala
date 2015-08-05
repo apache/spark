@@ -21,7 +21,7 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.{SaveMode, SQLConf, DataFrame}
+import org.apache.spark.sql.{AnalysisException, SaveMode, SQLConf, DataFrame}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -57,19 +57,21 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
     Utils.deleteRecursively(path)
   }
 
-  def checkLoad(): Unit = {
+  def checkLoad(expectedDF: DataFrame = df, tbl: String = "jsonTable"): Unit = {
     caseInsensitiveContext.conf.setConf(
       SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
-    checkAnswer(caseInsensitiveContext.read.load(path.toString), df.collect())
+    checkAnswer(caseInsensitiveContext.read.load(path.toString), expectedDF.collect())
 
     // Test if we can pick up the data source name passed in load.
     caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
-    checkAnswer(caseInsensitiveContext.read.format("json").load(path.toString), df.collect())
-    checkAnswer(caseInsensitiveContext.read.format("json").load(path.toString), df.collect())
+    checkAnswer(caseInsensitiveContext.read.format("json").load(path.toString),
+      expectedDF.collect())
+    checkAnswer(caseInsensitiveContext.read.format("json").load(path.toString),
+      expectedDF.collect())
     val schema = StructType(StructField("b", StringType, true) :: Nil)
     checkAnswer(
       caseInsensitiveContext.read.format("json").schema(schema).load(path.toString),
-      sql("SELECT b FROM jsonTable").collect())
+      sql(s"SELECT b FROM $tbl").collect())
   }
 
   test("save with path and load") {
@@ -102,7 +104,7 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
   test("save and save again") {
     df.write.json(path.toString)
 
-    var message = intercept[RuntimeException] {
+    val message = intercept[AnalysisException] {
       df.write.json(path.toString)
     }.getMessage
 
@@ -118,12 +120,11 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
     df.write.mode(SaveMode.Overwrite).json(path.toString)
     checkLoad()
 
-    message = intercept[RuntimeException] {
-      df.write.mode(SaveMode.Append).json(path.toString)
-    }.getMessage
+    // verify the append mode
+    df.write.mode(SaveMode.Append).json(path.toString)
+    val df2 = df.unionAll(df)
+    df2.registerTempTable("jsonTable2")
 
-    assert(
-      message.contains("Append mode is not supported"),
-      "We should complain that 'Append mode is not supported' for JSON source.")
+    checkLoad(df2, "jsonTable2")
   }
 }

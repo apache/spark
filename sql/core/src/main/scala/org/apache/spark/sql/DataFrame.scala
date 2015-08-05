@@ -1567,8 +1567,6 @@ class DataFrame private[sql](
     val files: Seq[String] = logicalPlan.collect {
       case LogicalRelation(fsBasedRelation: HadoopFsRelation) =>
         fsBasedRelation.paths.toSeq
-      case LogicalRelation(jsonRelation: JSONRelation) =>
-        jsonRelation.path.toSeq
     }.flatten
     files.toSet.toArray
   }

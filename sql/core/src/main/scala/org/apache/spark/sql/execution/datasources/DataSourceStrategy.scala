@@ -60,6 +60,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // Scanning partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation))
         if t.partitionSpec.partitionColumns.nonEmpty =>
+      t.refresh()
       val selectedPartitions = prunePartitions(filters, t.partitionSpec).toArray
 
       logInfo {
@@ -87,6 +88,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
     // Scanning non-partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation)) =>
+      t.refresh()
       // See buildPartitionedTableScan for the reason that we need to create a shard
       // broadcast HadoopConf.
       val sharedHadoopConf = SparkHadoopUtil.get.conf
