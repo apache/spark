@@ -78,8 +78,8 @@ case class SortMergeJoin(
 
         private[this] def fetchNext(): Boolean = {
           if (smjScanner.findNextInnerJoinRows()) {
-            currentRightMatches = smjScanner.getRightMatches
-            currentLeftRow = smjScanner.getLeftRow
+            currentRightMatches = smjScanner.getBuildMatches
+            currentLeftRow = smjScanner.getStreamedRow
             currentMatchIdx = 0
             true
           } else {
@@ -105,167 +105,178 @@ case class SortMergeJoin(
 
 /**
  * Helper class that is used to implement [[SortMergeJoin]] and [[SortMergeOuterJoin]].
+ *
+ * The streamed input is the left side of a left outer join or the right side of a right outer join.
+ *
+ * // todo(josh): scaladoc
+ * @param streamedKeyGenerator
+ * @param buildKeyGenerator
+ * @param keyOrdering
+ * @param streamedIter
+ * @param buildIter
  */
-// TODO(josh): rename to build and probe terminology, which should be easy now that the projection
-// building has been moved out of here
 private[joins] class SortMergeJoinScanner(
-    leftKeyGenerator: Projection,
-    rightKeyGenerator: Projection,
+    streamedKeyGenerator: Projection,
+    buildKeyGenerator: Projection,
     keyOrdering: RowOrdering,
-    leftIter: Iterator[InternalRow],
-    rightIter: Iterator[InternalRow]) {
-  private[this] var leftRow: InternalRow = _
-  private[this] var leftJoinKey: InternalRow = _
-  private[this] var rightRow: InternalRow = _
-  private[this] var rightJoinKey: InternalRow = _
-   /** The join key for the rows buffered in `rightMatches`, or null if `rightMatches` is empty */
+    streamedIter: Iterator[InternalRow],
+    buildIter: Iterator[InternalRow]) {
+  private[this] var streamedRow: InternalRow = _
+  private[this] var streamedRowKey: InternalRow = _
+  private[this] var buildRow: InternalRow = _
+  private[this] var buildRowKey: InternalRow = _
+   /** The join key for the rows buffered in `buildMatches`, or null if `buildMatches` is empty */
   private[this] var matchJoinKey: InternalRow = _
-  /** Buffered rows from the right side of the join. This is null if there are no matches */
-  private[this] var rightMatches: CompactBuffer[InternalRow] = _
+  /** Buffered rows from the build side of the join. This is null if there are no matches */
+  private[this] var buildMatches: CompactBuffer[InternalRow] = _
 
-  // Initialization (note: do _not_ want to advance left here).
-  advanceRight()
+  // Initialization (note: do _not_ want to advance streamed here).
+  advanceBuild()
 
   // --- Public methods ---------------------------------------------------------------------------
 
   /**
    * Advances both input iterators, stopping when we have found rows with matching join keys.
    * @return true if matching rows have been found and false otherwise. If this returns true, then
-   *         [[getLeftRow]] and [[getRightMatches]] can be called to produce the join results.
+   *         [[getStreamedRow]] and [[getBuildMatches]] can be called to produce the join results.
    */
   final def findNextInnerJoinRows(): Boolean = {
-    advanceLeft()
-    if (leftRow == null) {
-      // We have consumed the entire left iterator, so there can be no more matches.
+    advancedStreamed()
+    if (streamedRow == null) {
+      // We have consumed the entire streamed iterator, so there can be no more matches.
       false
-    } else if (matchJoinKey != null && keyOrdering.compare(leftJoinKey, matchJoinKey) == 0) {
-      // The new left row has the same join key as the previous row, so return the same matches.
+    } else if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
+      // The new streamed row has the same join key as the previous row, so return the same matches.
       true
-    } else if (rightRow == null) {
-      // The left row's join key does not match the current batch of right rows and there are no
-      // more rows to read from the right iterator, so there can be no more matches.
+    } else if (buildRow == null) {
+      // The streamed row's join key does not match the current batch of build rows and there are no
+      // more rows to read from the build iterator, so there can be no more matches.
       false
     } else {
-      // Advance both the left and right iterators to find the next pair of matching rows.
+      // Advance both the streamed and build iterators to find the next pair of matching rows.
       var comp = 0
       do {
-        if (leftJoinKey.anyNull) {
-          advanceLeft()
-        } else if (rightJoinKey.anyNull) {
-          advanceRight()
+        if (streamedRowKey.anyNull) {
+          advancedStreamed()
+        } else if (buildRowKey.anyNull) {
+          advanceBuild()
         } else {
-          comp = keyOrdering.compare(leftJoinKey, rightJoinKey)
-          if (comp > 0) advanceRight()
-          else if (comp < 0) advanceLeft()
+          comp = keyOrdering.compare(streamedRowKey, buildRowKey)
+          if (comp > 0) advanceBuild()
+          else if (comp < 0) advancedStreamed()
         }
-      } while (leftRow != null && rightRow != null && comp != 0)
-      if (leftRow == null || rightRow == null) {
+      } while (streamedRow != null && buildRow != null && comp != 0)
+      if (streamedRow == null || buildRow == null) {
         // We have either hit the end of one of the iterators, so there can be no more matches.
         false
       } else {
-        // The left and right rows have matching join keys, so scan through the right iterator to
-        // buffer all matching rows.
+        // The streamed and build rows have matching join keys, so walk through the build iterator
+        // to buffer all matching rows.
         assert(comp == 0)
-        bufferMatchingRightRows()
+        bufferMatchingBuildRows()
         true
       }
     }
   }
 
   /**
-   * Advances the left input iterator and buffers all rows from the right input with matching keys.
-   * @return true if the left iterator returned a row, false otherwise. If this returns true, then
-   *         [[getLeftRow]] and [[getRightMatches]] can be called to produce the outer join results.
+   * Advances the streamed input iterator and buffers all rows from the build input with matching
+   * keys.
+   * @return true if the streamed iterator returned a row, false otherwise. If this returns true,
+   *         then [getStreamedRow and [[getBuildMatches]] can be called to produce the outer
+   *         join results.
    */
   final def findNextOuterJoinRows(): Boolean = {
-    if (advanceLeft()) {
-      if (leftJoinKey.anyNull) {
-        // Since at least one join column is null, the left row has no matches.
+    if (advancedStreamed()) {
+      if (streamedRowKey.anyNull) {
+        // Since at least one join column is null, the streamed row has no matches.
         matchJoinKey = null
-        rightMatches = null
-      } else if (matchJoinKey != null && keyOrdering.compare(leftJoinKey, matchJoinKey) == 0) {
+        buildMatches = null
+      } else if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
         // Matches the current group, so do nothing.
       } else {
-        // The left row does not match the current group.
+        // The streamed row does not match the current group.
         matchJoinKey = null
-        rightMatches = null
-        if (rightRow != null) {
-          // The right iterator could still contain matching rows, so we'll need to scan through it
+        buildMatches = null
+        if (buildRow != null) {
+          // The build iterator could still contain matching rows, so we'll need to walk through it
           // until we either find matches or pass where they would be found.
-          var comp = if (rightJoinKey.anyNull) 1 else keyOrdering.compare(leftJoinKey, rightJoinKey)
-          while (comp > 0 && advanceRight()) {
-            comp = if (rightJoinKey.anyNull) 1 else keyOrdering.compare(leftJoinKey, rightJoinKey)
+          var comp = if (buildRowKey.anyNull) 1 else keyOrdering.compare(streamedRowKey, buildRowKey)
+          while (comp > 0 && advanceBuild()) {
+            comp = if (buildRowKey.anyNull) 1 else keyOrdering.compare(streamedRowKey, buildRowKey)
           }
           if (comp == 0) {
             // We have found matches, so buffer them (this updates matchJoinKey)
-            bufferMatchingRightRows()
+            bufferMatchingBuildRows()
           } else {
             // We have overshot the position where the row would be found, hence no matches.
           }
         }
       }
-      // If there is a left input, then we always return true since outer join always returns a row.
+      // If there is a streamed input, then we always return true since outer join always returns a row.
       true
     } else {
-      // End of left input, hence no more results.
+      // End of streamed input, hence no more results.
       false
     }
   }
 
-  def getLeftRow: InternalRow = leftRow
-  def getRightMatches: CompactBuffer[InternalRow] = rightMatches
+  def getStreamedRow: InternalRow = streamedRow
+  def getBuildMatches: CompactBuffer[InternalRow] = buildMatches
 
   // --- Private methods --------------------------------------------------------------------------
 
   /**
-   * Advance the left iterator and compute the new row's join key.
-   * @return true if the left iterator returned a row and false otherwise.
+   * Advance the streamed iterator and compute the new row's join key.
+   * @return true if the streamed iterator returned a row and false otherwise.
    */
-  private def advanceLeft(): Boolean = {
-    if (leftIter.hasNext) {
-      leftRow = leftIter.next()
-      leftJoinKey = leftKeyGenerator(leftRow)
+  private def advancedStreamed(): Boolean = {
+    if (streamedIter.hasNext) {
+      streamedRow = streamedIter.next()
+      streamedRowKey = streamedKeyGenerator(streamedRow)
       true
     } else {
-      leftRow = null
-      leftJoinKey = null
+      streamedRow = null
+      streamedRowKey = null
       false
     }
   }
 
   /**
-   * Advance the right iterator and compute the new row's join key.
-   * @return true if the right iterator returned a row and false otherwise.
+   * Advance the build iterator and compute the new row's join key.
+   * @return true if the build iterator returned a row and false otherwise.
    */
-  private def advanceRight(): Boolean = {
-    if (rightIter.hasNext) {
-      rightRow = rightIter.next()
-      rightJoinKey = rightKeyGenerator(rightRow)
+  private def advanceBuild(): Boolean = {
+    if (buildIter.hasNext) {
+      buildRow = buildIter.next()
+      buildRowKey = buildKeyGenerator(buildRow)
       true
     } else {
-      rightRow = null
-      rightJoinKey = null
+      buildRow = null
+      buildRowKey = null
       false
     }
   }
 
-  /** Called when the left and right join keys match in order to buffer the matching right rows. */
-  private def bufferMatchingRightRows(): Unit = {
-    assert(leftJoinKey != null)
-    assert(!leftJoinKey.anyNull)
-    assert(rightJoinKey != null)
-    assert(!rightJoinKey.anyNull)
-    assert(keyOrdering.compare(leftJoinKey, rightJoinKey) == 0)
-    matchJoinKey = leftJoinKey.copy()
-    rightMatches = new CompactBuffer[InternalRow]
+  /**
+   * Called when the streamed and build join keys match in order to buffer the matching build rows.
+   */
+  private def bufferMatchingBuildRows(): Unit = {
+    assert(streamedRowKey != null)
+    assert(!streamedRowKey.anyNull)
+    assert(buildRowKey != null)
+    assert(!buildRowKey.anyNull)
+    assert(keyOrdering.compare(streamedRowKey, buildRowKey) == 0)
+    matchJoinKey = streamedRowKey.copy()
+    buildMatches = new CompactBuffer[InternalRow]
     do {
       // TODO(josh): could maybe avoid a copy for case where all rows have exactly one match
-      rightMatches += rightRow.copy() // need to copy mutable rows before buffering them
-      advanceRight()
+      buildMatches += buildRow.copy() // need to copy mutable rows before buffering them
+      advanceBuild()
     } while (
-      rightRow != null &&
-      !rightJoinKey.anyNull &&
-      keyOrdering.compare(leftJoinKey, rightJoinKey) == 0
+      buildRow != null &&
+      !buildRowKey.anyNull &&
+      keyOrdering.compare(streamedRowKey, buildRowKey) == 0
     )
   }
 }

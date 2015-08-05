@@ -78,6 +78,8 @@ trait OuterJoin {
   }
 
   protected[this] def isUnsafeMode: Boolean = {
+    // TODO(josh): there is an existing bug here: this should also check whether unsafe mode
+    // is enabled. also, the default for self.codegenEnabled looks inconsistent to me.
     (self.codegenEnabled && joinType != FullOuter
       && UnsafeProjection.canSupport(buildKeys)
       && UnsafeProjection.canSupport(self.schema))
@@ -142,26 +144,21 @@ trait OuterJoin {
   }
 
   protected[this] def rightOuterIterator(
-      key: InternalRow,
       leftIter: Iterable[InternalRow],
       joinedRow: JoinedRow): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
-      if (!key.anyNull) {
-        val temp = if (leftIter != null) {
-          leftIter.collect {
-            case l if boundCondition(joinedRow.withLeft(l)) =>
-              resultProjection(joinedRow).copy()
-          }
-        } else {
-          List.empty
-        }
-        if (temp.isEmpty) {
-          resultProjection(joinedRow.withLeft(leftNullRow)).copy :: Nil
-        } else {
-          temp
+      val temp = if (leftIter != null) {
+        leftIter.collect {
+          case l if boundCondition(joinedRow.withLeft(l)) =>
+            resultProjection(joinedRow).copy()
         }
       } else {
+        List.empty
+      }
+      if (temp.isEmpty) {
         resultProjection(joinedRow.withLeft(leftNullRow)).copy :: Nil
+      } else {
+        temp
       }
     }
     ret.iterator

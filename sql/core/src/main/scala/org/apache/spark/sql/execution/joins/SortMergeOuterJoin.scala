@@ -67,25 +67,29 @@ case class SortMergeOuterJoin(
             streamedKeyGenerator,
             buildKeyGenerator,
             keyOrdering,
-            leftIter,
-            rightIter  // TODO(josh): streamed vs. right/left terminology; may be more explicit to
-                       // just call these arguments with name = value syntax and continue to use
-                       // left and right terminology here.
+            streamedIter = leftIter,
+            buildIter = rightIter
           )
           // TODO(josh): this is a little terse and needs explanation:
           Iterator.continually(0).takeWhile(_ => smjScanner.findNextOuterJoinRows()).flatMap { _ =>
             leftOuterIterator(
-              joinedRow.withLeft(smjScanner.getLeftRow),
-              smjScanner.getRightMatches)
+              joinedRow.withLeft(smjScanner.getStreamedRow),
+              smjScanner.getBuildMatches)
           }
 
         case RightOuter =>
-          // TODO(josh): for SMJ we would buffer keys here:
-          val hashed = HashedRelation(leftIter, buildKeyGenerator)
-          val keyGenerator = streamedKeyGenerator
-          rightIter.flatMap { currentRow =>
-            val rowKey = keyGenerator(currentRow)
-            rightOuterIterator(rowKey, hashed.get(rowKey), joinedRow.withRight(currentRow))
+          val smjScanner = new SortMergeJoinScanner(
+            streamedKeyGenerator,
+            buildKeyGenerator,
+            keyOrdering,
+            streamedIter = rightIter,
+            buildIter = leftIter
+          )
+          // TODO(josh): this is a little terse and needs explanation:
+          Iterator.continually(0).takeWhile(_ => smjScanner.findNextOuterJoinRows()).flatMap { _ =>
+            rightOuterIterator(
+              smjScanner.getBuildMatches,
+              joinedRow.withRight(smjScanner.getStreamedRow))
           }
 
         case FullOuter =>
