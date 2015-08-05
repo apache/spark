@@ -451,23 +451,20 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   test("(SPARK-9591)getRemoteBytes from another location when  IOException throw") {
     try {
       conf.set("spark.network.timeout", "2s")
-      store = makeBlockManager(8000, "excutor1")
-      store2 = makeBlockManager(8000, "excutor2")
+      store = makeBlockManager(8000, "executor1")
+      store2 = makeBlockManager(8000, "executor2")
       store3 = makeBlockManager(8000, "executor3")
       val list1 = List(new Array[Byte](4000))
       store2.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
       store3.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-
       var list1Get = store.getRemoteBytes("list1")
       assert(list1Get.isDefined, "list1Get expected to be fetched")
       // block manager exit
       store2.stop()
       store2 = null
       list1Get = store.getRemoteBytes("list1")
-
       // get `list1` block
       assert(list1Get.isDefined, "list1Get expected to be fetched")
-
       store3.stop()
       store3 = null
       // exception throw because there is no locations
