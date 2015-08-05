@@ -82,7 +82,7 @@ class PrefixSpan private (
   /**
    * Gets the maximal pattern length (i.e. the length of the longest sequential pattern to consider.
    */
-  def getMaxPatternLength: Double = maxPatternLength
+  def getMaxPatternLength: Int = maxPatternLength
 
   /**
    * Sets maximal pattern length (default: `10`).
