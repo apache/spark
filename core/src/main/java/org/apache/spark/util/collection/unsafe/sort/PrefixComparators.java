@@ -23,6 +23,7 @@ import org.apache.spark.annotation.Private;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.util.Utils;
+import static org.apache.spark.unsafe.PlatformDependent.BYTE_ARRAY_OFFSET;
 
 @Private
 public class PrefixComparators {
