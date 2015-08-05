@@ -65,3 +65,8 @@ function expandOrCollapseAllThreadStackTrace(expandOrCollapse) {
         $('.expandbutton').toggleClass('hidden');
     }
 }
+
+// inOrOut - true: over, false: out
+function onMouseOverAndOut(threadId) {
+    $("#" + threadId + "_tr").toggleClass("threaddump-td-mouseover");
+}

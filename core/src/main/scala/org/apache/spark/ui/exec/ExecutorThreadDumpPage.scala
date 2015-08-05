@@ -61,7 +61,10 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
         }
       }.map { thread =>
         val threadId = thread.threadId
-        <tr class="accordion-heading" onclick={s"toggleThreadStackTrace($threadId)"}>
+        <tr id={threadId + "_tr"} class="accordion-heading"
+            onclick={s"toggleThreadStackTrace($threadId)"}
+            onmouseover={s"onMouseOverAndOut($threadId)"}
+            onmouseout={s"onMouseOverAndOut($threadId)"}>
           <td>{threadId}</td><td>{thread.threadName}</td><td>{thread.threadState}</td>
           <td id={threadId + "_stacktrace"} class="accordion-body hidden">
             <pre>{thread.stackTrace}</pre>

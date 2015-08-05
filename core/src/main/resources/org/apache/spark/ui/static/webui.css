@@ -224,3 +224,7 @@ span.additional-metric-title {
 a.expandbutton {
   cursor: pointer;
 }
+
+.threaddump-td-mouseover {
+  font-weight: bold;
+}
