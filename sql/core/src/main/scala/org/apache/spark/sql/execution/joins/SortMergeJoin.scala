@@ -56,8 +56,10 @@ case class SortMergeJoin(
   @transient protected lazy val leftKeyGenerator = newProjection(leftKeys, left.output)
   @transient protected lazy val rightKeyGenerator = newProjection(rightKeys, right.output)
 
-  private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] =
+  private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] = {
+    // This must be ascending in order to agree with the `keyOrdering` defined in `doExecute()`.
     keys.map(SortOrder(_, Ascending))
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val leftResults = left.execute().map(_.copy())
