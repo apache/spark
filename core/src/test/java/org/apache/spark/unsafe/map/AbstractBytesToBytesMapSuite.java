@@ -233,9 +233,6 @@ public abstract class AbstractBytesToBytesMapSuite {
         }
         valuesSeen.set((int) value);
       }
-      if (destructive) {
-        Assert.assertEquals(map.getNumDataPages(), 0);
-      }
       Assert.assertEquals(size, valuesSeen.cardinality());
     } finally {
       map.free();

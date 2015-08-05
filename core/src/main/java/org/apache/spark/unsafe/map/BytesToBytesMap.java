@@ -266,17 +266,7 @@ public final class BytesToBytesMap {
 
     @Override
     public boolean hasNext() {
-      boolean ret = currentRecordNumber != numRecords;
-      if (destructive && !ret) {
-        // Remove latest page.
-        dataPagesIterator.remove();
-        this.map.taskMemoryManager.freePage(currentPage);
-        this.map.shuffleMemoryManager.release(currentPage.size());
-        this.map.bitset = null;
-        this.map.longArray = null;
-        assert(this.map.dataPages.isEmpty());
-      }
-      return ret;
+      return currentRecordNumber != numRecords;
     }
 
     @Override
