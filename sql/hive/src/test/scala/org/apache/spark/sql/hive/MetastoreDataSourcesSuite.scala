@@ -28,9 +28,8 @@ import org.apache.spark.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.client.{HiveTable, ManagedTable}
-import org.apache.spark.sql.hive.test.TestHiveContext
+import org.apache.spark.sql.hive.test.HiveTestUtils
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -39,17 +38,12 @@ import org.apache.spark.util.Utils
  */
 class MetastoreDataSourcesSuite
   extends QueryTest
-  with SQLTestUtils
-  with MyTestSQLContext
+  with HiveTestUtils
   with Logging {
 
-  // Use a hive context instead
-  switchSQLContext(() => new TestHiveContext)
-  private val ctx = sqlContext.asInstanceOf[TestHiveContext]
+  private val ctx = hiveContext
   import ctx.implicits._
   import ctx._
-
-  protected override def _sqlContext: SQLContext = ctx
 
   var jsonFilePath: String = _
 
@@ -842,17 +836,17 @@ class MetastoreDataSourcesSuite
   test("SPARK-8156:create table to specific database by 'use dbname' ") {
 
     val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
-    sqlContext.sql("""create database if not exists testdb8156""")
-    sqlContext.sql("""use testdb8156""")
+    ctx.sql("""create database if not exists testdb8156""")
+    ctx.sql("""use testdb8156""")
     df.write
       .format("parquet")
       .mode(SaveMode.Overwrite)
       .saveAsTable("ttt3")
 
     checkAnswer(
-      sqlContext.sql("show TABLES in testdb8156").filter("tableName = 'ttt3'"),
+      ctx.sql("show TABLES in testdb8156").filter("tableName = 'ttt3'"),
       Row("ttt3", false))
-    sqlContext.sql("""use default""")
-    sqlContext.sql("""drop database if exists testdb8156 CASCADE""")
+    ctx.sql("""use default""")
+    ctx.sql("""drop database if exists testdb8156 CASCADE""")
   }
 }

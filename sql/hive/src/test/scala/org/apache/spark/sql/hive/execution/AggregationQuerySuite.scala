@@ -18,27 +18,20 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.hive.test.TestHiveContext
-import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
+import org.apache.spark.sql.hive.test.HiveTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf, SQLContext}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
 import test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 
-abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with MyTestSQLContext {
-
-  // Use a hive context instead
-  switchSQLContext(() => new TestHiveContext)
-  private val ctx = sqlContext
+abstract class AggregationQuerySuite extends QueryTest with HiveTestUtils {
+  protected final val ctx = hiveContext
   import ctx.implicits._
-
-  // For SQLTestUtils
-  protected override def _sqlContext: SQLContext = ctx
 
   var originalUseAggregate2: Boolean = _
 
   override def beforeAll(): Unit = {
-    originalUseAggregate2 = sqlContext.conf.useSqlAggregate2
-    sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2.key, "true")
+    originalUseAggregate2 = ctx.conf.useSqlAggregate2
+    ctx.setConf(SQLConf.USE_SQL_AGGREGATE2.key, "true")
     val data1 = Seq[(Integer, Integer)](
       (1, 10),
       (null, -60),
@@ -71,27 +64,27 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
       (3, null, null)).toDF("key", "value1", "value2")
     data2.write.saveAsTable("agg2")
 
-    val emptyDF = sqlContext.createDataFrame(
-      sqlContext.sparkContext.emptyRDD[Row],
+    val emptyDF = ctx.createDataFrame(
+      ctx.sparkContext.emptyRDD[Row],
       StructType(StructField("key", StringType) :: StructField("value", IntegerType) :: Nil))
     emptyDF.registerTempTable("emptyTable")
 
     // Register UDAFs
-    sqlContext.udaf.register("mydoublesum", new MyDoubleSum)
-    sqlContext.udaf.register("mydoubleavg", new MyDoubleAvg)
+    ctx.udaf.register("mydoublesum", new MyDoubleSum)
+    ctx.udaf.register("mydoubleavg", new MyDoubleAvg)
   }
 
   override def afterAll(): Unit = {
-    sqlContext.sql("DROP TABLE IF EXISTS agg1")
-    sqlContext.sql("DROP TABLE IF EXISTS agg2")
-    sqlContext.dropTempTable("emptyTable")
-    sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2.key, originalUseAggregate2.toString)
+    ctx.sql("DROP TABLE IF EXISTS agg1")
+    ctx.sql("DROP TABLE IF EXISTS agg2")
+    ctx.dropTempTable("emptyTable")
+    ctx.setConf(SQLConf.USE_SQL_AGGREGATE2.key, originalUseAggregate2.toString)
   }
 
   test("empty table") {
     // If there is no GROUP BY clause and the table is empty, we will generate a single row.
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT
           |  AVG(value),
@@ -108,7 +101,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
       Row(null, 0, 0, 0, null, null, null, null, null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT
           |  AVG(value),
@@ -127,7 +120,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
 
     // If there is a GROUP BY clause and the table is empty, there is no output.
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT
           |  AVG(value),
@@ -147,7 +140,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
 
   test("only do grouping") {
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT key
           |FROM agg1
@@ -156,7 +149,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
       Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT DISTINCT value1, key
           |FROM agg2
@@ -173,7 +166,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
         Row(null, null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT value1, key
           |FROM agg2
@@ -193,7 +186,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
 
   test("case in-sensitive resolution") {
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT avg(value), kEY - 100
           |FROM agg1
@@ -202,7 +195,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
       Row(20.0, -99) :: Row(-0.5, -98) :: Row(null, -97) :: Row(10.0, null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT sum(distinct value1), kEY - 100, count(distinct value1)
           |FROM agg2
@@ -211,7 +204,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
       Row(40, -99, 2) :: Row(0, -98, 2) :: Row(null, -97, 0) :: Row(30, null, 3) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT valUe * key - 100
           |FROM agg1
@@ -227,7 +220,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
 
   test("test average no key in output") {
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT avg(value)
           |FROM agg1
@@ -238,7 +231,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
 
   test("test average") {
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT key, avg(value)
           |FROM agg1
@@ -247,7 +240,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
       Row(1, 20.0) :: Row(2, -0.5) :: Row(3, null) :: Row(null, 10.0) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT avg(value), key
           |FROM agg1
@@ -256,7 +249,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
       Row(20.0, 1) :: Row(-0.5, 2) :: Row(null, 3) :: Row(10.0, null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT avg(value) + 1.5, key + 10
           |FROM agg1
@@ -265,14 +258,14 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
       Row(21.5, 11) :: Row(1.0, 12) :: Row(null, 13) :: Row(11.5, null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT avg(value) FROM agg1
         """.stripMargin),
       Row(11.125) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT avg(null)
         """.stripMargin),
@@ -281,7 +274,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
 
   test("udaf") {
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT
           |  key,
@@ -301,7 +294,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
 
   test("non-AlgebraicAggregate aggreguate function") {
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT mydoublesum(value), key
           |FROM agg1
@@ -310,14 +303,14 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
       Row(60.0, 1) :: Row(-1.0, 2) :: Row(null, 3) :: Row(30.0, null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT mydoublesum(value) FROM agg1
         """.stripMargin),
       Row(89.0) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT mydoublesum(null)
         """.stripMargin),
@@ -326,7 +319,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
 
   test("non-AlgebraicAggregate and AlgebraicAggregate aggreguate function") {
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT mydoublesum(value), key, avg(value)
           |FROM agg1
@@ -338,7 +331,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
         Row(30.0, null, 10.0) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT
           |  mydoublesum(value + 1.5 * key),
@@ -358,7 +351,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
   test("single distinct column set") {
     // DISTINCT is not meaningful with Max and Min, so we just ignore the DISTINCT keyword.
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT
           |  min(distinct value1),
@@ -371,7 +364,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
       Row(-60, 70.0, 101.0/9.0, 5.6, 100.0))
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT
           |  mydoubleavg(distinct value1),
@@ -390,7 +383,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
         Row(110.0, 10.0, 20.0, null, 109.0, 11.0, 30.0) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT
           |  key,
@@ -410,7 +403,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
 
   test("test count") {
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT
           |  count(value2),
@@ -433,7 +426,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
         Row(0, null, 1, 1, null) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT
           |  count(value2),
@@ -460,7 +453,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
   test("error handling") {
     withSQLConf("spark.sql.useAggregate2" -> "false") {
       val errorMessage = intercept[AnalysisException] {
-        sqlContext.sql(
+        ctx.sql(
           """
             |SELECT
             |  key,
@@ -478,7 +471,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
     // we can remove the following two tests.
     withSQLConf("spark.sql.useAggregate2" -> "true") {
       val errorMessage = intercept[AnalysisException] {
-        sqlContext.sql(
+        ctx.sql(
           """
             |SELECT
             |  key,
@@ -491,7 +484,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with My
       assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
 
       // This will fall back to the old aggregate
-      val newAggregateOperators = sqlContext.sql(
+      val newAggregateOperators = ctx.sql(
         """
           |SELECT
           |  key,
@@ -515,14 +508,14 @@ class SortBasedAggregationQuerySuite extends AggregationQuerySuite {
   var originalUnsafeEnabled: Boolean = _
 
   override def beforeAll(): Unit = {
-    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "false")
+    originalUnsafeEnabled = ctx.conf.unsafeEnabled
+    ctx.setConf(SQLConf.UNSAFE_ENABLED.key, "false")
     super.beforeAll()
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+    ctx.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
   }
 }
 
@@ -531,13 +524,13 @@ class TungstenAggregationQuerySuite extends AggregationQuerySuite {
   var originalUnsafeEnabled: Boolean = _
 
   override def beforeAll(): Unit = {
-    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "true")
+    originalUnsafeEnabled = ctx.conf.unsafeEnabled
+    ctx.setConf(SQLConf.UNSAFE_ENABLED.key, "true")
     super.beforeAll()
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+    ctx.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
   }
 }

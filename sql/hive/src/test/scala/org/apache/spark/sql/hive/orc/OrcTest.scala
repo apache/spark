@@ -24,19 +24,12 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
-import org.apache.spark.sql.hive.test.TestHiveContext
-import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
+import org.apache.spark.sql.hive.test.HiveTestUtils
 
-private[sql] trait OrcTest extends SparkFunSuite with SQLTestUtils with MyTestSQLContext {
-
-  // Use a hive context instead
-  switchSQLContext(() => new TestHiveContext)
-  private val ctx = sqlContext
+private[sql] trait OrcTest extends SparkFunSuite with HiveTestUtils {
+  private val ctx = hiveContext
   import ctx.implicits._
   import ctx.sparkContext
-
-  // For SQLTestUtils
-  protected override def _sqlContext: SQLContext = ctx
 
   /**
    * Writes `data` to a Orc file, which is then passed to `f` and will be deleted after `f`
@@ -58,7 +51,7 @@ private[sql] trait OrcTest extends SparkFunSuite with SQLTestUtils with MyTestSQ
   protected def withOrcDataFrame[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: DataFrame => Unit): Unit = {
-    withOrcFile(data)(path => f(sqlContext.read.orc(path)))
+    withOrcFile(data)(path => f(ctx.read.orc(path)))
   }
 
   /**
@@ -70,7 +63,7 @@ private[sql] trait OrcTest extends SparkFunSuite with SQLTestUtils with MyTestSQ
       (data: Seq[T], tableName: String)
       (f: => Unit): Unit = {
     withOrcDataFrame(data) { df =>
-      sqlContext.registerDataFrameAsTable(df, tableName)
+      ctx.registerDataFrameAsTable(df, tableName)
       withTempTable(tableName)(f)
     }
   }

@@ -28,21 +28,14 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.TestHiveContext
-import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
+import org.apache.spark.sql.hive.test.HiveTestUtils
 import org.apache.spark.sql.types._
 
 
-abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyTestSQLContext {
-
-  // Use a hive context instead
-  switchSQLContext(() => new TestHiveContext)
-  private val ctx = sqlContext
+abstract class HadoopFsRelationTest extends QueryTest with HiveTestUtils {
+  private val ctx = hiveContext
   import ctx.implicits._
   import ctx.sql
-
-  // For SQLTestUtils
-  protected override def _sqlContext: SQLContext = ctx
 
   val dataSourceName: String
 
@@ -112,7 +105,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
       testDF.write.mode(SaveMode.Overwrite).format(dataSourceName).save(file.getCanonicalPath)
 
       checkAnswer(
-        sqlContext.read.format(dataSourceName)
+        ctx.read.format(dataSourceName)
           .option("path", file.getCanonicalPath)
           .option("dataSchema", dataSchema.json)
           .load(),
@@ -126,7 +119,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
       testDF.write.mode(SaveMode.Append).format(dataSourceName).save(file.getCanonicalPath)
 
       checkAnswer(
-        sqlContext.read.format(dataSourceName)
+        ctx.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath).orderBy("a"),
         testDF.unionAll(testDF).orderBy("a").collect())
@@ -146,7 +139,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
       testDF.write.mode(SaveMode.Ignore).format(dataSourceName).save(file.getCanonicalPath)
 
       val path = new Path(file.getCanonicalPath)
-      val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+      val fs = path.getFileSystem(ctx.sparkContext.hadoopConfiguration)
       assert(fs.listStatus(path).isEmpty)
     }
   }
@@ -160,7 +153,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
         .save(file.getCanonicalPath)
 
       checkQueries(
-        sqlContext.read.format(dataSourceName)
+        ctx.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath))
     }
@@ -181,7 +174,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
         .save(file.getCanonicalPath)
 
       checkAnswer(
-        sqlContext.read.format(dataSourceName)
+        ctx.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
         partitionedTestDF.collect())
@@ -203,7 +196,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
         .save(file.getCanonicalPath)
 
       checkAnswer(
-        sqlContext.read.format(dataSourceName)
+        ctx.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
         partitionedTestDF.unionAll(partitionedTestDF).collect())
@@ -225,7 +218,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
         .save(file.getCanonicalPath)
 
       checkAnswer(
-        sqlContext.read.format(dataSourceName)
+        ctx.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
         partitionedTestDF.collect())
@@ -261,7 +254,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), testDF.collect())
+      checkAnswer(ctx.table("t"), testDF.collect())
     }
   }
 
@@ -270,7 +263,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
     testDF.write.format(dataSourceName).mode(SaveMode.Append).saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), testDF.unionAll(testDF).orderBy("a").collect())
+      checkAnswer(ctx.table("t"), testDF.unionAll(testDF).orderBy("a").collect())
     }
   }
 
@@ -289,7 +282,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
 
     withTempTable("t") {
       testDF.write.format(dataSourceName).mode(SaveMode.Ignore).saveAsTable("t")
-      assert(sqlContext.table("t").collect().isEmpty)
+      assert(ctx.table("t").collect().isEmpty)
     }
   }
 
@@ -300,7 +293,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
       .saveAsTable("t")
 
     withTable("t") {
-      checkQueries(sqlContext.table("t"))
+      checkQueries(ctx.table("t"))
     }
   }
 
@@ -320,7 +313,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), partitionedTestDF.collect())
+      checkAnswer(ctx.table("t"), partitionedTestDF.collect())
     }
   }
 
@@ -340,7 +333,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), partitionedTestDF.unionAll(partitionedTestDF).collect())
+      checkAnswer(ctx.table("t"), partitionedTestDF.unionAll(partitionedTestDF).collect())
     }
   }
 
@@ -360,7 +353,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), partitionedTestDF.collect())
+      checkAnswer(ctx.table("t"), partitionedTestDF.collect())
     }
   }
 
@@ -409,7 +402,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
         .partitionBy("p1", "p2")
         .saveAsTable("t")
 
-      assert(sqlContext.table("t").collect().isEmpty)
+      assert(ctx.table("t").collect().isEmpty)
     }
   }
 
@@ -421,7 +414,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
 
-      val df = sqlContext.read
+      val df = ctx.read
         .format(dataSourceName)
         .option("dataSchema", dataSchema.json)
         .load(s"${file.getCanonicalPath}/p1=*/p2=???")
@@ -433,7 +426,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
         s"${file.getCanonicalFile}/p1=2/p2=bar"
       ).map { p =>
         val path = new Path(p)
-        val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+        val fs = path.getFileSystem(ctx.sparkContext.hadoopConfiguration)
         path.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
       }
 
@@ -461,7 +454,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
         .saveAsTable("t")
 
       withTempTable("t") {
-        checkAnswer(sqlContext.table("t"), input.collect())
+        checkAnswer(ctx.table("t"), input.collect())
       }
     }
   }
@@ -476,7 +469,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), df.select('b, 'c, 'a).collect())
+      checkAnswer(ctx.table("t"), df.select('b, 'c, 'a).collect())
     }
   }
 
@@ -488,7 +481,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
   test("SPARK-8406: Avoids name collision while writing files") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      sqlContext
+      ctx
         .range(10000)
         .repartition(250)
         .write
@@ -497,7 +490,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
         .save(path)
 
       assertResult(10000) {
-        sqlContext
+        ctx
           .read
           .format(dataSourceName)
           .option("dataSchema", StructType(StructField("id", LongType) :: Nil).json)
@@ -510,7 +503,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
   test("SPARK-8578 specified custom output committer will not be used to append data") {
     val clonedConf = new Configuration(configuration)
     try {
-      val df = sqlContext.range(1, 10).toDF("i")
+      val df = ctx.range(1, 10).toDF("i")
       withTempPath { dir =>
         df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
         configuration.set(
@@ -525,7 +518,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with MyT
         // with file format and AlwaysFailOutputCommitter will not be used.
         df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
         checkAnswer(
-          sqlContext.read
+          ctx.read
             .format(dataSourceName)
             .option("dataSchema", df.schema.json)
             .load(dir.getCanonicalPath),

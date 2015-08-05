@@ -26,7 +26,15 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
-trait SQLTestUtils { this: SparkFunSuite =>
+private[spark] trait SQLTestUtils
+  extends SparkFunSuite
+  with AbstractSQLTestUtils
+  with MyTestSQLContext {
+
+  protected final override def _sqlContext = sqlContext
+}
+
+private[spark] trait AbstractSQLTestUtils { this: SparkFunSuite =>
   protected def _sqlContext: SQLContext
 
   protected def configuration = _sqlContext.sparkContext.hadoopConfiguration

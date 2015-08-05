@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -27,12 +27,9 @@ import org.apache.spark.sql.types._
  * This is here for now so I can make sure Tungsten project is tested without refactoring existing
  * end-to-end test infra. In the long run this should just go away.
  */
-class DataFrameTungstenSuite extends QueryTest with SQLTestUtils with MyTestSQLContext {
+class DataFrameTungstenSuite extends QueryTest with SQLTestUtils {
   private val ctx = sqlContext
   import ctx.implicits._
-
-  // For SQLTestUtils
-  protected override def _sqlContext = ctx
 
   test("test simple types") {
     withSQLConf(SQLConf.UNSAFE_ENABLED.key -> "true") {

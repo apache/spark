@@ -86,7 +86,7 @@ private[spark] trait MyTestSQLContext extends SparkFunSuite with BeforeAndAfterA
   }
 
   /**
-   * Switch the [[SQLContext]] with the one provided.
+   * Switch to the provided [[SQLContext]].
    *
    * This stops the underlying [[SparkContext]] and expects a new one to be created.
    * This is needed because only one [[SparkContext]] is allowed per JVM.
@@ -112,7 +112,7 @@ private[spark] trait MyTestSQLContext extends SparkFunSuite with BeforeAndAfterA
   }
 
   protected override def afterAll(): Unit = {
-    super.afterAll()
     switchSQLContext(() => null)
+    super.afterAll()
   }
 }

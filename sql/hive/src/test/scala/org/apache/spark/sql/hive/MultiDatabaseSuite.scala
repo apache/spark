@@ -17,40 +17,33 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.hive.test.TestHiveContext
-import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
-import org.apache.spark.sql.{QueryTest, SaveMode, SQLContext}
+import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.{QueryTest, SaveMode}
 
-class MultiDatabaseSuite extends QueryTest with SQLTestUtils with MyTestSQLContext {
-
-  // Use a hive context instead
-  switchSQLContext(() => new TestHiveContext)
-  private val ctx = sqlContext
+class MultiDatabaseSuite extends QueryTest with HiveTestUtils {
+  private val ctx = hiveContext
   import ctx.sql
 
-  // For SQLTestUtils
-  protected override def _sqlContext: SQLContext = ctx
-
-  private val df = sqlContext.range(10).coalesce(1)
+  private val df = ctx.range(10).coalesce(1)
 
   test(s"saveAsTable() to non-default database - with USE - Overwrite") {
     withTempDatabase { db =>
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
-        assert(sqlContext.tableNames().contains("t"))
-        checkAnswer(sqlContext.table("t"), df)
+        assert(ctx.tableNames().contains("t"))
+        checkAnswer(ctx.table("t"), df)
       }
 
-      assert(sqlContext.tableNames(db).contains("t"))
-      checkAnswer(sqlContext.table(s"$db.t"), df)
+      assert(ctx.tableNames(db).contains("t"))
+      checkAnswer(ctx.table(s"$db.t"), df)
     }
   }
 
   test(s"saveAsTable() to non-default database - without USE - Overwrite") {
     withTempDatabase { db =>
       df.write.mode(SaveMode.Overwrite).saveAsTable(s"$db.t")
-      assert(sqlContext.tableNames(db).contains("t"))
-      checkAnswer(sqlContext.table(s"$db.t"), df)
+      assert(ctx.tableNames(db).contains("t"))
+      checkAnswer(ctx.table(s"$db.t"), df)
     }
   }
 
@@ -59,12 +52,12 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with MyTestSQLConte
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
         df.write.mode(SaveMode.Append).saveAsTable("t")
-        assert(sqlContext.tableNames().contains("t"))
-        checkAnswer(sqlContext.table("t"), df.unionAll(df))
+        assert(ctx.tableNames().contains("t"))
+        checkAnswer(ctx.table("t"), df.unionAll(df))
       }
 
-      assert(sqlContext.tableNames(db).contains("t"))
-      checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
+      assert(ctx.tableNames(db).contains("t"))
+      checkAnswer(ctx.table(s"$db.t"), df.unionAll(df))
     }
   }
 
@@ -72,8 +65,8 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with MyTestSQLConte
     withTempDatabase { db =>
       df.write.mode(SaveMode.Overwrite).saveAsTable(s"$db.t")
       df.write.mode(SaveMode.Append).saveAsTable(s"$db.t")
-      assert(sqlContext.tableNames(db).contains("t"))
-      checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
+      assert(ctx.tableNames(db).contains("t"))
+      checkAnswer(ctx.table(s"$db.t"), df.unionAll(df))
     }
   }
 
@@ -81,10 +74,10 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with MyTestSQLConte
     withTempDatabase { db =>
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
-        assert(sqlContext.tableNames().contains("t"))
+        assert(ctx.tableNames().contains("t"))
 
         df.write.insertInto(s"$db.t")
-        checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
+        checkAnswer(ctx.table(s"$db.t"), df.unionAll(df))
       }
     }
   }
@@ -93,13 +86,13 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with MyTestSQLConte
     withTempDatabase { db =>
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
-        assert(sqlContext.tableNames().contains("t"))
+        assert(ctx.tableNames().contains("t"))
       }
 
-      assert(sqlContext.tableNames(db).contains("t"))
+      assert(ctx.tableNames(db).contains("t"))
 
       df.write.insertInto(s"$db.t")
-      checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
+      checkAnswer(ctx.table(s"$db.t"), df.unionAll(df))
     }
   }
 
@@ -107,10 +100,10 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with MyTestSQLConte
     withTempDatabase { db =>
       activateDatabase(db) {
         sql("CREATE TABLE t (key INT)")
-        checkAnswer(sqlContext.table("t"), sqlContext.emptyDataFrame)
+        checkAnswer(ctx.table("t"), ctx.emptyDataFrame)
       }
 
-      checkAnswer(sqlContext.table(s"$db.t"), sqlContext.emptyDataFrame)
+      checkAnswer(ctx.table(s"$db.t"), ctx.emptyDataFrame)
     }
   }
 
@@ -118,21 +111,21 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with MyTestSQLConte
     withTempDatabase { db =>
       activateDatabase(db) {
         sql(s"CREATE TABLE t (key INT)")
-        assert(sqlContext.tableNames().contains("t"))
-        assert(!sqlContext.tableNames("default").contains("t"))
+        assert(ctx.tableNames().contains("t"))
+        assert(!ctx.tableNames("default").contains("t"))
       }
 
-      assert(!sqlContext.tableNames().contains("t"))
-      assert(sqlContext.tableNames(db).contains("t"))
+      assert(!ctx.tableNames().contains("t"))
+      assert(ctx.tableNames(db).contains("t"))
 
       activateDatabase(db) {
         sql(s"DROP TABLE t")
-        assert(!sqlContext.tableNames().contains("t"))
-        assert(!sqlContext.tableNames("default").contains("t"))
+        assert(!ctx.tableNames().contains("t"))
+        assert(!ctx.tableNames("default").contains("t"))
       }
 
-      assert(!sqlContext.tableNames().contains("t"))
-      assert(!sqlContext.tableNames(db).contains("t"))
+      assert(!ctx.tableNames().contains("t"))
+      assert(!ctx.tableNames(db).contains("t"))
     }
   }
 
@@ -151,12 +144,12 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with MyTestSQLConte
                |LOCATION '$path'
              """.stripMargin)
 
-          checkAnswer(sqlContext.table("t"), sqlContext.emptyDataFrame)
+          checkAnswer(ctx.table("t"), ctx.emptyDataFrame)
 
           df.write.parquet(s"$path/p=1")
           sql("ALTER TABLE t ADD PARTITION (p=1)")
           sql("REFRESH TABLE t")
-          checkAnswer(sqlContext.table("t"), df.withColumn("p", lit(1)))
+          checkAnswer(ctx.table("t"), df.withColumn("p", lit(1)))
         }
       }
     }

@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 
 class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
-  private val ctx = sqlContext
+  private val ctx = hiveContext
   import ctx.implicits._
   import ctx._
 
@@ -120,7 +120,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   test("SPARK-8604: Parquet data source should write summary file while doing appending") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val df = sqlContext.range(0, 5)
+      val df = ctx.range(0, 5)
       df.write.mode(SaveMode.Overwrite).parquet(path)
 
       val summaryPath = new Path(path, "_metadata")
@@ -131,7 +131,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       fs.delete(commonSummaryPath, true)
 
       df.write.mode(SaveMode.Append).parquet(path)
-      checkAnswer(sqlContext.read.parquet(path), df.unionAll(df))
+      checkAnswer(ctx.read.parquet(path), df.unionAll(df))
 
       assert(fs.exists(summaryPath))
       assert(fs.exists(commonSummaryPath))

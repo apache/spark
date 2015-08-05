@@ -23,7 +23,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
-  private val ctx = sqlContext
+  private val ctx = hiveContext
   import ctx._
 
   override val dataSourceName: String = classOf[SimpleTextSource].getCanonicalName

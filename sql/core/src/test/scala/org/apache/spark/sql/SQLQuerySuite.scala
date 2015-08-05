@@ -26,19 +26,16 @@ import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 /** A SQL Dialect for testing purpose, and it can not be nested type */
 class MyDialect extends DefaultParserDialect
 
-class SQLQuerySuite extends QueryTest with SQLTestUtils with MyTestSQLContext {
+class SQLQuerySuite extends QueryTest with SQLTestUtils {
   private val ctx = sqlContextWithData
   import ctx.implicits._
   import ctx._
-
-  // For SQLTestUtils
-  protected override def _sqlContext: SQLContext = ctx
 
   test("having clause") {
     Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v").registerTempTable("hav")

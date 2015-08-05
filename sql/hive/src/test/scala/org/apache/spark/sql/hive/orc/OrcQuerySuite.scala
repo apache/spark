@@ -46,7 +46,7 @@ case class Contact(name: String, phone: String)
 case class Person(name: String, age: Int, contacts: Seq[Contact])
 
 class OrcQuerySuite extends QueryTest with OrcTest {
-  private val ctx = sqlContext
+  private val ctx = hiveContext
   import ctx.implicits._
   import ctx._
 
@@ -63,7 +63,7 @@ class OrcQuerySuite extends QueryTest with OrcTest {
 
     withOrcFile(data) { file =>
       checkAnswer(
-        sqlContext.read.orc(file),
+        ctx.read.orc(file),
         data.toDF().collect())
     }
   }
@@ -293,7 +293,7 @@ class OrcQuerySuite extends QueryTest with OrcTest {
 
       withTable("empty_orc") {
         withTempTable("empty", "single") {
-          sqlContext.sql(
+          ctx.sql(
             s"""CREATE TABLE empty_orc(key INT, value STRING)
                |STORED AS ORC
                |LOCATION '$path'
@@ -304,13 +304,13 @@ class OrcQuerySuite extends QueryTest with OrcTest {
 
           // This creates 1 empty ORC file with Hive ORC SerDe.  We are using this trick because
           // Spark SQL ORC data source always avoids write empty ORC files.
-          sqlContext.sql(
+          ctx.sql(
             s"""INSERT INTO TABLE empty_orc
                |SELECT key, value FROM empty
              """.stripMargin)
 
           val errorMessage = intercept[AnalysisException] {
-            sqlContext.read.orc(path)
+            ctx.read.orc(path)
           }.getMessage
 
           assert(errorMessage.contains("Failed to discover schema from ORC files"))
@@ -318,12 +318,12 @@ class OrcQuerySuite extends QueryTest with OrcTest {
           val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
           singleRowDF.registerTempTable("single")
 
-          sqlContext.sql(
+          ctx.sql(
             s"""INSERT INTO TABLE empty_orc
                |SELECT key, value FROM single
              """.stripMargin)
 
-          val df = sqlContext.read.orc(path)
+          val df = ctx.read.orc(path)
           assert(df.schema === singleRowDF.schema.asNullable)
           checkAnswer(df, singleRowDF)
         }

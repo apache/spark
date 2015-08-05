@@ -24,7 +24,7 @@ import org.apache.spark.sql.sources.HadoopFsRelationTest
 import org.apache.spark.sql.types._
 
 class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
-  private val ctx = sqlContext
+  private val ctx = hiveContext
   import ctx.implicits._
   import ctx._
 

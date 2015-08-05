@@ -22,19 +22,16 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{execution, Row, SQLConf, SQLContext}
+import org.apache.spark.sql.{execution, Row, SQLConf}
 
 
-class PlannerSuite extends SparkFunSuite with SQLTestUtils with MyTestSQLContext {
+class PlannerSuite extends SparkFunSuite with SQLTestUtils {
   private val ctx = sqlContextWithData
   import ctx.implicits._
   import ctx.planner._
   import ctx._
-
-  // For SQLTestUtils
-  protected override def _sqlContext: SQLContext = ctx
 
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val plannedOption = HashAggregation(query).headOption.orElse(Aggregation(query).headOption)

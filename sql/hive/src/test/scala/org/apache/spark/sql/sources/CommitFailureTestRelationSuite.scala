@@ -20,19 +20,10 @@ package org.apache.spark.sql.sources
 import org.apache.hadoop.fs.Path
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.hive.test.TestHiveContext
-import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
+import org.apache.spark.sql.hive.test.HiveTestUtils
 
-
-class CommitFailureTestRelationSuite extends SparkFunSuite with SQLTestUtils with MyTestSQLContext {
-
-  // Use a hive context instead
-  switchSQLContext(() => new TestHiveContext)
-  private val ctx = sqlContext
-
-  // For SQLTestUtils
-  protected override def _sqlContext: SQLContext = ctx
+class CommitFailureTestRelationSuite extends SparkFunSuite with HiveTestUtils {
+  private val ctx = hiveContext
 
   // When committing a task, `CommitFailureTestSource` throws an exception for testing purpose.
   val dataSourceName: String = classOf[CommitFailureTestSource].getCanonicalName

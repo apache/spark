@@ -23,8 +23,8 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
-import org.apache.spark.sql.{SQLContext, DataFrame, SaveMode}
+import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.{DataFrame, SaveMode}
 
 /**
  * A helper trait that provides convenient facilities for Parquet testing.
@@ -33,10 +33,7 @@ import org.apache.spark.sql.{SQLContext, DataFrame, SaveMode}
  * convenient to use tuples rather than special case classes when writing test cases/suites.
  * Especially, `Tuple1.apply` can be used to easily wrap a single type/value.
  */
-private[sql] trait ParquetTest extends SparkFunSuite with SQLTestUtils with MyTestSQLContext {
-
-  // For SQLTestUtils
-  protected override def _sqlContext: SQLContext = sqlContext
+private[sql] trait ParquetTest extends SparkFunSuite with SQLTestUtils {
 
   /**
    * Writes `data` to a Parquet file, which is then passed to `f` and will be deleted after `f`

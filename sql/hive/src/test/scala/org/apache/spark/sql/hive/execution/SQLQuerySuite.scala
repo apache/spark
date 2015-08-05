@@ -26,10 +26,9 @@ import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.TestHiveContext
+import org.apache.spark.sql.hive.test.HiveTestUtils
 import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.test.{SQLTestUtils, MyTestSQLContext}
 import org.apache.spark.sql.types._
 
 case class Nested1(f1: Nested2)
@@ -62,16 +61,10 @@ class MyDialect extends DefaultParserDialect
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
-class SQLQuerySuite extends QueryTest with SQLTestUtils with MyTestSQLContext {
-
-  // Use a hive context instead
-  switchSQLContext(() => new TestHiveContext)
-  private val ctx = sqlContext.asInstanceOf[TestHiveContext]
+class SQLQuerySuite extends QueryTest with HiveTestUtils {
+  private val ctx = hiveContext
   import ctx.implicits._
   import ctx._
-
-  // For SQLTestUtils
-  protected override def _sqlContext: SQLContext = ctx
 
   test("UDTF") {
     sql(s"ADD JAR ${getHiveFile("TestUDTF.jar").getCanonicalPath()}")

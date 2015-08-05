@@ -695,9 +695,6 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
   import ctx.implicits._
   import ctx._
 
-  // For SQLTestUtils
-  protected override def _sqlContext: SQLContext = ctx
-
   var partitionedTableDir: File = null
   var normalTableDir: File = null
   var partitionedTableDirWithKey: File = null
