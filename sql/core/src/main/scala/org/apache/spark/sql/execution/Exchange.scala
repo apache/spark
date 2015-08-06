@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.types.UserDefinedType
 import org.apache.spark.util.MutablePair
 import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEnv}
 
@@ -47,8 +48,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
    */
   private lazy val tungstenMode: Boolean = {
     val unserializableUDT = child.schema.exists(_.dataType match {
-      case HyperLogLogUDT => true
-      case _: OpenHashSetUDT => true
+      case _: UserDefinedType[_] => true
       case _ => false
     })
     // Do not use the Unsafe path if we are using a RangePartitioning, since this may lead to
@@ -138,10 +138,6 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 
   private val serializer: Serializer = {
     val rowDataTypes = child.output.map(_.dataType).toArray
-    // It is true when there is no field that needs to be write out.
-    // For now, we will not use SparkSqlSerializer2 when noField is true.
-    val noField = rowDataTypes == null || rowDataTypes.length == 0
-
     if (tungstenMode) {
       new UnsafeRowSerializer(child.output.size)
     } else {
