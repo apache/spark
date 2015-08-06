@@ -17,13 +17,48 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{LessThan, Expression}
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.logical.Join
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.expressions.{And, LessThan, Expression}
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
 
+class SemiJoinSuite extends SparkPlanTest {
 
-class SemiJoinSuite extends SparkPlanTest{
+  private def testLeftSemiJoin(
+      testName: String,
+      leftRows: DataFrame,
+      rightRows: DataFrame,
+      condition: Expression,
+      expectedAnswer: Seq[Product]): Unit = {
+
+    val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
+    ExtractEquiJoinKeys.unapply(join).foreach {
+      case (joinType, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
+        test(s"$testName using LeftSemiJoinHash") {
+          checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+            LeftSemiJoinHash(leftKeys, rightKeys, left, right, boundCondition),
+            expectedAnswer.map(Row.fromTuple),
+            sortAnswers = true)
+        }
+
+        test(s"$testName using BroadcastLeftSemiJoinHash") {
+          checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+            BroadcastLeftSemiJoinHash(leftKeys, rightKeys, left, right, boundCondition),
+            expectedAnswer.map(Row.fromTuple),
+            sortAnswers = true)
+        }
+    }
+
+    test(s"$testName using LeftSemiJoinBNL") {
+      checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+        LeftSemiJoinBNL(left, right, Some(condition)),
+        expectedAnswer.map(Row.fromTuple),
+        sortAnswers = true)
+    }
+  }
+
   val left = Seq(
     (1, 2.0),
     (1, 2.0),
@@ -39,36 +74,20 @@ class SemiJoinSuite extends SparkPlanTest{
     (4, 1.0)
   ).toDF("c", "d")
 
-  val leftKeys: List[Expression] = 'a :: Nil
-  val rightKeys: List[Expression] = 'c :: Nil
-  val condition = Some(LessThan('b, 'd))
-
-  test("left semi join hash") {
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      LeftSemiJoinHash(leftKeys, rightKeys, left, right, condition),
-      Seq(
-        (2, 1.0),
-        (2, 1.0)
-      ).map(Row.fromTuple))
+  val condition = {
+    And(
+      (left.col("a") === right.col("c")).expr,
+      LessThan(left.col("b").expr, right.col("d").expr))
   }
 
-  test("left semi join BNL") {
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      LeftSemiJoinBNL(left, right, condition),
-      Seq(
-        (1, 2.0),
-        (1, 2.0),
-        (2, 1.0),
-        (2, 1.0)
-      ).map(Row.fromTuple))
-  }
-
-  test("broadcast left semi join hash") {
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      BroadcastLeftSemiJoinHash(leftKeys, rightKeys, left, right, condition),
-      Seq(
-        (2, 1.0),
-        (2, 1.0)
-      ).map(Row.fromTuple))
-  }
+  testLeftSemiJoin(
+    "basic test",
+    left,
+    right,
+    condition,
+    Seq(
+      (2, 1.0),
+      (2, 1.0)
+    )
+  )
 }
