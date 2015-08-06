@@ -65,11 +65,11 @@ public final class UnsafeRow extends MutableRow {
   /**
    * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
    */
-  public static final Set<DataType> settableFieldTypes;
+  public static final Set<DataType> mutableFieldTypes;
 
-  // DecimalType is also settable
+  // DecimalType is also mutable
   static {
-    settableFieldTypes = Collections.unmodifiableSet(
+    mutableFieldTypes = Collections.unmodifiableSet(
       new HashSet<>(
         Arrays.asList(new DataType[] {
           NullType,
@@ -89,12 +89,12 @@ public final class UnsafeRow extends MutableRow {
     if (dt instanceof DecimalType) {
       return ((DecimalType) dt).precision() <= Decimal.MAX_LONG_DIGITS();
     } else {
-      return settableFieldTypes.contains(dt);
+      return mutableFieldTypes.contains(dt);
     }
   }
 
-  public static boolean isSettable(DataType dt) {
-    return isFixedLength(dt) || dt instanceof DecimalType;
+  public static boolean isMutable(DataType dt) {
+    return mutableFieldTypes.contains(dt) || dt instanceof DecimalType;
   }
 
   //////////////////////////////////////////////////////////////////////////////
