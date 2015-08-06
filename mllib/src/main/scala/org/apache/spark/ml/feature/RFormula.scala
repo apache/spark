@@ -84,7 +84,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     val encoderStages = ArrayBuffer[PipelineStage]()
     val tempColumns = ArrayBuffer[String]()
     val takenNames = mutable.Set(dataset.columns: _*)
-    def encodeInteraction(terms: Array[String]): String = {
+    def encodeInteraction(terms: Seq[String]): String = {
       val outputCol = {
         var tmp = terms.mkString(":")
         while (takenNames.contains(tmp)) {
@@ -94,21 +94,21 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
       }
       takenNames.add(outputCol)
       encoderStages += new Interaction()
-        .setInputCols(terms)
+        .setInputCols(terms.toArray)
         .setOutputCol(outputCol)
       tempColumns += outputCol
       outputCol
     }
     val encodedCols = resolvedFormula.terms.map {
-      case ColumnInteraction(values) =>
-        encodeInteraction(values)
-      case ColumnRef(value) =>
+      case terms @ Seq(value) =>
         dataset.schema(value) match {
           case column if column.dataType == StringType =>
-            encodeInteraction(Array(value))
+            encodeInteraction(terms)
           case _ =>
             value
         }
+      case terms =>
+        encodeInteraction(terms)
     }
     encoderStages += new VectorAssembler(uid)
       .setInputCols(encodedCols.toArray)

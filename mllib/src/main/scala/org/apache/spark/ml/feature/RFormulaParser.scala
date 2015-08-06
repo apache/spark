@@ -31,21 +31,26 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
    * of the special '.' term. Duplicate terms will be removed during resolution.
    */
   def resolve(schema: StructType): ResolvedRFormula = {
-    var includedTerms = Seq[SimpleTerm]()
+    var includedTerms = Seq[Seq[String]]()
     terms.foreach {
-      case term: SimpleTerm =>
-        includedTerms :+= term
+      case term: ColumnRef =>
+        includedTerms :+= Seq(term.value)
+      case ColumnInteraction(terms) =>
+        includedTerms ++= expandInteraction(schema, terms)
       case Dot =>
-        includedTerms ++= simpleTypes(schema).filter(_ != label.value).map(ColumnRef)
+        includedTerms ++= simpleTypes(schema).filter(_ != label.value).map(Seq(_))
       case Deletion(term: Term) =>
         term match {
-          case inner: SimpleTerm =>
-            includedTerms = includedTerms.filter(_ != inner)
+          case inner: ColumnRef =>
+            includedTerms = includedTerms.filter(_ != Seq(inner.value))
+          case ColumnInteraction(terms) =>
+            val fromInteraction = expandInteraction(schema, terms)
+            includedTerms = includedTerms.filter(!fromInteraction.contains(_))
           case Dot =>
             // e.g. "- .", which removes all first-order terms
             val fromSchema = simpleTypes(schema)
             includedTerms = includedTerms.filter {
-              case t: ColumnRef => !includedTerms.contains(t.value)
+              case Seq(t) => !fromSchema.contains(t)
               case _ => true
             }
           case _: Deletion =>
@@ -70,6 +75,23 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
     intercept
   }
 
+  private def expandInteraction(
+      schema: StructType, terms: Seq[InteractionComponent]): Seq[Seq[String]] = {
+    if (terms.isEmpty) {
+      Seq(Nil)
+    } else {
+      terms.head match {
+        case Dot =>
+          val rest = expandInteraction(schema, terms.tail)
+          simpleTypes(schema).filter(_ != label.value).map { t =>
+            Seq(t) ++ rest
+          }
+        case ColumnRef(value) =>
+          (Seq(value) ++ expandInteraction(schema, terms.tail))
+      }
+    }
+  }
+
   // the dot operator excludes complex column types
   private def simpleTypes(schema: StructType): Seq[String] = {
     schema.fields.filter(_.dataType match {
@@ -82,7 +104,7 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
 /**
  * Represents a fully evaluated and simplified R formula.
  */
-private[ml] case class ResolvedRFormula(label: String, terms: Seq[SimpleTerm])
+private[ml] case class ResolvedRFormula(label: String, terms: Seq[Seq[String]])
 
 /**
  * R formula terms. See the R formula docs here for more information:
@@ -90,17 +112,17 @@ private[ml] case class ResolvedRFormula(label: String, terms: Seq[SimpleTerm])
  */
 private[ml] sealed trait Term
 
-/** A standalone term after formula simplification, e.g. single variable or interaction. */
-private[ml] sealed trait SimpleTerm
+/** A term that may be part of an interaction, e.g. 'x' in 'x:y' */
+private[ml] sealed trait InteractionComponent extends Term
 
 /* R formula reference to all available columns, e.g. "." in a formula */
-private[ml] case object Dot extends Term
+private[ml] case object Dot extends InteractionComponent
 
 /* R formula reference to a column, e.g. "+ Species" in a formula */
-private[ml] case class ColumnRef(value: String) extends Term with SimpleTerm
+private[ml] case class ColumnRef(value: String) extends InteractionComponent
 
 /* R formula interaction of several columns, e.g. "Sepal_Length:Species" in a formula */
-private[ml] case class ColumnInteraction(values: Array[String]) extends Term with SimpleTerm
+private[ml] case class ColumnInteraction(terms: Seq[InteractionComponent]) extends Term
 
 /* R formula intercept toggle, e.g. "+ 0" in a formula */
 private[ml] case class Intercept(enabled: Boolean) extends Term
@@ -118,7 +140,15 @@ private[ml] object RFormulaParser extends RegexParsers {
   def columnRef: Parser[ColumnRef] =
     "([a-zA-Z]|\\.[a-zA-Z_])[a-zA-Z0-9._]*".r ^^ { case a => ColumnRef(a) }
 
-  def term: Parser[Term] = intercept | columnRef | "\\.".r ^^ { case _ => Dot }
+  def dot: Parser[InteractionComponent] = "\\.".r ^^ { case _ => Dot } 
+
+  def interaction: Parser[List[InteractionComponent]] = repsep(columnRef | dot, ":")
+
+  def term: Parser[Term] = intercept |
+    interaction ^^ {
+      case Seq(term) => term
+      case terms => ColumnInteraction(terms)
+    }
 
   def terms: Parser[List[Term]] = (term ~ rep("+" ~ term | "-" ~ term)) ^^ {
     case op ~ list => list.foldLeft(List(op)) {

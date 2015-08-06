@@ -28,13 +28,21 @@ class RFormulaParserSuite extends SparkFunSuite {
       schema: StructType = null) {
     val resolved = RFormulaParser.parse(formula).resolve(schema)
     assert(resolved.label == label)
-    assert(resolved.terms == terms)
+    val simpleTerms = terms.map { t =>
+      if (t.contains(":")) {
+        t.split(":").toSeq
+      } else {
+        Seq(t)
+      }
+    }
+    assert(resolved.terms == simpleTerms)
   }
 
   test("parse simple formulas") {
     checkParse("y ~ x", "y", Seq("x"))
     checkParse("y ~ x + x", "y", Seq("x"))
-    checkParse("y ~   ._foo  ", "y", Seq("._foo"))
+    checkParse("y~x+z", "y", Seq("x", "z"))
+    checkParse("y ~   ._fo..o  ", "y", Seq("._fo..o"))
     checkParse("resp ~ A_VAR + B + c123", "resp", Seq("A_VAR", "B", "c123"))
   }
 
@@ -78,5 +86,13 @@ class RFormulaParserSuite extends SparkFunSuite {
     assert(!RFormulaParser.parse("a ~ b + 0").hasIntercept)
     assert(!RFormulaParser.parse("a ~ b - 1").hasIntercept)
     assert(!RFormulaParser.parse("a ~ b + 1 - 1").hasIntercept)
+  }
+
+  test("parse interactions") {
+    checkParse("y ~ a:b", "y", Seq("a:b"))
+    checkParse("y ~ ._a:._x", "y", Seq("._a:._x"))
+    checkParse("y ~ foo:bar", "y", Seq("foo:bar"))
+    checkParse("y ~ a : b : c", "y", Seq("a:b:c"))
+    checkParse("y ~ q + a:b:c + b:c + c:d + z", "y", Seq("q", "a:b:c", "b:c", "c:d", "z"))
   }
 }
