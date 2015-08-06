@@ -337,20 +337,27 @@ private[sql] class DynamicPartitionWriterContainer(
         val sortedIterator = sorter.sortedIterator()
         var currentKey: InternalRow = null
         var currentWriter: OutputWriter = null
-        while(sortedIterator.next()) {
-          if (currentKey != sortedIterator.getKey) {
-            if (currentWriter != null) { currentWriter.close() }
-            currentKey = sortedIterator.getKey.copy()
-            logDebug(s"Writing partition: $currentKey")
+        try {
+          while (sortedIterator.next()) {
+            if (currentKey != sortedIterator.getKey) {
+              if (currentWriter != null) {
+                currentWriter.close()
+              }
+              currentKey = sortedIterator.getKey.copy()
+              logDebug(s"Writing partition: $currentKey")
 
-            // Either use an existing file from before, or open a new one.
-            currentWriter = outputWriters.remove(currentKey)
-            if (currentWriter == null) { currentWriter = newOutputWriter(currentKey) }
+              // Either use an existing file from before, or open a new one.
+              currentWriter = outputWriters.remove(currentKey)
+              if (currentWriter == null) {
+                currentWriter = newOutputWriter(currentKey)
+              }
+            }
+
+            currentWriter.writeInternal(sortedIterator.getValue)
           }
-
-          currentWriter.writeInternal(sortedIterator.getValue)
+        } finally {
+          if (currentWriter != null) { currentWriter.close() }
         }
-        currentWriter.close()
       }
 
       commitTask()
