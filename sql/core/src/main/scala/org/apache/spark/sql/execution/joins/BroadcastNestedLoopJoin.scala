@@ -47,7 +47,7 @@ case class BroadcastNestedLoopJoin(
   override def outputsUnsafeRows: Boolean = left.outputsUnsafeRows || right.outputsUnsafeRows
   override def canProcessUnsafeRows: Boolean = true
 
-  @transient private[this] def genResultProjection: InternalRow => InternalRow = {
+  private[this] def genResultProjection: InternalRow => InternalRow = {
     if (outputsUnsafeRows) {
       UnsafeProjection.create(schema)
     } else {
@@ -78,7 +78,6 @@ case class BroadcastNestedLoopJoin(
       sparkContext.broadcast(broadcast.execute().map(_.copy())
         .collect().toIndexedSeq)
 
-    val resultProj = genResultProjection
     /** All rows that either match both-way, or rows from streamed joined with nulls. */
     val matchesOrStreamedRowsWithNulls = streamed.execute().mapPartitions { streamedIter =>
       val matchedRows = new CompactBuffer[InternalRow]
@@ -89,6 +88,7 @@ case class BroadcastNestedLoopJoin(
 
       val leftNulls = new GenericMutableRow(left.output.size)
       val rightNulls = new GenericMutableRow(right.output.size)
+      val resultProj = genResultProjection
 
       streamedIter.foreach { streamedRow =>
         var i = 0
@@ -128,6 +128,8 @@ case class BroadcastNestedLoopJoin(
 
     val leftNulls = new GenericMutableRow(left.output.size)
     val rightNulls = new GenericMutableRow(right.output.size)
+    val resultProj = genResultProjection
+
     /** Rows from broadcasted joined with nulls. */
     val broadcastRowsWithNulls: Seq[InternalRow] = {
       val buf: CompactBuffer[InternalRow] = new CompactBuffer()

@@ -235,7 +235,7 @@ abstract class HiveComparisonTest
       return
     }
 
-    test(testCaseName + " " + (new java.util.Random().nextInt()) ) {
+    test(testCaseName) {
       logDebug(s"=== HIVE TEST: $testCaseName ===")
 
       // Clear old output for this testcase.

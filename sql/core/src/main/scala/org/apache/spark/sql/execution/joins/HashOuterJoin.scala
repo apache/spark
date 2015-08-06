@@ -76,14 +76,14 @@ trait HashOuterJoin {
   override def canProcessUnsafeRows: Boolean = isUnsafeMode
   override def canProcessSafeRows: Boolean = !isUnsafeMode
 
-  @transient protected def buildKeyGenerator: Projection =
+  protected def buildKeyGenerator: Projection =
     if (isUnsafeMode) {
       UnsafeProjection.create(buildKeys, buildPlan.output)
     } else {
       newMutableProjection(buildKeys, buildPlan.output)()
     }
 
-  @transient protected[this] def streamedKeyGenerator: Projection = {
+  protected[this] def streamedKeyGenerator: Projection = {
     if (isUnsafeMode) {
       UnsafeProjection.create(streamedKeys, streamedPlan.output)
     } else {
@@ -91,7 +91,7 @@ trait HashOuterJoin {
     }
   }
 
-  @transient protected[this] def resultProjection: InternalRow => InternalRow = {
+  protected[this] def resultProjection: InternalRow => InternalRow = {
     if (isUnsafeMode) {
       UnsafeProjection.create(self.schema)
     } else {

@@ -43,14 +43,14 @@ trait HashSemiJoin {
   override def canProcessUnsafeRows: Boolean = supportUnsafe
   override def canProcessSafeRows: Boolean = !supportUnsafe
 
-  @transient protected def leftKeyGenerator: Projection =
+  protected def leftKeyGenerator: Projection =
     if (supportUnsafe) {
       UnsafeProjection.create(leftKeys, left.output)
     } else {
       newMutableProjection(leftKeys, left.output)()
     }
 
-  @transient protected def rightKeyGenerator: Projection =
+  protected def rightKeyGenerator: Projection =
     if (supportUnsafe) {
       UnsafeProjection.create(rightKeys, right.output)
     } else {
