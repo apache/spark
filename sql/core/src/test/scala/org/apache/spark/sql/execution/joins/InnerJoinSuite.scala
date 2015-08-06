@@ -26,14 +26,6 @@ import org.apache.spark.sql.execution.{Filter, joins, SparkPlan, SparkPlanTest}
 
 class InnerJoinSuite extends SparkPlanTest {
 
-  private val testData2 = Seq(
-    (1, 1),
-    (2, 1),
-    (2, 2),
-    (3, 1),
-    (3, 2)
-  ).toDF("a", "b")
-
   private def testInnerJoin(
       testName: String,
       leftRows: DataFrame,
@@ -101,10 +93,67 @@ class InnerJoinSuite extends SparkPlanTest {
   }
 
   {
+    val upperCaseData = Seq(
+      (1, "A"),
+      (2, "B"),
+      (3, "C"),
+      (4, "D"),
+      (5, "E"),
+      (6, "F")
+    ).toDF("N", "L")
+
+    val lowerCaseData = Seq(
+      (1, "a"),
+      (2, "b"),
+      (3, "c"),
+      (4, "d")
+    ).toDF("n", "l")
+
+    testInnerJoin(
+      "inner join, one match per row",
+      upperCaseData,
+      lowerCaseData,
+      (upperCaseData.col("N") === lowerCaseData.col("n")).expr,
+      Seq(
+        (1, "A", 1, "a"),
+        (2, "B", 2, "b"),
+        (3, "C", 3, "c"),
+        (4, "D", 4, "d")
+      )
+    )
+  }
+
+  private val testData2 = Seq(
+    (1, 1),
+    (1, 2),
+    (2, 1),
+    (2, 2),
+    (3, 1),
+    (3, 2)
+  ).toDF("a", "b")
+
+  {
+    val left = testData2.where("a = 1")
+    val right = testData2.where("a = 1")
+    testInnerJoin(
+      "inner join, multiple matches",
+      left,
+      right,
+      (left.col("a") === right.col("a")).expr,
+      Seq(
+        (1, 1, 1, 1),
+        (1, 1, 1, 2),
+        (1, 2, 1, 1),
+        (1, 2, 1, 2)
+      )
+    )
+  }
+
+  {
     val left = testData2.where("a = 1")
     val right = testData2.where("a = 2")
     testInnerJoin(
-      "no matches",
+      "inner join, no matches",
       left,
       right,
       (left.col("a") === right.col("a")).expr,
