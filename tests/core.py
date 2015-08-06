@@ -263,6 +263,19 @@ class CoreTest(unittest.TestCase):
             dag=self.dag)
         t.dry_run()
 
+    def test_presto_to_mysql(self):
+        t = operators.PrestoToMySqlTransfer(
+            task_id='presto_to_mysql_check',
+            sql="""
+            SELECT name, count(*) as ccount
+            FROM airflow.static_babynames
+            GROUP BY name
+            """,
+            mysql_table='test_static_babynames',
+            mysql_preoperator='TRUNCATE TABLE test_static_babynames;',
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
     def test_sqlite(self):
         t = operators.SqliteOperator(
             task_id='time_sqlite',
