@@ -253,9 +253,14 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
 
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
 
-    // Precondition: joins' children have compatible partitionings.
-
     def addShuffleIfNecessary(child: SparkPlan, requiredDistribution: Distribution): SparkPlan = {
+      // A pre-condition of ensureDistributionAndOrdering is that joins' children have compatible
+      // partitionings. Thus, we only need to check whether the output partitionings satisfy
+      // the required distribution. In the case where the children are all compatible, then they
+      // will either all satisfy the required distribution or will all fail to satisfy it:, since
+      //     (A.guarantees(B) && B.satisfies(C)) => A.satisfies(C).
+      // Therefore, if all children are compatible then either all or none of them will shuffled to
+      // ensure that the distribution requirements are met.
       if (child.outputPartitioning.satisfies(requiredDistribution)) {
         child
       } else {
