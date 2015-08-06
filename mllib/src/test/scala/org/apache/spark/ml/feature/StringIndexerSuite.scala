@@ -50,7 +50,7 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(output === expected)
   }
 
-  test("StringIndexerUnessen") {
+  test("StringIndexerUnseen") {
     val data = sc.parallelize(Seq((0, "a"), (1, "b")), 2)
     val data2 = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c")), 2)
     val df = sqlContext.createDataFrame(data).toDF("id", "label")
