@@ -789,7 +789,6 @@ class StringIndexerInverse(JavaTransformer):
         self._java_obj = java_obj
 
 
-
 @inherit_doc
 @ignore_unicode_prefix
 class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
