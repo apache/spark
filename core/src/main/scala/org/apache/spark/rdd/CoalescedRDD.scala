@@ -298,7 +298,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
     val minPowerOfTwo = if (p.isInstanceOf[HadoopPartition]) {
       val groupLen1 = groupArr(r1).arr.map(part =>
         part.asInstanceOf[HadoopPartition].inputSplit.value.getLength).sum
-      val groupLen2 = groupArr(r1).arr.map(part =>
+      val groupLen2 = groupArr(r2).arr.map(part =>
         part.asInstanceOf[HadoopPartition].inputSplit.value.getLength).sum
       if (groupLen1 < groupLen2) groupArr(r1) else groupArr(r2)
     } else {
