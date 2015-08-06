@@ -33,7 +33,8 @@ trait HashSemiJoin {
   override def output: Seq[Attribute] = left.output
 
   protected[this] def supportUnsafe: Boolean = {
-    (self.codegenEnabled && UnsafeProjection.canSupport(leftKeys)
+    (self.codegenEnabled && self.unsafeEnabled
+      && UnsafeProjection.canSupport(leftKeys)
       && UnsafeProjection.canSupport(rightKeys)
       && UnsafeProjection.canSupport(left.schema)
       && UnsafeProjection.canSupport(right.schema))
