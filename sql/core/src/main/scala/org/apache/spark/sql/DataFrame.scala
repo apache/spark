@@ -20,8 +20,6 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 import java.util.Properties
 
-import org.apache.spark.unsafe.types.UTF8String
-
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -41,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
 import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
-import org.apache.spark.sql.json.{JacksonGenerator, JSONRelation}
+import org.apache.spark.sql.json.JacksonGenerator
 import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -53,7 +51,6 @@ private[sql] object DataFrame {
     new DataFrame(sqlContext, logicalPlan)
   }
 }
-
 
 /**
  * :: Experimental ::
@@ -690,9 +687,7 @@ class DataFrame private[sql](
       case Column(explode: Explode) => MultiAlias(explode, Nil)
       case Column(expr: Expression) => Alias(expr, expr.prettyString)()
     }
-    // When user continuously call `select`, speed up analysis by collapsing `Project`
-    import org.apache.spark.sql.catalyst.optimizer.ProjectCollapsing
-    Project(namedExpressions.toSeq, ProjectCollapsing(logicalPlan))
+    Project(namedExpressions.toSeq, logicalPlan)
   }
 
   /**
@@ -1567,8 +1562,6 @@ class DataFrame private[sql](
     val files: Seq[String] = logicalPlan.collect {
       case LogicalRelation(fsBasedRelation: HadoopFsRelation) =>
         fsBasedRelation.paths.toSeq
-      case LogicalRelation(jsonRelation: JSONRelation) =>
-        jsonRelation.path.toSeq
     }.flatten
     files.toSet.toArray
   }
@@ -1654,8 +1647,12 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().saveAsTable(tableName)`.
    */
@@ -1673,8 +1670,12 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
    */
@@ -1693,8 +1694,12 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().format(source).saveAsTable(tableName)`.
    */
@@ -1713,8 +1718,12 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
    */
@@ -1732,8 +1741,12 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by
    *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.
@@ -1758,8 +1771,12 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by
    *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.

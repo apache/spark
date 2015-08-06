@@ -133,8 +133,7 @@ private[hive] case class HiveSimpleUDF(funcWrapper: HiveFunctionWrapper, childre
   @transient
   private lazy val conversionHelper = new ConversionHelper(method, arguments)
 
-  @transient
-  lazy val dataType = javaClassToDataType(method.getReturnType)
+  val dataType = javaClassToDataType(method.getReturnType)
 
   @transient
   lazy val returnInspector = ObjectInspectorFactory.getReflectionObjectInspector(

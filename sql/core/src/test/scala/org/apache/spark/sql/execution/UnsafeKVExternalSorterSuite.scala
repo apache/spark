@@ -22,7 +22,7 @@ import scala.util.Random
 import org.apache.spark._
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, RowOrdering, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, UnsafeRow, UnsafeProjection}
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
@@ -144,8 +144,8 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite {
     }
     sorter.cleanupResources()
 
-    val keyOrdering = RowOrdering.forSchema(keySchema.map(_.dataType))
-    val valueOrdering = RowOrdering.forSchema(valueSchema.map(_.dataType))
+    val keyOrdering = InterpretedOrdering.forSchema(keySchema.map(_.dataType))
+    val valueOrdering = InterpretedOrdering.forSchema(valueSchema.map(_.dataType))
     val kvOrdering = new Ordering[(InternalRow, InternalRow)] {
       override def compare(x: (InternalRow, InternalRow), y: (InternalRow, InternalRow)): Int = {
         keyOrdering.compare(x._1, y._1) match {
