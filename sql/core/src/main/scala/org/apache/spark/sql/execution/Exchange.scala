@@ -269,7 +269,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     operator.withNewChildren(newChildren)
   }
 
-  def apply(plan: SparkPlan): SparkPlan =  plan.transformUp {
+  def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     case operator: SparkPlan =>
       ensureDistributionAndOrdering(ensureChildNumPartitionsAgreementIfNecessary(operator))
   }
