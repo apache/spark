@@ -100,7 +100,19 @@ public class ExternalShuffleBlockResolver {
             throw new IOException("Unable to create state store", dbExc);
           }
         } else {
-          throw e;
+          logger.error("error opening leveldb file {}.  Creating new file, will not be able to " +
+            "recover state for existing applications", registeredExecutorFile, e);
+          for (File f: registeredExecutorFile.listFiles()) {
+            f.delete();
+          }
+          registeredExecutorFile.delete();
+          options.createIfMissing(true);
+          try {
+            tmpDb = JniDBFactory.factory.open(registeredExecutorFile, options);
+          } catch (NativeDB.DBException dbExc) {
+            throw new IOException("Unable to create state store", dbExc);
+          }
+
         }
       }
       try {

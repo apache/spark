@@ -127,7 +127,7 @@ public class YarnShuffleService extends AuxiliaryService {
     try {
       blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile);
     } catch (Exception e) {
-      logger.error("Failed to initial external shuffle service", e);
+      logger.error("Failed to initialize external shuffle service", e);
     }
 
     List<TransportServerBootstrap> bootstraps = Lists.newArrayList();

@@ -172,7 +172,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     ShuffleTestAccessor.reloadRegisteredExecutors(db) shouldBe empty
   }
 
-  ignore("shuffle service should be robust to corrupt registered executor file") {
+  test("shuffle service should be robust to corrupt registered executor file") {
     s1 = new YarnShuffleService
     s1.init(yarnConfig)
     val app1Id = ApplicationId.newInstance(0, 1)
