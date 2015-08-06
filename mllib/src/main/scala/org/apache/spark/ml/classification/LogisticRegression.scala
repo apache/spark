@@ -294,13 +294,13 @@ class LogisticRegressionModel private[ml] (
 
   override val numClasses: Int = 2
 
-  private var trainingSummary: Option[BinaryLogisticRegressionTrainingSummary] = None
+  private var trainingSummary: Option[LogisticRegressionTrainingSummary] = None
 
   /**
    * Gets summary of model on training set. An exception is
    * thrown if `trainingSummary == None`.
    */
-  def summary: BinaryLogisticRegressionTrainingSummary = trainingSummary match {
+  def summary: LogisticRegressionTrainingSummary = trainingSummary match {
     case Some(summ) => summ
     case None =>
       throw new SparkException(
@@ -309,7 +309,7 @@ class LogisticRegressionModel private[ml] (
   }
 
   private[classification] def setSummary(
-      summary: BinaryLogisticRegressionTrainingSummary): this.type = {
+      summary: LogisticRegressionTrainingSummary): this.type = {
     this.trainingSummary = Some(summary)
     this
   }
@@ -322,11 +322,8 @@ class LogisticRegressionModel private[ml] (
    * @param dataset Test dataset to evaluate model on.
    */
   // TODO: decide on a good name before exposing to public API
-  private[classification] def evaluate(dataset: DataFrame): BinaryLogisticRegressionSummary = {
-    val t = udf { features: Vector => raw2probabilityInPlace(predictRaw(features)) }
-    val labelsAndScores = dataset.
-      select(col($(labelCol)), t(col($(featuresCol))).as($(probabilityCol)))
-    new BinaryLogisticRegressionSummary(labelsAndScores, $(probabilityCol), $(labelCol))
+  private[classification] def evaluate(dataset: DataFrame): LogisticRegressionSummary = {
+    new BinaryLogisticRegressionSummary(this.transform(dataset), $(probabilityCol), $(labelCol))
   }
 
   /**
@@ -453,13 +450,13 @@ private[classification] class MultiClassSummarizer extends Serializable {
 /**
  * Abstraction for multinomial Logistic Regression Training results.
  */
-sealed trait LogisticRegressionTrainingSummary extends Serializable {
+sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary {
 
   /** objective function (scaled loss + regularization) at each iteration. */
-  val objectiveHistory: Array[Double]
+  def objectiveHistory: Array[Double]
 
   /** Number of training iterations until termination */
-  val totalIterations: Int = objectiveHistory.length
+  def totalIterations: Int = objectiveHistory.length
 
 }
 
@@ -467,6 +464,15 @@ sealed trait LogisticRegressionTrainingSummary extends Serializable {
  * Abstraction for Logistic Regression Results for a given model.
  */
 sealed trait LogisticRegressionSummary extends Serializable {
+
+  /** Dataframe outputted by the model's `transform` method. */
+  def predictions: DataFrame
+
+  /** Field in "predictions" which gives the calibrated probability of each sample as a vector. */
+  def probabilityCol: String
+
+  /** Field in "predictions" which gives the the true label of each sample. */
+  def labelCol: String
 
 }
 
@@ -500,9 +506,9 @@ class BinaryLogisticRegressionTrainingSummary private[classification] (
  */
 @Experimental
 class BinaryLogisticRegressionSummary private[classification] (
-    @transient val predictions: DataFrame,
-    val probabilityCol: String,
-    val labelCol: String) extends LogisticRegressionSummary {
+    @transient override val predictions: DataFrame,
+    override val probabilityCol: String,
+    override val labelCol: String) extends LogisticRegressionSummary {
 
   private val sqlContext = predictions.sqlContext
   import sqlContext.implicits._
@@ -524,23 +530,23 @@ class BinaryLogisticRegressionSummary private[classification] (
    * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
    * @see http://en.wikipedia.org/wiki/Receiver_operating_characteristic
    */
-  def roc(): DataFrame = binaryMetrics.roc().toDF("FPR", "TPR")
+  @transient lazy val roc: DataFrame = binaryMetrics.roc().toDF("FPR", "TPR")
 
   /**
    * Computes the area under the receiver operating characteristic (ROC) curve.
    */
-  def areaUnderROC(): Double = binaryMetrics.areaUnderROC()
+  lazy val areaUnderROC: Double = binaryMetrics.areaUnderROC()
 
   /**
    * Returns the precision-recall curve, which is an Dataframe containing
    * two fields recall, precision with (0.0, 1.0) prepended to it.
    */
-  def pr(): DataFrame = binaryMetrics.pr().toDF("recall", "precision")
+  @transient lazy val pr: DataFrame = binaryMetrics.pr().toDF("recall", "precision")
 
   /**
    * Returns a dataframe with two fields (threshold, F-Measure) curve with beta = 1.0.
    */
-  def fMeasureByThreshold(): DataFrame = {
+  @transient lazy val fMeasureByThreshold: DataFrame = {
     binaryMetrics.fMeasureByThreshold().toDF("threshold", "F-Measure")
   }
 
@@ -549,7 +555,7 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the precision.
    */
-  def precisionByThreshold(): DataFrame = {
+  @transient lazy val precisionByThreshold: DataFrame = {
     binaryMetrics.precisionByThreshold().toDF("threshold", "precision")
   }
 
@@ -558,7 +564,7 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the recall.
    */
-  def recallByThreshold(): DataFrame = {
+  @transient lazy val recallByThreshold: DataFrame = {
     binaryMetrics.recallByThreshold().toDF("threshold", "recall")
   }
 }
