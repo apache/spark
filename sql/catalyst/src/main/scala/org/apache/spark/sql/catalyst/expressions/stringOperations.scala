@@ -403,9 +403,12 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     ctx.addMutableState(classNameDict, termDict, s"${termDict} = null;")
 
     nullSafeCodeGen(ctx, ev, (src, matching, replace) => {
-      s"""if (!(${matchingExpr.foldable} && ${replaceExpr.foldable} && ${termDict} != null) ||
-        !${matching}.equals(${termLastMatching}) ||
-        !${replace}.equals(${termLastReplace})) {
+      val check = if (matchingExpr.foldable && replaceExpr.foldable) {
+        s"${termDict} == null"
+      } else {
+        s"!${matching}.equals(${termLastMatching}) || !${replace}.equals(${termLastReplace})"
+      }
+      s"""if ($check) {
         // Not all of them is literal or matching or replace value changed
         ${termLastMatching} = ${matching}.clone();
         ${termLastReplace} = ${replace}.clone();
