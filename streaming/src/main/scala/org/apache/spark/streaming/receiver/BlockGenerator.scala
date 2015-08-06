@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{SparkException, Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.util.RecurringTimer
-import org.apache.spark.util.SystemClock
+import org.apache.spark.util.{Clock, SystemClock}
 
 /** Listener object for BlockGenerator events */
 private[streaming] trait BlockGeneratorListener {
@@ -76,7 +76,8 @@ private[streaming] trait BlockGeneratorListener {
 private[streaming] class BlockGenerator(
     listener: BlockGeneratorListener,
     receiverId: Int,
-    conf: SparkConf
+    conf: SparkConf,
+    clock: Clock = new SystemClock()
   ) extends RateLimiter(conf) with Logging {
 
   private case class Block(id: StreamBlockId, buffer: ArrayBuffer[Any])
@@ -97,7 +98,6 @@ private[streaming] class BlockGenerator(
   }
   import GeneratorState._
 
-  private val clock = new SystemClock()
   private val blockIntervalMs = conf.getTimeAsMs("spark.streaming.blockInterval", "200ms")
   require(blockIntervalMs > 0, s"'spark.streaming.blockInterval' should be a positive value")
 
@@ -118,7 +118,8 @@ private[streaming] class BlockGenerator(
       blockPushingThread.start()
       logInfo("Started BlockGenerator")
     } else {
-      throw new SparkException("Cannot start BlockGenerator as already stopped")
+      throw new SparkException(
+        s"Cannot start BlockGenerator as its not in the Initialized state [state = $state]")
     }
   }
 
@@ -134,7 +135,7 @@ private[streaming] class BlockGenerator(
       if (state == Active) {
         state = StoppedAddingData
       } else {
-        logWarning("BlockGenerator not started")
+        logWarning(s"Cannot stop BlockGenerator as its not in the Active state [state = $state]")
         return
       }
     }
@@ -147,8 +148,8 @@ private[streaming] class BlockGenerator(
     // Wait for the queue to drain and mark generated as stopped
     logInfo("Waiting for block pushing thread to terminate")
     blockPushingThread.join()
-    logInfo("Stopped BlockGenerator")
     synchronized { state = StoppedAll }
+    logInfo("Stopped BlockGenerator")
   }
 
   /**
@@ -196,6 +197,8 @@ private[streaming] class BlockGenerator(
         "Cannot add data as BlockGenerator has not been started or has been stopped")
     }
   }
+
+  def isActive(): Boolean = state == Active
 
   def isStopped(): Boolean = state == StoppedAll
 
