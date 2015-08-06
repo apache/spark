@@ -19,11 +19,16 @@ package org.apache.spark.ml.util
 
 import java.util.UUID
 
+import org.apache.spark.annotation.DeveloperApi
+
 
 /**
+ * :: DeveloperApi ::
+ *
  * Trait for an object with an immutable unique ID that identifies itself and its derivatives.
  */
-private[spark] trait Identifiable {
+@DeveloperApi
+trait Identifiable {
 
   /**
    * An immutable unique ID for the object and its derivatives.
@@ -33,7 +38,11 @@ private[spark] trait Identifiable {
   override def toString: String = uid
 }
 
-private[spark] object Identifiable {
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+object Identifiable {
 
   /**
    * Returns a random UID that concatenates the given prefix, "_", and 12 random hex chars.
