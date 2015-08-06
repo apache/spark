@@ -732,7 +732,7 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)]
     >>> itd = model.invert("indexed", "label2").transform(td)
-    >>> sorted(set([(i[0], i[1]) for i in itd.select(itd.id, itd.label2).collect()]),
+    >>> sorted(set([(i[0], str(i[1])) for i in itd.select(itd.id, itd.label2).collect()]),
     ...     key=lambda x: x[0])
     [(0, 'a'), (1, 'b'), (2, 'c'), (3, 'a'), (4, 'a'), (5, 'c')]
     """
