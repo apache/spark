@@ -259,7 +259,7 @@ class Column(object):
         .. note:: Deprecated in 1.5, use :func:`Column.isin` instead.
         """
         warnings.warn("inSet is deprecated. Use isin() instead.")
-        self.isin(cols)
+        self.isin(*cols)
 
     @ignore_unicode_prefix
     @since(1.5)
@@ -277,7 +277,7 @@ class Column(object):
             cols = cols[0]
         cols = [c._jc if isinstance(c, Column) else _create_column_from_literal(c) for c in cols]
         sc = SparkContext._active_spark_context
-        jc = getattr(self._jc, "in")(_to_seq(sc, cols))
+        jc = getattr(self._jc, "isin")(_to_seq(sc, cols))
         return Column(jc)
 
     # order
