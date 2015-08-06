@@ -87,7 +87,6 @@ public class ExternalShuffleBlockResolver {
       options.createIfMissing(false);
       options.logger(new LevelDBLogger());
       DB tmpDb;
-      ConcurrentMap<AppExecId, ExecutorShuffleInfo> tmpExecutors;
       try {
         tmpDb = JniDBFactory.factory.open(registeredExecutorFile, options);
       } catch (NativeDB.DBException e) {
@@ -100,6 +99,8 @@ public class ExternalShuffleBlockResolver {
             throw new IOException("Unable to create state store", dbExc);
           }
         } else {
+          // the leveldb file seems to be corrupt somehow.  Lets just blow it away and create a new
+          // one, so we can keep processing new apps
           logger.error("error opening leveldb file {}.  Creating new file, will not be able to " +
             "recover state for existing applications", registeredExecutorFile, e);
           for (File f: registeredExecutorFile.listFiles()) {
@@ -115,15 +116,8 @@ public class ExternalShuffleBlockResolver {
 
         }
       }
-      try {
-        tmpExecutors = reloadRegisteredExecutors(tmpDb);
-      } catch (Exception e) {
-        logger.info("Error opening leveldb file {}", registeredExecutorFile, e);
-        tmpDb = null;
-        tmpExecutors = Maps.newConcurrentMap();
-      }
+      executors = reloadRegisteredExecutors(tmpDb);
       db = tmpDb;
-      executors = tmpExecutors;
     } else {
       db = null;
       executors = Maps.newConcurrentMap();
@@ -348,7 +342,7 @@ public class ExternalShuffleBlockResolver {
 
   @VisibleForTesting
   static ConcurrentMap<AppExecId, ExecutorShuffleInfo> reloadRegisteredExecutors(DB db)
-      throws IOException, ClassNotFoundException {
+      throws IOException {
     ConcurrentMap<AppExecId, ExecutorShuffleInfo> registeredExecutors = Maps.newConcurrentMap();
     if (db != null) {
       DBIterator itr = db.iterator();
@@ -357,10 +351,14 @@ public class ExternalShuffleBlockResolver {
         Map.Entry<byte[], byte[]> e = itr.next();
         ObjectInputStream in = new ObjectInputStream(new ByteArrayInputStream(e.getValue()));
         AppExecId id = parseDbAppExecKey(e.getKey());
-        registeredExecutors.put(
-          id,
-          (ExecutorShuffleInfo) in.readObject()
-        );
+        try {
+          registeredExecutors.put(
+            id,
+            (ExecutorShuffleInfo) in.readObject()
+          );
+        } catch (ClassNotFoundException e1) {
+          throw new IOException(e1);
+        }
         in.close();
       }
     }
