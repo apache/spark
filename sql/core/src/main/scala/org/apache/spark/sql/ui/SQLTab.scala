@@ -44,6 +44,6 @@ private[sql] object SQLTab {
 
   private def nextTabName: String = {
     val nextId = nextTabId.getAndIncrement()
-    if (nextId == 0) "sql" else s"sql${nextId}"
+    if (nextId == 0) "SQL" else s"SQL${nextId}"
   }
 }
