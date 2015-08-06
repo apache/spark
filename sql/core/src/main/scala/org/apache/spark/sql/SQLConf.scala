@@ -478,7 +478,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
-  private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED)
+  private[spark] def unsafeEnabled: Boolean = false
 
   private[spark] def useSqlAggregate2: Boolean = getConf(USE_SQL_AGGREGATE2)
 
