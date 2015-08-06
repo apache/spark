@@ -478,7 +478,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
       }
     }
 
-    if (getOption(sparkExecutorInstances).isEmpty) {
+    if (!contains(sparkExecutorInstances)) {
       sys.env.get("SPARK_WORKER_INSTANCES").foreach { value =>
         val warning =
           s"""
