@@ -342,18 +342,17 @@ abstract class OutputWriter {
    * @since 1.4.0
    */
   def close(): Unit
-}
 
-/**
- * This is an internal, private version of [[OutputWriter]] with an writeInternal method that
- * accepts an [[InternalRow]] rather than an [[Row]]. Data sources that return this must have
- * the conversion flag set to false.
- */
-private[sql] abstract class OutputWriterInternal extends OutputWriter {
+  private var converter: InternalRow => Row = _
 
-  override def write(row: Row): Unit = throw new UnsupportedOperationException
+  protected[sql] def initConverter(dataSchema: StructType) = {
+    converter =
+      CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
+  }
 
-  def writeInternal(row: InternalRow): Unit
+  protected[sql] def writeInternal(row: InternalRow): Unit = {
+    write(converter(row))
+  }
 }
 
 /**
