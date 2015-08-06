@@ -158,7 +158,7 @@ private[spark] object ShuffleMemoryManager {
    * of the memory pool and a safety factor since collections can sometimes grow bigger than
    * the size we target before we estimate their sizes again.
    */
-  def getMaxMemory(conf: SparkConf): Long = {
+  private def getMaxMemory(conf: SparkConf): Long = {
     val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
     val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
@@ -171,7 +171,7 @@ private[spark] object ShuffleMemoryManager {
    * by looking at the number of cores available to the process, and the total amount of memory,
    * and then divide it by a factor of safety.
    */
-  def getPageSize(conf: SparkConf, maxMemory: Long, numCores: Int): Long = {
+  private def getPageSize(conf: SparkConf, maxMemory: Long, numCores: Int): Long = {
     val minPageSize = 1L * 1024 * 1024   // 1MB
     val maxPageSize = 64L * minPageSize  // 64MB
     val cores = if (numCores > 0) numCores else Runtime.getRuntime.availableProcessors()
