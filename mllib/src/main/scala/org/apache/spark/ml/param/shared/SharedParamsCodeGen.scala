@@ -54,7 +54,7 @@ private[shared] object SharedParamsCodeGen {
         isValid = "ParamValidators.gtEq(1)"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
       ParamDesc[String]("handleInvalid", "how to handle invalid entries",
-        isValid = "ParamValidators.inArray(List(\"skip\", \"error\"))"),
+        isValid = "ParamValidators.inArray(Array(\"skip\", \"error\"))"),
       ParamDesc[Boolean]("standardization", "whether to standardize the training features" +
         " before fitting the model.", Some("true")),
       ParamDesc[Long]("seed", "random seed", Some("this.getClass.getName.hashCode.toLong")),

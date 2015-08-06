@@ -66,7 +66,7 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val indexerSkipInvalid = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
-      .setSkipInvalid(true)
+      .setHandleInvalid("skip")
       .fit(df)
     // Verify that we skip the c record
     val transformed = indexerSkipInvalid.transform(df2)

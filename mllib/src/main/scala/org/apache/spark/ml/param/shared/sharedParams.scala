@@ -241,7 +241,7 @@ private[ml] trait HasHandleInvalid extends Params {
    * Param for how to handle invalid entries.
    * @group param
    */
-  final val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries", ParamValidators.inArray(List("skip", "error")))
+  final val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries", ParamValidators.inArray(Array("skip", "error")))
 
   /** @group getParam */
   final def getHandleInvalid: String = $(handleInvalid)

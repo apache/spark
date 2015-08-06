@@ -33,7 +33,7 @@ import org.apache.spark.util.collection.OpenHashMap
  * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
  */
 private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol
-    with HasSkipInvalid {
+    with HasHandleInvalid {
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
@@ -66,8 +66,8 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
   def this() = this(Identifiable.randomUID("strIdx"))
 
   /** @group setParam */
-  def setSkipInvalid(value: Boolean): this.type = set(skipInvalid, value)
-  setDefault(skipInvalid, false)
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+  setDefault(handleInvalid, "error")
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -115,8 +115,8 @@ class StringIndexerModel private[ml] (
   }
 
   /** @group setParam */
-  def setSkipInvalid(value: Boolean): this.type = set(skipInvalid, value)
-  setDefault(skipInvalid, false)
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+  setDefault(handleInvalid, "error")
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -143,13 +143,14 @@ class StringIndexerModel private[ml] (
     val metadata = NominalAttribute.defaultAttr
       .withName(outputColName).withValues(labels).toMetadata()
     // If we are skipping invalid records, filter them out.
-    val filteredDataset = if (getSkipInvalid) {
-      val filterer = udf { label: String =>
-        labelToIndex.contains(label)
+    val filteredDataset = (getHandleInvalid) match {
+      case "skip" => {
+        val filterer = udf { label: String =>
+          labelToIndex.contains(label)
+        }
+        dataset.where(filterer(dataset($(inputCol))))
       }
-      dataset.where(filterer(dataset($(inputCol))))
-    } else {
-      dataset
+      case _ =>  dataset
     }
     filteredDataset.select(col("*"),
       indexer(dataset($(inputCol)).cast(StringType)).as(outputColName, metadata))
