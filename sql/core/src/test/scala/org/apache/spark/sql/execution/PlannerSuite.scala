@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions  .{Ascending, Literal, Attribute, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -210,9 +210,10 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
   // --- Unit tests of EnsureRequirements ---------------------------------------------------------
 
   private def assertDistributionRequirementsAreSatisfied(outputPlan: SparkPlan): Unit = {
-    if (outputPlan.requiresChildrenToProduceSameNumberOfPartitions) {
-      if (outputPlan.children.map(_.outputPartitioning.numPartitions).toSet.size != 1) {
-        fail(s"Children did not produce the same number of partitions:\n$outputPlan")
+    if (outputPlan.requiresChildPartitioningsToBeCompatible) {
+      val childPartitionings = outputPlan.children.map(_.outputPartitioning)
+      if (!Partitioning.allCompatible(childPartitionings)) {
+        fail(s"Partitionings are not compatible: $childPartitionings")
       }
     }
     outputPlan.children.zip(outputPlan.requiredChildDistribution).foreach {
@@ -222,7 +223,42 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
     }
   }
 
-  test("EnsureRequirements ensures that children produce same number of partitions when required") {
+  test("EnsureRequirements ensures that child partitionings guarantee each other, if required") {
+    // Consider an operator that requires inputs that are clustered by two expressions (e.g.
+    // sort merge join where there are multiple columns in the equi-join condition)
+    val clusteringA = Literal(1) :: Nil
+    val clusteringB = Literal(2) :: Nil
+    val distribution = ClusteredDistribution(clusteringA ++ clusteringB)
+    // Say that the left and right inputs are each partitioned by _one_ of the two join columns:
+    val leftPartitioning = HashPartitioning(clusteringA, 1)
+    val rightPartitioning = HashPartitioning(clusteringB, 1)
+    // Individually, each input's partitioning satisfies the clustering distribution:
+    assert(leftPartitioning.satisfies(distribution))
+    assert(rightPartitioning.satisfies(distribution))
+    // However, these partitionings are not compatible with each other, so we still need to
+    // repartition both inputs prior to performing the join:
+    assert(!leftPartitioning.guarantees(rightPartitioning))
+    assert(!rightPartitioning.guarantees(leftPartitioning))
+    val inputPlan = DummyPlan(
+      children = Seq(
+        DummyPlan(outputPartitioning = HashPartitioning(clusteringA, 1)),
+        DummyPlan(outputPartitioning = HashPartitioning(clusteringB, 1))
+      ),
+      requiresChildPartitioningsToBeCompatible = true,
+      requiredChildDistribution = Seq(distribution, distribution),
+      requiredChildOrdering = Seq(Seq.empty, Seq.empty)
+    )
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case Exchange(_, _) => true }.isEmpty) {
+      fail(s"Exchanges should have been added:\n$outputPlan")
+    }
+  }
+
+  test("EnsureRequirements ensures that children produce same number of partitions, if required") {
+    // This is similar to the previous test, except it checks that partitionings are not compatible
+    // unless they produce the same number of partitions. This requirement is also enforced via
+    // assertions in Exchange.
     val clustering = Literal(1) :: Nil
     val distribution = ClusteredDistribution(clustering)
     val inputPlan = DummyPlan(
@@ -230,7 +266,7 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
         DummyPlan(outputPartitioning = HashPartitioning(clustering, 1)),
         DummyPlan(outputPartitioning = HashPartitioning(clustering, 2))
       ),
-      requiresChildrenToProduceSameNumberOfPartitions = true,
+      requiresChildPartitioningsToBeCompatible = true,
       requiredChildDistribution = Seq(distribution, distribution),
       requiredChildOrdering = Seq(Seq.empty, Seq.empty)
     )
@@ -239,6 +275,10 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   test("EnsureRequirements should not repartition if only ordering requirement is unsatisfied") {
+    // Consider an operator that imposes both output distribution and  ordering requirements on its
+    // children, such as sort sort merge join. If the distribution requirements are satisfied but
+    // the output ordering requirements are unsatisfied, then the planner should only add sorts and
+    // should not need to add additional shuffles / exchanges.
     val outputOrdering = Seq(SortOrder(Literal(1), Ascending))
     val distribution = ClusteredDistribution(Literal(1) :: Nil)
     val inputPlan = DummyPlan(
@@ -246,7 +286,7 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
         DummyPlan(outputPartitioning = SinglePartition),
         DummyPlan(outputPartitioning = SinglePartition)
       ),
-      requiresChildrenToProduceSameNumberOfPartitions = true,
+      requiresChildPartitioningsToBeCompatible = true,
       requiredChildDistribution = Seq(distribution, distribution),
       requiredChildOrdering = Seq(outputOrdering, outputOrdering)
     )
@@ -265,7 +305,7 @@ private case class DummyPlan(
     override val children: Seq[SparkPlan] = Nil,
     override val outputOrdering: Seq[SortOrder] = Nil,
     override val outputPartitioning: Partitioning = UnknownPartitioning(0),
-    override val requiresChildrenToProduceSameNumberOfPartitions: Boolean = false,
+    override val requiresChildPartitioningsToBeCompatible: Boolean = false,
     override val requiredChildDistribution: Seq[Distribution] = Nil,
     override val requiredChildOrdering: Seq[Seq[SortOrder]] = Nil
   ) extends SparkPlan {

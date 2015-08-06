@@ -48,7 +48,7 @@ case class SortMergeJoin(
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
-  override def requiresChildrenToProduceSameNumberOfPartitions: Boolean = true
+  override def requiresChildPartitioningsToBeCompatible: Boolean = true
 
   override def outputOrdering: Seq[SortOrder] = requiredOrders(leftKeys)
 

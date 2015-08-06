@@ -95,6 +95,22 @@ sealed trait Partitioning {
   def guarantees(other: Partitioning): Boolean
 }
 
+object Partitioning {
+  def allCompatible(partitionings: Seq[Partitioning]): Boolean = {
+    // Note: this assumes transitivity
+    partitionings.sliding(2).map {
+      case Seq(a) => true
+      case Seq(a, b) =>
+        if (a.numPartitions != b.numPartitions) {
+          assert(!a.guarantees(b) && !b.guarantees(a))
+          false
+        } else {
+          a.guarantees(b) && b.guarantees(a)
+        }
+    }.forall(_ == true)
+  }
+}
+
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true

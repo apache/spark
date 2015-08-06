@@ -110,10 +110,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
   /**
-   * Specifies whether this operator requires all of its children to produce the same number of
-   * output partitions.
+   * Specifies whether this operator requires all of its children to have [[outputPartitioning]]s
+   * that are compatible with each other.
    */
-  def requiresChildrenToProduceSameNumberOfPartitions: Boolean = false
+  def requiresChildPartitioningsToBeCompatible: Boolean = false
 
   /** Specifies whether this operator outputs UnsafeRows */
   def outputsUnsafeRows: Boolean = false
