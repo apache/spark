@@ -88,8 +88,11 @@ public final class UnsafeKVExternalSorter {
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
         taskMemoryManager, recordComparator, prefixComparator, Math.max(1, map.numElements()));
 
-      final int numKeyFields = keySchema.size();
+      // We cannot use the destructive iterator here because we are reusing the existing memory
+      // pages in BytesToBytesMap to hold records during sorting.
+      // The only new memory we are allocating is the pointer/prefix array.
       BytesToBytesMap.BytesToBytesMapIterator iter = map.iterator();
+      final int numKeyFields = keySchema.size();
       UnsafeRow row = new UnsafeRow();
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
