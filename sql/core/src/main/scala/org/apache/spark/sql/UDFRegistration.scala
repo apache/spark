@@ -26,6 +26,8 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
+import org.apache.spark.sql.execution.aggregate.ScalaUDAF
+import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -50,6 +52,20 @@ class UDFRegistration private[sql] (sqlContext: SQLContext) extends Logging {
       """.stripMargin)
 
     functionRegistry.registerFunction(name, udf.builder)
+  }
+
+  /**
+   * Register a user-defined aggregate function (UDAF).
+   * @param name the name of the UDAF.
+   * @param udaf the UDAF needs to be registered.
+   * @return the registered UDAF.
+   */
+  def register(
+      name: String,
+      udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
+    def builder(children: Seq[Expression]) = ScalaUDAF(children, udaf)
+    functionRegistry.registerFunction(name, builder)
+    udaf
   }
 
   // scalastyle:off
