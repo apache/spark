@@ -26,8 +26,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-import scala.collection.mutable
-
 
 object Cast {
 
@@ -157,7 +155,7 @@ case class Cast(child: Expression, dataType: DataType)
     case ByteType =>
       buildCast[Byte](_, _ != 0)
     case DecimalType() =>
-      buildCast[Decimal](_, _ != Decimal(0))
+      buildCast[Decimal](_, _ != Decimal.ZERO)
     case DoubleType =>
       buildCast[Double](_, _ != 0)
     case FloatType =>
@@ -311,7 +309,7 @@ case class Cast(child: Expression, dataType: DataType)
         case _: NumberFormatException => null
       })
     case BooleanType =>
-      buildCast[Boolean](_, b => changePrecision(if (b) Decimal(1) else Decimal(0), target))
+      buildCast[Boolean](_, b => changePrecision(if (b) Decimal.ONE else Decimal.ZERO, target))
     case DateType =>
       buildCast[Int](_, d => null) // date can't cast to decimal in Hive
     case TimestampType =>

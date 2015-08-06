@@ -25,6 +25,7 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.Accumulators
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar._
+import org.apache.spark.sql.functions._
 import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
 case class BigData(s: String)
@@ -48,6 +49,25 @@ class CachedTableSuite extends QueryTest {
 
   def isMaterialized(rddId: Int): Boolean = {
     ctx.sparkContext.env.blockManager.get(RDDBlockId(rddId, 0)).nonEmpty
+  }
+
+  test("withColumn doesn't invalidate cached dataframe") {
+    var evalCount = 0
+    val myUDF = udf((x: String) => { evalCount += 1; "result" })
+    val df = Seq(("test", 1)).toDF("s", "i").select(myUDF($"s"))
+    df.cache()
+
+    df.collect()
+    assert(evalCount === 1)
+
+    df.collect()
+    assert(evalCount === 1)
+
+    val df2 = df.withColumn("newColumn", lit(1))
+    df2.collect()
+
+    // We should not reevaluate the cached dataframe
+    assert(evalCount === 1)
   }
 
   test("cache temp table") {
@@ -305,12 +325,8 @@ class CachedTableSuite extends QueryTest {
     sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
     sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
 
-    Accumulators.synchronized {
-      val accsSize = Accumulators.originals.size
-      ctx.cacheTable("t1")
-      ctx.cacheTable("t2")
-      assert((accsSize + 2) == Accumulators.originals.size)
-    }
+    ctx.cacheTable("t1")
+    ctx.cacheTable("t2")
 
     sql("SELECT * FROM t1").count()
     sql("SELECT * FROM t2").count()

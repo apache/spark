@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.IOException
 import java.util.{Date, UUID}
 
 import scala.collection.JavaConversions.asScalaIterator
@@ -33,10 +34,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.execution.{RunnableCommand, SQLExecution}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{Utils, SerializableConfiguration}
 
 
 private[sql] case class InsertIntoDataSource(
@@ -102,7 +103,12 @@ private[sql] case class InsertIntoHadoopFsRelation(
       case (SaveMode.ErrorIfExists, true) =>
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
       case (SaveMode.Overwrite, true) =>
-        fs.delete(qualifiedOutputPath, true)
+        Utils.tryOrIOException {
+          if (!fs.delete(qualifiedOutputPath, true /* recursively */)) {
+            throw new IOException(s"Unable to clear output " +
+              s"directory $qualifiedOutputPath prior to writing to it")
+          }
+        }
         true
       case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
         true
@@ -122,25 +128,26 @@ private[sql] case class InsertIntoHadoopFsRelation(
 
       // We create a DataFrame by applying the schema of relation to the data to make sure.
       // We are writing data based on the expected schema,
-      val df = {
-        // For partitioned relation r, r.schema's column ordering can be different from the column
-        // ordering of data.logicalPlan (partition columns are all moved after data column). We
-        // need a Project to adjust the ordering, so that inside InsertIntoHadoopFsRelation, we can
-        // safely apply the schema of r.schema to the data.
-        val project = Project(
-          relation.schema.map(field => new UnresolvedAttribute(Seq(field.name))), query)
 
-        sqlContext.internalCreateDataFrame(
-          DataFrame(sqlContext, project).queryExecution.toRdd, relation.schema)
-      }
+      // For partitioned relation r, r.schema's column ordering can be different from the column
+      // ordering of data.logicalPlan (partition columns are all moved after data column). We
+      // need a Project to adjust the ordering, so that inside InsertIntoHadoopFsRelation, we can
+      // safely apply the schema of r.schema to the data.
+      val project = Project(
+        relation.schema.map(field => new UnresolvedAttribute(Seq(field.name))), query)
 
-      val partitionColumns = relation.partitionColumns.fieldNames
-      if (partitionColumns.isEmpty) {
-        insert(new DefaultWriterContainer(relation, job, isAppend), df)
-      } else {
-        val writerContainer = new DynamicPartitionWriterContainer(
-          relation, job, partitionColumns, PartitioningUtils.DEFAULT_PARTITION_NAME, isAppend)
-        insertWithDynamicPartitions(sqlContext, writerContainer, df, partitionColumns)
+      val queryExecution = DataFrame(sqlContext, project).queryExecution
+      SQLExecution.withNewExecutionId(sqlContext, queryExecution) {
+        val df = sqlContext.internalCreateDataFrame(queryExecution.toRdd, relation.schema)
+
+        val partitionColumns = relation.partitionColumns.fieldNames
+        if (partitionColumns.isEmpty) {
+          insert(new DefaultWriterContainer(relation, job, isAppend), df)
+        } else {
+          val writerContainer = new DynamicPartitionWriterContainer(
+            relation, job, partitionColumns, PartitioningUtils.DEFAULT_PARTITION_NAME, isAppend)
+          insertWithDynamicPartitions(sqlContext, writerContainer, df, partitionColumns)
+        }
       }
     }
 
