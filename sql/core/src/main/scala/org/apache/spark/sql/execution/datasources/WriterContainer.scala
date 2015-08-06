@@ -361,8 +361,7 @@ private[sql] class DynamicPartitionWriterContainer(
         throw new SparkException("Task failed while writing rows.", cause)
     }
 
-    // The `row` argument is supposed to only contain partition column values which have been casted
-    // to strings.
+    /** Open and returns a new OutputWriter given a partition key. */
     def newOutputWriter(key: InternalRow): OutputWriter = {
       val partitionPath = getPartitionString(key).getString(0)
       val path = new Path(getWorkPath, partitionPath)
