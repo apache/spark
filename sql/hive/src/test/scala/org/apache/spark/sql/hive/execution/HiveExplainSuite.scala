@@ -74,4 +74,21 @@ class HiveExplainSuite extends QueryTest {
       "Limit",
       "src")
   }
+
+  test("SPARK-6212: The EXPLAIN output of CTAS only shows the analyzed plan") {
+    checkExistence(sql(
+      s"""
+         |EXPLAIN EXTENDED
+         |CREATE TABLE t1
+         |AS
+         |SELECT * FROM src
+      """.stripMargin), true,
+      "== Parsed Logical Plan ==",
+      "== Analyzed Logical Plan ==",
+      "== Optimized Logical Plan ==",
+      "== Physical Plan ==",
+      "CreateTableAsSelect",
+      "InsertIntoHiveTable",
+      "src")
+  }
 }
