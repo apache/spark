@@ -259,7 +259,7 @@ class Column(object):
         .. note:: Deprecated in 1.5, use :func:`Column.isin` instead.
         """
         warnings.warn("inSet is deprecated. Use isin() instead.")
-        self.isin(*cols)
+        return self.isin(*cols)
 
     @ignore_unicode_prefix
     @since(1.5)
