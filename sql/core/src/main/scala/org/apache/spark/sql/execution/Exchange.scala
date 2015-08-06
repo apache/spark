@@ -201,62 +201,76 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
  */
 private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[SparkPlan] {
   // TODO: Determine the number of partitions.
-  def numPartitions: Int = sqlContext.conf.numShufflePartitions
+  private def numPartitions: Int = sqlContext.conf.numShufflePartitions
 
-  def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
-    case operator: SparkPlan =>
-      // Adds Exchange or Sort operators as required
-      def addOperatorsIfNecessary(
-          partitioning: Partitioning,
-          rowOrdering: Seq[SortOrder],
-          child: SparkPlan): SparkPlan = {
+  private def canonicalPartitioning(requiredDistribution: Distribution): Partitioning = {
+    requiredDistribution match {
+      case AllTuples => SinglePartition
+      case ClusteredDistribution(clustering) => HashPartitioning(clustering, numPartitions)
+      case OrderedDistribution(ordering) => RangePartitioning(ordering, numPartitions)
+      case dist => sys.error(s"Do not know how to satisfy distribution $dist")
+    }
+  }
 
-        def addShuffleIfNecessary(child: SparkPlan): SparkPlan = {
-          if (!child.outputPartitioning.guarantees(partitioning)) {
-            Exchange(partitioning, child)
-          } else {
-            child
-          }
-        }
-
-        def addSortIfNecessary(child: SparkPlan): SparkPlan = {
-
-          if (rowOrdering.nonEmpty) {
-            // If child.outputOrdering is [a, b] and rowOrdering is [a], we do not need to sort.
-            val minSize = Seq(rowOrdering.size, child.outputOrdering.size).min
-            if (minSize == 0 || rowOrdering.take(minSize) != child.outputOrdering.take(minSize)) {
-              sqlContext.planner.BasicOperators.getSortOperator(rowOrdering, global = false, child)
-            } else {
+  private def ensureChildNumPartitionsAgreementIfNecessary(operator: SparkPlan): SparkPlan = {
+    if (operator.requiresChildrenToProduceSameNumberOfPartitions) {
+      if (operator.children.map(_.outputPartitioning.numPartitions).distinct.size > 1) {
+        val newChildren = operator.children.zip(operator.requiredChildDistribution).map {
+          case (child, requiredDistribution) =>
+            val targetPartitioning = canonicalPartitioning(requiredDistribution)
+            if (child.outputPartitioning.guarantees(targetPartitioning)) {
               child
+            } else {
+              Exchange(targetPartitioning, child)
             }
-          } else {
-            child
-          }
         }
-
-        addSortIfNecessary(addShuffleIfNecessary(child))
+        operator.withNewChildren(newChildren)
+      } else {
+        operator
       }
+    } else {
+      operator
+    }
+  }
 
-      val requirements =
-        (operator.requiredChildDistribution, operator.requiredChildOrdering, operator.children)
+  private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
 
-      val fixedChildren = requirements.zipped.map {
-        case (AllTuples, rowOrdering, child) =>
-          addOperatorsIfNecessary(SinglePartition, rowOrdering, child)
-        case (ClusteredDistribution(clustering), rowOrdering, child) =>
-          addOperatorsIfNecessary(HashPartitioning(clustering, numPartitions), rowOrdering, child)
-        case (OrderedDistribution(ordering), rowOrdering, child) =>
-          addOperatorsIfNecessary(RangePartitioning(ordering, numPartitions), rowOrdering, child)
+    def addShuffleIfNecessary(child: SparkPlan, requiredDistribution: Distribution): SparkPlan = {
+      if (child.outputPartitioning.satisfies(requiredDistribution)) {
+        child
+      } else {
+        Exchange(canonicalPartitioning(requiredDistribution), child)
+      }
+    }
 
-        case (UnspecifiedDistribution, Seq(), child) =>
+    def addSortIfNecessary(child: SparkPlan, requiredOrdering: Seq[SortOrder]): SparkPlan = {
+      if (requiredOrdering.nonEmpty) {
+        // If child.outputOrdering is [a, b] and requiredOrdering is [a], we do not need to sort.
+        val minSize = Seq(requiredOrdering.size, child.outputOrdering.size).min
+        if (minSize == 0 || requiredOrdering.take(minSize) != child.outputOrdering.take(minSize)) {
+          sqlContext.planner.BasicOperators.getSortOperator(requiredOrdering, global = false, child)
+        } else {
           child
-        case (UnspecifiedDistribution, rowOrdering, child) =>
-          sqlContext.planner.BasicOperators.getSortOperator(rowOrdering, global = false, child)
-
-        case (dist, ordering, _) =>
-          sys.error(s"Don't know how to ensure $dist with ordering $ordering")
+        }
+      } else {
+        child
       }
+    }
 
-      operator.withNewChildren(fixedChildren)
+    val children = operator.children
+    val requiredChildDistribution = operator.requiredChildDistribution
+    val requiredChildOrdering = operator.requiredChildOrdering
+    assert(children.length == requiredChildDistribution.length)
+    assert(children.length == requiredChildOrdering.length)
+    val newChildren = (children, requiredChildDistribution, requiredChildOrdering).zipped.map {
+      case (child, requiredDistribution, requiredOrdering) =>
+        addSortIfNecessary(addShuffleIfNecessary(child, requiredDistribution), requiredOrdering)
+    }
+    operator.withNewChildren(newChildren)
+  }
+
+  def apply(plan: SparkPlan): SparkPlan =  plan.transformUp {
+    case operator: SparkPlan =>
+      ensureDistributionAndOrdering(ensureChildNumPartitionsAgreementIfNecessary(operator))
   }
 }

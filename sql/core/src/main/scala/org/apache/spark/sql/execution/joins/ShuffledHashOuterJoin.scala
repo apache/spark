@@ -44,6 +44,8 @@ case class ShuffledHashOuterJoin(
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
+  override def requiresChildrenToProduceSameNumberOfPartitions: Boolean = true
+
   override def outputPartitioning: Partitioning = joinType match {
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning

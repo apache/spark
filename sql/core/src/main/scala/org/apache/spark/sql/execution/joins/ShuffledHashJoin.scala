@@ -46,6 +46,8 @@ case class ShuffledHashJoin(
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
+  override def requiresChildrenToProduceSameNumberOfPartitions: Boolean = true
+
   protected override def doExecute(): RDD[InternalRow] = {
     buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
       val hashed = HashedRelation(buildIter, buildSideKeyGenerator)
