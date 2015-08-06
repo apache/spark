@@ -154,14 +154,17 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
-   * Returns an iterator over the keys and values in this map.
+   * Returns an iterator over the keys and values in this map. This uses destructive iterator of
+   * BytesToBytesMap. So it is illegal to call any other method on this map after `iterator()` has
+   * been called.
    *
    * For efficiency, each call returns the same object.
    */
   public KVIterator<UnsafeRow, UnsafeRow> iterator() {
     return new KVIterator<UnsafeRow, UnsafeRow>() {
 
-      private final BytesToBytesMap.BytesToBytesMapIterator mapLocationIterator = map.iterator();
+      private final BytesToBytesMap.BytesToBytesMapIterator mapLocationIterator =
+        map.destructiveIterator();
       private final UnsafeRow key = new UnsafeRow();
       private final UnsafeRow value = new UnsafeRow();
 

@@ -89,7 +89,7 @@ public final class UnsafeKVExternalSorter {
         taskMemoryManager, recordComparator, prefixComparator, Math.max(1, map.numElements()));
 
       final int numKeyFields = keySchema.size();
-      BytesToBytesMap.BytesToBytesMapIterator iter = map.iterator();
+      BytesToBytesMap.BytesToBytesMapIterator iter = map.destructiveIterator();
       UnsafeRow row = new UnsafeRow();
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
