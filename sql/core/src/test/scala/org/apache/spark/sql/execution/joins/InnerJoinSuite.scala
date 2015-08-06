@@ -41,7 +41,6 @@ class InnerJoinSuite extends SparkPlanTest {
       rightRows: DataFrame,
       condition: Expression,
       expectedAnswer: Seq[Product]): Unit = {
-    // Precondition: leftRows and rightRows should be sorted according to the join keys.
 
     val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
     ExtractEquiJoinKeys.unapply(join).foreach {
