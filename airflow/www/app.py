@@ -1,3 +1,4 @@
+from __future__ import print_function
 import copy
 from datetime import datetime, timedelta
 import dateutil.parser
@@ -1920,7 +1921,7 @@ def integrate_plugins():
     for v in admin_views:
         admin.add_view(v)
     for bp in flask_blueprints:
-        print bp
+        print(bp)
         app.register_blueprint(bp)
     for ml in menu_links:
         admin.add_link(ml)
