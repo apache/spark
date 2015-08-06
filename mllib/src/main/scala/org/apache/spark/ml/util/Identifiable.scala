@@ -26,6 +26,9 @@ import org.apache.spark.annotation.DeveloperApi
  * :: DeveloperApi ::
  *
  * Trait for an object with an immutable unique ID that identifies itself and its derivatives.
+ *
+ * WARNING: There have not yet been final discussions on this API, so it may be broken in future
+ *          releases.
  */
 @DeveloperApi
 trait Identifiable {
