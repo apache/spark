@@ -138,6 +138,11 @@ public final class UnsafeExternalSorter {
       this.inMemSorter = existingInMemorySorter;
     }
 
+    // Acquire a new page as soon as we construct the sorter to ensure that we have at
+    // least one page to work with. Otherwise, other operators in the same task may starve
+    // this sorter (SPARK-9709).
+    acquireNewPage();
+
     // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
     // the end of the task. This is necessary to avoid memory leaks in when the downstream operator
     // does not fully consume the sorter's output (e.g. sort followed by limit).
@@ -343,22 +348,32 @@ public final class UnsafeExternalSorter {
         throw new IOException("Required space " + requiredSpace + " is greater than page size (" +
           pageSizeBytes + ")");
       } else {
-        final long memoryAcquired = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
-        if (memoryAcquired < pageSizeBytes) {
-          shuffleMemoryManager.release(memoryAcquired);
-          spill();
-          final long memoryAcquiredAfterSpilling = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
-          if (memoryAcquiredAfterSpilling != pageSizeBytes) {
-            shuffleMemoryManager.release(memoryAcquiredAfterSpilling);
-            throw new IOException("Unable to acquire " + pageSizeBytes + " bytes of memory");
-          }
-        }
-        currentPage = taskMemoryManager.allocatePage(pageSizeBytes);
-        currentPagePosition = currentPage.getBaseOffset();
-        freeSpaceInCurrentPage = pageSizeBytes;
-        allocatedPages.add(currentPage);
+        acquireNewPage();
       }
     }
+  }
+
+  /**
+   * Acquire a new page from the {@link ShuffleMemoryManager}.
+   *
+   * If there is not enough space to allocate the new page, spill all existing ones
+   * and try again. If there is still not enough space, report error to the caller.
+   */
+  private void acquireNewPage() throws IOException {
+    final long memoryAcquired = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
+    if (memoryAcquired < pageSizeBytes) {
+      shuffleMemoryManager.release(memoryAcquired);
+      spill();
+      final long memoryAcquiredAfterSpilling = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
+      if (memoryAcquiredAfterSpilling != pageSizeBytes) {
+        shuffleMemoryManager.release(memoryAcquiredAfterSpilling);
+        throw new IOException("Unable to acquire " + pageSizeBytes + " bytes of memory");
+      }
+    }
+    currentPage = taskMemoryManager.allocatePage(pageSizeBytes);
+    currentPagePosition = currentPage.getBaseOffset();
+    freeSpaceInCurrentPage = pageSizeBytes;
+    allocatedPages.add(currentPage);
   }
 
   /**
