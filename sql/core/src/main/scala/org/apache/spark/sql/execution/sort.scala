@@ -164,7 +164,7 @@ case class TungstenSort(
     }
 
     // Note: we need to set up the external sorter in each partition before computing
-    // the parent partition, so we cannot simply use `mapPartitions` here.
+    // the parent partition, so we cannot simply use `mapPartitions` here (SPARK-9709).
     new MapPartitionsWithPreparationRDD[InternalRow, InternalRow, UnsafeExternalRowSorter](
       child.execute(), preparePartition, executePartition, preservesPartitioning = true)
   }

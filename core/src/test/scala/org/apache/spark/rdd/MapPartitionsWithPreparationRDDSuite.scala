@@ -27,7 +27,7 @@ class MapPartitionsWithPreparationRDDSuite extends SparkFunSuite with LocalSpark
     val maxMemory = ShuffleMemoryManager.getMaxMemory(conf)
     sc = new SparkContext(conf)
 
-    // Make sure we can in fact acquire all the memory once, but not twice.
+    // First, make sure we can in fact acquire all the memory once, but not twice.
     val shuffleMemoryManager = sc.env.shuffleMemoryManager
     assert(shuffleMemoryManager.tryToAcquire(maxMemory) > 0)
     assert(shuffleMemoryManager.tryToAcquire(maxMemory) === 0)
@@ -55,8 +55,8 @@ class MapPartitionsWithPreparationRDDSuite extends SparkFunSuite with LocalSpark
     }
 
     // Verify that that we are victorious!
-    // More specifically: we acquired memory and our parent didn't,
-    // meaning prepared is run before parent partition is computed.
+    // More specifically: verify that we successfully acquired memory and our parent didn't,
+    // which means that our prepare partition method is run before parent partition is computed.
     val result = {
       new MapPartitionsWithPreparationRDD[(Long, Long), Long, Long](
         parent, preparePartition, executePartition).collect()
