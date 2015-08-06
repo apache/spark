@@ -67,9 +67,15 @@ class Interaction(override val uid: String) extends Estimator[PipelineModel]
           $(outputCol)
         }
         encoderStages += new IndexCombiner(indexedCols, factorCols, combinedIndex)
-        encoderStages += new OneHotEncoder()
-          .setInputCol(combinedIndex)
-          .setOutputCol(encodedCol)
+        encoderStages += {
+          val encoder = new OneHotEncoder()
+            .setInputCol(combinedIndex)
+            .setOutputCol(encodedCol)
+          if ($(inputCols).length > 1) {
+            encoder.setDropLast(false)  // R includes all columns for interactions.
+          }
+          encoder
+        }
         Some(encodedCol)
       } else {
         None

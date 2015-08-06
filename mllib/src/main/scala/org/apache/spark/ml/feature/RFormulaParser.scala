@@ -153,7 +153,7 @@ private[ml] object RFormulaParser extends RegexParsers {
   def columnRef: Parser[ColumnRef] =
     "([a-zA-Z]|\\.[a-zA-Z_])[a-zA-Z0-9._]*".r ^^ { case a => ColumnRef(a) }
 
-  def dot: Parser[InteractionComponent] = "\\.".r ^^ { case _ => Dot } 
+  def dot: Parser[InteractionComponent] = "\\.".r ^^ { case _ => Dot }
 
   def interaction: Parser[List[InteractionComponent]] = repsep(columnRef | dot, ":")
 

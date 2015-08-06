@@ -69,15 +69,8 @@ class VectorAssembler(override val uid: String)
         case _: VectorUDT =>
           val group = AttributeGroup.fromStructField(field)
           if (group.attributes.isDefined) {
-            // If attributes are defined, copy them with updated names.
-            group.attributes.get.map { attr =>
-//              if (attr.name.isDefined) {
-//                // TODO: Define a rigorous naming scheme.
-//                attr.withName(c + "_" + attr.name.get)
-//              } else {
-                attr
-//              }
-            }
+            // If attributes are defined, copy them.
+            group.attributes.get
           } else {
             // Otherwise, treat all attributes as numeric. If we cannot get the number of attributes
             // from metadata, check the first row.
