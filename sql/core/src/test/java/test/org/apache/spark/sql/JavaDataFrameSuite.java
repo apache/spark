@@ -167,6 +167,7 @@ public class JavaDataFrameSuite {
     for (int i = 0; i < result.length(); i++) {
       Assert.assertEquals(bean.getB()[i], result.apply(i));
     }
+    @SuppressWarnings("unchecked")
     Seq<Integer> outputBuffer = (Seq<Integer>) first.getJavaMap(2).get("hello");
     Assert.assertArrayEquals(
       bean.getC().get("hello"),

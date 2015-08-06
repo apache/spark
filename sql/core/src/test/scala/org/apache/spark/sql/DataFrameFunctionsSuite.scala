@@ -208,6 +208,14 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row(2743272264L, 2180413220L))
   }
 
+  test("string function find_in_set") {
+    val df = Seq(("abc,b,ab,c,def", "abc,b,ab,c,def")).toDF("a", "b")
+
+    checkAnswer(
+      df.selectExpr("find_in_set('ab', a)", "find_in_set('x', b)"),
+      Row(3, 0))
+  }
+
   test("conditional function: least") {
     checkAnswer(
       testData2.select(least(lit(-1), lit(0), col("a"), col("b"))).limit(1),
@@ -315,9 +323,9 @@ class DataFrameFunctionsSuite extends QueryTest {
 
   test("array size function") {
     val df = Seq(
-      (Array[Int](1, 2), "x"),
-      (Array[Int](), "y"),
-      (Array[Int](1, 2, 3), "z")
+      (Seq[Int](1, 2), "x"),
+      (Seq[Int](), "y"),
+      (Seq[Int](1, 2, 3), "z")
     ).toDF("a", "b")
     checkAnswer(
       df.select(size($"a")),
@@ -342,6 +350,49 @@ class DataFrameFunctionsSuite extends QueryTest {
     checkAnswer(
       df.selectExpr("size(a)"),
       Seq(Row(2), Row(0), Row(3))
+    )
+  }
+
+  test("array contains function") {
+    val df = Seq(
+      (Seq[Int](1, 2), "x"),
+      (Seq[Int](), "x")
+    ).toDF("a", "b")
+
+    // Simple test cases
+    checkAnswer(
+      df.select(array_contains(df("a"), 1)),
+      Seq(Row(true), Row(false))
+    )
+    checkAnswer(
+      df.selectExpr("array_contains(a, 1)"),
+      Seq(Row(true), Row(false))
+    )
+    checkAnswer(
+      df.select(array_contains(array(lit(2), lit(null)), 1)),
+      Seq(Row(false), Row(false))
+    )
+
+    // In hive, this errors because null has no type information
+    intercept[AnalysisException] {
+      df.select(array_contains(df("a"), null))
+    }
+    intercept[AnalysisException] {
+      df.selectExpr("array_contains(a, null)")
+    }
+    intercept[AnalysisException] {
+      df.selectExpr("array_contains(null, 1)")
+    }
+
+    // In hive, if either argument has a matching type has a null value, return false, even if
+    // the first argument array contains a null and the second argument is null
+    checkAnswer(
+      df.selectExpr("array_contains(array(array(1), null)[1], 1)"),
+      Seq(Row(false), Row(false))
+    )
+    checkAnswer(
+      df.selectExpr("array_contains(array(0, null), array(1, null)[1])"),
+      Seq(Row(false), Row(false))
     )
   }
 }

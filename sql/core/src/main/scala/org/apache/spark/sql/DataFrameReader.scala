@@ -237,7 +237,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   def json(jsonRDD: RDD[String]): DataFrame = {
     val samplingRatio = extraOptions.getOrElse("samplingRatio", "1.0").toDouble
     sqlContext.baseRelationToDataFrame(
-      new JSONRelation(() => jsonRDD, None, samplingRatio, userSpecifiedSchema)(sqlContext))
+      new JSONRelation(Some(jsonRDD), samplingRatio, userSpecifiedSchema, None, None)(sqlContext))
   }
 
   /**
@@ -260,7 +260,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
 
       sqlContext.baseRelationToDataFrame(
         new ParquetRelation(
-          globbedPaths.map(_.toString), None, None, extraOptions.toMap)(sqlContext))
+          globbedPaths.map(_.toString), userSpecifiedSchema, None, extraOptions.toMap)(sqlContext))
     }
   }
 
