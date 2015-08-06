@@ -133,7 +133,6 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
       try {
         val localDir = Utils.createDirectory(rootDir, "blockmgr")
-        Utils.chmod700(localDir)
         logInfo(s"Created local directory at $localDir")
         Some(localDir)
       } catch {
