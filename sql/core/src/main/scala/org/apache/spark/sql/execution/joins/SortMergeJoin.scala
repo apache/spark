@@ -48,9 +48,6 @@ case class SortMergeJoin(
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
-  // this is to manually construct an ordering that can be used to compare keys from both sides
-  private val keyOrdering: RowOrdering = RowOrdering.forSchema(leftKeys.map(_.dataType))
-
   override def outputOrdering: Seq[SortOrder] = requiredOrders(leftKeys)
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
@@ -59,8 +56,10 @@ case class SortMergeJoin(
   @transient protected lazy val leftKeyGenerator = newProjection(leftKeys, left.output)
   @transient protected lazy val rightKeyGenerator = newProjection(rightKeys, right.output)
 
-  private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] =
+  private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] = {
+    // This must be ascending in order to agree with the `keyOrdering` defined in `doExecute()`.
     keys.map(SortOrder(_, Ascending))
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val leftResults = left.execute().map(_.copy())
@@ -68,6 +67,8 @@ case class SortMergeJoin(
 
     leftResults.zipPartitions(rightResults) { (leftIter, rightIter) =>
       new Iterator[InternalRow] {
+        // An ordering that can be used to compare keys from both sides.
+        private[this] val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
         // Mutable per row objects.
         private[this] val joinRow = new JoinedRow
         private[this] var leftElement: InternalRow = _

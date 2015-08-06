@@ -2500,6 +2500,7 @@ object functions {
    * @group udf_funcs
    * @since 1.5.0
    */
+  @scala.annotation.varargs
   def callUDF(udfName: String, cols: Column*): Column = {
     UnresolvedFunction(udfName, cols.map(_.expr), isDistinct = false)
   }

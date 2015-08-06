@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.SQLTestUtils
@@ -263,7 +262,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
     val hasGeneratedAgg = df.queryExecution.executedPlan
-      .collect { case _: GeneratedAggregate | _: aggregate.Aggregate => true }
+      .collect { case _: aggregate.Aggregate => true }
       .nonEmpty
     if (!hasGeneratedAgg) {
       fail(
@@ -1603,7 +1602,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Row(new CalendarInterval(-(12 * 3 - 3), -(7L * MICROS_PER_WEEK + 123))))
   }
 
-  test("aggregation with codegen updates peak execution memory") {
+  ignore("aggregation with codegen updates peak execution memory") {
     withSQLConf(
         (SQLConf.CODEGEN_ENABLED.key, "true"),
         (SQLConf.USE_SQL_AGGREGATE2.key, "false")) {

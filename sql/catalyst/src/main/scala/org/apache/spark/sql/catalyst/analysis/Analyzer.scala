@@ -140,7 +140,7 @@ class Analyzer(
   object ResolveAliases extends Rule[LogicalPlan] {
     private def assignAliases(exprs: Seq[NamedExpression]) = {
       // The `UnresolvedAlias`s will appear only at root of a expression tree, we don't need
-      // to resolveOperator down the whole tree.
+      // to traverse the whole tree.
       exprs.zipWithIndex.map {
         case (u @ UnresolvedAlias(child), i) =>
           child match {
@@ -872,7 +872,6 @@ class Analyzer(
     // We have to use transformDown at here to make sure the rule of
     // "Aggregate with Having clause" will be triggered.
     def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-
 
       // Aggregate with Having clause. This rule works with an unresolved Aggregate because
       // a resolved Aggregate will not have Window Functions.
