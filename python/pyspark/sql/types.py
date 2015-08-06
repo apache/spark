@@ -1223,6 +1223,11 @@ class Row(tuple):
         except ValueError:
             raise AttributeError(item)
 
+    def __setattr__(self, key, value):
+        if key != '__fields__':
+            raise Exception("Row is read-only")
+        self.__dict__[key] = value
+
     def __reduce__(self):
         """Returns a tuple so Python knows how to pickle Row."""
         if hasattr(self, "__fields__"):
