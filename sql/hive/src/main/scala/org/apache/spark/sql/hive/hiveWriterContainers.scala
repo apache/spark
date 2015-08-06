@@ -211,9 +211,9 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
       }
     }
 
-    val dynamicPartPath = dynamicPartColNames.map { colName =>
-      val fieldIndex = schema.fieldIndex(colName)
-      val rawVal = row.get(fieldIndex, schema(fieldIndex).dataType)
+    val nonDynamicPartLen = schema.length - dynamicPartColNames.length
+    val dynamicPartPath = dynamicPartColNames.zipWithIndex.map { case (colName, i) =>
+      val rawVal = row.get(nonDynamicPartLen + i, schema(colName).dataType)
       val string = if (rawVal == null) null else convertToHiveRawString(colName, rawVal)
       val colString =
         if (string == null || string.isEmpty) {
