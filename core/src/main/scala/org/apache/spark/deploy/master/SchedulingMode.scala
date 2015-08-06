@@ -20,12 +20,12 @@ package org.apache.spark.deploy.master
 /**
  *  Determines which policy is used to order Spark applications.
  */
-object SchedulingMode extends Enumeration {
+private[master] object SchedulingMode extends Enumeration {
 
   type SchedulingMode = Value
   val FIFO, PRIORITY = Value
 }
 
-case class SchedulingSetting(
+private[master] case class SchedulingSetting(
     mode: SchedulingMode.SchedulingMode,
     configFile: Option[String])
