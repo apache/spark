@@ -17,25 +17,28 @@
 
 package org.apache.spark.network.yarn;
 
+import java.io.*;
 import java.nio.ByteBuffer;
-import java.util.List;
+import java.util.*;
+import java.util.Map.Entry;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.AuxiliaryService;
 import org.apache.hadoop.yarn.server.api.ApplicationInitializationContext;
 import org.apache.hadoop.yarn.server.api.ApplicationTerminationContext;
 import org.apache.hadoop.yarn.server.api.ContainerInitializationContext;
 import org.apache.hadoop.yarn.server.api.ContainerTerminationContext;
+import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.sasl.SaslServerBootstrap;
 import org.apache.spark.network.sasl.ShuffleSecretManager;
-import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler;
@@ -79,11 +82,29 @@ public class YarnShuffleService extends AuxiliaryService {
   private TransportServer shuffleServer = null;
 
   // Handles registering executors and opening shuffle blocks
-  private ExternalShuffleBlockHandler blockHandler;
+  @VisibleForTesting
+  ExternalShuffleBlockHandler blockHandler;
+
+  // Where to store & reload executor info for recovering state after an NM restart
+  @VisibleForTesting
+  File registeredExecutorFile;
+
+  // just for testing when you want to find an open port
+  @VisibleForTesting
+  static int boundPort = -1;
+
+  // just for integration tests that want to look at this file -- in general not sensible as
+  // a static
+  @VisibleForTesting
+  static YarnShuffleService instance;
+
+  @VisibleForTesting
+  Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> recoveredExecutorRegistrations = null;
 
   public YarnShuffleService() {
     super("spark_shuffle");
     logger.info("Initializing YARN shuffle service for Spark");
+    instance = this;
   }
 
   /**
@@ -100,11 +121,34 @@ public class YarnShuffleService extends AuxiliaryService {
    */
   @Override
   protected void serviceInit(Configuration conf) {
+
+    // In case this NM was killed while there were running spark applications, we need to restore
+    // lost state for the existing executors.  We look for an existing file in the NM's local dirs.
+    // If we don't find one, then we choose a file to use to save the state next time.  However, we
+    // do *not* immediately register all the executors in that file, just in case the application
+    // was terminated while the NM was restarting.  We wait until yarn tells the service about the
+    // app again via #initializeApplication, so we know it's still running.  That is important
+    // for preventing a leak where the app data would stick around *forever*.  This does leave
+    // a small race -- if the NM restarts *again*, after only some of the existing apps have been
+    // re-registered, the info of the remaining apps is lost.
+    registeredExecutorFile =
+      findRegisteredExecutorFile(conf.getStrings("yarn.nodemanager.local-dirs"));
+    try {
+      recoveredExecutorRegistrations = reloadRegisteredExecutors();
+    } catch (Exception e) {
+      recoveredExecutorRegistrations = new HashMap<>();
+      logger.error("Failed to load previously registered executors", e);
+    }
+
     TransportConf transportConf = new TransportConf(new HadoopConfigProvider(conf));
     // If authentication is enabled, set up the shuffle server to use a
     // special RPC handler that filters out unauthenticated fetch requests
     boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
-    blockHandler = new ExternalShuffleBlockHandler(transportConf);
+    try {
+      blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile);
+    } catch (Exception e) {
+      logger.error("Failed to initial external shuffle service", e);
+    }
 
     List<TransportServerBootstrap> bootstraps = Lists.newArrayList();
     if (authEnabled) {
@@ -116,9 +160,13 @@ public class YarnShuffleService extends AuxiliaryService {
       SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
     TransportContext transportContext = new TransportContext(transportConf, blockHandler);
     shuffleServer = transportContext.createServer(port, bootstraps);
+    // the port should normally be fixed, but for tests its useful to find an open port
+    port = shuffleServer.getPort();
+    boundPort = port;
     String authEnabledString = authEnabled ? "enabled" : "not enabled";
     logger.info("Started YARN shuffle service for Spark on port {}. " +
-      "Authentication is {}.", port, authEnabledString);
+      "Authentication is {}.  Registered executor file is {}", port, authEnabledString,
+      registeredExecutorFile);
   }
 
   @Override
@@ -132,6 +180,16 @@ public class YarnShuffleService extends AuxiliaryService {
       }
     } catch (Exception e) {
       logger.error("Exception when initializing application {}", appId, e);
+    }
+    // See if we already have data for this app from before the restart -- if so, re-register
+    // those executors
+    List<Entry<AppExecId, ExecutorShuffleInfo>> executorsForApp =
+      recoveredExecutorRegistrations.get(appId);
+    if (executorsForApp != null) {
+      for (Entry<AppExecId, ExecutorShuffleInfo> entry: executorsForApp) {
+        logger.info("re-registering {} with {}", entry.getKey(), entry.getValue());
+        blockHandler.reregisterExecutor(entry.getKey(), entry.getValue());
+      }
     }
   }
 
@@ -161,6 +219,16 @@ public class YarnShuffleService extends AuxiliaryService {
     logger.info("Stopping container {}", containerId);
   }
 
+  private File findRegisteredExecutorFile(String[] localDirs) {
+    for (String dir: localDirs) {
+      File f = new File(dir, "registeredExecutors.bin");
+      if (f.exists()) {
+        return f;
+      }
+    }
+    return new File(localDirs[0], "registeredExecutors.bin");
+  }
+
   /**
    * Close the shuffle server to clean up any associated state.
    */
@@ -180,5 +248,45 @@ public class YarnShuffleService extends AuxiliaryService {
   public ByteBuffer getMetaData() {
     return ByteBuffer.allocate(0);
   }
+
+  private Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> reloadRegisteredExecutors()
+      throws IOException, ClassNotFoundException {
+    if (registeredExecutorFile != null && registeredExecutorFile.exists()) {
+      logger.info("Reloading executors from {}", registeredExecutorFile);
+      return reloadRegisteredExecutors(registeredExecutorFile);
+    } else {
+      logger.info("No executor info to reload");
+      return new HashMap<>();
+    }
+  }
+
+
+  @VisibleForTesting
+  static Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> reloadRegisteredExecutors(
+      File file
+  ) throws IOException, ClassNotFoundException {
+    Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> result = new HashMap<>();
+    ObjectInputStream in = null;
+    try {
+      in = new ObjectInputStream(new FileInputStream(file));
+      Map<AppExecId, ExecutorShuffleInfo> registeredExecutors =
+        (Map<AppExecId, ExecutorShuffleInfo>) in.readObject();
+      for (Entry<AppExecId, ExecutorShuffleInfo> e : registeredExecutors.entrySet()) {
+        List<Map.Entry<AppExecId, ExecutorShuffleInfo>> executorsForApp =
+          result.get(e.getKey().appId);
+        if (executorsForApp == null) {
+          executorsForApp = new ArrayList<>();
+          result.put(e.getKey().appId, executorsForApp);
+        }
+        executorsForApp.add(new AbstractMap.SimpleImmutableEntry<>(e.getKey(), e.getValue()));
+      }
+    } finally {
+      if (in != null) {
+        in.close();
+      }
+    }
+    return result;
+  }
+
 
 }

@@ -17,10 +17,7 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
+import java.io.*;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
@@ -30,6 +27,7 @@ import java.util.concurrent.Executors;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
+import com.google.common.io.Files;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,23 +51,31 @@ public class ExternalShuffleBlockResolver {
   private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockResolver.class);
 
   // Map containing all registered executors' metadata.
-  private final ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors;
+  @VisibleForTesting
+  final ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors;
 
   // Single-threaded Java executor used to perform expensive recursive directory deletion.
   private final Executor directoryCleaner;
 
   private final TransportConf conf;
 
-  public ExternalShuffleBlockResolver(TransportConf conf) {
-    this(conf, Executors.newSingleThreadExecutor(
+  @VisibleForTesting
+  final File registeredExecutorFile;
+
+  public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile) {
+    this(conf, registeredExecutorFile, Executors.newSingleThreadExecutor(
         // Add `spark` prefix because it will run in NM in Yarn mode.
         NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
   }
 
   // Allows tests to have more control over when directories are cleaned up.
   @VisibleForTesting
-  ExternalShuffleBlockResolver(TransportConf conf, Executor directoryCleaner) {
+  ExternalShuffleBlockResolver(
+      TransportConf conf,
+      File registeredExecutorFile,
+      Executor directoryCleaner) {
     this.conf = conf;
+    this.registeredExecutorFile = registeredExecutorFile;
     this.executors = Maps.newConcurrentMap();
     this.directoryCleaner = directoryCleaner;
   }
@@ -81,7 +87,14 @@ public class ExternalShuffleBlockResolver {
       ExecutorShuffleInfo executorInfo) {
     AppExecId fullId = new AppExecId(appId, execId);
     logger.info("Registered executor {} with {}", fullId, executorInfo);
-    executors.put(fullId, executorInfo);
+    synchronized (executors) {
+      executors.put(fullId, executorInfo);
+      try {
+        saveRegisteredExecutors();
+      } catch (Exception e) {
+        logger.error("Error saving registered executors", e);
+      }
+    }
   }
 
   /**
@@ -150,6 +163,14 @@ public class ExternalShuffleBlockResolver {
         }
       }
     }
+    synchronized (executors) {
+      try {
+        saveRegisteredExecutors();
+      } catch (Exception e) {
+        logger.error("Error saving registered executors", e);
+      }
+    }
+
   }
 
   /**
@@ -221,11 +242,11 @@ public class ExternalShuffleBlockResolver {
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */
-  private static class AppExecId {
-    final String appId;
+  public static class AppExecId implements Serializable {
+    public final String appId;
     final String execId;
 
-    private AppExecId(String appId, String execId) {
+    public AppExecId(String appId, String execId) {
       this.appId = appId;
       this.execId = execId;
     }
@@ -250,6 +271,21 @@ public class ExternalShuffleBlockResolver {
         .add("appId", appId)
         .add("execId", execId)
         .toString();
+    }
+  }
+
+  /**
+   * write out the set of registered executors to a file so we can reload them on restart.
+   * You must have a lock on executors when calling this
+   */
+  private void saveRegisteredExecutors() throws IOException {
+    if (registeredExecutorFile != null) {
+      File tmp = new File(registeredExecutorFile.getAbsolutePath() + ".tmp");
+      ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(tmp));
+      out.writeObject(executors);
+      out.close();
+      Files.move(tmp, registeredExecutorFile);
+      logger.info("Saving registered executors to {}", registeredExecutorFile);
     }
   }
 }

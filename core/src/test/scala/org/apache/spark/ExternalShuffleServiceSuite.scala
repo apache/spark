@@ -36,7 +36,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
 
   override def beforeAll() {
     val transportConf = SparkTransportConf.fromSparkConf(conf, numUsableCores = 2)
-    rpcHandler = new ExternalShuffleBlockHandler(transportConf)
+    rpcHandler = new ExternalShuffleBlockHandler(transportConf, null)
     val transportContext = new TransportContext(transportConf, rpcHandler)
     server = transportContext.createServer()
 

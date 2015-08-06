@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
+import java.io.Serializable;
 import java.util.Arrays;
 
 import com.google.common.base.Objects;
@@ -26,7 +27,7 @@ import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.protocol.Encoders;
 
 /** Contains all configuration necessary for locating the shuffle files of an executor. */
-public class ExecutorShuffleInfo implements Encodable {
+public class ExecutorShuffleInfo implements Encodable, Serializable {
   /** The base set of local directories that the executor stores its shuffle files in. */
   public final String[] localDirs;
   /** Number of subdirectories created within each localDir. */
