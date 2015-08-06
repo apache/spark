@@ -16,6 +16,7 @@
 #
 
 import sys
+import warnings
 
 if sys.version >= '3':
     basestring = str
