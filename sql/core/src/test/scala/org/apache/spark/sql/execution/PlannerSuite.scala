@@ -169,6 +169,11 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
     val planned = df1.repartition(1000).join(df2, "_1").queryExecution.executedPlan
     val repartitions = planned.collect { case rep: Repartition => rep }
     assert(repartitions.isEmpty, "Should remove repartition")
+
+    // DataFrame.coalesce will do repartition with shuffle=False
+    val planned2 = df1.coalesce(1000).join(df2, "_1").queryExecution.executedPlan
+    val repartitions2 = planned2.collect { case rep: Repartition => rep }
+    assert(repartitions2.nonEmpty, "Should not remove repartition")
   }
 
   test("PartitioningCollection") {

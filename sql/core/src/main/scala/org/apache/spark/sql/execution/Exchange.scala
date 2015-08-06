@@ -213,8 +213,11 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
 
         def addShuffleIfNecessary(child: SparkPlan): SparkPlan = {
           if (!child.outputPartitioning.guarantees(partitioning)) {
-            // SPARK-9563: We should remove repartition operators
-            // if they are the child of Exchange and shuffle=True
+            // For an query like df1.repartition(1000).join(df2, "_1"), we will repartition df1
+            // with shuffle. Then we perform shuffle again as part of the exchange added here.
+            // To avoid the extra shuffle, we should remove repartition operators if they are
+            // the child of Exchange and shuffle=True.
+
             val optimized = child match {
               case Repartition(n, true, plan) => plan
               case _ => child
