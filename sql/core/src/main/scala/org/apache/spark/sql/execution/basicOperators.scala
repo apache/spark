@@ -245,6 +245,11 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: SparkPlan)
   extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
+  override def outputPartitioning: Partitioning = {
+    if (numPartitions == 1) SinglePartition
+    else UnknownPartitioning(numPartitions)
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     child.execute().map(_.copy()).coalesce(numPartitions, shuffle)
   }
