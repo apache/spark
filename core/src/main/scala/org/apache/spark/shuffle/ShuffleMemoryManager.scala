@@ -39,9 +39,14 @@ import org.apache.spark.{Logging, SparkException, SparkConf, TaskContext}
  * wait() and notifyAll() to signal changes.
  *
  * Use `ShuffleMemoryManager.create()` factory method to create a new instance.
+ *
+ * @param maxMemory total amount of memory available for execution, in bytes.
+ * @param pageSizeBytes number of bytes for each page, by default.
  */
 private[spark]
-class ShuffleMemoryManager protected (val maxMemory: Long, val pageSizeBytes: Long)
+class ShuffleMemoryManager protected (
+    val maxMemory: Long,
+    val pageSizeBytes: Long)
   extends Logging {
 
   private val taskMemory = new mutable.HashMap[Long, Long]()  // taskAttemptId -> memory bytes
