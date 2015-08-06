@@ -136,7 +136,7 @@ private[kinesis] class KinesisReceiver(
    * The KCL creates and manages the receiving/processing thread pool through Worker.run().
    */
   override def onStart() {
-    blockGenerator = new BlockGenerator(new GeneratedBlockHandler, streamId, SparkEnv.get.conf)
+    blockGenerator = supervisor.createBlockGenerator(new GeneratedBlockHandler)
 
     workerId = Utils.localHostName() + ":" + UUID.randomUUID()
 

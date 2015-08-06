@@ -227,22 +227,35 @@ public final class BytesToBytesMap {
     private final Iterator<MemoryBlock> dataPagesIterator;
     private final Location loc;
 
-    private MemoryBlock currentPage;
+    private MemoryBlock currentPage = null;
     private int currentRecordNumber = 0;
     private Object pageBaseObject;
     private long offsetInPage;
 
+    // If this iterator destructive or not. When it is true, it frees each page as it moves onto
+    // next one.
+    private boolean destructive = false;
+    private BytesToBytesMap bmap;
+
     private BytesToBytesMapIterator(
-        int numRecords, Iterator<MemoryBlock> dataPagesIterator, Location loc) {
+        int numRecords, Iterator<MemoryBlock> dataPagesIterator, Location loc,
+        boolean destructive, BytesToBytesMap bmap) {
       this.numRecords = numRecords;
       this.dataPagesIterator = dataPagesIterator;
       this.loc = loc;
+      this.destructive = destructive;
+      this.bmap = bmap;
       if (dataPagesIterator.hasNext()) {
         advanceToNextPage();
       }
     }
 
     private void advanceToNextPage() {
+      if (destructive && currentPage != null) {
+        dataPagesIterator.remove();
+        this.bmap.taskMemoryManager.freePage(currentPage);
+        this.bmap.shuffleMemoryManager.release(currentPage.size());
+      }
       currentPage = dataPagesIterator.next();
       pageBaseObject = currentPage.getBaseObject();
       offsetInPage = currentPage.getBaseOffset();
@@ -281,7 +294,21 @@ public final class BytesToBytesMap {
    * `lookup()`, the behavior of the returned iterator is undefined.
    */
   public BytesToBytesMapIterator iterator() {
-    return new BytesToBytesMapIterator(numElements, dataPages.iterator(), loc);
+    return new BytesToBytesMapIterator(numElements, dataPages.iterator(), loc, false, this);
+  }
+
+  /**
+   * Returns a destructive iterator for iterating over the entries of this map. It frees each page
+   * as it moves onto next one. Notice: it is illegal to call any method on the map after
+   * `destructiveIterator()` has been called.
+   *
+   * For efficiency, all calls to `next()` will return the same {@link Location} object.
+   *
+   * If any other lookups or operations are performed on this map while iterating over it, including
+   * `lookup()`, the behavior of the returned iterator is undefined.
+   */
+  public BytesToBytesMapIterator destructiveIterator() {
+    return new BytesToBytesMapIterator(numElements, dataPages.iterator(), loc, true, this);
   }
 
   /**

@@ -345,23 +345,23 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
 
   test("in") {
     val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
-    checkAnswer(df.filter($"a".in(1, 2)),
+    checkAnswer(df.filter($"a".isin(1, 2)),
       df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
-    checkAnswer(df.filter($"a".in(3, 2)),
+    checkAnswer(df.filter($"a".isin(3, 2)),
       df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
-    checkAnswer(df.filter($"a".in(3, 1)),
+    checkAnswer(df.filter($"a".isin(3, 1)),
       df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
-    checkAnswer(df.filter($"b".in("y", "x")),
+    checkAnswer(df.filter($"b".isin("y", "x")),
       df.collect().toSeq.filter(r => r.getString(1) == "y" || r.getString(1) == "x"))
-    checkAnswer(df.filter($"b".in("z", "x")),
+    checkAnswer(df.filter($"b".isin("z", "x")),
       df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "x"))
-    checkAnswer(df.filter($"b".in("z", "y")),
+    checkAnswer(df.filter($"b".isin("z", "y")),
       df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "y"))
 
     val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
 
     intercept[AnalysisException] {
-      df2.filter($"a".in($"b"))
+      df2.filter($"a".isin($"b"))
     }
   }
 
