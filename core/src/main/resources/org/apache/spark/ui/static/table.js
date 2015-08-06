@@ -80,7 +80,7 @@ function grep() {
         if (url.indexOf("&grepexp=") == -1) {
             location.href = url + "&grepexp=" + grepExp;
         } else {
-            location.href = url.replace(/grep=(.*)&+/g, "grep=" + grepExp + "&");
+            location.href = url.replace(/&grepexp=.*/g, "&grepexp=" + grepExp);
         }
     } else {
         alert("input cannot be empty");
@@ -88,5 +88,5 @@ function grep() {
 }
 
 function viewAll() {
-    location.href = location.href.replace(/grep=(.*)&+/g, "");
+    location.href = location.href.replace(/&grepexp=(.*)/g, "");
 }
