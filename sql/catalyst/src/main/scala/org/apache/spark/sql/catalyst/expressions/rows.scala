@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * An extended interface to [[InternalRow]] that allows the values for each column to be updated.
@@ -39,6 +38,13 @@ abstract class MutableRow extends InternalRow {
   def setLong(i: Int, value: Long): Unit = { update(i, value) }
   def setFloat(i: Int, value: Float): Unit = { update(i, value) }
   def setDouble(i: Int, value: Double): Unit = { update(i, value) }
+
+  /**
+   * Update the decimal column at `i`.
+   *
+   * Note: In order to support update decimal with precision > 18 in UnsafeRow,
+   * CAN NOT call setNullAt() for decimal column on UnsafeRow, call setDecimal(i, null, precision).
+   */
   def setDecimal(i: Int, value: Decimal, precision: Int) { update(i, value) }
 }
 
