@@ -79,9 +79,9 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 object BindReferences extends Logging {
 
   def bindReference[A <: Expression](
-                                      expression: A,
-                                      input: Seq[Attribute],
-                                      allowFailures: Boolean = false): A = {
+      expression: A,
+      input: Seq[Attribute],
+      allowFailures: Boolean = false): A = {
     expression.transform { case a: AttributeReference =>
       attachTree(a, "Binding attribute") {
         val ordinal = input.indexWhere(_.exprId == a.exprId)
