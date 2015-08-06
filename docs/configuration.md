@@ -479,7 +479,10 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Enables the external shuffle service. This service preserves the shuffle files written by 
     executors so the executors can be safely removed. This must be enabled if 
-    <code>spark.dynamicAllocation.enabled</code> is "true".
+    <code>spark.dynamicAllocation.enabled</code> is "true". The external shuffle service
+    must be set up in order to enable it. See
+    <a href="job-scheduling.html#configuration-and-setup">dynamic allocation 
+    configuration and setup documentation</a> for more information.
   </td>
 </tr>
 <tr>
