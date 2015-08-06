@@ -18,6 +18,7 @@
 package org.apache.spark.ui.exec
 
 import java.net.URLDecoder
+import java.util.regex.Pattern
 import javax.servlet.http.HttpServletRequest
 
 import scala.util.Try
@@ -48,15 +49,11 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
     val time = System.currentTimeMillis()
     val maybeThreadDump = sc.get.getExecutorThreadDump(executorId)
 
-    val grepExp = Option(request.getParameter("grepexp"))
+    val grepExp = Option(request.getParameter("grepexp")).map(Pattern.compile(_, Pattern.MULTILINE))
 
     val filteredContent = maybeThreadDump.map { threadDump =>
       threadDump.filter(thread =>
-        if (!grepExp.isDefined) {
-          true
-        } else {
-          thread.stackTrace.filter(_ >= ' ').matches(grepExp.get)
-        }
+        grepExp.map { grep => grep.matcher(thread.stackTrace).find()}.getOrElse(true)
       )
     }.map { threadDump =>
       val dumpRows = threadDump.sortWith {
@@ -94,19 +91,18 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
         <p><a class="expandbutton hidden" onClick="expandOrCollapseAllThreadStackTrace(false)">
           Collapse All
         </a></p>
-        <table style="vertical-align: bottom">
-        <tr>
-          <td>
-            <input type="text" id="grepexp" name="fname" class="form-control"></input>
-          </td>
-          <td>
-            <button class="btn btn-default" onclick="grep()">Search</button>
-          </td>
-          <td>
-            <button class="btn btn-default" onclick="viewAll()">View All</button>
-          </td>
-        </tr>
-        </table>
+        <div class="form-inline">
+        <div class="bs-example" data-example-id="simple-form-inline">
+          <div class="form-group">
+            <div class="input-group">
+              <input type="text" class="form-control" id="grepexp"></input>
+              <button type="submit" onclick="grep()" class="btn btn-default">Grep</button>
+              <button type="submit" onclick="viewAll()" class="btn btn-default">View All</button>
+            </div>
+          </div>
+        </div>
+        </div>
+        <p></p>
         // scalastyle:on
       }
       <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
