@@ -36,7 +36,7 @@ class OuterJoinSuite extends SparkPlanTest {
       expectedAnswer: Seq[Product]): Unit = {
     // Precondition: leftRows and rightRows should be sorted according to the join keys.
 
-    test(s"$testName with ShuffledHashOuterJoin") {
+    test(s"$testName using ShuffledHashOuterJoin") {
       checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
         ShuffledHashOuterJoin(leftKeys, rightKeys, joinType, condition, left, right),
         expectedAnswer.map(Row.fromTuple),
@@ -44,7 +44,7 @@ class OuterJoinSuite extends SparkPlanTest {
     }
 
     if (joinType != FullOuter) {
-      test(s"$testName with BroadcastHashOuterJoin") {
+      test(s"$testName using BroadcastHashOuterJoin") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           BroadcastHashOuterJoin(leftKeys, rightKeys, joinType, condition, left, right),
           expectedAnswer.map(Row.fromTuple),
@@ -52,7 +52,7 @@ class OuterJoinSuite extends SparkPlanTest {
       }
     }
 
-    test(s"$testName with SortMergeOuterJoin") {
+    test(s"$testName using SortMergeOuterJoin") {
       checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
         SortMergeOuterJoin(leftKeys, rightKeys, joinType, condition, left, right),
         expectedAnswer.map(Row.fromTuple),
@@ -75,6 +75,8 @@ class OuterJoinSuite extends SparkPlanTest {
   val leftKeys: List[Expression] = 'a :: Nil
   val rightKeys: List[Expression] = 'c :: Nil
   val condition = Some(LessThan('b, 'd))
+
+  // --- Basic outer joins ------------------------------------------------------------------------
 
   testOuterJoin(
     "basic left outer join",
@@ -121,5 +123,40 @@ class OuterJoinSuite extends SparkPlanTest {
       (null, null, 3, 2.0),
       (null, null, 4, 1.0)
     )
+  )
+
+  // --- Both inputs empty ------------------------------------------------------------------------
+
+  testOuterJoin(
+    "left outer join with both inputs empty",
+    left.filter("false"),
+    right.filter("false"),
+    leftKeys,
+    rightKeys,
+    LeftOuter,
+    condition,
+    Seq.empty
+  )
+
+  testOuterJoin(
+    "right outer join with both inputs empty",
+    left.filter("false"),
+    right.filter("false"),
+    leftKeys,
+    rightKeys,
+    RightOuter,
+    condition,
+    Seq.empty
+  )
+
+  testOuterJoin(
+    "full outer join with both inputs empty",
+    left.filter("false"),
+    right.filter("false"),
+    leftKeys,
+    rightKeys,
+    FullOuter,
+    condition,
+    Seq.empty
   )
 }
