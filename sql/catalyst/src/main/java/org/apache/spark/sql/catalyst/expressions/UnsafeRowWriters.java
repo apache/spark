@@ -73,14 +73,14 @@ public class UnsafeRowWriters {
       final BigInteger integer = input.toJavaBigDecimal().unscaledValue();
       int signum = integer.signum() + 1;
       final int[] mag = (int[]) PlatformDependent.UNSAFE.getObjectVolatile(integer,
-        PlatformDependent.BigIntegerMagOffset);
+        PlatformDependent.BIG_INTEGER_MAG_OFFSET);
       assert(mag.length <= 4);
 
       // Write the bytes to the variable length portion.
       PlatformDependent.copyMemory(mag, PlatformDependent.INT_ARRAY_OFFSET,
         base, target.getBaseOffset() + cursor, mag.length * 4);
       // Set the fixed length portion.
-      target.setLong(ordinal, (((long) cursor) << 32) | ((long) (signum * 4 + mag.length)));
+      target.setLong(ordinal, (((long) cursor) << 32) | ((long) ((signum << 8) + mag.length)));
 
       return SIZE;
     }

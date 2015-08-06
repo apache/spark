@@ -149,20 +149,20 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       if (dt.isInstanceOf[DecimalType]) {
         // Can't call setNullAt() for DecimalType
         s"""
-         if (${ev.isNull}) {
+          if (${ev.isNull}) {
            $cursor += $DecimalWriter.write($output, $i, $cursor, null);
-         } else {
+          } else {
            $update;
-         }
-         """
+          }
+        """
       } else {
         s"""
-        if (${ev.isNull}) {
-          $output.setNullAt($i);
-        } else {
-          $update;
-        }
-      """
+          if (${ev.isNull}) {
+            $output.setNullAt($i);
+          } else {
+            $update;
+          }
+        """
       }
     }.mkString("\n")
 

@@ -242,6 +242,12 @@ public final class UnsafeRow extends MutableRow {
     PlatformDependent.UNSAFE.putFloat(baseObject, getFieldOffset(ordinal), value);
   }
 
+  /**
+   * Updates the decimal column.
+   *
+   * Note: In order to support update a decimal with precision > 18, CAN NOT call
+   * setNullAt() for this column.
+   */
   @Override
   public void setDecimal(int ordinal, Decimal value, int precision) {
     assertIndexIsValid(ordinal);
@@ -255,7 +261,7 @@ public final class UnsafeRow extends MutableRow {
     } else {
       // fixed length
       long cursor = getLong(ordinal) >>> 32;
-      assert cursor > 0;
+      assert cursor > 0 : "invalid cursor " + cursor;
       // zero-out the bytes
       PlatformDependent.UNSAFE.putLong(baseObject, baseOffset + cursor, 0L);
       PlatformDependent.UNSAFE.putLong(baseObject, baseOffset + cursor + 8, 0L);
@@ -268,14 +274,13 @@ public final class UnsafeRow extends MutableRow {
 
         final BigInteger integer = value.toJavaBigDecimal().unscaledValue();
         final int[] mag = (int[]) PlatformDependent.UNSAFE.getObjectVolatile(integer,
-          PlatformDependent.BigIntegerMagOffset);
+          PlatformDependent.BIG_INTEGER_MAG_OFFSET);
         assert(mag.length <= 4);
 
         // Write the bytes to the variable length portion.
         PlatformDependent.copyMemory(mag, PlatformDependent.INT_ARRAY_OFFSET,
           baseObject, baseOffset + cursor, mag.length * 4);
-
-        setLong(ordinal, (cursor << 32) | ((long) ((integer.signum() + 1) * 4 + mag.length)));
+        setLong(ordinal, (cursor << 32) | ((long) (((integer.signum() + 1) << 8) + mag.length)));
       }
     }
   }
@@ -382,17 +387,17 @@ public final class UnsafeRow extends MutableRow {
     } else {
       long offsetAndSize = getLong(ordinal);
       long offset = offsetAndSize >>> 32;
-      int signum = ((int) (offsetAndSize & 0xf) >> 2);
-      int size = (int) (offsetAndSize & 0x3);
+      int signum = ((int) (offsetAndSize & 0xfff) >> 8);
+      assert signum >=0 && signum <= 2 : "invalid signum " + signum;
+      int size = (int) (offsetAndSize & 0xff);
       int[] mag = new int[size];
       PlatformDependent.copyMemory(baseObject, baseOffset + offset,
         mag, PlatformDependent.INT_ARRAY_OFFSET, size * 4);
 
       // create a BigInteger using signum and mag
       BigInteger v = new BigInteger(0, EMPTY);  // create the initial object
-      PlatformDependent.UNSAFE.putInt(v, PlatformDependent.BigIntegerSignumOffset, signum - 1);
-      PlatformDependent.UNSAFE.putObjectVolatile(v, PlatformDependent.BigIntegerMagOffset, mag);
-
+      PlatformDependent.UNSAFE.putInt(v, PlatformDependent.BIG_INTEGER_SIGNUM_OFFSET, signum - 1);
+      PlatformDependent.UNSAFE.putObjectVolatile(v, PlatformDependent.BIG_INTEGER_MAG_OFFSET, mag);
       return Decimal.apply(new BigDecimal(v, scale), precision, scale);
     }
   }

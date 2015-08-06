@@ -117,8 +117,8 @@ public final class PlatformDependent {
   public static final int DOUBLE_ARRAY_OFFSET;
 
   // Support for resetting final fields while deserializing
-  public static final long BigIntegerSignumOffset;
-  public static final long BigIntegerMagOffset;
+  public static final long BIG_INTEGER_SIGNUM_OFFSET;
+  public static final long BIG_INTEGER_MAG_OFFSET;
 
   /**
    * Limits the number of bytes to copy per {@link Unsafe#copyMemory(long, long, long)} to
@@ -146,22 +146,20 @@ public final class PlatformDependent {
       long signumOffset = 0;
       long magOffset = 0;
       try {
-        signumOffset = unsafe.objectFieldOffset
-          (BigInteger.class.getDeclaredField("signum"));
-        magOffset = unsafe.objectFieldOffset
-          (BigInteger.class.getDeclaredField("mag"));
+        signumOffset = _UNSAFE.objectFieldOffset(BigInteger.class.getDeclaredField("signum"));
+        magOffset = _UNSAFE.objectFieldOffset(BigInteger.class.getDeclaredField("mag"));
       } catch (Exception ex) {
+        // should not happen
       }
-      BigIntegerSignumOffset = signumOffset;
-      BigIntegerMagOffset = magOffset;
-
+      BIG_INTEGER_SIGNUM_OFFSET = signumOffset;
+      BIG_INTEGER_MAG_OFFSET = magOffset;
     } else {
       BYTE_ARRAY_OFFSET = 0;
       INT_ARRAY_OFFSET = 0;
       LONG_ARRAY_OFFSET = 0;
       DOUBLE_ARRAY_OFFSET = 0;
-      BigIntegerSignumOffset = 0;
-      BigIntegerMagOffset = 0;
+      BIG_INTEGER_SIGNUM_OFFSET = 0;
+      BIG_INTEGER_MAG_OFFSET = 0;
     }
   }
 
