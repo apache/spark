@@ -210,7 +210,8 @@ private[yarn] class YarnAllocator(
   def getExecutorLossReason(executorId: String): ExecutorLossReason = synchronized {
     allocateResources()
     // Expect to be asked for a loss reason once and exactly once.
-    completedExecutorExitReasons.remove(executorId).getOrElse(executorId, UNKNOWN_CONTAINER_EXIT_STATUS)
+    assert(completedExecutorExitReasons.contains(executorId))
+    completedExecutorExitReasons.remove(executorId).getOrElse(UNKNOWN_CONTAINER_EXIT_STATUS)
   }
 
   /**
