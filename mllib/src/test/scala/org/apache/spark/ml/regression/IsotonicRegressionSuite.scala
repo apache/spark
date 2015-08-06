@@ -85,7 +85,7 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(ir.getFeaturesCol === "features")
     assert(ir.getPredictionCol === "prediction")
     assert(!ir.isDefined(ir.weightCol))
-    assert(ir.getIsotonic === true)
+    assert(ir.getIsotonic)
     assert(ir.getFeatureIndex === 0)
 
     val model = ir.fit(dataset)
@@ -97,7 +97,7 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.getFeaturesCol === "features")
     assert(model.getPredictionCol === "prediction")
     assert(!model.isDefined(model.weightCol))
-    assert(model.getIsotonic === true)
+    assert(model.getIsotonic)
     assert(model.getFeatureIndex === 0)
     assert(model.hasParent)
   }
@@ -110,7 +110,7 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setLabelCol("l")
       .setPredictionCol("p")
 
-    assert(isotonicRegression.getIsotonic === false)
+    assert(!isotonicRegression.getIsotonic)
     assert(isotonicRegression.getWeightCol === "w")
     assert(isotonicRegression.getFeaturesCol === "f")
     assert(isotonicRegression.getLabelCol === "l")

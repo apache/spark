@@ -38,19 +38,20 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
   with HasLabelCol with HasPredictionCol with Logging {
 
   /**
-   * Param for weight column name.
+   * Param for weight column name (default: none).
    * @group param
    */
   // TODO: Move weightCol to sharedParams.
   final val weightCol: Param[String] =
     new Param[String](this, "weightCol",
-      "weight column name. If this is not set or empty, we treat all weights as 1.0.")
+      "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
 
   /** @group getParam */
   final def getWeightCol: String = $(weightCol)
 
   /**
-   * Param for whether the output should be isotonic (increasing) or antitonic (decreasing).
+   * Param for whether the output sequence should be isotonic/increasing (true) or
+   * antitonic/decreasing (false).
    * @group param
    */
   final val isotonic: BooleanParam =
@@ -59,7 +60,11 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
   /** @group getParam */
   final def getIsotonic: Boolean = $(isotonic)
 
-  /** @group param */
+  /**
+   * Param for the index of the feature if [[featuresCol]] is a vector column (default: `1`), no
+   * effect otherwise.
+   * @group param
+   */
   final val featureIndex: IntParam = new IntParam(this, "featureIndex",
     "The index of the feature if featuresCol is a vector column, no effect otherwise.")
 
@@ -164,8 +169,7 @@ class IsotonicRegression(override val uid: String) extends Estimator[IsotonicReg
     val isotonicRegression = new MLlibIsotonicRegression().setIsotonic($(isotonic))
     val oldModel = isotonicRegression.run(instances)
 
-    new IsotonicRegressionModel(uid, oldModel)
-      .setParent(this)
+    copyValues(new IsotonicRegressionModel(uid, oldModel).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -202,7 +206,7 @@ class IsotonicRegressionModel private[ml] (
   def boundaries: Vector = Vectors.dense(oldModel.boundaries)
 
   /**
-   * Predictions associated to the boundaries at the same index, monotone because of isotonic
+   * Predictions associated with the boundaries at the same index, monotone because of isotonic
    * regression.
    */
   def predictions: Vector = Vectors.dense(oldModel.predictions)
