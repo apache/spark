@@ -123,12 +123,12 @@ class DataFrameStatSuite extends QueryTest {
 
     val results = df.stat.freqItems(Array("numbers", "letters"), 0.1)
     val items = results.collect().head
-    items.getSeq[Int](0) should contain (1)
-    items.getSeq[String](1) should contain (toLetter(1))
+    assert(items.getSeq[Int](0).contains(1))
+    assert(items.getSeq[String](1).contains(toLetter(1)))
 
     val singleColResults = df.stat.freqItems(Array("negDoubles"), 0.1)
     val items2 = singleColResults.collect().head
-    items2.getSeq[Double](0) should contain (-1.0)
+    assert(items2.getSeq[Double](0).contains(-1.0))
   }
 
   test("Frequent Items 2") {
@@ -137,16 +137,16 @@ class DataFrameStatSuite extends QueryTest {
     // counts than those that existed in the map when the map was full. This test should also fail
     // if anything like SPARK-9614 is observed once again
     val df = rows.mapPartitionsWithIndex { (idx, iter) =>
-      if (idx == 3) {
-        Iterator.tabulate(5)(_ => "3")
+      if (idx == 3) { // must come from one of the later merges, therefore higher partition index
+        Iterator("3", "3", "3", "3", "3")
       } else {
-        Iterator.tabulate(5)(i => (i * (idx + 1)).toString)
+        Iterator("0", "1", "2", "3", "4")
       }
     }.toDF("a")
     val results = df.stat.freqItems(Array("a"), 0.25)
     val items = results.collect().head.getSeq[String](0)
-    items should contain ("3")
-    items.length should equal(1)
+    assert(items.contains("3"))
+    assert(items.length === 1)
   }
 
   test("sampleBy") {
