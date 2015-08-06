@@ -30,6 +30,17 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
+/**
+ * :: Experimental ::
+ * Implements the transforms required for R-style feature interactions. In summary, once fitted to
+ * a dataset, this transformer jointly one-hot encodes all input factor columns, and then scales
+ * the encoded factors by all numeric input columns. If only numeric are columns are specified,
+ * the output column will simply be a vector containing their product. The last category will be
+ * preserved during one-hot encoding except when there is no interaction.
+ *
+ * See https://stat.ethz.ch/R-manual/R-devel/library/base/html/formula.html for more
+ * information about factor interactions in R formulae.
+ */
 @Experimental
 class Interaction(override val uid: String) extends Estimator[PipelineModel]
   with HasInputCols with HasOutputCol {
@@ -115,6 +126,10 @@ class Interaction(override val uid: String) extends Estimator[PipelineModel]
   }
 }
 
+/**
+ * This helper class combines the output of multiple string-indexed columns to simulate
+ * the joint indexing of tuples containing all the column values.
+ */
 private class IndexCombiner(
     inputCols: Array[String], attrNames: Array[String], outputCol: String)
   extends Transformer {
@@ -165,6 +180,10 @@ private class IndexCombiner(
   }
 }
 
+/**
+ * This helper class scales the input vector column by the product of the input numeric columns.
+ * If no vector column is specified, the output is just the product of the numeric columns.
+ */
 private class NumericInteraction(
     inputCols: Array[String], vectorCol: Option[String], outputCol: String)
   extends Transformer {
