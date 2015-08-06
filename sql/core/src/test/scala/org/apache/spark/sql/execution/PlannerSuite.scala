@@ -209,6 +209,22 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
 
   // --- Unit tests of EnsureRequirements ---------------------------------------------------------
 
+  test("EnsureRequirements ensures that children produce same number of partitions when required") {
+    val clustering = Literal(1) :: Nil
+    val distribution = ClusteredDistribution(clustering)
+    val inputPlan = DummyPlan(
+      children = Seq(
+        DummyPlan(outputPartitioning = HashPartitioning(clustering, 1)),
+        DummyPlan(outputPartitioning = HashPartitioning(clustering, 2))
+      ),
+      requiresChildrenToProduceSameNumberOfPartitions = true,
+      requiredChildDistribution = Seq(distribution, distribution),
+      requiredChildOrdering = Seq(Seq.empty, Seq.empty)
+    )
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assert (outputPlan.children.map(_.outputPartitioning.numPartitions).toSet.size === 1)
+  }
+
   test("EnsureRequirements should not repartition if only ordering requirement is unsatisfied") {
     val outputOrdering = Seq(SortOrder(Literal(1), Ascending))
     val distribution = ClusteredDistribution(Literal(1) :: Nil)
