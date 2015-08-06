@@ -160,7 +160,7 @@ class TungstenAggregationIterator(
   // This functions should be only called at most three times (when we create the hash map,
   // when we switch to sort-based aggregation, and when we create the re-used buffer for
   // sort-based aggregation).
-  private def createNewBuffer(): UnsafeRow = {
+  private def createNewAggregationBuffer(): UnsafeRow = {
     val bufferSchema = allAggregateFunctions.flatMap(_.bufferAttributes)
     val bufferRowSize: Int = bufferSchema.length
 
@@ -326,7 +326,7 @@ class TungstenAggregationIterator(
 
   // An aggregation buffer containing initial buffer values. It is used to
   // initialize other aggregation buffers.
-  private[this] val initialAggregationBuffer: UnsafeRow = createNewBuffer()
+  private[this] val initialAggregationBuffer: UnsafeRow = createNewAggregationBuffer()
 
   ///////////////////////////////////////////////////////////////////////////
   // Part 3: Methods and fields used by hash-based aggregation.
@@ -423,7 +423,7 @@ class TungstenAggregationIterator(
 
     if (needsProcess) {
       // First, we create a buffer.
-      val buffer = createNewBuffer()
+      val buffer = createNewAggregationBuffer()
 
       // Process firstKey and firstInput.
       // Initialize buffer.
@@ -442,7 +442,7 @@ class TungstenAggregationIterator(
     } else {
       // When needsProcess is false, the format of input rows is groupingKey + aggregation buffer.
       // We need to project the aggregation buffer part from an input row.
-      val buffer = createNewBuffer()
+      val buffer = createNewAggregationBuffer()
       // The originalInputAttributes are using cloneBufferAttributes. So, we need to use
       // allAggregateFunctions.flatMap(_.cloneBufferAttributes).
       val bufferExtractor = newMutableProjection(
@@ -526,7 +526,7 @@ class TungstenAggregationIterator(
   private[this] var sortedInputHasNewGroup: Boolean = false
 
   // The aggregation buffer used by the sort-based aggregation.
-  private[this] val sortBasedAggregationBuffer: UnsafeRow = createNewBuffer()
+  private[this] val sortBasedAggregationBuffer: UnsafeRow = createNewAggregationBuffer()
 
   // Processes rows in the current group. It will stop when it find a new group.
   private def processCurrentSortedGroup(): Unit = {
@@ -654,7 +654,11 @@ class TungstenAggregationIterator(
   def outputForEmptyGroupingKeyWithoutInput(): UnsafeRow = {
     if (groupingExpressions.isEmpty) {
       sortBasedAggregationBuffer.copyFrom(initialAggregationBuffer)
-      generateOutput(UnsafeRow.createFromByteArray(0, 0), sortBasedAggregationBuffer)
+      // We create a output row and copy it. So, we can free the map.
+      val resultCopy =
+        generateOutput(UnsafeRow.createFromByteArray(0, 0), sortBasedAggregationBuffer).copy()
+      hashMap.free()
+      resultCopy
     } else {
       throw new IllegalStateException(
         "This method should not be called when groupingExpressions is not empty.")
