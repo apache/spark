@@ -53,7 +53,8 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[Int]("checkpointInterval", "checkpoint interval (>= 1)",
         isValid = "ParamValidators.gtEq(1)"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
-      ParamDesc[Boolean]("skipInvalid", "whether to skip invalid entries"),
+      ParamDesc[String]("handleInvalid", "how to handle invalid entries",
+        isValid = "ParamValidators.inArray(List(\"skip\", \"error\"))"),
       ParamDesc[Boolean]("standardization", "whether to standardize the training features" +
         " before fitting the model.", Some("true")),
       ParamDesc[Long]("seed", "random seed", Some("this.getClass.getName.hashCode.toLong")),

@@ -233,18 +233,18 @@ private[ml] trait HasFitIntercept extends Params {
 }
 
 /**
- * Trait for shared param skipInvalid.
+ * Trait for shared param handleInvalid.
  */
-private[ml] trait HasSkipInvalid extends Params {
+private[ml] trait HasHandleInvalid extends Params {
 
   /**
-   * Param for whether to skip invalid entries.
+   * Param for how to handle invalid entries.
    * @group param
    */
-  final val skipInvalid: BooleanParam = new BooleanParam(this, "skipInvalid", "whether to skip invalid entries")
+  final val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries", ParamValidators.inArray(List("skip", "error")))
 
   /** @group getParam */
-  final def getSkipInvalid: Boolean = $(skipInvalid)
+  final def getHandleInvalid: String = $(handleInvalid)
 }
 
 /**
