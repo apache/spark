@@ -136,32 +136,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object HashAggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Aggregations that can be performed in two phases, before and after the shuffle.
-
-      // Cases where all aggregates can be codegened.
-      case PartialAggregation(
-             namedGroupingAttributes,
-             rewrittenAggregateExpressions,
-             groupingExpressions,
-             partialComputation,
-             child)
-             if canBeCodeGened(
-                  allAggregates(partialComputation) ++
-                  allAggregates(rewrittenAggregateExpressions)) &&
-               codegenEnabled &&
-               !canBeConvertedToNewAggregation(plan) =>
-          execution.GeneratedAggregate(
-            partial = false,
-            namedGroupingAttributes,
-            rewrittenAggregateExpressions,
-            unsafeEnabled,
-            execution.GeneratedAggregate(
-              partial = true,
-              groupingExpressions,
-              partialComputation,
-              unsafeEnabled,
-              planLater(child))) :: Nil
-
-      // Cases where some aggregate can not be codegened
       case PartialAggregation(
              namedGroupingAttributes,
              rewrittenAggregateExpressions,
@@ -189,14 +163,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           Utils.checkInvalidAggregateFunction2(a)
           false
         }
-      case _ => false
-    }
-
-    def canBeCodeGened(aggs: Seq[AggregateExpression1]): Boolean = aggs.forall {
-      case _: Sum | _: Count | _: Max | _: Min |  _: CombineSetsAndCount => true
-      // The generated set implementation is pretty limited ATM.
-      case CollectHashSet(exprs) if exprs.size == 1  &&
-           Seq(IntegerType, LongType).contains(exprs.head.dataType) => true
       case _ => false
     }
 
