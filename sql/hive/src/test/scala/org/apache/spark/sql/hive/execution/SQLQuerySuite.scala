@@ -245,6 +245,21 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     checkAnswer(query, Row(1, 1) :: Nil)
   }
 
+  test("SPARK-6212: The EXPLAIN output of CTAS only shows the analyzed plan") {
+    val df = Seq((1, 1)).toDF("c1", "c2")
+    df.registerTempTable("table1")
+
+    val explainOutput = sql(
+      s"""
+         |EXPLAIN EXTENDED
+         |CREATE TABLE t1
+         |AS
+         |SELECT * FROM table1
+      """.stripMargin).collect()
+    // SubQuery operator should be removed after analyzing
+    assert(explainOutput.count(_.getString(0).contains("Subquery")) == 1)
+  }
+
   test("explode nested Field") {
     Seq(NestedArray1(NestedArray2(Seq(1, 2, 3)))).toDF.registerTempTable("nestedArray")
     checkAnswer(
