@@ -28,7 +28,9 @@ import com.google.common.base.Charsets;
 import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
 import org.fusesource.leveldbjni.JniDBFactory;
+import org.fusesource.leveldbjni.internal.NativeDB;
 import org.iq80.leveldb.DB;
+import org.iq80.leveldb.DBIterator;
 import org.iq80.leveldb.Options;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,7 +68,7 @@ public class ExternalShuffleBlockResolver {
   @VisibleForTesting
   final DB db;
 
-  public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile) {
+  public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile) throws IOException {
     this(conf, registeredExecutorFile, Executors.newSingleThreadExecutor(
         // Add `spark` prefix because it will run in NM in Yarn mode.
         NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
@@ -77,18 +79,31 @@ public class ExternalShuffleBlockResolver {
   ExternalShuffleBlockResolver(
       TransportConf conf,
       File registeredExecutorFile,
-      Executor directoryCleaner) {
+      Executor directoryCleaner) throws IOException {
     this.conf = conf;
     this.registeredExecutorFile = registeredExecutorFile;
     if (registeredExecutorFile != null) {
       Options options = new Options();
-      options.createIfMissing(true);
+      options.createIfMissing(false);
       options.logger(new LevelDBLogger());
-      JniDBFactory factory = new JniDBFactory();
       DB tmpDb;
       ConcurrentMap<AppExecId, ExecutorShuffleInfo> tmpExecutors;
       try {
-        tmpDb = factory.open(registeredExecutorFile, options);
+        tmpDb = JniDBFactory.factory.open(registeredExecutorFile, options);
+      } catch (NativeDB.DBException e) {
+        if (e.isNotFound() || e.getMessage().contains(" does not exist ")) {
+          logger.info("Creating state database at " + registeredExecutorFile);
+          options.createIfMissing(true);
+          try {
+            tmpDb = JniDBFactory.factory.open(registeredExecutorFile, options);
+          } catch (NativeDB.DBException dbExc) {
+            throw new IOException("Unable to create state store", dbExc);
+          }
+        } else {
+          throw e;
+        }
+      }
+      try {
         tmpExecutors = reloadRegisteredExecutors(tmpDb);
       } catch (Exception e) {
         logger.info("Error opening leveldb file {}", registeredExecutorFile, e);
@@ -114,7 +129,13 @@ public class ExternalShuffleBlockResolver {
     synchronized (executors) {
       executors.put(fullId, executorInfo);
       try {
-        saveRegisteredExecutors();
+        ByteArrayOutputStream bytesOut = new ByteArrayOutputStream();
+        ObjectOutputStream out = new ObjectOutputStream(bytesOut);
+        out.writeObject(executorInfo);
+        out.close();
+        if (db != null) {
+          db.put(dbAppExecKey(new AppExecId(appId, execId)), bytesOut.toByteArray());
+        }
       } catch (Exception e) {
         logger.error("Error saving registered executors", e);
       }
@@ -173,6 +194,9 @@ public class ExternalShuffleBlockResolver {
       // Only touch executors associated with the appId that was removed.
       if (appId.equals(fullId.appId)) {
         it.remove();
+        if (db != null) {
+          db.delete(dbAppExecKey(fullId));
+        }
 
         if (cleanupLocalDirs) {
           logger.info("Cleaning up executor {}'s {} local dirs", fullId, executor.localDirs.length);
@@ -187,14 +211,6 @@ public class ExternalShuffleBlockResolver {
         }
       }
     }
-    synchronized (executors) {
-      try {
-        saveRegisteredExecutors();
-      } catch (Exception e) {
-        logger.error("Error saving registered executors", e);
-      }
-    }
-
   }
 
   /**
@@ -308,41 +324,35 @@ public class ExternalShuffleBlockResolver {
     }
   }
 
-  /**
-   * write out the set of registered executors to a file so we can reload them on restart.
-   * You must have a lock on executors when calling this
-   */
-  private void saveRegisteredExecutors() throws IOException {
-    if (db != null) {
-      ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-      ObjectOutputStream out = new ObjectOutputStream(bytes);
-      out.writeObject(executors);
-      out.close();
-      db.put("registeredExecutors".getBytes(Charsets.UTF_8), bytes.toByteArray());
-    }
+  private static byte[] dbAppExecKey(AppExecId appExecId) {
+    return (appExecId.appId + ";" + appExecId.execId).getBytes(Charsets.UTF_8);
+  }
+
+  private static AppExecId parseDbAppExecKey(byte[] bytes) {
+    String s = new String(bytes, Charsets.UTF_8);
+    int p = s.indexOf(';');
+    return new AppExecId(s.substring(0, p), s.substring(p + 1));
   }
 
   @VisibleForTesting
   static ConcurrentMap<AppExecId, ExecutorShuffleInfo> reloadRegisteredExecutors(DB db)
       throws IOException, ClassNotFoundException {
+    ConcurrentMap<AppExecId, ExecutorShuffleInfo> registeredExecutors = Maps.newConcurrentMap();
     if (db != null) {
-      ObjectInputStream in = null;
-      byte[] bytes = db.get("registeredExecutors".getBytes(Charsets.UTF_8));
-      if (bytes != null) {
-        try {
-          in = new ObjectInputStream(new ByteArrayInputStream(bytes));
-          ConcurrentMap<AppExecId, ExecutorShuffleInfo> registeredExecutors =
-            (ConcurrentMap<AppExecId, ExecutorShuffleInfo>) in.readObject();
-          in.close();
-          return registeredExecutors;
-        } finally {
-          if (in != null) {
-            in.close();
-          }
-        }
+      DBIterator itr = db.iterator();
+      itr.seekToFirst();
+      while (itr.hasNext()) {
+        Map.Entry<byte[], byte[]> e = itr.next();
+        ObjectInputStream in = new ObjectInputStream(new ByteArrayInputStream(e.getValue()));
+        AppExecId id = parseDbAppExecKey(e.getKey());
+        registeredExecutors.put(
+          id,
+          (ExecutorShuffleInfo) in.readObject()
+        );
+        in.close();
       }
     }
-    return Maps.newConcurrentMap();
+    return registeredExecutors;
   }
 
   private static class LevelDBLogger implements org.iq80.leveldb.Logger {

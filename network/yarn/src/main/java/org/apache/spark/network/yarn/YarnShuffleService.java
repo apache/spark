@@ -17,22 +17,15 @@
 
 package org.apache.spark.network.yarn;
 
-import java.io.*;
+import java.io.File;
 import java.nio.ByteBuffer;
-import java.util.*;
-import java.util.Map.Entry;
+import java.util.List;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.ContainerId;
-import org.apache.hadoop.yarn.server.api.AuxiliaryService;
-import org.apache.hadoop.yarn.server.api.ApplicationInitializationContext;
-import org.apache.hadoop.yarn.server.api.ApplicationTerminationContext;
-import org.apache.hadoop.yarn.server.api.ContainerInitializationContext;
-import org.apache.hadoop.yarn.server.api.ContainerTerminationContext;
-import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
-import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
+import org.apache.hadoop.yarn.server.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
