@@ -916,16 +916,15 @@ private[execution] final class OffsetMutableRow(offset: Int, delegate: MutableRo
     extends MutableRow {
   def setNullAt(i: Int): Unit = delegate.setNullAt(i + offset)
   def update(i: Int, value: Any): Unit = delegate.update(i + offset, value)
-  def genericGet(i: Int): Any = delegate.genericGet(i + offset)
+  override def setBoolean(i: Int, value: Boolean): Unit = delegate.setBoolean(i, value)
+  override def setByte(i: Int, value: Byte): Unit = delegate.setByte(i, value)
+  override def setShort(i: Int, value: Short): Unit = delegate.setShort(i, value)
+  override def setInt(i: Int, value: Int): Unit = delegate.setInt(i, value)
+  override def setLong(i: Int, value: Long): Unit = delegate.setLong(i, value)
+  override def setFloat(i: Int, value: Float): Unit = delegate.setFloat(i, value)
+  override def setDouble(i: Int, value: Double): Unit = delegate.setDouble(i, value)
+  override def setDecimal(i: Int, value: Decimal, precision: Int): Unit =
+    delegate.setDecimal(i, value, precision)
   def numFields: Int = delegate.numFields - offset
-  def copy(): InternalRow = {
-    val numFields = delegate.numFields
-    val values = new Array[Any](numFields)
-    var i = 0
-    while (i < numFields) {
-      values(i) = delegate.genericGet(i)
-      i += 1
-    }
-    new OffsetMutableRow(offset, new GenericMutableRow(values))
-  }
+  def copy(): InternalRow = this
 }
