@@ -257,10 +257,13 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       // A pre-condition of ensureDistributionAndOrdering is that joins' children have compatible
       // partitionings. Thus, we only need to check whether the output partitionings satisfy
       // the required distribution. In the case where the children are all compatible, then they
-      // will either all satisfy the required distribution or will all fail to satisfy it:, since
-      //     (A.guarantees(B) && B.satisfies(C)) => A.satisfies(C).
+      // will either all satisfy the required distribution or will all fail to satisfy it, since
+      // A.guarantees(B) implies that A and B satisfy the same set of distributions.
       // Therefore, if all children are compatible then either all or none of them will shuffled to
       // ensure that the distribution requirements are met.
+      //
+      // Note that this reasoning implicitly assumes that operators which require compatible
+      // child partitionings have equivalent required distributions for those children.
       if (child.outputPartitioning.satisfies(requiredDistribution)) {
         child
       } else {
