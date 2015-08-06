@@ -84,9 +84,8 @@ private[sql] object JacksonParser {
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, DoubleType) =>
         parser.getDoubleValue
 
-      case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, DecimalType()) =>
-        // TODO: add fixed precision and scale handling
-        Decimal(parser.getDecimalValue)
+      case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, dt: DecimalType) =>
+        Decimal(parser.getDecimalValue, dt.precision, dt.scale)
 
       case (VALUE_NUMBER_INT, ByteType) =>
         parser.getByteValue
@@ -126,7 +125,7 @@ private[sql] object JacksonParser {
         convertMap(factory, parser, kt)
 
       case (_, udt: UserDefinedType[_]) =>
-        udt.deserialize(convertField(factory, parser, udt.sqlType))
+        convertField(factory, parser, udt.sqlType)
     }
   }
 

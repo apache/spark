@@ -15,22 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{Expression}
-import org.apache.spark.sql.execution.aggregate.ScalaUDAF
-import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
+/**
+ * Utilities to make sure we pass the proper numeric ranges
+ */
+object IntegralLiteralTestUtils {
 
-class UDAFRegistration private[sql] (sqlContext: SQLContext) extends Logging {
+  val positiveShort: Short = (Byte.MaxValue + 1).toShort
+  val negativeShort: Short = (Byte.MinValue - 1).toShort
 
-  private val functionRegistry = sqlContext.functionRegistry
+  val positiveShortLit: Literal = Literal(positiveShort)
+  val negativeShortLit: Literal = Literal(negativeShort)
 
-  def register(
-      name: String,
-      func: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
-    def builder(children: Seq[Expression]) = ScalaUDAF(children, func)
-    functionRegistry.registerFunction(name, builder)
-    func
-  }
+  val positiveInt: Int = Short.MaxValue + 1
+  val negativeInt: Int = Short.MinValue - 1
+
+  val positiveIntLit: Literal = Literal(positiveInt)
+  val negativeIntLit: Literal = Literal(negativeInt)
+
+  val positiveLong: Long = Int.MaxValue + 1L
+  val negativeLong: Long = Int.MinValue - 1L
+
+  val positiveLongLit: Literal = Literal(positiveLong)
+  val negativeLongLit: Literal = Literal(negativeLong)
 }

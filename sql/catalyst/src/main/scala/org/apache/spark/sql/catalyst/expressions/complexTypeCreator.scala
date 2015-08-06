@@ -211,7 +211,10 @@ case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    GenerateUnsafeProjection.createCode(ctx, ev, children)
+    val eval = GenerateUnsafeProjection.createCode(ctx, children)
+    ev.isNull = eval.isNull
+    ev.primitive = eval.primitive
+    eval.code
   }
 
   override def prettyName: String = "struct_unsafe"
@@ -246,7 +249,10 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    GenerateUnsafeProjection.createCode(ctx, ev, valExprs)
+    val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
+    ev.isNull = eval.isNull
+    ev.primitive = eval.primitive
+    eval.code
   }
 
   override def prettyName: String = "named_struct_unsafe"

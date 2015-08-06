@@ -357,6 +357,12 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
       df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "x"))
     checkAnswer(df.filter($"b".in("z", "y")),
       df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "y"))
+
+    val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
+
+    intercept[AnalysisException] {
+      df2.filter($"a".in($"b"))
+    }
   }
 
   val booleanData = ctx.createDataFrame(ctx.sparkContext.parallelize(

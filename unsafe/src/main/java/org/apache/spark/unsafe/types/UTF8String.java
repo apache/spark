@@ -54,8 +54,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     5, 5, 5, 5,
     6, 6};
 
-  private static ByteOrder byteOrder = ByteOrder.nativeOrder();
+  private static boolean isLittleEndian = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
 
+  private static final UTF8String COMMA_UTF8 = UTF8String.fromString(",");
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
 
   /**
@@ -179,7 +180,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     // After getting the data, we use a mask to mask out data that is not part of the string.
     long p;
     long mask = 0;
-    if (byteOrder == ByteOrder.LITTLE_ENDIAN) {
+    if (isLittleEndian) {
       if (numBytes >= 8) {
         p = PlatformDependent.UNSAFE.getLong(base, offset);
       } else if (numBytes > 4) {
@@ -409,6 +410,36 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       }
     }
     return fromString(sb.toString());
+  }
+
+  /*
+   * Returns the index of the string `match` in this String. This string has to be a comma separated
+   * list. If `match` contains a comma 0 will be returned. If the `match` isn't part of this String,
+   * 0 will be returned, else the index of match (1-based index)
+   */
+  public int findInSet(UTF8String match) {
+    if (match.contains(COMMA_UTF8)) {
+      return 0;
+    }
+
+    int n = 1, lastComma = -1;
+    for (int i = 0; i < numBytes; i++) {
+      if (getByte(i) == (byte) ',') {
+        if (i - (lastComma + 1) == match.numBytes &&
+          ByteArrayMethods.arrayEquals(base, offset + (lastComma + 1), match.base, match.offset,
+            match.numBytes)) {
+          return n;
+        }
+        lastComma = i;
+        n++;
+      }
+    }
+    if (numBytes - (lastComma + 1) == match.numBytes &&
+      ByteArrayMethods.arrayEquals(base, offset + (lastComma + 1), match.base, match.offset,
+        match.numBytes)) {
+      return n;
+    }
+    return 0;
   }
 
   /**

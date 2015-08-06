@@ -29,8 +29,12 @@ import org.junit.Test;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.expressions.Window;
+import org.apache.spark.sql.expressions.UserDefinedAggregateFunction;
+import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.hive.HiveContext;
 import org.apache.spark.sql.hive.test.TestHive$;
+import org.apache.spark.sql.expressions.UserDefinedAggregateFunction;
+import test.org.apache.spark.sql.hive.aggregate.MyDoubleSum;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext sc;
@@ -54,7 +58,7 @@ public class JavaDataFrameSuite {
     for (int i = 0; i < 10; i++) {
       jsonObjects.add("{\"key\":" + i + ", \"value\":\"str" + i + "\"}");
     }
-    df = hc.jsonRDD(sc.parallelize(jsonObjects));
+    df = hc.read().json(sc.parallelize(jsonObjects));
     df.registerTempTable("window_table");
   }
 
@@ -76,5 +80,27 @@ public class JavaDataFrameSuite {
         "      ORDER BY key " +
         "      ROWS BETWEEN 1 preceding and 1 following) " +
         "FROM window_table").collectAsList());
+  }
+
+  @Test
+  public void testUDAF() {
+    DataFrame df = hc.range(0, 100).unionAll(hc.range(0, 100)).select(col("id").as("value"));
+    UserDefinedAggregateFunction udaf = new MyDoubleSum();
+    UserDefinedAggregateFunction registeredUDAF = hc.udf().register("mydoublesum", udaf);
+    // Create Columns for the UDAF. For now, callUDF does not take an argument to specific if
+    // we want to use distinct aggregation.
+    DataFrame aggregatedDF =
+      df.groupBy()
+        .agg(
+          udaf.apply(true, col("value")),
+          udaf.apply(col("value")),
+          registeredUDAF.apply(col("value")),
+          callUDF("mydoublesum", col("value")));
+
+    List<Row> expectedResult = new ArrayList<Row>();
+    expectedResult.add(RowFactory.create(4950.0, 9900.0, 9900.0, 9900.0));
+    checkAnswer(
+      aggregatedDF,
+      expectedResult);
   }
 }

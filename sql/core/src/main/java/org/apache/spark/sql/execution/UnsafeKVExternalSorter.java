@@ -82,8 +82,11 @@ public final class UnsafeKVExternalSorter {
         pageSizeBytes);
     } else {
       // Insert the records into the in-memory sorter.
+      // We will use the number of elements in the map as the initialSize of the
+      // UnsafeInMemorySorter. Because UnsafeInMemorySorter does not accept 0 as the initialSize,
+      // we will use 1 as its initial size if the map is empty.
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
-        taskMemoryManager, recordComparator, prefixComparator, map.numElements());
+        taskMemoryManager, recordComparator, prefixComparator, Math.max(1, map.numElements()));
 
       final int numKeyFields = keySchema.size();
       BytesToBytesMap.BytesToBytesMapIterator iter = map.iterator();
@@ -134,6 +137,10 @@ public final class UnsafeKVExternalSorter {
       value.getBaseObject(), value.getBaseOffset(), value.getSizeInBytes(), prefix);
   }
 
+  /**
+   * Returns a sorted iterator. It is the caller's responsibility to call `cleanupResources()`
+   * after consuming this iterator.
+   */
   public KVSorterIterator sortedIterator() throws IOException {
     try {
       final UnsafeSorterIterator underlying = sorter.getSortedIterator();
@@ -158,8 +165,11 @@ public final class UnsafeKVExternalSorter {
     sorter.closeCurrentPage();
   }
 
-  private void cleanupResources() {
-    sorter.freeMemory();
+  /**
+   * Frees this sorter's in-memory data structures and cleans up its spill files.
+   */
+  public void cleanupResources() {
+    sorter.cleanupResources();
   }
 
   private static final class KVComparator extends RecordComparator {
@@ -207,7 +217,6 @@ public final class UnsafeKVExternalSorter {
           // Note that recordLen = keyLen + valueLen + 4 bytes (for the keyLen itself)
           int keyLen = PlatformDependent.UNSAFE.getInt(baseObj, recordOffset);
           int valueLen = recordLen - keyLen - 4;
-
           key.pointTo(baseObj, recordOffset + 4, numKeyFields, keyLen);
           value.pointTo(baseObj, recordOffset + 4 + keyLen, numValueFields, valueLen);
 

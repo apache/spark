@@ -60,6 +60,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // Scanning partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation))
         if t.partitionSpec.partitionColumns.nonEmpty =>
+      t.refresh()
       val selectedPartitions = prunePartitions(filters, t.partitionSpec).toArray
 
       logInfo {
@@ -87,6 +88,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
     // Scanning non-partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation)) =>
+      t.refresh()
       // See buildPartitionedTableScan for the reason that we need to create a shard
       // broadcast HadoopConf.
       val sharedHadoopConf = SparkHadoopUtil.get.conf
@@ -187,15 +189,17 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         // To see whether the `index`-th column is a partition column...
         val i = partitionColumns.indexOf(name)
         if (i != -1) {
+          val dt = schema(partitionColumns(i)).dataType
           // If yes, gets column value from partition values.
           (mutableRow: MutableRow, dataRow: InternalRow, ordinal: Int) => {
-            mutableRow(ordinal) = partitionValues.genericGet(i)
+            mutableRow(ordinal) = partitionValues.get(i, dt)
           }
         } else {
           // Otherwise, inherits the value from scanned data.
           val i = nonPartitionColumns.indexOf(name)
+          val dt = schema(nonPartitionColumns(i)).dataType
           (mutableRow: MutableRow, dataRow: InternalRow, ordinal: Int) => {
-            mutableRow(ordinal) = dataRow.genericGet(i)
+            mutableRow(ordinal) = dataRow.get(i, dt)
           }
         }
       }
@@ -361,6 +365,13 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
       case expressions.InSet(a: Attribute, set) =>
         Some(sources.In(a.name, set.toArray))
+
+      // Because we only convert In to InSet in Optimizer when there are more than certain
+      // items. So it is possible we still get an In expression here that needs to be pushed
+      // down.
+      case expressions.In(a: Attribute, list) if !list.exists(!_.isInstanceOf[Literal]) =>
+        val hSet = list.map(e => e.eval(EmptyRow))
+        Some(sources.In(a.name, hSet.toArray))
 
       case expressions.IsNull(a: Attribute) =>
         Some(sources.IsNull(a.name))

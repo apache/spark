@@ -54,7 +54,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   // GenerateOrdering agrees with RowOrdering.
   (DataTypeTestUtils.atomicTypes ++ Set(NullType)).foreach { dataType =>
     test(s"GenerateOrdering with $dataType") {
-      val rowOrdering = RowOrdering.forSchema(Seq(dataType, dataType))
+      val rowOrdering = InterpretedOrdering.forSchema(Seq(dataType, dataType))
       val genOrdering = GenerateOrdering.generate(
         BoundReference(0, dataType, nullable = true).asc ::
           BoundReference(1, dataType, nullable = true).asc :: Nil)

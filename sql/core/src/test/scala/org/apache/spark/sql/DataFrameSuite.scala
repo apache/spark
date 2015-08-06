@@ -492,15 +492,16 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     val df1 = DataFrame(sqlContext, LogicalRelation(fakeRelation1))
     assert(df1.inputFiles.toSet == fakeRelation1.paths.toSet)
 
-    val fakeRelation2 = new JSONRelation("/json/path", 1, Some(testData.schema), sqlContext)
+    val fakeRelation2 = new JSONRelation(
+      None, 1, Some(testData.schema), None, None, Array("/json/path"))(sqlContext)
     val df2 = DataFrame(sqlContext, LogicalRelation(fakeRelation2))
-    assert(df2.inputFiles.toSet == fakeRelation2.path.toSet)
+    assert(df2.inputFiles.toSet == fakeRelation2.paths.toSet)
 
     val unionDF = df1.unionAll(df2)
-    assert(unionDF.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.path)
+    assert(unionDF.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.paths)
 
     val filtered = df1.filter("false").unionAll(df2.intersect(df2))
-    assert(filtered.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.path)
+    assert(filtered.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.paths)
   }
 
   ignore("show") {
@@ -683,18 +684,6 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     checkAnswer(
       testData.dropDuplicates(Seq("value2")),
       Seq(Row(2, 1, 2), Row(1, 1, 1)))
-  }
-
-  test("SPARK-7276: Project collapse for continuous select") {
-    var df = testData
-    for (i <- 1 to 5) {
-      df = df.select($"*")
-    }
-
-    import org.apache.spark.sql.catalyst.plans.logical.Project
-    // make sure df have at most two Projects
-    val p = df.logicalPlan.asInstanceOf[Project].child.asInstanceOf[Project]
-    assert(!p.child.isInstanceOf[Project])
   }
 
   test("SPARK-7150 range api") {
