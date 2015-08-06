@@ -25,7 +25,7 @@ class RFormulaParserSuite extends SparkFunSuite {
       formula: String,
       label: String,
       terms: Seq[String],
-      schema: StructType = null) {
+      schema: StructType = new StructType) {
     val resolved = RFormulaParser.parse(formula).resolve(schema)
     assert(resolved.label == label)
     val simpleTerms = terms.map { t =>

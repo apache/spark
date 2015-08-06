@@ -41,6 +41,7 @@ import org.apache.spark.sql.types._
  * See https://stat.ethz.ch/R-manual/R-devel/library/base/html/formula.html for more
  * information about factor interactions in R formulae.
  */
+// TODO(ekl) it might be nice to have standalone tests for RInteraction.
 @Experimental
 class RInteraction(override val uid: String) extends Estimator[PipelineModel]
   with HasInputCols with HasOutputCol {
@@ -127,8 +128,8 @@ class RInteraction(override val uid: String) extends Estimator[PipelineModel]
 }
 
 /**
- * This helper class combines the output of multiple string-indexed columns to simulate
- * the joint indexing of tuples containing all the column values.
+ * This helper class computes the joint index of multiple string-indexed columns such that the
+ * combined index covers the cartesian product of column values.
  */
 private class IndexCombiner(
     inputCols: Array[String], attrNames: Array[String], outputCol: String)

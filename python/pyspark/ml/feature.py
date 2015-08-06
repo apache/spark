@@ -1117,7 +1117,7 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol):
 
     Implements the transforms required for fitting a dataset against an
     R model formula. Currently we support a limited subset of the R
-    operators, including '~', '+', '-', and '.'. Also see the R formula
+    operators, including '~', '.', ':', '+', and '-'. Also see the R formula
     docs:
     http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
 

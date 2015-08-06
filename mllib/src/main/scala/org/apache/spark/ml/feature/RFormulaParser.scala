@@ -32,7 +32,7 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
    * of the special '.' term. Duplicate terms will be removed during resolution.
    */
   def resolve(schema: StructType): ResolvedRFormula = {
-    lazy val dotTerms = expandDot(schema)
+    val dotTerms = expandDot(schema)
     var includedTerms = Seq[Seq[String]]()
     terms.foreach {
       case term: ColumnRef =>
@@ -80,29 +80,30 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
   private def expandInteraction(
       schema: StructType, terms: Seq[InteractionComponent]): Seq[Seq[String]] = {
     if (terms.isEmpty) {
-      Seq(Nil)
-    } else {
-      val rest = expandInteraction(schema, terms.tail)
-      val validInteractions = (terms.head match {
-        case Dot =>
-          expandDot(schema).filter(_ != label.value).flatMap { t =>
-            rest.map { r =>
-              Seq(t) ++ r
-            }
-          }
-        case ColumnRef(value) =>
-          rest.map(Seq(value) ++ _)
-      }).map(_.distinct)
-      // Deduplicates feature interactions, for example, a:b is the same as b:a.
-      var seen = mutable.Set[Set[String]]()
-      validInteractions.flatMap {
-        case t if seen.contains(t.toSet) =>
-          None
-        case t =>
-          seen += t.toSet
-          Some(t)
-      }.sortBy(_.length)
+      return Seq(Nil)
     }
+
+    val rest = expandInteraction(schema, terms.tail)
+    val validInteractions = (terms.head match {
+      case Dot =>
+        expandDot(schema).filter(_ != label.value).flatMap { t =>
+          rest.map { r =>
+            Seq(t) ++ r
+          }
+        }
+      case ColumnRef(value) =>
+        rest.map(Seq(value) ++ _)
+    }).map(_.distinct)
+
+    // Deduplicates feature interactions, for example, a:b is the same as b:a.
+    var seen = mutable.Set[Set[String]]()
+    validInteractions.flatMap {
+      case t if seen.contains(t.toSet) =>
+        None
+      case t =>
+        seen += t.toSet
+        Some(t)
+    }.sortBy(_.length)
   }
 
   // the dot operator excludes complex column types
@@ -116,6 +117,9 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
 
 /**
  * Represents a fully evaluated and simplified R formula.
+ * @param label the column name of the R formula label (response variable).
+ * @param terms the simplified terms of the R formula. Interactions terms are represented as Seqs
+ *              of column names; non-interaction terms as length 1 Seqs.
  */
 private[ml] case class ResolvedRFormula(label: String, terms: Seq[Seq[String]])
 

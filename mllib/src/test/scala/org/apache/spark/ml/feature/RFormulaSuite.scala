@@ -125,26 +125,26 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("numeric interaction") {
-    val formula = new RFormula().setFormula("a ~ b:c")
+    val formula = new RFormula().setFormula("a ~ b:c:d")
     val original = sqlContext.createDataFrame(
-      Seq((1, 2, 4), (2, 3, 4))
-    ).toDF("a", "b", "c")
+      Seq((1, 2, 4, 2), (2, 3, 4, 1))
+    ).toDF("a", "b", "c", "d")
     val model = formula.fit(original)
     val result = model.transform(original)
     val expected = sqlContext.createDataFrame(
       Seq(
-        (1, 2, 4, Vectors.dense(8.0), 1.0),
-        (2, 3, 4, Vectors.dense(12.0), 2.0))
-      ).toDF("id", "a", "b", "features", "label")
+        (1, 2, 4, 2, Vectors.dense(16.0), 1.0),
+        (2, 3, 4, 1, Vectors.dense(12.0), 2.0))
+      ).toDF("a", "b", "c", "d", "features", "label")
     assert(result.collect() === expected.collect())
     val attrs = AttributeGroup.fromStructField(result.schema("features"))
     val expectedAttrs = new AttributeGroup(
       "features",
-      Array[Attribute](new NumericAttribute(Some("b:c"), Some(1))))
+      Array[Attribute](new NumericAttribute(Some("b:c:d"), Some(1))))
     assert(attrs === expectedAttrs)
   }
 
-  test("numeric:factor interaction") {
+  test("factor numeric interaction") {
     val formula = new RFormula().setFormula("id ~ a:b")
     val original = sqlContext.createDataFrame(
       Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5), (4, "baz", 5), (4, "baz", 5))
@@ -171,7 +171,7 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(attrs === expectedAttrs)
   }
 
-  test("factor:factor interaction") {
+  test("factor factor interaction") {
     val formula = new RFormula().setFormula("id ~ a:b")
     val original = sqlContext.createDataFrame(
       Seq((1, "foo", "zq"), (2, "bar", "zq"), (3, "bar", "zz"))

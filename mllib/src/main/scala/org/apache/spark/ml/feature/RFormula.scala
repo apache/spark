@@ -47,8 +47,8 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
 /**
  * :: Experimental ::
  * Implements the transforms required for fitting a dataset against an R model formula. Currently
- * we support a limited subset of the R operators, including '~' and '+'. Also see the R formula
- * docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
+ * we support a limited subset of the R operators, including '~', '.', ':', '+', and '-'. Also see
+ * the R formula docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
  */
 @Experimental
 class RFormula(override val uid: String) extends Estimator[RFormulaModel] with RFormulaBase {
@@ -86,6 +86,8 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     val takenNames = mutable.Set(dataset.columns: _*)
     def encodeInteraction(terms: Seq[String]): String = {
       val outputCol = {
+        // TODO(ekl) this column naming should be unnecessary since we generate the right attr
+        // names in RInteraction, but the name is lost somewhere before VectorAssembler.
         var tmp = terms.mkString(":")
         while (takenNames.contains(tmp)) {
           tmp += "_"
@@ -99,7 +101,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
       tempColumns += outputCol
       outputCol
     }
-    val encodedCols = resolvedFormula.terms.map {
+    val encodedTerms = resolvedFormula.terms.map {
       case terms @ Seq(value) =>
         dataset.schema(value) match {
           case column if column.dataType == StringType =>
@@ -111,7 +113,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
         encodeInteraction(terms)
     }
     encoderStages += new VectorAssembler(uid)
-      .setInputCols(encodedCols.toArray)
+      .setInputCols(encodedTerms.toArray)
       .setOutputCol($(featuresCol))
     encoderStages += new ColumnPruner(tempColumns.toSet)
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
