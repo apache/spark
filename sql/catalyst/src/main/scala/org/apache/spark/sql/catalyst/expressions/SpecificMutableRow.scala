@@ -192,8 +192,7 @@ final class MutableAny extends MutableValue {
  * based on the dataTypes of each column.  The intent is to decrease garbage when modifying the
  * values of primitive columns.
  */
-final class SpecificMutableRow(val values: Array[MutableValue])
-  extends MutableRow with BaseGenericInternalRow {
+final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableRow {
 
   def this(dataTypes: Seq[DataType]) =
     this(
@@ -213,6 +212,8 @@ final class SpecificMutableRow(val values: Array[MutableValue])
   def this() = this(Seq.empty)
 
   override def numFields: Int = values.length
+
+  override def toSeq: Seq[Any] = values.map(_.boxed)
 
   override def setNullAt(i: Int): Unit = {
     values(i).isNull = true

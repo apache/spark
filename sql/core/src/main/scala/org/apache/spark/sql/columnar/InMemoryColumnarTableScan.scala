@@ -148,7 +148,7 @@ private[sql] case class InMemoryRelation(
           }
 
           val stats = InternalRow.fromSeq(columnBuilders.map(_.columnStats.collectedStatistics)
-                        .flatMap(_.values))
+                        .flatMap(_.toSeq))
 
           batchStats += stats
           CachedBatch(columnBuilders.map(_.build().array()), stats)
@@ -330,11 +330,10 @@ private[sql] case class InMemoryColumnarTableScan(
         if (inMemoryPartitionPruningEnabled) {
           cachedBatchIterator.filter { cachedBatch =>
             if (!partitionFilter(cachedBatch.stats)) {
-              def statsString: String = relation.partitionStatistics.schema.zipWithIndex.map {
-                case (a, i) =>
-                  val value = cachedBatch.stats.get(i, a.dataType)
-                  s"${a.name}: $value"
-              }.mkString(", ")
+              def statsString: String = relation.partitionStatistics.schema
+                .zip(cachedBatch.stats.toSeq)
+                .map { case (a, s) => s"${a.name}: $s" }
+                .mkString(", ")
               logInfo(s"Skipping partition based on stats $statsString")
               false
             } else {

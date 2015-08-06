@@ -390,10 +390,8 @@ private[hive] trait HiveInspectors {
       (o: Any) => {
         if (o != null) {
           val struct = soi.create()
-          val row = o.asInstanceOf[InternalRow]
-          soi.getAllStructFieldRefs.zip(wrappers).zipWithIndex.foreach {
-            case ((field, wrapper), i) =>
-              soi.setStructFieldData(struct, field, wrapper(row.get(i, schema(i).dataType)))
+          (soi.getAllStructFieldRefs, wrappers, o.asInstanceOf[InternalRow].toSeq).zipped.foreach {
+            (field, wrapper, data) => soi.setStructFieldData(struct, field, wrapper(data))
           }
           struct
         } else {
