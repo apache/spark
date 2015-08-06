@@ -77,12 +77,12 @@ private[hive] class ClientWrapper(
   //
   // However, APIs in Hadoop 2.0.x and 2.1.x versions were in flux due to historical reasons. It
   // turns out that Hadoop 2.0.x versions should also be used together with `Hadoop20SShims`, but
-  // `Hadoop20SShims` is chosen because the major version number here is 2.
+  // `Hadoop23Shims` is chosen because the major version number here is 2.
   //
   // To fix this issue, we try to inspect Hadoop version via `org.apache.hadoop.utils.VersionInfo`
   // and load `Hadoop20SShims` for Hadoop 1.x and 2.0.x versions.  If Hadoop version information is
-  // not available, we decide whether to load the shims or not by checking for existence of a probe
-  // method which doesn't exist in either Hadoop 1.x or 2.0.x versions.
+  // not available, we decide whether to override the shims or not by checking for existence of a
+  // probe method which doesn't exist in Hadoop 1.x or 2.0.x versions.
   private def overrideHadoopShims(): Unit = {
     val hadoopVersion = VersionInfo.getVersion
     val VersionPattern = """(\d+)\.(\d+).*""".r
