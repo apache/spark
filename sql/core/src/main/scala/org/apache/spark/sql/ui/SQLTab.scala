@@ -15,22 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.ui
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{Expression}
-import org.apache.spark.sql.execution.aggregate.ScalaUDAF
-import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.ui.{SparkUI, SparkUITab}
 
-class UDAFRegistration private[sql] (sqlContext: SQLContext) extends Logging {
+private[sql] class SQLTab(sqlContext: SQLContext, sparkUI: SparkUI)
+  extends SparkUITab(sparkUI, "sql") with Logging {
 
-  private val functionRegistry = sqlContext.functionRegistry
 
-  def register(
-      name: String,
-      func: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
-    def builder(children: Seq[Expression]) = ScalaUDAF(children, func)
-    functionRegistry.registerFunction(name, builder)
-    func
-  }
+  val parent = sparkUI
+  val listener = sqlContext.listener
+
+  attachPage(new AllExecutionsPage(this))
+  attachPage(new ExecutionPage(this))
+  parent.attachTab(this)
+
+  parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
+}
+
+private[sql] object SQLTab {
+
+  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/ui/static"
 }

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, ResolvedDataSource}
 import org.apache.spark.sql.jdbc.{JDBCWriteDetails, JdbcUtils}
+import org.apache.spark.sql.sources.HadoopFsRelation
 
 
 /**
@@ -184,6 +185,12 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * the same as that of the existing table.
    * When `mode` is `Append`, the schema of the [[DataFrame]] need to be
    * the same as that of the existing table, and format or options will be ignored.
+   *
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
    *
    * @since 1.4.0
    */

@@ -948,6 +948,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-7595: Window will cause resolve failed with self join") {
+    sql("SELECT * FROM src") // Force loading of src table.
+
     checkAnswer(sql(
       """
         |with

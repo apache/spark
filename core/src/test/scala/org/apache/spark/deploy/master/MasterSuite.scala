@@ -93,8 +93,8 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
       publicAddress = ""
     )
 
-    val (rpcEnv, uiPort, restPort) =
-      Master.startRpcEnvAndEndpoint("127.0.0.1", 7077, 8080, conf)
+    val (rpcEnv, _, _) =
+      Master.startRpcEnvAndEndpoint("127.0.0.1", 0, 0, conf)
 
     try {
       rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, rpcEnv.address, Master.ENDPOINT_NAME)
@@ -343,8 +343,8 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
 
   private def makeMaster(conf: SparkConf = new SparkConf): Master = {
     val securityMgr = new SecurityManager(conf)
-    val rpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 7077, conf, securityMgr)
-    val master = new Master(rpcEnv, rpcEnv.address, 8080, securityMgr, conf)
+    val rpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityMgr)
+    val master = new Master(rpcEnv, rpcEnv.address, 0, securityMgr, conf)
     master
   }
 

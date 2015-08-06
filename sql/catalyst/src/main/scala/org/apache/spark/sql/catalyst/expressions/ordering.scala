@@ -24,7 +24,7 @@ import org.apache.spark.sql.types._
 /**
  * An interpreted row ordering comparator.
  */
-class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
+class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
 
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
     this(ordering.map(BindReferences.bindReference(_, inputSchema)))
@@ -49,9 +49,9 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
           case dt: AtomicType if order.direction == Descending =>
             dt.ordering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
           case s: StructType if order.direction == Ascending =>
-            s.ordering.asInstanceOf[Ordering[Any]].compare(left, right)
+            s.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case s: StructType if order.direction == Descending =>
-            s.ordering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
+            s.interpretedOrdering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
           case other =>
             throw new IllegalArgumentException(s"Type $other does not support ordered operations")
         }
@@ -62,6 +62,18 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
       i += 1
     }
     return 0
+  }
+}
+
+object InterpretedOrdering {
+
+  /**
+   * Creates a [[InterpretedOrdering]] for the given schema, in natural ascending order.
+   */
+  def forSchema(dataTypes: Seq[DataType]): InterpretedOrdering = {
+    new InterpretedOrdering(dataTypes.zipWithIndex.map {
+      case (dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    })
   }
 }
 
@@ -81,13 +93,4 @@ object RowOrdering {
    * Returns true iff outputs from the expressions can be ordered.
    */
   def isOrderable(exprs: Seq[Expression]): Boolean = exprs.forall(e => isOrderable(e.dataType))
-
-  /**
-   * Creates a [[RowOrdering]] for the given schema, in natural ascending order.
-   */
-  def forSchema(dataTypes: Seq[DataType]): RowOrdering = {
-    new RowOrdering(dataTypes.zipWithIndex.map {
-      case (dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
-    })
-  }
 }
