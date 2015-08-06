@@ -21,10 +21,12 @@ import java.io.File
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
+import org.apache.commons.io.FileUtils
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
 
 import org.apache.spark._
+import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
 
 /**
@@ -46,7 +48,6 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     val shuffleService = YarnTestAccessor.getShuffleServiceInstance
 
     val registeredExecFile = YarnTestAccessor.getRegisteredExecutorFile(shuffleService)
-    assert(!registeredExecFile.exists())
 
     logInfo("Shuffle service port = " + shuffleServicePort)
     val result = File.createTempFile("result", null, tempDir)
@@ -88,15 +89,19 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
     val registeredExecFile = new File(args(1))
     logInfo("shuffle service executor file = " + registeredExecFile)
     var result = "failure"
+    val execStateCopy = new File(registeredExecFile.getAbsolutePath + "_dup")
     try {
       val data = sc.parallelize(0 until 100, 10).map { x => (x % 10) -> x }.reduceByKey{ _ + _ }.
         collect().toSet
       sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
       data should be ((0 until 10).map{x => x -> (x * 10 + 450)}.toSet)
       result = "success"
-      assert(!YarnTestAccessor.loadSavedExecutors(registeredExecFile).isEmpty)
+      // only one process can open a leveldb file at a time, so we copy the files
+      FileUtils.copyDirectory(registeredExecFile, execStateCopy)
+      assert(!ShuffleTestAccessor.reloadRegisteredExecutors(execStateCopy).isEmpty)
     } finally {
       sc.stop()
+      FileUtils.deleteDirectory(execStateCopy)
       Files.write(result, status, UTF_8)
     }
   }

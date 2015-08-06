@@ -23,9 +23,7 @@ import java.util.*;
 import java.util.Map.Entry;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Charsets;
 import com.google.common.collect.Lists;
-import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.AuxiliaryService;
@@ -35,10 +33,6 @@ import org.apache.hadoop.yarn.server.api.ContainerInitializationContext;
 import org.apache.hadoop.yarn.server.api.ContainerTerminationContext;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
-import org.fusesource.leveldbjni.JniDBFactory;
-import org.fusesource.leveldbjni.internal.NativeDB.DBException;
-import org.iq80.leveldb.DB;
-import org.iq80.leveldb.Options;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -104,9 +98,6 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   static YarnShuffleService instance;
 
-  @VisibleForTesting
-  Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> recoveredExecutorRegistrations = null;
-
   public YarnShuffleService() {
     super("spark_shuffle");
     logger.info("Initializing YARN shuffle service for Spark");
@@ -130,21 +121,11 @@ public class YarnShuffleService extends AuxiliaryService {
 
     // In case this NM was killed while there were running spark applications, we need to restore
     // lost state for the existing executors.  We look for an existing file in the NM's local dirs.
-    // If we don't find one, then we choose a file to use to save the state next time.  However, we
-    // do *not* immediately register all the executors in that file, just in case the application
-    // was terminated while the NM was restarting.  We wait until yarn tells the service about the
-    // app again via #initializeApplication, so we know its still running.  That is important
-    // for preventing a leak where the app data would stick around *forever*.  This does leave
-    // a small race -- if the NM restarts *again*, after only some of the existing apps have been
-    // re-registered, the info of the remaining apps is lost.
+    // If we don't find one, then we choose a file to use to save the state next time.  Even if
+    // an application was stopped while the NM was down, we expect yarn to call stopApplication()
+    // when it comes back
     registeredExecutorFile =
       findRegisteredExecutorFile(conf.getStrings("yarn.nodemanager.local-dirs"));
-    try {
-      recoveredExecutorRegistrations = reloadRegisteredExecutors();
-    } catch (Exception e) {
-      recoveredExecutorRegistrations = new HashMap<>();
-      logger.error("Failed to load previously registered executors", e);
-    }
 
     TransportConf transportConf = new TransportConf(new HadoopConfigProvider(conf));
     // If authentication is enabled, set up the shuffle server to use a
@@ -186,16 +167,6 @@ public class YarnShuffleService extends AuxiliaryService {
       }
     } catch (Exception e) {
       logger.error("Exception when initializing application {}", appId, e);
-    }
-    // See if we already have data for this app from before the restart -- if so, re-register
-    // those executors
-    List<Entry<AppExecId, ExecutorShuffleInfo>> executorsForApp =
-      recoveredExecutorRegistrations.get(appId);
-    if (executorsForApp != null) {
-      for (Entry<AppExecId, ExecutorShuffleInfo> entry: executorsForApp) {
-        logger.info("re-registering {} with {}", entry.getKey(), entry.getValue());
-        blockHandler.reregisterExecutor(entry.getKey(), entry.getValue());
-      }
     }
   }
 
@@ -257,54 +228,4 @@ public class YarnShuffleService extends AuxiliaryService {
   public ByteBuffer getMetaData() {
     return ByteBuffer.allocate(0);
   }
-
-  private Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> reloadRegisteredExecutors()
-      throws IOException, ClassNotFoundException {
-    if (registeredExecutorFile != null && registeredExecutorFile.exists()) {
-      logger.info("Reloading executors from {}", registeredExecutorFile);
-      return reloadRegisteredExecutors(registeredExecutorFile);
-    } else {
-      logger.info("No executor info to reload");
-      return new HashMap<>();
-    }
-  }
-
-
-  @VisibleForTesting
-  static Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> reloadRegisteredExecutors(
-      File file) throws IOException, ClassNotFoundException {
-    Map<String, List<Entry<AppExecId, ExecutorShuffleInfo>>> result = new HashMap<>();
-    Options options = new Options();
-    options.createIfMissing(true);
-    JniDBFactory factory = new JniDBFactory();
-    DB db = null;
-    try {
-      db = factory.open(file, options);
-      ObjectInputStream in = new ObjectInputStream(new ByteArrayInputStream(
-        db.get("registeredExecutors".getBytes(Charsets.UTF_8))));
-      Map<AppExecId, ExecutorShuffleInfo> registeredExecutors =
-        (Map<AppExecId, ExecutorShuffleInfo>) in.readObject();
-      for (Entry<AppExecId, ExecutorShuffleInfo> e: registeredExecutors.entrySet()) {
-        List<Map.Entry<AppExecId, ExecutorShuffleInfo>> executorsForApp =
-          result.get(e.getKey().appId);
-        if (executorsForApp == null) {
-          executorsForApp = new ArrayList<>();
-          result.put(e.getKey().appId, executorsForApp);
-        }
-        executorsForApp.add(new AbstractMap.SimpleImmutableEntry<>(e.getKey(), e.getValue()));
-      }
-      in.close();
-    } catch (DBException dbe) {
-      // blow the corrupt db away, so we can still write out OK data for future executors
-      FileUtils.deleteDirectory(file);
-      throw dbe;
-    } finally {
-      if (db != null) {
-        db.close();
-      }
-    }
-    return result;
-  }
-
-
 }

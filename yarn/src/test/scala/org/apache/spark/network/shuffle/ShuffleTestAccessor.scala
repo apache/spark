@@ -16,9 +16,13 @@
  */
 package org.apache.spark.network.shuffle
 
-import java.io.File
+import java.io.{IOException, File}
+import java.util.concurrent.ConcurrentMap
 
+import com.google.common.annotations.VisibleForTesting
 import org.apache.hadoop.yarn.api.records.ApplicationId
+import org.fusesource.leveldbjni.JniDBFactory
+import org.iq80.leveldb.{DB, Options}
 
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
@@ -45,4 +49,23 @@ object ShuffleTestAccessor {
     resolver.registeredExecutorFile
   }
 
+  def shuffleServiceLevelDB(resolver: ExternalShuffleBlockResolver): DB = {
+    resolver.db
+  }
+
+  def reloadRegisteredExecutors(
+    file: File): ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
+    val options: Options = new Options
+    options.createIfMissing(true)
+    val factory = new JniDBFactory
+    val db = factory.open(file, options)
+    val result = ExternalShuffleBlockResolver.reloadRegisteredExecutors(db)
+    db.close()
+    result
+  }
+
+  def reloadRegisteredExecutors(
+      db: DB): ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
+    ExternalShuffleBlockResolver.reloadRegisteredExecutors(db)
+  }
 }

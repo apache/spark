@@ -18,8 +18,7 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.*;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -64,7 +63,8 @@ public class ExternalShuffleBlockResolver {
 
   @VisibleForTesting
   final File registeredExecutorFile;
-  private final DB db;
+  @VisibleForTesting
+  final DB db;
 
   public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile) {
     this(conf, registeredExecutorFile, Executors.newSingleThreadExecutor(
@@ -83,19 +83,24 @@ public class ExternalShuffleBlockResolver {
     if (registeredExecutorFile != null) {
       Options options = new Options();
       options.createIfMissing(true);
+      options.logger(new LevelDBLogger());
       JniDBFactory factory = new JniDBFactory();
       DB tmpDb;
+      ConcurrentMap<AppExecId, ExecutorShuffleInfo> tmpExecutors;
       try {
         tmpDb = factory.open(registeredExecutorFile, options);
-      } catch (IOException e) {
+        tmpExecutors = reloadRegisteredExecutors(tmpDb);
+      } catch (Exception e) {
         logger.info("Error opening leveldb file {}", registeredExecutorFile, e);
         tmpDb = null;
+        tmpExecutors = Maps.newConcurrentMap();
       }
       db = tmpDb;
+      executors = tmpExecutors;
     } else {
       db = null;
+      executors = Maps.newConcurrentMap();
     }
-    this.executors = Maps.newConcurrentMap();
     this.directoryCleaner = directoryCleaner;
   }
 
@@ -316,4 +321,38 @@ public class ExternalShuffleBlockResolver {
       db.put("registeredExecutors".getBytes(Charsets.UTF_8), bytes.toByteArray());
     }
   }
+
+  @VisibleForTesting
+  static ConcurrentMap<AppExecId, ExecutorShuffleInfo> reloadRegisteredExecutors(DB db)
+      throws IOException, ClassNotFoundException {
+    if (db != null) {
+      ObjectInputStream in = null;
+      byte[] bytes = db.get("registeredExecutors".getBytes(Charsets.UTF_8));
+      if (bytes != null) {
+        try {
+          in = new ObjectInputStream(new ByteArrayInputStream(bytes));
+          ConcurrentMap<AppExecId, ExecutorShuffleInfo> registeredExecutors =
+            (ConcurrentMap<AppExecId, ExecutorShuffleInfo>) in.readObject();
+          in.close();
+          return registeredExecutors;
+        } finally {
+          if (in != null) {
+            in.close();
+          }
+        }
+      }
+    }
+    return Maps.newConcurrentMap();
+  }
+
+  private static class LevelDBLogger implements org.iq80.leveldb.Logger {
+    private static final Logger LOG = LoggerFactory.getLogger(LevelDBLogger.class);
+
+    @Override
+    public void log(String message) {
+      LOG.info(message);
+    }
+  }
+
+
 }
