@@ -54,7 +54,8 @@ private[shared] object SharedParamsCodeGen {
         isValid = "ParamValidators.gtEq(1)"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
       ParamDesc[String]("handleInvalid", "how to handle invalid entries. Options are skip (which " +
-        "will filter out rows with bad values), or error (which will throw an errror). More options may be added later.",
+        "will filter out rows with bad values), or error (which will throw an errror). More " +
+        "options may be added later.",
         isValid = "ParamValidators.inArray(Array(\"skip\", \"error\"))"),
       ParamDesc[Boolean]("standardization", "whether to standardize the training features" +
         " before fitting the model.", Some("true")),
