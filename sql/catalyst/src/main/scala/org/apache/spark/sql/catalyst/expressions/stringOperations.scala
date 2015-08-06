@@ -385,8 +385,8 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
 
   override def nullSafeEval(srcEval: Any, matchingEval: Any, replaceEval: Any): Any = {
     if (matchingEval != lastMatching || replaceEval != lastReplace) {
-      lastMatching = matchingEval.asInstanceOf[UTF8String]
-      lastReplace = replaceEval.asInstanceOf[UTF8String]
+      lastMatching = matchingEval.asInstanceOf[UTF8String].clone()
+      lastReplace = replaceEval.asInstanceOf[UTF8String].clone()
       dict = StringTranslate.buildDict(lastMatching, lastReplace)
     }
     srcEval.asInstanceOf[UTF8String].translate(dict)
