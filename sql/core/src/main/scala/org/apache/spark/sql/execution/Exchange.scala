@@ -39,20 +39,34 @@ import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEn
 @DeveloperApi
 case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
 
+  override def nodeName: String = if (tungstenMode) "TungstenExchange" else "Exchange"
+
+  /**
+   * Returns true iff the children outputs aggregate UDTs that are not part of the SQL type.
+   * This only happens with the old aggregate implementation and should be removed in 1.6.
+   */
+  private lazy val tungstenMode: Boolean = {
+    val unserializableUDT = child.schema.exists(_.dataType match {
+      case HyperLogLogUDT => true
+      case _: OpenHashSetUDT => true
+      case _ => false
+    })
+    // Do not use the Unsafe path if we are using a RangePartitioning, since this may lead to
+    // an interpreted RowOrdering being applied to an UnsafeRow, which will lead to
+    // ClassCastExceptions at runtime. This check can be removed after SPARK-9054 is fixed.
+    !unserializableUDT && !newPartitioning.isInstanceOf[RangePartitioning]
+  }
+
   override def outputPartitioning: Partitioning = newPartitioning
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
-
-  override def canProcessSafeRows: Boolean = true
-
-  override def canProcessUnsafeRows: Boolean = {
-    // Do not use the Unsafe path if we are using a RangePartitioning, since this may lead to
-    // an interpreted RowOrdering being applied to an UnsafeRow, which will lead to
-    // ClassCastExceptions at runtime. This check can be removed after SPARK-9054 is fixed.
-    !newPartitioning.isInstanceOf[RangePartitioning]
-  }
+  // This setting is somewhat counterintuitive:
+  // If the schema works with UnsafeRow, then we tell the planner that we don't support safe row,
+  // so the planner inserts a converter to convert data into UnsafeRow if needed.
+  override def outputsUnsafeRows: Boolean = tungstenMode
+  override def canProcessSafeRows: Boolean = !tungstenMode
+  override def canProcessUnsafeRows: Boolean = tungstenMode
 
   /**
    * Determines whether records must be defensively copied before being sent to the shuffle.
@@ -128,19 +142,11 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
     // For now, we will not use SparkSqlSerializer2 when noField is true.
     val noField = rowDataTypes == null || rowDataTypes.length == 0
 
-    val useSqlSerializer2 =
-        child.sqlContext.conf.useSqlSerializer2 &&   // SparkSqlSerializer2 is enabled.
-        SparkSqlSerializer2.support(rowDataTypes) &&  // The schema of row is supported.
-        !noField
-
     if (child.outputsUnsafeRows) {
-      logInfo("Using UnsafeRowSerializer.")
+      logDebug("Using UnsafeRowSerializer.")
       new UnsafeRowSerializer(child.output.size)
-    } else if (useSqlSerializer2) {
-      logInfo("Using SparkSqlSerializer2.")
-      new SparkSqlSerializer2(rowDataTypes)
     } else {
-      logInfo("Using SparkSqlSerializer.")
+      logDebug("Using SparkSqlSerializer.")
       new SparkSqlSerializer(sparkConf)
     }
   }
