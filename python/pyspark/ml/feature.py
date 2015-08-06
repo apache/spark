@@ -731,10 +731,10 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)]
-    >>> itd = model.invert("labelIndex", "label2").transform(td)
+    >>> itd = model.invert("indexed", "label2").transform(td)
     >>> sorted(set([(i[0], i[1]) for i in itd.select(itd.id, itd.label2).collect()]),
     ...     key=lambda x: x[0])
-    []
+    [(0, u'a'), (1, u'b'), (2, u'c'), (3, u'a'), (4, u'a'), (5, u'c')]
     """
 
     @keyword_only
@@ -781,6 +781,13 @@ class StringIndexerInverse(JavaTransformer):
     Note: By default we keep the original columns during StringIndexerModel's transformation,
     so the inverse should only be used on new columns such as predicted labels.
     """
+
+    def __init__(self, java_obj):
+        """
+        Initialize this instace of the StringIndexerInverse using the provided java_obj.
+        """
+        self._java_obj = java_obj
+
 
 
 @inherit_doc

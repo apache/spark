@@ -136,18 +136,11 @@ class JavaEstimator(Estimator, JavaWrapper):
 class JavaTransformer(Transformer, JavaWrapper):
     """
     Base class for :py:class:`Transformer`s that wrap Java/Scala
-    implementations.
+    implementations. Subclasses should ensure they have the transformer Java object
+    available as _java_obj.
     """
 
     __metaclass__ = ABCMeta
-
-    def __init__(self, java_obj):
-        """
-        Initialize this instance with a Java model object.
-        Subclasses should esnure they have the transformer Java object
-        available as _java_obj.
-        """
-        self._java_obj = java_obj
 
     def _transform(self, dataset):
         self._transfer_params_to_java()
