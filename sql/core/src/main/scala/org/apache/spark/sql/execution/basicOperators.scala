@@ -212,7 +212,9 @@ case class TakeOrderedAndProject(
 
   override def outputPartitioning: Partitioning = SinglePartition
 
-  private val ord: RowOrdering = new RowOrdering(sortOrder, child.output)
+  // We need to use an interpreted ordering here because generated orderings cannot be serialized
+  // and this ordering needs to be created on the driver in order to be passed into Spark core code.
+  private val ord: InterpretedOrdering = new InterpretedOrdering(sortOrder, child.output)
 
   // TODO: remove @transient after figure out how to clean closure at InsertIntoHiveTable.
   @transient private val projection = projectList.map(new InterpretedProjection(_, child.output))

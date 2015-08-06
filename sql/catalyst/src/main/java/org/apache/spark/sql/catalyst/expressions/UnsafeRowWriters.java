@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.math.BigInteger;
+
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.Decimal;
-import org.apache.spark.sql.types.MapData;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.ByteArray;
@@ -47,29 +48,41 @@ public class UnsafeRowWriters {
 
   /** Writer for Decimal with precision larger than 18. */
   public static class DecimalWriter {
-
+    private static final int SIZE = 16;
     public static int getSize(Decimal input) {
       // bounded size
-      return 16;
+      return SIZE;
     }
 
     public static int write(UnsafeRow target, int ordinal, int cursor, Decimal input) {
+      final Object base = target.getBaseObject();
       final long offset = target.getBaseOffset() + cursor;
-      final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
-      final int numBytes = bytes.length;
-      assert(numBytes <= 16);
-
       // zero-out the bytes
-      PlatformDependent.UNSAFE.putLong(target.getBaseObject(), offset, 0L);
-      PlatformDependent.UNSAFE.putLong(target.getBaseObject(), offset + 8, 0L);
+      PlatformDependent.UNSAFE.putLong(base, offset, 0L);
+      PlatformDependent.UNSAFE.putLong(base, offset + 8, 0L);
+
+      if (input == null) {
+        target.setNullAt(ordinal);
+        // keep the offset and length for update
+        int fieldOffset = UnsafeRow.calculateBitSetWidthInBytes(target.numFields()) + ordinal * 8;
+        PlatformDependent.UNSAFE.putLong(base, target.getBaseOffset() + fieldOffset,
+          ((long) cursor) << 32);
+        return SIZE;
+      }
+
+      final BigInteger integer = input.toJavaBigDecimal().unscaledValue();
+      int signum = integer.signum() + 1;
+      final int[] mag = (int[]) PlatformDependent.UNSAFE.getObjectVolatile(integer,
+        PlatformDependent.BIG_INTEGER_MAG_OFFSET);
+      assert(mag.length <= 4);
 
       // Write the bytes to the variable length portion.
-      PlatformDependent.copyMemory(bytes, PlatformDependent.BYTE_ARRAY_OFFSET,
-        target.getBaseObject(), offset, numBytes);
-
+      PlatformDependent.copyMemory(mag, PlatformDependent.INT_ARRAY_OFFSET,
+        base, target.getBaseOffset() + cursor, mag.length * 4);
       // Set the fixed length portion.
-      target.setLong(ordinal, (((long) cursor) << 32) | ((long) numBytes));
-      return 16;
+      target.setLong(ordinal, (((long) cursor) << 32) | ((long) ((signum << 8) + mag.length)));
+
+      return SIZE;
     }
   }
 
