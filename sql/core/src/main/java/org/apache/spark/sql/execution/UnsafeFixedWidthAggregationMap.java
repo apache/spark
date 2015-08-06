@@ -72,7 +72,7 @@ public final class UnsafeFixedWidthAggregationMap {
    */
   public static boolean supportsAggregationBufferSchema(StructType schema) {
     for (StructField field: schema.fields()) {
-      if (!UnsafeRow.isFixedLength(field.dataType())) {
+      if (!UnsafeRow.isMutable(field.dataType())) {
         return false;
       }
     }
@@ -111,8 +111,6 @@ public final class UnsafeFixedWidthAggregationMap {
     // Initialize the buffer for aggregation value
     final UnsafeProjection valueProjection = UnsafeProjection.create(aggregationBufferSchema);
     this.emptyAggregationBuffer = valueProjection.apply(emptyAggregationBuffer).getBytes();
-    assert(this.emptyAggregationBuffer.length == aggregationBufferSchema.length() * 8 +
-      UnsafeRow.calculateBitSetWidthInBytes(aggregationBufferSchema.length()));
   }
 
   /**
