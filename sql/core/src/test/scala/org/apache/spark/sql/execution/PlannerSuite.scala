@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin, SortMergeJoin}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{SQLTestUtils, TestSQLContext}
 import org.apache.spark.sql.test.TestSQLContext._
@@ -200,6 +200,16 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
         }
 
       }
+    }
+  }
+
+  test("EnsureRequirements shouldn't add exchange to SMJ inputs if both are SinglePartition") {
+    val df = (1 to 10).map(Tuple1.apply).toDF("a").repartition(1)
+    val keys = Seq(df.col("a").expr)
+    val smj = SortMergeJoin(keys, keys, df.queryExecution.sparkPlan, df.queryExecution.sparkPlan)
+    val afterEnsureRequirements = EnsureRequirements(df.sqlContext).apply(smj)
+    if (afterEnsureRequirements.collect { case Exchange(_, _) => true }.nonEmpty) {
+      fail(s"No Exchanges should have been added:\n$afterEnsureRequirements")
     }
   }
 }
