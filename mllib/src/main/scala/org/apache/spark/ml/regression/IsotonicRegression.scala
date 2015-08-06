@@ -55,13 +55,15 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
    * @group param
    */
   final val isotonic: BooleanParam =
-    new BooleanParam(this, "isotonic", "isotonic (increasing) or antitonic (decreasing) sequence")
+    new BooleanParam(this, "isotonic",
+      "whether the output sequence should be isotonic/increasing (true) or" +
+        "antitonic/decreasing (false)")
 
   /** @group getParam */
   final def getIsotonic: Boolean = $(isotonic)
 
   /**
-   * Param for the index of the feature if [[featuresCol]] is a vector column (default: `1`), no
+   * Param for the index of the feature if [[featuresCol]] is a vector column (default: `0`), no
    * effect otherwise.
    * @group param
    */
