@@ -572,7 +572,7 @@ class DAGSchedulerSuite
       completeNextShuffleMapSuccesfully(0, attempt, numShufflePartitions = 2)
 
       // Now we should have a new taskSet, for a new attempt of stage 1.
-      // We will have one fetch failure for this task set
+      // Fail all these tasks with FetchFailure
       completeNextStageWithFetchFailure(1, attempt, shuffleDep)
 
       // this will (potentially) trigger a resubmission of stage 0, since we've lost some of its
@@ -620,7 +620,7 @@ class DAGSchedulerSuite
 
       if (attempt < Stage.MAX_STAGE_FAILURES/2) {
         // Now we should have a new taskSet, for a new attempt of stage 1.
-        // We will have one fetch failure for this task set
+        // Fail all these tasks with FetchFailure
         completeNextStageWithFetchFailure(1, attempt, shuffleDepOne)
       } else {
         completeNextShuffleMapSuccesfully(1, attempt, numShufflePartitions = 1)
@@ -650,7 +650,7 @@ class DAGSchedulerSuite
    * We want to show that many fetch failures inside a single stage attempt do not trigger an abort
    * on their own, but only when there are enough failing stage attempts.
    */
-  test("Multiple tasks w/ fetch failures in same stage should not abort the stage.") {
+  test("Multiple tasks w/ fetch failures in same stage attempt should not abort the stage.") {
     setupStageAbortTest(sc)
 
     val parts = 8
@@ -702,7 +702,7 @@ class DAGSchedulerSuite
       completeNextShuffleMapSuccesfully(0, attempt, numShufflePartitions = 2)
 
       // Now we should have a new taskSet, for a new attempt of stage 1.
-      // We will have one fetch failure for this task set
+      // Fail these tasks with FetchFailure
       completeNextStageWithFetchFailure(1, attempt, shuffleDepOne)
 
       scheduler.resubmitFailedStages()
