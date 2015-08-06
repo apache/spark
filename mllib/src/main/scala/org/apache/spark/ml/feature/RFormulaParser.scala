@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.feature
 
+import scala.collection.mutable
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.mllib.linalg.VectorUDT
@@ -31,6 +32,7 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
    * of the special '.' term. Duplicate terms will be removed during resolution.
    */
   def resolve(schema: StructType): ResolvedRFormula = {
+    lazy val dotTerms = expandDot(schema)
     var includedTerms = Seq[Seq[String]]()
     terms.foreach {
       case term: ColumnRef =>
@@ -38,19 +40,18 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
       case ColumnInteraction(terms) =>
         includedTerms ++= expandInteraction(schema, terms)
       case Dot =>
-        includedTerms ++= simpleTypes(schema).filter(_ != label.value).map(Seq(_))
+        includedTerms ++= dotTerms.map(Seq(_))
       case Deletion(term: Term) =>
         term match {
           case inner: ColumnRef =>
             includedTerms = includedTerms.filter(_ != Seq(inner.value))
           case ColumnInteraction(terms) =>
-            val fromInteraction = expandInteraction(schema, terms)
-            includedTerms = includedTerms.filter(!fromInteraction.contains(_))
+            val fromInteraction = expandInteraction(schema, terms).map(_.toSet)
+            includedTerms = includedTerms.filter(t => !fromInteraction.contains(t.toSet))
           case Dot =>
             // e.g. "- .", which removes all first-order terms
-            val fromSchema = simpleTypes(schema)
             includedTerms = includedTerms.filter {
-              case Seq(t) => !fromSchema.contains(t)
+              case Seq(t) => !dotTerms.contains(t)
               case _ => true
             }
           case _: Deletion =>
@@ -75,29 +76,41 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
     intercept
   }
 
+  // expands the Dot operators in interaction terms
   private def expandInteraction(
       schema: StructType, terms: Seq[InteractionComponent]): Seq[Seq[String]] = {
     if (terms.isEmpty) {
       Seq(Nil)
     } else {
-      terms.head match {
+      val rest = expandInteraction(schema, terms.tail)
+      val validInteractions = (terms.head match {
         case Dot =>
-          val rest = expandInteraction(schema, terms.tail)
-          simpleTypes(schema).filter(_ != label.value).map { t =>
-            Seq(t) ++ rest
+          expandDot(schema).filter(_ != label.value).flatMap { t =>
+            rest.map { r =>
+              Seq(t) ++ r
+            }
           }
         case ColumnRef(value) =>
-          (Seq(value) ++ expandInteraction(schema, terms.tail))
-      }
+          rest.map(Seq(value) ++ _)
+      }).map(_.distinct)
+      // Deduplicates feature interactions, for example, a:b is the same as b:a.
+      var seen = mutable.Set[Set[String]]()
+      validInteractions.flatMap {
+        case t if seen.contains(t.toSet) =>
+          None
+        case t =>
+          seen += t.toSet
+          Some(t)
+      }.sortBy(_.length)
     }
   }
 
   // the dot operator excludes complex column types
-  private def simpleTypes(schema: StructType): Seq[String] = {
+  private def expandDot(schema: StructType): Seq[String] = {
     schema.fields.filter(_.dataType match {
       case _: NumericType | StringType | BooleanType | _: VectorUDT => true
       case _ => false
-    }).map(_.name)
+    }).map(_.name).filter(_ != label.value)
   }
 }
 
