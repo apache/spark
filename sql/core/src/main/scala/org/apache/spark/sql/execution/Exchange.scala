@@ -197,12 +197,15 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
  * of input data meets the
  * [[org.apache.spark.sql.catalyst.plans.physical.Distribution Distribution]] requirements for
  * each operator by inserting [[Exchange]] Operators where required.  Also ensure that the
- * required input partition ordering requirements are met.
+ * input partition ordering requirements are met.
  */
 private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[SparkPlan] {
   // TODO: Determine the number of partitions.
   private def numPartitions: Int = sqlContext.conf.numShufflePartitions
 
+  /**
+   * Given a required distribution, returns a partitioning that satisfies that distribution.
+   */
   private def canonicalPartitioning(requiredDistribution: Distribution): Partitioning = {
     requiredDistribution match {
       case AllTuples => SinglePartition
@@ -212,6 +215,19 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     }
   }
 
+  /**
+   * Return true if all of the operator's children satisfy their output distribution requirements.
+   */
+  private def childPartitioningsSatisfyDistributionRequirements(operator: SparkPlan): Boolean = {
+    operator.children.zip(operator.requiredChildDistribution).forall {
+      case (child, distribution) => child.outputPartitioning.satisfies(distribution)
+    }
+  }
+
+  /**
+   * Given an operator, check whether the operator requires its children to have compatible
+   * output partitionings and add Exchanges to fix any detected incompatibilities.
+   */
   private def ensureChildPartitioningsAreCompatible(operator: SparkPlan): SparkPlan = {
     if (operator.requiresChildPartitioningsToBeCompatible) {
       if (!Partitioning.allCompatible(operator.children.map(_.outputPartitioning))) {
@@ -224,7 +240,9 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
               Exchange(targetPartitioning, child)
             }
         }
-        operator.withNewChildren(newChildren)
+        val newOperator = operator.withNewChildren(newChildren)
+        assert(childPartitioningsSatisfyDistributionRequirements(newOperator))
+        newOperator
       } else {
         operator
       }
@@ -234,6 +252,8 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
   }
 
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
+
+    // Precondition: joins' children have compatible partitionings.
 
     def addShuffleIfNecessary(child: SparkPlan, requiredDistribution: Distribution): SparkPlan = {
       if (child.outputPartitioning.satisfies(requiredDistribution)) {
