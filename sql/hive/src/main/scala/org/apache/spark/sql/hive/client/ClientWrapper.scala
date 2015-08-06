@@ -66,27 +66,22 @@ private[hive] class ClientWrapper(
 
   overrideHadoopShims()
 
-  // !! HACK ALERT !!
-  //
-  // This method is a surgical fix for Hadoop version 2.0.0-mr1-cdh4.1.1, which is used by Spark EC2
-  // scripts.  We should remove this after upgrading Spark EC2 scripts to some more recent Hadoop
-  // version in the future.
-  //
-  // Internally, Hive `ShimLoader` tries to load different versions of Hadoop shims by checking
+  // Internally, Hive ShimLoader tries to load different versions of Hadoop shims by checking
   // version information gathered from Hadoop jar files.  If the major version number is 1,
-  // `Hadoop20SShims` will be loaded.  Otherwise, if the major version number is 2, `Hadoop23Shims`
+  // Hadoop20SShims (shims for 0.20 and its derivatives, generally where Hadoop 1.x came from)
+  // will be loaded.  Otherwise, if the major version number is 2, Hadoop23Shims
+  // (shims for 0.23 and derivatives, which is more where Hadoop 2.x came from)
   // will be chosen.
   //
-  // However, part of APIs in Hadoop 2.0.x and 2.1.x versions were in flux due to historical
-  // reasons. So 2.0.0-mr1-cdh4.1.1 is actually more Hadoop-1-like and should be used together with
-  // `Hadoop20SShims`, but `Hadoop20SShims` is chose because the major version number here is 2.
+  // However, part of APIs in Hadoop 2.0.x and 2.1.x versions were in flux, being alpha/beta
+  // lines for the Hadoop 2.x line that stabilized in 2.2. So 2.0.x releases,
+  // like 2.0.0-cdh4.x.x for example, may end up needing Hadoop20Shims, even
+  // though the major version number here is 2.
   //
-  // Here we check for this specific version and loads `Hadoop20SShims` via reflection.  Note that
-  // we can't check for string literal "2.0.0-mr1-cdh4.1.1" because the obtained version string
-  // comes from Maven artifact org.apache.hadoop:hadoop-common:2.0.0-cdh4.1.1, which doesn't have
-  // the "mr1" tag in its version string.
+  // Here we check for this specific version and loads `Hadoop20SShims` via reflection.
+  // This also catches 'mr1' flavors of the CDH4 release, like 2.0.0-mr1-cdh4.x.x
   private def overrideHadoopShims(): Unit = {
-    val VersionPattern = """2\.0\.0.*cdh4.*""".r
+    val VersionPattern = """2\.0\.0.*""".r
 
     VersionInfo.getVersion match {
       case VersionPattern() =>
