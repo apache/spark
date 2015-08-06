@@ -908,8 +908,10 @@ class KinesisStreamTests(PySparkStreamingTestCase):
             "awsAccessKey", "awsSecretKey")
 
     def test_kinesis_stream(self):
-        if os.environ.get('ENABLE_KINESIS_TESTS') != '1':
-            print("Skip test_kinesis_stream")
+        if not are_kinesis_tests_enabled:
+            sys.stderr.write(
+                "Skipped test_kinesis_stream (enable by setting environment variable %s=1"
+                % kinesis_test_environ_var)
             return
 
         import random
@@ -950,6 +952,7 @@ class KinesisStreamTests(PySparkStreamingTestCase):
             traceback.print_exc()
             raise
         finally:
+            self.ssc.stop(False)
             kinesisTestUtils.deleteStream()
             kinesisTestUtils.deleteDynamoDBTable(kinesisAppName)
 
@@ -964,7 +967,7 @@ def search_kafka_assembly_jar():
             ("Failed to find Spark Streaming kafka assembly jar in %s. " % kafka_assembly_dir) +
             "You need to build Spark with "
             "'build/sbt assembly/assembly streaming-kafka-assembly/assembly' or "
-            "'build/mvn package' before running this test")
+            "'build/mvn package' before running this test.")
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Kafka assembly JARs in %s; please "
                          "remove all but one") % kafka_assembly_dir)
@@ -982,7 +985,7 @@ def search_flume_assembly_jar():
             ("Failed to find Spark Streaming Flume assembly jar in %s. " % flume_assembly_dir) +
             "You need to build Spark with "
             "'build/sbt assembly/assembly streaming-flume-assembly/assembly' or "
-            "'build/mvn package' before running this test")
+            "'build/mvn package' before running this test.")
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Flume assembly JARs in %s; please "
                          "remove all but one") % flume_assembly_dir)
@@ -997,12 +1000,24 @@ def search_kinesis_asl_assembly_jar():
         os.path.join(kinesis_asl_assembly_dir,
                      "target/scala-*/spark-streaming-kinesis-asl-assembly-*.jar"))
     if not jars:
-        return None
+        if are_kinesis_tests_enabled:
+            raise Exception(
+                ("Failed to find Spark Streaming Kinesis assembly jar in %s. " %
+                kinesis_asl_assembly_dir) + "You need to build Spark with 'build/sbt -Pkinesis-asl "
+                "assembly/assembly streaming-kinesis-asl-assembly/assembly'"
+                "or 'build/mvn -Pkinesis-asl package' before running this test.")
+        else:
+            return None
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Kinesis ASL assembly JARs in %s; please "
                          "remove all but one") % kinesis_asl_assembly_dir)
     else:
         return jars[0]
+
+
+# Must be same as the variable and condition defined in KinesisTestUtils.scala
+kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
+are_kinesis_tests_enabled = os.environ.get(kinesis_test_environ_var) == '1'
 
 
 if __name__ == "__main__":
@@ -1016,15 +1031,16 @@ if __name__ == "__main__":
         kinesis_jar_present = True
         jars = "%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, kinesis_asl_assembly_jar)
 
-    print kinesis_jar_present, jars
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
     testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, \
         CheckpointTests, KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests]
     if kinesis_jar_present is True:
         testcases.append(KinesisStreamTests)
+    else:
+        sys.stderr.write("Skipping all Kinesis Python tests as the "
+                         "optional Kinesis project was not compiled")
 
-    sys.stderr.write("Running tests %s\n" % (str(testcases)))
     for testcase in testcases:
-        print "[", testcase, "]"
+        sys.stderr.write("[Running %s]" % (testcase))
         tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
         unittest.TextTestRunner(verbosity=2).run(tests)
