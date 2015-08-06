@@ -142,11 +142,9 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
     // For now, we will not use SparkSqlSerializer2 when noField is true.
     val noField = rowDataTypes == null || rowDataTypes.length == 0
 
-    if (child.outputsUnsafeRows) {
-      logDebug("Using UnsafeRowSerializer.")
+    if (tungstenMode) {
       new UnsafeRowSerializer(child.output.size)
     } else {
-      logDebug("Using SparkSqlSerializer.")
       new SparkSqlSerializer(sparkConf)
     }
   }
