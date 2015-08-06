@@ -33,16 +33,16 @@ import org.apache.spark.sql.types._
 /**
  * :: Experimental ::
  * Implements the transforms required for R-style feature interactions. In summary, once fitted to
- * a dataset, this transformer jointly one-hot encodes all input factor columns, and then scales
- * the encoded factors by all numeric input columns. If only numeric are columns are specified,
- * the output column will simply be a vector containing their product. The last category will be
- * preserved during one-hot encoding except when there is no interaction.
+ * a dataset, this transformer jointly one-hot encodes all factor input columns, then scales
+ * the encoded vector by all numeric input columns. If only numeric columns are specified, the
+ * output column will be a one-length vector containing their product. During one-hot encoding,
+ * the last category will be preserved unless the interaction is trivial.
  *
  * See https://stat.ethz.ch/R-manual/R-devel/library/base/html/formula.html for more
  * information about factor interactions in R formulae.
  */
 @Experimental
-class Interaction(override val uid: String) extends Estimator[PipelineModel]
+class RInteraction(override val uid: String) extends Estimator[PipelineModel]
   with HasInputCols with HasOutputCol {
 
   def this() = this(Identifiable.randomUID("interaction"))
@@ -116,7 +116,7 @@ class Interaction(override val uid: String) extends Estimator[PipelineModel]
     }
   }
 
-  override def copy(extra: ParamMap): Interaction = defaultCopy(extra)
+  override def copy(extra: ParamMap): RInteraction = defaultCopy(extra)
 
   private def checkParams(): Unit = {
     require(isDefined(inputCols), "Input cols must be defined first.")

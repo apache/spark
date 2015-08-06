@@ -93,7 +93,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
         tmp
       }
       takenNames.add(outputCol)
-      encoderStages += new Interaction()
+      encoderStages += new RInteraction()
         .setInputCols(terms.toArray)
         .setOutputCol(outputCol)
       tempColumns += outputCol
