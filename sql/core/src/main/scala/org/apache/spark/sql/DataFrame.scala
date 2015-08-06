@@ -1647,9 +1647,11 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * This function always persists table metadata into Hive's metastore. But the table is
-   * not accessible from Hive unless the underlying data source is either Parquet or ORC.
-   * And we can disable that by setting spark.sql.hive.writeDataSourceSchema to false.
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
    *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().saveAsTable(tableName)`.
