@@ -1,4 +1,5 @@
 from setuptools import setup, find_packages
+import sys
 
 # Kept manually in sync with airflow.__version__
 version = '1.3.0'
@@ -22,7 +23,12 @@ druid = ['pydruid>=0.2.1']
 s3 = ['boto>=2.36.0']
 jdbc = ['jaydebeapi>=0.2.0']
 mssql = ['pymssql>=2.1.1', 'unicodecsv>=0.13.0']
-hdfs = ['snakebite>=2.4.13']
+
+# snakebite only compatible with Python 2 -- as of August 2015
+if sys.version_info[0] == 2:
+    hdfs = ['snakebite>=2.4.13']
+else:
+    hdfs = []
 
 all_dbs = postgres + mysql + hive + mssql + hdfs
 devel = all_dbs + doc + samba + s3 + ['nose']
