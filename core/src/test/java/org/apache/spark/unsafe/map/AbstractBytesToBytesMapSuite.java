@@ -215,7 +215,14 @@ public abstract class AbstractBytesToBytesMapSuite {
         }
       }
       final java.util.BitSet valuesSeen = new java.util.BitSet(size);
-      final Iterator<BytesToBytesMap.Location> iter = map.iterator(destructive);
+      final Iterator<BytesToBytesMap.Location> iter;
+      if (destructive) {
+        iter = map.destructiveIterator();
+      } else {
+        iter = map.iterator();
+      }
+      int numPages = map.getNumDataPages();
+      int countFreedPages = 0;
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
         Assert.assertTrue(loc.isDefined());
@@ -227,11 +234,22 @@ public abstract class AbstractBytesToBytesMapSuite {
         if (keyLength == 0) {
           Assert.assertTrue("value " + value + " was not divisible by 5", value % 5 == 0);
         } else {
-        final long key = PlatformDependent.UNSAFE.getLong(
-          keyAddress.getBaseObject(), keyAddress.getBaseOffset());
+          final long key = PlatformDependent.UNSAFE.getLong(
+            keyAddress.getBaseObject(), keyAddress.getBaseOffset());
           Assert.assertEquals(value, key);
         }
         valuesSeen.set((int) value);
+        if (destructive) {
+          // The iterator moves onto next page and frees previous page
+          if (map.getNumDataPages() < numPages) {
+            numPages = map.getNumDataPages();
+            countFreedPages++;
+          }
+        }
+      }
+      if (destructive) {
+        // Latest page is not freed by iterator but by map itself
+        Assert.assertEquals(countFreedPages, numPages - 1);
       }
       Assert.assertEquals(size, valuesSeen.cardinality());
     } finally {
