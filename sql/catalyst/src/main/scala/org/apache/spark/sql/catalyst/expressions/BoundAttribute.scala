@@ -28,22 +28,13 @@ import org.apache.spark.sql.types._
  * to be retrieved more efficiently.  However, since operations like column pruning can change
  * the layout of intermediate tuples, BindReferences should be run after all such transformations.
  */
-abstract class AbstractBoundReference extends LeafExpression with NamedExpression {
-  val ordinal: Int
+case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
+  extends LeafExpression with NamedExpression {
 
-  protected[this] def prefix: String = ""
-
-  protected[this] def genCodeInput = "i"
-
-  protected[this] def join = false
-
-  protected[this] def unwrap(input: InternalRow): InternalRow = input
-
-  override def toString: String = s"${prefix}input[$ordinal, $dataType]"
+  override def toString: String = s"input[$ordinal, $dataType]"
 
   // Use special getter for primitive types (for UnsafeRow)
-  override def eval(i: InternalRow): Any = {
-    val input = unwrap(i)
+  override def eval(input: InternalRow): Any = {
     if (input.isNullAt(ordinal)) {
       null
     } else {
@@ -76,43 +67,21 @@ abstract class AbstractBoundReference extends LeafExpression with NamedExpressio
   override def exprId: ExprId = throw new UnsupportedOperationException
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    ctx.join = join
     val javaType = ctx.javaType(dataType)
-    val value = ctx.getValue(genCodeInput, dataType, ordinal.toString)
+    val value = ctx.getValue("i", dataType, ordinal.toString)
     s"""
-      boolean ${ev.isNull} = $genCodeInput.isNullAt($ordinal);
+      boolean ${ev.isNull} = i.isNullAt($ordinal);
       $javaType ${ev.primitive} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
     """
   }
 }
 
-case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
-    extends AbstractBoundReference
-
-case class LeftBoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
-  extends AbstractBoundReference {
-  override protected def join = true
-  override protected def prefix = "left"
-  override protected def genCodeInput = "left"
-  override protected def unwrap(input: InternalRow): InternalRow =
-    input.asInstanceOf[JoinedRow].left
-}
-
-case class RightBoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
-  extends AbstractBoundReference {
-  override protected def join = true
-  override protected def prefix = "right"
-  override protected def genCodeInput = "right"
-  override protected def unwrap(input: InternalRow): InternalRow =
-    input.asInstanceOf[JoinedRow].right
-}
-
 object BindReferences extends Logging {
 
   def bindReference[A <: Expression](
-      expression: A,
-      input: Seq[Attribute],
-      allowFailures: Boolean = false): A = {
+                                      expression: A,
+                                      input: Seq[Attribute],
+                                      allowFailures: Boolean = false): A = {
     expression.transform { case a: AttributeReference =>
       attachTree(a, "Binding attribute") {
         val ordinal = input.indexWhere(_.exprId == a.exprId)
@@ -127,31 +96,5 @@ object BindReferences extends Logging {
         }
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
-  }
-
-  def createJoinReferenceMap(left: Seq[Attribute], right: Seq[Attribute]):
-      Map[ExprId, AbstractBoundReference] = {
-    (left.zipWithIndex.map {
-      case (e, ordinal) =>
-        (e.exprId, LeftBoundReference(ordinal, e.dataType, e.nullable))
-    } ++ right.zipWithIndex.map {
-      case (e, ordinal) =>
-        (e.exprId, RightBoundReference(ordinal, e.dataType, e.nullable))
-    }).toMap
-  }
-
-  def bindJoinReferences(
-      expressions: Seq[Expression],
-      left: Seq[Attribute],
-      right: Seq[Attribute]): Seq[Expression] = {
-    val refMap = createJoinReferenceMap(left, right)
-    expressions.map { expression =>
-      expression.transform { case a: AttributeReference =>
-        attachTree(a, "Binding attribute") {
-          refMap.getOrElse(a.exprId, sys.error(s"Couldn't find $a in left " +
-            s"${left.mkString("[", ",", "]")} or right ${right.mkString("[", ",", "]")}"))
-        }
-      }
-    }
   }
 }
