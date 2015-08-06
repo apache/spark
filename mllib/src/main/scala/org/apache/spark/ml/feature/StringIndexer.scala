@@ -150,7 +150,7 @@ class StringIndexerModel private[ml] (
         }
         dataset.where(filterer(dataset($(inputCol))))
       }
-      case _ =>  dataset
+      case _ => dataset
     }
     filteredDataset.select(col("*"),
       indexer(dataset($(inputCol)).cast(StringType)).as(outputColName, metadata))
