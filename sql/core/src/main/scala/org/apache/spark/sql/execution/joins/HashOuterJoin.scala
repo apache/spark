@@ -119,7 +119,7 @@ trait HashOuterJoin {
       if (!key.anyNull) {
         val temp = if (rightIter != null) {
           rightIter.collect {
-            case r if boundCondition(joinedRow.withRight(r)) => resultProjection(joinedRow)
+            case r if boundCondition(joinedRow.withRight(r)) => resultProjection(joinedRow).copy()
           }
         } else {
           List.empty
@@ -145,7 +145,7 @@ trait HashOuterJoin {
       if (!key.anyNull) {
         val temp = if (leftIter != null) {
           leftIter.collect {
-            case l if boundCondition(joinedRow.withLeft(l)) => resultProjection(joinedRow)
+            case l if boundCondition(joinedRow.withLeft(l)) => resultProjection(joinedRow).copy()
           }
         } else {
           List.empty
