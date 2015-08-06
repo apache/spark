@@ -20,7 +20,7 @@ package org.apache.spark.deploy.master
 /**
  * An interface for sort algorithm
  */
-private[spark] trait SchedulingAlgorithm {
+private[master] trait SchedulingAlgorithm {
   def master: Master
 
   /**
@@ -29,10 +29,12 @@ private[spark] trait SchedulingAlgorithm {
   def startExecutorsOnWorkers(
       waitingApps: Array[ApplicationInfo],
       workers: Array[WorkerInfo]): Unit
+
   def scheduleExecutorsOnWorkers(
       app: ApplicationInfo,
       usableWorkers: Array[WorkerInfo],
       spreadOutApps: Boolean): Array[Int]
+
   /**
    * Allocate a worker's resources to one or more executors.
    * @param app the info of the application which the executors belong to
@@ -61,7 +63,7 @@ private[spark] trait SchedulingAlgorithm {
 /**
  * FIFO algorithm between Spark applications
  */
-private[spark] class FIFOSchedulingAlgorithm(val master: Master) extends SchedulingAlgorithm {
+private[master] class FIFOSchedulingAlgorithm(val master: Master) extends SchedulingAlgorithm {
   /**
    * This is a very simple FIFO scheduler. We keep trying to fit in the first app
    * in the queue, then the second app, etc.

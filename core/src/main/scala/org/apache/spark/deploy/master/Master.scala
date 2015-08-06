@@ -116,7 +116,7 @@ private[deploy] class Master(
 
   private var checkForWorkerTimeOutTask: ScheduledFuture[_] = _
 
-  private var appScheduler: SchedulingAlgorithm = schedulingSetting.mode match {
+  private val appScheduler: SchedulingAlgorithm = schedulingSetting.mode match {
     case SchedulingMode.FIFO =>
       new FIFOSchedulingAlgorithm(this)
     case _ =>
