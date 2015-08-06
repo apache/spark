@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
-import org.apache.spark.sql.execution.joins.SortMergeJoin
 
 class ExchangeSuite extends SparkPlanTest {
   test("shuffling UnsafeRows in exchange") {
