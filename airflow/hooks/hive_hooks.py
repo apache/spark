@@ -14,8 +14,6 @@ from airflow.utils import AirflowException
 from airflow.hooks.base_hook import BaseHook
 from airflow.utils import TemporaryDirectory
 
-HS2_TIMEOUT = 10000  # HiveServer2 timeout is 10 seconds
-
 
 class HiveCliHook(BaseHook):
     """
@@ -327,8 +325,7 @@ class HiveServer2Hook(BaseHook):
             port=db.port,
             authMechanism=db.extra_dejson.get('authMechanism', 'NOSASL'),
             user=db.login,
-            database=db.schema or 'default',
-            timeout=HS2_TIMEOUT)
+            database=db.schema or 'default')
 
     def get_results(self, hql, schema='default', arraysize=1000):
         with self.get_conn() as conn:
