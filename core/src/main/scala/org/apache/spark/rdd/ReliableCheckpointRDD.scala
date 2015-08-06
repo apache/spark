@@ -125,7 +125,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       fs.create(tempOutputPath, false, bufferSize)
     } else {
       // This is mainly for testing purpose
-      fs.create(tempOutputPath, false, bufferSize, fs.getDefaultReplication, blockSize)
+      fs.create(tempOutputPath, false, bufferSize, fs.getDefaultReplication(new Path(path)), blockSize)
     }
     val serializer = env.serializer.newInstance()
     val serializeStream = serializer.serializeStream(fileOutputStream)

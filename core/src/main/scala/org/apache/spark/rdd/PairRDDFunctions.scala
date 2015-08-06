@@ -930,7 +930,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       conf: Configuration = self.context.hadoopConfiguration): Unit = self.withScope {
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
     val hadoopConf = conf
-    val job = new NewAPIHadoopJob(hadoopConf)
+    val job = NewAPIHadoopJob.getInstance(hadoopConf)
     job.setOutputKeyClass(keyClass)
     job.setOutputValueClass(valueClass)
     job.setOutputFormatClass(outputFormatClass)
@@ -998,7 +998,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def saveAsNewAPIHadoopDataset(conf: Configuration): Unit = self.withScope {
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
     val hadoopConf = conf
-    val job = new NewAPIHadoopJob(hadoopConf)
+    val job = NewAPIHadoopJob.getInstance(hadoopConf)
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id

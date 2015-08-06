@@ -46,7 +46,7 @@ private[spark] abstract class StreamFileInputFormat[T]
   def setMinPartitions(context: JobContext, minPartitions: Int) {
     val files = listStatus(context)
     val totalLen = files.map { file =>
-      if (file.isDir) 0L else file.getLen
+      if (file.isDirectory) 0L else file.getLen
     }.sum
 
     val maxSplitSize = Math.ceil(totalLen * 1.0 / files.length).toLong
