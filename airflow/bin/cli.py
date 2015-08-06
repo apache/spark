@@ -254,7 +254,10 @@ def webserver(args):
 def scheduler(args):
     print(settings.HEADER)
     log_to_stdout()
-    job = jobs.SchedulerJob(args.dag_id, args.subdir)
+    job = jobs.SchedulerJob(
+        dag_id=args.dag_id,
+        subdir=args.subdir,
+        num_runs=args.num_runs)
     job.run()
 
 
@@ -482,6 +485,11 @@ def get_parser():
     parser_scheduler.add_argument(
         "-sd", "--subdir", help=subdir_help,
         default=DAGS_FOLDER)
+    parser_scheduler.add_argument(
+        "-n", "--num_runs",
+        default=None,
+        type=int,
+        help="Set the number of runs to execute before exiting")
     parser_scheduler.set_defaults(func=scheduler)
 
     ht = "Initialize the metadata database"
