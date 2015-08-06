@@ -39,8 +39,6 @@ import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.StatCounter
 
-import scala.math.pow
-
 /**
  * Params for linear regression.
  */
@@ -810,11 +808,11 @@ private class HuberCostFun(
     val norm = brzNorm(weights, 2.0)
     var regVal = 0.0
     if(diff < -k){
-      regVal = -k * 0.5 * effectiveL2regParam * diff - 0.5 * pow(k, 2)
+      regVal = -k * 0.5 * effectiveL2regParam * diff - 0.5 * k * k
     } else if (diff >= -k && diff <= k){
       regVal = 0.25 * effectiveL2regParam * norm * norm
     } else {
-      regVal = k * 0.5 * effectiveL2regParam * diff - 0.5 * pow(k, 2)
+      regVal = k * 0.5 * effectiveL2regParam * diff - 0.5 * k * k
     }
 
     val loss = leastSquaresAggregator.loss + regVal
