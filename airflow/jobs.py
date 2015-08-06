@@ -130,6 +130,7 @@ class BaseJob(Base):
             sleep_for = self.heartrate - (
                 datetime.now() - job.latest_heartbeat).total_seconds()
             if sleep_for > 0:
+                logging.info("Sleeping for {} seconds".format(sleep_for))
                 sleep(sleep_for)
 
         job.latest_heartbeat = datetime.now()
@@ -200,10 +201,15 @@ class SchedulerJob(BaseJob):
             subdir=None,
             test_mode=False,
             refresh_dags_every=10,
+            num_runs=None,
             *args, **kwargs):
+
         self.dag_id = dag_id
         self.subdir = subdir
-        self.test_mode = test_mode
+        if test_mode:
+            self.num_runs = 1
+        else:
+            self.num_runs = num_runs
         self.refresh_dags_every = refresh_dags_every
         super(SchedulerJob, self).__init__(*args, **kwargs)
 
@@ -457,7 +463,7 @@ class SchedulerJob(BaseJob):
         executor = dagbag.executor
         executor.start()
         i = 0
-        while (not self.test_mode) or i < 1:
+        while not self.num_runs or self.num_runs > i:
             loop_start_dttm = datetime.now()
             try:
                 self.prioritize_queued(executor=executor, dagbag=dagbag)
@@ -494,7 +500,7 @@ class SchedulerJob(BaseJob):
                     logging.exception(e)
             logging.info(
                 "Done queuing tasks, calling the executor's heartbeat")
-            duration_sec = (loop_start_dttm - datetime.now()).total_seconds()
+            duration_sec = (datetime.now() - loop_start_dttm).total_seconds()
             logging.info("Loop took: {} seconds".format(duration_sec))
             try:
                 dag_sizes = sorted(
@@ -512,7 +518,7 @@ class SchedulerJob(BaseJob):
             except Exception as e:
                 logging.exception(e)
                 logging.error("Tachycardia!")
-        executor.end()
+
 
     def heartbeat_callback(self):
         if statsd:
