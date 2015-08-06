@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.ml.util.MLTestingUtils
+
 import scala.util.Random
 
 import org.apache.spark.{SparkException, SparkFunSuite}
@@ -114,8 +116,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("copied model must have the same parent") {
     val model = new Bucketizer()
-    val copied = model.copy(ParamMap.empty)
-    assert(model.parent == copied.parent)
+    MLTestingUtils.checkCopy(model)
   }
 }
 

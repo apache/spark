@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml
 
+import org.apache.spark.ml.util.MLTestingUtils
+
 import scala.collection.JavaConverters._
 
 import org.mockito.Matchers.{any, eq => meq}
@@ -92,7 +94,7 @@ class PipelineSuite extends SparkFunSuite {
     val copied = model.copy(ParamMap(hashingTF.numFeatures -> 10))
     require(copied.stages(0).asInstanceOf[HashingTF].getNumFeatures === 10,
       "copy should handle extra stage params")
-    assert(copied.parent == model.parent)
+    MLTestingUtils.checkCopy(model)
   }
 
   test("pipeline model constructors") {

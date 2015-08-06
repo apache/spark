@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.ml.util.MLTestingUtils
+
 import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.{Logging, SparkException, SparkFunSuite}
@@ -100,8 +102,7 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext with L
 
   test("copied model must have the same parent") {
     val model = new VectorIndexerModel("indexer", 1, Map.empty)
-    val copied = model.copy(ParamMap.empty)
-    assert(model.parent == copied.parent)
+    MLTestingUtils.checkCopy(model)
   }
 
   test("Cannot fit an empty DataFrame") {

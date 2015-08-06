@@ -55,6 +55,44 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
     forAll { (s1: String, s2: String) => testPrefixComparison(s1, s2) }
   }
 
+  test("Binary prefix comparator") {
+
+     def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
+      for (i <- 0 until x.length; if i < y.length) {
+        val res = x(i).compare(y(i))
+        if (res != 0) return res
+      }
+      x.length - y.length
+    }
+
+    def testPrefixComparison(x: Array[Byte], y: Array[Byte]): Unit = {
+      val s1Prefix = PrefixComparators.BinaryPrefixComparator.computePrefix(x)
+      val s2Prefix = PrefixComparators.BinaryPrefixComparator.computePrefix(y)
+      val prefixComparisonResult =
+        PrefixComparators.BINARY.compare(s1Prefix, s2Prefix)
+      assert(
+        (prefixComparisonResult == 0) ||
+        (prefixComparisonResult < 0 && compareBinary(x, y) < 0) ||
+        (prefixComparisonResult > 0 && compareBinary(x, y) > 0))
+    }
+
+    // scalastyle:off
+    val regressionTests = Table(
+      ("s1", "s2"),
+      ("abc", "世界"),
+      ("你好", "世界"),
+      ("你好123", "你好122")
+    )
+    // scalastyle:on
+
+    forAll (regressionTests) { (s1: String, s2: String) =>
+      testPrefixComparison(s1.getBytes("UTF-8"), s2.getBytes("UTF-8"))
+    }
+    forAll { (s1: String, s2: String) =>
+      testPrefixComparison(s1.getBytes("UTF-8"), s2.getBytes("UTF-8"))
+    }
+  }
+
   test("double prefix comparator handles NaNs properly") {
     val nan1: Double = java.lang.Double.longBitsToDouble(0x7ff0000000000001L)
     val nan2: Double = java.lang.Double.longBitsToDouble(0x7fffffffffffffffL)

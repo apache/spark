@@ -22,6 +22,7 @@ import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.LeafNode
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -81,8 +82,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model = new GBTClassificationModel("gbtc",
       Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0, null))),
       Array(1.0))
-    val copied = model.copy(ParamMap.empty)
-    assert(model.parent == copied.parent)
+    MLTestingUtils.checkCopy(model)
   }
 
   test("Checkpointing") {

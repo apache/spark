@@ -362,6 +362,30 @@ class SparkSubmitSuite
     }
   }
 
+  test("correctly builds R packages included in a jar with --packages") {
+    // TODO(SPARK-9603): Building a package to $SPARK_HOME/R/lib is unavailable on Jenkins.
+    // It's hard to write the test in SparkR (because we can't create the repository dynamically)
+    /*
+    assume(RUtils.isRInstalled, "R isn't installed on this machine.")
+    val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
+    val rScriptDir =
+      Seq(sparkHome, "R", "pkg", "inst", "tests", "packageInAJarTest.R").mkString(File.separator)
+    assert(new File(rScriptDir).exists)
+    IvyTestUtils.withRepository(main, None, None, withR = true) { repo =>
+      val args = Seq(
+        "--name", "testApp",
+        "--master", "local-cluster[2,1,1024]",
+        "--packages", main.toString,
+        "--repositories", repo,
+        "--verbose",
+        "--conf", "spark.ui.enabled=false",
+        rScriptDir)
+      runSparkSubmit(args)
+    }
+    */
+  }
+
   test("resolves command line argument paths correctly") {
     val jars = "/jar1,/jar2"                 // --jars
     val files = "hdfs:/file1,file2"          // --files

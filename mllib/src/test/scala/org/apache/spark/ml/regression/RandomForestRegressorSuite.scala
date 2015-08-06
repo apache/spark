@@ -20,6 +20,7 @@ package org.apache.spark.ml.regression
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
@@ -77,8 +78,7 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     val df = TreeTests.setMetadata(orderedLabeledPoints50_1000,
       Map.empty[Int, Int], numClasses = 0)
     val model = rf.fit(df)
-    val copied = model.copy(ParamMap.empty)
-    assert(model.parent == copied.parent)
+    MLTestingUtils.checkCopy(model)
   }
 
   test("Feature importance with toy data") {

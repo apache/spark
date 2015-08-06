@@ -18,6 +18,7 @@
 package org.apache.spark.ml.tuning
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
@@ -125,8 +126,7 @@ class CrossValidatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setEvaluator(eval)
       .setNumFolds(3)
     val model = cv.fit(dataset)
-    val copied = model.copy(ParamMap.empty)
-    assert(model.parent == copied.parent)
+    MLTestingUtils.checkCopy(model)
   }
 }
 

@@ -21,6 +21,7 @@ import java.io.File
 import java.util.Random
 
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.util.MLTestingUtils
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -378,8 +379,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
     assert(rmse < targetRMSE)
 
     // copied model must have the same parent.
-    val copied = model.copy(ParamMap.empty)
-    assert(model.parent == copied.parent)
+    MLTestingUtils.checkCopy(model)
   }
 
   test("exact rank-1 matrix") {

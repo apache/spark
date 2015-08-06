@@ -1059,14 +1059,6 @@ object functions {
   def factorial(e: Column): Column = Factorial(e.expr)
 
   /**
-   * Computes the factorial of the given column.
-   *
-   * @group math_funcs
-   * @since 1.5.0
-   */
-  def factorial(columnName: String): Column = factorial(Column(columnName))
-
-  /**
    * Computes the floor of the given value.
    *
    * @group math_funcs
@@ -1367,15 +1359,6 @@ object functions {
   def pmod(dividend: Column, divisor: Column): Column = Pmod(dividend.expr, divisor.expr)
 
   /**
-   * Returns the positive value of dividend mod divisor.
-   *
-   * @group math_funcs
-   * @since 1.5.0
-   */
-  def pmod(dividendColName: String, divisorColName: String): Column =
-    pmod(Column(dividendColName), Column(divisorColName))
-
-  /**
    * Returns the double value that is closest in value to the argument and
    * is equal to a mathematical integer.
    *
@@ -1402,14 +1385,6 @@ object functions {
   def round(e: Column): Column = round(e.expr, 0)
 
   /**
-   * Returns the value of the given column rounded to 0 decimal places.
-   *
-   * @group math_funcs
-   * @since 1.5.0
-   */
-  def round(columnName: String): Column = round(Column(columnName), 0)
-
-  /**
    * Round the value of `e` to `scale` decimal places if `scale` >= 0
    * or at integral part when `scale` < 0.
    *
@@ -1419,15 +1394,6 @@ object functions {
   def round(e: Column, scale: Int): Column = Round(e.expr, Literal(scale))
 
   /**
-   * Round the value of the given column to `scale` decimal places if `scale` >= 0
-   * or at integral part when `scale` < 0.
-   *
-   * @group math_funcs
-   * @since 1.5.0
-   */
-  def round(columnName: String, scale: Int): Column = round(Column(columnName), scale)
-
-  /**
    * Shift the the given value numBits left. If the given value is a long value, this function
    * will return a long value else it will return an integer value.
    *
@@ -1435,16 +1401,6 @@ object functions {
    * @since 1.5.0
    */
   def shiftLeft(e: Column, numBits: Int): Column = ShiftLeft(e.expr, lit(numBits).expr)
-
-  /**
-   * Shift the the given value numBits left. If the given value is a long value, this function
-   * will return a long value else it will return an integer value.
-   *
-   * @group math_funcs
-   * @since 1.5.0
-   */
-  def shiftLeft(columnName: String, numBits: Int): Column =
-    shiftLeft(Column(columnName), numBits)
 
   /**
    * Shift the the given value numBits right. If the given value is a long value, it will return
@@ -1462,28 +1418,8 @@ object functions {
    * @group math_funcs
    * @since 1.5.0
    */
-  def shiftRightUnsigned(columnName: String, numBits: Int): Column =
-    shiftRightUnsigned(Column(columnName), numBits)
-
-  /**
-   * Unsigned shift the the given value numBits right. If the given value is a long value,
-   * it will return a long value else it will return an integer value.
-   *
-   * @group math_funcs
-   * @since 1.5.0
-   */
   def shiftRightUnsigned(e: Column, numBits: Int): Column =
     ShiftRightUnsigned(e.expr, lit(numBits).expr)
-
-  /**
-   * Shift the the given value numBits right. If the given value is a long value, it will return
-   * a long value else it will return an integer value.
-   *
-   * @group math_funcs
-   * @since 1.5.0
-   */
-  def shiftRight(columnName: String, numBits: Int): Column =
-    shiftRight(Column(columnName), numBits)
 
   /**
    * Computes the signum of the given value.
@@ -1789,14 +1725,6 @@ object functions {
   }
 
   /**
-   * Trim the spaces from left end for the specified string value.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def ltrim(e: Column): Column = StringTrimLeft(e.expr)
-
-  /**
    * Locate the position of the first occurrence of substr in a string column, after position pos.
    *
    * NOTE: The position is not zero based, but 1 based index. returns 0 if substr
@@ -1818,6 +1746,14 @@ object functions {
   def lpad(str: Column, len: Int, pad: String): Column = {
     StringLPad(str.expr, lit(len).expr, lit(pad).expr)
   }
+
+  /**
+   * Trim the spaces from left end for the specified string value.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def ltrim(e: Column): Column = StringTrimLeft(e.expr)
 
   /**
    * Extract a specific(idx) group identified by a java regex, from the specified string column.
@@ -2183,6 +2119,14 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns true if the array contain the value
+   * @group collection_funcs
+   * @since 1.5.0
+   */
+  def array_contains(column: Column, value: Any): Column =
+    ArrayContains(column.expr, Literal(value))
 
   /**
    * Creates a new row for each element in the given array or map column.

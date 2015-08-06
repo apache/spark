@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
-import org.apache.spark.ml.util.MetadataUtils
+import org.apache.spark.ml.util.{MLTestingUtils, MetadataUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
@@ -59,8 +59,10 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("params") {
     ParamsSuite.checkParams(new OneVsRest)
     val lrModel = new LogisticRegressionModel("lr", Vectors.dense(0.0), 0.0)
+    MLTestingUtils.checkCopy(lrModel)
     val model = new OneVsRestModel("ovr", Metadata.empty, Array(lrModel))
     ParamsSuite.checkParams(model)
+    MLTestingUtils.checkCopy(model)
   }
 
   test("one-vs-rest: default params") {

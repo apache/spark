@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.linalg.{Vector, Vectors, DenseMatrix, Matrices}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -38,8 +39,7 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
   test("copied model must have the same parent") {
     val mat = Matrices.dense(2, 2, Array(0.0, 1.0, 2.0, 3.0)).asInstanceOf[DenseMatrix]
     val model = new PCAModel("pca", new OldPCAModel(2, mat))
-    val copied = model.copy(ParamMap.empty)
-    assert(model.parent == copied.parent)
+    MLTestingUtils.checkCopy(model)
   }
 
   test("pca") {
