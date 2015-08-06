@@ -27,10 +27,8 @@ it's worth taking the time to understand the parameters of ``BaseOperator``
 to understand the primitive features that can be leveraged in your
 DAGs.
 
-.. automodule:: airflow.operators
-    :show-inheritance:
-    :members:
-        BaseOperator
+
+.. autoclass:: airflow.models.BaseOperator
 
 
 Operator API
