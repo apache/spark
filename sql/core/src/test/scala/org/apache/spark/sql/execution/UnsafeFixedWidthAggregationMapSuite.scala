@@ -93,7 +93,7 @@ class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
   testWithMemoryLeakDetection("supported schemas") {
     assert(supportsAggregationBufferSchema(
       StructType(StructField("x", DecimalType.USER_DEFAULT) :: Nil)))
-    assert(!supportsAggregationBufferSchema(
+    assert(supportsAggregationBufferSchema(
       StructType(StructField("x", DecimalType.SYSTEM_DEFAULT) :: Nil)))
     assert(!supportsAggregationBufferSchema(StructType(StructField("x", StringType) :: Nil)))
     assert(

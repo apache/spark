@@ -111,8 +111,6 @@ public final class UnsafeFixedWidthAggregationMap {
     // Initialize the buffer for aggregation value
     final UnsafeProjection valueProjection = UnsafeProjection.create(aggregationBufferSchema);
     this.emptyAggregationBuffer = valueProjection.apply(emptyAggregationBuffer).getBytes();
-    assert(this.emptyAggregationBuffer.length == aggregationBufferSchema.length() * 8 +
-      UnsafeRow.calculateBitSetWidthInBytes(aggregationBufferSchema.length()));
   }
 
   /**
