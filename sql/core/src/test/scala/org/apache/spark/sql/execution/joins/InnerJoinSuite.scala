@@ -24,7 +24,6 @@ import org.apache.spark.sql.{execution, Row, DataFrame}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.{Filter, joins, SparkPlan, SparkPlanTest}
 
-
 class InnerJoinSuite extends SparkPlanTest {
 
   private val testData2 = Seq(
@@ -98,20 +97,6 @@ class InnerJoinSuite extends SparkPlanTest {
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
-    }
-
-    test(s"$testName using BroadcastNestedLoopJoin (build=left)") {
-      checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-        joins.BroadcastNestedLoopJoin(left, right, joins.BuildLeft, Inner, Some(condition)),
-        expectedAnswer.map(Row.fromTuple),
-        sortAnswers = true)
-    }
-
-    test(s"$testName using BroadcastNestedLoopJoin (build=right)") {
-      checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-        joins.BroadcastNestedLoopJoin(left, right, joins.BuildRight, Inner, Some(condition)),
-        expectedAnswer.map(Row.fromTuple),
-        sortAnswers = true)
     }
   }
 
