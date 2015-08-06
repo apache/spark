@@ -837,7 +837,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       path: String,
       minPartitions: Int = defaultMinPartitions): RDD[(String, String)] = withScope {
     assertNotStopped()
-    val job = new NewHadoopJob(hadoopConfiguration)
+    val job = NewHadoopJob.getInstance(hadoopConfiguration)
     // Use setInputPaths so that wholeTextFiles aligns with hadoopFile/textFile in taking
     // comma separated files as input. (see SPARK-7155)
     NewFileInputFormat.setInputPaths(job, path)
@@ -886,7 +886,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       path: String,
       minPartitions: Int = defaultMinPartitions): RDD[(String, PortableDataStream)] = withScope {
     assertNotStopped()
-    val job = new NewHadoopJob(hadoopConfiguration)
+    val job = NewHadoopJob.getInstance(hadoopConfiguration)
     // Use setInputPaths so that binaryFiles aligns with hadoopFile/textFile in taking
     // comma separated files as input. (see SPARK-7155)
     NewFileInputFormat.setInputPaths(job, path)
@@ -1065,7 +1065,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     assertNotStopped()
     // The call to new NewHadoopJob automatically adds security credentials to conf,
     // so we don't need to explicitly add them ourselves
-    val job = new NewHadoopJob(conf)
+    val job = NewHadoopJob.getInstance(conf)
     // Use setInputPaths so that newAPIHadoopFile aligns with hadoopFile/textFile in taking
     // comma separated files as input. (see SPARK-7155)
     NewFileInputFormat.setInputPaths(job, path)
@@ -1347,7 +1347,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       if (!fs.exists(hadoopPath)) {
         throw new FileNotFoundException(s"Added file $hadoopPath does not exist.")
       }
-      val isDir = fs.getFileStatus(hadoopPath).isDir
+      val isDir = fs.getFileStatus(hadoopPath).isDirectory
       if (!isLocal && scheme == "file" && isDir) {
         throw new SparkException(s"addFile does not support local directories when not running " +
           "local mode.")

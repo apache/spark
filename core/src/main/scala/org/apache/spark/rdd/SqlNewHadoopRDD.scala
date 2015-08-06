@@ -80,7 +80,7 @@ private[spark] class SqlNewHadoopRDD[K, V](
     // "new Job" will make a copy of the conf. Then, it is
     // safe to mutate conf properties with initLocalJobFuncOpt
     // and initDriverSideJobFuncOpt.
-    val newJob = new Job(conf)
+    val newJob = Job.getInstance(conf)
     initLocalJobFuncOpt.map(f => f(newJob))
     newJob
   }
