@@ -17,54 +17,44 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark._
-import org.apache.spark.shuffle.ShuffleMemoryManager
+import scala.collection.mutable
+
+import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite, TaskContext}
 
 class MapPartitionsWithPreparationRDDSuite extends SparkFunSuite with LocalSparkContext {
 
   test("prepare called before parent partition is computed") {
-    val conf = new SparkConf().setMaster("local").setAppName("testing")
-    val maxMemory = ShuffleMemoryManager.getMaxMemory(conf)
-    sc = new SparkContext(conf)
+    sc = new SparkContext("local", "test")
 
-    // First, make sure we can in fact acquire all the memory once, but not twice.
-    val shuffleMemoryManager = sc.env.shuffleMemoryManager
-    assert(shuffleMemoryManager.tryToAcquire(maxMemory) > 0)
-    assert(shuffleMemoryManager.tryToAcquire(maxMemory) === 0)
-    shuffleMemoryManager.release(maxMemory)
-
-    // Have the parent partition try to acquire all the shuffle memory
-    // Return the acquire result so we can verify it later
+    // Have the parent partition push a number to the list
     val parent = sc.parallelize(1 to 100, 1).mapPartitions { iter =>
-      Seq(SparkEnv.get.shuffleMemoryManager.tryToAcquire(maxMemory)).toIterator
+      TestObject.things.append(20)
+      iter
     }
 
-    // ... and try to do the same ourselves
-    val preparePartition = () => {
-      SparkEnv.get.shuffleMemoryManager.tryToAcquire(maxMemory)
-    }
+    // Push a different number during the prepare phase
+    val preparePartition = () => { TestObject.things.append(10) }
 
-    // Return the acquire results as a tuple (parent result, our result)
+    // Push yet another number during the execution phase
     val executePartition = (
         taskContext: TaskContext,
         partitionIndex: Int,
-        ourAcquireResult: Long,
-        parentIterator: Iterator[Long]) => {
-      val parentAcquireResult = parentIterator.toSeq.head
-      Seq((parentAcquireResult, ourAcquireResult)).toIterator
+        notUsed: Unit,
+        parentIterator: Iterator[Int]) => {
+      TestObject.things.append(30)
+      TestObject.things.iterator
     }
 
-    // Verify that that we are victorious!
-    // More specifically: verify that we successfully acquired memory and our parent didn't,
-    // which means that our prepare partition method is run before parent partition is computed.
+    // Verify that the numbers are pushed in the order expected
     val result = {
-      new MapPartitionsWithPreparationRDD[(Long, Long), Long, Long](
+      new MapPartitionsWithPreparationRDD[Int, Int, Unit](
         parent, preparePartition, executePartition).collect()
     }
-    assert(result.size === 1)
-    val (parentAcquireResult, ourAcquireResult) = result.head
-    assert(ourAcquireResult > 0)
-    assert(parentAcquireResult === 0)
+    assert(result === Array(10, 20, 30))
   }
 
+}
+
+private object TestObject {
+  val things = new mutable.ListBuffer[Int]
 }
