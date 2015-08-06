@@ -81,7 +81,7 @@ private[hive] class ClientWrapper(
   // Here we check for this specific version and loads `Hadoop20SShims` via reflection.
   // This also catches 'mr1' flavors of the CDH4 release, like 2.0.0-mr1-cdh4.x.x
   private def overrideHadoopShims(): Unit = {
-    val VersionPattern = """2\.0\.0.*cdh4.*""".r
+    val VersionPattern = """2\.0\.0.*""".r
 
     VersionInfo.getVersion match {
       case VersionPattern() =>
