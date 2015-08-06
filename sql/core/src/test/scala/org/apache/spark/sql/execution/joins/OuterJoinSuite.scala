@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.execution.{joins, SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.execution.{EnsureRequirements, joins, SparkPlan, SparkPlanTest}
 
 class OuterJoinSuite extends SparkPlanTest {
 
@@ -33,14 +33,13 @@ class OuterJoinSuite extends SparkPlanTest {
       joinType: JoinType,
       condition: Expression,
       expectedAnswer: Seq[Product]): Unit = {
-    // Precondition: leftRows and rightRows should be sorted according to the join keys.
-
     val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
     ExtractEquiJoinKeys.unapply(join).foreach {
       case (_, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
         test(s"$testName using ShuffledHashOuterJoin") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            ShuffledHashOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right),
+            EnsureRequirements(left.sqlContext).apply(
+              ShuffledHashOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right)),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = false)
         }

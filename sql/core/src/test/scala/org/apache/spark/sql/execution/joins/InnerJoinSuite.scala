@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.{execution, Row, DataFrame}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.execution.{Filter, joins, SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.execution._
 
 class InnerJoinSuite extends SparkPlanTest {
 
@@ -32,7 +32,6 @@ class InnerJoinSuite extends SparkPlanTest {
       rightRows: DataFrame,
       condition: Expression,
       expectedAnswer: Seq[Product]): Unit = {
-
     val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
     ExtractEquiJoinKeys.unapply(join).foreach {
       case (joinType, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
@@ -46,13 +45,16 @@ class InnerJoinSuite extends SparkPlanTest {
         def makeShuffledHashJoin(left: SparkPlan, right: SparkPlan, side: BuildSide) = {
           val shuffledHashJoin =
             execution.joins.ShuffledHashJoin(leftKeys, rightKeys, side, left, right)
-          boundCondition.map(Filter(_, shuffledHashJoin)).getOrElse(shuffledHashJoin)
+          val filteredJoin =
+            boundCondition.map(Filter(_, shuffledHashJoin)).getOrElse(shuffledHashJoin)
+          EnsureRequirements(filteredJoin.sqlContext).apply(filteredJoin)
         }
 
         def makeSortMergeJoin(left: SparkPlan, right: SparkPlan) = {
           val sortMergeJoin =
             execution.joins.SortMergeJoin(leftKeys, rightKeys, left, right)
-          boundCondition.map(Filter(_, sortMergeJoin)).getOrElse(sortMergeJoin)
+          val filteredJoin = boundCondition.map(Filter(_, sortMergeJoin)).getOrElse(sortMergeJoin)
+          EnsureRequirements(filteredJoin.sqlContext).apply(filteredJoin)
         }
 
         test(s"$testName using BroadcastHashJoin (build=left)") {

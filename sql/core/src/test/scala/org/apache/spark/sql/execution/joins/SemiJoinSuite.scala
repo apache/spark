@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{And, LessThan, Expression}
-import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.execution.{EnsureRequirements, SparkPlan, SparkPlanTest}
 
 class SemiJoinSuite extends SparkPlanTest {
 
@@ -38,7 +38,8 @@ class SemiJoinSuite extends SparkPlanTest {
       case (joinType, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
         test(s"$testName using LeftSemiJoinHash") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            LeftSemiJoinHash(leftKeys, rightKeys, left, right, boundCondition),
+            EnsureRequirements(left.sqlContext).apply(
+              LeftSemiJoinHash(leftKeys, rightKeys, left, right, boundCondition)),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
