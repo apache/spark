@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
-import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
@@ -29,10 +29,6 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     ParamsSuite.checkParams(new StringIndexer)
     val model = new StringIndexerModel("indexer", Array("a", "b"))
     ParamsSuite.checkParams(model)
-  }
-
-  test("copied model must have the same parent") {
-    val model = new StringIndexerModel("indexer", Array("a", "b"))
     MLTestingUtils.checkCopy(model)
   }
 

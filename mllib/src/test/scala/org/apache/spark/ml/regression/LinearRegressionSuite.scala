@@ -18,7 +18,6 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.{DenseVector, Vectors}
@@ -62,6 +61,7 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     ParamsSuite.checkParams(new LinearRegression)
     val model = new LinearRegressionModel("linearReg", Vectors.dense(0.0), 0.0)
     ParamsSuite.checkParams(model)
+    MLTestingUtils.checkCopy(model)
   }
 
   test("linear regression: default params") {
@@ -506,12 +506,5 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     model.summary.residuals.select("residuals").collect()
       .zip(testSummary.residuals.select("residuals").collect())
       .forall { case (Row(r1: Double), Row(r2: Double)) => r1 ~== r2 relTol 1E-5 }
-  }
-
-  test("copied model must have the same parent") {
-    val trainer = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
-      .setFitIntercept(false)
-    val model = trainer.fit(dataset)
-    MLTestingUtils.checkCopy(model)
   }
 }

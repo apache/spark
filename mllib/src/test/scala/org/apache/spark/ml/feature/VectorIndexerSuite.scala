@@ -17,13 +17,12 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.ml.util.MLTestingUtils
-
 import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.{Logging, SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
@@ -98,10 +97,6 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext with L
     ParamsSuite.checkParams(new VectorIndexer)
     val model = new VectorIndexerModel("indexer", 1, Map.empty)
     ParamsSuite.checkParams(model)
-  }
-
-  test("copied model must have the same parent") {
-    val model = new VectorIndexerModel("indexer", 1, Map.empty)
     MLTestingUtils.checkCopy(model)
   }
 

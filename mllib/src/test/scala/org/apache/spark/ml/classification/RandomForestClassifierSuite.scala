@@ -19,7 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
-import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -70,6 +70,7 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     val model = new RandomForestClassificationModel("rfc",
       Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 2)), 2, 2)
     ParamsSuite.checkParams(model)
+    MLTestingUtils.checkCopy(model)
   }
 
   test("Binary classification with continuous features:" +
@@ -121,13 +122,6 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
 
     val rf2 = rf1.setSubsamplingRate(0.5)
     compareAPIs(rdd, rf2, categoricalFeatures, numClasses)
-  }
-
-  test("copied model must have the same parent") {
-    ParamsSuite.checkParams(new RandomForestClassifier)
-    val model = new RandomForestClassificationModel("rfc",
-      Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 2)), 2, 2)
-    MLTestingUtils.checkCopy(model)
   }
 
   test("predictRaw and predictProbability") {

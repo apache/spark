@@ -62,6 +62,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
       Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0, null))),
       Array(1.0))
     ParamsSuite.checkParams(model)
+    MLTestingUtils.checkCopy(model)
   }
 
   test("Binary classification with continuous features: Log Loss") {
@@ -76,13 +77,6 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
           .setStepSize(learningRate)
         compareAPIs(data, None, gbt, categoricalFeatures)
     }
-  }
-
-  test("copied model must have the same parent") {
-    val model = new GBTClassificationModel("gbtc",
-      Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0, null))),
-      Array(1.0))
-    MLTestingUtils.checkCopy(model)
   }
 
   test("Checkpointing") {

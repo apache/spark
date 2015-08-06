@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.ml.util.MLTestingUtils
-
 import scala.collection.JavaConverters._
 
 import org.mockito.Matchers.{any, eq => meq}
@@ -28,6 +26,7 @@ import org.scalatest.mock.MockitoSugar.mock
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.HashingTF
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.sql.DataFrame
 
 class PipelineSuite extends SparkFunSuite {

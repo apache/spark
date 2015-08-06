@@ -20,8 +20,6 @@ package org.apache.spark.ml.recommendation
 import java.io.File
 import java.util.Random
 
-import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.MLTestingUtils
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -31,6 +29,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.{Logging, SparkException, SparkFunSuite}
 import org.apache.spark.ml.recommendation.ALS._
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
