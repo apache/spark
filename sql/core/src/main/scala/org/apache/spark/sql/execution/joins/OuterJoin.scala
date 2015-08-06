@@ -89,14 +89,14 @@ trait OuterJoin {
   override def canProcessUnsafeRows: Boolean = isUnsafeMode
   override def canProcessSafeRows: Boolean = !isUnsafeMode
 
-  @transient protected lazy val buildKeyGenerator: Projection =
+  protected def buildKeyGenerator: Projection =
     if (isUnsafeMode) {
       UnsafeProjection.create(buildKeys, buildPlan.output)
     } else {
       newMutableProjection(buildKeys, buildPlan.output)()
     }
 
-  @transient protected[this] lazy val streamedKeyGenerator: Projection = {
+  protected[this] def streamedKeyGenerator: Projection = {
     if (isUnsafeMode) {
       UnsafeProjection.create(streamedKeys, streamedPlan.output)
     } else {
@@ -104,7 +104,7 @@ trait OuterJoin {
     }
   }
 
-  @transient private[this] lazy val resultProjection: InternalRow => InternalRow = {
+  protected[this] def createResultProjection(): InternalRow => InternalRow = {
     if (isUnsafeMode) {
       UnsafeProjection.create(self.schema)
     } else {
@@ -125,7 +125,8 @@ trait OuterJoin {
 
   protected[this] def leftOuterIterator(
       joinedRow: JoinedRow,
-      rightIter: Iterable[InternalRow]): Iterator[InternalRow] = {
+      rightIter: Iterable[InternalRow],
+      resultProjection: InternalRow => InternalRow): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
       val temp = if (rightIter != null) {
         rightIter.collect {
@@ -135,7 +136,7 @@ trait OuterJoin {
         List.empty
       }
       if (temp.isEmpty) {
-        resultProjection(joinedRow.withRight(rightNullRow)).copy :: Nil
+        resultProjection(joinedRow.withRight(rightNullRow)) :: Nil
       } else {
         temp
       }
@@ -145,7 +146,8 @@ trait OuterJoin {
 
   protected[this] def rightOuterIterator(
       leftIter: Iterable[InternalRow],
-      joinedRow: JoinedRow): Iterator[InternalRow] = {
+      joinedRow: JoinedRow,
+      resultProjection: InternalRow => InternalRow): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
       val temp = if (leftIter != null) {
         leftIter.collect {
@@ -156,7 +158,7 @@ trait OuterJoin {
         List.empty
       }
       if (temp.isEmpty) {
-        resultProjection(joinedRow.withLeft(leftNullRow)).copy :: Nil
+        resultProjection(joinedRow.withLeft(leftNullRow)) :: Nil
       } else {
         temp
       }

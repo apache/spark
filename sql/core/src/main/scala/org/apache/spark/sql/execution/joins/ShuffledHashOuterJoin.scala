@@ -52,19 +52,21 @@ case class ShuffledHashOuterJoin(
         case LeftOuter =>
           val hashed = HashedRelation(rightIter, buildKeyGenerator)
           val keyGenerator = streamedKeyGenerator
+          val resultProj = createResultProjection()
           leftIter.flatMap { currentRow =>
             val rowKey = keyGenerator(currentRow)
             val matches = if (rowKey.anyNull) null else hashed.get(rowKey)
-            leftOuterIterator(joinedRow.withLeft(currentRow), matches)
+            leftOuterIterator(joinedRow.withLeft(currentRow), matches, resultProj)
           }
 
         case RightOuter =>
           val hashed = HashedRelation(leftIter, buildKeyGenerator)
           val keyGenerator = streamedKeyGenerator
+          val resultProj = createResultProjection()
           rightIter.flatMap { currentRow =>
             val rowKey = keyGenerator(currentRow)
             val matches = if (rowKey.anyNull) null else hashed.get(rowKey)
-            rightOuterIterator(matches, joinedRow.withRight(currentRow))
+            rightOuterIterator(matches, joinedRow.withRight(currentRow), resultProj)
           }
 
         case FullOuter =>

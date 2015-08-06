@@ -64,6 +64,7 @@ case class SortMergeOuterJoin(
       val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
       joinType match {
         case LeftOuter =>
+          val resultProj = createResultProjection()
           val smjScanner = new SortMergeJoinScanner(
             streamedKeyGenerator,
             buildKeyGenerator,
@@ -75,10 +76,12 @@ case class SortMergeOuterJoin(
           Iterator.continually(0).takeWhile(_ => smjScanner.findNextOuterJoinRows()).flatMap { _ =>
             leftOuterIterator(
               joinedRow.withLeft(smjScanner.getStreamedRow),
-              smjScanner.getBuildMatches)
+              smjScanner.getBuildMatches,
+              resultProj)
           }
 
         case RightOuter =>
+          val resultProj = createResultProjection()
           val smjScanner = new SortMergeJoinScanner(
             streamedKeyGenerator,
             buildKeyGenerator,
@@ -90,7 +93,8 @@ case class SortMergeOuterJoin(
           Iterator.continually(0).takeWhile(_ => smjScanner.findNextOuterJoinRows()).flatMap { _ =>
             rightOuterIterator(
               smjScanner.getBuildMatches,
-              joinedRow.withRight(smjScanner.getStreamedRow))
+              joinedRow.withRight(smjScanner.getStreamedRow),
+              resultProj)
           }
 
         case FullOuter =>
