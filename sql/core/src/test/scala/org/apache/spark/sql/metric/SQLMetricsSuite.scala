@@ -37,7 +37,7 @@ class SQLMetricsSuite extends SparkFunSuite {
     BoxingFinder.getClassReader(f.getClass).foreach { cl =>
       val boxingFinder = new BoxingFinder()
       cl.accept(boxingFinder, 0)
-      assert(boxingFinder.boxingInvokes.isEmpty, s"Find boxing: ${boxingFinder.boxingInvokes}")
+      assert(boxingFinder.boxingInvokes.isEmpty, s"Found boxing: ${boxingFinder.boxingInvokes}")
     }
   }
 
@@ -47,7 +47,7 @@ class SQLMetricsSuite extends SparkFunSuite {
     BoxingFinder.getClassReader(f.getClass).foreach { cl =>
       val boxingFinder = new BoxingFinder()
       cl.accept(boxingFinder, 0)
-      assert(boxingFinder.boxingInvokes.isEmpty, s"Find boxing: ${boxingFinder.boxingInvokes}")
+      assert(boxingFinder.boxingInvokes.isEmpty, s"Found boxing: ${boxingFinder.boxingInvokes}")
     }
   }
 
@@ -58,7 +58,7 @@ class SQLMetricsSuite extends SparkFunSuite {
     BoxingFinder.getClassReader(f.getClass).foreach { cl =>
       val boxingFinder = new BoxingFinder()
       cl.accept(boxingFinder, 0)
-      assert(boxingFinder.boxingInvokes.nonEmpty, "Should find boxing in this test")
+      assert(boxingFinder.boxingInvokes.nonEmpty, "Found find boxing in this test")
     }
   }
 }
