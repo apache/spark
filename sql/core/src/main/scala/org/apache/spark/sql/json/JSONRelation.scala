@@ -22,20 +22,22 @@ import java.io.CharArrayWriter
 import com.fasterxml.jackson.core.JsonFactory
 import com.google.common.base.Objects
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.{Text, LongWritable, NullWritable}
+import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
 import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
-import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext, Job}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-import org.apache.spark.Logging
-import org.apache.spark.mapred.SparkHadoopMapRedUtil
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 
+import org.apache.spark.Logging
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.util.SerializableConfiguration
 
 private[sql] class DefaultSource extends HadoopFsRelationProvider {
   override def createRelation(
@@ -103,6 +105,15 @@ private[sql] class JSONRelation(
     checkConstraints(jsonSchema)
 
     jsonSchema
+  }
+
+  override private[sql] def buildScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputPaths: Array[String],
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
+    refresh()
+    super.buildScan(requiredColumns, filters, inputPaths, broadcastedConf)
   }
 
   override def buildScan(
