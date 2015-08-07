@@ -166,6 +166,8 @@ public final class BytesToBytesMap {
 
   private long numHashCollisions = 0;
 
+  private long peakMemoryUsedBytes = 0L;
+
   public BytesToBytesMap(
       TaskMemoryManager taskMemoryManager,
       ShuffleMemoryManager shuffleMemoryManager,
@@ -658,6 +660,7 @@ public final class BytesToBytesMap {
    * This method is idempotent and can be called multiple times.
    */
   public void free() {
+    updatePeakMemoryUsed();
     longArray = null;
     bitset = null;
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
@@ -684,7 +687,6 @@ public final class BytesToBytesMap {
 
   /**
    * Returns the total amount of memory, in bytes, consumed by this map's managed structures.
-   * Note that this is also the peak memory used by this map, since the map is append-only.
    */
   public long getTotalMemoryConsumption() {
     long totalDataPagesSize = 0L;
@@ -692,6 +694,21 @@ public final class BytesToBytesMap {
       totalDataPagesSize += dataPage.size();
     }
     return totalDataPagesSize + bitset.memoryBlock().size() + longArray.memoryBlock().size();
+  }
+
+  private void updatePeakMemoryUsed() {
+    long mem = getTotalMemoryConsumption();
+    if (mem > peakMemoryUsedBytes) {
+      peakMemoryUsedBytes = mem;
+    }
+  }
+
+  /**
+   * Return the peak memory used so far, in bytes.
+   */
+  public long getPeakMemoryUsedBytes() {
+    updatePeakMemoryUsed();
+    return peakMemoryUsedBytes;
   }
 
   /**
