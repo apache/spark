@@ -590,7 +590,7 @@ class BackfillJob(BaseJob):
 
         # Triggering what is ready to get triggered
         while tasks_to_run:
-            for key, ti in tasks_to_run.items():
+            for key, ti in list(tasks_to_run.items()):
                 ti.refresh_from_db()
                 if ti.state == State.SUCCESS and key in tasks_to_run:
                     succeeded.append(key)
