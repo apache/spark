@@ -4,8 +4,8 @@ import logging
 import json
 import re
 import fnmatch
-import ConfigParser
 from urlparse import urlparse
+import configparser
 
 import boto
 from boto.s3.connection import S3Connection
@@ -30,7 +30,7 @@ def _parse_s3_config(config_file_name, config_format='boto', profile=None):
     :param profile: profile name in AWS type config file
     :type profile: str
     """
-    Config = ConfigParser.ConfigParser()
+    Config = configparser.ConfigParser()
     if Config.read(config_file_name):
         sections = Config.sections()
     else:
