@@ -54,9 +54,6 @@ case class BroadcastHashOuterJoin(
     }
   }
 
-  override def requiredChildDistribution: Seq[Distribution] =
-    UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
-
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
   // Use lazy so that we won't do broadcast when calling explain but still cache the broadcast value
