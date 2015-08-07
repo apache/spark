@@ -83,18 +83,8 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     val resolvedFormula = parsedFormula.resolve(dataset.schema)
     val encoderStages = ArrayBuffer[PipelineStage]()
     val tempColumns = ArrayBuffer[String]()
-    val takenNames = mutable.Set(dataset.columns: _*)
     def encodeInteraction(terms: Seq[String]): String = {
-      val outputCol = {
-        // TODO(ekl) this column naming should be unnecessary since we generate the right attr
-        // names in RInteraction, but the name is lost somewhere before VectorAssembler.
-        var tmp = terms.mkString(":")
-        while (takenNames.contains(tmp)) {
-          tmp += "_"
-        }
-        tmp
-      }
-      takenNames.add(outputCol)
+      val outputCol = "interaction_" + uid + "_" + terms.mkString(":")
       encoderStages += new RInteraction()
         .setInputCols(terms.toArray)
         .setOutputCol(outputCol)

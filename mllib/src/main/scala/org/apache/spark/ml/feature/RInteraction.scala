@@ -41,7 +41,6 @@ import org.apache.spark.sql.types._
  * See https://stat.ethz.ch/R-manual/R-devel/library/base/html/formula.html for more
  * information about factor interactions in R formulae.
  */
-// TODO(ekl) it might be nice to have standalone tests for RInteraction.
 @Experimental
 class RInteraction(override val uid: String) extends Estimator[PipelineModel]
   with HasInputCols with HasOutputCol {
@@ -120,8 +119,8 @@ class RInteraction(override val uid: String) extends Estimator[PipelineModel]
   override def copy(extra: ParamMap): RInteraction = defaultCopy(extra)
 
   private def checkParams(): Unit = {
-    require(isDefined(inputCols), "Input cols must be defined first.")
-    require(isDefined(outputCol), "Output col must be defined first.")
+    require(get(inputCols).isDefined, "Input cols must be defined first.")
+    require(get(outputCol).isDefined, "Output col must be defined first.")
     require($(inputCols).length > 0, "Input cols must have non-zero length.")
     require($(inputCols).distinct.length == $(inputCols).length, "Input cols must be distinct.")
   }

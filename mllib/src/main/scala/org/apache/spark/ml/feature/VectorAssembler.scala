@@ -56,10 +56,12 @@ class VectorAssembler(override val uid: String)
       val index = schema.fieldIndex(c)
       field.dataType match {
         case DoubleType =>
-          val attr = Attribute.fromStructField(field)
+          val attr = Attribute.decodeStructField(field, preserveName = true)
           // If the input column doesn't have ML attribute, assume numeric.
           if (attr == UnresolvedAttribute) {
             Some(NumericAttribute.defaultAttr.withName(c))
+          } else if (attr.name.isDefined) {
+            Some(attr)
           } else {
             Some(attr.withName(c))
           }
