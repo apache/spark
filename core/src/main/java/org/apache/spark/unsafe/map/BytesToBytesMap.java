@@ -109,7 +109,7 @@ public final class BytesToBytesMap {
    * Position {@code 2 * i} in the array is used to track a pointer to the key at index {@code i},
    * while position {@code 2 * i + 1} in the array holds key's full 32-bit hashcode.
    */
-  private LongArray longArray;
+  @Nullable private LongArray longArray;
   // TODO: we're wasting 32 bits of space here; we can probably store fewer bits of the hashcode
   // and exploit word-alignment to use fewer bits to hold the address.  This might let us store
   // only one long per map entry, increasing the chance that this array will fit in cache at the
@@ -124,7 +124,7 @@ public final class BytesToBytesMap {
    * A {@link BitSet} used to track location of the map where the key is set.
    * Size of the bitset should be half of the size of the long array.
    */
-  private BitSet bitset;
+  @Nullable private BitSet bitset;
 
   private final double loadFactor;
 
@@ -323,6 +323,9 @@ public final class BytesToBytesMap {
       Object keyBaseObject,
       long keyBaseOffset,
       int keyRowLengthBytes) {
+    assert(bitset != null);
+    assert(longArray != null);
+
     if (enablePerfMetrics) {
       numKeyLookups++;
     }
@@ -412,6 +415,7 @@ public final class BytesToBytesMap {
     }
 
     private Location with(int pos, int keyHashcode, boolean isDefined) {
+      assert(longArray != null);
       this.pos = pos;
       this.isDefined = isDefined;
       this.keyHashcode = keyHashcode;
@@ -527,6 +531,9 @@ public final class BytesToBytesMap {
       assert (!isDefined) : "Can only set value once for a key";
       assert (keyLengthBytes % 8 == 0);
       assert (valueLengthBytes % 8 == 0);
+      assert(bitset != null);
+      assert(longArray != null);
+
       if (numElements == MAX_CAPACITY) {
         throw new IllegalStateException("BytesToBytesMap has reached maximum capacity");
       }
@@ -693,7 +700,9 @@ public final class BytesToBytesMap {
     for (MemoryBlock dataPage : dataPages) {
       totalDataPagesSize += dataPage.size();
     }
-    return totalDataPagesSize + bitset.memoryBlock().size() + longArray.memoryBlock().size();
+    return totalDataPagesSize +
+      ((bitset != null) ? bitset.memoryBlock().size() : 0L) +
+      ((longArray != null) ? longArray.memoryBlock().size() : 0L);
   }
 
   private void updatePeakMemoryUsed() {
@@ -748,6 +757,9 @@ public final class BytesToBytesMap {
    */
   @VisibleForTesting
   void growAndRehash() {
+    assert(bitset != null);
+    assert(longArray != null);
+
     long resizeStartTime = -1;
     if (enablePerfMetrics) {
       resizeStartTime = System.nanoTime();
