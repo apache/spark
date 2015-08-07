@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.metric.SQLMetrics
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
@@ -81,13 +82,13 @@ case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) 
 case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  private[sql] override lazy val accumulators = Map(
-    "numInputRows" -> sparkContext.internalAccumulator(0L, "number of input rows"),
-    "numOutputRows" -> sparkContext.internalAccumulator(0L, "number of output rows"))
+  private[sql] override lazy val metrics = Map(
+    "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numInputRows = accumulator[Long]("numInputRows")
-    val numOutputRows = accumulator[Long]("numOutputRows")
+    val numInputRows = longMetric("numInputRows")
+    val numOutputRows = longMetric("numOutputRows")
     child.execute().mapPartitions { iter =>
       val predicate = newPredicate(condition, child.output)
       iter.filter { row =>

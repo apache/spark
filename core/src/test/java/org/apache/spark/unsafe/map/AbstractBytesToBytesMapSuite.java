@@ -48,7 +48,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Before
   public void setup() {
-    shuffleMemoryManager = new ShuffleMemoryManager(Long.MAX_VALUE);
+    shuffleMemoryManager = ShuffleMemoryManager.create(Long.MAX_VALUE, PAGE_SIZE_BYTES);
     taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(getMemoryAllocator()));
     // Mocked memory manager for tests that check the maximum array size, since actually allocating
     // such large arrays will cause us to run out of memory in our tests.
@@ -183,8 +183,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     }
   }
 
-  @Test
-  public void iteratorTest() throws Exception {
+  private void iteratorTestBase(boolean destructive) throws Exception {
     final int size = 4096;
     BytesToBytesMap map = new BytesToBytesMap(
       taskMemoryManager, shuffleMemoryManager, size / 2, PAGE_SIZE_BYTES);
@@ -216,7 +215,14 @@ public abstract class AbstractBytesToBytesMapSuite {
         }
       }
       final java.util.BitSet valuesSeen = new java.util.BitSet(size);
-      final Iterator<BytesToBytesMap.Location> iter = map.iterator();
+      final Iterator<BytesToBytesMap.Location> iter;
+      if (destructive) {
+        iter = map.destructiveIterator();
+      } else {
+        iter = map.iterator();
+      }
+      int numPages = map.getNumDataPages();
+      int countFreedPages = 0;
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
         Assert.assertTrue(loc.isDefined());
@@ -228,16 +234,37 @@ public abstract class AbstractBytesToBytesMapSuite {
         if (keyLength == 0) {
           Assert.assertTrue("value " + value + " was not divisible by 5", value % 5 == 0);
         } else {
-        final long key = PlatformDependent.UNSAFE.getLong(
-          keyAddress.getBaseObject(), keyAddress.getBaseOffset());
+          final long key = PlatformDependent.UNSAFE.getLong(
+            keyAddress.getBaseObject(), keyAddress.getBaseOffset());
           Assert.assertEquals(value, key);
         }
         valuesSeen.set((int) value);
+        if (destructive) {
+          // The iterator moves onto next page and frees previous page
+          if (map.getNumDataPages() < numPages) {
+            numPages = map.getNumDataPages();
+            countFreedPages++;
+          }
+        }
+      }
+      if (destructive) {
+        // Latest page is not freed by iterator but by map itself
+        Assert.assertEquals(countFreedPages, numPages - 1);
       }
       Assert.assertEquals(size, valuesSeen.cardinality());
     } finally {
       map.free();
     }
+  }
+
+  @Test
+  public void iteratorTest() throws Exception {
+    iteratorTestBase(false);
+  }
+
+  @Test
+  public void destructiveIteratorTest() throws Exception {
+    iteratorTestBase(true);
   }
 
   @Test
@@ -414,7 +441,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void failureToAllocateFirstPage() {
-    shuffleMemoryManager = new ShuffleMemoryManager(1024);
+    shuffleMemoryManager = ShuffleMemoryManager.createForTesting(1024);
     BytesToBytesMap map =
       new BytesToBytesMap(taskMemoryManager, shuffleMemoryManager, 1, PAGE_SIZE_BYTES);
     try {
@@ -434,7 +461,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void failureToGrow() {
-    shuffleMemoryManager = new ShuffleMemoryManager(1024 * 10);
+    shuffleMemoryManager = ShuffleMemoryManager.createForTesting(1024 * 10);
     BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, shuffleMemoryManager, 1, 1024);
     try {
       boolean success = true;

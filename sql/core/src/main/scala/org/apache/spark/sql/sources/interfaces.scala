@@ -382,7 +382,7 @@ abstract class OutputWriter {
 abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec])
   extends BaseRelation with Logging {
 
-  logInfo("Constructing HadoopFsRelation")
+  override def toString: String = getClass.getSimpleName + paths.mkString("[", ",", "]")
 
   def this() = this(None)
 
@@ -460,8 +460,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
             val spec = discoverPartitions()
             val partitionColumnTypes = spec.partitionColumns.map(_.dataType)
             val castedPartitions = spec.partitions.map { case p @ Partition(values, path) =>
-              val literals = values.toSeq.zip(partitionColumnTypes).map {
-                case (value, dataType) => Literal.create(value, dataType)
+              val literals = partitionColumnTypes.zipWithIndex.map { case (dt, i) =>
+                Literal.create(values.get(i, dt), dt)
               }
               val castedValues = partitionSchema.zip(literals).map { case (field, literal) =>
                 Cast(literal, field.dataType).eval()

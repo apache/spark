@@ -428,7 +428,9 @@ private[deploy] class Worker(
           // application finishes.
           val appLocalDirs = appDirectories.get(appId).getOrElse {
             Utils.getOrCreateLocalRootDirs(conf).map { dir =>
-              Utils.createDirectory(dir, namePrefix = "executor").getAbsolutePath()
+              val appDir = Utils.createDirectory(dir, namePrefix = "executor")
+              Utils.chmod700(appDir)
+              appDir.getAbsolutePath()
             }.toSeq
           }
           appDirectories(appId) = appLocalDirs
