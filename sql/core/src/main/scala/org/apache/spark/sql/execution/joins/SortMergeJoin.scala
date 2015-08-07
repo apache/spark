@@ -128,12 +128,20 @@ case class SortMergeJoin(
  *
  * The streamed input is the left side of a left outer join or the right side of a right outer join.
  *
- * // todo(josh): scaladoc
- * @param streamedKeyGenerator
- * @param bufferedKeyGenerator
- * @param keyOrdering
- * @param streamedIter
- * @param bufferedIter
+ * To perform an inner (outer) join, users of this class call [[findNextInnerJoinRows()]]
+ * ([[findNextOuterJoinRows()]]), which returns `true` if a result has been produced and `false`
+ * otherwise. If a result has been produced, then the caller may call [[getStreamedRow]] to return
+ * the matching row from the streamed input and may call [[getBufferedMatches]] to return the
+ * sequence of matching rows from the buffered input (in the case of an outer join, this will return
+ * an empty sequence). For efficiency, both of these methods return mutable objects which are
+ * re-used across calls to the `findNext*JoinRows()` methods.
+ *
+ * @param streamedKeyGenerator a projection that produces join keys from the streamed input.
+ * @param bufferedKeyGenerator a projection that produces join keys from the buffered input.
+ * @param keyOrdering an ordering which can be used to compare join keys.
+ * @param streamedIter an input whose rows will be streamed.
+ * @param bufferedIter an input whose rows will be buffered to construct sequences of rows that
+ *                     have the same join key.
  */
 private[joins] class SortMergeJoinScanner(
     streamedKeyGenerator: Projection,
