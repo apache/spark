@@ -38,7 +38,7 @@ class JoinSuite extends QueryTest with SQLTestUtils with BeforeAndAfterEach {
     val x = testData2.as("x")
     val y = testData2.as("y")
     val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.optimizedPlan
-    val planned = ctx.planner.HashJoin(join)
+    val planned = ctx.planner.EquiJoinSelection(join)
     assert(planned.size === 1)
   }
 
@@ -173,7 +173,7 @@ class JoinSuite extends QueryTest with SQLTestUtils with BeforeAndAfterEach {
     val x = testData2.as("x")
     val y = testData2.as("y")
     val join = x.join(y, ($"x.a" === $"y.a") && ($"x.b" === $"y.b")).queryExecution.optimizedPlan
-    val planned = ctx.planner.HashJoin(join)
+    val planned = ctx.planner.EquiJoinSelection(join)
     assert(planned.size === 1)
   }
 

@@ -66,7 +66,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   // joins, such as SortMergeJoin. Maybe we could just name this something like JoinSelection.
   /**
    * Uses the [[ExtractEquiJoinKeys]] pattern to find joins where at least some of the predicates
-   * can be evaluated by matching hash keys.
+   * can be evaluated by matching join keys.
    *
    * Join implementations are chosen with the following precedence:
    *
@@ -81,7 +81,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *     will be used.
    * - Hash: will be chosen if neither of the above optimizations apply to this join.
    */
-  object HashJoin extends Strategy with PredicateHelper {
+  object EquiJoinSelection extends Strategy with PredicateHelper {
 
     private[this] def makeBroadcastHashJoin(
         leftKeys: Seq[Expression],
