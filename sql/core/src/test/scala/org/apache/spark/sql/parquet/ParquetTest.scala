@@ -19,11 +19,19 @@ package org.apache.spark.sql.parquet
 
 import java.io.File
 
+import scala.collection.JavaConverters.{iterableAsScalaIterableConverter, mapAsJavaMapConverter, seqAsJavaListConverter}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.parquet.format.converter.ParquetMetadataConverter
+import org.apache.parquet.hadoop.metadata.{BlockMetaData, FileMetaData, ParquetMetadata}
+import org.apache.parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SaveMode}
 
 /**
@@ -96,5 +104,28 @@ private[sql] trait ParquetTest extends SQLTestUtils { this: SparkFunSuite =>
 
     assert(partDir.mkdirs(), s"Couldn't create directory $partDir")
     partDir
+  }
+
+  def writeMetadata(schema: StructType, path: Path, configuration: Configuration): Unit = {
+    val parquetSchema = new ParquetSchemaConverter(configuration).convert(schema)
+    val extraMetadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> schema.json).asJava
+    val createdBy = s"Apache Spark ${org.apache.spark.SPARK_VERSION}"
+    val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, createdBy)
+    val parquetMetadata = new ParquetMetadata(fileMetadata, Seq.empty[BlockMetaData].asJava)
+    val footer = new Footer(path, parquetMetadata)
+    ParquetFileWriter.writeMetadataFile(configuration, path, Seq(footer).asJava)
+  }
+
+  def readAllFootersWithoutSummaryFiles(
+      path: Path, configuration: Configuration): Seq[Footer] = {
+    val fs = path.getFileSystem(configuration)
+    ParquetFileReader.readAllFootersInParallel(configuration, fs.getFileStatus(path)).asScala.toSeq
+  }
+
+  def readFooter(path: Path, configuration: Configuration): ParquetMetadata = {
+    ParquetFileReader.readFooter(
+      configuration,
+      new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE),
+      ParquetMetadataConverter.NO_FILTER)
   }
 }

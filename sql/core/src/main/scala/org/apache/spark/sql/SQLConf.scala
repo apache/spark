@@ -290,12 +290,12 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     doc = "Enables Parquet filter push-down optimization when set to true.")
 
-  val PARQUET_FOLLOW_PARQUET_FORMAT_SPEC = booleanConf(
-    key = "spark.sql.parquet.followParquetFormatSpec",
+  val PARQUET_WRITE_LEGACY_FORMAT = booleanConf(
+    key = "spark.sql.parquet.writeLegacyParquetFormat",
     defaultValue = Some(false),
-    doc = "Whether to follow Parquet's format specification when converting Parquet schema to " +
-      "Spark SQL schema and vice versa.",
-    isPublic = false)
+    doc = "When true, writes Parquet data in legacy format compatible with Spark 1.4.0 and prior " +
+      "versions, instead of the standard one defined in parquet-format spec.",
+    isPublic = true)
 
   val PARQUET_OUTPUT_COMMITTER_CLASS = stringConf(
     key = "spark.sql.parquet.output.committer.class",
@@ -497,7 +497,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
 
-  private[spark] def followParquetFormatSpec: Boolean = getConf(PARQUET_FOLLOW_PARQUET_FORMAT_SPEC)
+  private[spark] def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
   private[spark] def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 

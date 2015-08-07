@@ -25,6 +25,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition._
 import org.apache.parquet.schema._
 
+import org.apache.spark.sql.parquet.ParquetSchemaConverter.{MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64, maxPrecisionForBytes, minBytesForPrecision}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, SQLConf}
 
@@ -40,35 +41,33 @@ import org.apache.spark.sql.{AnalysisException, SQLConf}
  * @constructor
  * @param assumeBinaryIsString Whether unannotated BINARY fields should be assumed to be Spark SQL
  *        [[StringType]] fields when converting Parquet a [[MessageType]] to Spark SQL
- *        [[StructType]].
+ *        [[StructType]].  This argument only affects Parquet read path.
  * @param assumeInt96IsTimestamp Whether unannotated INT96 fields should be assumed to be Spark SQL
  *        [[TimestampType]] fields when converting Parquet a [[MessageType]] to Spark SQL
  *        [[StructType]].  Note that Spark SQL [[TimestampType]] is similar to Hive timestamp, which
  *        has optional nanosecond precision, but different from `TIME_MILLS` and `TIMESTAMP_MILLIS`
- *        described in Parquet format spec.
- * @param followParquetFormatSpec Whether to generate standard DECIMAL, LIST, and MAP structure when
- *        converting Spark SQL [[StructType]] to Parquet [[MessageType]].  For Spark 1.4.x and
- *        prior versions, Spark SQL only supports decimals with a max precision of 18 digits, and
- *        uses non-standard LIST and MAP structure.  Note that the current Parquet format spec is
- *        backwards-compatible with these settings.  If this argument is set to `false`, we fallback
- *        to old style non-standard behaviors.
+ *        described in Parquet format spec.  This argument only affects Parquet read path.
+ * @param writeLegacyParquetFormat Whether to use legacy Parquet format compatible with Spark 1.4
+ *        and prior versions when converting a Catalyst [[StructType]] to a Parquet [[MessageType]].
+ *        When set to false, use standard format defined in parquet-format spec.  This argument only
+ *        affects Parquet write path.
  */
-private[parquet] class CatalystSchemaConverter(
+private[parquet] class ParquetSchemaConverter(
     private val assumeBinaryIsString: Boolean,
     private val assumeInt96IsTimestamp: Boolean,
-    private val followParquetFormatSpec: Boolean) {
+    private val writeLegacyParquetFormat: Boolean) {
 
   // Only used when constructing converter for converting Spark SQL schema to Parquet schema, in
   // which case `assumeInt96IsTimestamp` and `assumeBinaryIsString` are irrelevant.
   def this() = this(
     assumeBinaryIsString = SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get,
     assumeInt96IsTimestamp = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get,
-    followParquetFormatSpec = SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.defaultValue.get)
+    writeLegacyParquetFormat = SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get)
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
     assumeInt96IsTimestamp = conf.isParquetINT96AsTimestamp,
-    followParquetFormatSpec = conf.followParquetFormatSpec)
+    writeLegacyParquetFormat = conf.writeLegacyParquetFormat)
 
   def this(conf: Configuration) = this(
     assumeBinaryIsString =
@@ -79,10 +78,10 @@ private[parquet] class CatalystSchemaConverter(
       conf.getBoolean(
         SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
         SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get),
-    followParquetFormatSpec =
+    writeLegacyParquetFormat =
       conf.getBoolean(
-        SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key,
-        SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.defaultValue.get))
+        SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
+        SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get))
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
@@ -135,7 +134,7 @@ private[parquet] class CatalystSchemaConverter(
       val precision = field.getDecimalMetadata.getPrecision
       val scale = field.getDecimalMetadata.getScale
 
-      CatalystSchemaConverter.analysisRequire(
+      ParquetSchemaConverter.checkConversionRequirement(
         maxPrecision == -1 || 1 <= precision && precision <= maxPrecision,
         s"Invalid decimal precision: $typeName cannot store $precision digits (max $maxPrecision)")
 
@@ -155,7 +154,7 @@ private[parquet] class CatalystSchemaConverter(
           case INT_16 => ShortType
           case INT_32 | null => IntegerType
           case DATE => DateType
-          case DECIMAL => makeDecimalType(maxPrecisionForBytes(4))
+          case DECIMAL => makeDecimalType(MAX_PRECISION_FOR_INT32)
           case TIME_MILLIS => typeNotImplemented()
           case _ => illegalType()
         }
@@ -163,13 +162,13 @@ private[parquet] class CatalystSchemaConverter(
       case INT64 =>
         originalType match {
           case INT_64 | null => LongType
-          case DECIMAL => makeDecimalType(maxPrecisionForBytes(8))
+          case DECIMAL => makeDecimalType(MAX_PRECISION_FOR_INT64)
           case TIMESTAMP_MILLIS => typeNotImplemented()
           case _ => illegalType()
         }
 
       case INT96 =>
-        CatalystSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.checkConversionRequirement(
           assumeInt96IsTimestamp,
           "INT96 is not supported unless it's interpreted as timestamp. " +
             s"Please try to set ${SQLConf.PARQUET_INT96_AS_TIMESTAMP.key} to true.")
@@ -211,11 +210,11 @@ private[parquet] class CatalystSchemaConverter(
       //
       // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
       case LIST =>
-        CatalystSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.checkConversionRequirement(
           field.getFieldCount == 1, s"Invalid list type $field")
 
         val repeatedType = field.getType(0)
-        CatalystSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.checkConversionRequirement(
           repeatedType.isRepetition(REPEATED), s"Invalid list type $field")
 
         if (isElementType(repeatedType, field.getName)) {
@@ -231,17 +230,17 @@ private[parquet] class CatalystSchemaConverter(
       // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules-1
       // scalastyle:on
       case MAP | MAP_KEY_VALUE =>
-        CatalystSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.checkConversionRequirement(
           field.getFieldCount == 1 && !field.getType(0).isPrimitive,
           s"Invalid map type: $field")
 
         val keyValueType = field.getType(0).asGroupType()
-        CatalystSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.checkConversionRequirement(
           keyValueType.isRepetition(REPEATED) && keyValueType.getFieldCount == 2,
           s"Invalid map type: $field")
 
         val keyType = keyValueType.getType(0)
-        CatalystSchemaConverter.analysisRequire(
+        ParquetSchemaConverter.checkConversionRequirement(
           keyType.isPrimitive,
           s"Map key type is expected to be a primitive type, but found: $keyType")
 
@@ -313,7 +312,10 @@ private[parquet] class CatalystSchemaConverter(
    * Converts a Spark SQL [[StructType]] to a Parquet [[MessageType]].
    */
   def convert(catalystSchema: StructType): MessageType = {
-    Types.buildMessage().addFields(catalystSchema.map(convertField): _*).named("root")
+    Types
+      .buildMessage()
+      .addFields(catalystSchema.map(convertField): _*)
+      .named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
   }
 
   /**
@@ -324,13 +326,9 @@ private[parquet] class CatalystSchemaConverter(
   }
 
   private def convertField(field: StructField, repetition: Type.Repetition): Type = {
-    CatalystSchemaConverter.checkFieldName(field.name)
+    ParquetSchemaConverter.checkFieldName(field.name)
 
     field.dataType match {
-      // ===================
-      // Simple atomic types
-      // ===================
-
       case BooleanType =>
         Types.primitive(BOOLEAN, repetition).named(field.name)
 
@@ -361,171 +359,123 @@ private[parquet] class CatalystSchemaConverter(
       // NOTE: Spark SQL TimestampType is NOT a well defined type in Parquet format spec.
       //
       // As stated in PARQUET-323, Parquet `INT96` was originally introduced to represent nanosecond
-      // timestamp in Impala for some historical reasons, it's not recommended to be used for any
-      // other types and will probably be deprecated in future Parquet format spec.  That's the
-      // reason why Parquet format spec only defines `TIMESTAMP_MILLIS` and `TIMESTAMP_MICROS` which
-      // are both logical types annotating `INT64`.
+      // timestamp in Impala for some historical reasons.  It's not recommended to be used for any
+      // other types and will probably be deprecated in some future version of parquet-format spec.
+      // That's the reason why parquet-format spec only defines `TIMESTAMP_MILLIS` and
+      // `TIMESTAMP_MICROS` which are both logical types annotating `INT64`.
       //
       // Originally, Spark SQL uses the same nanosecond timestamp type as Impala and Hive.  Starting
-      // from Spark 1.5.0, we resort to a timestamp type with 100 ns precision so that we can store
-      // a timestamp into a `Long`.  This design decision is subject to change though, for example,
-      // we may resort to microsecond precision in the future.
+      // from Spark 1.5.0, we resort to microsecond timestamp type.
       //
-      // For Parquet, we plan to write all `TimestampType` value as `TIMESTAMP_MICROS`, but it's
-      // currently not implemented yet because parquet-mr 1.7.0 (the version we're currently using)
-      // hasn't implemented `TIMESTAMP_MICROS` yet.
+      // We plan to write all `TimestampType` values as `TIMESTAMP_MICROS`, but up to writing, the
+      // most recent version of parquet-mr (1.8.1) hasn't implemented `TIMESTAMP_MICROS` yet.
       //
-      // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
+      // TODO Converts to `TIMESTAMP_MICROS` once parquet-mr implements that.
       case TimestampType =>
         Types.primitive(INT96, repetition).named(field.name)
 
       case BinaryType =>
         Types.primitive(BINARY, repetition).named(field.name)
 
-      // =====================================
-      // Decimals (for Spark version <= 1.4.x)
-      // =====================================
+      case DecimalType.Fixed(precision, scale) =>
+        val builder = writeLegacyParquetFormat match {
+          // Standard mode, 1 <= precision <= 9, converts to INT32 based DECIMAL
+          case false if precision <= MAX_PRECISION_FOR_INT32 =>
+            Types.primitive(INT32, repetition)
 
-      // Spark 1.4.x and prior versions only support decimals with a maximum precision of 18 and
-      // always store decimals in fixed-length byte arrays.  To keep compatibility with these older
-      // versions, here we convert decimals with all precisions to `FIXED_LEN_BYTE_ARRAY` annotated
-      // by `DECIMAL`.
-      case DecimalType.Fixed(precision, scale) if !followParquetFormatSpec =>
-        Types
-          .primitive(FIXED_LEN_BYTE_ARRAY, repetition)
-          .as(DECIMAL)
-          .precision(precision)
-          .scale(scale)
-          .length(CatalystSchemaConverter.minBytesForPrecision(precision))
-          .named(field.name)
+          // Standard mode, 10 <= precision <= 18, converts to INT64 based DECIMAL
+          case false if precision <= MAX_PRECISION_FOR_INT64 =>
+            Types.primitive(INT64, repetition)
 
-      // =====================================
-      // Decimals (follow Parquet format spec)
-      // =====================================
+          // All other cases:
+          //  - Standard mode, 19 <= precision <= 38, converts to FIXED_LEN_BYTE_ARRAY based DECIMAL
+          //  - Legacy mode, 1 <= precision <= 38, converts to FIXED_LEN_BYTE_ARRAY based DECIMAL
+          case _ =>
+            val numBytes = minBytesForPrecision(precision)
+            Types.primitive(FIXED_LEN_BYTE_ARRAY, repetition).length(numBytes)
+        }
 
-      // Uses INT32 for 1 <= precision <= 9
-      case DecimalType.Fixed(precision, scale)
-        if precision <= maxPrecisionForBytes(4) && followParquetFormatSpec =>
-        Types
-          .primitive(INT32, repetition)
-          .as(DECIMAL)
-          .precision(precision)
-          .scale(scale)
-          .named(field.name)
+        builder.as(DECIMAL).precision(precision).scale(scale).named(field.name)
 
-      // Uses INT64 for 1 <= precision <= 18
-      case DecimalType.Fixed(precision, scale)
-        if precision <= maxPrecisionForBytes(8) && followParquetFormatSpec =>
-        Types
-          .primitive(INT64, repetition)
-          .as(DECIMAL)
-          .precision(precision)
-          .scale(scale)
-          .named(field.name)
-
-      // Uses FIXED_LEN_BYTE_ARRAY for all other precisions
-      case DecimalType.Fixed(precision, scale) if followParquetFormatSpec =>
-        Types
-          .primitive(FIXED_LEN_BYTE_ARRAY, repetition)
-          .as(DECIMAL)
-          .precision(precision)
-          .scale(scale)
-          .length(CatalystSchemaConverter.minBytesForPrecision(precision))
-          .named(field.name)
-
-      // ===================================================
-      // ArrayType and MapType (for Spark versions <= 1.4.x)
-      // ===================================================
-
-      // Spark 1.4.x and prior versions convert ArrayType with nullable elements into a 3-level
-      // LIST structure.  This behavior mimics parquet-hive (1.6.0rc3).  Note that this case is
-      // covered by the backwards-compatibility rules implemented in `isElementType()`.
-      case ArrayType(elementType, nullable @ true) if !followParquetFormatSpec =>
-        // <list-repetition> group <name> (LIST) {
-        //   optional group bag {
-        //     repeated <element-type> element;
-        //   }
-        // }
-        ConversionPatterns.listType(
-          repetition,
-          field.name,
-          Types
-            .buildGroup(REPEATED)
-            // "array_element" is the name chosen by parquet-hive (1.7.0 and prior version)
-            .addField(convertField(StructField("array_element", elementType, nullable)))
-            .named(CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME))
-
-      // Spark 1.4.x and prior versions convert ArrayType with non-nullable elements into a 2-level
-      // LIST structure.  This behavior mimics parquet-avro (1.6.0rc3).  Note that this case is
-      // covered by the backwards-compatibility rules implemented in `isElementType()`.
-      case ArrayType(elementType, nullable @ false) if !followParquetFormatSpec =>
-        // <list-repetition> group <name> (LIST) {
-        //   repeated <element-type> element;
-        // }
-        ConversionPatterns.listType(
-          repetition,
-          field.name,
-          // "array" is the name chosen by parquet-avro (1.7.0 and prior version)
-          convertField(StructField("array", elementType, nullable), REPEATED))
-
-      // Spark 1.4.x and prior versions convert MapType into a 3-level group annotated by
-      // MAP_KEY_VALUE.  This is covered by `convertGroupField(field: GroupType): DataType`.
-      case MapType(keyType, valueType, valueContainsNull) if !followParquetFormatSpec =>
-        // <map-repetition> group <name> (MAP) {
-        //   repeated group map (MAP_KEY_VALUE) {
-        //     required <key-type> key;
-        //     <value-repetition> <value-type> value;
-        //   }
-        // }
-        ConversionPatterns.mapType(
-          repetition,
-          field.name,
-          convertField(StructField("key", keyType, nullable = false)),
-          convertField(StructField("value", valueType, valueContainsNull)))
-
-      // ==================================================
-      // ArrayType and MapType (follow Parquet format spec)
-      // ==================================================
-
-      case ArrayType(elementType, containsNull) if followParquetFormatSpec =>
-        // <list-repetition> group <name> (LIST) {
-        //   repeated group list {
-        //     <element-repetition> <element-type> element;
-        //   }
-        // }
-        Types
-          .buildGroup(repetition).as(LIST)
-          .addField(
-            Types.repeatedGroup()
-              .addField(convertField(StructField("element", elementType, containsNull)))
-              .named("list"))
-          .named(field.name)
-
-      case MapType(keyType, valueType, valueContainsNull) =>
-        // <map-repetition> group <name> (MAP) {
-        //   repeated group key_value {
-        //     required <key-type> key;
-        //     <value-repetition> <value-type> value;
-        //   }
-        // }
-        Types
-          .buildGroup(repetition).as(MAP)
-          .addField(
+      case t: ArrayType =>
+        val repeatedType = (writeLegacyParquetFormat, t.containsNull) match {
+          case (true, true) =>
+            // Legacy mode: Spark 1.4.x and prior versions convert `ArrayType` with nullable
+            // elements into a 3-level `LIST` structure.  This behavior is somewhat a hybrid of
+            // parquet-hive and parquet-avro (1.6.0rc3): the 3-level structure is similar to
+            // parquet-hive while the 3rd level anonymous field name "array" is from parquet-avro.
+            //
+            //   <list-repetition> group <name> (LIST) {
+            //     repeated group bag {                             |
+            //       optional <element-type> array;                 |-  repeatedType
+            //     }                                                |
+            //   }
             Types
               .repeatedGroup()
-              .addField(convertField(StructField("key", keyType, nullable = false)))
-              .addField(convertField(StructField("value", valueType, valueContainsNull)))
-              .named("key_value"))
-          .named(field.name)
+              .addField(convertField(StructField("array", t.elementType, t.containsNull)))
+              .named("bag")
 
-      // ===========
-      // Other types
-      // ===========
+          case (true, false) =>
+            // Legacy mode: Spark 1.4.x and prior versions convert `ArrayType` with non-nullable
+            // elements into a 2-level `LIST` structure.  This behavior mimics parquet-avro
+            // (1.6.0rc3).
+            //
+            //   <list-repetition> group <name> (LIST) {
+            //     repeated <element-type> array;                   <-  repeatedType
+            //   }
+            convertField(StructField("array", t.elementType, t.containsNull), REPEATED)
 
-      case StructType(fields) =>
-        fields.foldLeft(Types.buildGroup(repetition)) { (builder, field) =>
-          builder.addField(convertField(field))
-        }.named(field.name)
+          case (false, _) =>
+            // Standard mode:
+            //
+            //   <list-repetition> group <name> (LIST) {
+            //     repeated group list {                            |
+            //       <element-repetition> <element-type> element;   |-  repeatedType
+            //     }                                                |
+            //   }
+            Types
+              .repeatedGroup()
+              .addField(convertField(StructField("element", t.elementType, t.containsNull)))
+              .named("list")
+        }
+
+        Types.buildGroup(repetition).as(LIST).addField(repeatedType).named(field.name)
+
+      case t: MapType =>
+        val repeatedGroupBuilder =
+          Types
+            .repeatedGroup()
+            .addField(convertField(StructField("key", t.keyType, nullable = false)))
+            .addField(convertField(StructField("value", t.valueType, t.valueContainsNull)))
+
+        val repeatedGroup = if (writeLegacyParquetFormat) {
+          // Legacy mode: Spark 1.4.x and prior versions convert MapType into a 3-level group
+          // annotated by MAP_KEY_VALUE.
+          //
+          //   <map-repetition> group <name> (MAP) {
+          //     repeated group map (MAP_KEY_VALUE) {               |
+          //       required <key-type> key;                         |-  repeatedGroup
+          //       <value-repetition> <value-type> value;           |
+          //     }                                                  |
+          //   }
+          repeatedGroupBuilder.as(MAP_KEY_VALUE).named("map")
+        } else {
+          // Standard mode:
+          //
+          //   <map-repetition> group <name> (MAP) {
+          //     repeated group key_value {                         |
+          //       required <key-type> key;                         |-  repeatedGroup
+          //       <value-repetition> <value-type> value;           |
+          //     }                                                  |
+          //   }
+          repeatedGroupBuilder.named("key_value")
+        }
+
+        Types.buildGroup(repetition).as(MAP).addField(repeatedGroup).named(field.name)
+
+      case t: StructType =>
+        val parquetFields = t.fields.map(convertField)
+        Types.buildGroup(repetition).addFields(parquetFields: _*).named(field.name)
 
       case udt: UserDefinedType[_] =>
         convertField(field.copy(dataType = udt.sqlType))
@@ -534,21 +484,15 @@ private[parquet] class CatalystSchemaConverter(
         throw new AnalysisException(s"Unsupported data type $field.dataType")
     }
   }
-
-  // Max precision of a decimal value stored in `numBytes` bytes
-  private def maxPrecisionForBytes(numBytes: Int): Int = {
-    Math.round(                               // convert double to long
-      Math.floor(Math.log10(                  // number of base-10 digits
-        Math.pow(2, 8 * numBytes - 1) - 1)))  // max value stored in numBytes
-      .asInstanceOf[Int]
-  }
 }
 
 
-private[parquet] object CatalystSchemaConverter {
+private[parquet] object ParquetSchemaConverter {
+  val SPARK_PARQUET_SCHEMA_NAME = "spark_schema"
+
   def checkFieldName(name: String): Unit = {
     // ,;{}()\n\t= and space are special characters in Parquet schema
-    analysisRequire(
+    checkConversionRequirement(
       !name.matches(".*[ ,;{}()\n\t=].*"),
       s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\\n\\t=".
          |Please use alias to rename it.
@@ -560,13 +504,14 @@ private[parquet] object CatalystSchemaConverter {
     schema
   }
 
-  def analysisRequire(f: => Boolean, message: String): Unit = {
+  def checkConversionRequirement(f: => Boolean, message: String): Unit = {
     if (!f) {
       throw new AnalysisException(message)
     }
   }
 
-  private def computeMinBytesForPrecision(precision : Int) : Int = {
+  // The minimum number of bytes needed to store a decimal with a given `precision`.
+  val minBytesForPrecision = Array.tabulate[Int](DecimalType.MAX_PRECISION + 1) { precision =>
     var numBytes = 1
     while (math.pow(2.0, 8 * numBytes - 1) < math.pow(10.0, precision)) {
       numBytes += 1
@@ -574,14 +519,15 @@ private[parquet] object CatalystSchemaConverter {
     numBytes
   }
 
-  private val MIN_BYTES_FOR_PRECISION = Array.tabulate[Int](39)(computeMinBytesForPrecision)
+  val MAX_PRECISION_FOR_INT32 = maxPrecisionForBytes(4)
 
-  // Returns the minimum number of bytes needed to store a decimal with a given `precision`.
-  def minBytesForPrecision(precision : Int) : Int = {
-    if (precision < MIN_BYTES_FOR_PRECISION.length) {
-      MIN_BYTES_FOR_PRECISION(precision)
-    } else {
-      computeMinBytesForPrecision(precision)
-    }
+  val MAX_PRECISION_FOR_INT64 = maxPrecisionForBytes(8)
+
+  // Max precision of a decimal value stored in `numBytes` bytes
+  def maxPrecisionForBytes(numBytes: Int): Int = {
+    Math.round(                               // convert double to long
+      Math.floor(Math.log10(                  // number of base-10 digits
+        Math.pow(2, 8 * numBytes - 1) - 1)))  // max value stored in numBytes
+      .asInstanceOf[Int]
   }
 }

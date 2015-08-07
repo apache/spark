@@ -31,7 +31,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 
-private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with Logging {
+private[parquet] class ParquetReadSupport extends ReadSupport[InternalRow] with Logging {
   override def prepareForRead(
       conf: Configuration,
       keyValueMetaData: JMap[String, String],
@@ -39,24 +39,24 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
       readContext: ReadContext): RecordMaterializer[InternalRow] = {
     log.debug(s"Preparing for read Parquet file with message type: $fileSchema")
 
-    val toCatalyst = new CatalystSchemaConverter(conf)
+    val toCatalyst = new ParquetSchemaConverter(conf)
     val parquetRequestedSchema = readContext.getRequestedSchema
 
     val catalystRequestedSchema =
       Option(readContext.getReadSupportMetadata).map(_.toMap).flatMap { metadata =>
         metadata
           // First tries to read requested schema, which may result from projections
-          .get(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
+          .get(ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
           // If not available, tries to read Catalyst schema from file metadata.  It's only
           // available if the target file is written by Spark SQL.
-          .orElse(metadata.get(CatalystReadSupport.SPARK_METADATA_KEY))
+          .orElse(metadata.get(ParquetReadSupport.SPARK_METADATA_KEY))
       }.map(StructType.fromString).getOrElse {
         logDebug("Catalyst schema not available, falling back to Parquet schema")
         toCatalyst.convert(parquetRequestedSchema)
       }
 
     logDebug(s"Catalyst schema used to read Parquet files: $catalystRequestedSchema")
-    new CatalystRecordMaterializer(parquetRequestedSchema, catalystRequestedSchema)
+    new ParquetRecordMaterializer(parquetRequestedSchema, catalystRequestedSchema)
   }
 
   override def init(context: InitContext): ReadContext = {
@@ -64,11 +64,11 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
 
     // If the target file was written by Spark SQL, we should be able to find a serialized Catalyst
     // schema of this file from its the metadata.
-    val maybeRowSchema = Option(conf.get(RowWriteSupport.SPARK_ROW_SCHEMA))
+    val maybeRowSchema = Option(conf.get(ParquetWriteSupport.SPARK_ROW_SCHEMA))
 
     // Optional schema of requested columns, in the form of a string serialized from a Catalyst
     // `StructType` containing all requested columns.
-    val maybeRequestedSchema = Option(conf.get(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA))
+    val maybeRequestedSchema = Option(conf.get(ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA))
 
     // Below we construct a Parquet schema containing all requested columns.  This schema tells
     // Parquet which columns to read.
@@ -110,7 +110,7 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
     //    different physical structures.
     val parquetRequestedSchema =
       maybeRequestedSchema.fold(context.getFileSchema) { schemaString =>
-        val toParquet = new CatalystSchemaConverter(conf)
+        val toParquet = new ParquetSchemaConverter(conf)
         val fileSchema = context.getFileSchema.asGroupType()
         val fileFieldNames = fileSchema.getFields.map(_.getName).toSet
 
@@ -121,7 +121,9 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
             if (fileFieldNames.contains(field.name)) {
               // If the field exists in the target Parquet file, extracts the field type from the
               // full file schema and makes a single-field Parquet schema
-              new MessageType("root", fileSchema.getType(field.name))
+              new MessageType(
+                ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME,
+                fileSchema.getType(field.name))
             } else {
               // Otherwise, just resorts to `CatalystSchemaConverter`
               toParquet.convert(StructType(Array(field)))
@@ -131,22 +133,22 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
           // columns.  Note that it's possible that no columns are requested at all (e.g., count
           // some partition column of a partitioned Parquet table). That's why `fold` is used here
           // and always fallback to an empty Parquet schema.
-          .fold(new MessageType("root")) {
+          .fold(new MessageType(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)) {
             _ union _
           }
       }
 
     val metadata =
       Map.empty[String, String] ++
-        maybeRequestedSchema.map(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA -> _) ++
-        maybeRowSchema.map(RowWriteSupport.SPARK_ROW_SCHEMA -> _)
+        maybeRequestedSchema.map(ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA -> _) ++
+        maybeRowSchema.map(ParquetWriteSupport.SPARK_ROW_SCHEMA -> _)
 
     logInfo(s"Going to read Parquet file with these requested columns: $parquetRequestedSchema")
     new ReadContext(parquetRequestedSchema, metadata)
   }
 }
 
-private[parquet] object CatalystReadSupport {
+private[parquet] object ParquetReadSupport {
   val SPARK_ROW_REQUESTED_SCHEMA = "org.apache.spark.sql.parquet.row.requested_schema"
 
   val SPARK_METADATA_KEY = "org.apache.spark.sql.parquet.row.metadata"

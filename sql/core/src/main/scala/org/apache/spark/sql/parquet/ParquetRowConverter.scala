@@ -56,7 +56,7 @@ private[parquet] trait ParentContainerUpdater {
 private[parquet] object NoopUpdater extends ParentContainerUpdater
 
 /**
- * A [[CatalystRowConverter]] is used to convert Parquet "structs" into Spark SQL [[InternalRow]]s.
+ * A [[ParquetRowConverter]] is used to convert Parquet records into Spark SQL [[InternalRow]]s.
  * Since any Parquet record is also a struct, this converter can also be used as root converter.
  *
  * When used as a root converter, [[NoopUpdater]] should be used since root converters don't have
@@ -66,14 +66,14 @@ private[parquet] object NoopUpdater extends ParentContainerUpdater
  * @param catalystType Spark SQL schema that corresponds to the Parquet record type
  * @param updater An updater which propagates converted field values to the parent container
  */
-private[parquet] class CatalystRowConverter(
+private[parquet] class ParquetRowConverter(
     parquetType: GroupType,
     catalystType: StructType,
     updater: ParentContainerUpdater)
   extends GroupConverter {
 
   /**
-   * Updater used together with field converters within a [[CatalystRowConverter]].  It propagates
+   * Updater used together with field converters within a [[ParquetRowConverter]].  It propagates
    * converted filed values to the `ordinal`-th cell in `currentRow`.
    */
   private final class RowUpdater(row: MutableRow, ordinal: Int) extends ParentContainerUpdater {
@@ -126,7 +126,7 @@ private[parquet] class CatalystRowConverter(
 
     catalystType match {
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType =>
-        new CatalystPrimitiveConverter(updater)
+        new ParquetPrimitiveConverter(updater)
 
       case ByteType =>
         new PrimitiveConverter {
@@ -141,10 +141,10 @@ private[parquet] class CatalystRowConverter(
         }
 
       case t: DecimalType =>
-        new CatalystDecimalConverter(t, updater)
+        new ParquetDecimalConverter(t, updater)
 
       case StringType =>
-        new CatalystStringConverter(updater)
+        new ParquetStringConverter(updater)
 
       case TimestampType =>
         // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
@@ -172,13 +172,13 @@ private[parquet] class CatalystRowConverter(
         }
 
       case t: ArrayType =>
-        new CatalystArrayConverter(parquetType.asGroupType(), t, updater)
+        new ParquetArrayConverter(parquetType.asGroupType(), t, updater)
 
       case t: MapType =>
-        new CatalystMapConverter(parquetType.asGroupType(), t, updater)
+        new ParquetMapConverter(parquetType.asGroupType(), t, updater)
 
       case t: StructType =>
-        new CatalystRowConverter(parquetType.asGroupType(), t, new ParentContainerUpdater {
+        new ParquetRowConverter(parquetType.asGroupType(), t, new ParentContainerUpdater {
           override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
         })
 
@@ -186,7 +186,7 @@ private[parquet] class CatalystRowConverter(
         val catalystTypeForUDT = t.sqlType
         val nullable = parquetType.isRepetition(Repetition.OPTIONAL)
         val field = StructField("udt", catalystTypeForUDT, nullable)
-        val parquetTypeForUDT = new CatalystSchemaConverter().convertField(field)
+        val parquetTypeForUDT = new ParquetSchemaConverter().convertField(field)
         newConverter(parquetTypeForUDT, catalystTypeForUDT, updater)
 
       case _ =>
@@ -200,7 +200,7 @@ private[parquet] class CatalystRowConverter(
    * are handled by this converter.  Parquet primitive types are only a subset of those of Spark
    * SQL.  For example, BYTE, SHORT, and INT in Spark SQL are all covered by INT32 in Parquet.
    */
-  private final class CatalystPrimitiveConverter(updater: ParentContainerUpdater)
+  private final class ParquetPrimitiveConverter(updater: ParentContainerUpdater)
     extends PrimitiveConverter {
 
     override def addBoolean(value: Boolean): Unit = updater.setBoolean(value)
@@ -214,7 +214,7 @@ private[parquet] class CatalystRowConverter(
   /**
    * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
    */
-  private final class CatalystStringConverter(updater: ParentContainerUpdater)
+  private final class ParquetStringConverter(updater: ParentContainerUpdater)
     extends PrimitiveConverter {
 
     private var expandedDictionary: Array[UTF8String] = null
@@ -239,7 +239,7 @@ private[parquet] class CatalystRowConverter(
   /**
    * Parquet converter for fixed-precision decimals.
    */
-  private final class CatalystDecimalConverter(
+  private final class ParquetDecimalConverter(
       decimalType: DecimalType,
       updater: ParentContainerUpdater)
     extends PrimitiveConverter {
@@ -264,7 +264,7 @@ private[parquet] class CatalystRowConverter(
       val scale = decimalType.scale
       val bytes = value.getBytes
 
-      if (precision <= 8) {
+      def bytesToUnscaledLong(bytes: Array[Byte]): Long = {
         // Constructs a `Decimal` with an unscaled `Long` value if possible.
         var unscaled = 0L
         var i = 0
@@ -275,11 +275,17 @@ private[parquet] class CatalystRowConverter(
         }
 
         val bits = 8 * bytes.length
-        unscaled = (unscaled << (64 - bits)) >> (64 - bits)
+        (unscaled << (64 - bits)) >> (64 - bits)
+      }
+
+      if (precision <= ParquetSchemaConverter.MAX_PRECISION_FOR_INT64) {
+        // Constructs a `Decimal` with an unscaled `Long` value if possible.
+        val unscaled = bytesToUnscaledLong(bytes)
         Decimal(unscaled, precision, scale)
       } else {
         // Otherwise, resorts to an unscaled `BigInteger` instead.
-        Decimal(new BigDecimal(new BigInteger(bytes), scale), precision, scale)
+        val unscaled = new BigInteger(bytes)
+        Decimal(new BigDecimal(unscaled, scale), precision, scale)
       }
     }
   }
@@ -302,7 +308,7 @@ private[parquet] class CatalystRowConverter(
    *
    * @see https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
    */
-  private final class CatalystArrayConverter(
+  private final class ParquetArrayConverter(
       parquetSchema: GroupType,
       catalystSchema: ArrayType,
       updater: ParentContainerUpdater)
@@ -379,7 +385,7 @@ private[parquet] class CatalystRowConverter(
   }
 
   /** Parquet converter for maps */
-  private final class CatalystMapConverter(
+  private final class ParquetMapConverter(
       parquetType: GroupType,
       catalystType: MapType,
       updater: ParentContainerUpdater)

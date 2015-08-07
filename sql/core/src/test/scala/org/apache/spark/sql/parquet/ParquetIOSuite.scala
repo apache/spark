@@ -29,7 +29,7 @@ import org.apache.parquet.example.data.{Group, GroupWriter}
 import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
 import org.apache.parquet.hadoop.metadata.{CompressionCodecName, FileMetaData, ParquetMetadata}
-import org.apache.parquet.hadoop.{Footer, ParquetFileWriter, ParquetOutputCommitter, ParquetWriter}
+import org.apache.parquet.hadoop._
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
@@ -101,7 +101,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     def makeDecimalRDD(decimal: DecimalType): DataFrame =
       sqlContext.sparkContext
         .parallelize(0 to 1000)
-        .map(i => Tuple1(i / 100.0))
+        .map(i => Tuple1((i - 500) / 100.0))
         .toDF()
         // Parquet doesn't allow column names with spaces, have to add an alias here
         .select($"_1" cast decimal as "dec")
@@ -203,15 +203,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
   }
 
   test("compression codec") {
-    def compressionCodecFor(path: String): String = {
-      val codecs = ParquetTypesConverter
-        .readMetaData(new Path(path), Some(configuration))
-        .getBlocks
-        .flatMap(_.getColumns)
-        .map(_.getCodec.name())
-        .distinct
+    def compressionCodecFor(path: String, codecName: String): String = {
+      val codecs = for {
+        footer <- readAllFootersWithoutSummaryFiles(new Path(path), configuration)
+        block <- footer.getParquetMetadata.getBlocks
+        column <- block.getColumns
+      } yield column.getCodec.name()
 
-      assert(codecs.size === 1)
+      assert(codecs.distinct === Seq(codecName))
       codecs.head
     }
 
@@ -221,7 +220,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
       withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> codec.name()) {
         withParquetFile(data) { path =>
           assertResult(sqlContext.conf.parquetCompressionCodec.toUpperCase) {
-            compressionCodecFor(path)
+            compressionCodecFor(path, codec.name())
           }
         }
       }
@@ -277,15 +276,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     withTempPath { file =>
       val path = new Path(file.toURI.toString)
       val fs = FileSystem.getLocal(configuration)
-      val attributes = ScalaReflection.attributesFor[(Int, String)]
-      ParquetTypesConverter.writeMetaData(attributes, path, configuration)
+      val schema = StructType.fromAttributes(ScalaReflection.attributesFor[(Int, String)])
+      writeMetadata(schema, path, configuration)
 
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)))
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)))
 
-      val metaData = ParquetTypesConverter.readMetaData(path, Some(configuration))
-      val actualSchema = metaData.getFileMetaData.getSchema
-      val expectedSchema = ParquetTypesConverter.convertFromAttributes(attributes)
+      val expectedSchema = new ParquetSchemaConverter(configuration).convert(schema)
+      val actualSchema = readFooter(path, configuration).getFileMetaData.getSchema
 
       actualSchema.checkContains(expectedSchema)
       expectedSchema.checkContains(actualSchema)
@@ -348,7 +346,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
       """.stripMargin)
 
     withTempPath { location =>
-      val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
+      val extraMetadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
       val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, "Spark")
       val path = new Path(location.getCanonicalPath)
 
