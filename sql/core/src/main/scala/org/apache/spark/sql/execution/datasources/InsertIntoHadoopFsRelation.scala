@@ -98,9 +98,6 @@ private[sql] case class InsertIntoHadoopFsRelation(
       job.setOutputValueClass(classOf[InternalRow])
       FileOutputFormat.setOutputPath(job, qualifiedOutputPath)
 
-      // We create a DataFrame by applying the schema of relation to the data to make sure.
-      // We are writing data based on the expected schema,
-
       // A partitioned relation schema's can be different from the input logicalPlan, since
       // partition columns are all moved after data column. We Project to adjust the ordering.
       // TODO: this belongs in the analyzer.
