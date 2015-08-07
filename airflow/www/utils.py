@@ -3,7 +3,7 @@ standard_library.install_aliases()
 from builtins import str
 from builtins import object
 from cgi import escape
-from cStringIO import StringIO as IO
+from io import StringIO as IO
 import gzip
 import functools
 
