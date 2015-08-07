@@ -435,19 +435,25 @@ private[yarn] class YarnAllocator(
         // there are some exit status' we shouldn't necessarily count against us, but for
         // now I think its ok as none of the containers are expected to exit
         if (completedContainer.getExitStatus == ContainerExitStatus.PREEMPTED) {
-          logInfo("Container preempted: " + containerId)
+          val msg = "Container preempted: " + containerId
+          logInfo(msg)
+          driverRef.send(completedContainer.getExitStatus, msg)
         } else if (completedContainer.getExitStatus == -103) { // vmem limit exceeded
           logWarning(memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
             VMEM_EXCEEDED_PATTERN))
+          driverRef.send(ContainedExited(completedContainer.getExitStatus, completedContainer.getDiagnostics))
         } else if (completedContainer.getExitStatus == -104) { // pmem limit exceeded
           logWarning(memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
             PMEM_EXCEEDED_PATTERN))
+          driverRef.send(ContainedExited(completedContainer.getExitStatus, completedContainer.getDiagnostics))
         } else if (completedContainer.getExitStatus != 0) {
-          logInfo("Container marked as failed: " + containerId +
+          val msg = "Container marked as failed: " + containerId +
             ". Exit status: " + completedContainer.getExitStatus +
-            ". Diagnostics: " + completedContainer.getDiagnostics)
+            ". Diagnostics: " + completedContainer.getDiagnostics
+          logInfo(msg)
+          driverRef.send(ContainedExited(completedContainer.getExitStatus, msg))
           numExecutorsFailed += 1
         }
       }

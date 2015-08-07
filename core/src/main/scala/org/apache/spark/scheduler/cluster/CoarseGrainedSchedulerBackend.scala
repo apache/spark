@@ -19,6 +19,9 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.regex.Pattern
+
+import org.apache.hadoop.yarn.api.records.ContainerExitStatus
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
@@ -123,6 +126,21 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           case None =>
             // Ignoring the task kill since the executor is not registered.
             logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
+        }
+
+      case ContainedExited(containerExitStatus, msg) =>
+        if (containerExitStatus == ContainerExitStatus.PREEMPTED) {
+          logInfo(msg)
+        } else if (containerExitStatus == -103) { // vmem limit exceeded
+          logWarning(memLimitExceededLogMessage(
+            msg,
+            VMEM_EXCEEDED_PATTERN))
+        } else if (containerExitStatus == -104) { // pmem limit exceeded
+          logWarning(memLimitExceededLogMessage(
+            msg,
+            PMEM_EXCEEDED_PATTERN))
+        } else if (containerExitStatus != 0) {
+          logInfo(msg)
         }
 
     }
@@ -444,4 +462,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
 private[spark] object CoarseGrainedSchedulerBackend {
   val ENDPOINT_NAME = "CoarseGrainedScheduler"
+  val MEM_REGEX = "[0-9.]+ [KMG]B"
+  val PMEM_EXCEEDED_PATTERN =
+    Pattern.compile(s"$MEM_REGEX of $MEM_REGEX physical memory used")
+  val VMEM_EXCEEDED_PATTERN =
+    Pattern.compile(s"$MEM_REGEX of $MEM_REGEX virtual memory used")
+
+  def memLimitExceededLogMessage(diagnostics: String, pattern: Pattern): String = {
+    val matcher = pattern.matcher(diagnostics)
+    val diag = if (matcher.find()) " " + matcher.group() + "." else ""
+    ("Container killed by YARN for exceeding memory limits." + diag
+      + " Consider boosting spark.yarn.executor.memoryOverhead.")
+  }
+
 }
