@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution;
 
 import java.io.IOException;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -215,6 +217,11 @@ public final class UnsafeFixedWidthAggregationMap {
    */
   public long getMemoryUsage() {
     return map.getTotalMemoryConsumption();
+  }
+
+  @VisibleForTesting
+  public int getNumDataPages() {
+    return map.getNumDataPages();
   }
 
   /**

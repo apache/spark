@@ -335,7 +335,7 @@ class TungstenAggregationIterator(
   // This is the hash map used for hash-based aggregation. It is backed by an
   // UnsafeFixedWidthAggregationMap and it is used to store
   // all groups and their corresponding aggregation buffers for hash-based aggregation.
-  private[this] val hashMap = new UnsafeFixedWidthAggregationMap(
+  private[aggregate] val hashMap = new UnsafeFixedWidthAggregationMap(
     initialAggregationBuffer,
     StructType.fromAttributes(allAggregateFunctions.flatMap(_.bufferAttributes)),
     StructType.fromAttributes(groupingExpressions.map(_.toAttribute)),
