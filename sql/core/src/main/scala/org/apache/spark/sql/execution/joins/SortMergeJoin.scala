@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution.joins
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
-import org.apache.spark.util.collection.CompactBuffer
 
 /**
  * :: DeveloperApi ::
@@ -74,7 +75,7 @@ case class SortMergeJoin(
         // An ordering that can be used to compare keys from both sides.
         private[this] val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
         private[this] var currentLeftRow: InternalRow = _
-        private[this] var currentRightMatches: CompactBuffer[InternalRow] = _
+        private[this] var currentRightMatches: ArrayBuffer[InternalRow] = _
         private[this] var currentMatchIdx: Int = -1
         private[this] val smjScanner = new SortMergeJoinScanner(
           leftKeyGenerator,
@@ -139,13 +140,17 @@ private[joins] class SortMergeJoinScanner(
   private[this] var buildRowKey: InternalRow = _
    /** The join key for the rows buffered in `buildMatches`, or null if `buildMatches` is empty */
   private[this] var matchJoinKey: InternalRow = _
-  /** Buffered rows from the build side of the join. This is null if there are no matches */
-  private[this] var buildMatches: CompactBuffer[InternalRow] = _
+  /** Buffered rows from the build side of the join. This is empty if there are no matches. */
+  private[this] val buildMatches: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
 
   // Initialization (note: do _not_ want to advance streamed here).
   advanceBuild()
 
   // --- Public methods ---------------------------------------------------------------------------
+
+  def getStreamedRow: InternalRow = streamedRow
+
+  def getBuildMatches: ArrayBuffer[InternalRow] = buildMatches
 
   /**
    * Advances both input iterators, stopping when we have found rows with matching join keys.
@@ -206,13 +211,13 @@ private[joins] class SortMergeJoinScanner(
       if (streamedRowKey.anyNull) {
         // Since at least one join column is null, the streamed row has no matches.
         matchJoinKey = null
-        buildMatches = null
+        buildMatches.clear()
       } else if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
         // Matches the current group, so do nothing.
       } else {
         // The streamed row does not match the current group.
         matchJoinKey = null
-        buildMatches = null
+        buildMatches.clear()
         if (buildRow != null) {
           // The build iterator could still contain matching rows, so we'll need to walk through it
           // until we either find matches or pass where they would be found.
@@ -237,8 +242,6 @@ private[joins] class SortMergeJoinScanner(
     }
   }
 
-  def getStreamedRow: InternalRow = streamedRow
-  def getBuildMatches: CompactBuffer[InternalRow] = buildMatches
 
   // --- Private methods --------------------------------------------------------------------------
 
@@ -284,7 +287,7 @@ private[joins] class SortMergeJoinScanner(
     assert(!buildRowKey.anyNull)
     assert(keyOrdering.compare(streamedRowKey, buildRowKey) == 0)
     matchJoinKey = streamedRowKey.copy()
-    buildMatches = new CompactBuffer[InternalRow]
+    buildMatches.clear()
     do {
       // TODO(josh): could maybe avoid a copy for case where all rows have exactly one match
       buildMatches += buildRow.copy() // need to copy mutable rows before buffering them
