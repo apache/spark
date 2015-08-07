@@ -301,7 +301,7 @@ class HiveMetastoreHook(BaseHook):
         if not parts:
             return None
         elif len(parts[0]) == 1:
-            field = parts[0].keys()[0]
+            field = list(parts[0].keys())[0]
         elif not field:
             raise AirflowException(
                 "Please specify the field you want the max "
