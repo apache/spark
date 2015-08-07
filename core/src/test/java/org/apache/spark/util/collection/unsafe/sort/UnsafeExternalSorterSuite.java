@@ -340,7 +340,8 @@ public class UnsafeExternalSorterSuite {
       for (int i = 0; i < numRecordsPerPage * 10; i++) {
         insertNumber(sorter, i);
         newPeakMemory = sorter.getPeakMemoryUsedBytes();
-        if (i % numRecordsPerPage == 0) {
+        // The first page is pre-allocated on instantiation
+        if (i % numRecordsPerPage == 0 && i > 0) {
           // We allocated a new page for this record, so peak memory should change
           assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
         } else {
@@ -358,6 +359,22 @@ public class UnsafeExternalSorterSuite {
       }
       newPeakMemory = sorter.getPeakMemoryUsedBytes();
       assertEquals(previousPeakMemory, newPeakMemory);
+    } finally {
+      sorter.cleanupResources();
+      assertSpillFilesWereCleanedUp();
+    }
+  }
+
+  @Test
+  public void testReservePageOnInstantiation() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    try {
+      assertEquals(1, sorter.getNumberOfAllocatedPages());
+      // Inserting a new record doesn't allocate more memory since we already have a page
+      long peakMemory = sorter.getPeakMemoryUsedBytes();
+      insertNumber(sorter, 100);
+      assertEquals(peakMemory, sorter.getPeakMemoryUsedBytes());
+      assertEquals(1, sorter.getNumberOfAllocatedPages());
     } finally {
       sorter.cleanupResources();
       assertSpillFilesWereCleanedUp();
