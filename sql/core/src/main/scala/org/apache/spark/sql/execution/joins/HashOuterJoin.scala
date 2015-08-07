@@ -23,12 +23,11 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.util.collection.CompactBuffer
 
 @DeveloperApi
-trait OuterJoin {
+trait HashOuterJoin {
   self: SparkPlan =>
 
   val leftKeys: Seq[Expression]
@@ -38,7 +37,7 @@ trait OuterJoin {
   val left: SparkPlan
   val right: SparkPlan
 
-  final override def output: Seq[Attribute] = {
+  override def output: Seq[Attribute] = {
     joinType match {
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
@@ -47,18 +46,8 @@ trait OuterJoin {
       case FullOuter =>
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
       case x =>
-        throw new IllegalArgumentException(
-          s"${getClass.getSimpleName} should not take $x as the JoinType")
+        throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
     }
-  }
-
-  override def outputPartitioning: Partitioning = joinType match {
-    case LeftOuter => left.outputPartitioning
-    case RightOuter => right.outputPartitioning
-    case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
-    case x =>
-      throw new IllegalArgumentException(
-        s"${getClass.getSimpleName}  should not take $x as the JoinType")
   }
 
   protected[this] lazy val (buildPlan, streamedPlan) = joinType match {
@@ -66,7 +55,7 @@ trait OuterJoin {
     case LeftOuter => (right, left)
     case x =>
       throw new IllegalArgumentException(
-        s"${getClass.getSimpleName} should not take $x as the JoinType")
+        s"HashOuterJoin should not take $x as the JoinType")
   }
 
   protected[this] lazy val (buildKeys, streamedKeys) = joinType match {
@@ -74,7 +63,7 @@ trait OuterJoin {
     case LeftOuter => (rightKeys, leftKeys)
     case x =>
       throw new IllegalArgumentException(
-        s"${getClass.getSimpleName} should not take $x as the JoinType")
+        s"HashOuterJoin should not take $x as the JoinType")
   }
 
   protected[this] def isUnsafeMode: Boolean = {
@@ -102,7 +91,7 @@ trait OuterJoin {
     }
   }
 
-  protected[this] def createResultProjection(): InternalRow => InternalRow = {
+  protected[this] def resultProjection: InternalRow => InternalRow = {
     if (isUnsafeMode) {
       UnsafeProjection.create(self.schema)
     } else {
@@ -113,52 +102,61 @@ trait OuterJoin {
   @transient private[this] lazy val DUMMY_LIST = CompactBuffer[InternalRow](null)
   @transient protected[this] lazy val EMPTY_LIST = CompactBuffer[InternalRow]()
 
-  @transient protected[this] lazy val leftNullRow = new GenericInternalRow(left.output.length)
-  @transient protected[this] lazy val rightNullRow = new GenericInternalRow(right.output.length)
-  @transient protected[this] lazy val boundCondition =
+  @transient private[this] lazy val leftNullRow = new GenericInternalRow(left.output.length)
+  @transient private[this] lazy val rightNullRow = new GenericInternalRow(right.output.length)
+  @transient private[this] lazy val boundCondition =
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
   // TODO we need to rewrite all of the iterators with our own implementation instead of the Scala
   // iterator for performance purpose.
 
   protected[this] def leftOuterIterator(
+      key: InternalRow,
       joinedRow: JoinedRow,
       rightIter: Iterable[InternalRow],
       resultProjection: InternalRow => InternalRow): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
-      val temp = if (rightIter != null) {
-        rightIter.collect {
-          case r if boundCondition(joinedRow.withRight(r)) => resultProjection(joinedRow).copy()
+      if (!key.anyNull) {
+        val temp = if (rightIter != null) {
+          rightIter.collect {
+            case r if boundCondition(joinedRow.withRight(r)) => resultProjection(joinedRow).copy()
+          }
+        } else {
+          List.empty
+        }
+        if (temp.isEmpty) {
+          resultProjection(joinedRow.withRight(rightNullRow)) :: Nil
+        } else {
+          temp
         }
       } else {
-        List.empty
-      }
-      if (temp.isEmpty) {
         resultProjection(joinedRow.withRight(rightNullRow)) :: Nil
-      } else {
-        temp
       }
     }
     ret.iterator
   }
 
   protected[this] def rightOuterIterator(
+      key: InternalRow,
       leftIter: Iterable[InternalRow],
       joinedRow: JoinedRow,
       resultProjection: InternalRow => InternalRow): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
-      val temp = if (leftIter != null) {
-        leftIter.collect {
-          case l if boundCondition(joinedRow.withLeft(l)) =>
-            resultProjection(joinedRow).copy()
+      if (!key.anyNull) {
+        val temp = if (leftIter != null) {
+          leftIter.collect {
+            case l if boundCondition(joinedRow.withLeft(l)) => resultProjection(joinedRow).copy()
+          }
+        } else {
+          List.empty
+        }
+        if (temp.isEmpty) {
+          resultProjection(joinedRow.withLeft(leftNullRow)) :: Nil
+        } else {
+          temp
         }
       } else {
-        List.empty
-      }
-      if (temp.isEmpty) {
         resultProjection(joinedRow.withLeft(leftNullRow)) :: Nil
-      } else {
-        temp
       }
     }
     ret.iterator

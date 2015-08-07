@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
-import org.apache.spark.util.collection.CompactBuffer
 
 /**
  * :: DeveloperApi ::
@@ -40,7 +39,7 @@ case class ShuffledHashOuterJoin(
     joinType: JoinType,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryNode with OuterJoin {
+    right: SparkPlan) extends BinaryNode with HashOuterJoin {
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
@@ -48,41 +47,37 @@ case class ShuffledHashOuterJoin(
   protected override def doExecute(): RDD[InternalRow] = {
     val joinedRow = new JoinedRow()
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
+      // TODO this probably can be replaced by external sort (sort merged join?)
       joinType match {
         case LeftOuter =>
           val hashed = HashedRelation(rightIter, buildKeyGenerator)
           val keyGenerator = streamedKeyGenerator
-          val resultProj = createResultProjection()
-          leftIter.flatMap { currentRow =>
+          val resultProj = resultProjection
+          leftIter.flatMap( currentRow => {
             val rowKey = keyGenerator(currentRow)
-            val matches = if (rowKey.anyNull) null else hashed.get(rowKey)
-            leftOuterIterator(joinedRow.withLeft(currentRow), matches, resultProj)
-          }
+            joinedRow.withLeft(currentRow)
+            leftOuterIterator(rowKey, joinedRow, hashed.get(rowKey), resultProj)
+          })
 
         case RightOuter =>
           val hashed = HashedRelation(leftIter, buildKeyGenerator)
           val keyGenerator = streamedKeyGenerator
-          val resultProj = createResultProjection()
-          rightIter.flatMap { currentRow =>
+          val resultProj = resultProjection
+          rightIter.flatMap ( currentRow => {
             val rowKey = keyGenerator(currentRow)
-            val matches = if (rowKey.anyNull) null else hashed.get(rowKey)
-            rightOuterIterator(matches, joinedRow.withRight(currentRow), resultProj)
-          }
+            joinedRow.withRight(currentRow)
+            rightOuterIterator(rowKey, hashed.get(rowKey), joinedRow, resultProj)
+          })
 
         case FullOuter =>
           // TODO(davies): use UnsafeRow
           val leftHashTable = buildHashTable(leftIter, newProjection(leftKeys, left.output))
           val rightHashTable = buildHashTable(rightIter, newProjection(rightKeys, right.output))
-          (leftHashTable.keySet.asScala ++ rightHashTable.keySet.asScala).iterator.flatMap { key =>
-            val leftRows: CompactBuffer[InternalRow] = {
-              val rows = leftHashTable.get(key)
-              if (rows == null) EMPTY_LIST else rows
-            }
-            val rightRows: CompactBuffer[InternalRow] = {
-              val rows = rightHashTable.get(key)
-              if (rows == null) EMPTY_LIST else rows
-            }
-            fullOuterIterator(key, leftRows, rightRows, joinedRow)
+          (leftHashTable.keySet ++ rightHashTable.keySet).iterator.flatMap { key =>
+            fullOuterIterator(key,
+              leftHashTable.getOrElse(key, EMPTY_LIST),
+              rightHashTable.getOrElse(key, EMPTY_LIST),
+              joinedRow)
           }
 
         case x =>

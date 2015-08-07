@@ -21,7 +21,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
@@ -38,16 +38,37 @@ case class SortMergeOuterJoin(
     joinType: JoinType,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryNode with OuterJoin {
+    right: SparkPlan) extends BinaryNode {
 
-  override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+  override def output: Seq[Attribute] = {
+    joinType match {
+      case LeftOuter =>
+        left.output ++ right.output.map(_.withNullability(true))
+      case RightOuter =>
+        left.output.map(_.withNullability(true)) ++ right.output
+      case x =>
+        throw new IllegalArgumentException(
+          s"${getClass.getSimpleName} should not take $x as the JoinType")
+    }
+  }
+
+  override def outputPartitioning: Partitioning = joinType match {
+    case LeftOuter => left.outputPartitioning
+    case RightOuter => right.outputPartitioning
+    case x =>
+      throw new IllegalArgumentException(
+        s"${getClass.getSimpleName} should not take $x as the JoinType")
+  }
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
-    case LeftOuter | RightOuter => requiredOrders(leftKeys)
+    case LeftOuter => requiredOrders(leftKeys)
+    case RightOuter => requiredOrders(rightKeys)
     case x => throw new IllegalArgumentException(
       s"SortMergeOuterJoin should not take $x as the JoinType")
   }
+
+  override def requiredChildDistribution: Seq[Distribution] =
+    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     requiredOrders(leftKeys) :: requiredOrders(rightKeys) :: Nil
@@ -57,31 +78,64 @@ case class SortMergeOuterJoin(
     keys.map(SortOrder(_, Ascending))
   }
 
-  protected override def doExecute(): RDD[InternalRow] = {
+  private def isUnsafeMode: Boolean = {
+    (codegenEnabled && unsafeEnabled
+      && UnsafeProjection.canSupport(leftKeys)
+      && UnsafeProjection.canSupport(rightKeys)
+      && UnsafeProjection.canSupport(schema))
+  }
+
+  private def createLeftKeyGenerator(): Projection = {
+    if (isUnsafeMode) {
+      UnsafeProjection.create(leftKeys, left.output)
+    } else {
+      newProjection(leftKeys, left.output)
+    }
+  }
+
+  private def createRightKeyGenerator(): Projection = {
+    if (isUnsafeMode) {
+      UnsafeProjection.create(rightKeys, right.output)
+    } else {
+      newProjection(rightKeys, right.output)
+    }
+  }
+
+  override def doExecute(): RDD[InternalRow] = {
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       // An ordering that can be used to compare keys from both sides.
       val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
+      val boundCondition =
+        newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
+      val resultProj: InternalRow => InternalRow = {
+        if (isUnsafeMode) {
+          UnsafeProjection.create(schema)
+        } else {
+          identity[InternalRow]
+        }
+      }
+
       joinType match {
         case LeftOuter =>
-          val resultProj = createResultProjection()
           val smjScanner = new SortMergeJoinScanner(
-            streamedKeyGenerator,
-            buildKeyGenerator,
+            streamedKeyGenerator = createLeftKeyGenerator(),
+            bufferedKeyGenerator = createRightKeyGenerator(),
             keyOrdering,
             streamedIter = leftIter,
             bufferedIter = rightIter
           )
+          val rightNullRow = new GenericInternalRow(right.output.length)
           new LeftOuterIterator(smjScanner, rightNullRow, boundCondition, resultProj).toScala
 
         case RightOuter =>
-          val resultProj = createResultProjection()
           val smjScanner = new SortMergeJoinScanner(
-            streamedKeyGenerator,
-            buildKeyGenerator,
+            streamedKeyGenerator = createRightKeyGenerator(),
+            bufferedKeyGenerator = createLeftKeyGenerator(),
             keyOrdering,
             streamedIter = rightIter,
             bufferedIter = leftIter
           )
+          val leftNullRow = new GenericInternalRow(left.output.length)
           new RightOuterIterator(smjScanner, leftNullRow, boundCondition, resultProj).toScala
 
         case x =>

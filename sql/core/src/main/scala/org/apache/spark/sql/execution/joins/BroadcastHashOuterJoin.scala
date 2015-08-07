@@ -43,7 +43,7 @@ case class BroadcastHashOuterJoin(
     joinType: JoinType,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryNode with OuterJoin {
+    right: SparkPlan) extends BinaryNode with HashOuterJoin {
 
   val timeout = {
     val timeoutValue = sqlContext.conf.broadcastTimeout
@@ -53,6 +53,9 @@ case class BroadcastHashOuterJoin(
       timeoutValue.seconds
     }
   }
+
+  override def requiredChildDistribution: Seq[Distribution] =
+    UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
 
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
@@ -94,21 +97,21 @@ case class BroadcastHashOuterJoin(
         case _ =>
       }
 
-      val resultProj = createResultProjection()
+      val resultProj = resultProjection
       joinType match {
         case LeftOuter =>
-          streamedIter.flatMap { currentRow =>
+          streamedIter.flatMap(currentRow => {
             val rowKey = keyGenerator(currentRow)
-            val matches = if (rowKey.anyNull) null else hashTable.get(rowKey)
-            leftOuterIterator(joinedRow.withLeft(currentRow), matches, resultProj)
-          }
+            joinedRow.withLeft(currentRow)
+            leftOuterIterator(rowKey, joinedRow, hashTable.get(rowKey), resultProj)
+          })
 
         case RightOuter =>
-          streamedIter.flatMap { currentRow =>
+          streamedIter.flatMap(currentRow => {
             val rowKey = keyGenerator(currentRow)
-            val matches = if (rowKey.anyNull) null else hashTable.get(rowKey)
-            rightOuterIterator(matches, joinedRow.withRight(currentRow), resultProj)
-          }
+            joinedRow.withRight(currentRow)
+            rightOuterIterator(rowKey, hashTable.get(rowKey), joinedRow, resultProj)
+          })
 
         case x =>
           throw new IllegalArgumentException(
