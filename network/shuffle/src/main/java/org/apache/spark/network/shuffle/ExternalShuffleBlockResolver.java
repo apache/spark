@@ -117,6 +117,8 @@ public class ExternalShuffleBlockResolver {
 
         }
       }
+      // if there is a version mismatch, we throw an exception, which means the service is unusable
+      checkVersion(tmpDb);
       executors = reloadRegisteredExecutors(tmpDb);
       db = tmpDb;
     } else {
@@ -332,14 +334,16 @@ public class ExternalShuffleBlockResolver {
   }
 
   private static byte[] dbAppExecKey(AppExecId appExecId) {
-    return (appExecId.appId + ";" + appExecId.execId).getBytes(Charsets.UTF_8);
+    return (APP_KEY_PREFIX + ";" + appExecId.appId + ";" + appExecId.execId).getBytes(Charsets.UTF_8);
   }
 
-  private static AppExecId parseDbAppExecKey(byte[] bytes) {
-    String s = new String(bytes, Charsets.UTF_8);
+  private static AppExecId parseDbAppExecKey(String s) {
     int p = s.indexOf(';');
-    return new AppExecId(s.substring(0, p), s.substring(p + 1));
+    int p2 = s.indexOf(';', p + 1);
+    return new AppExecId(s.substring(p + 1, p2), s.substring(p2 + 1));
   }
+
+  private static final String APP_KEY_PREFIX = "AppExecShuffleInfo";
 
   @VisibleForTesting
   static ConcurrentMap<AppExecId, ExecutorShuffleInfo> reloadRegisteredExecutors(DB db)
@@ -347,11 +351,14 @@ public class ExternalShuffleBlockResolver {
     ConcurrentMap<AppExecId, ExecutorShuffleInfo> registeredExecutors = Maps.newConcurrentMap();
     if (db != null) {
       DBIterator itr = db.iterator();
-      itr.seekToFirst();
+      itr.seek(APP_KEY_PREFIX.getBytes(Charsets.UTF_8));
       while (itr.hasNext()) {
         Map.Entry<byte[], byte[]> e = itr.next();
+        String key = new String(e.getKey(), Charsets.UTF_8);
+        if (!key.startsWith(APP_KEY_PREFIX))
+          break;
+        AppExecId id = parseDbAppExecKey(key);
         ObjectInputStream in = new ObjectInputStream(new ByteArrayInputStream(e.getValue()));
-        AppExecId id = parseDbAppExecKey(e.getKey());
         try {
           registeredExecutors.put(
             id,
@@ -374,6 +381,70 @@ public class ExternalShuffleBlockResolver {
       LOG.info(message);
     }
   }
+
+  private static final StoreVersion CURRENT_VERSION = new StoreVersion(1,0);
+  private static void checkVersion(DB db) throws IOException {
+    byte[] bytes = db.get(StoreVersion.KEY);
+    if (bytes == null) {
+      storeVersion(db);
+    } else if (bytes.length != 8) {
+      throw new IOException("unexpected version format");
+    } else {
+      DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes));
+      int major = in.readInt();
+      int minor = in.readInt();
+      StoreVersion version = new StoreVersion(major, minor);
+      if (version.major != CURRENT_VERSION.major) {
+        throw new IOException("cannot read state DB with version " + version + ", incompatible " +
+          "with current version " + CURRENT_VERSION);
+      }
+      storeVersion(db);
+    }
+  }
+
+  private static void storeVersion(DB db) throws IOException {
+    ByteArrayOutputStream bytesOut = new ByteArrayOutputStream();
+    DataOutputStream out = new DataOutputStream(bytesOut);
+    out.writeInt(CURRENT_VERSION.major);
+    out.writeInt(CURRENT_VERSION.minor);
+    out.close();
+    db.put(StoreVersion.KEY, bytesOut.toByteArray());
+  }
+
+
+  private static class StoreVersion {
+
+    final static byte[] KEY = "StoreVersion".getBytes(Charsets.UTF_8);
+
+    final int major;
+    final int minor;
+
+    StoreVersion(int major, int minor) {
+      this.major = major;
+      this.minor = minor;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      StoreVersion that = (StoreVersion) o;
+
+      if (major != that.major) return false;
+      if (minor != that.minor) return false;
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      int result = major;
+      result = 31 * result + minor;
+      return result;
+    }
+  }
+
 
 
 }
