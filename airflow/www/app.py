@@ -993,7 +993,7 @@ class Airflow(BaseView):
         else:
             base_date = dateutil.parser.parse(base_date)
 
-         start_date = dag.start_date
+        start_date = dag.start_date
         if not start_date:
             start_date = dag.default_args['start_date']
 
