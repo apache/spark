@@ -1053,8 +1053,6 @@ class BaseOperator(object):
     :type start_date: datetime
     :param end_date: if specified, the scheduler won't go beyond this date
     :type end_date: datetime
-    :param schedule_interval: interval at which to schedule the task
-    :type schedule_interval: timedelta
     :param depends_on_past: when set to true, task instances will run
         sequentially while relying on the previous task's schedule to
         succeed. The task instance for the start_date is allowed to run.
@@ -1126,7 +1124,7 @@ class BaseOperator(object):
             retry_delay=timedelta(seconds=300),
             start_date=None,
             end_date=None,
-            schedule_interval=timedelta(days=1),
+            schedule_interval=timedelta(days=1),  # not hooked as of now
             depends_on_past=False,
             wait_for_downstream=False,
             dag=None,
