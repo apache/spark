@@ -35,7 +35,7 @@ object LDADataGenerator {
    * Generate an RDD containing test data for LDA.
    *
    * @param sc SparkContext to use for creating the RDD
-   * @param k Number of clusters
+   * @param k Number of topics
    * @param docNum Number of documents
    * @param docLength Number of words per document
    * @param vocabSize size of the vocabulary
