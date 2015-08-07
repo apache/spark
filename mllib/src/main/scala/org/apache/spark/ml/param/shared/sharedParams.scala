@@ -297,6 +297,38 @@ private[ml] trait HasStandardization extends Params {
 }
 
 /**
+ * Trait for shared param robustRegression (default: false).
+ */
+private[ml] trait HasRobustRegression extends Params {
+
+  /**
+   * Param for whether to use robust Huber Cost Function.
+   * @group param
+   */
+  final val robustRegression: BooleanParam = new BooleanParam(this, "robustRegression", "whether to use robust Huber Cost Function")
+
+  setDefault(robustRegression, false)
+
+  /** @group getParam */
+  final def getRobustRegression: Boolean = $(robustRegression)
+}
+
+/**
+ * Trait for shared param robustEfficiency.
+ */
+private[ml] trait HasRobustEfficiency extends Params {
+
+  /**
+   * Param for threshold in the distribution of errors (>= 0).
+   * @group param
+   */
+  final val robustEfficiency: DoubleParam = new DoubleParam(this, "robustEfficiency", "threshold in the distribution of errors (>= 0)", ParamValidators.gtEq(0))
+
+  /** @group getParam */
+  final def getRobustEfficiency: Double = $(robustEfficiency)
+}
+
+/**
  * Trait for shared param seed (default: this.getClass.getName.hashCode.toLong).
  */
 private[ml] trait HasSeed extends Params {
@@ -388,5 +420,25 @@ private[ml] trait HasSolver extends Params {
 
   /** @group getParam */
   final def getSolver: String = $(solver)
+
 }
+
+/**
+ * Trait for shared param robust (default: false).
+ */
+private[ml] trait HasRobust extends Params {
+
+  /**
+   * Param for whether to fit an intercept term.
+   * @group param
+   */
+  final val robust: BooleanParam = new BooleanParam(this, "robust", "whether to use robust Huber Cost Function")
+
+  setDefault(robust, false)
+
+  /** @group getParam */
+  final def getRobust: Boolean = $(robust)
+
+}
+
 // scalastyle:on
