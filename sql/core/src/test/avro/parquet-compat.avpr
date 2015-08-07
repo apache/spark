@@ -2,6 +2,10 @@
   "protocol" : "CompatibilityTest",
   "namespace" : "org.apache.spark.sql.parquet.test.avro",
   "types" : [ {
+    "type" : "enum",
+    "name" : "Suit",
+    "symbols" : [ "SPADES", "HEARTS", "DIAMONDS", "CLUBS" ]
+  }, {
     "type" : "record",
     "name" : "Nested",
     "fields" : [ {
@@ -39,6 +43,9 @@
       "name" : "string_column",
       "type" : "string"
     }, {
+      "name" : "enum_column",
+      "type" : "Suit"
+    }, {
       "name" : "maybe_bool_column",
       "type" : [ "null", "boolean" ]
     }, {
@@ -60,10 +67,19 @@
       "name" : "maybe_string_column",
       "type" : [ "null", "string" ]
     }, {
+      "name" : "maybe_enum_column",
+      "type" : [ "null", "Suit" ]
+    }, {
       "name" : "strings_column",
       "type" : {
         "type" : "array",
         "items" : "string"
+      }
+    }, {
+      "name" : "structs_column",
+      "type" : {
+        "type" : "array",
+        "items" : "Nested"
       }
     }, {
       "name" : "string_to_int_column",
@@ -80,6 +96,33 @@
           "items" : "Nested"
         }
       }
+    }, {
+      "name" : "maybe_strings_column",
+      "type" : [ "null", {
+        "type" : "array",
+        "items" : "string"
+      } ]
+    }, {
+      "name" : "maybe_structs_column",
+      "type" : [ "null", {
+        "type" : "array",
+        "items" : "Nested"
+      } ]
+    }, {
+      "name" : "maybe_string_to_int_column",
+      "type" : [ "null", {
+        "type" : "map",
+        "values" : "int"
+      } ]
+    }, {
+      "name" : "maybe_complex_column",
+      "type" : [ "null", {
+        "type" : "map",
+        "values" : {
+          "type" : "array",
+          "items" : "Nested"
+        }
+      } ]
     } ]
   } ],
   "messages" : { }

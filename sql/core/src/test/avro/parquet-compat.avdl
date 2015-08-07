@@ -18,6 +18,13 @@
 // This is a test protocol for testing parquet-avro compatibility.
 @namespace("org.apache.spark.sql.parquet.test.avro")
 protocol CompatibilityTest {
+    enum Suit {
+        SPADES,
+        HEARTS,
+        DIAMONDS,
+        CLUBS
+    }
+
     record Nested {
         array<int> nested_ints_column;
         string nested_string_column;
@@ -31,6 +38,7 @@ protocol CompatibilityTest {
         double double_column;
         bytes binary_column;
         string string_column;
+        Suit enum_column;
 
         union { null, boolean } maybe_bool_column;
         union { null, int } maybe_int_column;
@@ -39,9 +47,16 @@ protocol CompatibilityTest {
         union { null, double } maybe_double_column;
         union { null, bytes } maybe_binary_column;
         union { null, string } maybe_string_column;
+        union { null, Suit } maybe_enum_column;
 
         array<string> strings_column;
+        array<Nested> structs_column;
         map<int> string_to_int_column;
         map<array<Nested>> complex_column;
+
+        union { null, array<string> } maybe_strings_column;
+        union { null, array<Nested> } maybe_structs_column;
+        union { null, map<int> } maybe_string_to_int_column;
+        union { null, map<array<Nested>> } maybe_complex_column;
     }
 }

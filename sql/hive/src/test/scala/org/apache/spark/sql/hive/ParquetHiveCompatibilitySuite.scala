@@ -51,7 +51,9 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest {
              |  double_column DOUBLE,
              |
              |  strings_column ARRAY<STRING>,
-             |  int_to_string_column MAP<INT, STRING>
+             |  int_to_string_column MAP<INT, STRING>,
+             |  structs_column ARRAY<STRUCT<a: STRING, b: STRING>>,
+             |  maps_column ARRAY<MAP<INT, STRING>>
              |)
              |STORED AS PARQUET
              |LOCATION '${parquetStore.getCanonicalPath}'
@@ -95,7 +97,11 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest {
         nullable(i.toFloat + 0.1f: java.lang.Float),
         nullable(i.toDouble + 0.2d: java.lang.Double),
         nullable(Seq.tabulate(3)(n => s"arr_${i + n}")),
-        nullable(Seq.tabulate(3)(n => (i + n: Integer) -> s"val_${i + n}").toMap))
+        nullable(Seq.tabulate(3)(n => (i + n: Integer) -> s"val_${i + n}").toMap),
+        nullable(Seq.tabulate(3)(n => Row(s"val_a_${i + n}", s"val_b_${i + n}"))),
+        nullable(Seq.tabulate(3) { n =>
+          Seq.tabulate(3)(m => (i + n + m: Integer) -> s"val_b_${i + n + m}").toMap
+        }))
     }
   }
 }
