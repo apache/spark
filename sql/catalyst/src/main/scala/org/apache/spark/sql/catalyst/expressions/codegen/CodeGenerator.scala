@@ -137,8 +137,7 @@ class CodeGenContext {
     dataType match {
       case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
       case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
-      // The UTF8String may came from UnsafeRow, otherwise clone is cheap (re-use the bytes)
-      case StringType => s"$row.update($ordinal, $value.clone())"
+      case StringType => s"$row.update($ordinal, $value)"
       case _ => s"$row.update($ordinal, $value)"
     }
   }
