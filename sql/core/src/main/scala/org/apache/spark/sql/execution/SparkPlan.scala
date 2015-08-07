@@ -158,7 +158,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   final def prepare(): Unit = {
     if (prepareCalled.compareAndSet(false, true)) {
-      doPrepare
+      doPrepare()
       children.foreach(_.prepare())
     }
   }
