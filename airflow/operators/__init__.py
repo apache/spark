@@ -37,6 +37,7 @@ _operators = {
         'S3PrefixSensor',
         'HdfsSensor',
         'TimeSensor',
+        'TimeDeltaSensor',
         'HttpSensor'
     ],
     'subdag_operator': ['SubDagOperator'],
