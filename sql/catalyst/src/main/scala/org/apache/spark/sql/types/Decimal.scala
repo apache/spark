@@ -237,7 +237,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.ne(null)) {
       // We get here if either we started with a BigDecimal, or we switched to one because we would
       // have overflowed our Long; in either case we must rescale decimalVal to the new scale.
-      val newVal = decimalVal.setScale(scale, ROUNDING_MODE.id)
+      val newVal = decimalVal.setScale(scale, ROUNDING_MODE)
       if (newVal.precision > precision) {
         return false
       }
@@ -324,16 +324,16 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 }
 
 object Decimal {
-  private val ROUNDING_MODE = RoundingMode.HALF_UP
-  private val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION, ROUNDING_MODE)
-  private val POW_10 = Array.tabulate[Long](MAX_LONG_DIGITS + 1)(i => math.pow(10, i).toLong)
-  private val BIG_DEC_ZERO: JavaBigDecimal = JavaBigDecimal.valueOf(0)
-
   /** Maximum number of decimal digits a Long can represent */
   val MAX_LONG_DIGITS = 18
 
   val ZERO = Decimal(0)
   val ONE = Decimal(1)
+
+  private val ROUNDING_MODE = RoundingMode.HALF_UP
+  private val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION, ROUNDING_MODE)
+  private val POW_10 = Array.tabulate[Long](MAX_LONG_DIGITS + 1)(i => math.pow(10, i).toLong)
+  private val BIG_DEC_ZERO: JavaBigDecimal = JavaBigDecimal.valueOf(0)
 
   def apply(value: Double): Decimal = new Decimal().set(value)
 
