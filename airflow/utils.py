@@ -1,4 +1,5 @@
 from __future__ import print_function
+from builtins import str
 from builtins import object
 from copy import copy
 from datetime import datetime, timedelta
@@ -355,7 +356,7 @@ def ask_yesno(question):
 def send_email(to, subject, html_content):
     SMTP_MAIL_FROM = conf.get('smtp', 'SMTP_MAIL_FROM')
 
-    if isinstance(to, unicode) or isinstance(to, str):
+    if isinstance(to, str) or isinstance(to, str):
         if ',' in to:
             to = to.split(',')
         elif ';' in to:

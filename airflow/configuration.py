@@ -1,4 +1,5 @@
 from ConfigParser import ConfigParser
+from builtins import str
 import errno
 import logging
 import os

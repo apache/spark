@@ -1,3 +1,4 @@
+from builtins import str
 import logging
 
 from airflow.utils import AirflowException

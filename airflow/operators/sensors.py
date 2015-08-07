@@ -1,4 +1,5 @@
 from __future__ import print_function
+from builtins import str
 from datetime import datetime
 import logging
 from urlparse import urlparse

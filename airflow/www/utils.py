@@ -1,3 +1,4 @@
+from builtins import str
 from builtins import object
 from cgi import escape
 from cStringIO import StringIO as IO

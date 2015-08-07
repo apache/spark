@@ -1,3 +1,4 @@
+from builtins import str
 from collections import OrderedDict
 import json
 import logging
