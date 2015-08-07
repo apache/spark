@@ -139,7 +139,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
       (1 to 10).map(i => Row(Decimal(i, 15, 10).toJavaBigDecimal)))
   }
 
-  test("test different data types") {
+  ignore("test different data types") {
     // Create the schema.
     val struct =
       StructType(
