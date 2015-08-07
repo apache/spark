@@ -76,4 +76,10 @@ class DDLSourceLoadSuite extends DataSourceTest {
     caseInsensitiveContext.read.format("org.apache.spark.sql.sources.FakeSourceOne")
       .load().schema == StructType(Seq(StructField("stringType", StringType, nullable = false)))
   }
+
+  test("Loading Orc") {
+    intercept[ClassNotFoundException] {
+      caseInsensitiveContext.read.format("orc").load()
+    }
+  }
 }
