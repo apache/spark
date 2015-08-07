@@ -26,7 +26,7 @@ import scala.collection.JavaConverters._
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
@@ -159,7 +159,7 @@ sealed trait Vector extends Serializable {
 }
 
 /**
- * :: DeveloperApi ::
+ * :: AlphaComponent ::
  *
  * User-defined type for [[Vector]] which allows easy interaction with SQL
  * via [[org.apache.spark.sql.DataFrame]].
@@ -167,7 +167,7 @@ sealed trait Vector extends Serializable {
  * WARNING: The [[UserDefinedType]] has NOT been stabilized, so users should be aware that this API
  *          may need to change in future releases.
  */
-@DeveloperApi
+@AlphaComponent
 class VectorUDT extends UserDefinedType[Vector] {
 
   override def sqlType: StructType = {
