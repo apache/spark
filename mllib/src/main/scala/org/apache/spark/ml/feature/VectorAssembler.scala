@@ -56,12 +56,10 @@ class VectorAssembler(override val uid: String)
       val index = schema.fieldIndex(c)
       field.dataType match {
         case DoubleType =>
-          val attr = Attribute.decodeStructField(field, preserveName = true)
+          val attr = Attribute.fromStructField(field)
           // If the input column doesn't have ML attribute, assume numeric.
           if (attr == UnresolvedAttribute) {
             Some(NumericAttribute.defaultAttr.withName(c))
-          } else if (attr.name.isDefined) {
-            Some(attr)
           } else {
             Some(attr.withName(c))
           }
@@ -71,8 +69,15 @@ class VectorAssembler(override val uid: String)
         case _: VectorUDT =>
           val group = AttributeGroup.fromStructField(field)
           if (group.attributes.isDefined) {
-            // If attributes are defined, copy them.
-            group.attributes.get
+            // If attributes are defined, copy them with updated names.
+            group.attributes.get.map { attr =>
+              if (attr.name.isDefined) {
+                // TODO: Define a rigorous naming scheme.
+                attr.withName(c + "_" + attr.name.get)
+              } else {
+                attr
+              }
+            }
           } else {
             // Otherwise, treat all attributes as numeric. If we cannot get the number of attributes
             // from metadata, check the first row.

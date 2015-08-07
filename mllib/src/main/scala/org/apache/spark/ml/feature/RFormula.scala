@@ -47,8 +47,8 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
 /**
  * :: Experimental ::
  * Implements the transforms required for fitting a dataset against an R model formula. Currently
- * we support a limited subset of the R operators, including '~', '.', ':', '+', and '-'. Also see
- * the R formula docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
+ * we support a limited subset of the R operators, including '~' and '+'. Also see the R formula
+ * docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
  */
 @Experimental
 class RFormula(override val uid: String) extends Estimator[RFormulaModel] with RFormulaBase {
@@ -81,26 +81,32 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
     require(isDefined(formula), "Formula must be defined first.")
     val parsedFormula = RFormulaParser.parse($(formula))
     val resolvedFormula = parsedFormula.resolve(dataset.schema)
+    // StringType terms and terms representing interactions need to be encoded before assembly.
+    // TODO(ekl) add support for feature interactions
     val encoderStages = ArrayBuffer[PipelineStage]()
     val tempColumns = ArrayBuffer[String]()
-    def encodeInteraction(terms: Seq[String]): String = {
-      val outputCol = "interaction_" + uid + "_" + terms.mkString(":")
-      encoderStages += new RInteraction()
-        .setInputCols(terms.toArray)
-        .setOutputCol(outputCol)
-      tempColumns += outputCol
-      outputCol
-    }
-    val encodedTerms = resolvedFormula.terms.map {
-      case terms @ Seq(value) =>
-        dataset.schema(value) match {
-          case column if column.dataType == StringType =>
-            encodeInteraction(terms)
-          case _ =>
-            value
-        }
-      case terms =>
-        encodeInteraction(terms)
+    val takenNames = mutable.Set(dataset.columns: _*)
+    val encodedTerms = resolvedFormula.terms.map { term =>
+      dataset.schema(term) match {
+        case column if column.dataType == StringType =>
+          val indexCol = term + "_idx_" + uid
+          val encodedCol = {
+            var tmp = term
+            while (takenNames.contains(tmp)) {
+              tmp += "_"
+            }
+            tmp
+          }
+          takenNames.add(indexCol)
+          takenNames.add(encodedCol)
+          encoderStages += new StringIndexer().setInputCol(term).setOutputCol(indexCol)
+          encoderStages += new OneHotEncoder().setInputCol(indexCol).setOutputCol(encodedCol)
+          tempColumns += indexCol
+          tempColumns += encodedCol
+          encodedCol
+        case _ =>
+          term
+      }
     }
     encoderStages += new VectorAssembler(uid)
       .setInputCols(encodedTerms.toArray)
@@ -197,7 +203,7 @@ class RFormulaModel private[feature](
  * Utility transformer for removing temporary columns from a DataFrame.
  * TODO(ekl) make this a public transformer
  */
-private[feature] class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
+private class ColumnPruner(columnsToPrune: Set[String]) extends Transformer {
   override val uid = Identifiable.randomUID("columnPruner")
 
   override def transform(dataset: DataFrame): DataFrame = {

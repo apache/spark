@@ -127,8 +127,8 @@ class RInteraction(override val uid: String) extends Estimator[PipelineModel]
 }
 
 /**
- * This helper class computes the joint index of multiple string-indexed columns such that the
- * combined index covers the cartesian product of column values.
+ * Computes the joint index of multiple string-indexed columns such that the combined index
+ * covers the cartesian product of column values.
  */
 private class IndexCombiner(
     inputCols: Array[String], attrNames: Array[String], outputCol: String)
@@ -181,8 +181,8 @@ private class IndexCombiner(
 }
 
 /**
- * This helper class scales the input vector column by the product of the input numeric columns.
- * If no vector column is specified, the output is just the product of the numeric columns.
+ * Scales the input vector column by the product of the input numeric columns. If no vector column
+ * is specified, the output is just the product of the numeric columns.
  */
 private class NumericInteraction(
     inputCols: Array[String], vectorCol: Option[String], outputCol: String)
