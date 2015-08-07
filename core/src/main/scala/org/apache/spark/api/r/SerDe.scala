@@ -20,7 +20,7 @@ package org.apache.spark.api.r
 import java.io.{DataInputStream, DataOutputStream}
 import java.sql.{Timestamp, Date, Time}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 /**
  * Utility functions to serialize, deserialize objects to / from R
@@ -165,7 +165,7 @@ private[spark] object SerDe {
         val valueType = readObjectType(in)
         readTypedObject(in, valueType)
       })
-      mapAsJavaMap(keys.zip(values).toMap)
+      keys.zip(values).toMap.asJava
     } else {
       new java.util.HashMap[Object, Object]()
     }

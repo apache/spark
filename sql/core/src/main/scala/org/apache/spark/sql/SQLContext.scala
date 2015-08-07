@@ -21,7 +21,7 @@ import java.beans.Introspector
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -225,7 +225,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     conf.setConf(properties)
     // After we have populated SQLConf, we call setConf to populate other confs in the subclass
     // (e.g. hiveconf in HiveContext).
-    properties.foreach {
+    properties.asScala.foreach {
       case (key, value) => setConf(key, value)
     }
   }
@@ -567,7 +567,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       tableName: String,
       source: String,
       options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, options.toMap)
+    createExternalTable(tableName, source, options.asScala.toMap)
   }
 
   /**
@@ -612,7 +612,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       source: String,
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, schema, options.toMap)
+    createExternalTable(tableName, source, schema, options.asScala.toMap)
   }
 
   /**

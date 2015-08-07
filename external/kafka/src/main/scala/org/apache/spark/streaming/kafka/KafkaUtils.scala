@@ -20,7 +20,7 @@ package org.apache.spark.streaming.kafka
 import java.lang.{Integer => JInt, Long => JLong}
 import java.util.{List => JList, Map => JMap, Set => JSet}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import kafka.common.TopicAndPartition
@@ -96,7 +96,7 @@ object KafkaUtils {
       groupId: String,
       topics: JMap[String, JInt]
     ): JavaPairReceiverInputDStream[String, String] = {
-    createStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*))
+    createStream(jssc.ssc, zkQuorum, groupId, Map(topics.asScala.mapValues(_.intValue()).toSeq: _*))
   }
 
   /**
@@ -115,7 +115,7 @@ object KafkaUtils {
       topics: JMap[String, JInt],
       storageLevel: StorageLevel
     ): JavaPairReceiverInputDStream[String, String] = {
-    createStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
+    createStream(jssc.ssc, zkQuorum, groupId, Map(topics.asScala.mapValues(_.intValue()).toSeq: _*),
       storageLevel)
   }
 
@@ -149,7 +149,10 @@ object KafkaUtils {
     implicit val valueCmd: ClassTag[T] = ClassTag(valueDecoderClass)
 
     createStream[K, V, U, T](
-      jssc.ssc, kafkaParams.toMap, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)
+      jssc.ssc,
+      kafkaParams.asScala.toMap,
+      Map(topics.asScala.mapValues(_.intValue()).toSeq: _*),
+      storageLevel)
   }
 
   /** get leaders for the given offset ranges, or throw an exception */
@@ -275,7 +278,7 @@ object KafkaUtils {
     implicit val keyDecoderCmt: ClassTag[KD] = ClassTag(keyDecoderClass)
     implicit val valueDecoderCmt: ClassTag[VD] = ClassTag(valueDecoderClass)
     new JavaPairRDD(createRDD[K, V, KD, VD](
-      jsc.sc, Map(kafkaParams.toSeq: _*), offsetRanges))
+      jsc.sc, Map(kafkaParams.asScala.toSeq: _*), offsetRanges))
   }
 
   /**
@@ -311,9 +314,9 @@ object KafkaUtils {
     implicit val keyDecoderCmt: ClassTag[KD] = ClassTag(keyDecoderClass)
     implicit val valueDecoderCmt: ClassTag[VD] = ClassTag(valueDecoderClass)
     implicit val recordCmt: ClassTag[R] = ClassTag(recordClass)
-    val leaderMap = Map(leaders.toSeq: _*)
+    val leaderMap = Map(leaders.asScala.toSeq: _*)
     createRDD[K, V, KD, VD, R](
-      jsc.sc, Map(kafkaParams.toSeq: _*), offsetRanges, leaderMap, messageHandler.call _)
+      jsc.sc, Map(kafkaParams.asScala.toSeq: _*), offsetRanges, leaderMap, messageHandler.call(_))
   }
 
   /**
@@ -476,8 +479,8 @@ object KafkaUtils {
     val cleanedHandler = jssc.sparkContext.clean(messageHandler.call _)
     createDirectStream[K, V, KD, VD, R](
       jssc.ssc,
-      Map(kafkaParams.toSeq: _*),
-      Map(fromOffsets.mapValues { _.longValue() }.toSeq: _*),
+      Map(kafkaParams.asScala.toSeq: _*),
+      Map(fromOffsets.asScala.mapValues(_.longValue()).toSeq: _*),
       cleanedHandler
     )
   }
@@ -531,8 +534,8 @@ object KafkaUtils {
     implicit val valueDecoderCmt: ClassTag[VD] = ClassTag(valueDecoderClass)
     createDirectStream[K, V, KD, VD](
       jssc.ssc,
-      Map(kafkaParams.toSeq: _*),
-      Set(topics.toSeq: _*)
+      Map(kafkaParams.asScala.toSeq: _*),
+      Set(topics.asScala.toSeq: _*)
     )
   }
 }
@@ -602,10 +605,10 @@ private[kafka] class KafkaUtilsPythonHelper {
     ): JavaPairInputDStream[Array[Byte], Array[Byte]] = {
 
     if (!fromOffsets.isEmpty) {
-      import scala.collection.JavaConversions._
-      val topicsFromOffsets = fromOffsets.keySet().map(_.topic)
-      if (topicsFromOffsets != topics.toSet) {
-        throw new IllegalStateException(s"The specified topics: ${topics.toSet.mkString(" ")} " +
+      val topicsFromOffsets = fromOffsets.keySet().asScala.map(_.topic)
+      if (topicsFromOffsets != topics.asScala.toSet) {
+        throw new IllegalStateException(
+          s"The specified topics: ${topics.asScala.toSet.mkString(" ")} " +
           s"do not equal to the topic from offsets: ${topicsFromOffsets.mkString(" ")}")
       }
     }
@@ -663,6 +666,6 @@ private[kafka] class KafkaUtilsPythonHelper {
         "with this RDD, please call this method only on a Kafka RDD.")
 
     val kafkaRDD = kafkaRDDs.head.asInstanceOf[KafkaRDD[_, _, _, _, _]]
-    kafkaRDD.offsetRanges.toSeq
+    kafkaRDD.offsetRanges.toSeq.asJava
   }
 }

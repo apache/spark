@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -109,7 +111,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def options(options: java.util.Map[String, String]): DataFrameWriter = {
-    this.options(scala.collection.JavaConversions.mapAsScalaMap(options))
+    this.options(options.asScala)
     this
   }
 

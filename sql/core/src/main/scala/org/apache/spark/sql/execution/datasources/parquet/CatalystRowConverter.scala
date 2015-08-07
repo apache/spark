@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
@@ -183,7 +183,7 @@ private[parquet] class CatalystRowConverter(
     // those missing fields and create converters for them, although values of these fields are
     // always null.
     val paddedParquetFields = {
-      val parquetFields = parquetType.getFields
+      val parquetFields = parquetType.getFields.asScala
       val parquetFieldNames = parquetFields.map(_.getName).toSet
       val missingFields = catalystType.filterNot(f => parquetFieldNames.contains(f.name))
 

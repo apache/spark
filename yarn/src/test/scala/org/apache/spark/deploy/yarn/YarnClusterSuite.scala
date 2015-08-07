@@ -21,7 +21,6 @@ import java.io.File
 import java.net.URL
 
 import scala.collection.mutable
-import scala.collection.JavaConversions._
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.{ByteStreams, Files}
@@ -216,8 +215,8 @@ private object YarnClusterDriver extends Logging with Matchers {
       assert(listener.driverLogs.nonEmpty)
       val driverLogs = listener.driverLogs.get
       assert(driverLogs.size === 2)
-      assert(driverLogs.containsKey("stderr"))
-      assert(driverLogs.containsKey("stdout"))
+      assert(driverLogs.contains("stderr"))
+      assert(driverLogs.contains("stdout"))
       val urlStr = driverLogs("stderr")
       // Ensure that this is a valid URL, else this will throw an exception
       new URL(urlStr)
