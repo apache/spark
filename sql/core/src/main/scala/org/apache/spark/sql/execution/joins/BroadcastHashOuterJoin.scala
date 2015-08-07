@@ -99,15 +99,15 @@ case class BroadcastHashOuterJoin(
         case LeftOuter =>
           streamedIter.flatMap { currentRow =>
             val rowKey = keyGenerator(currentRow)
-            joinedRow.withLeft(currentRow)
-            leftOuterIterator(joinedRow, hashTable.get(rowKey), resultProj)
+            val matches = if (rowKey.anyNull) null else hashTable.get(rowKey)
+            leftOuterIterator(joinedRow.withLeft(currentRow), matches, resultProj)
           }
 
         case RightOuter =>
           streamedIter.flatMap { currentRow =>
             val rowKey = keyGenerator(currentRow)
-            joinedRow.withRight(currentRow)
-            rightOuterIterator(hashTable.get(rowKey), joinedRow, resultProj)
+            val matches = if (rowKey.anyNull) null else hashTable.get(rowKey)
+            rightOuterIterator(matches,joinedRow.withRight(currentRow), resultProj)
           }
 
         case x =>
