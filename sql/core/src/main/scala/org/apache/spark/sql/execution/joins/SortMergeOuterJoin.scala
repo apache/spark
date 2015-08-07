@@ -70,13 +70,13 @@ case class SortMergeOuterJoin(
             buildKeyGenerator,
             keyOrdering,
             streamedIter = leftIter,
-            buildIter = rightIter
+            bufferedIter = rightIter
           )
           // TODO(josh): this is a little terse and needs explanation:
           Iterator.continually(0).takeWhile(_ => smjScanner.findNextOuterJoinRows()).flatMap { _ =>
             leftOuterIterator(
               joinedRow.withLeft(smjScanner.getStreamedRow),
-              smjScanner.getBuildMatches,
+              smjScanner.getBufferedMatches,
               resultProj)
           }
 
@@ -87,12 +87,12 @@ case class SortMergeOuterJoin(
             buildKeyGenerator,
             keyOrdering,
             streamedIter = rightIter,
-            buildIter = leftIter
+            bufferedIter = leftIter
           )
           // TODO(josh): this is a little terse and needs explanation:
           Iterator.continually(0).takeWhile(_ => smjScanner.findNextOuterJoinRows()).flatMap { _ =>
             rightOuterIterator(
-              smjScanner.getBuildMatches,
+              smjScanner.getBufferedMatches,
               joinedRow.withRight(smjScanner.getStreamedRow),
               resultProj)
           }
