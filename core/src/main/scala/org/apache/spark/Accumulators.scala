@@ -66,7 +66,7 @@ class Accumulable[R, T] private[spark] (
 
   val id: Long = Accumulators.newId
 
-  @volatile @transient protected[spark] var value_ : R = initialValue // Current value on master
+  @volatile @transient private var value_ : R = initialValue // Current value on master
   val zero = param.zero(initialValue)  // Zero value to be passed to workers
   private var deserialized = false
 

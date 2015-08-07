@@ -85,11 +85,11 @@ private[sql] class LongSQLMetric private[metric](name: String)
   extends SQLMetric[LongSQLMetricValue, Long](name, LongSQLMetricParam) {
 
   override def +=(term: Long): Unit = {
-    value_.add(term)
+    localValue.add(term)
   }
 
   override def add(term: Long): Unit = {
-    value_.add(term)
+    localValue.add(term)
   }
 }
 
@@ -101,11 +101,11 @@ private[sql] class IntSQLMetric private[metric](name: String)
   extends SQLMetric[IntSQLMetricValue, Int](name, IntSQLMetricParam) {
 
   override def +=(term: Int): Unit = {
-    value_.add(term)
+    localValue.add(term)
   }
 
   override def add(term: Int): Unit = {
-    value_.add(term)
+    localValue.add(term)
   }
 }
 
