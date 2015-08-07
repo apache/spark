@@ -102,8 +102,8 @@ case class TungstenAggregate(
       }
     }
 
-    // Note: we need to set up the external sorter in each partition before computing
-    // the parent partition, so we cannot simply use `mapPartitions` here (SPARK-9747).
+    // Note: we need to set up the iterator in each partition before computing the
+    // parent partition, so we cannot simply use `mapPartitions` here (SPARK-9747).
     val parentPartition = child.execute().asInstanceOf[RDD[UnsafeRow]]
     val resultRdd = {
       new MapPartitionsWithPreparationRDD[UnsafeRow, UnsafeRow, TungstenAggregationIterator](
