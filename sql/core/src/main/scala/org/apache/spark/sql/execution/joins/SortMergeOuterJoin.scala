@@ -72,13 +72,14 @@ case class SortMergeOuterJoin(
             streamedIter = leftIter,
             bufferedIter = rightIter
           )
-          // TODO(josh): this is a little terse and needs explanation:
-          Iterator.continually(0).takeWhile(_ => smjScanner.findNextOuterJoinRows()).flatMap { _ =>
-            leftOuterIterator(
+          for (
+            hasMoreStreamedRows <- Iterator.continually(smjScanner.findNextOuterJoinRows())
+            if hasMoreStreamedRows;
+            result <- leftOuterIterator(
               joinedRow.withLeft(smjScanner.getStreamedRow),
               smjScanner.getBufferedMatches,
               resultProj)
-          }
+          ) yield result
 
         case RightOuter =>
           val resultProj = createResultProjection()
@@ -89,13 +90,14 @@ case class SortMergeOuterJoin(
             streamedIter = rightIter,
             bufferedIter = leftIter
           )
-          // TODO(josh): this is a little terse and needs explanation:
-          Iterator.continually(0).takeWhile(_ => smjScanner.findNextOuterJoinRows()).flatMap { _ =>
-            rightOuterIterator(
+          for (
+            hasMoreStreamedRows <- Iterator.continually(smjScanner.findNextOuterJoinRows())
+            if hasMoreStreamedRows;
+            result <- rightOuterIterator(
               smjScanner.getBufferedMatches,
               joinedRow.withRight(smjScanner.getStreamedRow),
               resultProj)
-          }
+          ) yield result
 
         case x =>
           throw new IllegalArgumentException(
