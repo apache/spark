@@ -1,5 +1,7 @@
 from __future__ import print_function
+from __future__ import division
 from builtins import str
+from past.utils import old_div
 import copy
 from datetime import datetime, timedelta
 import dateutil.parser
@@ -1224,10 +1226,10 @@ class Airflow(BaseView):
             for ti in task.get_task_instances(session, from_date):
                 if ti.end_date:
                     data.append([
-                        ti.execution_date.isoformat(), (
+                        ti.execution_date.isoformat(), old_div((
                             ti.end_date - (
                                 ti.execution_date + task.schedule_interval)
-                        ).total_seconds()/(60*60)
+                        ).total_seconds(),(60*60))
                     ])
             all_data.append({'data': data, 'name': task.task_id})
 
