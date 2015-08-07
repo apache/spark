@@ -1,5 +1,6 @@
 from __future__ import print_function
 from builtins import str
+from builtins import input
 from builtins import object
 from copy import copy
 from datetime import datetime, timedelta
@@ -344,7 +345,7 @@ def ask_yesno(question):
     done = False
     print(question)
     while not done:
-        choice = raw_input().lower()
+        choice = input().lower()
         if choice in yes:
             return True
         elif choice in no:
