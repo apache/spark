@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.unsafe.KVIterator
-import org.apache.spark.{Logging, SparkEnv, TaskContext}
+import org.apache.spark.{InternalAccumulator, Logging, SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
@@ -397,14 +397,20 @@ class TungstenAggregationIterator(
   private[this] var mapIteratorHasNext: Boolean = false
 
   ///////////////////////////////////////////////////////////////////////////
-  // Part 4: The function used to switch this iterator from hash-based
-  // aggregation to sort-based aggregation.
+  // Part 3: Methods and fields used by sort-based aggregation.
   ///////////////////////////////////////////////////////////////////////////
 
+  // This sorter is used for sort-based aggregation. It is initialized as soon as
+  // we switch from hash-based to sort-based aggregation. Otherwise, it is not used.
+  private[this] var externalSorter: UnsafeKVExternalSorter = null
+
+  /**
+   * Switch to sort-based aggregation when the hash-based approach is unable to acquire memory.
+   */
   private def switchToSortBasedAggregation(firstKey: UnsafeRow, firstInput: UnsafeRow): Unit = {
     logInfo("falling back to sort based aggregation.")
     // Step 1: Get the ExternalSorter containing sorted entries of the map.
-    val externalSorter: UnsafeKVExternalSorter = hashMap.destructAndCreateExternalSorter()
+    externalSorter = hashMap.destructAndCreateExternalSorter()
 
     // Step 2: Free the memory used by the map.
     hashMap.free()
@@ -607,7 +613,7 @@ class TungstenAggregationIterator(
   }
 
   ///////////////////////////////////////////////////////////////////////////
-  // Par 7: Iterator's public methods.
+  // Part 7: Iterator's public methods.
   ///////////////////////////////////////////////////////////////////////////
 
   override final def hasNext: Boolean = {
@@ -616,7 +622,7 @@ class TungstenAggregationIterator(
 
   override final def next(): UnsafeRow = {
     if (hasNext) {
-      if (sortBased) {
+      val res = if (sortBased) {
         // Process the current group.
         processCurrentSortedGroup()
         // Generate output row for the current group.
@@ -647,6 +653,19 @@ class TungstenAggregationIterator(
           result
         }
       }
+
+      // If this is the last record, update the task's peak memory usage. Since we destroy
+      // the map to create the sorter, their memory usages should not overlap, so it is safe
+      // to just use the max of the two.
+      if (!hasNext) {
+        val mapMemory = hashMap.getPeakMemoryUsedBytes
+        val sorterMemory = Option(externalSorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
+        val peakMemory = Math.max(mapMemory, sorterMemory)
+        TaskContext.get().internalMetricsToAccumulators(
+          InternalAccumulator.PEAK_EXECUTION_MEMORY).add(peakMemory)
+      }
+
+      res
     } else {
       // no more result
       throw new NoSuchElementException

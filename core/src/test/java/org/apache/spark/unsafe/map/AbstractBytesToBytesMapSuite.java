@@ -525,7 +525,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   }
 
   @Test
-  public void testTotalMemoryConsumption() {
+  public void testPeakMemoryUsed() {
     final long recordLengthBytes = 24;
     final long pageSizeBytes = 256 + 8; // 8 bytes for end-of-page marker
     final long numRecordsPerPage = (pageSizeBytes - 8) / recordLengthBytes;
@@ -536,8 +536,8 @@ public abstract class AbstractBytesToBytesMapSuite {
     // monotonically increasing. More specifically, every time we allocate a new page it
     // should increase by exactly the size of the page. In this regard, the memory usage
     // at any given time is also the peak memory used.
-    long previousMemory = map.getTotalMemoryConsumption();
-    long newMemory;
+    long previousPeakMemory = map.getPeakMemoryUsedBytes();
+    long newPeakMemory;
     try {
       for (long i = 0; i < numRecordsPerPage * 10; i++) {
         final long[] value = new long[]{i};
@@ -548,15 +548,21 @@ public abstract class AbstractBytesToBytesMapSuite {
           value,
           PlatformDependent.LONG_ARRAY_OFFSET,
           8);
-        newMemory = map.getTotalMemoryConsumption();
+        newPeakMemory = map.getPeakMemoryUsedBytes();
         if (i % numRecordsPerPage == 0 && i > 0) {
           // We allocated a new page for this record, so peak memory should change
-          assertEquals(previousMemory + pageSizeBytes, newMemory);
+          assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
         } else {
-          assertEquals(previousMemory, newMemory);
+          assertEquals(previousPeakMemory, newPeakMemory);
         }
-        previousMemory = newMemory;
+        previousPeakMemory = newPeakMemory;
       }
+
+      // Freeing the map should not change the peak memory
+      map.free();
+      newPeakMemory = map.getPeakMemoryUsedBytes();
+      assertEquals(previousPeakMemory, newPeakMemory);
+
     } finally {
       map.free();
     }

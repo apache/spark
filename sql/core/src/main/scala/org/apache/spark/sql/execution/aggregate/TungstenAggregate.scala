@@ -116,10 +116,13 @@ case class TungstenAggregate(
     val allAggregateExpressions = nonCompleteAggregateExpressions ++ completeAggregateExpressions
 
     testFallbackStartsAt match {
-      case None => s"TungstenAggregate ${groupingExpressions} ${allAggregateExpressions}"
+      case None =>
+        val keyString = groupingExpressions.mkString("[", ",", "]")
+        val valueString = allAggregateExpressions.mkString("[", ",", "]")
+        s"TungstenAggregate(key=$keyString, value=$valueString"
       case Some(fallbackStartsAt) =>
-        s"TungstenAggregateWithControlledFallback ${groupingExpressions} " +
-          s"${allAggregateExpressions} fallbackStartsAt=$fallbackStartsAt"
+        s"TungstenAggregateWithControlledFallback $groupingExpressions " +
+          s"$allAggregateExpressions fallbackStartsAt=$fallbackStartsAt"
     }
   }
 }
