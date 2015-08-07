@@ -167,7 +167,6 @@ trait OuterJoin {
   protected[this] def fullOuterIterator(
       key: InternalRow, leftIter: Iterable[InternalRow], rightIter: Iterable[InternalRow],
       joinedRow: JoinedRow): Iterator[InternalRow] = {
-    // TODO(josh): why doesn't this use resultProjection?
     if (!key.anyNull) {
       // Store the positions of records in right, if one of its associated row satisfy
       // the join condition.

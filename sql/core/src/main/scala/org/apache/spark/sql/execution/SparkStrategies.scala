@@ -62,8 +62,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  // TODO(josh): this class's name is slightly misleading in the sense that it also plans non-hash
-  // joins, such as SortMergeJoin. Maybe we could just name this something like JoinSelection.
   /**
    * Uses the [[ExtractEquiJoinKeys]] pattern to find joins where at least some of the predicates
    * can be evaluated by matching join keys.

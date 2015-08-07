@@ -54,14 +54,15 @@ case class SortMergeJoin(
   @transient protected lazy val rightKeyGenerator = newProjection(rightKeys, right.output)
 
   protected[this] def isUnsafeMode: Boolean = {
-    codegenEnabled && unsafeEnabled &&
-      UnsafeProjection.canSupport(leftKeys) && UnsafeProjection.canSupport(schema)
+    (codegenEnabled && unsafeEnabled
+      && UnsafeProjection.canSupport(leftKeys)
+      && UnsafeProjection.canSupport(schema))
   }
 
-  // TODO(josh): this will need to change once we use an Unsafe row joiner
-  override def outputsUnsafeRows: Boolean = false
+  override def outputsUnsafeRows: Boolean = isUnsafeMode
   override def canProcessUnsafeRows: Boolean = isUnsafeMode
   override def canProcessSafeRows: Boolean = !isUnsafeMode
+
 
   private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] = {
     // This must be ascending in order to agree with the `keyOrdering` defined in `doExecute()`.
@@ -84,6 +85,13 @@ case class SortMergeJoin(
           rightIter
         )
         private[this] val joinRow = new JoinedRow
+        private[this] val resultProjection: (InternalRow) => InternalRow = {
+          if (isUnsafeMode) {
+            UnsafeProjection.create(schema)
+          } else {
+            identity[InternalRow]
+          }
+        }
 
         override final def hasNext: Boolean =
           (currentMatchIdx != -1 && currentMatchIdx < currentRightMatches.length) || fetchNext()
@@ -108,7 +116,7 @@ case class SortMergeJoin(
           }
           val joinedRow = joinRow(currentLeftRow, currentRightMatches(currentMatchIdx))
           currentMatchIdx += 1
-          joinedRow
+          resultProjection(joinedRow)
         }
       }
     }
@@ -156,7 +164,8 @@ private[joins] class SortMergeJoinScanner(
   /**
    * Advances both input iterators, stopping when we have found rows with matching join keys.
    * @return true if matching rows have been found and false otherwise. If this returns true, then
-   *         [[getStreamedRow]] and [[getBufferedMatches]] can be called to produce the join results.
+   *         [[getStreamedRow]] and [[getBufferedMatches]] can be called to construct the join
+   *         results.
    */
   final def findNextInnerJoinRows(): Boolean = {
     while (advancedStreamed() && streamedRowKey.anyNull) {
