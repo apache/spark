@@ -1,4 +1,6 @@
 from ConfigParser import ConfigParser
+from future import standard_library
+standard_library.install_aliases()
 from builtins import str
 import errno
 import logging
