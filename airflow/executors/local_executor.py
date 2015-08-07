@@ -52,7 +52,7 @@ class LocalExecutor(BaseExecutor):
         self.result_queue = multiprocessing.Queue()
         self.workers = [
             LocalWorker(self.queue, self.result_queue)
-            for i in xrange(self.parallelism)
+            for i in range(self.parallelism)
         ]
 
         for w in self.workers:
