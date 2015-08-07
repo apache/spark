@@ -342,7 +342,7 @@ class TungstenAggregationIterator(
     TaskContext.get.taskMemoryManager(),
     SparkEnv.get.shuffleMemoryManager,
     1024 * 16, // initial capacity
-    SparkEnv.get.conf.getSizeAsBytes("spark.buffer.pageSize", "64m"),
+    SparkEnv.get.shuffleMemoryManager.pageSizeBytes,
     false // disable tracking of performance metrics
   )
 

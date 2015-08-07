@@ -22,7 +22,7 @@ import org.apache.spark.shuffle.ShuffleMemoryManager
 /**
  * A [[ShuffleMemoryManager]] that can be controlled to run out of memory.
  */
-class TestShuffleMemoryManager extends ShuffleMemoryManager(Long.MaxValue) {
+class TestShuffleMemoryManager extends ShuffleMemoryManager(Long.MaxValue, 4 * 1024 * 1024) {
   private var oom = false
 
   override def tryToAcquire(numBytes: Long): Long = {
