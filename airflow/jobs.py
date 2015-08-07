@@ -1,4 +1,5 @@
 from builtins import str
+from past.builtins import basestring
 from collections import defaultdict
 from datetime import datetime
 import getpass
