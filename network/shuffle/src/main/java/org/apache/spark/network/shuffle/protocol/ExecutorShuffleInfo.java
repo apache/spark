@@ -20,6 +20,8 @@ package org.apache.spark.network.shuffle.protocol;
 import java.io.Serializable;
 import java.util.Arrays;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
@@ -27,7 +29,7 @@ import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.protocol.Encoders;
 
 /** Contains all configuration necessary for locating the shuffle files of an executor. */
-public class ExecutorShuffleInfo implements Encodable, Serializable {
+public class ExecutorShuffleInfo implements Encodable {
   /** The base set of local directories that the executor stores its shuffle files in. */
   public final String[] localDirs;
   /** Number of subdirectories created within each localDir. */
@@ -35,7 +37,11 @@ public class ExecutorShuffleInfo implements Encodable, Serializable {
   /** Shuffle manager (SortShuffleManager or HashShuffleManager) that the executor is using. */
   public final String shuffleManager;
 
-  public ExecutorShuffleInfo(String[] localDirs, int subDirsPerLocalDir, String shuffleManager) {
+  @JsonCreator
+  public ExecutorShuffleInfo(
+      @JsonProperty("localDirs")String[] localDirs,
+      @JsonProperty("subDirsPerLocalDir") int subDirsPerLocalDir,
+      @JsonProperty("shuffleManager") String shuffleManager) {
     this.localDirs = localDirs;
     this.subDirsPerLocalDir = subDirsPerLocalDir;
     this.shuffleManager = shuffleManager;

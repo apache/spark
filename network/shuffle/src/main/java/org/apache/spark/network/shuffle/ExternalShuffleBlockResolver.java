@@ -23,6 +23,9 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
 import com.google.common.base.Objects;
@@ -138,12 +141,10 @@ public class ExternalShuffleBlockResolver {
     synchronized (executors) {
       executors.put(fullId, executorInfo);
       try {
-        ByteArrayOutputStream bytesOut = new ByteArrayOutputStream();
-        ObjectOutputStream out = new ObjectOutputStream(bytesOut);
-        out.writeObject(executorInfo);
-        out.close();
         if (db != null) {
-          db.put(dbAppExecKey(new AppExecId(appId, execId)), bytesOut.toByteArray());
+          byte[] key = dbAppExecKey(new AppExecId(appId, execId));
+          byte[] value = mapper.writeValueAsString(executorInfo).getBytes(Charsets.UTF_8);
+          db.put(key, value);
         }
       } catch (Exception e) {
         logger.error("Error saving registered executors", e);
@@ -204,7 +205,11 @@ public class ExternalShuffleBlockResolver {
       if (appId.equals(fullId.appId)) {
         it.remove();
         if (db != null) {
-          db.delete(dbAppExecKey(fullId));
+          try {
+            db.delete(dbAppExecKey(fullId));
+          } catch (IOException e) {
+            logger.error("Error deleting {} from executor state db", appId, e);
+          }
         }
 
         if (cleanupLocalDirs) {
@@ -301,11 +306,12 @@ public class ExternalShuffleBlockResolver {
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */
-  public static class AppExecId implements Serializable {
+  public static class AppExecId {
     public final String appId;
-    final String execId;
+    public final String execId;
 
-    public AppExecId(String appId, String execId) {
+    @JsonCreator
+    public AppExecId(@JsonProperty("appId") String appId, @JsonProperty("execId") String execId) {
       this.appId = appId;
       this.execId = execId;
     }
@@ -333,14 +339,20 @@ public class ExternalShuffleBlockResolver {
     }
   }
 
-  private static byte[] dbAppExecKey(AppExecId appExecId) {
-    return (APP_KEY_PREFIX + ";" + appExecId.appId + ";" + appExecId.execId).getBytes(Charsets.UTF_8);
+  static ObjectMapper mapper = new ObjectMapper();
+
+  private static byte[] dbAppExecKey(AppExecId appExecId) throws IOException {
+    // we stick a common prefix on all the keys so we can find them in the DB
+    String appExecJson = mapper.writeValueAsString(appExecId);
+    String key = (APP_KEY_PREFIX + ";" + appExecJson);
+    return key.getBytes(Charsets.UTF_8);
   }
 
-  private static AppExecId parseDbAppExecKey(String s) {
+  private static AppExecId parseDbAppExecKey(String s) throws IOException {
     int p = s.indexOf(';');
-    int p2 = s.indexOf(';', p + 1);
-    return new AppExecId(s.substring(p + 1, p2), s.substring(p2 + 1));
+    String json = s.substring(p + 1);
+    AppExecId parsed = mapper.readValue(json, AppExecId.class);
+    return parsed;
   }
 
   private static final String APP_KEY_PREFIX = "AppExecShuffleInfo";
@@ -358,16 +370,9 @@ public class ExternalShuffleBlockResolver {
         if (!key.startsWith(APP_KEY_PREFIX))
           break;
         AppExecId id = parseDbAppExecKey(key);
-        ObjectInputStream in = new ObjectInputStream(new ByteArrayInputStream(e.getValue()));
-        try {
-          registeredExecutors.put(
-            id,
-            (ExecutorShuffleInfo) in.readObject()
-          );
-        } catch (ClassNotFoundException e1) {
-          throw new IOException(e1);
-        }
-        in.close();
+        ExecutorShuffleInfo shuffleInfo =
+          mapper.readValue(new String(e.getValue(), Charsets.UTF_8), ExecutorShuffleInfo.class);
+        registeredExecutors.put(id, shuffleInfo);
       }
     }
     return registeredExecutors;

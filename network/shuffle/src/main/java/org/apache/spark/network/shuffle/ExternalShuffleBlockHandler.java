@@ -51,7 +51,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   final ExternalShuffleBlockResolver blockManager;
   private final OneForOneStreamManager streamManager;
 
-  public ExternalShuffleBlockHandler(TransportConf conf, File registeredExecutorFile) {
+  public ExternalShuffleBlockHandler(TransportConf conf, File registeredExecutorFile) throws IOException {
     this(new OneForOneStreamManager(),
       new ExternalShuffleBlockResolver(conf, registeredExecutorFile));
   }

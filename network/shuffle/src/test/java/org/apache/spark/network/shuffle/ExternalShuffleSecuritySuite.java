@@ -43,7 +43,7 @@ public class ExternalShuffleSecuritySuite {
   TransportServer server;
 
   @Before
-  public void beforeEach() {
+  public void beforeEach() throws IOException {
     TransportContext context =
       new TransportContext(conf, new ExternalShuffleBlockHandler(conf, null));
     TransportServerBootstrap bootstrap = new SaslServerBootstrap(conf,
