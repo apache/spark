@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.unsafe.KVIterator
-import org.apache.spark.{Logging, SparkEnv, TaskContext}
+import org.apache.spark.{InternalAccumulator, Logging, SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
@@ -633,6 +633,9 @@ class TungstenAggregationIterator(
         if (!mapIteratorHasNext) {
           // If there is no input from aggregationBufferMapIterator, we copy current result.
           val resultCopy = result.copy()
+          // Report memory usage metrics.
+          TaskContext.get().internalMetricsToAccumulators(
+            InternalAccumulator.PEAK_EXECUTION_MEMORY).add(hashMap.getMemoryUsage)
           // Then, we free the map.
           hashMap.free()
 
