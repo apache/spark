@@ -44,7 +44,7 @@ import org.apache.spark.unsafe.memory.TaskMemoryManager;
 import org.apache.spark.util.Utils;
 
 /**
- * An external inMemSorter that is specialized for sort-based shuffle.
+ * An external sorter that is specialized for sort-based shuffle.
  * <p>
  * Incoming records are appended to data pages. When all records have been inserted (or when the
  * current thread's shuffle memory limit is reached), the in-memory records are sorted according to
@@ -55,7 +55,7 @@ import org.apache.spark.util.Utils;
  * written as a single serialized, compressed stream that can be read with a new decompression and
  * deserialization stream.
  * <p>
- * Unlike {@link org.apache.spark.util.collection.ExternalSorter}, this inMemSorter does not merge its
+ * Unlike {@link org.apache.spark.util.collection.ExternalSorter}, this sorter does not merge its
  * spill files. Instead, this merging is performed in {@link UnsafeShuffleWriter}, which uses a
  * specialized merge procedure that avoids extra serialization/deserialization.
  */
@@ -90,7 +90,7 @@ final class UnsafeShuffleExternalSorter {
 
   private final LinkedList<SpillInfo> spills = new LinkedList<SpillInfo>();
 
-  /** Peak memory used by this inMemSorter so far, in bytes. **/
+  /** Peak memory used by this sorter so far, in bytes. **/
   private long peakMemoryUsedBytes;
 
   // These variables are reset after spilling:
@@ -126,10 +126,10 @@ final class UnsafeShuffleExternalSorter {
   }
 
   /**
-   * Allocates new sort data structures. Called when creating the inMemSorter and after each spill.
+   * Allocates new sort data structures. Called when creating the sorter and after each spill.
    */
   private void initializeForWriting() throws IOException {
-    // TODO: move this sizing calculation logic into a static method of inMemSorter:
+    // TODO: move this sizing calculation logic into a static method of sorter:
     final long memoryRequested = initialSize * 8L;
     final long memoryAcquired = shuffleMemoryManager.tryToAcquire(memoryRequested);
     if (memoryAcquired != memoryRequested) {
@@ -399,7 +399,7 @@ final class UnsafeShuffleExternalSorter {
   }
 
   /**
-   * Write a record to the shuffle inMemSorter.
+   * Write a record to the shuffle sorter.
    */
   public void insertRecord(
       Object recordBaseObject,
@@ -461,10 +461,10 @@ final class UnsafeShuffleExternalSorter {
   }
 
   /**
-   * Close the inMemorySorter, causing any buffered data to be sorted and written out to disk.
+   * Close the sorter, causing any buffered data to be sorted and written out to disk.
    *
-   * @return metadata for the spill files written by this inMemSorter. If no records were ever inserted
-   *         into this inMemSorter, then this will return an empty array.
+   * @return metadata for the spill files written by this sorter. If no records were ever inserted
+   *         into this sorter, then this will return an empty array.
    * @throws IOException
    */
   public SpillInfo[] closeAndGetSpills() throws IOException {

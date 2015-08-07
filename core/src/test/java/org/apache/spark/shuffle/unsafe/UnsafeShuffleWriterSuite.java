@@ -219,10 +219,6 @@ public class UnsafeShuffleWriterSuite {
   }
 
   private List<Tuple2<Object, Object>> readRecordsFromFile() throws IOException {
-    return readRecordsFromFile(serializer);
-  }
-
-  private List<Tuple2<Object, Object>> readRecordsFromFile(Serializer serializer) throws IOException {
     final ArrayList<Tuple2<Object, Object>> recordsList = new ArrayList<Tuple2<Object, Object>>();
     long startOffset = 0;
     for (int i = 0; i < NUM_PARTITITONS; i++) {
@@ -238,7 +234,7 @@ public class UnsafeShuffleWriterSuite {
         Iterator<Tuple2<Object, Object>> records = recordsStream.asKeyValueIterator();
         while (records.hasNext()) {
           Tuple2<Object, Object> record = records.next();
-          //assertEquals(i, hashPartitioner.getPartition(record._1()));
+          assertEquals(i, hashPartitioner.getPartition(record._1()));
           recordsList.add(record);
         }
         recordsStream.close();
@@ -485,7 +481,7 @@ public class UnsafeShuffleWriterSuite {
     final byte[] atMaxRecordSize = new byte[writer.maxRecordSizeBytes()];
     new Random(42).nextBytes(atMaxRecordSize);
     dataToWrite.add(new Tuple2<Object, Object>(2, ByteBuffer.wrap(atMaxRecordSize)));
-    // Inserting a record that's larger than the max record size should fail:
+    // Inserting a record that's larger than the max record size
     final byte[] exceedsMaxRecordSize = new byte[writer.maxRecordSizeBytes() + 1];
     new Random(42).nextBytes(exceedsMaxRecordSize);
     dataToWrite.add(new Tuple2<Object, Object>(3, ByteBuffer.wrap(exceedsMaxRecordSize)));
