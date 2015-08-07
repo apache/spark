@@ -65,7 +65,7 @@ class CeleryExecutor(BaseExecutor):
     def sync(self):
         logging.debug(
             "Inquiring about {} celery task(s)".format(len(self.tasks)))
-        for key, async in self.tasks.items():
+        for key, async in list(self.tasks.items()):
             state = async.state
             if self.last_state[key] != state:
                 if state == celery_states.SUCCESS:
