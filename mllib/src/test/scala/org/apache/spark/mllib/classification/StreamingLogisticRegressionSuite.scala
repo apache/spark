@@ -144,7 +144,6 @@ class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase 
   test("training and prediction") {
     // create model initialized with zero weights
     val model = new StreamingLogisticRegressionWithSGD()
-      .setDecayFactor(0.01)
       .setInitialWeights(Vectors.dense(-0.1))
       .setStepSize(0.01)
       .setNumIterations(10)

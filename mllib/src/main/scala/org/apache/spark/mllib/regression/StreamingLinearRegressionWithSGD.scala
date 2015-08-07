@@ -106,4 +106,5 @@ class StreamingLinearRegressionWithSGD private[mllib] (
     this.algorithm.optimizer.setConvergenceTol(tolerance)
     this
   }
+
 }
