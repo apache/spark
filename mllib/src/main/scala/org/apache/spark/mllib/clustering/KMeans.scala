@@ -403,11 +403,14 @@ class KMeans private (
 
 /**
  * Top-level methods for calling K-means clustering.
+ * @since 0.8.0
  */
 object KMeans {
 
   // Initialization mode names
+  /** @since 0.8.0 */
   val RANDOM = "random"
+  /** @since 0.8.0 */
   val K_MEANS_PARALLEL = "k-means||"
 
   /**
@@ -419,6 +422,7 @@ object KMeans {
    * @param runs number of parallel runs, defaults to 1. The best model is returned.
    * @param initializationMode initialization model, either "random" or "k-means||" (default).
    * @param seed random seed value for cluster initialization
+   * @since 1.3.0
    */
   def train(
       data: RDD[Vector],
@@ -443,6 +447,7 @@ object KMeans {
    * @param maxIterations max number of iterations
    * @param runs number of parallel runs, defaults to 1. The best model is returned.
    * @param initializationMode initialization model, either "random" or "k-means||" (default).
+   * @since 0.8.0
    */
   def train(
       data: RDD[Vector],
@@ -459,6 +464,7 @@ object KMeans {
 
   /**
    * Trains a k-means model using specified parameters and the default values for unspecified.
+   * @since 0.8.0
    */
   def train(
       data: RDD[Vector],
@@ -469,6 +475,7 @@ object KMeans {
 
   /**
    * Trains a k-means model using specified parameters and the default values for unspecified.
+   * @since 0.8.0
    */
   def train(
       data: RDD[Vector],
