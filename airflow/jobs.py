@@ -130,7 +130,6 @@ class BaseJob(Base):
             sleep_for = self.heartrate - (
                 datetime.now() - job.latest_heartbeat).total_seconds()
             if sleep_for > 0:
-                logging.info("Sleeping for {} seconds".format(sleep_for))
                 sleep(sleep_for)
 
         job.latest_heartbeat = datetime.now()
