@@ -78,9 +78,7 @@ trait OuterJoin {
   }
 
   protected[this] def isUnsafeMode: Boolean = {
-    // TODO(josh): there is an existing bug here: this should also check whether unsafe mode
-    // is enabled. also, the default for self.codegenEnabled looks inconsistent to me.
-    (self.codegenEnabled && joinType != FullOuter
+    (self.codegenEnabled && self.unsafeEnabled && joinType != FullOuter
       && UnsafeProjection.canSupport(buildKeys)
       && UnsafeProjection.canSupport(self.schema))
   }

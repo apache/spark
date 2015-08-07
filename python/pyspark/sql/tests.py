@@ -629,6 +629,16 @@ class SQLTests(ReusedPySparkTestCase):
         for row in rndn:
             assert row[1] >= -4.0 and row[1] <= 4.0, "got: %s" % row[1]
 
+        # If the specified seed is 0, we should use it.
+        # https://issues.apache.org/jira/browse/SPARK-9691
+        rnd1 = df.select('key', functions.rand(0)).collect()
+        rnd2 = df.select('key', functions.rand(0)).collect()
+        self.assertEqual(sorted(rnd1), sorted(rnd2))
+
+        rndn1 = df.select('key', functions.randn(0)).collect()
+        rndn2 = df.select('key', functions.randn(0)).collect()
+        self.assertEqual(sorted(rndn1), sorted(rndn2))
+
     def test_between_function(self):
         df = self.sc.parallelize([
             Row(a=1, b=2, c=3),

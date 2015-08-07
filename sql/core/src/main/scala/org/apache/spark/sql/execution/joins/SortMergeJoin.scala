@@ -54,9 +54,8 @@ case class SortMergeJoin(
   @transient protected lazy val rightKeyGenerator = newProjection(rightKeys, right.output)
 
   protected[this] def isUnsafeMode: Boolean = {
-    // TODO(josh): there is an existing bug here: this should also check whether unsafe mode
-    // is enabled. also, the default for self.codegenEnabled looks inconsistent to me.
-    codegenEnabled && UnsafeProjection.canSupport(leftKeys) && UnsafeProjection.canSupport(schema)
+    codegenEnabled && unsafeEnabled &&
+      UnsafeProjection.canSupport(leftKeys) && UnsafeProjection.canSupport(schema)
   }
 
   // TODO(josh): this will need to change once we use an Unsafe row joiner

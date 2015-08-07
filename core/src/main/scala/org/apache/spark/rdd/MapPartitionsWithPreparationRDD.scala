@@ -19,21 +19,31 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Partition, TaskContext}
+import org.apache.spark.{Partition, Partitioner, TaskContext}
 
 /**
- * An RDD that applies the provided function to every partition of the parent RDD.
+ * An RDD that applies a user provided function to every partition of the parent RDD, and
+ * additionally allows the user to prepare each partition before computing the parent partition.
  */
-private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
+private[spark] class MapPartitionsWithPreparationRDD[U: ClassTag, T: ClassTag, M: ClassTag](
     prev: RDD[T],
-    f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator)
+    preparePartition: () => M,
+    executePartition: (TaskContext, Int, M, Iterator[T]) => Iterator[U],
     preservesPartitioning: Boolean = false)
   extends RDD[U](prev) {
 
-  override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
+  override val partitioner: Option[Partitioner] = {
+    if (preservesPartitioning) firstParent[T].partitioner else None
+  }
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
-  override def compute(split: Partition, context: TaskContext): Iterator[U] =
-    f(context, split.index, firstParent[T].iterator(split, context))
+  /**
+   * Prepare a partition before computing it from its parent.
+   */
+  override def compute(partition: Partition, context: TaskContext): Iterator[U] = {
+    val preparedArgument = preparePartition()
+    val parentIterator = firstParent[T].iterator(partition, context)
+    executePartition(context, partition.index, preparedArgument, parentIterator)
+  }
 }

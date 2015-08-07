@@ -178,7 +178,7 @@ private[ui] abstract class ExecutionTable(
     "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), jobId)
 
   private def executionURL(executionID: Long): String =
-    "%s/sql/execution?id=%s".format(UIUtils.prependBaseUri(parent.basePath), executionID)
+    s"${UIUtils.prependBaseUri(parent.basePath)}/${parent.prefix}/execution?id=$executionID"
 }
 
 private[ui] class RunningExecutionTable(
