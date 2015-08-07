@@ -85,6 +85,10 @@ case class SortMergeOuterJoin(
       && UnsafeProjection.canSupport(schema))
   }
 
+  override def outputsUnsafeRows: Boolean = isUnsafeMode
+  override def canProcessUnsafeRows: Boolean = isUnsafeMode
+  override def canProcessSafeRows: Boolean = !isUnsafeMode
+
   private def createLeftKeyGenerator(): Projection = {
     if (isUnsafeMode) {
       UnsafeProjection.create(leftKeys, left.output)
