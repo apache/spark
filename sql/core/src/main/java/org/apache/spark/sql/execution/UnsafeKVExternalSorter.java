@@ -160,6 +160,13 @@ public final class UnsafeKVExternalSorter {
   }
 
   /**
+   * Return the peak memory used so far, in bytes.
+   */
+  public long getPeakMemoryUsedBytes() {
+    return sorter.getPeakMemoryUsedBytes();
+  }
+
+  /**
    * Marks the current page as no-more-space-available, and as a result, either allocate a
    * new page or spill when we see the next record.
    */
