@@ -791,7 +791,7 @@ class ExecutorAllocationManagerSuite
       Map("host2" -> 1, "host3" -> 2, "host4" -> 1, "host5" -> 2))
   }
 
-  test("SPARK-8366: it should be resubmitted later if task fails") {
+  test("SPARK-8366: maxNumExecutorsNeeded should properly handle failed tasks") {
     sc = createSparkContext()
     val manager = sc.executorAllocationManager.get
     assert(maxNumExecutorsNeeded(manager) === 0)
@@ -803,6 +803,7 @@ class ExecutorAllocationManagerSuite
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, taskInfo))
     assert(maxNumExecutorsNeeded(manager) === 1)
 
+    //  If the task is failed, we expect it to be resubmitted later.
     val taskEndReason = ExceptionFailure(null, null, null, null, null)
     sc.listenerBus.postToAll(SparkListenerTaskEnd(0, 0, null, taskEndReason, taskInfo, null))
     assert(maxNumExecutorsNeeded(manager) === 1)

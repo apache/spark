@@ -622,7 +622,7 @@ private[spark] class ExecutorAllocationManager(
           }
         }
 
-        // If the task failed, we expect it to be resubmitted later.
+        // If the task is failed, we expect it to be resubmitted later.
         if (taskEnd.reason != Success) {
           stageIdToTaskIndices.get(stageId).foreach { taskIndices =>
             taskIndices.remove(taskIndex)
