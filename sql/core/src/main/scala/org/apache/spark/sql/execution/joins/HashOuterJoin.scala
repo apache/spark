@@ -67,7 +67,7 @@ trait HashOuterJoin {
   }
 
   protected[this] def isUnsafeMode: Boolean = {
-    (self.codegenEnabled && self.unsafeEnabled && joinType != FullOuter
+    (self.codegenEnabled && joinType != FullOuter
       && UnsafeProjection.canSupport(buildKeys)
       && UnsafeProjection.canSupport(self.schema))
   }
