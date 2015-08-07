@@ -1634,7 +1634,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
         except Exception as e:
             d = {}
 
-        for field in self.form_extra_fields.keys():
+        for field in list(self.form_extra_fields.keys()):
             value = d.get(field, '')
             if value:
                 field = getattr(form, field)
