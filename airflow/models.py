@@ -843,7 +843,7 @@ class TaskInstance(Base):
                     else:
                         task_copy.execute(context=context)
                     task_copy.post_execute(context=context)
-            except (Exception, StandardError, KeyboardInterrupt) as e:
+            except (Exception, KeyboardInterrupt) as e:
                 self.handle_failure(e, test_mode, context)
                 raise
 
