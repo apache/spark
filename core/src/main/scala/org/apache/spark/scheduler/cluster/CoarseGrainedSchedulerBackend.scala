@@ -128,7 +128,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
         }
 
-      case ContainedExited(containerExitStatus, msg) =>
+      case ContainerExited(containerExitStatus, msg) =>
         val MEM_REGEX = "[0-9.]+ [KMG]B"
         val PMEM_EXCEEDED_PATTERN =
           Pattern.compile(s"$MEM_REGEX of $MEM_REGEX physical memory used")

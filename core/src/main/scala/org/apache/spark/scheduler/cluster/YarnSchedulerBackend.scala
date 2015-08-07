@@ -111,6 +111,9 @@ private[spark] abstract class YarnSchedulerBackend(
 
       case RemoveExecutor(executorId, reason) =>
         removeExecutor(executorId, reason)
+
+      case ContainerExited(containerStatus, msg) =>
+        ContainerExited(containerStatus, msg)
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

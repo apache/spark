@@ -94,6 +94,6 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage
 
-  case class ContainedExited( containerStatus: Int, msg: String ) extends CoarseGrainedClusterMessage
+  case class ContainerExited( containerStatus: Int, msg: String ) extends CoarseGrainedClusterMessage
 
 }
