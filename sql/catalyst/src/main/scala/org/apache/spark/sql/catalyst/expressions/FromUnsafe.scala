@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 case class FromUnsafe(child: Expression) extends UnaryExpression
   with ExpectsInputTypes with CodegenFallback {
@@ -51,6 +52,8 @@ case class FromUnsafe(child: Expression) extends UnaryExpression
         i += 1
       }
       new GenericArrayData(result)
+
+    case StringType => value.asInstanceOf[UTF8String].clone()
 
     case MapType(kt, vt, _) =>
       val map = value.asInstanceOf[UnsafeMapData]

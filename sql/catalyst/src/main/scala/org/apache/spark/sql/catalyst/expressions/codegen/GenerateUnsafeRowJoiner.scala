@@ -155,7 +155,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
            |$putLong(buf, $cursor, $getLong(buf, $cursor) + ($shift << 32));
          """.stripMargin
       }
-    }
+    }.mkString("\n")
 
     // ------------------------ Finally, put everything together  --------------------------- //
     val code = s"""
