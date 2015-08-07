@@ -257,7 +257,7 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  */
 class Accumulator[T] private[spark] (
     @transient private[spark] val initialValue: T,
-    private[spark] val param: AccumulatorParam[T],
+    param: AccumulatorParam[T],
     name: Option[String],
     internal: Boolean)
   extends Accumulable[T, T](initialValue, param, name, internal) {
