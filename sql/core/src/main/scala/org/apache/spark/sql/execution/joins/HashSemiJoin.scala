@@ -43,14 +43,14 @@ trait HashSemiJoin {
   override def canProcessUnsafeRows: Boolean = supportUnsafe
   override def canProcessSafeRows: Boolean = !supportUnsafe
 
-  @transient protected lazy val leftKeyGenerator: Projection =
+  protected def leftKeyGenerator: Projection =
     if (supportUnsafe) {
       UnsafeProjection.create(leftKeys, left.output)
     } else {
       newMutableProjection(leftKeys, left.output)()
     }
 
-  @transient protected lazy val rightKeyGenerator: Projection =
+  protected def rightKeyGenerator: Projection =
     if (supportUnsafe) {
       UnsafeProjection.create(rightKeys, right.output)
     } else {
@@ -62,12 +62,11 @@ trait HashSemiJoin {
 
   protected def buildKeyHashSet(buildIter: Iterator[InternalRow]): java.util.Set[InternalRow] = {
     val hashSet = new java.util.HashSet[InternalRow]()
-    var currentRow: InternalRow = null
 
     // Create a Hash set of buildKeys
     val rightKey = rightKeyGenerator
     while (buildIter.hasNext) {
-      currentRow = buildIter.next()
+      val currentRow = buildIter.next()
       val rowKey = rightKey(currentRow)
       if (!rowKey.anyNull) {
         val keyExists = hashSet.contains(rowKey)
@@ -76,6 +75,7 @@ trait HashSemiJoin {
         }
       }
     }
+
     hashSet
   }
 

@@ -45,10 +45,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
   /** Returns true iff we support this data type. */
   def canSupport(dataType: DataType): Boolean = dataType match {
+    case NullType => true
     case t: AtomicType => true
     case _: CalendarIntervalType => true
     case t: StructType => t.toSeq.forall(field => canSupport(field.dataType))
-    case NullType => true
     case t: ArrayType if canSupport(t.elementType) => true
     case MapType(kt, vt, _) if canSupport(kt) && canSupport(vt) => true
     case _ => false
@@ -56,7 +56,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
   def genAdditionalSize(dt: DataType, ev: GeneratedExpressionCode): String = dt match {
     case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
-      s" + (${ev.isNull} ? 0 : $DecimalWriter.getSize(${ev.primitive}))"
+      s" + $DecimalWriter.getSize(${ev.primitive})"
     case StringType =>
       s" + (${ev.isNull} ? 0 : $StringWriter.getSize(${ev.primitive}))"
     case BinaryType =>
@@ -76,41 +76,41 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       ctx: CodeGenContext,
       fieldType: DataType,
       ev: GeneratedExpressionCode,
-      primitive: String,
+      target: String,
       index: Int,
       cursor: String): String = fieldType match {
     case _ if ctx.isPrimitiveType(fieldType) =>
-      s"${ctx.setColumn(primitive, fieldType, index, ev.primitive)}"
+      s"${ctx.setColumn(target, fieldType, index, ev.primitive)}"
     case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS =>
       s"""
        // make sure Decimal object has the same scale as DecimalType
        if (${ev.primitive}.changePrecision(${t.precision}, ${t.scale})) {
-         $CompactDecimalWriter.write($primitive, $index, $cursor, ${ev.primitive});
+         $CompactDecimalWriter.write($target, $index, $cursor, ${ev.primitive});
        } else {
-         $primitive.setNullAt($index);
+         $target.setNullAt($index);
        }
        """
     case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
       s"""
        // make sure Decimal object has the same scale as DecimalType
        if (${ev.primitive}.changePrecision(${t.precision}, ${t.scale})) {
-         $cursor += $DecimalWriter.write($primitive, $index, $cursor, ${ev.primitive});
+         $cursor += $DecimalWriter.write($target, $index, $cursor, ${ev.primitive});
        } else {
-         $primitive.setNullAt($index);
+         $cursor += $DecimalWriter.write($target, $index, $cursor, null);
        }
        """
     case StringType =>
-      s"$cursor += $StringWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+      s"$cursor += $StringWriter.write($target, $index, $cursor, ${ev.primitive})"
     case BinaryType =>
-      s"$cursor += $BinaryWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+      s"$cursor += $BinaryWriter.write($target, $index, $cursor, ${ev.primitive})"
     case CalendarIntervalType =>
-      s"$cursor += $IntervalWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+      s"$cursor += $IntervalWriter.write($target, $index, $cursor, ${ev.primitive})"
     case _: StructType =>
-      s"$cursor += $StructWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+      s"$cursor += $StructWriter.write($target, $index, $cursor, ${ev.primitive})"
     case _: ArrayType =>
-      s"$cursor += $ArrayWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+      s"$cursor += $ArrayWriter.write($target, $index, $cursor, ${ev.primitive})"
     case _: MapType =>
-      s"$cursor += $MapWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+      s"$cursor += $MapWriter.write($target, $index, $cursor, ${ev.primitive})"
     case NullType => ""
     case _ =>
       throw new UnsupportedOperationException(s"Not supported DataType: $fieldType")
@@ -146,13 +146,24 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val fieldWriters = inputTypes.zip(convertedFields).zipWithIndex.map { case ((dt, ev), i) =>
       val update = genFieldWriter(ctx, dt, ev, output, i, cursor)
-      s"""
-        if (${ev.isNull}) {
-          $output.setNullAt($i);
-        } else {
-          $update;
-        }
-      """
+      if (dt.isInstanceOf[DecimalType]) {
+        // Can't call setNullAt() for DecimalType
+        s"""
+          if (${ev.isNull}) {
+           $cursor += $DecimalWriter.write($output, $i, $cursor, null);
+          } else {
+           $update;
+          }
+        """
+      } else {
+        s"""
+          if (${ev.isNull}) {
+            $output.setNullAt($i);
+          } else {
+            $update;
+          }
+        """
+      }
     }.mkString("\n")
 
     val code = s"""
