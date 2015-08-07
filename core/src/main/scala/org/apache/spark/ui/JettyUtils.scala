@@ -253,11 +253,10 @@ private[spark] object JettyUtils extends Logging {
   }
 
   /**
-   * Attach a prefix to the given path, but avoid returning an empty path.
-   * Don't remove the trailing / if present.
+   * Attach a prefix to the given path, don't remove the trailing / if present.
    */
   private def attachPrefixForRedirect(basePath: String, relativePath: String): String = {
-    if (basePath == "") relativePath else (basePath + relativePath)
+    basePath + relativePath
   }
 }
 
