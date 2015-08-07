@@ -33,6 +33,8 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.JobContext
+import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
+import org.apache.hadoop.mapreduce.{TaskAttemptID => MapReduceTaskAttemptID}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.annotation.DeveloperApi
@@ -191,6 +193,18 @@ class SparkHadoopUtil extends Logging {
   def getConfigurationFromJobContext(context: JobContext): Configuration = {
     val method = context.getClass.getMethod("getConfiguration")
     method.invoke(context).asInstanceOf[Configuration]
+  }
+
+  /**
+   * Using reflection to call `getTaskAttemptID` from TaskAttemptContext. If we directly
+   * call `TaskAttemptContext.getTaskAttemptID`, it will generate different byte codes
+   * for Hadoop 1.+ and Hadoop 2.+ because TaskAttemptContext is class in Hadoop 1.+
+   * while it's interface in Hadoop 2.+.
+   */
+  def getTaskAttemptIDFromTaskAttemptContext(
+      context: MapReduceTaskAttemptContext): MapReduceTaskAttemptID = {
+    val method = context.getClass.getMethod("getTaskAttemptID")
+    method.invoke(context).asInstanceOf[MapReduceTaskAttemptID]
   }
 
   /**
