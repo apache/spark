@@ -448,7 +448,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(list2DiskGet.get.readMethod === DataReadMethod.Disk)
   }
 
-  test("(SPARK-9591)getRemoteBytes from another location when  IOException throw") {
+  test("SPARK-9591:getRemoteBytes from another location when  IOException throw") {
+    val origTimeoutOpt = conf.getOption("spark.network.timeout")
     try {
       conf.set("spark.network.timeout", "2s")
       store = makeBlockManager(8000, "executor1")
@@ -468,11 +469,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       store3.stop()
       store3 = null
       // exception throw because there is no locations
-      intercept[java.io.IOException] {
+      intercept[BlockFetchException] {
         list1Get = store.getRemoteBytes("list1")
       }
     } finally {
-      conf.remove("spark.network.timeout")
+      origTimeoutOpt match {
+        case Some(t) => conf.set("spark.network.timeout", t)
+        case None => conf.remove("spark.network.timeout")
+      }
     }
   }
 
