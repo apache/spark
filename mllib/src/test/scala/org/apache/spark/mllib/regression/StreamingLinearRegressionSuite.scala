@@ -211,7 +211,8 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
       LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 200, 42 * (i + 1))
     }
     // the last RDD is generated under the model B
-    val inputB = LinearDataGenerator.generateLinearInput(0.0, Array(5.0, 3.0), 200, 42 * (numBatches + 1))
+    val inputB =
+      LinearDataGenerator.generateLinearInput(0.0, Array(5.0, 3.0), 200, 42 * (numBatches + 1))
     val input = inputA :+ inputB
 
     // apply model training to input stream
@@ -243,7 +244,8 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
       LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 200, 42 * (i + 1))
     }
     // the last RDD is generated under the model B
-    val inputB = LinearDataGenerator.generateLinearInput(0.0, Array(5.0, 3.0), 200, 42 * (numBatches + 1))
+    val inputB =
+      LinearDataGenerator.generateLinearInput(0.0, Array(5.0, 3.0), 200, 42 * (numBatches + 1))
     val input = inputA :+ inputB
 
     // apply model training to input stream

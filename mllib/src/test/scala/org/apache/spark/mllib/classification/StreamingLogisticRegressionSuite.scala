@@ -203,7 +203,8 @@ class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase 
       LogisticRegressionSuite.generateLogisticInput(0.0, 0.5, nPoints, 42 * (i + 1))
     }
     // the last RDD is generated under the model B
-    val inputB = LogisticRegressionSuite.generateLogisticInput(0.0, 1.5, nPoints, 42 * (numBatches + 1))
+    val inputB =
+      LogisticRegressionSuite.generateLogisticInput(0.0, 1.5, nPoints, 42 * (numBatches + 1))
     val input = inputA :+ inputB
 
     // apply model training to input stream
@@ -236,7 +237,8 @@ class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase 
       LogisticRegressionSuite.generateLogisticInput(0.0, 0.5, nPoints, 42 * (i + 1))
     }
     // the last RDD is generated under the model B
-    val inputB = LogisticRegressionSuite.generateLogisticInput(0.0, 1.5, nPoints, 42 * (numBatches + 1))
+    val inputB =
+      LogisticRegressionSuite.generateLogisticInput(0.0, 1.5, nPoints, 42 * (numBatches + 1))
     val input = inputA :+ inputB
 
     // apply model training to input stream

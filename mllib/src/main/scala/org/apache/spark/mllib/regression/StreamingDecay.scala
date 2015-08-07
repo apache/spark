@@ -44,7 +44,7 @@ private[mllib] trait StreamingDecaySetter[T <: StreamingDecaySetter[T]] extends 
     this.timeUnit = timeUnit
     this
   }
-  
+
   def getDiscount(numNewDataPoints: Long): Double = timeUnit match {
     case StreamingDecay.BATCHES => decayFactor
     case StreamingDecay.POINTS => math.pow(decayFactor, numNewDataPoints)
