@@ -48,7 +48,6 @@ class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase 
 
     // create model
     val model = new StreamingLogisticRegressionWithSGD()
-      .setDecayFactor(0.01)
       .setInitialWeights(Vectors.dense(0.0))
       .setStepSize(0.2)
       .setNumIterations(25)
@@ -185,5 +184,71 @@ class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase 
       }
     )
     val output: Seq[Seq[(Double, Double)]] = runStreams(ssc, numBatches, numBatches)
+  }
+
+  test("parameter accuracy with full memory (decayFactor = 1)") {
+
+    val nPoints = 100
+
+    // create model
+    val model = new StreamingLogisticRegressionWithSGD()
+      .setDecayFactor(1)
+      .setInitialWeights(Vectors.dense(0.0))
+      .setStepSize(0.5)
+      .setNumIterations(50)
+
+    // generate sequence of simulated data
+    val numBatches = 20
+    // the first few RDD's are generated under the model A
+    val inputA = (0 until (numBatches - 1)).map { i =>
+      LogisticRegressionSuite.generateLogisticInput(0.0, 0.5, nPoints, 42 * (i + 1))
+    }
+    // the last RDD is generated under the model B
+    val inputB = LogisticRegressionSuite.generateLogisticInput(0.0, 1.5, nPoints, 42 * (numBatches + 1))
+    val input = inputA :+ inputB
+
+    // apply model training to input stream
+    ssc = setupStreams(input, (inputDStream: DStream[LabeledPoint]) => {
+      model.trainOn(inputDStream)
+      inputDStream.count()
+    })
+    runStreams(ssc, numBatches, numBatches)
+
+    // with full memory, the final parameter estimates should be close to model A
+    assert(model.latestModel().weights(0) ~== 0.5 relTol 0.5)
+
+  }
+
+  test("parameter accuracy with no memory (decayFactor = 0)") {
+
+    val nPoints = 100
+
+    // create model
+    val model = new StreamingLogisticRegressionWithSGD()
+      .setDecayFactor(0)
+      .setInitialWeights(Vectors.dense(0.0))
+      .setStepSize(0.5)
+      .setNumIterations(50)
+
+    // generate sequence of simulated data
+    val numBatches = 20
+    // the first few RDD's are generated under the model A
+    val inputA = (0 until (numBatches - 1)).map { i =>
+      LogisticRegressionSuite.generateLogisticInput(0.0, 0.5, nPoints, 42 * (i + 1))
+    }
+    // the last RDD is generated under the model B
+    val inputB = LogisticRegressionSuite.generateLogisticInput(0.0, 1.5, nPoints, 42 * (numBatches + 1))
+    val input = inputA :+ inputB
+
+    // apply model training to input stream
+    ssc = setupStreams(input, (inputDStream: DStream[LabeledPoint]) => {
+      model.trainOn(inputDStream)
+      inputDStream.count()
+    })
+    runStreams(ssc, numBatches, numBatches)
+
+    // with no memory, the final parameter estimates should be close to model B
+    assert(model.latestModel().weights(0) ~== 1.5 relTol 0.5)
+
   }
 }
