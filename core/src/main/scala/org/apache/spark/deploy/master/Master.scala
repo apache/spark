@@ -591,9 +591,15 @@ private[deploy] class Master(
           true
         }
       val assignedMemory = assignedExecutors(pos) * memoryPerExecutor
-      usableWorkers(pos).memoryFree - assignedMemory >= memoryPerExecutor &&
+      val enoughMemory =
+        if (launchingNewExecutor) {
+          usableWorkers(pos).memoryFree - assignedMemory >= memoryPerExecutor
+        } else {
+          true
+        }
       usableWorkers(pos).coresFree - assignedCores(pos) >= minCoresPerExecutor &&
       coresToAssign >= minCoresPerExecutor &&
+      enoughMemory &&
       underLimit
     }
 
