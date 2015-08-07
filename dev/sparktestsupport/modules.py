@@ -134,7 +134,7 @@ streaming = Module(
 # files in streaming_kinesis_asl are changed, so that if Kinesis experiences an outage, we don't
 # fail other PRs.
 streaming_kinesis_asl = Module(
-    name="kinesis-asl",
+    name="streaming-kinesis-asl",
     dependencies=[],
     source_file_regexes=[
         "extras/kinesis-asl/",
@@ -147,7 +147,7 @@ streaming_kinesis_asl = Module(
         "ENABLE_KINESIS_TESTS": "1"
     },
     sbt_test_goals=[
-        "kinesis-asl/test",
+        "streaming-kinesis-asl/test",
     ]
 )
 
