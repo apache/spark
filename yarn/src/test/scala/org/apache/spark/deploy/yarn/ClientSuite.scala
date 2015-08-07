@@ -29,8 +29,11 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
+import org.apache.hadoop.yarn.api.protocolrecords.GetNewApplicationResponse
 import org.apache.hadoop.yarn.api.records._
+import org.apache.hadoop.yarn.client.api.YarnClientApplication
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.util.Records
 import org.mockito.Matchers._
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterAll, Matchers}
@@ -168,6 +171,39 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
     val cp = classpath(env)
     cp should contain ("/remotePath/spark.jar")
     cp should contain ("/remotePath/my1.jar")
+  }
+
+  test("configuration and args propagate through createApplicationSubmissionContext") {
+    val conf = new Configuration()
+    // When parsing tags, duplicates and leading/trailing whitespace should be removed.
+    // Spaces between non-comma strings should be preserved as single tags. Empty strings may or
+    // may not be removed depending on the version of Hadoop being used.
+    val sparkConf = new SparkConf()
+      .set(Client.CONF_SPARK_YARN_APPLICATION_TAGS, ",tag1, dup,tag2 , ,multi word , dup")
+      .set("spark.yarn.maxAppAttempts", "42")
+    val args = new ClientArguments(Array(
+      "--name", "foo-test-app",
+      "--queue", "staging-queue"), sparkConf)
+
+    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+    val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+    val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+    val client = new Client(args, conf, sparkConf)
+    client.createApplicationSubmissionContext(
+      new YarnClientApplication(getNewApplicationResponse, appContext),
+      containerLaunchContext)
+
+    appContext.getApplicationName should be ("foo-test-app")
+    appContext.getQueue should be ("staging-queue")
+    appContext.getAMContainerSpec should be (containerLaunchContext)
+    appContext.getApplicationType should be ("SPARK")
+    appContext.getClass.getMethods.filter(_.getName.equals("getApplicationTags")).foreach{ method =>
+      val tags = method.invoke(appContext).asInstanceOf[java.util.Set[String]]
+      tags should contain allOf ("tag1", "dup", "tag2", "multi word")
+      tags.filter(!_.isEmpty).size should be (4)
+    }
+    appContext.getMaxAppAttempts should be (42)
   }
 
   object Fixtures {
