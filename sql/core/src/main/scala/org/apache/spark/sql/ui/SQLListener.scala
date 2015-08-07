@@ -21,11 +21,12 @@ import scala.collection.mutable
 
 import com.google.common.annotations.VisibleForTesting
 
-import org.apache.spark.{AccumulatorParam, JobExecutionStatus, Logging}
+import org.apache.spark.{JobExecutionStatus, Logging}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.metric.{SQLMetricParam, SQLMetricValue}
 
 private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener with Logging {
 
@@ -36,8 +37,6 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener wit
 
   // Old data in the following fields must be removed in "trimExecutionsIfNecessary".
   // If adding new fields, make sure "trimExecutionsIfNecessary" can clean up old data
-
-  // VisibleForTesting
   private val _executionIdToData = mutable.HashMap[Long, SQLExecutionUIData]()
 
   /**
@@ -270,9 +269,10 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener wit
                accumulatorUpdate <- taskMetrics.accumulatorUpdates.toSeq) yield {
             accumulatorUpdate
           }
-        }.filter { case (id, _) => executionUIData.accumulatorMetrics.keySet(id) }
+        }.filter { case (id, _) => executionUIData.accumulatorMetrics.contains(id) }
         mergeAccumulatorUpdates(accumulatorUpdates, accumulatorId =>
-          executionUIData.accumulatorMetrics(accumulatorId).accumulatorParam)
+          executionUIData.accumulatorMetrics(accumulatorId).metricParam).
+          mapValues(_.asInstanceOf[SQLMetricValue[_]].value)
       case None =>
         // This execution has been dropped
         Map.empty
@@ -281,10 +281,11 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener wit
 
   private def mergeAccumulatorUpdates(
       accumulatorUpdates: Seq[(Long, Any)],
-      paramFunc: Long => AccumulatorParam[Any]): Map[Long, Any] = {
+      paramFunc: Long => SQLMetricParam[SQLMetricValue[Any], Any]): Map[Long, Any] = {
     accumulatorUpdates.groupBy(_._1).map { case (accumulatorId, values) =>
       val param = paramFunc(accumulatorId)
-      (accumulatorId, values.map(_._2).reduceLeft(param.addInPlace))
+      (accumulatorId,
+        values.map(_._2.asInstanceOf[SQLMetricValue[Any]]).foldLeft(param.zero)(param.addInPlace))
     }
   }
 
@@ -336,7 +337,7 @@ private[ui] class SQLExecutionUIData(
 private[ui] case class SQLPlanMetric(
     name: String,
     accumulatorId: Long,
-    accumulatorParam: AccumulatorParam[Any])
+    metricParam: SQLMetricParam[SQLMetricValue[Any], Any])
 
 /**
  * Store all accumulatorUpdates for all tasks in a Spark stage.

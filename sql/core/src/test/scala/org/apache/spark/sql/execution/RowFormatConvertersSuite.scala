@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{Literal, IsNull}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute, Literal, IsNull}
 import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.types.{GenericArrayData, ArrayType, StructType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class RowFormatConvertersSuite extends SparkPlanTest {
 
@@ -87,4 +91,36 @@ class RowFormatConvertersSuite extends SparkPlanTest {
       input.map(Row.fromTuple)
     )
   }
+
+  test("SPARK-9683: copy UTF8String when convert unsafe array/map to safe") {
+    SparkPlan.currentContext.set(TestSQLContext)
+    val schema = ArrayType(StringType)
+    val rows = (1 to 100).map { i =>
+      InternalRow(new GenericArrayData(Array[Any](UTF8String.fromString(i.toString))))
+    }
+    val relation = LocalTableScan(Seq(AttributeReference("t", schema)()), rows)
+
+    val plan =
+      DummyPlan(
+        ConvertToSafe(
+          ConvertToUnsafe(relation)))
+    assert(plan.execute().collect().map(_.getUTF8String(0).toString) === (1 to 100).map(_.toString))
+  }
+}
+
+case class DummyPlan(child: SparkPlan) extends UnaryNode {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitions { iter =>
+      // cache all strings to make sure we have deep copied UTF8String inside incoming
+      // safe InternalRow.
+      val strings = new scala.collection.mutable.ArrayBuffer[UTF8String]
+      iter.foreach { row =>
+        strings += row.getArray(0).getUTF8String(0)
+      }
+      strings.map(InternalRow(_)).iterator
+    }
+  }
+
+  override def output: Seq[Attribute] = Seq(AttributeReference("a", StringType)())
 }
