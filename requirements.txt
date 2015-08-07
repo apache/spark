@@ -9,6 +9,7 @@ flask-admin
 flask-cache
 flask-login
 flower
+future
 hive-thrift-py
 ipython[all]
 jinja2
