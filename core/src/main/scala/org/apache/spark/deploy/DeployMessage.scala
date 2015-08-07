@@ -107,6 +107,10 @@ private[deploy] object DeployMessages {
 
   case class MasterChangeAcknowledged(appId: String)
 
+  case class RequestExecutors(appId: String, requestedTotal: Int)
+
+  case class KillExecutors(appId: String, executorIds: Seq[String])
+
   // Master to AppClient
 
   case class RegisteredApplication(appId: String, master: RpcEndpointRef) extends DeployMessage

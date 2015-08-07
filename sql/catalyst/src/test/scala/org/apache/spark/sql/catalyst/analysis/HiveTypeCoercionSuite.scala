@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.sql.Timestamp
+
 import org.apache.spark.sql.catalyst.plans.PlanTest
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class HiveTypeCoercionSuite extends PlanTest {
 
@@ -115,6 +118,14 @@ class HiveTypeCoercionSuite extends PlanTest {
     shouldNotCast(IntegerType, ArrayType)
     shouldNotCast(IntegerType, MapType)
     shouldNotCast(IntegerType, StructType)
+
+    shouldNotCast(CalendarIntervalType, StringType)
+
+    // Don't implicitly cast complex types to string.
+    shouldNotCast(ArrayType(StringType), StringType)
+    shouldNotCast(MapType(StringType, StringType), StringType)
+    shouldNotCast(new StructType().add("a1", StringType), StringType)
+    shouldNotCast(MapType(StringType, StringType), StringType)
   }
 
   test("tightest common bound for types") {
@@ -240,6 +251,18 @@ class HiveTypeCoercionSuite extends PlanTest {
         :: Nil))
   }
 
+  test("nanvl casts") {
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+      NaNvl(Literal.create(1.0, FloatType), Literal.create(1.0, DoubleType)),
+      NaNvl(Cast(Literal.create(1.0, FloatType), DoubleType), Literal.create(1.0, DoubleType)))
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+      NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, FloatType)),
+      NaNvl(Literal.create(1.0, DoubleType), Cast(Literal.create(1.0, FloatType), DoubleType)))
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+      NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, DoubleType)),
+      NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, DoubleType)))
+  }
+
   test("type coercion for If") {
     val rule = HiveTypeCoercion.IfCoercion
     ruleTest(rule,
@@ -306,7 +329,7 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
   }
 
-  test("WidenTypes for union except and intersect") {
+  test("WidenSetOperationTypes for union except and intersect") {
     def checkOutput(logical: LogicalPlan, expectTypes: Seq[DataType]): Unit = {
       logical.output.zip(expectTypes).foreach { case (attr, dt) =>
         assert(attr.dataType === dt)
@@ -324,7 +347,7 @@ class HiveTypeCoercionSuite extends PlanTest {
       AttributeReference("f", FloatType)(),
       AttributeReference("l", LongType)())
 
-    val wt = HiveTypeCoercion.WidenTypes
+    val wt = HiveTypeCoercion.WidenSetOperationTypes
     val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
 
     val r1 = wt(Union(left, right)).asInstanceOf[Union]
@@ -345,7 +368,7 @@ class HiveTypeCoercionSuite extends PlanTest {
       }
     }
 
-    val dp = HiveTypeCoercion.WidenTypes
+    val dp = HiveTypeCoercion.WidenSetOperationTypes
 
     val left1 = LocalRelation(
       AttributeReference("l", DecimalType(10, 8))())
@@ -391,6 +414,33 @@ class HiveTypeCoercionSuite extends PlanTest {
       checkOutput(r6.left, Seq(expectedType))
     }
   }
+
+  test("rule for date/timestamp operations") {
+    val dateTimeOperations = HiveTypeCoercion.DateTimeOperations
+    val date = Literal(new java.sql.Date(0L))
+    val timestamp = Literal(new Timestamp(0L))
+    val interval = Literal(new CalendarInterval(0, 0))
+    val str = Literal("2015-01-01")
+
+    ruleTest(dateTimeOperations, Add(date, interval), Cast(TimeAdd(date, interval), DateType))
+    ruleTest(dateTimeOperations, Add(interval, date), Cast(TimeAdd(date, interval), DateType))
+    ruleTest(dateTimeOperations, Add(timestamp, interval),
+      Cast(TimeAdd(timestamp, interval), TimestampType))
+    ruleTest(dateTimeOperations, Add(interval, timestamp),
+      Cast(TimeAdd(timestamp, interval), TimestampType))
+    ruleTest(dateTimeOperations, Add(str, interval), Cast(TimeAdd(str, interval), StringType))
+    ruleTest(dateTimeOperations, Add(interval, str), Cast(TimeAdd(str, interval), StringType))
+
+    ruleTest(dateTimeOperations, Subtract(date, interval), Cast(TimeSub(date, interval), DateType))
+    ruleTest(dateTimeOperations, Subtract(timestamp, interval),
+      Cast(TimeSub(timestamp, interval), TimestampType))
+    ruleTest(dateTimeOperations, Subtract(str, interval), Cast(TimeSub(str, interval), StringType))
+
+    // interval operations should not be effected
+    ruleTest(dateTimeOperations, Add(interval, interval), Add(interval, interval))
+    ruleTest(dateTimeOperations, Subtract(interval, interval), Subtract(interval, interval))
+  }
+
 
   /**
    * There are rules that need to not fire before child expressions get resolved.

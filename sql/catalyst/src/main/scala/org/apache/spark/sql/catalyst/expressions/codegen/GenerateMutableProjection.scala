@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
-
-import scala.collection.mutable.ArrayBuffer
+import org.apache.spark.sql.types.DecimalType
 
 // MutableProjection is not accessible in Java
 abstract class BaseMutableProjection extends MutableProjection
@@ -43,13 +44,26 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
       case (NoOp, _) => ""
       case (e, i) =>
         val evaluationCode = e.gen(ctx)
-        evaluationCode.code +
+        if (e.dataType.isInstanceOf[DecimalType]) {
+          // Can't call setNullAt on DecimalType, because we need to keep the offset
           s"""
-            if(${evaluationCode.isNull})
-              mutableRow.setNullAt($i);
-            else
+            ${evaluationCode.code}
+            if (${evaluationCode.isNull}) {
+              ${ctx.setColumn("mutableRow", e.dataType, i, null)};
+            } else {
               ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
+            }
           """
+        } else {
+          s"""
+            ${evaluationCode.code}
+            if (${evaluationCode.isNull}) {
+              mutableRow.setNullAt($i);
+            } else {
+              ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
+            }
+          """
+        }
     }
     // collect projections into blocks as function has 64kb codesize limit in JVM
     val projectionBlocks = new ArrayBuffer[String]()
@@ -91,6 +105,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
         private $exprType[] expressions;
         private $mutableRowType mutableRow;
         ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
 
         public SpecificProjection($exprType[] expr) {
           expressions = expr;
@@ -119,7 +134,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
       }
     """
 
-    logDebug(s"code for ${expressions.mkString(",")}:\n$code")
+    logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
     val c = compile(code)
     () => {

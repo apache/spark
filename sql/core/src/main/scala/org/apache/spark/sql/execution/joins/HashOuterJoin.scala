@@ -22,7 +22,6 @@ import java.util.{HashMap => JavaHashMap}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.util.collection.CompactBuffer
@@ -37,14 +36,6 @@ trait HashOuterJoin {
   val condition: Option[Expression]
   val left: SparkPlan
   val right: SparkPlan
-
-  override def outputPartitioning: Partitioning = joinType match {
-    case LeftOuter => left.outputPartitioning
-    case RightOuter => right.outputPartitioning
-    case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
-    case x =>
-      throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
-  }
 
   override def output: Seq[Attribute] = {
     joinType match {
@@ -75,30 +66,36 @@ trait HashOuterJoin {
         s"HashOuterJoin should not take $x as the JoinType")
   }
 
-  protected[this] def supportUnsafe: Boolean = {
+  protected[this] def isUnsafeMode: Boolean = {
     (self.codegenEnabled && joinType != FullOuter
       && UnsafeProjection.canSupport(buildKeys)
       && UnsafeProjection.canSupport(self.schema))
   }
 
-  override def outputsUnsafeRows: Boolean = supportUnsafe
-  override def canProcessUnsafeRows: Boolean = supportUnsafe
+  override def outputsUnsafeRows: Boolean = isUnsafeMode
+  override def canProcessUnsafeRows: Boolean = isUnsafeMode
+  override def canProcessSafeRows: Boolean = !isUnsafeMode
 
-  protected[this] def streamedKeyGenerator(): Projection = {
-    if (supportUnsafe) {
+  protected def buildKeyGenerator: Projection =
+    if (isUnsafeMode) {
+      UnsafeProjection.create(buildKeys, buildPlan.output)
+    } else {
+      newMutableProjection(buildKeys, buildPlan.output)()
+    }
+
+  protected[this] def streamedKeyGenerator: Projection = {
+    if (isUnsafeMode) {
       UnsafeProjection.create(streamedKeys, streamedPlan.output)
     } else {
       newProjection(streamedKeys, streamedPlan.output)
     }
   }
 
-  @transient private[this] lazy val resultProjection: Projection = {
-    if (supportUnsafe) {
+  protected[this] def resultProjection: InternalRow => InternalRow = {
+    if (isUnsafeMode) {
       UnsafeProjection.create(self.schema)
     } else {
-      new Projection {
-        override def apply(r: InternalRow): InternalRow = r
-      }
+      identity[InternalRow]
     }
   }
 
@@ -116,7 +113,8 @@ trait HashOuterJoin {
   protected[this] def leftOuterIterator(
       key: InternalRow,
       joinedRow: JoinedRow,
-      rightIter: Iterable[InternalRow]): Iterator[InternalRow] = {
+      rightIter: Iterable[InternalRow],
+      resultProjection: InternalRow => InternalRow): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
       if (!key.anyNull) {
         val temp = if (rightIter != null) {
@@ -127,12 +125,12 @@ trait HashOuterJoin {
           List.empty
         }
         if (temp.isEmpty) {
-          resultProjection(joinedRow.withRight(rightNullRow)).copy :: Nil
+          resultProjection(joinedRow.withRight(rightNullRow)) :: Nil
         } else {
           temp
         }
       } else {
-        resultProjection(joinedRow.withRight(rightNullRow)).copy :: Nil
+        resultProjection(joinedRow.withRight(rightNullRow)) :: Nil
       }
     }
     ret.iterator
@@ -141,24 +139,24 @@ trait HashOuterJoin {
   protected[this] def rightOuterIterator(
       key: InternalRow,
       leftIter: Iterable[InternalRow],
-      joinedRow: JoinedRow): Iterator[InternalRow] = {
+      joinedRow: JoinedRow,
+      resultProjection: InternalRow => InternalRow): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
       if (!key.anyNull) {
         val temp = if (leftIter != null) {
           leftIter.collect {
-            case l if boundCondition(joinedRow.withLeft(l)) =>
-              resultProjection(joinedRow).copy()
+            case l if boundCondition(joinedRow.withLeft(l)) => resultProjection(joinedRow).copy()
           }
         } else {
           List.empty
         }
         if (temp.isEmpty) {
-          resultProjection(joinedRow.withLeft(leftNullRow)).copy :: Nil
+          resultProjection(joinedRow.withLeft(leftNullRow)) :: Nil
         } else {
           temp
         }
       } else {
-        resultProjection(joinedRow.withLeft(leftNullRow)).copy :: Nil
+        resultProjection(joinedRow.withLeft(leftNullRow)) :: Nil
       }
     }
     ret.iterator
@@ -229,13 +227,5 @@ trait HashOuterJoin {
     }
 
     hashTable
-  }
-
-  protected[this] def buildHashRelation(buildIter: Iterator[InternalRow]): HashedRelation = {
-    if (supportUnsafe) {
-      UnsafeHashedRelation(buildIter, buildKeys, buildPlan)
-    } else {
-      HashedRelation(buildIter, newProjection(buildKeys, buildPlan.output))
-    }
   }
 }

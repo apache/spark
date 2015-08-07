@@ -23,7 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{Distribution, ClusteredDistribution}
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
@@ -44,27 +44,37 @@ case class ShuffledHashOuterJoin(
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
+  override def outputPartitioning: Partitioning = joinType match {
+    case LeftOuter => left.outputPartitioning
+    case RightOuter => right.outputPartitioning
+    case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
+    case x =>
+      throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val joinedRow = new JoinedRow()
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       // TODO this probably can be replaced by external sort (sort merged join?)
       joinType match {
         case LeftOuter =>
-          val hashed = buildHashRelation(rightIter)
-          val keyGenerator = streamedKeyGenerator()
+          val hashed = HashedRelation(rightIter, buildKeyGenerator)
+          val keyGenerator = streamedKeyGenerator
+          val resultProj = resultProjection
           leftIter.flatMap( currentRow => {
             val rowKey = keyGenerator(currentRow)
             joinedRow.withLeft(currentRow)
-            leftOuterIterator(rowKey, joinedRow, hashed.get(rowKey))
+            leftOuterIterator(rowKey, joinedRow, hashed.get(rowKey), resultProj)
           })
 
         case RightOuter =>
-          val hashed = buildHashRelation(leftIter)
-          val keyGenerator = streamedKeyGenerator()
+          val hashed = HashedRelation(leftIter, buildKeyGenerator)
+          val keyGenerator = streamedKeyGenerator
+          val resultProj = resultProjection
           rightIter.flatMap ( currentRow => {
             val rowKey = keyGenerator(currentRow)
             joinedRow.withRight(currentRow)
-            rightOuterIterator(rowKey, hashed.get(rowKey), joinedRow)
+            rightOuterIterator(rowKey, hashed.get(rowKey), joinedRow, resultProj)
           })
 
         case FullOuter =>
