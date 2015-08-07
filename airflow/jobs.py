@@ -609,7 +609,7 @@ class BackfillJob(BaseJob):
             executor.heartbeat()
 
             # Reacting to events
-            for key, state in executor.get_event_buffer().items():
+            for key, state in list(executor.get_event_buffer().items()):
                 dag_id, task_id, execution_date = key
                 if key not in tasks_to_run:
                     continue
