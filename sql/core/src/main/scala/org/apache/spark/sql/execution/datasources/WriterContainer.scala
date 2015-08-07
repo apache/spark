@@ -281,14 +281,14 @@ private[sql] class DynamicPartitionWriterContainer(
     val getOutputRow = UnsafeProjection.create(dataColumns, inputSchema)
 
     // Expressions that given a partition key build a string like: col1=val/col2=val/...
-    val partitionStringExpression = partitionColumns.zipWithIndex.map { case (c, i) =>
+    val partitionStringExpression = partitionColumns.zipWithIndex.flatMap { case (c, i) =>
       val escaped =
         ScalaUDF(
           PartitioningUtils.escapePathName _, StringType, Seq(Cast(c, StringType)), Seq(StringType))
       val str = If(IsNull(c), Literal(defaultPartitionName), escaped)
       val partitionName = Literal(c.name + "=") :: str :: Nil
       if (i == 0) partitionName else Literal(Path.SEPARATOR_CHAR.toString) :: partitionName
-    }.flatten
+    }
 
     // Returns the partition path given a partition key.
     val getPartitionString =
@@ -315,7 +315,7 @@ private[sql] class DynamicPartitionWriterContainer(
               StructType.fromAttributes(dataColumns),
               SparkEnv.get.blockManager,
               SparkEnv.get.shuffleMemoryManager,
-              SparkEnv.get.conf.getSizeAsBytes("spark.buffer.pageSize", "64m"))
+              SparkEnv.get.shuffleMemoryManager.pageSizeBytes)
             sorter.insertKV(currentKey, getOutputRow(inputRow))
           }
         } else {
