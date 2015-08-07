@@ -50,13 +50,13 @@ class OuterJoinSuite extends SparkPlanTest {
           expectedAnswer.map(Row.fromTuple),
           sortAnswers = false)
       }
-    }
 
-    test(s"$testName using SortMergeOuterJoin") {
-      checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-        SortMergeOuterJoin(leftKeys, rightKeys, joinType, condition, left, right),
-        expectedAnswer.map(Row.fromTuple),
-        sortAnswers = false)
+      test(s"$testName using SortMergeOuterJoin") {
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          SortMergeOuterJoin(leftKeys, rightKeys, joinType, condition, left, right),
+          expectedAnswer.map(Row.fromTuple),
+          sortAnswers = false)
+      }
     }
   }
 
