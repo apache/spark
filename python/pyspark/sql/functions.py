@@ -329,7 +329,7 @@ def rand(seed=None):
     """Generates a random column with i.i.d. samples from U[0.0, 1.0].
     """
     sc = SparkContext._active_spark_context
-    if seed:
+    if seed is not None:
         jc = sc._jvm.functions.rand(seed)
     else:
         jc = sc._jvm.functions.rand()
@@ -341,7 +341,7 @@ def randn(seed=None):
     """Generates a column with i.i.d. samples from the standard normal distribution.
     """
     sc = SparkContext._active_spark_context
-    if seed:
+    if seed is not None:
         jc = sc._jvm.functions.randn(seed)
     else:
         jc = sc._jvm.functions.randn()
