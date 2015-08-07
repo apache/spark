@@ -23,12 +23,7 @@ druid = ['pydruid>=0.2.1']
 s3 = ['boto>=2.36.0']
 jdbc = ['jaydebeapi>=0.2.0']
 mssql = ['pymssql>=2.1.1', 'unicodecsv>=0.13.0']
-
-# snakebite only compatible with Python 2 -- as of August 2015
-if sys.version_info[0] == 2:
-    hdfs = ['snakebite>=2.4.13']
-else:
-    hdfs = []
+hdfs = ['snakebite>=2.4.13']
 
 all_dbs = postgres + mysql + hive + mssql + hdfs
 devel = all_dbs + doc + samba + s3 + ['nose']
