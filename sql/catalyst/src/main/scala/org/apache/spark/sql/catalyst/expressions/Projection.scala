@@ -203,12 +203,16 @@ class JoinedRow extends InternalRow {
     this
   }
 
-  override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
+  override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = {
+    assert(fieldTypes.length == row1.numFields + row2.numFields)
+    val (left, right) = fieldTypes.splitAt(row1.numFields)
+    row1.toSeq(left) ++ row2.toSeq(right)
+  }
 
   override def numFields: Int = row1.numFields + row2.numFields
 
-  override def genericGet(i: Int): Any =
-    if (i < row1.numFields) row1.genericGet(i) else row2.genericGet(i - row1.numFields)
+  override def get(i: Int, dt: DataType): AnyRef =
+    if (i < row1.numFields) row1.get(i, dt) else row2.get(i - row1.numFields, dt)
 
   override def isNullAt(i: Int): Boolean =
     if (i < row1.numFields) row1.isNullAt(i) else row2.isNullAt(i - row1.numFields)
@@ -276,11 +280,11 @@ class JoinedRow extends InternalRow {
     if ((row1 eq null) && (row2 eq null)) {
       "[ empty row ]"
     } else if (row1 eq null) {
-      row2.mkString("[", ",", "]")
+      row2.toString
     } else if (row2 eq null) {
-      row1.mkString("[", ",", "]")
+      row1.toString
     } else {
-      mkString("[", ",", "]")
+      s"{${row1.toString} + ${row2.toString}}"
     }
   }
 }

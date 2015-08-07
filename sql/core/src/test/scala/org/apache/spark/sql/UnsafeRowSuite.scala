@@ -28,6 +28,16 @@ import org.apache.spark.unsafe.memory.MemoryAllocator
 import org.apache.spark.unsafe.types.UTF8String
 
 class UnsafeRowSuite extends SparkFunSuite {
+
+  test("bitset width calculation") {
+    assert(UnsafeRow.calculateBitSetWidthInBytes(0) === 0)
+    assert(UnsafeRow.calculateBitSetWidthInBytes(1) === 8)
+    assert(UnsafeRow.calculateBitSetWidthInBytes(32) === 8)
+    assert(UnsafeRow.calculateBitSetWidthInBytes(64) === 8)
+    assert(UnsafeRow.calculateBitSetWidthInBytes(65) === 16)
+    assert(UnsafeRow.calculateBitSetWidthInBytes(128) === 16)
+  }
+
   test("writeToStream") {
     val row = InternalRow.apply(UTF8String.fromString("hello"), UTF8String.fromString("world"), 123)
     val arrayBackedUnsafeRow: UnsafeRow =

@@ -291,7 +291,6 @@ private[sql] class ParquetRelation(
         initDriverSideJobFuncOpt = Some(setInputPaths),
         initLocalJobFuncOpt = Some(initLocalJobFuncOpt),
         inputFormatClass = classOf[ParquetInputFormat[InternalRow]],
-        keyClass = classOf[Void],
         valueClass = classOf[InternalRow]) {
 
         val cacheMetadata = useMetadataCache
@@ -328,7 +327,7 @@ private[sql] class ParquetRelation(
             new SqlNewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
           }
         }
-      }.values.asInstanceOf[RDD[Row]]  // type erasure hack to pass RDD[InternalRow] as RDD[Row]
+      }.asInstanceOf[RDD[Row]]  // type erasure hack to pass RDD[InternalRow] as RDD[Row]
     }
   }
 

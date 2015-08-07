@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.{InternalAccumulator, TaskContext}
+import org.apache.spark.rdd.{MapPartitionsWithPreparationRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
@@ -76,6 +77,11 @@ case class ExternalSort(
       val sorter = new ExternalSorter[InternalRow, Null, InternalRow](ordering = Some(ordering))
       sorter.insertAll(iterator.map(r => (r.copy(), null)))
       val baseIterator = sorter.iterator.map(_._1)
+      val context = TaskContext.get()
+      context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
+      context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
+      context.internalMetricsToAccumulators(
+        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.peakMemoryUsedBytes)
       // TODO(marmbrus): The complex type signature below thwarts inference for no reason.
       CompletionIterator[InternalRow, Iterator[InternalRow]](baseIterator, sorter.stop())
     }, preservesPartitioning = true)
@@ -117,7 +123,12 @@ case class TungstenSort(
     val schema = child.schema
     val childOutput = child.output
     val pageSize = sparkContext.conf.getSizeAsBytes("spark.buffer.pageSize", "64m")
-    child.execute().mapPartitions({ iter =>
+
+    /**
+     * Set up the sorter in each partition before computing the parent partition.
+     * This makes sure our sorter is not starved by other sorters used in the same task.
+     */
+    def preparePartition(): UnsafeExternalRowSorter = {
       val ordering = newOrdering(sortOrder, childOutput)
 
       // The comparator for comparing prefix
@@ -137,8 +148,25 @@ case class TungstenSort(
       if (testSpillFrequency > 0) {
         sorter.setTestSpillFrequency(testSpillFrequency)
       }
-      sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
-    }, preservesPartitioning = true)
+      sorter
+    }
+
+    /** Compute a partition using the sorter already set up previously. */
+    def executePartition(
+        taskContext: TaskContext,
+        partitionIndex: Int,
+        sorter: UnsafeExternalRowSorter,
+        parentIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
+      val sortedIterator = sorter.sort(parentIterator.asInstanceOf[Iterator[UnsafeRow]])
+      taskContext.internalMetricsToAccumulators(
+        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.getPeakMemoryUsage)
+      sortedIterator
+    }
+
+    // Note: we need to set up the external sorter in each partition before computing
+    // the parent partition, so we cannot simply use `mapPartitions` here (SPARK-9709).
+    new MapPartitionsWithPreparationRDD[InternalRow, InternalRow, UnsafeExternalRowSorter](
+      child.execute(), preparePartition, executePartition, preservesPartitioning = true)
   }
 
 }

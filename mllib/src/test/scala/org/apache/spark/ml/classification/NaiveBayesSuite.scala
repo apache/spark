@@ -21,7 +21,7 @@ import breeze.linalg.{Vector => BV}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.mllib.classification.NaiveBayes
+import org.apache.spark.mllib.classification.NaiveBayes.{Multinomial, Bernoulli}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
@@ -30,8 +30,6 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Row
 
 class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
-
-  import NaiveBayes.{Multinomial, Bernoulli}
 
   def validatePrediction(predictionAndLabels: DataFrame): Unit = {
     val numOfErrorPredictions = predictionAndLabels.collect().count {

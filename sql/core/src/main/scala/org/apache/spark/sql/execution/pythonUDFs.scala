@@ -21,7 +21,6 @@ import java.io.OutputStream
 import java.util.{List => JList, Map => JMap}
 
 import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
 
 import net.razorvine.pickle._
 
@@ -66,7 +65,7 @@ private[spark] case class PythonUDF(
  * multiple child operators.
  */
 private[spark] object ExtractPythonUDFs extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // Skip EvaluatePython nodes.
     case plan: EvaluatePython => plan
 
@@ -182,7 +181,7 @@ object EvaluatePython {
 
     case (c: Double, DoubleType) => c
 
-    case (c: java.math.BigDecimal, dt: DecimalType) => Decimal(c)
+    case (c: java.math.BigDecimal, dt: DecimalType) => Decimal(c, dt.precision, dt.scale)
 
     case (c: Int, DateType) => c
 

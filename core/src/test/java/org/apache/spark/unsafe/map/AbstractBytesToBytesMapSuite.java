@@ -25,6 +25,7 @@ import org.junit.*;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.junit.Assert.*;
 import static org.mockito.AdditionalMatchers.geq;
 import static org.mockito.Mockito.*;
 
@@ -182,8 +183,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     }
   }
 
-  @Test
-  public void iteratorTest() throws Exception {
+  private void iteratorTestBase(boolean destructive) throws Exception {
     final int size = 4096;
     BytesToBytesMap map = new BytesToBytesMap(
       taskMemoryManager, shuffleMemoryManager, size / 2, PAGE_SIZE_BYTES);
@@ -215,7 +215,14 @@ public abstract class AbstractBytesToBytesMapSuite {
         }
       }
       final java.util.BitSet valuesSeen = new java.util.BitSet(size);
-      final Iterator<BytesToBytesMap.Location> iter = map.iterator();
+      final Iterator<BytesToBytesMap.Location> iter;
+      if (destructive) {
+        iter = map.destructiveIterator();
+      } else {
+        iter = map.iterator();
+      }
+      int numPages = map.getNumDataPages();
+      int countFreedPages = 0;
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
         Assert.assertTrue(loc.isDefined());
@@ -227,16 +234,37 @@ public abstract class AbstractBytesToBytesMapSuite {
         if (keyLength == 0) {
           Assert.assertTrue("value " + value + " was not divisible by 5", value % 5 == 0);
         } else {
-        final long key = PlatformDependent.UNSAFE.getLong(
-          keyAddress.getBaseObject(), keyAddress.getBaseOffset());
+          final long key = PlatformDependent.UNSAFE.getLong(
+            keyAddress.getBaseObject(), keyAddress.getBaseOffset());
           Assert.assertEquals(value, key);
         }
         valuesSeen.set((int) value);
+        if (destructive) {
+          // The iterator moves onto next page and frees previous page
+          if (map.getNumDataPages() < numPages) {
+            numPages = map.getNumDataPages();
+            countFreedPages++;
+          }
+        }
+      }
+      if (destructive) {
+        // Latest page is not freed by iterator but by map itself
+        Assert.assertEquals(countFreedPages, numPages - 1);
       }
       Assert.assertEquals(size, valuesSeen.cardinality());
     } finally {
       map.free();
     }
+  }
+
+  @Test
+  public void iteratorTest() throws Exception {
+    iteratorTestBase(false);
+  }
+
+  @Test
+  public void destructiveIteratorTest() throws Exception {
+    iteratorTestBase(true);
   }
 
   @Test
@@ -494,5 +522,43 @@ public abstract class AbstractBytesToBytesMapSuite {
       PAGE_SIZE_BYTES);
     map.growAndRehash();
     map.free();
+  }
+
+  @Test
+  public void testTotalMemoryConsumption() {
+    final long recordLengthBytes = 24;
+    final long pageSizeBytes = 256 + 8; // 8 bytes for end-of-page marker
+    final long numRecordsPerPage = (pageSizeBytes - 8) / recordLengthBytes;
+    final BytesToBytesMap map = new BytesToBytesMap(
+      taskMemoryManager, shuffleMemoryManager, 1024, pageSizeBytes);
+
+    // Since BytesToBytesMap is append-only, we expect the total memory consumption to be
+    // monotonically increasing. More specifically, every time we allocate a new page it
+    // should increase by exactly the size of the page. In this regard, the memory usage
+    // at any given time is also the peak memory used.
+    long previousMemory = map.getTotalMemoryConsumption();
+    long newMemory;
+    try {
+      for (long i = 0; i < numRecordsPerPage * 10; i++) {
+        final long[] value = new long[]{i};
+        map.lookup(value, PlatformDependent.LONG_ARRAY_OFFSET, 8).putNewKey(
+          value,
+          PlatformDependent.LONG_ARRAY_OFFSET,
+          8,
+          value,
+          PlatformDependent.LONG_ARRAY_OFFSET,
+          8);
+        newMemory = map.getTotalMemoryConsumption();
+        if (i % numRecordsPerPage == 0) {
+          // We allocated a new page for this record, so peak memory should change
+          assertEquals(previousMemory + pageSizeBytes, newMemory);
+        } else {
+          assertEquals(previousMemory, newMemory);
+        }
+        previousMemory = newMemory;
+      }
+    } finally {
+      map.free();
+    }
   }
 }

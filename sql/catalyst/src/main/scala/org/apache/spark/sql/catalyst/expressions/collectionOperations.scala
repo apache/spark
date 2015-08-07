@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenFallback, CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.expressions.codegen.{
+  CodegenFallback, CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 /**
@@ -114,4 +115,77 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   }
 
   override def prettyName: String = "sort_array"
+}
+
+/**
+ * Checks if the array (left) has the element (right)
+ */
+case class ArrayContains(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def dataType: DataType = BooleanType
+
+  override def inputTypes: Seq[AbstractDataType] = right.dataType match {
+    case NullType => Seq()
+    case _ => left.dataType match {
+      case n @ ArrayType(element, _) => Seq(n, element)
+      case _ => Seq()
+    }
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (right.dataType == NullType) {
+      TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
+    } else if (!left.dataType.isInstanceOf[ArrayType]
+      || left.dataType.asInstanceOf[ArrayType].elementType != right.dataType) {
+      TypeCheckResult.TypeCheckFailure(
+        "Arguments must be an array followed by a value of same type as the array members")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Boolean = {
+    val arr = left.eval(input)
+    if (arr == null) {
+      false
+    } else {
+      val value = right.eval(input)
+      if (value == null) {
+        false
+      } else {
+        arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
+          if (v == value) return true
+        )
+        false
+      }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val arrGen = left.gen(ctx)
+    val elementGen = right.gen(ctx)
+    val i = ctx.freshName("i")
+    val getValue = ctx.getValue(arrGen.primitive, right.dataType, i)
+    s"""
+      ${arrGen.code}
+      boolean ${ev.isNull} = false;
+      boolean ${ev.primitive} = false;
+      if (!${arrGen.isNull}) {
+        ${elementGen.code}
+        if (!${elementGen.isNull}) {
+          for (int $i = 0; $i < ${arrGen.primitive}.numElements(); $i ++) {
+            if (${ctx.genEqual(right.dataType, elementGen.primitive, getValue)}) {
+              ${ev.primitive} = true;
+              break;
+            }
+          }
+        }
+      }
+     """
+  }
+
+  override def prettyName: String = "array_contains"
 }

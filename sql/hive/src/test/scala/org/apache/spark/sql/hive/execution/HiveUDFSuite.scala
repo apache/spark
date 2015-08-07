@@ -182,7 +182,7 @@ class HiveUDFSuite extends QueryTest {
     val errMsg = intercept[AnalysisException] {
       sql("SELECT testUDFToListString(s) FROM inputTable")
     }
-    assert(errMsg.getMessage === "List type in java is unsupported because " +
+    assert(errMsg.getMessage contains "List type in java is unsupported because " +
       "JVM type erasure makes spark fail to catch a component type in List<>;")
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListString")
@@ -197,7 +197,7 @@ class HiveUDFSuite extends QueryTest {
     val errMsg = intercept[AnalysisException] {
       sql("SELECT testUDFToListInt(s) FROM inputTable")
     }
-    assert(errMsg.getMessage === "List type in java is unsupported because " +
+    assert(errMsg.getMessage contains "List type in java is unsupported because " +
       "JVM type erasure makes spark fail to catch a component type in List<>;")
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListInt")
@@ -213,7 +213,7 @@ class HiveUDFSuite extends QueryTest {
     val errMsg = intercept[AnalysisException] {
       sql("SELECT testUDFToStringIntMap(s) FROM inputTable")
     }
-    assert(errMsg.getMessage === "Map type in java is unsupported because " +
+    assert(errMsg.getMessage contains "Map type in java is unsupported because " +
       "JVM type erasure makes spark fail to catch key and value types in Map<>;")
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToStringIntMap")
@@ -229,7 +229,7 @@ class HiveUDFSuite extends QueryTest {
     val errMsg = intercept[AnalysisException] {
       sql("SELECT testUDFToIntIntMap(s) FROM inputTable")
     }
-    assert(errMsg.getMessage === "Map type in java is unsupported because " +
+    assert(errMsg.getMessage contains "Map type in java is unsupported because " +
       "JVM type erasure makes spark fail to catch key and value types in Map<>;")
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToIntIntMap")

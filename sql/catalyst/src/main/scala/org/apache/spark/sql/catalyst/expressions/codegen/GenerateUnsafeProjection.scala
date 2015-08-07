@@ -45,10 +45,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
   /** Returns true iff we support this data type. */
   def canSupport(dataType: DataType): Boolean = dataType match {
+    case NullType => true
     case t: AtomicType => true
     case _: CalendarIntervalType => true
     case t: StructType => t.toSeq.forall(field => canSupport(field.dataType))
-    case NullType => true
     case t: ArrayType if canSupport(t.elementType) => true
     case MapType(kt, vt, _) if canSupport(kt) && canSupport(vt) => true
     case _ => false
@@ -56,7 +56,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
   def genAdditionalSize(dt: DataType, ev: GeneratedExpressionCode): String = dt match {
     case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
-      s" + (${ev.isNull} ? 0 : $DecimalWriter.getSize(${ev.primitive}))"
+      s" + $DecimalWriter.getSize(${ev.primitive})"
     case StringType =>
       s" + (${ev.isNull} ? 0 : $StringWriter.getSize(${ev.primitive}))"
     case BinaryType =>
@@ -76,192 +76,44 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       ctx: CodeGenContext,
       fieldType: DataType,
       ev: GeneratedExpressionCode,
-      primitive: String,
+      target: String,
       index: Int,
       cursor: String): String = fieldType match {
     case _ if ctx.isPrimitiveType(fieldType) =>
-      s"${ctx.setColumn(primitive, fieldType, index, ev.primitive)}"
+      s"${ctx.setColumn(target, fieldType, index, ev.primitive)}"
     case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS =>
       s"""
        // make sure Decimal object has the same scale as DecimalType
        if (${ev.primitive}.changePrecision(${t.precision}, ${t.scale})) {
-         $CompactDecimalWriter.write($primitive, $index, $cursor, ${ev.primitive});
+         $CompactDecimalWriter.write($target, $index, $cursor, ${ev.primitive});
        } else {
-         $primitive.setNullAt($index);
+         $target.setNullAt($index);
        }
        """
     case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
       s"""
        // make sure Decimal object has the same scale as DecimalType
        if (${ev.primitive}.changePrecision(${t.precision}, ${t.scale})) {
-         $cursor += $DecimalWriter.write($primitive, $index, $cursor, ${ev.primitive});
+         $cursor += $DecimalWriter.write($target, $index, $cursor, ${ev.primitive});
        } else {
-         $primitive.setNullAt($index);
+         $cursor += $DecimalWriter.write($target, $index, $cursor, null);
        }
        """
     case StringType =>
-      s"$cursor += $StringWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+      s"$cursor += $StringWriter.write($target, $index, $cursor, ${ev.primitive})"
     case BinaryType =>
-      s"$cursor += $BinaryWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+      s"$cursor += $BinaryWriter.write($target, $index, $cursor, ${ev.primitive})"
     case CalendarIntervalType =>
-      s"$cursor += $IntervalWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+      s"$cursor += $IntervalWriter.write($target, $index, $cursor, ${ev.primitive})"
     case _: StructType =>
-      s"$cursor += $StructWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+      s"$cursor += $StructWriter.write($target, $index, $cursor, ${ev.primitive})"
     case _: ArrayType =>
-      s"$cursor += $ArrayWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+      s"$cursor += $ArrayWriter.write($target, $index, $cursor, ${ev.primitive})"
     case _: MapType =>
-      s"$cursor += $MapWriter.write($primitive, $index, $cursor, ${ev.primitive})"
+      s"$cursor += $MapWriter.write($target, $index, $cursor, ${ev.primitive})"
     case NullType => ""
     case _ =>
       throw new UnsupportedOperationException(s"Not supported DataType: $fieldType")
-  }
-
-  /**
-   * Generates the code to create an [[UnsafeRow]] object based on the input expressions.
-   * @param ctx context for code generation
-   * @param ev specifies the name of the variable for the output [[UnsafeRow]] object
-   * @param expressions input expressions
-   * @return generated code to put the expression output into an [[UnsafeRow]]
-   */
-  def createCode(ctx: CodeGenContext, ev: GeneratedExpressionCode, expressions: Seq[Expression])
-    : String = {
-
-    val ret = ev.primitive
-    ctx.addMutableState("UnsafeRow", ret, s"$ret = new UnsafeRow();")
-    val buffer = ctx.freshName("buffer")
-    ctx.addMutableState("byte[]", buffer, s"$buffer = new byte[64];")
-    val cursor = ctx.freshName("cursor")
-    val numBytes = ctx.freshName("numBytes")
-
-    val exprs = expressions.map { e => e.dataType match {
-      case st: StructType => createCodeForStruct(ctx, e.gen(ctx), st)
-      case _ => e.gen(ctx)
-    }}
-    val allExprs = exprs.map(_.code).mkString("\n")
-
-    val fixedSize = 8 * exprs.length + UnsafeRow.calculateBitSetWidthInBytes(exprs.length)
-    val additionalSize = expressions.zipWithIndex.map {
-      case (e, i) => genAdditionalSize(e.dataType, exprs(i))
-    }.mkString("")
-
-    val writers = expressions.zipWithIndex.map { case (e, i) =>
-      val update = genFieldWriter(ctx, e.dataType, exprs(i), ret, i, cursor)
-      s"""if (${exprs(i).isNull}) {
-            $ret.setNullAt($i);
-          } else {
-            $update;
-          }"""
-    }.mkString("\n          ")
-
-    s"""
-      $allExprs
-      int $numBytes = $fixedSize $additionalSize;
-      if ($numBytes > $buffer.length) {
-        $buffer = new byte[$numBytes];
-      }
-
-      $ret.pointTo(
-        $buffer,
-        $PlatformDependent.BYTE_ARRAY_OFFSET,
-        ${expressions.size},
-        $numBytes);
-      int $cursor = $fixedSize;
-
-      $writers
-      boolean ${ev.isNull} = false;
-     """
-  }
-
-  /**
-   * Generates the Java code to convert a struct (backed by InternalRow) to UnsafeRow.
-   *
-   * This function also handles nested structs by recursively generating the code to do conversion.
-   *
-   * @param ctx code generation context
-   * @param input the input struct, identified by a [[GeneratedExpressionCode]]
-   * @param schema schema of the struct field
-   */
-  // TODO: refactor createCode and this function to reduce code duplication.
-  private def createCodeForStruct(
-      ctx: CodeGenContext,
-      input: GeneratedExpressionCode,
-      schema: StructType): GeneratedExpressionCode = {
-
-    val isNull = input.isNull
-    val primitive = ctx.freshName("structConvert")
-    ctx.addMutableState("UnsafeRow", primitive, s"$primitive = new UnsafeRow();")
-    val buffer = ctx.freshName("buffer")
-    ctx.addMutableState("byte[]", buffer, s"$buffer = new byte[64];")
-    val cursor = ctx.freshName("cursor")
-
-    val exprs: Seq[GeneratedExpressionCode] = schema.map(_.dataType).zipWithIndex.map {
-      case (dt, i) => dt match {
-        case st: StructType =>
-          val nestedStructEv = GeneratedExpressionCode(
-            code = "",
-            isNull = s"${input.primitive}.isNullAt($i)",
-            primitive = s"${ctx.getValue(input.primitive, dt, i.toString)}"
-          )
-          createCodeForStruct(ctx, nestedStructEv, st)
-        case _ =>
-          GeneratedExpressionCode(
-            code = "",
-            isNull = s"${input.primitive}.isNullAt($i)",
-            primitive = s"${ctx.getValue(input.primitive, dt, i.toString)}"
-          )
-        }
-    }
-    val allExprs = exprs.map(_.code).mkString("\n")
-
-    val fixedSize = 8 * exprs.length + UnsafeRow.calculateBitSetWidthInBytes(exprs.length)
-    val additionalSize = schema.toSeq.map(_.dataType).zip(exprs).map { case (dt, ev) =>
-      genAdditionalSize(dt, ev)
-    }.mkString("")
-
-    val writers = schema.toSeq.map(_.dataType).zip(exprs).zipWithIndex.map { case ((dt, ev), i) =>
-      val update = genFieldWriter(ctx, dt, ev, primitive, i, cursor)
-      s"""
-          if (${exprs(i).isNull}) {
-            $primitive.setNullAt($i);
-          } else {
-            $update;
-          }
-        """
-    }.mkString("\n          ")
-
-    // Note that we add a shortcut here for performance: if the input is already an UnsafeRow,
-    // just copy the bytes directly into our buffer space without running any conversion.
-    // We also had to use a hack to introduce a "tmp" variable, to avoid the Java compiler from
-    // complaining that a GenericMutableRow (generated by expressions) cannot be cast to UnsafeRow.
-    val tmp = ctx.freshName("tmp")
-    val numBytes = ctx.freshName("numBytes")
-    val code = s"""
-       |${input.code}
-       |if (!${input.isNull}) {
-       |  Object $tmp = (Object) ${input.primitive};
-       |  if ($tmp instanceof UnsafeRow) {
-       |    $primitive = (UnsafeRow) $tmp;
-       |  } else {
-       |    $allExprs
-       |
-       |    int $numBytes = $fixedSize $additionalSize;
-       |    if ($numBytes > $buffer.length) {
-       |      $buffer = new byte[$numBytes];
-       |    }
-       |
-       |    $primitive.pointTo(
-       |      $buffer,
-       |      $PlatformDependent.BYTE_ARRAY_OFFSET,
-       |      ${exprs.size},
-       |      $numBytes);
-       |    int $cursor = $fixedSize;
-       |
-       |    $writers
-       |  }
-       |}
-     """.stripMargin
-
-    GeneratedExpressionCode(code, isNull, primitive)
   }
 
   /**
@@ -271,7 +123,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
    * @param inputs could be the codes for expressions or input struct fields.
    * @param inputTypes types of the inputs
    */
-  private def createCodeForStruct2(
+  private def createCodeForStruct(
       ctx: CodeGenContext,
       inputs: Seq[GeneratedExpressionCode],
       inputTypes: Seq[DataType]): GeneratedExpressionCode = {
@@ -294,13 +146,24 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val fieldWriters = inputTypes.zip(convertedFields).zipWithIndex.map { case ((dt, ev), i) =>
       val update = genFieldWriter(ctx, dt, ev, output, i, cursor)
-      s"""
-        if (${ev.isNull}) {
-          $output.setNullAt($i);
-        } else {
-          $update;
-        }
-      """
+      if (dt.isInstanceOf[DecimalType]) {
+        // Can't call setNullAt() for DecimalType
+        s"""
+          if (${ev.isNull}) {
+           $cursor += $DecimalWriter.write($output, $i, $cursor, null);
+          } else {
+           $update;
+          }
+        """
+      } else {
+        s"""
+          if (${ev.isNull}) {
+            $output.setNullAt($i);
+          } else {
+            $update;
+          }
+        """
+      }
     }.mkString("\n")
 
     val code = s"""
@@ -537,7 +400,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         val fieldIsNull = s"$tmp.isNullAt($i)"
         GeneratedExpressionCode("", fieldIsNull, getFieldCode)
       }
-      val converter = createCodeForStruct2(ctx, fieldEvals, fieldTypes)
+      val converter = createCodeForStruct(ctx, fieldEvals, fieldTypes)
       val code = s"""
         ${input.code}
          UnsafeRow $output = null;
@@ -561,6 +424,12 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case _ => input
   }
 
+  def createCode(ctx: CodeGenContext, expressions: Seq[Expression]): GeneratedExpressionCode = {
+    val exprEvals = expressions.map(e => e.gen(ctx))
+    val exprTypes = expressions.map(_.dataType)
+    createCodeForStruct(ctx, exprEvals, exprTypes)
+  }
+
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
 
@@ -570,8 +439,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   protected def create(expressions: Seq[Expression]): UnsafeProjection = {
     val ctx = newCodeGenContext()
 
-    val exprEvals = expressions.map(e => e.gen(ctx))
-    val eval = createCodeForStruct2(ctx, exprEvals, expressions.map(_.dataType))
+    val eval = createCode(ctx, expressions)
 
     val code = s"""
       public Object generate($exprType[] exprs) {

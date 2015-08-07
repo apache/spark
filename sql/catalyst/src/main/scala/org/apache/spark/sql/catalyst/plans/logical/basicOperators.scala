@@ -34,7 +34,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
       }.nonEmpty
     )
 
-    expressions.forall(_.resolved) && childrenResolved && !hasSpecialExpressions
+    !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 }
 
@@ -68,7 +68,7 @@ case class Generate(
     generator.resolved &&
       childrenResolved &&
       generator.elementTypes.length == generatorOutput.length &&
-      generatorOutput.forall(_.resolved)
+      !generatorOutput.exists(!_.resolved)
   }
 
   // we don't want the gOutput to be taken as part of the expressions
@@ -86,37 +86,7 @@ case class Generate(
 }
 
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
-  /**
-   * Indicates if `atLeastNNulls` is used to check if atLeastNNulls.children
-   * have at least one null value and atLeastNNulls.children are all attributes.
-   */
-  private def isAtLeastOneNullOutputAttributes(atLeastNNulls: AtLeastNNulls): Boolean = {
-    val expressions = atLeastNNulls.children
-    val n = atLeastNNulls.n
-    if (n != 1) {
-      // AtLeastNNulls is not used to check if atLeastNNulls.children have
-      // at least one null value.
-      false
-    } else {
-      // AtLeastNNulls is used to check if atLeastNNulls.children have
-      // at least one null value. We need to make sure all atLeastNNulls.children
-      // are attributes.
-      expressions.forall(_.isInstanceOf[Attribute])
-    }
-  }
-
-  override def output: Seq[Attribute] = condition match {
-    case Not(a: AtLeastNNulls) if isAtLeastOneNullOutputAttributes(a) =>
-      // The condition is used to make sure that there is no null value in
-      // a.children.
-      val nonNullableAttributes = AttributeSet(a.children.asInstanceOf[Seq[Attribute]])
-      child.output.map {
-        case attr if nonNullableAttributes.contains(attr) =>
-          attr.withNullability(false)
-        case attr => attr
-      }
-    case _ => child.output
-  }
+  override def output: Seq[Attribute] = child.output
 }
 
 case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -218,7 +188,7 @@ case class WithWindowDefinition(
 }
 
 /**
- * @param order  The ordering expressions, should all be [[AttributeReference]]
+ * @param order  The ordering expressions
  * @param global True means global sorting apply for entire data set,
  *               False means sorting only apply within the partition.
  * @param child  Child logical plan
@@ -228,11 +198,6 @@ case class Sort(
     global: Boolean,
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-
-  def hasNoEvaluation: Boolean = order.forall(_.child.isInstanceOf[AttributeReference])
-
-  override lazy val resolved: Boolean =
-    expressions.forall(_.resolved) && childrenResolved && hasNoEvaluation
 }
 
 case class Aggregate(
@@ -247,7 +212,7 @@ case class Aggregate(
       }.nonEmpty
     )
 
-    expressions.forall(_.resolved) && childrenResolved && !hasWindowExpressions
+    !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions
   }
 
   lazy val newAggregation: Option[Aggregate] = Utils.tryConvert(this)
