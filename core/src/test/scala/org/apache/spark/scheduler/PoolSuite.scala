@@ -44,11 +44,18 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     assert(nextTaskSetToSchedule.get.stageId === expectedStageId)
   }
 
+  def verifyNoRemainedTask(rootPool: Pool): Unit = {
+    val taskSetQueue = rootPool.getSortedTaskSetQueue
+    val nextTaskSetToSchedule =
+      taskSetQueue.find(t => (t.runningTasks + t.tasksSuccessful) < t.numTasks)
+    assert(nextTaskSetToSchedule.isEmpty)
+  }
+
   test("FIFO Scheduler Test") {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    val rootPool = new Pool("", SchedulingMode.FIFO, 0, 0)
+    val rootPool = new Pool("", SchedulingMode.FIFO, 0, 0, 0)
     val schedulableBuilder = new FIFOSchedulableBuilder(rootPool)
     schedulableBuilder.buildPools()
 
@@ -78,7 +85,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
+    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0, 0)
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
     schedulableBuilder.buildPools()
 
@@ -137,19 +144,19 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
-    val pool0 = new Pool("0", SchedulingMode.FAIR, 3, 1)
-    val pool1 = new Pool("1", SchedulingMode.FAIR, 4, 1)
+    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0, 0)
+    val pool0 = new Pool("0", SchedulingMode.FAIR, 3, 1, 0)
+    val pool1 = new Pool("1", SchedulingMode.FAIR, 4, 1, 0)
     rootPool.addSchedulable(pool0)
     rootPool.addSchedulable(pool1)
 
-    val pool00 = new Pool("00", SchedulingMode.FAIR, 2, 2)
-    val pool01 = new Pool("01", SchedulingMode.FAIR, 1, 1)
+    val pool00 = new Pool("00", SchedulingMode.FAIR, 2, 2, 0)
+    val pool01 = new Pool("01", SchedulingMode.FAIR, 1, 1, 0)
     pool0.addSchedulable(pool00)
     pool0.addSchedulable(pool01)
 
-    val pool10 = new Pool("10", SchedulingMode.FAIR, 2, 2)
-    val pool11 = new Pool("11", SchedulingMode.FAIR, 2, 1)
+    val pool10 = new Pool("10", SchedulingMode.FAIR, 2, 2, 0)
+    val pool11 = new Pool("11", SchedulingMode.FAIR, 2, 1, 0)
     pool1.addSchedulable(pool10)
     pool1.addSchedulable(pool11)
 
@@ -177,5 +184,31 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     scheduleTaskAndVerifyId(1, rootPool, 4)
     scheduleTaskAndVerifyId(2, rootPool, 6)
     scheduleTaskAndVerifyId(3, rootPool, 2)
+  }
+
+  test("Fair Scheduler maxRunning Test") {
+    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc)
+
+    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0, 3)
+
+    val taskSetManager0 = createTaskSetManager(0, 2, taskScheduler)
+    val taskSetManager1 = createTaskSetManager(1, 2, taskScheduler)
+    val taskSetManager2 = createTaskSetManager(2, 2, taskScheduler)
+    val taskSetManager3 = createTaskSetManager(3, 2, taskScheduler)
+
+    rootPool.addSchedulable(taskSetManager0)
+    rootPool.addSchedulable(taskSetManager1)
+    rootPool.addSchedulable(taskSetManager2)
+    rootPool.addSchedulable(taskSetManager3)
+
+    scheduleTaskAndVerifyId(0, rootPool, 0)
+    scheduleTaskAndVerifyId(1, rootPool, 1)
+    scheduleTaskAndVerifyId(2, rootPool, 2)
+    scheduleTaskAndVerifyId(3, rootPool, 0)
+    scheduleTaskAndVerifyId(4, rootPool, 1)
+    scheduleTaskAndVerifyId(5, rootPool, 2)
+
+    verifyNoRemainedTask(rootPool)
   }
 }

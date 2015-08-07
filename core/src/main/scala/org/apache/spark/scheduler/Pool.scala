@@ -33,7 +33,8 @@ private[spark] class Pool(
     val poolName: String,
     val schedulingMode: SchedulingMode,
     initMinShare: Int,
-    initWeight: Int)
+    initWeight: Int,
+    initMaxRunning: Int)
   extends Schedulable
   with Logging {
 
@@ -41,6 +42,7 @@ private[spark] class Pool(
   val schedulableNameToSchedulable = new ConcurrentHashMap[String, Schedulable]
   var weight = initWeight
   var minShare = initMinShare
+  val maxRunning = initMaxRunning
   var runningTasks = 0
   var priority = 0
 
@@ -97,8 +99,14 @@ private[spark] class Pool(
 
   override def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager] = {
     var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]
+    def targetSchedulables = { sq:ConcurrentLinkedQueue[Schedulable] =>
+      if (maxRunning != 0)
+        sq.take(maxRunning).toSeq
+      else
+        sq.toSeq
+    }
     val sortedSchedulableQueue =
-      schedulableQueue.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
+      targetSchedulables(schedulableQueue).sortWith(taskSetSchedulingAlgorithm.comparator)
     for (schedulable <- sortedSchedulableQueue) {
       sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue
     }

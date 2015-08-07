@@ -40,6 +40,7 @@ private[ui] class PoolTable(pools: Seq[Schedulable], parent: StagesTab) {
       <thead>
         <th>Pool Name</th>
         <th>Minimum Share</th>
+        <th>Maximum Running Stages</th>
         <th>Pool Weight</th>
         <th>Active Stages</th>
         <th>Running Tasks</th>
@@ -65,6 +66,7 @@ private[ui] class PoolTable(pools: Seq[Schedulable], parent: StagesTab) {
         <a href={href}>{p.name}</a>
       </td>
       <td>{p.minShare}</td>
+      <td>{p.maxRunning}</td>
       <td>{p.weight}</td>
       <td>{activeStages}</td>
       <td>{p.runningTasks}</td>
