@@ -133,7 +133,7 @@ public final class UnsafeInMemorySorter {
     pointerArrayInsertPosition++;
   }
 
-  private static final class SortedIterator extends UnsafeSorterIterator {
+  public static final class SortedIterator extends UnsafeSorterIterator {
 
     private final TaskMemoryManager memoryManager;
     private final int sortBufferInsertPosition;
@@ -144,7 +144,7 @@ public final class UnsafeInMemorySorter {
     private long keyPrefix;
     private int recordLength;
 
-    SortedIterator(
+    private SortedIterator(
         TaskMemoryManager memoryManager,
         int sortBufferInsertPosition,
         long[] sortBuffer) {
@@ -186,7 +186,7 @@ public final class UnsafeInMemorySorter {
    * Return an iterator over record pointers in sorted order. For efficiency, all calls to
    * {@code next()} will return the same mutable object.
    */
-  public UnsafeSorterIterator getSortedIterator() {
+  public SortedIterator getSortedIterator() {
     sorter.sort(pointerArray, 0, pointerArrayInsertPosition / 2, sortComparator);
     return new SortedIterator(memoryManager, pointerArrayInsertPosition, pointerArray);
   }

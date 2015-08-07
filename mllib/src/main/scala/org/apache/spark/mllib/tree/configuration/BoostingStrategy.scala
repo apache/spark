@@ -90,7 +90,7 @@ object BoostingStrategy {
    * @return Configuration for boosting algorithm
    */
   def defaultParams(algo: Algo): BoostingStrategy = {
-    val treeStrategy = Strategy.defaultStategy(algo)
+    val treeStrategy = Strategy.defaultStrategy(algo)
     treeStrategy.maxDepth = 3
     algo match {
       case Algo.Classification =>

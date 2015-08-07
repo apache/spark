@@ -14,23 +14,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.hive.service.server
 
-package org.apache.spark.sql
+import org.apache.hive.service.server.HiveServer2.{StartOptionExecutor, ServerOptionsProcessor}
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{Expression}
-import org.apache.spark.sql.execution.aggregate.ScalaUDAF
-import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
+/**
+ * Class to upgrade a package-private class to public, and
+ * implement a `process()` operation consistent with
+ * the behavior of older Hive versions
+ * @param serverName name of the hive server
+ */
+private[apache] class HiveServerServerOptionsProcessor(serverName: String)
+    extends ServerOptionsProcessor(serverName) {
 
-class UDAFRegistration private[sql] (sqlContext: SQLContext) extends Logging {
-
-  private val functionRegistry = sqlContext.functionRegistry
-
-  def register(
-      name: String,
-      func: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
-    def builder(children: Seq[Expression]) = ScalaUDAF(children, func)
-    functionRegistry.registerFunction(name, builder)
-    func
+  def process(args: Array[String]): Boolean = {
+    // A parse failure automatically triggers a system exit
+    val response = super.parse(args)
+    val executor = response.getServerOptionsExecutor()
+    // return true if the parsed option was to start the service
+    executor.isInstanceOf[StartOptionExecutor]
   }
 }

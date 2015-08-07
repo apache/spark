@@ -54,7 +54,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def this(name: String) = this(name match {
     case "*" => UnresolvedStar(None)
     case _ if name.endsWith(".*") => UnresolvedStar(Some(name.substring(0, name.length - 2)))
-    case _ => UnresolvedAttribute(name)
+    case _ => UnresolvedAttribute.quotedString(name)
   })
 
   /** Creates a column based on the given expression. */
@@ -627,8 +627,19 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
+  @deprecated("use isin", "1.5.0")
   @scala.annotation.varargs
-  def in(list: Any*): Column = In(expr, list.map(lit(_).expr))
+  def in(list: Any*): Column = isin(list : _*)
+
+  /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the evaluated values of the arguments.
+   *
+   * @group expr_ops
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def isin(list: Any*): Column = In(expr, list.map(lit(_).expr))
 
   /**
    * SQL like expression.
