@@ -4,8 +4,8 @@ import logging
 import json
 import re
 import fnmatch
-from urlparse import urlparse
 import configparser
+from urllib.parse import urlparse
 
 import boto
 from boto.s3.connection import S3Connection

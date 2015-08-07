@@ -4,7 +4,7 @@ standard_library.install_aliases()
 from builtins import str
 from datetime import datetime
 import logging
-from urlparse import urlparse
+from urllib.parse import urlparse
 from time import sleep
 
 from airflow import hooks, settings
