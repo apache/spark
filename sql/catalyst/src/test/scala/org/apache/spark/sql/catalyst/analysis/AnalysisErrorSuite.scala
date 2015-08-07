@@ -42,8 +42,8 @@ case class UnresolvedTestPlan() extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }
 
-class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
-  import AnalysisSuite._
+class AnalysisErrorSuite extends AnalysisTest with BeforeAndAfter {
+  import TestRelations._
 
   def errorTest(
       name: String,
@@ -51,15 +51,7 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
       errorMessages: Seq[String],
       caseSensitive: Boolean = true): Unit = {
     test(name) {
-      val error = intercept[AnalysisException] {
-        if (caseSensitive) {
-          caseSensitiveAnalyze(plan)
-        } else {
-          caseInsensitiveAnalyze(plan)
-        }
-      }
-
-      errorMessages.foreach(m => assert(error.getMessage.toLowerCase.contains(m.toLowerCase)))
+      assertAnalysisError(plan, errorMessages, caseSensitive)
     }
   }
 
@@ -69,21 +61,21 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
     "single invalid type, single arg",
     testRelation.select(TestFunction(dateLit :: Nil, IntegerType :: Nil).as('a)),
     "cannot resolve" :: "testfunction" :: "argument 1" :: "requires int type" ::
-    "'null' is of date type" ::Nil)
+    "'null' is of date type" :: Nil)
 
   errorTest(
     "single invalid type, second arg",
     testRelation.select(
       TestFunction(dateLit :: dateLit :: Nil, DateType :: IntegerType :: Nil).as('a)),
     "cannot resolve" :: "testfunction" :: "argument 2" :: "requires int type" ::
-    "'null' is of date type" ::Nil)
+    "'null' is of date type" :: Nil)
 
   errorTest(
     "multiple invalid type",
     testRelation.select(
       TestFunction(dateLit :: dateLit :: Nil, IntegerType :: IntegerType :: Nil).as('a)),
     "cannot resolve" :: "testfunction" :: "argument 1" :: "argument 2" ::
-    "requires int type" :: "'null' is of date type" ::Nil)
+    "requires int type" :: "'null' is of date type" :: Nil)
 
   errorTest(
     "unresolved window function",
@@ -169,11 +161,7 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
 
     assert(plan.resolved)
 
-    val message = intercept[AnalysisException] {
-      caseSensitiveAnalyze(plan)
-    }.getMessage
-
-    assert(message.contains("resolved attribute(s) a#1 missing from a#2"))
+    assertAnalysisError(plan, "resolved attribute(s) a#1 missing from a#2" :: Nil)
   }
 
   test("error test for self-join") {
@@ -194,10 +182,8 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
           AttributeReference("a", BinaryType)(exprId = ExprId(2)),
           AttributeReference("b", IntegerType)(exprId = ExprId(1))))
 
-    val error = intercept[AnalysisException] {
-      caseSensitiveAnalyze(plan)
-    }
-    assert(error.message.contains("binary type expression a cannot be used in grouping expression"))
+    assertAnalysisError(plan,
+      "binary type expression a cannot be used in grouping expression" :: Nil)
 
     val plan2 =
       Aggregate(
@@ -207,10 +193,8 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
           AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
           AttributeReference("b", IntegerType)(exprId = ExprId(1))))
 
-    val error2 = intercept[AnalysisException] {
-      caseSensitiveAnalyze(plan2)
-    }
-    assert(error2.message.contains("map type expression a cannot be used in grouping expression"))
+    assertAnalysisError(plan2,
+      "map type expression a cannot be used in grouping expression" :: Nil)
   }
 
   test("Join can't work on binary and map types") {
@@ -226,10 +210,7 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
         Some(EqualTo(AttributeReference("a", BinaryType)(exprId = ExprId(2)),
           AttributeReference("c", BinaryType)(exprId = ExprId(4)))))
 
-    val error = intercept[AnalysisException] {
-      caseSensitiveAnalyze(plan)
-    }
-    assert(error.message.contains("binary type expression a cannot be used in join conditions"))
+    assertAnalysisError(plan, "binary type expression a cannot be used in join conditions" :: Nil)
 
     val plan2 =
       Join(
@@ -243,9 +224,6 @@ class AnalysisErrorSuite extends SparkFunSuite with BeforeAndAfter {
         Some(EqualTo(AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
           AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)))))
 
-    val error2 = intercept[AnalysisException] {
-      caseSensitiveAnalyze(plan2)
-    }
-    assert(error2.message.contains("map type expression a cannot be used in join conditions"))
+    assertAnalysisError(plan2, "map type expression a cannot be used in join conditions" :: Nil)
   }
 }
