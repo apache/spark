@@ -1002,8 +1002,9 @@ def search_kinesis_asl_assembly_jar():
     if not jars:
         if are_kinesis_tests_enabled:
             raise Exception(
-                ("Failed to find Spark Streaming Kinesis assembly jar in %s. " %
-                kinesis_asl_assembly_dir) + "You need to build Spark with 'build/sbt -Pkinesis-asl "
+                ("Failed to find Spark Streaming Kinesis assembly jar in %s. "
+                 % kinesis_asl_assembly_dir) +
+                "You need to build Spark with 'build/sbt -Pkinesis-asl "
                 "assembly/assembly streaming-kinesis-asl-assembly/assembly'"
                 "or 'build/mvn -Pkinesis-asl package' before running this test.")
         else:
@@ -1032,8 +1033,8 @@ if __name__ == "__main__":
         jars = "%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, kinesis_asl_assembly_jar)
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
-    testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, \
-        CheckpointTests, KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests]
+    testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests,
+                 CheckpointTests, KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests]
     if kinesis_jar_present is True:
         testcases.append(KinesisStreamTests)
     else:
