@@ -55,10 +55,11 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
               ${genUpdater(ctx, rowTerm, dt, i, colTerm)};
             }
            """
-        }.mkString("\n")
+        }
+        val allUpdates = ctx.splitExpressions(value, updates)
         s"""
           $genericMutableRowType $rowTerm = new $genericMutableRowType(${struct.fields.length});
-          $updates
+          $allUpdates
           $setter.update($ordinal, $rowTerm.copy());
         """
       case _ =>
@@ -68,7 +69,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
   protected def create(expressions: Seq[Expression]): Projection = {
     val ctx = newCodeGenContext()
-    val projectionCode = expressions.zipWithIndex.map {
+    val expressionCodes = expressions.zipWithIndex.map {
       case (NoOp, _) => ""
       case (e, i) =>
         val evaluationCode = e.gen(ctx)
@@ -81,36 +82,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
             }
           """
     }
-    // collect projections into blocks as function has 64kb codesize limit in JVM
-    val projectionBlocks = new ArrayBuffer[String]()
-    val blockBuilder = new StringBuilder()
-    for (projection <- projectionCode) {
-      if (blockBuilder.length > 16 * 1000) {
-        projectionBlocks.append(blockBuilder.toString())
-        blockBuilder.clear()
-      }
-      blockBuilder.append(projection)
-    }
-    projectionBlocks.append(blockBuilder.toString())
-
-    val (projectionFuns, projectionCalls) = {
-      // inline it if we have only one block
-      if (projectionBlocks.length == 1) {
-        ("", projectionBlocks.head)
-      } else {
-        (
-          projectionBlocks.zipWithIndex.map { case (body, i) =>
-            s"""
-               |private void apply$i(InternalRow i) {
-               |  $body
-               |}
-             """.stripMargin
-          }.mkString,
-          projectionBlocks.indices.map(i => s"apply$i(i);").mkString("\n")
-          )
-      }
-    }
-
+    val allExpressions = ctx.splitExpressions("i", expressionCodes)
     val code = s"""
       public Object generate($exprType[] expr) {
         return new SpecificSafeProjection(expr);
@@ -121,6 +93,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
         private $exprType[] expressions;
         private $mutableRowType mutableRow;
         ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
 
         public SpecificSafeProjection($exprType[] expr) {
           expressions = expr;
@@ -128,12 +101,9 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           ${initMutableStates(ctx)}
         }
 
-        $projectionFuns
-
         public Object apply(Object _i) {
           InternalRow i = (InternalRow) _i;
-          $projectionCalls
-
+          $allExpressions
           return mutableRow;
         }
       }
