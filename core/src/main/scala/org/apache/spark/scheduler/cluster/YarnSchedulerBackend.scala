@@ -101,7 +101,7 @@ private[spark] abstract class YarnSchedulerBackend(
 
     private val pendingDisconnectedExecutors = new HashSet[String]
     private val handleDisconnectedExecutorThreadPool =
-      ThreadUtils.newDaemonCachedThreadPool("yarn-driver-endpoint-handle-disconnected-executor-thread-pool")
+      ThreadUtils.newDaemonCachedThreadPool("yarn-driver-handle-lost-executor-thread-pool")
 
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       addressToExecutorId.get(rpcAddress).foreach({ executorId =>
@@ -110,11 +110,15 @@ private[spark] abstract class YarnSchedulerBackend(
             pendingDisconnectedExecutors.add(executorId)
             handleDisconnectedExecutorThreadPool.submit(new Runnable() {
               override def run(): Unit = {
-                val executorLossReason = yarnSchedulerEndpoint.askWithRetry[Option[ExecutorLossReason]](GetExecutorLossReason(executorId))
+                val executorLossReason =
+                  yarnSchedulerEndpoint.askWithRetry[Option[ExecutorLossReason]](
+                      GetExecutorLossReason(executorId))
                 executorLossReason match {
-                  case Some(reason) => driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
+                  case Some(reason) =>
+                    driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
                   case None =>
-                    logWarning(s"Attempted to get executor loss reason for $rpcAddress but got no response. Marking as slave lost.")
+                    logWarning(s"Attempted to get executor loss reason" +
+                      s" for $rpcAddress but got no response. Marking as slave lost.")
                     driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, SlaveLost()))
                 }
                 pendingDisconnectedExecutors.synchronized {
@@ -197,7 +201,8 @@ private[spark] abstract class YarnSchedulerBackend(
                 context.sendFailure(e)
             }
           case None =>
-            logWarning("Attempted to check if an executor exited normally before the AM has registered!")
+            logWarning("Attempted to check if an executor exited normally" +
+              " before the AM has registered!")
             context.reply(None)
         }
     }
@@ -213,7 +218,6 @@ private[spark] abstract class YarnSchedulerBackend(
     }
   }
 }
-
 
 private[spark] object YarnSchedulerBackend {
   val ENDPOINT_NAME = "YarnScheduler"

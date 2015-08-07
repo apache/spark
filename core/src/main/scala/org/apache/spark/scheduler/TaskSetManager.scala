@@ -708,8 +708,8 @@ private[spark] class TaskSetManager(
         }
 
       case e: ExecutorForTaskExited =>
-        logWarning(s"Task $tid failed because while it was being computed, its executor exited normally." +
-          s" Not marking the task as failed.")
+        logWarning(s"Task $tid failed because while it was being computed, its executor" +
+          s" exited normally. Not marking the task as failed.")
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
         logWarning(failureReason)
 
@@ -815,7 +815,8 @@ private[spark] class TaskSetManager(
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
       // Also re-enqueue any tasks that were running on the node
       val executorFailureReason = reason match {
-        case exited: ExecutorExitedNormally => ExecutorForTaskExited(tid, execId, exited.reason, exited.exitCode)
+        case exited: ExecutorExitedNormally =>
+          ExecutorForTaskExited(tid, execId, exited.reason, exited.exitCode)
         case default => ExecutorLostFailure(execId)
       }
       handleFailedTask(tid, TaskState.FAILED, executorFailureReason)

@@ -185,7 +185,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
-      addressToExecutorId.get(remoteAddress).foreach(removeExecutor(_, SlaveLost("remote Rpc client disassociated")))
+      addressToExecutorId
+        .get(remoteAddress)
+        .foreach(removeExecutor(_, SlaveLost("remote Rpc client disassociated")))
     }
 
     // Make fake resource offers on just one executor
@@ -262,10 +264,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     // TODO (prashant) send conf instead of properties
-    driverEndpoint = rpcEnv.setupEndpoint(CoarseGrainedSchedulerBackend.ENDPOINT_NAME, createDriverEndpoint(properties))
+    driverEndpoint = rpcEnv.setupEndpoint(
+        CoarseGrainedSchedulerBackend.ENDPOINT_NAME, createDriverEndpoint(properties))
   }
 
-  protected def createDriverEndpoint(properties: ArrayBuffer[(String, String)]): DriverEndpoint = new DriverEndpoint(rpcEnv, properties)
+  protected def createDriverEndpoint(
+      properties: ArrayBuffer[(String, String)]): DriverEndpoint
+    = new DriverEndpoint(rpcEnv, properties)
 
   def stopExecutors() {
     try {

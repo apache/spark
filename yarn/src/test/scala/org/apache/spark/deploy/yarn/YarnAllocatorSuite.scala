@@ -273,4 +273,3 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     assert(pmemMsg.contains("2.1 MB of 2 GB physical memory used."))
   }
 }
-

@@ -32,7 +32,9 @@ private[spark] case class ExecutorExitedAbnormally(val exitCode: Int, reason: St
 }
 
 private[spark] object ExecutorExitedAbnormally {
-  def apply(exitCode: Int): ExecutorExitedAbnormally = ExecutorExitedAbnormally(exitCode, ExecutorExitCode.explainExitCode(exitCode))
+  def apply(exitCode: Int): ExecutorExitedAbnormally = {
+    ExecutorExitedAbnormally(exitCode, ExecutorExitCode.explainExitCode(exitCode))
+  }
 }
 
 private[spark]
@@ -41,7 +43,9 @@ case class ExecutorExitedNormally(val exitCode: Int, reason: String)
 }
 
 private[spark] object ExecutorExitedNormally {
-  def apply(exitCode: Int): ExecutorExitedNormally = ExecutorExitedNormally(exitCode, ExecutorExitCode.explainExitCode(exitCode))
+  def apply(exitCode: Int): ExecutorExitedNormally = {
+    ExecutorExitedNormally(exitCode, ExecutorExitCode.explainExitCode(exitCode))
+  }
 }
 
 private[spark]

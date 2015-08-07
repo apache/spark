@@ -67,7 +67,8 @@ private[yarn] class YarnAllocator(
 
   import YarnAllocator._
 
-  private val UNKNOWN_CONTAINER_EXIT_STATUS = ExecutorExitedAbnormally(-1, "Executor exited for an unknown reason.")
+  private val UNKNOWN_CONTAINER_EXIT_STATUS =
+    ExecutorExitedAbnormally(-1, "Executor exited for an unknown reason.")
 
   // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
   if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
@@ -473,7 +474,8 @@ private[yarn] class YarnAllocator(
             ". Exit status: " + completedContainer.getExitStatus +
             ". Diagnostics: " + completedContainer.getDiagnostics)
           numExecutorsFailed += 1
-          containerExitReason = s"Container $containerId exited abnormally with exit status $exitStatus, and was marked as failed."
+          containerExitReason = s"Container $containerId exited abnormally with exit" +
+            s" status $exitStatus, and was marked as failed."
         }
 
         if (exitStatus == 0) {
