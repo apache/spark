@@ -383,7 +383,7 @@ private[sql] abstract class OutputWriterInternal extends OutputWriter {
 abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec])
   extends BaseRelation with Logging {
 
-  logInfo("Constructing HadoopFsRelation")
+  override def toString: String = getClass.getSimpleName + paths.mkString("[", ",", "]")
 
   def this() = this(None)
 
