@@ -519,6 +519,11 @@ class SparseMatrix(
       rowIndices: Array[Int],
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
 
+  override def equals(o: Any): Boolean = o match {
+    case m: SparseMatrix => toBreeze == m.toBreeze
+    case _ => false
+  }
+
   private[mllib] def toBreeze: BM[Double] = {
      if (!isTransposed) {
        new BSM[Double](values, numRows, numCols, colPtrs, rowIndices)
