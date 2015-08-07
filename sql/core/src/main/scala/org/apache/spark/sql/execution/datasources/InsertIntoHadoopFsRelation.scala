@@ -18,26 +18,18 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.IOException
-import java.util.{Date, UUID}
-
-import scala.collection.JavaConversions.asScalaIterator
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter, FileOutputFormat}
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.spark._
-import org.apache.spark.mapred.SparkHadoopMapRedUtil
-import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.{RunnableCommand, SQLExecution}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.StringType
-import org.apache.spark.util.{Utils, SerializableConfiguration}
+import org.apache.spark.util.Utils
 
 
 /**
@@ -109,14 +101,11 @@ private[sql] case class InsertIntoHadoopFsRelation(
       // We create a DataFrame by applying the schema of relation to the data to make sure.
       // We are writing data based on the expected schema,
 
-      // For partitioned relation r, r.schema's column ordering can be different from the column
-      // ordering of data.logicalPlan (partition columns are all moved after data column). We
-      // need a Project to adjust the ordering, so that inside InsertIntoHadoopFsRelation, we can
-      // safely apply the schema of r.schema to the data.
-
+      // A partitioned relation schema's can be different from the input logicalPlan, since
+      // partition columns are all moved after data column. We Project to adjust the ordering.
       // TODO: this belongs in the analyzer.
       val project = Project(
-        relation.schema.map(field => new UnresolvedAttribute(Seq(field.name))), query)
+        relation.schema.map(field => UnresolvedAttribute.quoted(field.name)), query)
       val queryExecution = DataFrame(sqlContext, project).queryExecution
 
       SQLExecution.withNewExecutionId(sqlContext, queryExecution) {
@@ -128,14 +117,14 @@ private[sql] case class InsertIntoHadoopFsRelation(
           df.schema == relation.schema,
           s"""DataFrame must have the same schema as the relation to which is inserted.
              |DataFrame schema: ${df.schema}
-              |Relation schema: ${relation.schema}
+             |Relation schema: ${relation.schema}
           """.stripMargin)
         val partitionColumnsInSpec = relation.partitionColumns.fieldNames
         require(
           partitionColumnsInSpec.sameElements(partitionColumns),
           s"""Partition columns mismatch.
              |Expected: ${partitionColumnsInSpec.mkString(", ")}
-              |Actual: ${partitionColumns.mkString(", ")}
+             |Actual: ${partitionColumns.mkString(", ")}
           """.stripMargin)
 
         val writerContainer = if (partitionColumns.isEmpty) {

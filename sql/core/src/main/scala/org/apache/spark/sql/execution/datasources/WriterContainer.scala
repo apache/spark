@@ -44,7 +44,6 @@ private[sql] abstract class BaseWriterContainer(
   with Logging
   with Serializable {
 
-  protected val needsConversion = relation.needConversion
   protected val dataSchema = relation.dataSchema
 
   protected val serializableConf = new SerializableConfiguration(job.getConfiguration)

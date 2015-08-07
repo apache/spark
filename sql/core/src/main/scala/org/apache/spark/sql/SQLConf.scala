@@ -369,7 +369,7 @@ private[spark] object SQLConf {
       doc = "When true, automatically infer the data types for partitioned columns.")
 
   val PARTITION_MAX_FILES =
-    intConf("spark.sql.sources.maxFiles",
+    intConf("spark.sql.sources.maxConcurrentWrites",
       defaultValue = Some(5),
       doc = "The maximum number of concurent files to open before falling back on sorting when " +
             "writing out files using dynamic partitioning.")
