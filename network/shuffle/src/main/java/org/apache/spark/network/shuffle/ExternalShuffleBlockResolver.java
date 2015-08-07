@@ -68,7 +68,8 @@ public class ExternalShuffleBlockResolver {
   @VisibleForTesting
   final DB db;
 
-  public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile) throws IOException {
+  public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
+      throws IOException {
     this(conf, registeredExecutorFile, Executors.newSingleThreadExecutor(
         // Add `spark` prefix because it will run in NM in Yarn mode.
         NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
