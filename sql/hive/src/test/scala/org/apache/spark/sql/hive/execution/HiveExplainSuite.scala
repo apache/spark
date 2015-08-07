@@ -36,7 +36,7 @@ class HiveExplainSuite extends QueryTest {
                    "== Analyzed Logical Plan ==",
                    "== Optimized Logical Plan ==",
                    "== Physical Plan ==",
-                   "Code Generation", "== RDD ==")
+                   "Code Generation")
   }
 
   test("explain create table command") {
