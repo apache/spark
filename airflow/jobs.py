@@ -422,7 +422,7 @@ class SchedulerJob(BaseJob):
             else:
                 d[ti.pool].append(ti)
 
-        for pool, tis in d.items():
+        for pool, tis in list(d.items()):
             open_slots = pools[pool].open_slots(session=session)
             if open_slots > 0:
                 tis = sorted(
