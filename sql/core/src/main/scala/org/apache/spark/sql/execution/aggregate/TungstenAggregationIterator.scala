@@ -71,8 +71,6 @@ import org.apache.spark.sql.types.StructType
  *   the function used to create mutable projections.
  * @param originalInputAttributes
  *   attributes of representing input rows from `inputIter`.
- * @param inputIter
- *   the iterator containing input [[UnsafeRow]]s.
  */
 class TungstenAggregationIterator(
     groupingExpressions: Seq[NamedExpression],
@@ -82,9 +80,11 @@ class TungstenAggregationIterator(
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
     originalInputAttributes: Seq[Attribute],
-    inputIter: Iterator[UnsafeRow],
     testFallbackStartsAt: Option[Int])
   extends Iterator[UnsafeRow] with Logging {
+
+  // The parent partition iterator, to be initialized later in `start`
+  private[this] var inputIter: Iterator[UnsafeRow] = Iterator[UnsafeRow]()
 
   ///////////////////////////////////////////////////////////////////////////
   // Part 1: Initializing aggregate functions.
@@ -576,27 +576,33 @@ class TungstenAggregationIterator(
   //         have not switched to sort-based aggregation.
   ///////////////////////////////////////////////////////////////////////////
 
-  // Starts to process input rows.
-  testFallbackStartsAt match {
-    case None =>
-      processInputs()
-    case Some(fallbackStartsAt) =>
-      // This is the testing path. processInputsWithControlledFallback is same as processInputs
-      // except that it switches to sort-based aggregation after `fallbackStartsAt` input rows
-      // have been processed.
-      processInputsWithControlledFallback(fallbackStartsAt)
-  }
+  /**
+   * Start processing input rows.
+   * Only after this method is called will this iterator be non-empty.
+   */
+  def start(parentIter: Iterator[UnsafeRow]): Unit = {
+    inputIter = parentIter
+    testFallbackStartsAt match {
+      case None =>
+        processInputs()
+      case Some(fallbackStartsAt) =>
+        // This is the testing path. processInputsWithControlledFallback is same as processInputs
+        // except that it switches to sort-based aggregation after `fallbackStartsAt` input rows
+        // have been processed.
+        processInputsWithControlledFallback(fallbackStartsAt)
+    }
 
-  // If we did not switch to sort-based aggregation in processInputs,
-  // we pre-load the first key-value pair from the map (to make hasNext idempotent).
-  if (!sortBased) {
-    // First, set aggregationBufferMapIterator.
-    aggregationBufferMapIterator = hashMap.iterator()
-    // Pre-load the first key-value pair from the aggregationBufferMapIterator.
-    mapIteratorHasNext = aggregationBufferMapIterator.next()
-    // If the map is empty, we just free it.
-    if (!mapIteratorHasNext) {
-      hashMap.free()
+    // If we did not switch to sort-based aggregation in processInputs,
+    // we pre-load the first key-value pair from the map (to make hasNext idempotent).
+    if (!sortBased) {
+      // First, set aggregationBufferMapIterator.
+      aggregationBufferMapIterator = hashMap.iterator()
+      // Pre-load the first key-value pair from the aggregationBufferMapIterator.
+      mapIteratorHasNext = aggregationBufferMapIterator.next()
+      // If the map is empty, we just free it.
+      if (!mapIteratorHasNext) {
+        hashMap.free()
+      }
     }
   }
 
@@ -648,20 +654,20 @@ class TungstenAggregationIterator(
   }
 
   ///////////////////////////////////////////////////////////////////////////
-  // Part 8: A utility function used to generate a output row when there is no
-  // input and there is no grouping expression.
+  // Part 8: Utility functions
   ///////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Generate a output row when there is no input and there is no grouping expression.
+   */
   def outputForEmptyGroupingKeyWithoutInput(): UnsafeRow = {
-    if (groupingExpressions.isEmpty) {
-      sortBasedAggregationBuffer.copyFrom(initialAggregationBuffer)
-      // We create a output row and copy it. So, we can free the map.
-      val resultCopy =
-        generateOutput(UnsafeRow.createFromByteArray(0, 0), sortBasedAggregationBuffer).copy()
-      hashMap.free()
-      resultCopy
-    } else {
-      throw new IllegalStateException(
-        "This method should not be called when groupingExpressions is not empty.")
-    }
+    assert(groupingExpressions.isEmpty)
+    assert(!inputIter.hasNext)
+    generateOutput(UnsafeRow.createFromByteArray(0, 0), initialAggregationBuffer)
+  }
+
+  /** Free memory used in the underlying map. */
+  def free(): Unit = {
+    hashMap.free()
   }
 }
