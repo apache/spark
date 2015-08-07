@@ -21,7 +21,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
@@ -121,8 +121,8 @@ case class SortMergeOuterJoin(
             streamedKeyGenerator = createLeftKeyGenerator(),
             bufferedKeyGenerator = createRightKeyGenerator(),
             keyOrdering,
-            streamedIter = leftIter,
-            bufferedIter = rightIter
+            streamedIter = RowIterator.fromScala(leftIter),
+            bufferedIter = RowIterator.fromScala(rightIter)
           )
           val rightNullRow = new GenericInternalRow(right.output.length)
           new LeftOuterIterator(smjScanner, rightNullRow, boundCondition, resultProj).toScala
@@ -132,8 +132,8 @@ case class SortMergeOuterJoin(
             streamedKeyGenerator = createRightKeyGenerator(),
             bufferedKeyGenerator = createLeftKeyGenerator(),
             keyOrdering,
-            streamedIter = rightIter,
-            bufferedIter = leftIter
+            streamedIter = RowIterator.fromScala(rightIter),
+            bufferedIter = RowIterator.fromScala(leftIter)
           )
           val leftNullRow = new GenericInternalRow(left.output.length)
           new RightOuterIterator(smjScanner, leftNullRow, boundCondition, resultProj).toScala
@@ -188,7 +188,7 @@ private class LeftOuterIterator(
     advanceRightUntilBoundConditionSatisfied() || advanceLeft()
   }
 
-  override def getNext: InternalRow = resultProj(joinedRow)
+  override def getRow: InternalRow = resultProj(joinedRow)
 }
 
 private class RightOuterIterator(
@@ -232,5 +232,5 @@ private class RightOuterIterator(
     advanceLeftUntilBoundConditionSatisfied() || advanceRight()
   }
 
-  override def getNext: InternalRow = resultProj(joinedRow)
+  override def getRow: InternalRow = resultProj(joinedRow)
 }

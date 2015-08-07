@@ -81,8 +81,8 @@ case class SortMergeJoin(
           leftKeyGenerator,
           rightKeyGenerator,
           keyOrdering,
-          leftIter,
-          rightIter
+          RowIterator.fromScala(leftIter),
+          RowIterator.fromScala(rightIter)
         )
         private[this] val joinRow = new JoinedRow
         private[this] val resultProjection: (InternalRow) => InternalRow = {
@@ -147,8 +147,8 @@ private[joins] class SortMergeJoinScanner(
     streamedKeyGenerator: Projection,
     bufferedKeyGenerator: Projection,
     keyOrdering: Ordering[InternalRow],
-    streamedIter: Iterator[InternalRow],
-    bufferedIter: Iterator[InternalRow]) {
+    streamedIter: RowIterator,
+    bufferedIter: RowIterator) {
   private[this] var streamedRow: InternalRow = _
   private[this] var streamedRowKey: InternalRow = _
   private[this] var bufferedRow: InternalRow = _
@@ -272,8 +272,8 @@ private[joins] class SortMergeJoinScanner(
    * @return true if the streamed iterator returned a row and false otherwise.
    */
   private def advancedStreamed(): Boolean = {
-    if (streamedIter.hasNext) {
-      streamedRow = streamedIter.next()
+    if (streamedIter.advanceNext()) {
+      streamedRow = streamedIter.getRow
       streamedRowKey = streamedKeyGenerator(streamedRow)
       true
     } else {
@@ -288,8 +288,8 @@ private[joins] class SortMergeJoinScanner(
    * @return true if the buffered iterator returned a row and false otherwise.
    */
   private def advancedBuffered(): Boolean = {
-    if (bufferedIter.hasNext) {
-      bufferedRow = bufferedIter.next()
+    if (bufferedIter.advanceNext()) {
+      bufferedRow = bufferedIter.getRow
       bufferedRowKey = bufferedKeyGenerator(bufferedRow)
       true
     } else {

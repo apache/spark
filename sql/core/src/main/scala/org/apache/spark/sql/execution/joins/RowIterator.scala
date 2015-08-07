@@ -23,17 +23,41 @@ import org.apache.spark.sql.catalyst.InternalRow
 
 private[sql] abstract class RowIterator {
   def advanceNext(): Boolean
-  def getNext: InternalRow
+  def getRow: InternalRow
   def toScala: Iterator[InternalRow] = new RowIteratorToScala(this)
 }
 
-private final class RowIteratorToScala(rowIter: RowIterator) extends Iterator[InternalRow] {
+object RowIterator {
+  def fromScala(scalaIter: Iterator[InternalRow]): RowIterator = {
+    scalaIter match {
+      case wrappedRowIter: RowIteratorToScala => wrappedRowIter.rowIter
+      case _ => new RowIteratorFromScala(scalaIter)
+    }
+  }
+}
+
+private final class RowIteratorToScala(val rowIter: RowIterator) extends Iterator[InternalRow] {
   private [this] var _hasNext: Boolean = rowIter.advanceNext()
   override def hasNext: Boolean = _hasNext
   override def next(): InternalRow = {
     if (!_hasNext) throw new NoSuchElementException
-    val row: InternalRow = rowIter.getNext.copy()
+    val row: InternalRow = rowIter.getRow.copy()
     _hasNext = rowIter.advanceNext()
     row
   }
+}
+
+private final class RowIteratorFromScala(scalaIter: Iterator[InternalRow]) extends RowIterator {
+  private[this] var _next: InternalRow = null
+  override def advanceNext(): Boolean = {
+    if (scalaIter.hasNext) {
+      _next = scalaIter.next()
+      true
+    } else {
+      _next = null
+      false
+    }
+  }
+  override def getRow: InternalRow = _next
+  override def toScala: Iterator[InternalRow] = scalaIter
 }
