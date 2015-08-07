@@ -405,7 +405,7 @@ def import_module_attrs(parent_module_globals, module_attrs_dict):
     brings functional operators to those namespaces.
     '''
     imported_attrs = []
-    for mod, attrs in module_attrs_dict.items():
+    for mod, attrs in list(module_attrs_dict.items()):
         try:
             folder = os.path.dirname(parent_module_globals['__file__'])
             f, filename, description = imp.find_module(mod, [folder])
