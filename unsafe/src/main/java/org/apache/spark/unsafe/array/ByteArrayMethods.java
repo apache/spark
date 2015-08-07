@@ -25,6 +25,12 @@ public class ByteArrayMethods {
     // Private constructor, since this class only contains static methods.
   }
 
+  /** Returns the next number greater or equal num that is power of 2. */
+  public static long nextPowerOf2(long num) {
+    final long highBit = Long.highestOneBit(num);
+    return (highBit == num) ? num : highBit << 1;
+  }
+
   public static int roundNumberOfBytesToNearestWord(int numBytes) {
     int remainder = numBytes & 0x07;  // This is equivalent to `numBytes % 8`
     if (remainder == 0) {

@@ -115,6 +115,7 @@ public class UnsafeShuffleWriterSuite {
     taskMetrics = new TaskMetrics();
 
     when(shuffleMemoryManager.tryToAcquire(anyLong())).then(returnsFirstArg());
+    when(shuffleMemoryManager.pageSizeBytes()).thenReturn(128L * 1024 * 1024);
 
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
     when(blockManager.getDiskWriter(
@@ -549,14 +550,14 @@ public class UnsafeShuffleWriterSuite {
     final long recordLengthBytes = 8;
     final long pageSizeBytes = 256;
     final long numRecordsPerPage = pageSizeBytes / recordLengthBytes;
-    final SparkConf conf = new SparkConf().set("spark.buffer.pageSize", pageSizeBytes + "b");
+    when(shuffleMemoryManager.pageSizeBytes()).thenReturn(pageSizeBytes);
     final UnsafeShuffleWriter<Object, Object> writer =
       new UnsafeShuffleWriter<Object, Object>(
         blockManager,
         shuffleBlockResolver,
         taskMemoryManager,
         shuffleMemoryManager,
-        new UnsafeShuffleHandle<Object, Object>(0, 1, shuffleDep),
+        new UnsafeShuffleHandle<>(0, 1, shuffleDep),
         0, // map id
         taskContext,
         conf);
