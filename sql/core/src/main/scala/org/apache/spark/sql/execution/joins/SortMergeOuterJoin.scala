@@ -58,7 +58,6 @@ case class SortMergeOuterJoin(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val joinedRow = new JoinedRow()
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       // An ordering that can be used to compare keys from both sides.
       val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
@@ -72,14 +71,7 @@ case class SortMergeOuterJoin(
             streamedIter = leftIter,
             bufferedIter = rightIter
           )
-          for (
-            hasMoreStreamedRows <- Iterator.continually(smjScanner.findNextOuterJoinRows())
-            if hasMoreStreamedRows;
-            result <- leftOuterIterator(
-              joinedRow.withLeft(smjScanner.getStreamedRow),
-              smjScanner.getBufferedMatches,
-              resultProj)
-          ) yield result
+          new LeftOuterIterator(smjScanner, rightNullRow, boundCondition, resultProj).toScala
 
         case RightOuter =>
           val resultProj = createResultProjection()
@@ -90,14 +82,7 @@ case class SortMergeOuterJoin(
             streamedIter = rightIter,
             bufferedIter = leftIter
           )
-          for (
-            hasMoreStreamedRows <- Iterator.continually(smjScanner.findNextOuterJoinRows())
-            if hasMoreStreamedRows;
-            result <- rightOuterIterator(
-              smjScanner.getBufferedMatches,
-              joinedRow.withRight(smjScanner.getStreamedRow),
-              resultProj)
-          ) yield result
+          new RightOuterIterator(smjScanner, leftNullRow, boundCondition, resultProj).toScala
 
         case x =>
           throw new IllegalArgumentException(
@@ -105,4 +90,93 @@ case class SortMergeOuterJoin(
       }
     }
   }
+}
+
+
+private class LeftOuterIterator(
+    smjScanner: SortMergeJoinScanner,
+    rightNullRow: InternalRow,
+    boundCondition: InternalRow => Boolean,
+    resultProj: InternalRow => InternalRow
+  ) extends RowIterator {
+  private[this] val joinedRow: JoinedRow = new JoinedRow()
+  private[this] var rightIdx: Int = 0
+
+  private def advanceLeft(): Boolean = {
+    if (smjScanner.findNextOuterJoinRows()) {
+      joinedRow.withLeft(smjScanner.getStreamedRow)
+      if (smjScanner.getBufferedMatches.isEmpty) {
+        // There are no matching right rows, so return nulls for the right row
+        joinedRow.withRight(rightNullRow)
+      } else {
+        // Find the next row from the right input that satisfied the bound condition
+        if (!advanceRightUntilBoundConditionSatisfied()) {
+          joinedRow.withRight(rightNullRow)
+        }
+      }
+      true
+    } else {
+      // Left input has been exhausted
+      false
+    }
+  }
+
+  private def advanceRightUntilBoundConditionSatisfied(): Boolean = {
+    var foundMatch: Boolean = false
+    if (!foundMatch && rightIdx < smjScanner.getBufferedMatches.length) {
+      foundMatch = boundCondition(joinedRow.withRight(smjScanner.getBufferedMatches(rightIdx)))
+      rightIdx += 1
+    }
+    foundMatch
+  }
+
+  override def advanceNext(): Boolean = {
+    advanceRightUntilBoundConditionSatisfied() || advanceLeft()
+  }
+
+  override def getNext: InternalRow = resultProj(joinedRow)
+}
+
+private class RightOuterIterator(
+    smjScanner: SortMergeJoinScanner,
+    leftNullRow: InternalRow,
+    boundCondition: InternalRow => Boolean,
+    resultProj: InternalRow => InternalRow
+  ) extends RowIterator {
+  private[this] val joinedRow: JoinedRow = new JoinedRow()
+  private[this] var rightIdx: Int = 0
+
+  private def advanceRight(): Boolean = {
+    if (smjScanner.findNextOuterJoinRows()) {
+      joinedRow.withRight(smjScanner.getStreamedRow)
+      if (smjScanner.getBufferedMatches.isEmpty) {
+        // There are no matching left rows, so return nulls for the left row
+        joinedRow.withLeft(leftNullRow)
+      } else {
+        // Find the next row from the left input that satisfied the bound condition
+        if (!advanceLeftUntilBoundConditionSatisfied()) {
+          joinedRow.withLeft(leftNullRow)
+        }
+      }
+      true
+    } else {
+      // Right input has been exhausted
+      false
+    }
+  }
+
+  private def advanceLeftUntilBoundConditionSatisfied(): Boolean = {
+    var foundMatch: Boolean = false
+    if (!foundMatch && rightIdx < smjScanner.getBufferedMatches.length) {
+      foundMatch = boundCondition(joinedRow.withLeft(smjScanner.getBufferedMatches(rightIdx)))
+      rightIdx += 1
+    }
+    foundMatch
+  }
+
+  override def advanceNext(): Boolean = {
+    advanceLeftUntilBoundConditionSatisfied() || advanceRight()
+  }
+
+  override def getNext: InternalRow = resultProj(joinedRow)
 }

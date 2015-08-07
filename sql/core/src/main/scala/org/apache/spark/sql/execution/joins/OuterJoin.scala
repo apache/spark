@@ -113,9 +113,9 @@ trait OuterJoin {
   @transient private[this] lazy val DUMMY_LIST = CompactBuffer[InternalRow](null)
   @transient protected[this] lazy val EMPTY_LIST = CompactBuffer[InternalRow]()
 
-  @transient private[this] lazy val leftNullRow = new GenericInternalRow(left.output.length)
-  @transient private[this] lazy val rightNullRow = new GenericInternalRow(right.output.length)
-  @transient private[this] lazy val boundCondition =
+  @transient protected[this] lazy val leftNullRow = new GenericInternalRow(left.output.length)
+  @transient protected[this] lazy val rightNullRow = new GenericInternalRow(right.output.length)
+  @transient protected[this] lazy val boundCondition =
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
   // TODO we need to rewrite all of the iterators with our own implementation instead of the Scala
