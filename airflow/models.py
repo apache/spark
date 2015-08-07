@@ -277,7 +277,7 @@ class BaseUser(Base):
         return self.username
 
     def get_id(self):
-        return unicode(self.id)
+        return str(self.id)
 
 
 class Connection(Base):
