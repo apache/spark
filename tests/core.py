@@ -167,6 +167,13 @@ class CoreTest(unittest.TestCase):
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+    def test_timedelta_sensor(self):
+        t = operators.TimeDeltaSensor(
+            task_id='timedelta_sensor_check',
+            delta=timedelta(seconds=2),
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
     def test_external_task_sensor(self):
         t = operators.ExternalTaskSensor(
             task_id='test_external_task_sensor_check',

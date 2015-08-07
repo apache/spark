@@ -352,6 +352,26 @@ class TimeSensor(BaseSensorOperator):
         return datetime.now().time() > self.target_time
 
 
+class TimeDeltaSensor(BaseSensorOperator):
+    """
+    Waits for a timedelta after the execution_date
+
+    :param delta: time length to wait after execution_date before succeeding
+    :type delta: datetime.timedelta
+    """
+    template_fields = tuple()
+
+    @apply_defaults
+    def __init__(self, delta, *args, **kwargs):
+        super(TimeDeltaSensor, self).__init__(*args, **kwargs)
+        self.delta = delta
+
+    def poke(self, context):
+        target_dttm = context['execution_date'] + self.delta
+        logging.info('Checking if the time ({0}) has come'.format(target_dttm))
+        return datetime.now() > target_dttm
+
+
 class HttpSensor(BaseSensorOperator):
     """
     Executes a HTTP get statement and returns False on failure:
