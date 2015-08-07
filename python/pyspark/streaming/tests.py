@@ -1000,15 +1000,8 @@ def search_kinesis_asl_assembly_jar():
         os.path.join(kinesis_asl_assembly_dir,
                      "target/scala-*/spark-streaming-kinesis-asl-assembly-*.jar"))
     if not jars:
-        if are_kinesis_tests_enabled:
-            raise Exception(
-                ("Failed to find Spark Streaming Kinesis assembly jar in %s. "
-                 % kinesis_asl_assembly_dir) +
-                "You need to build Spark with 'build/sbt -Pkinesis-asl "
-                "assembly/assembly streaming-kinesis-asl-assembly/assembly'"
-                "or 'build/mvn -Pkinesis-asl package' before running this test.")
-        else:
-            return None
+        return None
+
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Kinesis ASL assembly JARs in %s; please "
                          "remove all but one") % kinesis_asl_assembly_dir)
@@ -1035,13 +1028,26 @@ if __name__ == "__main__":
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
     testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests,
                  CheckpointTests, KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests]
+
     if kinesis_jar_present is True:
         testcases.append(KinesisStreamTests)
-    else:
-        sys.stderr.write("Skipping all Kinesis Python tests as the "
-                         "optional Kinesis project was not compiled")
 
+    elif are_kinesis_tests_enabled is False:
+        sys.stderr.write("Skipping all Kinesis Python tests as the optional Kinesis project was "
+                         "not compiled with -Pkinesis-asl profile. To run these tests, "
+                         "you need to build Spark with 'build/sbt -Pkinesis-asl assembly/assembly "
+                         "streaming-kinesis-asl-assembly/assembly' or "
+                         "'build/mvn -Pkinesis-asl package' before running this test.")
+    else:
+        raise Exception(
+            ("Failed to find Spark Streaming Kinesis assembly jar in %s. "
+             % kinesis_asl_assembly_dir) +
+            "You need to build Spark with 'build/sbt -Pkinesis-asl "
+            "assembly/assembly streaming-kinesis-asl-assembly/assembly'"
+            "or 'build/mvn -Pkinesis-asl package' before running this test.")
+
+    sys.stderr.write("Running tests: %s \n" % (str(testcases)))
     for testcase in testcases:
-        sys.stderr.write("[Running %s]" % (testcase))
+        sys.stderr.write("[Running %s]\n" % (testcase))
         tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
         unittest.TextTestRunner(verbosity=2).run(tests)
