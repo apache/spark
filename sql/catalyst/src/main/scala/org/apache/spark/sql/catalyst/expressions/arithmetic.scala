@@ -450,7 +450,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
           val decimalAdd = "$plus"
           s"""
             ${ctx.javaType(dataType)} r = $eval1.remainder($eval2);
-            if (r.compare(Decimal.ZERO) < 0) {
+            if (r.compare(Decimal.ZERO()) < 0) {
               ${ev.primitive} = (r.$decimalAdd($eval2)).remainder($eval2);
             } else {
               ${ev.primitive} = r;
