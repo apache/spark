@@ -1,4 +1,5 @@
 from __future__ import print_function
+from builtins import zip
 from past.builtins import basestring
 import csv
 import logging
