@@ -169,6 +169,7 @@ private class LeftOuterIterator(
   private def advanceLeft(): Boolean = {
     rightIdx = 0
     if (smjScanner.findNextOuterJoinRows()) {
+      assert(!smjScanner.getStreamedRow.anyNull)
       joinedRow.withLeft(smjScanner.getStreamedRow)
       if (smjScanner.getBufferedMatches.isEmpty) {
         // There are no matching right rows, so return nulls for the right row
@@ -215,6 +216,7 @@ private class RightOuterIterator(
   private def advanceRight(): Boolean = {
     leftIdx = 0
     if (smjScanner.findNextOuterJoinRows()) {
+      assert(!smjScanner.getStreamedRow.anyNull)
       joinedRow.withRight(smjScanner.getStreamedRow)
       if (smjScanner.getBufferedMatches.isEmpty) {
         // There are no matching left rows, so return nulls for the left row

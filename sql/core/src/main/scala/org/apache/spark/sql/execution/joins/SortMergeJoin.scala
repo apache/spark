@@ -181,6 +181,8 @@ private[joins] class SortMergeJoinScanner(
     }
     if (streamedRow == null) {
       // We have consumed the entire streamed iterator, so there can be no more matches.
+      matchJoinKey = null
+      bufferedMatches.clear()
       false
     } else if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
       // The new streamed row has the same join key as the previous row, so return the same matches.
@@ -188,6 +190,8 @@ private[joins] class SortMergeJoinScanner(
     } else if (bufferedRow == null) {
       // The streamed row's join key does not match the current batch of buffered rows and there are
       // no more rows to read from the buffered iterator, so there can be no more matches.
+      matchJoinKey = null
+      bufferedMatches.clear()
       false
     } else {
       // Advance both the streamed and buffered iterators to find the next pair of matching rows.
@@ -205,6 +209,8 @@ private[joins] class SortMergeJoinScanner(
       } while (streamedRow != null && bufferedRow != null && comp != 0)
       if (streamedRow == null || bufferedRow == null) {
         // We have either hit the end of one of the iterators, so there can be no more matches.
+        matchJoinKey = null
+        bufferedMatches.clear()
         false
       } else {
         // The streamed row's join key matches the current buffered row's join, so walk through the
@@ -224,12 +230,17 @@ private[joins] class SortMergeJoinScanner(
    *         join results.
    */
   final def findNextOuterJoinRows(): Boolean = {
-    if (advancedStreamed()) {
-      if (streamedRowKey.anyNull) {
-        // Since at least one join column is null, the streamed row has no matches.
-        matchJoinKey = null
-        bufferedMatches.clear()
-      } else if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
+    while (advancedStreamed() && streamedRowKey.anyNull) {
+      // Advance the streamed side of the join until we find the next row whose join key contains
+      // no nulls or we hit the end of the streamed iterator.
+    }
+    if (streamedRow == null) {
+      // We have consumed the entire streamed iterator, so there can be no more matches.
+      matchJoinKey = null
+      bufferedMatches.clear()
+      false
+    } else {
+      if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
         // Matches the current group, so do nothing.
       } else {
         // The streamed row does not match the current group.
@@ -255,14 +266,10 @@ private[joins] class SortMergeJoinScanner(
           }
         }
       }
-      // If there is a streamed input, then we always return true
+      // If there is a streamed input with a non-null join key, then we always return true
       true
-    } else {
-      // End of streamed input, hence no more results.
-      false
     }
   }
-
 
   // --- Private methods --------------------------------------------------------------------------
 
