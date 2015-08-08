@@ -288,7 +288,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def sampleByKeyExact(
       withReplacement: Boolean,
       fractions: Map[K, Double],
-      seed: Long = Utils.random.nextLong): RDD[(K, V)] = self.withScope {
+      seed: Long = Utils.random.nextLong,
+      complement: Boolean = false): RDD[(K, V)] = self.withScope {
 
     require(fractions.values.forall(v => v >= 0.0), "Negative sampling rates.")
 
@@ -301,9 +302,76 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * Merge the values for each key using an associative and commutative reduce function. This will
-   * also perform the merging locally on each mapper before sending results to a reducer, similarly
-   * to a "combiner" in MapReduce.
+   * ::Experimental::
+   * Return random, non-overlapping splits of this RDD sampled by key (via stratified sampling)
+   * with each split containing exactly math.ceil(numItems * samplingRate) for each stratum.
+   *
+   * This method differs from [[sampleByKey]] and [[sampleByKeyExact]] in that it provides random
+   * splits (and their complements) instead of just a subsample of the data. This requires segmenting
+   * random keys into ranges with upper and lower bounds instead of segmenting the keys into a high/low
+   * bisection of the entire dataset.
+   *
+   * @param weights array of maps of specific keys to sampling rates for each split, normalized by key to sum to 1
+   * @param exact boolean specifying whether to use exact subsampling
+   * @param seed seed for the random number generator
+   * @return Array of tuples containing the subsample and complement RDDs for each split
+   */
+  @Experimental
+  def randomSplitByKey(
+     weights: Array[Map[K, Double]],
+     exact: Boolean = false,
+     seed: Long = Utils.random.nextLong): Array[(RDD[(K, V)], RDD[(K, V)])] = self.withScope {
+
+    require(weights.flatMap(_.values).forall(v => v >= 0.0), "Negative sampling rates.")
+
+    // normalize and cumulative sum
+    val baseFold = weights(0).map(x => (x._1, 0.0))
+    val cumWeightsByKey = weights.scanLeft(baseFold){ case (accMap, iterMap) =>
+      accMap.map { case (k, v) => (k, v + iterMap(k)) }
+    }.drop(1)
+
+    val weightSumsByKey = cumWeightsByKey.last
+    val normalizedCumWeightsByKey = cumWeightsByKey.dropRight(1).map(_.map { case (key, threshold) =>
+      (key, threshold / weightSumsByKey(key))
+    })
+
+    // compute exact thresholds for each stratum if required
+    val splitArray = if (exact) {
+      normalizedCumWeightsByKey.map { fractions =>
+        val finalResult = StratifiedSamplingUtils.getAcceptanceResults(self, false, fractions, None, seed)
+        StratifiedSamplingUtils.computeThresholdByKey(finalResult, fractions)
+      }
+    } else normalizedCumWeightsByKey
+
+    // get the exact threshold for each segment
+    val totalSplitArray = weights(0).map(x => (x._1, 0.0)) +: splitArray :+ weights(0).map(x => (x._1, 1.0))
+    totalSplitArray.sliding(2).map { x =>
+      (randomSampleByKeyWithRange(x(0), x(1), seed), randomSampleByKeyWithRange(x(0), x(1), seed, complement = true))
+    }.toArray
+  }
+
+  /**
+   * Internal method exposed for Stratified Random Splits in DataFrames. Samples an RDD given probability
+   * bounds for each stratum.
+   *
+   * @param lb map of lower bound for each key to use for the Bernoulli cell sampler
+   * @param ub map of upper bound for each key to use for the Bernoulli cell sampler
+   * @param seed the seed for the Random number generator
+   * @param complement boolean specifying whether to return subsample or its complement
+   * @return A random, stratified sub-sample of the RDD without replacement.
+   */
+  private[spark] def randomSampleByKeyWithRange(lb: Map[K, Double],
+      ub: Map[K, Double],
+      seed: Long,
+      complement: Boolean = false): RDD[(K, V)] = {
+    val samplingFunc = StratifiedSamplingUtils.getBernoulliCellSamplingFunction(self, lb, ub, seed, complement)
+    self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
+  }
+
+  /**
+   * Merge the values for each key using an associative reduce function. This will also perform
+   * the merging locally on each mapper before sending results to a reducer, similarly to a
+   * "combiner" in MapReduce.
    */
   def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = self.withScope {
     combineByKeyWithClassTag[V]((v: V) => v, func, func, partitioner)

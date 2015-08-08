@@ -216,6 +216,33 @@ private[spark] object StratifiedSamplingUtils extends Logging {
   }
 
   /**
+   * WIP sample with range
+   */
+  def getBernoulliCellSamplingFunction[K, V](rdd: RDD[(K, V)],
+      lb: Map[K, Double],
+      ub: Map[K, Double],
+      seed: Long,
+      complement: Boolean = false): (Int, Iterator[(K, V)]) => Iterator[(K, V)] = {
+    (idx: Int, iter: Iterator[(K, V)]) => {
+      val rng = new RandomDataGenerator()
+      rng.reSeed(seed + idx)
+      // Must use the same invoke pattern on the rng as in getSeqOp for without replacement
+      // in order to generate the same sequence of random numbers when creating the sample
+      if (complement) {
+        iter.filter { t =>
+          val x = rng.nextUniform()
+          (x < lb(t._1)) || (x >= ub(t._1))
+        }
+      } else {
+        iter.filter { t =>
+          val x = rng.nextUniform()
+          (x >= lb(t._1)) && (x < ub(t._1))
+        }
+      }
+    }
+  }
+
+  /**
    * Return the per partition sampling function used for sampling with replacement.
    *
    * When exact sample size is required, we make two additional passed over the RDD to determine
