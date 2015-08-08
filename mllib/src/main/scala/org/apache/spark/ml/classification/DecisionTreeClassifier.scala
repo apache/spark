@@ -117,7 +117,7 @@ final class DecisionTreeClassificationModel private[ml] (
    * Construct a decision tree classification model.
    * @param rootNode  Root node of tree, with other nodes attached.
    */
-  def this(rootNode: Node, numClasses: Int) =
+  private[ml] def this(rootNode: Node, numClasses: Int) =
     this(Identifiable.randomUID("dtc"), rootNode, numClasses)
 
   override protected def predict(features: Vector): Double = {
