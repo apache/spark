@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
+import org.apache.hive.service.cli.thrift.{CLIService, ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.{HiveServerServerOptionsProcessor, HiveServer2}
 
 import org.apache.spark.annotation.DeveloperApi
@@ -93,6 +93,11 @@ object HiveThriftServer2 extends Logging {
       } else {
         None
       }
+      var tServer = getSuperField(server.thriftCliService, "server").asInstanceOf[TServer]
+      while (tServer == null || !tServer.isServing) {
+        tServer = getSuperField(server.thriftCliService, "server").asInstanceOf[TServer]
+      }
+      SparkSQLEnv.sparkContext.eventLogger.foreach(_.onSQLApplicationStart)
     } catch {
       case e: Exception =>
         logError("Error starting HiveThriftServer2", e)
@@ -247,13 +252,14 @@ private[hive] class HiveThriftServer2(hiveContext: HiveContext)
   // state is tracked internally so that the server only attempts to shut down if it successfully
   // started, and then once only.
   private val started = new AtomicBoolean(false)
+  private var thriftCliService: CLIService = null
 
   override def init(hiveConf: HiveConf) {
     val sparkSqlCliService = new SparkSQLCLIService(this, hiveContext)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
 
-    val thriftCliService = if (isHTTPTransportMode(hiveConf)) {
+    thriftCliService = if (isHTTPTransportMode(hiveConf)) {
       new ThriftHttpCLIService(sparkSqlCliService)
     } else {
       new ThriftBinaryCLIService(sparkSqlCliService)

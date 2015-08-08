@@ -34,6 +34,7 @@ import org.apache.spark.{Logging, SparkConf, SPARK_VERSION}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * A SparkListener that logs events to persistent storage.
@@ -59,11 +60,14 @@ private[spark] class EventLoggingListener(
     this(appId, appAttemptId, logBaseDir, sparkConf,
       SparkHadoopUtil.get.newConfiguration(sparkConf))
 
+  private val started = new AtomicBoolean(false)
+  private val bufferedEvents = new mutable.Queue[(SparkListenerEvent, Boolean)]()
+
   private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
   private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
-  private val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
+  private val bypassCacheHadoopConf = SparkHadoopUtil.getConfBypassingFSCache(hadoopConf, "hdfs")
   private val compressionCodec =
     if (shouldCompress) {
       Some(CompressionCodec.createCodec(sparkConf))
@@ -97,6 +101,7 @@ private[spark] class EventLoggingListener(
    * Creates the log file in the configured log directory.
    */
   def start() {
+    val fileSystem = Utils.getHadoopFileSystem(logBaseDir, bypassCacheHadoopConf)
     if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDir) {
       throw new IllegalArgumentException(s"Log directory $logBaseDir does not exist.")
     }
@@ -139,13 +144,17 @@ private[spark] class EventLoggingListener(
 
   /** Log the event as JSON. */
   private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
-    val eventJson = JsonProtocol.sparkEventToJson(event)
-    // scalastyle:off println
-    writer.foreach(_.println(compact(render(eventJson))))
-    // scalastyle:on println
-    if (flushLogger) {
-      writer.foreach(_.flush())
-      hadoopDataStream.foreach(hadoopFlushMethod.invoke(_))
+    if (started.get) {
+      val eventJson = JsonProtocol.sparkEventToJson(event)
+      // scalastyle:off println
+      writer.foreach(_.println(compact(render(eventJson))))
+      // scalastyle:on println
+      if (flushLogger) {
+        writer.foreach(_.flush())
+        hadoopDataStream.foreach(hadoopFlushMethod.invoke(_))
+      }
+    } else {
+      bufferedEvents += (event, flushLogger)
     }
     if (testing) {
       loggedEvents += eventJson
@@ -185,7 +194,21 @@ private[spark] class EventLoggingListener(
   }
 
   override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
+    if (!sparkConf.get("spark.app.name").startsWith("SparkSQL::")) {
+      start()
+      started.compareAndSet(false, true)
+    }
     logEvent(event, flushLogger = true)
+  }
+
+  def onSQLApplicationStart(): Unit = {
+    start()
+    started.compareAndSet(false, true)
+    var event: (SparkListenerEvent, Boolean) = null
+    while (!bufferedEvents.isEmpty) {
+      event = bufferedEvents.dequeue()
+      logEvent(event._1, event._2)
+    }
   }
 
   override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
@@ -210,6 +233,7 @@ private[spark] class EventLoggingListener(
    * ".inprogress" suffix.
    */
   def stop(): Unit = {
+    val fileSystem = Utils.getHadoopFileSystem(logBaseDir, bypassCacheHadoopConf)
     writer.foreach(_.close())
 
     val target = new Path(logPath)
