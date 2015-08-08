@@ -70,7 +70,7 @@ case class SortMergeJoin(
 
   protected override def doExecute(): RDD[InternalRow] = {
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
-      new Iterator[InternalRow] {
+      new RowIterator {
         // An ordering that can be used to compare keys from both sides.
         private[this] val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
         private[this] var currentLeftRow: InternalRow = _
@@ -92,32 +92,29 @@ case class SortMergeJoin(
           }
         }
 
-        override final def hasNext: Boolean =
-          (currentMatchIdx != -1 && currentMatchIdx < currentRightMatches.length) || fetchNext()
-
-        private[this] def fetchNext(): Boolean = {
-          if (smjScanner.findNextInnerJoinRows()) {
-            currentRightMatches = smjScanner.getBufferedMatches
-            currentLeftRow = smjScanner.getStreamedRow
-            currentMatchIdx = 0
+        override def advanceNext(): Boolean = {
+          if (currentMatchIdx == -1 || currentMatchIdx == currentRightMatches.length) {
+            if (smjScanner.findNextInnerJoinRows()) {
+              currentRightMatches = smjScanner.getBufferedMatches
+              currentLeftRow = smjScanner.getStreamedRow
+              currentMatchIdx = 0
+            } else {
+              currentRightMatches = null
+              currentLeftRow = null
+              currentMatchIdx = -1
+            }
+          }
+          if (currentLeftRow != null) {
+            joinRow(currentLeftRow, currentRightMatches(currentMatchIdx))
+            currentMatchIdx += 1
             true
           } else {
-            currentRightMatches = null
-            currentLeftRow = null
-            currentMatchIdx = -1
             false
           }
         }
 
-        override def next(): InternalRow = {
-          if (currentMatchIdx == -1 || currentMatchIdx == currentRightMatches.length) {
-            fetchNext()
-          }
-          val joinedRow = joinRow(currentLeftRow, currentRightMatches(currentMatchIdx))
-          currentMatchIdx += 1
-          resultProjection(joinedRow)
-        }
-      }
+        override def getRow: InternalRow = resultProjection(joinRow)
+      }.toScala
     }
   }
 }
