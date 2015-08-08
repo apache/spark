@@ -62,7 +62,7 @@ case class WriteToDirectory(
       if (localFileSystem.exists(localPath)) {
         localFileSystem.delete(localPath, true)
       }
-      (context.getExternalTmpPath(localPath.toUri), localPath)
+      (context.getExternalTmpPath(localPath), localPath)
     } else {
       val qualifiedPath = FileUtils.makeQualified(targetPath, hiveContext.hiveconf)
       val dfs = qualifiedPath.getFileSystem(jobConf)
@@ -71,7 +71,7 @@ case class WriteToDirectory(
       } else {
         dfs.mkdirs(qualifiedPath.getParent)
       }
-      (context.getExternalTmpPath(qualifiedPath.toUri), qualifiedPath)
+      (context.getExternalTmpPath(qualifiedPath), qualifiedPath)
     }
 
     val fileSinkConf = new FileSinkDesc(tmpPath.toString, desc, false)
