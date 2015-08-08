@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io._
 import java.net.URI
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -34,7 +35,6 @@ import org.apache.spark.{Logging, SparkConf, SPARK_VERSION}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * A SparkListener that logs events to persistent storage.
@@ -154,7 +154,7 @@ private[spark] class EventLoggingListener(
         hadoopDataStream.foreach(hadoopFlushMethod.invoke(_))
       }
     } else {
-      bufferedEvents += (event, flushLogger)
+      bufferedEvents += ((event, flushLogger))
     }
     if (testing) {
       loggedEvents += eventJson
