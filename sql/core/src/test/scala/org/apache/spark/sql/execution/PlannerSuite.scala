@@ -243,10 +243,10 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
     // repartition both inputs prior to performing the join:
     assert(!leftPartitioning.guarantees(rightPartitioning))
     assert(!rightPartitioning.guarantees(leftPartitioning))
-    val inputPlan = DummyPlan(
+    val inputPlan = DummySparkPlan(
       children = Seq(
-        DummyPlan(outputPartitioning = leftPartitioning),
-        DummyPlan(outputPartitioning = rightPartitioning)
+        DummySparkPlan(outputPartitioning = leftPartitioning),
+        DummySparkPlan(outputPartitioning = rightPartitioning)
       ),
       requiresChildPartitioningsToBeCompatible = true,
       requiredChildDistribution = Seq(distribution, distribution),
@@ -264,10 +264,10 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
     // unless they produce the same number of partitions.
     val clustering = Literal(1) :: Nil
     val distribution = ClusteredDistribution(clustering)
-    val inputPlan = DummyPlan(
+    val inputPlan = DummySparkPlan(
       children = Seq(
-        DummyPlan(outputPartitioning = HashPartitioning(clustering, 1)),
-        DummyPlan(outputPartitioning = HashPartitioning(clustering, 2))
+        DummySparkPlan(outputPartitioning = HashPartitioning(clustering, 1)),
+        DummySparkPlan(outputPartitioning = HashPartitioning(clustering, 2))
       ),
       requiresChildPartitioningsToBeCompatible = true,
       requiredChildDistribution = Seq(distribution, distribution),
@@ -283,10 +283,10 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
     // distribution because they are clustered on different columns. Thus, we need to shuffle.
     val childPartitioning = HashPartitioning(Literal(2) :: Nil, 1)
     assert(!childPartitioning.satisfies(distribution))
-    val inputPlan = DummyPlan(
+    val inputPlan = DummySparkPlan(
       children = Seq(
-        DummyPlan(outputPartitioning = childPartitioning),
-        DummyPlan(outputPartitioning = childPartitioning)
+        DummySparkPlan(outputPartitioning = childPartitioning),
+        DummySparkPlan(outputPartitioning = childPartitioning)
       ),
       requiresChildPartitioningsToBeCompatible = true,
       requiredChildDistribution = Seq(distribution, distribution),
@@ -304,10 +304,10 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
     val distribution = ClusteredDistribution(Literal(1) :: Nil)
     val childPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
     assert(childPartitioning.satisfies(distribution))
-    val inputPlan = DummyPlan(
+    val inputPlan = DummySparkPlan(
       children = Seq(
-        DummyPlan(outputPartitioning = childPartitioning),
-        DummyPlan(outputPartitioning = childPartitioning)
+        DummySparkPlan(outputPartitioning = childPartitioning),
+        DummySparkPlan(outputPartitioning = childPartitioning)
       ),
       requiresChildPartitioningsToBeCompatible = true,
       requiredChildDistribution = Seq(distribution, distribution),
@@ -328,10 +328,10 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
     // should not need to add additional shuffles / exchanges.
     val outputOrdering = Seq(SortOrder(Literal(1), Ascending))
     val distribution = ClusteredDistribution(Literal(1) :: Nil)
-    val inputPlan = DummyPlan(
+    val inputPlan = DummySparkPlan(
       children = Seq(
-        DummyPlan(outputPartitioning = SinglePartition),
-        DummyPlan(outputPartitioning = SinglePartition)
+        DummySparkPlan(outputPartitioning = SinglePartition),
+        DummySparkPlan(outputPartitioning = SinglePartition)
       ),
       requiresChildPartitioningsToBeCompatible = true,
       requiredChildDistribution = Seq(distribution, distribution),
@@ -348,7 +348,7 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
 }
 
 // Used for unit-testing EnsureRequirements
-private case class DummyPlan(
+private case class DummySparkPlan(
     override val children: Seq[SparkPlan] = Nil,
     override val outputOrdering: Seq[SortOrder] = Nil,
     override val outputPartitioning: Partitioning = UnknownPartitioning(0),
