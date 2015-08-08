@@ -43,8 +43,10 @@ case class SortMergeOuterJoin(
   override def output: Seq[Attribute] = {
     joinType match {
       case LeftOuter =>
+        // Note: technically the left join keys will not be nullable here:
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
+        // Note: technically the left right keys will not be nullable here:
         left.output.map(_.withNullability(true)) ++ right.output
       case x =>
         throw new IllegalArgumentException(
