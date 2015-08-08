@@ -159,8 +159,10 @@ private class LeftOuterIterator(
   ) extends RowIterator {
   private[this] val joinedRow: JoinedRow = new JoinedRow()
   private[this] var rightIdx: Int = 0
+  assert(smjScanner.getBufferedMatches.length == 0)
 
   private def advanceLeft(): Boolean = {
+    rightIdx = 0
     if (smjScanner.findNextOuterJoinRows()) {
       joinedRow.withLeft(smjScanner.getStreamedRow)
       if (smjScanner.getBufferedMatches.isEmpty) {
@@ -202,9 +204,11 @@ private class RightOuterIterator(
     resultProj: InternalRow => InternalRow
   ) extends RowIterator {
   private[this] val joinedRow: JoinedRow = new JoinedRow()
-  private[this] var rightIdx: Int = 0
+  private[this] var leftIdx: Int = 0
+  assert(smjScanner.getBufferedMatches.length == 0)
 
   private def advanceRight(): Boolean = {
+    leftIdx = 0
     if (smjScanner.findNextOuterJoinRows()) {
       joinedRow.withRight(smjScanner.getStreamedRow)
       if (smjScanner.getBufferedMatches.isEmpty) {
@@ -225,9 +229,9 @@ private class RightOuterIterator(
 
   private def advanceLeftUntilBoundConditionSatisfied(): Boolean = {
     var foundMatch: Boolean = false
-    if (!foundMatch && rightIdx < smjScanner.getBufferedMatches.length) {
-      foundMatch = boundCondition(joinedRow.withLeft(smjScanner.getBufferedMatches(rightIdx)))
-      rightIdx += 1
+    if (!foundMatch && leftIdx < smjScanner.getBufferedMatches.length) {
+      foundMatch = boundCondition(joinedRow.withLeft(smjScanner.getBufferedMatches(leftIdx)))
+      leftIdx += 1
     }
     foundMatch
   }
