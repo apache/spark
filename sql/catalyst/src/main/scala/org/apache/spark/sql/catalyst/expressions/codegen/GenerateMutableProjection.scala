@@ -69,17 +69,17 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
     val code = s"""
       public Object generate($exprType[] expr) {
-        return new SpecificProjection(expr);
+        return new SpecificMutableProjection(expr);
       }
 
-      class SpecificProjection extends ${classOf[BaseMutableProjection].getName} {
+      class SpecificMutableProjection extends ${classOf[BaseMutableProjection].getName} {
 
         private $exprType[] expressions;
         private $mutableRowType mutableRow;
         ${declareMutableStates(ctx)}
         ${declareAddedFunctions(ctx)}
 
-        public SpecificProjection($exprType[] expr) {
+        public SpecificMutableProjection($exprType[] expr) {
           expressions = expr;
           mutableRow = new $genericMutableRowType(${expressions.size});
           ${initMutableStates(ctx)}
