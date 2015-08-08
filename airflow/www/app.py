@@ -515,8 +515,9 @@ class Airflow(BaseView):
                     series.append({
                         'name': col,
                         'data': [
-                            (i, v)
-                            for i, v in df[col].items() if not np.isnan(v)]
+                            (k, df[col][k])
+                            for k in df[col].keys()
+                            if not np.isnan(df[col][k])]
                     })
                 series = [serie for serie in sorted(
                     series, key=lambda s: s['data'][0][1], reverse=True)]

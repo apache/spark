@@ -203,7 +203,7 @@ def resetdb():
 
 
 def validate_key(k, max_length=250):
-    if type(k) is not str:
+    if not isinstance(k, basestring):
         raise TypeError("The key has to be a string")
     elif len(k) > max_length:
         raise AirflowException("The key has to be less than {0} characters".format(
