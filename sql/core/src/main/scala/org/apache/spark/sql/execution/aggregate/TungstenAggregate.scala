@@ -39,7 +39,7 @@ case class TungstenAggregate(
 
   override def canProcessUnsafeRows: Boolean = true
 
-  override def canProcessSafeRows: Boolean = false
+  override def canProcessSafeRows: Boolean = true
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -77,7 +77,7 @@ case class TungstenAggregate(
             resultExpressions,
             newMutableProjection,
             child.output,
-            iter.asInstanceOf[Iterator[UnsafeRow]],
+            iter,
             testFallbackStartsAt)
 
         if (!hasInput && groupingExpressions.isEmpty) {
