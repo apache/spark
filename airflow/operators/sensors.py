@@ -355,7 +355,10 @@ class TimeSensor(BaseSensorOperator):
 
 class TimeDeltaSensor(BaseSensorOperator):
     """
-    Waits for a timedelta after the execution_date
+    Waits for a timedelta after the task's execution_date + schedule_interval.
+    In Airflow, the daily task stamped with ``execution_date``
+    2016-01-01 can only start running on 2016-01-02. The timedelta here
+    represents the time after the execution period has closed.
 
     :param delta: time length to wait after execution_date before succeeding
     :type delta: datetime.timedelta
@@ -368,7 +371,10 @@ class TimeDeltaSensor(BaseSensorOperator):
         self.delta = delta
 
     def poke(self, context):
-        target_dttm = context['execution_date'] + self.delta
+        target_dttm = (
+            context['execution_date'] +
+            context['dag'].schedule_interval +
+            self.delta)
         logging.info('Checking if the time ({0}) has come'.format(target_dttm))
         return datetime.now() > target_dttm
 
