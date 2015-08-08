@@ -162,8 +162,8 @@ case class TaskCommitDenied(jobID: Int, partitionID: Int, attemptID: Int) extend
  * the task crashed the JVM.
  */
 @DeveloperApi
-case class ExecutorLostFailure(execId: String) extends TaskFailedReason {
-  override def toErrorString: String = s"ExecutorLostFailure (executor ${execId} lost)"
+case class ExecutorLostFailure(execId: String, reason: String) extends TaskFailedReason {
+  override def toErrorString: String = s"ExecutorLostFailure (executor ${execId} lost) Reason: ${reason}"
 }
 
 /**

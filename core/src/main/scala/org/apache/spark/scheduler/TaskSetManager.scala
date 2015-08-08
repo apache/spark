@@ -774,7 +774,7 @@ private[spark] class TaskSetManager(
   }
 
   /** Called by TaskScheduler when an executor is lost so we can re-enqueue our tasks */
-  override def executorLost(execId: String, host: String, reason: Option[ExecutorLossReason]) {
+  override def executorLost(execId: String, host: String, reason: ExecutorLossReason) {
     logInfo("Re-queueing tasks for " + execId + " from TaskSet " + taskSet.id)
 
     // Re-enqueue pending tasks for this host based on the status of the cluster. Note
@@ -807,7 +807,7 @@ private[spark] class TaskSetManager(
     }
     // Also re-enqueue any tasks that were running on the node
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
-      handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(execId))
+      handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(execId, reason.toString))
     }
     // recalculate valid locality levels and waits when executor is lost
     recomputeLocality()
