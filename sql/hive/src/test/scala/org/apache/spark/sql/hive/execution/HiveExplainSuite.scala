@@ -90,9 +90,18 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils {
            |CREATE TABLE t1
            |AS
            |SELECT * FROM jt
-      """.stripMargin).collect().map(_.mkString)
+      """.stripMargin).collect().map(_.mkString).mkString
+
+      val shouldContain =
+        "== Parsed Logical Plan ==" :: "== Analyzed Logical Plan ==" :: "Subquery" ::
+        "== Optimized Logical Plan ==" :: "== Physical Plan ==" ::
+        "CreateTableAsSelect" :: "InsertIntoHiveTable" :: "jt" :: Nil
+      for (key <- shouldContain) {
+        assert(outputs.contains(key), s"$key doesn't exist in result")
+      }
+
       val physicalIndex = outputs.indexOf("== Physical Plan ==")
-      assert(outputs.slice(physicalIndex, outputs.length).forall(!_.contains("Subquery")),
+      assert(!outputs.substring(physicalIndex).contains("Subquery"),
         "Physical Plan should not contain Subquery since it's eliminated by optimizer")
     }
   }
