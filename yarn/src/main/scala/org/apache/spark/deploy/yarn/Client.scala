@@ -412,7 +412,7 @@ private[spark] class Client(
     }
 
     // Distribute an archive with Hadoop and Spark configuration for the AM.
-    val (_, confLocalizedPath) = distribute(createConfArchive().toURI.getPath,
+    val (_, confLocalizedPath) = distribute(createConfArchive().toURI().getPath(),
       resType = LocalResourceType.ARCHIVE,
       destName = Some(LOCALIZED_CONF_DIR),
       appMasterOnly = true)
