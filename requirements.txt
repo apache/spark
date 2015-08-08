@@ -9,6 +9,7 @@ flask-admin
 flask-cache
 flask-login
 flower
+future
 hive-thrift-py
 ipython[all]
 jinja2
@@ -27,7 +28,7 @@ redis
 requests
 setproctitle
 statsd
-snakebite
+#snakebite -> not compatible with Python 3
 sphinx
 sphinx-argparse
 sphinx_rtd_theme

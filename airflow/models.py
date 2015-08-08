@@ -1,3 +1,4 @@
+from __future__ import print_function
 import copy
 from datetime import datetime, timedelta
 import getpass
@@ -842,7 +843,7 @@ class TaskInstance(Base):
                     else:
                         task_copy.execute(context=context)
                     task_copy.post_execute(context=context)
-            except (Exception, StandardError, KeyboardInterrupt) as e:
+            except (Exception, KeyboardInterrupt) as e:
                 self.handle_failure(e, test_mode, context)
                 raise
 
@@ -1848,7 +1849,7 @@ class DAG(object):
         Shows an ascii tree representation of the DAG
         """
         def get_downstream(task, level=0):
-            print (" " * level * 4) + str(task)
+            print((" " * level * 4) + str(task))
             level += 1
             for t in task.upstream_list:
                 get_downstream(t, level)

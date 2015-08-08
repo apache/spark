@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from __future__ import print_function
 import argparse
 import dateutil.parser
 from datetime import datetime
@@ -134,9 +135,9 @@ def run(args):
                 session.add(pickle)
                 session.commit()
                 pickle_id = pickle.id
-                print(
+                print((
                     'Pickled dag {dag} '
-                    'as pickle_id:{pickle_id}').format(**locals())
+                    'as pickle_id:{pickle_id}').format(**locals()))
             except Exception as e:
                 print('Could not pickle the DAG')
                 print(e)
@@ -169,7 +170,7 @@ def task_state(args):
     dag = dagbag.dags[args.dag_id]
     task = dag.get_task(task_id=args.task_id)
     ti = TaskInstance(task, args.execution_date)
-    print ti.current_state()
+    print(ti.current_state())
 
 
 def list_dags(args):

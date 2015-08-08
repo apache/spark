@@ -1,4 +1,5 @@
 from setuptools import setup, find_packages
+import sys
 
 # Kept manually in sync with airflow.__version__
 version = '1.3.0'
@@ -45,6 +46,7 @@ setup(
         'flask-cache>=0.13.1',
         'flask-login>=0.2.11',
         'flower>=0.7.3',
+        'future>=0.15.0',
         'jinja2>=2.7.3',
         'markdown>=2.5.2',
         'pandas>=0.15.2',
