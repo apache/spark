@@ -219,6 +219,15 @@ object YarnSparkHadoopUtil {
     }
   }
 
+  def escapeForShell(arg: String): String = {
+    if (Utils.isWindows) {
+      escapeForShellWindows(arg)
+    }
+    else {
+      escapeForShellUnix(arg)
+    }
+  }
+
   /**
    * Escapes a string for inclusion in a command line executed by Yarn. Yarn executes commands
    * using `bash -c "command arg1 arg2"` and that means plain quoting doesn't really work. The
@@ -227,7 +236,7 @@ object YarnSparkHadoopUtil {
    * @param arg A single argument.
    * @return Argument quoted for execution via Yarn's generated shell script.
    */
-  def escapeForShell(arg: String): String = {
+  def escapeForShellUnix(arg: String): String = {
     if (arg != null) {
       val escaped = new StringBuilder("'")
       for (i <- 0 to arg.length() - 1) {
@@ -242,6 +251,47 @@ object YarnSparkHadoopUtil {
     } else {
       arg
     }
+  }
+
+  /**
+   * Escapes a string for inclusion in a command line executed by Yarn. Yarn executes commands
+   * using a batch file (.cmd) Windows escaping is neccessary. The
+   * argument is enclosed in single quotes only if there are spaces inside the string.
+   * Also some key characters are escaped that have a meaning in Windows.
+   *
+   * @param arg A single argument.
+   * @return Argument quoted for execution via Yarn's generated shell script.
+   */
+  def escapeForShellWindows(arg: String): String = {
+    var needsQuotes = false
+    var i: Int = 0
+    while (i < arg.length && !needsQuotes) {
+      val c = arg.charAt(i)
+      if (Character.isWhitespace(c) || c == '"' || c == '=' || c == ',' || c == ';' || c == '\'') {
+        needsQuotes = true
+      }
+      i += 1
+    }
+    if (!needsQuotes) {
+      return arg
+    }
+
+    val quoted: StringBuilder = new StringBuilder("\"")
+    for (i <- 0 to arg.length() - 1) {
+      arg.charAt(i) match {
+        case '"' =>
+          quoted.append("\"\"")
+        case '%' =>
+          quoted.append("%%")
+        case c =>
+          quoted.append(c)
+      }
+    }
+    if (arg.charAt(arg.length - 1) == '\\') {
+      quoted.append("\\")
+    }
+    quoted.append("\"")
+    return quoted.toString
   }
 
   def getApplicationAclsForYarn(securityMgr: SecurityManager)

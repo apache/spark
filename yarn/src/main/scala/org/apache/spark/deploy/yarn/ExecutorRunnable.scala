@@ -146,11 +146,11 @@ class ExecutorRunnable(
     javaOpts += "-Xmx" + executorMemoryString
 
     // Set extra Java options for the executor, if defined
-    sys.props.get("spark.executor.extraJavaOptions").foreach { opts =>
-      javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+    sys.props.get("spark.executor.extraJavaOptions").foreach {
+      javaOpts ++= Utils.splitCommandString(_)
     }
     sys.env.get("SPARK_JAVA_OPTS").foreach { opts =>
-      javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+      javaOpts ++= Utils.splitCommandString(opts)
     }
     sys.props.get("spark.executor.extraLibraryPath").foreach { p =>
       prefixEnv = Some(Client.getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(p))))
@@ -168,7 +168,7 @@ class ExecutorRunnable(
     // authentication settings.
     sparkConf.getAll
       .filter { case (k, v) => SparkConf.isExecutorStartupConf(k) }
-      .foreach { case (k, v) => javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v") }
+      .foreach { case (k, v) => javaOpts += s"-D$k=$v" }
 
     // Commenting it out for now - so that people can refer to the properties if required. Remove
     // it once cpuset version is pushed out.
@@ -231,7 +231,7 @@ class ExecutorRunnable(
         "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 
     // TODO: it would be nicer to just make sure there are no null commands here
-    commands.map(s => if (s == null) "null" else s).toList
+    commands.map(s => if (s == null) "null" else s).map(YarnSparkHadoopUtil.escapeForShell).toList
   }
 
   private def setupDistributedCache(

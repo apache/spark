@@ -44,14 +44,23 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
         false
     }
 
-  if (!hasBash) {
+  val isWindows = {
+    val os = System.getProperty("os.name")
+    os.contains("Windows")
+  }
+
+  if (!hasBash && !isWindows) {
     logWarning("Cannot execute bash, skipping bash tests.")
   }
 
-  def bashTest(name: String)(fn: => Unit): Unit =
-    if (hasBash) test(name)(fn) else ignore(name)(fn)
+  if (!isWindows) {
+    logWarning("Cannot execute Windows cmd, skipping cmd tests.")
+  }
 
-  bashTest("shell script escaping") {
+  def bashTest(name: String)(fn: => Unit): Unit =
+    if (hasBash && !isWindows) test(name)(fn) else ignore(name)(fn)
+
+  bashTest("bash shell script escaping") {
     val scriptFile = File.createTempFile("script.", ".sh", Utils.createTempDir())
     val args = Array("arg1", "${arg.2}", "\"arg3\"", "'arg4'", "$arg5", "\\arg6")
     try {
@@ -64,6 +73,31 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
       val err = new String(ByteStreams.toByteArray(proc.getErrorStream()))
       val exitCode = proc.waitFor()
       exitCode should be (0)
+      out should be (args.mkString(" "))
+    } finally {
+      scriptFile.delete()
+    }
+  }
+
+  def cmdTest(name: String)(fn: => Unit): Unit =
+    if (isWindows) test(name)(fn) else ignore(name)(fn)
+
+  cmdTest("cmd shell script escaping") {
+    val scriptFile = File.createTempFile("script.", ".cmd", Utils.createTempDir())
+    val args = Array("arg1", "${arg.2}", "\"arg3\"", "'arg4'", "$arg5", "\\arg6")
+    System.out.println(s"Test Arguments: ${args.mkString(" ")}")
+    try {
+      val argLine = args.map(a => YarnSparkHadoopUtil.escapeForShell(a)).mkString(" ")
+      Files.write(("cmd /C \"@echo " + argLine + "\"").getBytes(), scriptFile)
+      scriptFile.setExecutable(true)
+System.out.println(s"Escaped Arguments: $argLine")
+      val proc = Runtime.getRuntime().exec(Array(scriptFile.getAbsolutePath()))
+      val out = new String(ByteStreams.toByteArray(proc.getInputStream())).trim()
+      val err = new String(ByteStreams.toByteArray(proc.getErrorStream()))
+      val exitCode = proc.waitFor()
+      exitCode should be (0)
+      System.out.println(s"Output: $out")
+      System.out.println(s"Supposed Output: ${args.mkString(" ")}")
       out should be (args.mkString(" "))
     } finally {
       scriptFile.delete()
