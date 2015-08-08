@@ -53,6 +53,7 @@ case class SortMergeOuterJoin(
   }
 
   override def outputPartitioning: Partitioning = joinType match {
+    // For left and right outer joins, the output is partitioned by the streamed input's join keys.
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning
     case x =>
@@ -61,6 +62,7 @@ case class SortMergeOuterJoin(
   }
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
+    // For left and right outer joins, the output is ordered by the streamed input's join keys.
     case LeftOuter => requiredOrders(leftKeys)
     case RightOuter => requiredOrders(rightKeys)
     case x => throw new IllegalArgumentException(
