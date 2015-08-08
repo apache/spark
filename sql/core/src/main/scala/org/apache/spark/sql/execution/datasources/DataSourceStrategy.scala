@@ -408,6 +408,12 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       case _ => None
     }
 
-    filters.flatMap(translate)
+    filters.map(eliminateCastOnAttribute(_)).flatMap(translate)
+  }
+
+  private def eliminateCastOnAttribute(expression: Expression): Expression = {
+    expression.transform {
+      case Cast(a: Attribute, _) => a
+    }
   }
 }
