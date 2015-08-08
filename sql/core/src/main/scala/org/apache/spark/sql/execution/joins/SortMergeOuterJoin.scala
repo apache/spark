@@ -109,8 +109,13 @@ case class SortMergeOuterJoin(
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       // An ordering that can be used to compare keys from both sides.
       val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
-      val boundCondition =
-        newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
+      val boundCondition: (InternalRow) => Boolean = {
+        condition.map { cond =>
+          newPredicate(cond, left.output ++ right.output)
+        }.getOrElse {
+          (r: InternalRow) => true
+        }
+      }
       val resultProj: InternalRow => InternalRow = {
         if (isUnsafeMode) {
           UnsafeProjection.create(schema)
