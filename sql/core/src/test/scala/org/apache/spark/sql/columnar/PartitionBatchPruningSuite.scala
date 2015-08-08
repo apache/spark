@@ -36,8 +36,8 @@ class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfterAll wi
 
     val pruningData = ctx.sparkContext.makeRDD((1 to 100).map { key =>
       val string = if (((key - 1) / 10) % 2 == 0) null else key.toString
-      TestData(key, string)
-    }, 5).toDF()
+      (key, string)
+    }, 5).toDF("key", "value")
     pruningData.registerTempTable("pruningData")
 
     // Enable in-memory partition pruning

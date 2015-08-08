@@ -25,7 +25,6 @@ import org.apache.spark.rdd.RDD
 import org.scalactic.Tolerance._
 
 import org.apache.spark.sql.{SQLContext, QueryTest, Row, SQLConf}
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.{ResolvedDataSource, LogicalRelation}
 import org.apache.spark.sql.json.InferSchema.compatibleType
@@ -922,6 +921,13 @@ class JsonSuite extends QueryTest with SQLTestUtils with TestJsonData {
       StructField("f3", BooleanType, false) ::
       StructField("f4", ArrayType(StringType), nullable = true) ::
       StructField("f5", IntegerType, true) :: Nil)
+
+    val unparsedStrings =
+      ctx.sparkContext.parallelize(
+        "1, A1, true, null" ::
+        "2, B2, false, null" ::
+        "3, C3, true, null" ::
+        "4, D4, true, 2147483644" :: Nil)
 
     val rowRDD1 = unparsedStrings.map { r =>
       val values = r.split(",").map(_.trim)

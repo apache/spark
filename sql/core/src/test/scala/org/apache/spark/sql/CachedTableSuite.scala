@@ -23,19 +23,21 @@ import scala.language.{implicitConversions, postfixOps}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Accumulators
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.functions._
 import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
-case class BigData(s: String)
-
 class CachedTableSuite extends QueryTest {
-  TestData // Load test tables.
 
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
   import ctx.sql
+
+  val testData = {
+    val df = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
+    df.registerTempTable("testData")
+    df
+  }
 
   def rddIdOf(tableName: String): Int = {
     val executedPlan = ctx.table(tableName).queryExecution.executedPlan
@@ -115,7 +117,7 @@ class CachedTableSuite extends QueryTest {
 
   test("too big for memory") {
     val data = "*" * 1000
-    ctx.sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
+    ctx.sparkContext.parallelize(1 to 200000, 1).map(_ => data).toDF("s")
       .registerTempTable("bigData")
     ctx.table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
     assert(ctx.table("bigData").count() === 200000L)

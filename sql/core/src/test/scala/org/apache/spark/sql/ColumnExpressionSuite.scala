@@ -25,12 +25,17 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.SQLTestUtils
 
 class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
-  import org.apache.spark.sql.TestData._
 
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
 
-  override def sqlContext(): SQLContext = ctx
+  override def sqlContext: SQLContext = ctx
+
+  val testData = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
+
+  val testData2 = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+      .map(t => (t._1, t._2))
+      .toDF("a", "b")
 
   test("column names with space") {
     val df = Seq((1, "a")).toDF("name with space", "name.with.dot")
@@ -177,7 +182,7 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
   }
 
   test("star qualified by data frame object") {
-    val df = testData.toDF
+    val df = testData
     val goldAnswer = df.collect().toSeq
     checkAnswer(df.select(df("*")), goldAnswer)
 
@@ -246,15 +251,22 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
       testData2.collect().toSeq.map(r => Row(-r.getInt(0))))
   }
 
+  case class TestData(key: Int, value: String)
+  case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
   test("unary !") {
+    val complexData = Seq(
+      ComplexData(Map("1" -> 1), TestData(1, "1"), Seq(1), true),
+      ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2), false)
+    ).toDF()
     checkAnswer(
       complexData.select(!$"b"),
       complexData.collect().toSeq.map(r => Row(!r.getBoolean(3))))
   }
 
+  val nullStrings = Seq((1, "abc"), (2, "ABC"), (3, null)).toDF("n", "s")
   test("isNull") {
     checkAnswer(
-      nullStrings.toDF.where($"s".isNull),
+      nullStrings.where($"s".isNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
 
     checkAnswer(
@@ -264,7 +276,7 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
 
   test("isNotNull") {
     checkAnswer(
-      nullStrings.toDF.where($"s".isNotNull),
+      nullStrings.where($"s".isNotNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
 
     checkAnswer(
@@ -507,6 +519,10 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
   }
 
   test("upper") {
+    val lowerCaseData = ((1 to 4) zip ('a' to 'd'))
+      .map(t => (t._1, t._2.toString))
+      .toDF("n", "l")
+
     checkAnswer(
       lowerCaseData.select(upper('l)),
       ('a' to 'd').map(c => Row(c.toString.toUpperCase))
@@ -528,6 +544,10 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
   }
 
   test("lower") {
+    val upperCaseData = ((1 to 6) zip ('A' to 'F'))
+      .map(t => (t._1, t._2.toString))
+      .toDF("N", "L")
+
     checkAnswer(
       upperCaseData.select(lower('L)),
       ('A' to 'F').map(c => Row(c.toString.toLowerCase))
@@ -628,8 +648,10 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
     // Because Rand function is not deterministic, the column rand is not deterministic.
     // So, in the optimizer, we will not collapse Project [rand + 1 AS rand1, rand - 1 AS rand2]
     // and Project [key, Rand 5 AS rand]. The final plan still has two Projects.
+    val localTestData = ctx.sparkContext.parallelize((1 to 100).map(i => (i, i.toString)))
+      .toDF("key", "value")
     val dfWithTwoProjects =
-      testData
+      localTestData
         .select($"key", (rand(5L) + 1).as("rand"))
         .select(($"rand" + 1).as("rand1"), ($"rand" - 1).as("rand2"))
     checkNumProjects(dfWithTwoProjects, 2)

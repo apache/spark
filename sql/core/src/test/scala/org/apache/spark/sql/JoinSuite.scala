@@ -19,19 +19,29 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.types.BinaryType
 
-
 class JoinSuite extends QueryTest with BeforeAndAfterEach {
-  // Ensures tables are loaded.
-  TestData
 
   lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
   import ctx.logicalPlanToSparkQuery
+
+  val testData = {
+    val df = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
+    df.registerTempTable("testData")
+    df
+  }
+
+  val testData2 = {
+    val df = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+      .map(t => (t._1, t._2))
+      .toDF("a", "b")
+    df.registerTempTable("testData2")
+    df
+  }
 
   test("equi-join is hash-join") {
     val x = testData2.as("x")
@@ -58,13 +68,16 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
     }
 
     assert(operators.size === 1)
-    if (operators(0).getClass() != c) {
+    if (operators(0).getClass != c) {
       fail(s"$sqlString expected operator: $c, but got ${operators(0)}\n physical: \n$physical")
     }
   }
 
   test("join operator selection") {
     ctx.cacheManager.clearCache()
+
+    val originalThreshold = ctx.conf.autoBroadcastJoinThreshold
+    ctx.conf.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, -1)
 
     val SORTMERGEJOIN_ENABLED: Boolean = ctx.conf.sortMergeJoinEnabled
     Seq(
@@ -105,6 +118,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin])
       ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     } finally {
+      ctx.conf.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, originalThreshold)
       ctx.conf.setConf(SQLConf.SORTMERGE_JOIN, SORTMERGEJOIN_ENABLED)
     }
   }
@@ -184,6 +198,18 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
     assert(planned.size === 1)
   }
 
+  val upperCaseData = {
+    val df = ((1 to 6) zip ('A' to 'F'))
+      .map(t => (t._1, t._2.toString))
+      .toDF("N", "L")
+    df.registerTempTable("upperCaseData")
+    df
+  }
+
+  val lowerCaseData = ((1 to 4) zip ('a' to 'd'))
+    .map(t => (t._1, t._2.toString))
+    .toDF("n", "l")
+
   test("inner join where, one match per row") {
     checkAnswer(
       upperCaseData.join(lowerCaseData).where('n === 'N),
@@ -236,7 +262,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       testData.rdd.flatMap(row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
   }
 
-  test("cartisian product join") {
+  test("cartesian product join") {
+    val testData3 = Seq((1, None), (2, Some(2))).toDF("a", "b")
     checkAnswer(
       testData3.join(testData3),
       Row(1, null, 1, null) ::
@@ -244,6 +271,9 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(2, 2, 1, null) ::
         Row(2, 2, 2, 2) :: Nil)
   }
+
+  (1 to 4).map(_ => null).asInstanceOf[Seq[Integer]].map(Tuple1(_))
+    .toDF("a").registerTempTable("allNulls")
 
   test("left outer join") {
     checkAnswer(

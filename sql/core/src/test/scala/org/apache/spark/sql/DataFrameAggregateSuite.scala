@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{BinaryType, DecimalType}
-
 
 class DataFrameAggregateSuite extends QueryTest {
 
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
+
+  val testData2 = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+      .map(t => (t._1, t._2))
+      .toDF("a", "b")
 
   test("groupBy") {
     checkAnswer(
@@ -84,6 +86,11 @@ class DataFrameAggregateSuite extends QueryTest {
   }
 
   test("average") {
+
+    val decimalData = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+        .map(t => (t._1, t._2))
+        .toDF("a", "b")
+
     checkAnswer(
       testData2.agg(avg('a)),
       Row(2.0))
@@ -112,6 +119,8 @@ class DataFrameAggregateSuite extends QueryTest {
       decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
   }
+
+  val testData3 = Seq((1, None), (2, Some(2))).toDF("a", "b")
 
   test("null average") {
     checkAnswer(

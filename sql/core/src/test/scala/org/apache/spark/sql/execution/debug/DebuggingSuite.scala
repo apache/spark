@@ -18,10 +18,11 @@
 package org.apache.spark.sql.execution.debug
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.implicits._
 
 class DebuggingSuite extends SparkFunSuite {
+  val testData = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
+
   test("DataFrame.debug()") {
     testData.debug()
   }

@@ -31,10 +31,19 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SQLTestUtils}
 
 class DataFrameSuite extends QueryTest with SQLTestUtils {
-  import org.apache.spark.sql.TestData._
 
   lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
   import sqlContext.implicits._
+
+  val testData = {
+    val df = (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
+    df.registerTempTable("testData")
+    df
+  }
+
+  val testData2 = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+      .map(t => (t._1, t._2))
+      .toDF("a", "b")
 
   test("analysis error should be eagerly reported") {
     // Eager analysis.
@@ -86,7 +95,12 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  case class TestData(key: Int, value: String)
+  case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
   test("access complex data") {
+    val complexData = Seq(
+      ComplexData(Map("1" -> 1), TestData(1, "1"), Seq(1), true),
+      ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2), false)).toDF()
     assert(complexData.filter(complexData("a").getItem(0) === 2).count() == 1)
     assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
     assert(complexData.filter(complexData("s").getField("key") === 1).count() == 1)
@@ -173,7 +187,7 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   }
 
   test("coalesce") {
-    assert(testData.select('key).coalesce(1).rdd.partitions.size === 1)
+    assert(testData.select('key).coalesce(1).rdd.partitions.length === 1)
 
     checkAnswer(
       testData.select('key).coalesce(1).select('key),
@@ -224,6 +238,10 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
       Row(6))
   }
 
+
+  case class ArrayData(data: Seq[Int], nestedData: Seq[Seq[Int]])
+  val arrayData = Seq(ArrayData(1 to 3, Seq(1 to 3)), ArrayData(2 to 4, Seq(2 to 4)))
+
   test("global sorting") {
     checkAnswer(
       testData2.orderBy('a.asc, 'b.asc),
@@ -262,6 +280,8 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
       arrayData.toDF().collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
   }
 
+  case class MapData(data: scala.collection.Map[Int, String])
+
   test("limit") {
     checkAnswer(
       testData.limit(10),
@@ -271,10 +291,22 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
       arrayData.toDF().limit(1),
       arrayData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
 
+    val mapData = (5 to 1 by - 1)
+      .map(i => (1 to i) zip ('a' to ('a' + i).toChar).map(_.toString + (6 - i)))
+      .map(s => MapData(s.toMap))
+
     checkAnswer(
       mapData.toDF().limit(1),
       mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
   }
+
+  val upperCaseData = ((1 to 6) zip ('A' to 'F'))
+    .map(t => (t._1, t._2.toString))
+    .toDF("N", "L")
+
+  val lowerCaseData = ((1 to 4) zip ('a' to 'd'))
+    .map(t => (t._1, t._2.toString))
+    .toDF("n", "l")
 
   test("except") {
     checkAnswer(
@@ -386,7 +418,10 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     assert(df.schema.map(_.name) === Seq("key", "value"))
   }
 
+
   test("drop column after join with duplicate columns using column reference") {
+    val person = Seq((0, "mike", 30), (1, "jim", 20)).toDF("id", "name", "age")
+    val salary = Seq((0, 2000.0), (1, 1000.0)).toDF("personId", "salary")
     val newSalary = salary.withColumnRenamed("personId", "id")
     val col = newSalary("id")
     // this join will result in duplicate "id" columns
@@ -609,6 +644,9 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-6899: type should match when using codegen") {
+    val decimalData = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+      .map(t => (t._1, t._2))
+      .toDF("a", "b")
     withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
       checkAnswer(
         decimalData.agg(avg('a)),
@@ -617,6 +655,9 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-7133: Implement struct, array, and map field accessor") {
+    val complexData = Seq(
+      ComplexData(Map("1" -> 1), TestData(1, "1"), Seq(1), true),
+      ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2), false)).toDF()
     assert(complexData.filter(complexData("a")(0) === 2).count() == 1)
     assert(complexData.filter(complexData("m")("1") === 1).count() == 1)
     assert(complexData.filter(complexData("s")("key") === 1).count() == 1)
