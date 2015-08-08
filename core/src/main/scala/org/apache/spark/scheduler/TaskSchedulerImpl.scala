@@ -464,7 +464,7 @@ private[spark] class TaskSchedulerImpl(
       if (activeExecutorIds.contains(executorId)) {
         val hostPort = executorIdToHost(executorId)
         logError("Lost executor %s on %s: %s".format(executorId, hostPort, reason))
-        removeExecutor(executorId)
+        removeExecutor(executorId, reason)
         failedExecutor = Some(executorId)
       } else {
          // We may get multiple executorLost() calls with different loss reasons. For example, one
@@ -482,7 +482,7 @@ private[spark] class TaskSchedulerImpl(
   }
 
   /** Remove an executor from all our data structures and mark it as lost */
-  private def removeExecutor(executorId: String) {
+  private def removeExecutor(executorId: String, reason: ExecutorLossReason) {
     activeExecutorIds -= executorId
     val host = executorIdToHost(executorId)
     val execs = executorsByHost.getOrElse(host, new HashSet)
@@ -497,7 +497,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     executorIdToHost -= executorId
-    rootPool.executorLost(executorId, host)
+    rootPool.executorLost(executorId, host, reason)
   }
 
   def executorAdded(execId: String, host: String) {
