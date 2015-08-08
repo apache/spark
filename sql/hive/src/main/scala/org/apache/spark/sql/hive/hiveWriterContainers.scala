@@ -20,8 +20,9 @@ package org.apache.spark.sql.hive
 import java.text.NumberFormat
 import java.util.Date
 
-import scala.collection.mutable
-
+import org.apache.hadoop.hive.serde2.Serializer
+import org.apache.hadoop.hive.serde2.objectinspector.{StructObjectInspector, ObjectInspectorUtils}
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -32,22 +33,31 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
 
-import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
+import org.apache.spark.{Logging, SerializableWritable}
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.UnsafeKVExternalSorter
+import org.apache.spark._
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableJobConf
+
+import scala.collection.JavaConversions._
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
  * It is based on [[SparkHadoopWriter]].
  */
 private[hive] class SparkHiveWriterContainer(
-    jobConf: JobConf,
-    fileSinkConf: FileSinkDesc)
-  extends Logging with Serializable {
+    @transient jobConf: JobConf,
+    fileSinkConf: FileSinkDesc,
+    inputSchema: Seq[Attribute],
+    table: MetastoreRelation)
+  extends Logging
+  with HiveInspectors
+  with Serializable {
 
   private val now = new Date()
   private val tableDesc: TableDesc = fileSinkConf.getTableInfo
@@ -93,14 +103,12 @@ private[hive] class SparkHiveWriterContainer(
     "part-" + numberFormat.format(splitID) + extension
   }
 
-  def getLocalFileWriter(row: InternalRow, schema: StructType): FileSinkOperator.RecordWriter = {
-    writer
-  }
-
   def close() {
     // Seems the boolean value passed into close does not matter.
-    writer.close(false)
-    commit()
+    if (writer != null) {
+      writer.close(false)
+      commit()
+    }
   }
 
   def commitJob() {
@@ -123,6 +131,13 @@ private[hive] class SparkHiveWriterContainer(
     SparkHadoopMapRedUtil.commitTask(committer, taskContext, jobID, splitID)
   }
 
+  def abortTask(): Unit = {
+    if (committer != null) {
+      committer.abortTask(taskContext)
+    }
+    logError(s"Task attempt $taskContext aborted.")
+  }
+
   private def setIDs(jobId: Int, splitId: Int, attemptId: Int) {
     jobID = jobId
     splitID = splitId
@@ -139,6 +154,39 @@ private[hive] class SparkHiveWriterContainer(
     conf.value.set("mapred.task.id", taID.value.toString)
     conf.value.setBoolean("mapred.task.is.map", true)
     conf.value.setInt("mapred.task.partition", splitID)
+  }
+
+  def newSerializer(tableDesc: TableDesc): Serializer = {
+    val serializer = tableDesc.getDeserializerClass.newInstance().asInstanceOf[Serializer]
+    serializer.initialize(null, tableDesc.getProperties)
+    serializer
+  }
+
+  // this function is executed on executor side
+  def writeToFile(context: TaskContext, iterator: Iterator[InternalRow]): Unit = {
+    val serializer = newSerializer(fileSinkConf.getTableInfo)
+    val standardOI = ObjectInspectorUtils
+      .getStandardObjectInspector(
+        fileSinkConf.getTableInfo.getDeserializer.getObjectInspector,
+        ObjectInspectorCopyOption.JAVA)
+      .asInstanceOf[StructObjectInspector]
+
+    val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
+    val dataTypes = inputSchema.map(_.dataType)
+    val wrappers = fieldOIs.zip(dataTypes).map { case (f, dt) => wrapperFor(f, dt) }
+    val outputData = new Array[Any](fieldOIs.length)
+    executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
+
+    iterator.foreach { row =>
+      var i = 0
+      while (i < fieldOIs.length) {
+        outputData(i) = if (row.isNullAt(i)) null else wrappers(i)(row.get(i, dataTypes(i)))
+        i += 1
+      }
+      writer.write(serializer.serialize(outputData, standardOI))
+    }
+
+    close()
   }
 }
 
@@ -163,25 +211,23 @@ private[spark] object SparkHiveDynamicPartitionWriterContainer {
 private[spark] class SparkHiveDynamicPartitionWriterContainer(
     jobConf: JobConf,
     fileSinkConf: FileSinkDesc,
-    dynamicPartColNames: Array[String])
-  extends SparkHiveWriterContainer(jobConf, fileSinkConf) {
+    dynamicPartColNames: Array[String],
+    inputSchema: Seq[Attribute],
+    table: MetastoreRelation,
+    maxOpenFiles: Int)
+  extends SparkHiveWriterContainer(jobConf, fileSinkConf, inputSchema, table) {
 
   import SparkHiveDynamicPartitionWriterContainer._
 
   private val defaultPartName = jobConf.get(
     ConfVars.DEFAULTPARTITIONNAME.varname, ConfVars.DEFAULTPARTITIONNAME.defaultStrVal)
 
-  @transient private var writers: mutable.HashMap[String, FileSinkOperator.RecordWriter] = _
-
   override protected def initWriters(): Unit = {
-    // NOTE: This method is executed at the executor side.
-    // Actual writers are created for each dynamic partition on the fly.
-    writers = mutable.HashMap.empty[String, FileSinkOperator.RecordWriter]
+    // do nothing
   }
 
   override def close(): Unit = {
-    writers.values.foreach(_.close(false))
-    commit()
+    // do nothing
   }
 
   override def commitJob(): Unit = {
@@ -198,8 +244,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     conf.value.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, oldMarker)
   }
 
-  override def getLocalFileWriter(row: InternalRow, schema: StructType)
-    : FileSinkOperator.RecordWriter = {
+  private def getPartitionString(row: InternalRow, schema: StructType): String = {
     def convertToHiveRawString(col: String, value: Any): String = {
       val raw = String.valueOf(value)
       schema(col).dataType match {
@@ -210,7 +255,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     }
 
     val nonDynamicPartLen = row.numFields - dynamicPartColNames.length
-    val dynamicPartPath = dynamicPartColNames.zipWithIndex.map { case (colName, i) =>
+    dynamicPartColNames.zipWithIndex.map { case (colName, i) =>
       val rawVal = row.get(nonDynamicPartLen + i, schema(colName).dataType)
       val string = if (rawVal == null) null else convertToHiveRawString(colName, rawVal)
       val colString =
@@ -221,10 +266,137 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
         }
       s"/$colName=$colString"
     }.mkString
+  }
 
-    def newWriter(): FileSinkOperator.RecordWriter = {
+  // this function is executed on executor side
+  override def writeToFile(context: TaskContext, iterator: Iterator[InternalRow]): Unit = {
+    val outputWriters = new java.util.HashMap[InternalRow, FileSinkOperator.RecordWriter]
+
+    val serializer = newSerializer(fileSinkConf.getTableInfo)
+    val standardOI = ObjectInspectorUtils
+      .getStandardObjectInspector(
+        fileSinkConf.getTableInfo.getDeserializer.getObjectInspector,
+        ObjectInspectorCopyOption.JAVA)
+      .asInstanceOf[StructObjectInspector]
+
+    val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
+    val dataTypes = inputSchema.map(_.dataType)
+    val wrappers = fieldOIs.zip(dataTypes).map { case (f, dt) => wrapperFor(f, dt) }
+    val outputData = new Array[Any](fieldOIs.length)
+    executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
+
+    val partitionOutput = inputSchema.takeRight(dynamicPartColNames.length)
+    val dataOutput = inputSchema.dropRight(dynamicPartColNames.length)
+    // Returns the partition key given an input row
+    val getPartitionKey = UnsafeProjection.create(partitionOutput, inputSchema)
+    // Returns the data columns to be written given an input row
+    val getOutputRow = UnsafeProjection.create(dataOutput, inputSchema)
+
+    // If anything below fails, we should abort the task.
+    try {
+      // This will be filled in if we have to fall back on sorting.
+      var sorter: UnsafeKVExternalSorter = null
+      while (iterator.hasNext && sorter == null) {
+        val inputRow = iterator.next()
+        val currentKey = getPartitionKey(inputRow)
+        var currentWriter = outputWriters.get(currentKey)
+
+        if (currentWriter == null) {
+          if (outputWriters.size < maxOpenFiles) {
+            currentWriter = newOutputWriter(currentKey)
+            outputWriters.put(currentKey.copy(), currentWriter)
+            var i = 0
+            while (i < fieldOIs.length) {
+              outputData(i) = if (inputRow.isNullAt(i)) {
+                null
+              } else {
+                wrappers(i)(inputRow.get(i, dataTypes(i)))
+              }
+              i += 1
+            }
+            currentWriter.write(serializer.serialize(outputData, standardOI))
+          } else {
+            logInfo(s"Maximum partitions reached, falling back on sorting.")
+            sorter = new UnsafeKVExternalSorter(
+              StructType.fromAttributes(partitionOutput),
+              StructType.fromAttributes(dataOutput),
+              SparkEnv.get.blockManager,
+              TaskContext.get().taskMemoryManager().pageSizeBytes)
+            sorter.insertKV(currentKey, getOutputRow(inputRow))
+          }
+        } else {
+          var i = 0
+          while (i < fieldOIs.length) {
+            outputData(i) = if (inputRow.isNullAt(i)) {
+              null
+            } else {
+              wrappers(i)(inputRow.get(i, dataTypes(i)))
+            }
+            i += 1
+          }
+          currentWriter.write(serializer.serialize(outputData, standardOI))
+        }
+      }
+
+      // If the sorter is not null that means that we reached the maxFiles above and need to finish
+      // using external sort.
+      if (sorter != null) {
+        while (iterator.hasNext) {
+          val currentRow = iterator.next()
+          sorter.insertKV(getPartitionKey(currentRow), getOutputRow(currentRow))
+        }
+
+        logInfo(s"Sorting complete. Writing out partition files one at a time.")
+
+        val sortedIterator = sorter.sortedIterator()
+        var currentKey: InternalRow = null
+        var currentWriter: FileSinkOperator.RecordWriter = null
+        try {
+          while (sortedIterator.next()) {
+            if (currentKey != sortedIterator.getKey) {
+              if (currentWriter != null) {
+                currentWriter.close(false)
+              }
+              currentKey = sortedIterator.getKey.copy()
+              logDebug(s"Writing partition: $currentKey")
+
+              // Either use an existing file from before, or open a new one.
+              currentWriter = outputWriters.remove(currentKey)
+              if (currentWriter == null) {
+                currentWriter = newOutputWriter(currentKey)
+              }
+            }
+
+            var i = 0
+            while (i < fieldOIs.length) {
+              outputData(i) = if (sortedIterator.getValue.isNullAt(i)) {
+                null
+              } else {
+                wrappers(i)(sortedIterator.getValue.get(i, dataTypes(i)))
+              }
+              i += 1
+            }
+            currentWriter.write(serializer.serialize(outputData, standardOI))
+          }
+        } finally {
+          if (currentWriter != null) {
+            currentWriter.close(false)
+          }
+        }
+      }
+      clearOutputWriters
+      commit()
+    } catch {
+      case cause: Throwable =>
+        logError("Aborting task.", cause)
+        abortTask()
+        throw new SparkException("Task failed while writing rows.", cause)
+    }
+    /** Open and returns a new OutputWriter given a partition key. */
+    def newOutputWriter(key: InternalRow): FileSinkOperator.RecordWriter = {
+      val partitionPath = getPartitionString(key, table.schema)
       val newFileSinkDesc = new FileSinkDesc(
-        fileSinkConf.getDirName + dynamicPartPath,
+        fileSinkConf.getDirName + partitionPath,
         fileSinkConf.getTableInfo,
         fileSinkConf.getCompressed)
       newFileSinkDesc.setCompressCodec(fileSinkConf.getCompressCodec)
@@ -234,7 +406,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
       // to avoid write to the same file when `spark.speculation=true`
       val path = FileOutputFormat.getTaskOutputPath(
         conf.value,
-        dynamicPartPath.stripPrefix("/") + "/" + getOutputName)
+        partitionPath.stripPrefix("/") + "/" + getOutputName)
 
       HiveFileFormatUtils.getHiveRecordWriter(
         conf.value,
@@ -245,6 +417,17 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
         Reporter.NULL)
     }
 
-    writers.getOrElseUpdate(dynamicPartPath, newWriter())
+    def clearOutputWriters(): Unit = {
+      outputWriters.values.foreach(_.close(false))
+      outputWriters.clear()
+    }
+
+    def abortTask(): Unit = {
+      try {
+        clearOutputWriters()
+      } finally {
+        super.abortTask()
+      }
+    }
   }
 }
