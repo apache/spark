@@ -214,7 +214,8 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
   // do they satisfy the distribution requirements? As a result, we need at least four test cases.
 
   private def assertDistributionRequirementsAreSatisfied(outputPlan: SparkPlan): Unit = {
-    if (outputPlan.requiresChildPartitioningsToBeCompatible) {
+    if (outputPlan.children.length > 1
+        && outputPlan.requiredChildDistribution.toSet != Set(UnspecifiedDistribution)) {
       val childPartitionings = outputPlan.children.map(_.outputPartitioning)
       if (!Partitioning.allCompatible(childPartitionings)) {
         fail(s"Partitionings are not compatible: $childPartitionings")
@@ -248,7 +249,6 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
         DummySparkPlan(outputPartitioning = leftPartitioning),
         DummySparkPlan(outputPartitioning = rightPartitioning)
       ),
-      requiresChildPartitioningsToBeCompatible = true,
       requiredChildDistribution = Seq(distribution, distribution),
       requiredChildOrdering = Seq(Seq.empty, Seq.empty)
     )
@@ -269,7 +269,6 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
         DummySparkPlan(outputPartitioning = HashPartitioning(clustering, 1)),
         DummySparkPlan(outputPartitioning = HashPartitioning(clustering, 2))
       ),
-      requiresChildPartitioningsToBeCompatible = true,
       requiredChildDistribution = Seq(distribution, distribution),
       requiredChildOrdering = Seq(Seq.empty, Seq.empty)
     )
@@ -288,7 +287,6 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
         DummySparkPlan(outputPartitioning = childPartitioning),
         DummySparkPlan(outputPartitioning = childPartitioning)
       ),
-      requiresChildPartitioningsToBeCompatible = true,
       requiredChildDistribution = Seq(distribution, distribution),
       requiredChildOrdering = Seq(Seq.empty, Seq.empty)
     )
@@ -309,7 +307,6 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
         DummySparkPlan(outputPartitioning = childPartitioning),
         DummySparkPlan(outputPartitioning = childPartitioning)
       ),
-      requiresChildPartitioningsToBeCompatible = true,
       requiredChildDistribution = Seq(distribution, distribution),
       requiredChildOrdering = Seq(Seq.empty, Seq.empty)
     )
@@ -333,7 +330,6 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
         DummySparkPlan(outputPartitioning = SinglePartition),
         DummySparkPlan(outputPartitioning = SinglePartition)
       ),
-      requiresChildPartitioningsToBeCompatible = true,
       requiredChildDistribution = Seq(distribution, distribution),
       requiredChildOrdering = Seq(outputOrdering, outputOrdering)
     )
@@ -352,7 +348,6 @@ private case class DummySparkPlan(
     override val children: Seq[SparkPlan] = Nil,
     override val outputOrdering: Seq[SortOrder] = Nil,
     override val outputPartitioning: Partitioning = UnknownPartitioning(0),
-    override val requiresChildPartitioningsToBeCompatible: Boolean = false,
     override val requiredChildDistribution: Seq[Distribution] = Nil,
     override val requiredChildOrdering: Seq[Seq[SortOrder]] = Nil
   ) extends SparkPlan {

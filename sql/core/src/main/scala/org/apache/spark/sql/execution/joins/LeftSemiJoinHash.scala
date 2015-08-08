@@ -42,8 +42,6 @@ case class LeftSemiJoinHash(
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
-  override def requiresChildPartitioningsToBeCompatible: Boolean = true
-
   protected override def doExecute(): RDD[InternalRow] = {
     right.execute().zipPartitions(left.execute()) { (buildIter, streamIter) =>
       if (condition.isEmpty) {

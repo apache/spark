@@ -222,7 +222,10 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
    * output partitionings and add Exchanges to fix any detected incompatibilities.
    */
   private def ensureChildPartitioningsAreCompatible(operator: SparkPlan): SparkPlan = {
-    if (operator.requiresChildPartitioningsToBeCompatible) {
+    // If an operator has multiple children and the operator requires a specific child output
+    // distribution then we need to ensure that all children have compatible output partitionings.
+    if (operator.children.length > 1
+        && operator.requiredChildDistribution.toSet != Set(UnspecifiedDistribution)) {
       if (!Partitioning.allCompatible(operator.children.map(_.outputPartitioning))) {
         val newChildren = operator.children.zip(operator.requiredChildDistribution).map {
           case (child, requiredDistribution) =>
