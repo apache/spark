@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution;
+package test.org.apache.spark.sql.hive.execution;
 
 import org.apache.hadoop.hive.ql.exec.UDF;
 
