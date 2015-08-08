@@ -39,6 +39,27 @@ import org.apache.spark.util.SerializableConfiguration
 
 /**
  * ::DeveloperApi::
+ * Data sources should implement this trait so that they can register an alias to their data source.
+ * This allows users to give the data source alias as the format type over the fully qualified
+ * class name.
+ *
+ * ex: parquet.DefaultSource.format = "parquet".
+ *
+ * A new instance of this class with be instantiated each time a DDL call is made.
+ */
+@DeveloperApi
+trait DataSourceRegister {
+
+  /**
+   * The string that represents the format that this data source provider uses. This is
+   * overridden by children to provide a nice alias for the data source,
+   * ex: override def format(): String = "parquet"
+   */
+  def format(): String
+}
+
+/**
+ * ::DeveloperApi::
  * Implemented by objects that produce relations for a specific kind of data source.  When
  * Spark SQL is given a DDL operation with a USING clause specified (to specify the implemented
  * RelationProvider), this interface is used to pass in the parameters specified by a user.

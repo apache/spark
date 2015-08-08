@@ -47,7 +47,10 @@ import org.apache.spark.util.SerializableConfiguration
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
-private[sql] class DefaultSource extends HadoopFsRelationProvider {
+private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
+
+  def format(): String = "orc"
+
   def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
