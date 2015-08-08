@@ -46,11 +46,8 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     checkDecimal(Decimal(1e17.toLong, 18, 0), 1e17.toLong.toString, 18, 0)
     checkDecimal(Decimal(Long.MaxValue), Long.MaxValue.toString, 20, 0)
     checkDecimal(Decimal(Long.MinValue), Long.MinValue.toString, 20, 0)
-    intercept[IllegalArgumentException](Decimal(170L, 2, 1))
-    intercept[IllegalArgumentException](Decimal(170L, 2, 0))
     intercept[IllegalArgumentException](Decimal(BigDecimal("10.030"), 2, 1))
     intercept[IllegalArgumentException](Decimal(BigDecimal("-9.95"), 2, 1))
-    intercept[IllegalArgumentException](Decimal(1e17.toLong, 17, 0))
   }
 
   test("creating decimals with negative scale") {
@@ -88,36 +85,19 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     checkValues(Decimal(Double.MinValue), Double.MinValue, 0L)
   }
 
-  // Accessor for the BigDecimal value of a Decimal, which will be null if it's using Longs
-  private val decimalVal = PrivateMethod[BigDecimal]('decimalVal)
-
-  /** Check whether a decimal is represented compactly (passing whether we expect it to be) */
-  private def checkCompact(d: Decimal, expected: Boolean): Unit = {
-    val isCompact = d.invokePrivate(decimalVal()).eq(null)
-    assert(isCompact == expected, s"$d ${if (expected) "was not" else "was"} compact")
-  }
-
-  test("small decimals represented as unscaled long") {
-    checkCompact(new Decimal(), true)
-    checkCompact(Decimal(BigDecimal(10.03)), false)
-    checkCompact(Decimal(BigDecimal(1e20)), false)
-    checkCompact(Decimal(17L), true)
-    checkCompact(Decimal(17), true)
-    checkCompact(Decimal(17L, 2, 1), true)
-    checkCompact(Decimal(170L, 4, 2), true)
-    checkCompact(Decimal(17L, 24, 1), true)
-    checkCompact(Decimal(1e16.toLong), true)
-    checkCompact(Decimal(1e17.toLong), true)
-    checkCompact(Decimal(1e18.toLong - 1), true)
-    checkCompact(Decimal(- 1e18.toLong + 1), true)
-    checkCompact(Decimal(1e18.toLong - 1, 30, 10), true)
-    checkCompact(Decimal(- 1e18.toLong + 1, 30, 10), true)
-    checkCompact(Decimal(1e18.toLong), false)
-    checkCompact(Decimal(-1e18.toLong), false)
-    checkCompact(Decimal(1e18.toLong, 30, 10), false)
-    checkCompact(Decimal(-1e18.toLong, 30, 10), false)
-    checkCompact(Decimal(Long.MaxValue), false)
-    checkCompact(Decimal(Long.MinValue), false)
+  test("change precision and scale") {
+    assert(true === Decimal(5).changePrecision(1, 0))
+    assert(false === Decimal(15).changePrecision(1, 0))
+    assert(true === Decimal(5).changePrecision(2, 1))
+    assert(false === Decimal(5).changePrecision(2, 2))
+    assert(true === Decimal(0).changePrecision(1, 0))
+    assert(true === Decimal(BigDecimal("10.5")).changePrecision(3, 0))
+    assert(true === Decimal(BigDecimal("10.5")).changePrecision(3, 1))
+    assert(false === Decimal(BigDecimal("10.5")).changePrecision(3, 2))
+    assert(true === Decimal(BigDecimal("10.5")).changePrecision(4, 0))
+    assert(true === Decimal(BigDecimal("10.5")).changePrecision(4, 1))
+    assert(true === Decimal(BigDecimal("10.5")).changePrecision(4, 2))
+    assert(false === Decimal(BigDecimal("10.5")).changePrecision(4, 3))
   }
 
   test("hash code") {
@@ -132,10 +112,6 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
   }
 
   test("equals") {
-    // The decimals on the left are stored compactly, while the ones on the right aren't
-    checkCompact(Decimal(123), true)
-    checkCompact(Decimal(BigDecimal(123)), false)
-    checkCompact(Decimal("123"), false)
     assert(Decimal(123) === Decimal(BigDecimal(123)))
     assert(Decimal(123) === Decimal(BigDecimal("123.00")))
     assert(Decimal(-123) === Decimal(BigDecimal(-123)))
@@ -187,7 +163,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     assert(b.toDouble === 0.125)
   }
 
-  test("set/setOrNull") {
+  test("set") {
     assert(new Decimal().set(10L, 10, 0).toUnscaledLong === 10L)
     assert(new Decimal().set(100L, 10, 0).toUnscaledLong === 100L)
     assert(Decimal(Long.MaxValue, 100, 0).toUnscaledLong === Long.MaxValue)

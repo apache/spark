@@ -562,16 +562,16 @@ case class Cast(child: Expression, dataType: DataType)
               java.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
             ${changePrecision("tmpDecimal", target, evPrim, evNull)}
           """
-      case DecimalType() =>
+      case dt: DecimalType =>
         (c, evPrim, evNull) =>
           s"""
             Decimal tmpDecimal = $c.clone();
             ${changePrecision("tmpDecimal", target, evPrim, evNull)}
           """
-      case LongType =>
+      case ByteType | ShortType | IntegerType | LongType =>
         (c, evPrim, evNull) =>
           s"""
-            Decimal tmpDecimal = Decimal.apply($c);
+            Decimal tmpDecimal = Decimal.apply((long) $c);
             ${changePrecision("tmpDecimal", target, evPrim, evNull)}
           """
       case x: NumericType =>
