@@ -136,7 +136,10 @@ final class RandomForestClassificationModel private[ml] (
    * Construct a random forest classification model, with all trees weighted equally.
    * @param trees  Component trees
    */
-  def this(trees: Array[DecisionTreeClassificationModel], numFeatures: Int, numClasses: Int) =
+  private[ml] def this(
+      trees: Array[DecisionTreeClassificationModel],
+      numFeatures: Int,
+      numClasses: Int) =
     this(Identifiable.randomUID("rfc"), trees, numFeatures, numClasses)
 
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
