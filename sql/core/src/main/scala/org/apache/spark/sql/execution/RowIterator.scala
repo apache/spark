@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.joins
+package org.apache.spark.sql.execution
 
 import java.util.NoSuchElementException
 
