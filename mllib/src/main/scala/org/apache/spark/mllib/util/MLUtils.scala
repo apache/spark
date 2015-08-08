@@ -23,10 +23,19 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.dot
+
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
+import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, PairRDDFunctions}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.BernoulliCellSampler
+
+// My changes
+import scala.util.Random
+import org.apache.spark.util.random.StratifiedSamplingUtils
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+import org.apache.spark.util.random.XORShiftRandom
+
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
@@ -281,6 +290,20 @@ object MLUtils {
       val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), true, seed)
       (training, validation)
     }.toArray
+  }
+
+  /**
+   * Seth Code
+   */
+  @Experimental
+  def kFoldStrat[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)],
+      numFolds: Int,
+      seed: Int): Array[(RDD[(K, V)], RDD[(K, V)])] = {
+    val keys: Array[K] = rdd.keys.collect().distinct
+    val weights: Array[scala.collection.Map[K, Double]] = (1 to numFolds).map {
+      n => keys.map(k => (k, 1 / numFolds.toDouble)).toMap
+    }.toArray
+    rdd.randomSplitByKey(weights, exact = true, seed)
   }
 
   /**

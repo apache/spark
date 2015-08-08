@@ -50,10 +50,22 @@ private[ml] trait CrossValidatorParams extends ValidatorParams with HasSeed {
   val numFolds: IntParam = new IntParam(this, "numFolds",
     "number of folds for cross validation (>= 2)", ParamValidators.gtEq(2))
 
+  /**
+   * Param for stratified sampling column name
+   * Default: "None"
+   * @group param
+   */
+  val stratifiedCol: Param[String] = new Param[String](this, "stratifiedCol", "stratified column name")
+
+  /** @group getParam */
+  def getStratifiedCol: String = $(stratifiedCol)
+
   /** @group getParam */
   def getNumFolds: Int = $(numFolds)
 
   setDefault(numFolds -> 3)
+  setDefault(stratifiedCol -> "None")
+
 }
 
 /**
@@ -91,6 +103,10 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /** @group setParam */
+  @Since("2.0.0")
+  def setStratifiedCol(value: String): this.type = set(stratifiedCol, value)
+
   @Since("1.4.0")
   override def fit(dataset: DataFrame): CrossValidatorModel = {
     val schema = dataset.schema
@@ -101,7 +117,18 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val epm = $(estimatorParamMaps)
     val numModels = epm.length
     val metrics = new Array[Double](epm.length)
-    val splits = MLUtils.kFold(dataset.rdd, $(numFolds), $(seed))
+
+    val splits = if (dataset.columns.contains($(stratifiedCol))) {
+      // stratified kFold
+      val stratifiedColIndex = dataset.columns.indexOf($(stratifiedCol))
+      val splitsWithKeys = MLUtils.kFoldStrat(dataset.rdd.map(row => (row(stratifiedColIndex), row)), $(numFolds), 0)
+      splitsWithKeys.map { case (training, validation) => (training.values, validation.values)}
+    } else {
+      if (isSet(stratifiedCol)) logWarning(s"Stratified column does not exist. Performing regular k-fold subsampling.")
+      // regular kFold
+      MLUtils.kFold(dataset.rdd, $(numFolds), $(seed))
+    }
+
     splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
       val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
       val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()

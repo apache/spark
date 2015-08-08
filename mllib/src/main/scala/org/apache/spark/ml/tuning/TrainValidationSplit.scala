@@ -19,6 +19,8 @@ package org.apache.spark.ml.tuning
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
@@ -38,10 +40,21 @@ private[ml] trait TrainValidationSplitParams extends ValidatorParams {
   val trainRatio: DoubleParam = new DoubleParam(this, "trainRatio",
     "ratio between training set and validation set (>= 0 && <= 1)", ParamValidators.inRange(0, 1))
 
+  /**
+   * Param for stratified sampling column name
+   * Default: "None"
+   * @group param
+   */
+  val stratifiedCol: Param[String] = new Param[String](this, "stratifiedCol", "stratified column name")
+
   /** @group getParam */
   def getTrainRatio: Double = $(trainRatio)
 
+  /** @group getParam */
+  def getStratifiedCol: String = $(stratifiedCol)
+
   setDefault(trainRatio -> 0.75)
+  setDefault(stratifiedCol -> "None")
 }
 
 /**
@@ -76,6 +89,10 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   @Since("1.5.0")
   def setTrainRatio(value: Double): this.type = set(trainRatio, value)
 
+  /** @group setParam */
+  @Since("2.0.0")
+  def setStratifiedCol(value: String): this.type = set(stratifiedCol, value)
+
   @Since("1.5.0")
   override def fit(dataset: DataFrame): TrainValidationSplitModel = {
     val schema = dataset.schema
@@ -87,8 +104,20 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val numModels = epm.length
     val metrics = new Array[Double](epm.length)
 
-    val Array(training, validation) =
+    val Array(training, validation) = if (dataset.columns.contains($(stratifiedCol))) {
+      val stratifiedColIndex = dataset.columns.indexOf($(stratifiedCol))
+      val keyedRDD = dataset.rdd.map(row => (row(stratifiedColIndex), row))
+      val keys = keyedRDD.keys.distinct.collect()
+      val weights: Array[scala.collection.Map[Any, Double]] =
+        Array(keys.map(k => (k, $(trainRatio))).toMap, keys.map(k => (k, 1 - $(trainRatio))).toMap)
+      val splitsWithKeys = keyedRDD.randomSplitByKey(weights, exact = true, 0)
+      splitsWithKeys.map { case (subsample, complement) => subsample.values }
+    } else {
+      if (isSet(stratifiedCol)) logWarning(s"Stratified column does not exist. Performing approximate split.")
       dataset.rdd.randomSplit(Array($(trainRatio), 1 - $(trainRatio)))
+    }
+
+
     val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
     val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()
 
