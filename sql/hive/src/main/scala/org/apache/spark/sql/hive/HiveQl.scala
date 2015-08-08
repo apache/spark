@@ -45,6 +45,7 @@ import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
 
 /* Implicit conversions */
@@ -1518,6 +1519,30 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     case ast: ASTNode if ast.getType == HiveParser.TOK_CHARSETLITERAL =>
       Literal(BaseSemanticAnalyzer.charSetString(ast.getChild(0).getText, ast.getChild(1).getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_YEAR_MONTH_LITERAL =>
+      Literal(CalendarInterval.fromYearMonthString(ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_DAY_TIME_LITERAL =>
+      Literal(CalendarInterval.fromDayTimeString(ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_YEAR_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("year", ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_MONTH_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("month", ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_DAY_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("day", ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_HOUR_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("hour", ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_MINUTE_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("minute", ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_SECOND_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("second", ast.getText))
 
     case a: ASTNode =>
       throw new NotImplementedError(
