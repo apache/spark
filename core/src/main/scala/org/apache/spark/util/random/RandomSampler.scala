@@ -184,7 +184,7 @@ class PoissonSampler[T: ClassTag](
     fraction: Double,
     useGapSamplingIfPossible: Boolean) extends RandomSampler[T, T] {
 
-  def this(fraction: Double) = this(fraction, useGapSamplingIfPossible = false)
+  def this(fraction: Double) = this(fraction, useGapSamplingIfPossible = true)
 
   /** Epsilon slop to avoid failure from floating point jitter. */
   require(
