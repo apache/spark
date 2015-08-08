@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.execution.joins
 
-import java.io.{IOException, Externalizable, ObjectInput, ObjectOutput}
+import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.nio.ByteOrder
 import java.util.{HashMap => JavaHashMap}
 
 import org.apache.spark.shuffle.ShuffleMemoryManager
-import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkSqlSerializer
@@ -31,6 +30,7 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.{SparkConf, SparkEnv}
 
 
 /**
@@ -282,17 +282,15 @@ private[joins] final class UnsafeHashedRelation(
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
     val taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
 
+    val pageSizeBytes = Option(SparkEnv.get).map(_.shuffleMemoryManager.pageSizeBytes)
+      .getOrElse(new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "16m"))
+
     // Dummy shuffle memory manager which always grants all memory allocation requests.
     // We use this because it doesn't make sense count shared broadcast variables' memory usage
     // towards individual tasks' quotas. In the future, we should devise a better way of handling
     // this.
-    val shuffleMemoryManager = new ShuffleMemoryManager(new SparkConf()) {
-      override def tryToAcquire(numBytes: Long): Long = numBytes
-      override def release(numBytes: Long): Unit = {}
-    }
-
-    val pageSizeBytes = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
-      .getSizeAsBytes("spark.buffer.pageSize", "64m")
+    val shuffleMemoryManager =
+      ShuffleMemoryManager.create(maxMemory = Long.MaxValue, pageSizeBytes = pageSizeBytes)
 
     binaryMap = new BytesToBytesMap(
       taskMemoryManager,
@@ -306,11 +304,11 @@ private[joins] final class UnsafeHashedRelation(
     while (i < nKeys) {
       val keySize = in.readInt()
       val valuesSize = in.readInt()
-      if (keySize > keyBuffer.size) {
+      if (keySize > keyBuffer.length) {
         keyBuffer = new Array[Byte](keySize)
       }
       in.readFully(keyBuffer, 0, keySize)
-      if (valuesSize > valuesBuffer.size) {
+      if (valuesSize > valuesBuffer.length) {
         valuesBuffer = new Array[Byte](valuesSize)
       }
       in.readFully(valuesBuffer, 0, valuesSize)
