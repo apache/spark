@@ -17,15 +17,10 @@
 
 package org.apache.spark.util
 
-import java.io._
-import java.lang.management.ManagementFactory
-import java.net._
-import java.nio.ByteBuffer
-import java.util.{PriorityQueue, Properties, Locale, Random, UUID}
-import java.util.concurrent._
-import javax.net.ssl.HttpsURLConnection
 
-import scala.collection.JavaConversions._
+import java.util.{PriorityQueue, Properties, Locale, Random, UUID}
+
+
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
