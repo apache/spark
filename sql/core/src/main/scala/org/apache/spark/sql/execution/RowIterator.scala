@@ -70,27 +70,28 @@ private[sql] abstract class RowIterator {
 object RowIterator {
   def fromScala(scalaIter: Iterator[InternalRow]): RowIterator = {
     scalaIter match {
-      case wrappedRowIter: RowIteratorToScala if !wrappedRowIter._wasUsed => wrappedRowIter.rowIter
+      case wrappedRowIter: RowIteratorToScala => wrappedRowIter.rowIter
       case _ => new RowIteratorFromScala(scalaIter)
     }
   }
 }
 
 private final class RowIteratorToScala(val rowIter: RowIterator) extends Iterator[InternalRow] {
-  var _wasUsed: Boolean = false
+  private [this] var hasNextWasCalled: Boolean = false
   private [this] var _hasNext: Boolean = false
   override def hasNext: Boolean = {
-    if (!_wasUsed) {
+    // Idempotency:
+    if (!hasNextWasCalled) {
       _hasNext = rowIter.advanceNext()
-      _wasUsed = true
+      hasNextWasCalled = true
     }
     _hasNext
   }
   override def next(): InternalRow = {
     if (!hasNext) throw new NoSuchElementException
-    val row: InternalRow = rowIter.getRow.copy()
-    _hasNext = rowIter.advanceNext()
-    row
+    // TODO(josh): see whether we need to re-add the copy() here:
+    hasNextWasCalled = false
+    rowIter.getRow
   }
 }
 
