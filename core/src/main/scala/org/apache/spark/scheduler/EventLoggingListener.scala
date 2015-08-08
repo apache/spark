@@ -153,11 +153,11 @@ private[spark] class EventLoggingListener(
         writer.foreach(_.flush())
         hadoopDataStream.foreach(hadoopFlushMethod.invoke(_))
       }
+      if (testing) {
+        loggedEvents += eventJson
+      }
     } else {
       bufferedEvents += ((event, flushLogger))
-    }
-    if (testing) {
-      loggedEvents += eventJson
     }
   }
 
