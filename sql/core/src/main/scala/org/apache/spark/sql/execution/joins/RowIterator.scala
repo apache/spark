@@ -30,17 +30,24 @@ private[sql] abstract class RowIterator {
 object RowIterator {
   def fromScala(scalaIter: Iterator[InternalRow]): RowIterator = {
     scalaIter match {
-      case wrappedRowIter: RowIteratorToScala => wrappedRowIter.rowIter
+      case wrappedRowIter: RowIteratorToScala if !wrappedRowIter._wasUsed => wrappedRowIter.rowIter
       case _ => new RowIteratorFromScala(scalaIter)
     }
   }
 }
 
 private final class RowIteratorToScala(val rowIter: RowIterator) extends Iterator[InternalRow] {
-  private [this] var _hasNext: Boolean = rowIter.advanceNext()
-  override def hasNext: Boolean = _hasNext
+  var _wasUsed: Boolean = false
+  private [this] var _hasNext: Boolean = false
+  override def hasNext: Boolean = {
+    if (!_wasUsed) {
+      _hasNext = rowIter.advanceNext()
+      _wasUsed = true
+    }
+    _hasNext
+  }
   override def next(): InternalRow = {
-    if (!_hasNext) throw new NoSuchElementException
+    if (!hasNext) throw new NoSuchElementException
     val row: InternalRow = rowIter.getRow.copy()
     _hasNext = rowIter.advanceNext()
     row
