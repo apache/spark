@@ -105,7 +105,7 @@ public final class CalendarInterval implements Serializable {
    *
    * adapted from HiveIntervalYearMonth.valueOf
    */
-  public static CalendarInterval fromYearMonthString(String s) {
+  public static CalendarInterval fromYearMonthString(String s) throws IllegalArgumentException {
     CalendarInterval result = null;
     if (s == null) {
       throw new IllegalArgumentException("Interval year-month string was null");
@@ -134,7 +134,7 @@ public final class CalendarInterval implements Serializable {
    *
    * adapted from HiveIntervalDayTime.valueOf
    */
-  public static CalendarInterval fromDayTimeString(String s) {
+  public static CalendarInterval fromDayTimeString(String s) throws IllegalArgumentException {
     CalendarInterval result = null;
     if (s == null) {
       throw new IllegalArgumentException("Interval day-time string was null");
@@ -164,10 +164,12 @@ public final class CalendarInterval implements Serializable {
     return result;
   }
 
-  public static CalendarInterval fromSingleUnitString(String unit, String s) {
+  public static CalendarInterval fromSingleUnitString(String unit, String s)
+      throws IllegalArgumentException {
+
     CalendarInterval result = null;
     if (s == null) {
-      throw new IllegalArgumentException("Interval day-time string was null");
+      throw new IllegalArgumentException(String.format("Interval %s string was null", unit));
     }
     s = s.trim();
     Matcher m = quoteTrimPattern.matcher(s);
@@ -215,7 +217,7 @@ public final class CalendarInterval implements Serializable {
   /**
    * Parse second_nano string in ss.nnnnnnnnn format to microseconds
    */
-  public static long parseSecondNano(String secondNano) {
+  public static long parseSecondNano(String secondNano) throws IllegalArgumentException {
     String[] parts = secondNano.split("\\.");
     if (parts.length == 1) {
       return toLongWithRange("second", parts[0], Long.MIN_VALUE / MICROS_PER_SECOND,
