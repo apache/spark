@@ -21,6 +21,7 @@ import java.util.Properties
 
 import org.apache.spark.{SparkException, SparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.sql.metric.LongSQLMetricValue
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.SQLExecution
@@ -65,9 +66,9 @@ class SQLListenerSuite extends SparkFunSuite {
     speculative = false
   )
 
-  private def createTaskMetrics(accumulatorUpdates: Map[Long, Any]): TaskMetrics = {
+  private def createTaskMetrics(accumulatorUpdates: Map[Long, Long]): TaskMetrics = {
     val metrics = new TaskMetrics
-    metrics.setAccumulatorsUpdater(() => accumulatorUpdates)
+    metrics.setAccumulatorsUpdater(() => accumulatorUpdates.mapValues(new LongSQLMetricValue(_)))
     metrics.updateAccumulators()
     metrics
   }

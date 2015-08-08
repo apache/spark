@@ -21,8 +21,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
-import org.apache.spark.AccumulatorParam
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.metric.{SQLMetricParam, SQLMetricValue}
 
 /**
  * A graph used for storing information of an executionPlan of DataFrame.
@@ -61,9 +61,9 @@ private[sql] object SparkPlanGraph {
       nodeIdGenerator: AtomicLong,
       nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
       edges: mutable.ArrayBuffer[SparkPlanGraphEdge]): SparkPlanGraphNode = {
-    val metrics = plan.accumulators.toSeq.map { case (key, accumulator) =>
-      SQLPlanMetric(accumulator.name.getOrElse(key), accumulator.id,
-        accumulator.param.asInstanceOf[AccumulatorParam[Any]])
+    val metrics = plan.metrics.toSeq.map { case (key, metric) =>
+      SQLPlanMetric(metric.name.getOrElse(key), metric.id,
+        metric.param.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]])
     }
     val node = SparkPlanGraphNode(
       nodeIdGenerator.getAndIncrement(), plan.nodeName, plan.simpleString, metrics)

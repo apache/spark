@@ -107,6 +107,8 @@ object Cast {
 case class Cast(child: Expression, dataType: DataType)
   extends UnaryExpression with CodegenFallback {
 
+  override def toString: String = s"cast($child as ${dataType.simpleString})"
+
   override def checkInputDataTypes(): TypeCheckResult = {
     if (Cast.canCast(child.dataType, dataType)) {
       TypeCheckResult.TypeCheckSuccess
@@ -117,8 +119,6 @@ case class Cast(child: Expression, dataType: DataType)
   }
 
   override def nullable: Boolean = Cast.forceNullable(child.dataType, dataType) || child.nullable
-
-  override def toString: String = s"CAST($child, $dataType)"
 
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])

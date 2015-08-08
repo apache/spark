@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Accumulator, Logging}
+import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.SQLContext
@@ -32,6 +32,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.metric.{IntSQLMetric, LongSQLMetric, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.DataType
 
 object SparkPlan {
@@ -55,9 +56,15 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def sparkContext = sqlContext.sparkContext
 
   // sqlContext will be null when we are being deserialized on the slaves.  In this instance
-  // the value of codegenEnabled will be set by the desserializer after the constructor has run.
+  // the value of codegenEnabled/unsafeEnabled will be set by the desserializer after the
+  // constructor has run.
   val codegenEnabled: Boolean = if (sqlContext != null) {
     sqlContext.conf.codegenEnabled
+  } else {
+    false
+  }
+  val unsafeEnabled: Boolean = if (sqlContext != null) {
+    sqlContext.conf.unsafeEnabled
   } else {
     false
   }
@@ -78,22 +85,30 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   protected[sql] def trackNumOfRowsEnabled: Boolean = false
 
-  private lazy val numOfRowsAccumulator = sparkContext.internalAccumulator(0L, "number of rows")
-
-  /**
-   * Return all accumulators containing metrics of this SparkPlan.
-   */
-  private[sql] def accumulators: Map[String, Accumulator[_]] = if (trackNumOfRowsEnabled) {
-      Map("numRows" -> numOfRowsAccumulator)
-    } else {
+  private lazy val defaultMetrics: Map[String, SQLMetric[_, _]] =
+    if (trackNumOfRowsEnabled) {
+      Map("numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
+    }
+    else {
       Map.empty
     }
 
   /**
-   * Return the accumulator according to the name.
+   * Return all metrics containing metrics of this SparkPlan.
    */
-  private[sql] def accumulator[T](name: String): Accumulator[T] =
-    accumulators(name).asInstanceOf[Accumulator[T]]
+  private[sql] def metrics: Map[String, SQLMetric[_, _]] = defaultMetrics
+
+  /**
+   * Return a IntSQLMetric according to the name.
+   */
+  private[sql] def intMetric(name: String): IntSQLMetric =
+    metrics(name).asInstanceOf[IntSQLMetric]
+
+  /**
+   * Return a LongSQLMetric according to the name.
+   */
+  private[sql] def longMetric(name: String): LongSQLMetric =
+    metrics(name).asInstanceOf[LongSQLMetric]
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
@@ -142,7 +157,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
       if (trackNumOfRowsEnabled) {
-        val numRows = accumulator[Long]("numRows")
+        val numRows = longMetric("numRows")
         doExecute().map { row =>
           numRows += 1
           row
@@ -158,7 +173,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   final def prepare(): Unit = {
     if (prepareCalled.compareAndSet(false, true)) {
-      doPrepare
+      doPrepare()
       children.foreach(_.prepare())
     }
   }

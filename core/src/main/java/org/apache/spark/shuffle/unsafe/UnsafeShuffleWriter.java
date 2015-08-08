@@ -17,17 +17,17 @@
 
 package org.apache.spark.shuffle.unsafe;
 
+import javax.annotation.Nullable;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
-import javax.annotation.Nullable;
 
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConversions;
+import scala.collection.immutable.Map;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
-import scala.collection.immutable.Map;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.ByteStreams;
@@ -38,10 +38,10 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.*;
 import org.apache.spark.annotation.Private;
+import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.io.CompressionCodec;
 import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.io.LZFCompressionCodec;
-import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
@@ -178,7 +178,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     } finally {
       if (sorter != null) {
         try {
-          sorter.cleanupAfterError();
+          sorter.cleanupResources();
         } catch (Exception e) {
           // Only throw this error if we won't be masking another
           // error.
@@ -482,7 +482,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       if (sorter != null) {
         // If sorter is non-null, then this implies that we called stop() in response to an error,
         // so we need to clean up memory and spill files created by the sorter
-        sorter.cleanupAfterError();
+        sorter.cleanupResources();
       }
     }
   }
