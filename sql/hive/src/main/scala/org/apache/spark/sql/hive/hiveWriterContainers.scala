@@ -244,30 +244,6 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     conf.value.setBoolean(SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, oldMarker)
   }
 
-  private def getPartitionString(row: InternalRow, schema: StructType): String = {
-    def convertToHiveRawString(col: String, value: Any): String = {
-      val raw = String.valueOf(value)
-      schema(col).dataType match {
-        case DateType => DateTimeUtils.dateToString(raw.toInt)
-        case _: DecimalType => BigDecimal(raw).toString()
-        case _ => raw
-      }
-    }
-
-    val nonDynamicPartLen = row.numFields - dynamicPartColNames.length
-    dynamicPartColNames.zipWithIndex.map { case (colName, i) =>
-      val rawVal = row.get(nonDynamicPartLen + i, schema(colName).dataType)
-      val string = if (rawVal == null) null else convertToHiveRawString(colName, rawVal)
-      val colString =
-        if (string == null || string.isEmpty) {
-          defaultPartName
-        } else {
-          FileUtils.escapePathName(string, defaultPartName)
-        }
-      s"/$colName=$colString"
-    }.mkString
-  }
-
   // this function is executed on executor side
   override def writeToFile(context: TaskContext, iterator: Iterator[InternalRow]): Unit = {
     val outputWriters = new java.util.HashMap[InternalRow, FileSinkOperator.RecordWriter]
@@ -286,11 +262,25 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
 
     val partitionOutput = inputSchema.takeRight(dynamicPartColNames.length)
-    val dataOutput = inputSchema.dropRight(dynamicPartColNames.length)
+    val dataOutput = inputSchema.take(fieldOIs.length)
     // Returns the partition key given an input row
     val getPartitionKey = UnsafeProjection.create(partitionOutput, inputSchema)
     // Returns the data columns to be written given an input row
     val getOutputRow = UnsafeProjection.create(dataOutput, inputSchema)
+
+    val fun: AnyRef = (pathString: String) => FileUtils.escapePathName(pathString, defaultPartName)
+    // Expressions that given a partition key build a string like: col1=val/col2=val/...
+    val partitionStringExpression = partitionOutput.zipWithIndex.flatMap { case (c, i) =>
+      val escaped =
+        ScalaUDF(fun, StringType, Seq(Cast(c, StringType)), Seq(StringType))
+      val str = If(IsNull(c), Literal(defaultPartName), escaped)
+      val partitionName = Literal(dynamicPartColNames(i) + "=") :: str :: Nil
+      if (i == 0) partitionName else Literal(Path.SEPARATOR_CHAR.toString) :: partitionName
+    }
+
+    // Returns the partition path given a partition key.
+    val getPartitionString =
+      UnsafeProjection.create(Concat(partitionStringExpression) :: Nil, partitionOutput)
 
     // If anything below fails, we should abort the task.
     try {
@@ -394,7 +384,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     }
     /** Open and returns a new OutputWriter given a partition key. */
     def newOutputWriter(key: InternalRow): FileSinkOperator.RecordWriter = {
-      val partitionPath = getPartitionString(key, table.schema)
+      val partitionPath = getPartitionString(key).getString(0)
       val newFileSinkDesc = new FileSinkDesc(
         fileSinkConf.getDirName + partitionPath,
         fileSinkConf.getTableInfo,
