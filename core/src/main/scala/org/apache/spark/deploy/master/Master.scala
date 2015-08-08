@@ -593,7 +593,8 @@ private[deploy] class Master(
         val underLimit = assignedExecutors.sum + app.executors.size < app.executorLimit
         keepScheduling && enoughCores && enoughMemory && underLimit
       } else {
-        // We're adding cores to an existing executor, so no need to check memory and executor limits
+        // We're adding cores to an existing executor, so no need
+        // to check memory and executor limits
         keepScheduling && enoughCores
       }
     }
