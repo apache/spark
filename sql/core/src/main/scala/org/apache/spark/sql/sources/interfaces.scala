@@ -342,18 +342,17 @@ abstract class OutputWriter {
    * @since 1.4.0
    */
   def close(): Unit
-}
 
-/**
- * This is an internal, private version of [[OutputWriter]] with an writeInternal method that
- * accepts an [[InternalRow]] rather than an [[Row]]. Data sources that return this must have
- * the conversion flag set to false.
- */
-private[sql] abstract class OutputWriterInternal extends OutputWriter {
+  private var converter: InternalRow => Row = _
 
-  override def write(row: Row): Unit = throw new UnsupportedOperationException
+  protected[sql] def initConverter(dataSchema: StructType) = {
+    converter =
+      CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
+  }
 
-  def writeInternal(row: InternalRow): Unit
+  protected[sql] def writeInternal(row: InternalRow): Unit = {
+    write(converter(row))
+  }
 }
 
 /**
@@ -383,7 +382,7 @@ private[sql] abstract class OutputWriterInternal extends OutputWriter {
 abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec])
   extends BaseRelation with Logging {
 
-  logInfo("Constructing HadoopFsRelation")
+  override def toString: String = getClass.getSimpleName + paths.mkString("[", ",", "]")
 
   def this() = this(None)
 
@@ -461,8 +460,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
             val spec = discoverPartitions()
             val partitionColumnTypes = spec.partitionColumns.map(_.dataType)
             val castedPartitions = spec.partitions.map { case p @ Partition(values, path) =>
-              val literals = values.toSeq.zip(partitionColumnTypes).map {
-                case (value, dataType) => Literal.create(value, dataType)
+              val literals = partitionColumnTypes.zipWithIndex.map { case (dt, i) =>
+                Literal.create(values.get(i, dt), dt)
               }
               val castedValues = partitionSchema.zip(literals).map { case (field, literal) =>
                 Cast(literal, field.dataType).eval()

@@ -629,7 +629,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * [[org.apache.spark.SparkContext.setLocalProperty]].
    */
   def getLocalProperty(key: String): String =
-    Option(localProperties.get).map(_.getProperty(key)).getOrElse(null)
+    Option(localProperties.get).map(_.getProperty(key)).orNull
 
   /** Set a human readable description of the current job. */
   def setJobDescription(value: String) {
@@ -1234,21 +1234,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
     val acc = new Accumulator(initialValue, param, Some(name))
-    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
-    acc
-  }
-
-  /**
-   * Create an [[org.apache.spark.Accumulator]] variable of a given type, with a name for display
-   * in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only the
-   * driver can access the accumulator's `value`. The latest local value of such accumulator will be
-   * sent back to the driver via heartbeats.
-   *
-   * @tparam T type that can be added to the accumulator, must be thread safe
-   */
-  private[spark] def internalAccumulator[T](initialValue: T, name: String)(
-    implicit param: AccumulatorParam[T]): Accumulator[T] = {
-    val acc = new Accumulator(initialValue, param, Some(name), internal = true)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
   }

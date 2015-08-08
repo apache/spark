@@ -152,4 +152,13 @@ public class JavaLogisticRegressionSuite implements Serializable {
       }
     }
   }
+
+  @Test
+  public void logisticRegressionTrainingSummary() {
+    LogisticRegression lr = new LogisticRegression();
+    LogisticRegressionModel model = lr.fit(dataset);
+
+    LogisticRegressionTrainingSummary summary = model.summary();
+    assert(summary.totalIterations() == summary.objectiveHistory().length);
+  }
 }

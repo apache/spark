@@ -20,14 +20,14 @@ package org.apache.spark.sql.execution.joins
 import scala.concurrent._
 import scala.concurrent.duration._
 
-import org.apache.spark.{InternalAccumulator, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, Partitioning, UnspecifiedDistribution}
-import org.apache.spark.sql.execution.{BinaryNode, SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.{BinaryNode, SQLExecution, SparkPlan}
 import org.apache.spark.util.ThreadUtils
+import org.apache.spark.{InternalAccumulator, TaskContext}
 
 /**
  * :: DeveloperApi ::
@@ -102,6 +102,6 @@ case class BroadcastHashJoin(
 
 object BroadcastHashJoin {
 
-  private val broadcastHashJoinExecutionContext = ExecutionContext.fromExecutorService(
+  private[joins] val broadcastHashJoinExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("broadcast-hash-join", 128))
 }

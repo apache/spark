@@ -87,7 +87,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val length = 5000
     val expressions = List.fill(length)(EqualTo(Literal(1), Literal(1)))
     val plan = GenerateMutableProjection.generate(expressions)()
-    val actual = plan(new GenericMutableRow(length)).toSeq
+    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq.fill(length)(true)
 
     if (!checkResult(actual, expected)) {

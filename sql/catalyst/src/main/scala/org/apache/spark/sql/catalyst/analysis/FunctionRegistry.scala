@@ -203,6 +203,7 @@ object FunctionRegistry {
     expression[Substring]("substr"),
     expression[Substring]("substring"),
     expression[SubstringIndex]("substring_index"),
+    expression[StringTranslate]("translate"),
     expression[StringTrim]("trim"),
     expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),

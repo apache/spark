@@ -23,7 +23,7 @@ import scala.util.{Try, Random}
 
 import org.scalatest.Matchers
 
-import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
 import org.apache.spark.{TaskContextImpl, TaskContext, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.test.TestSQLContext
@@ -93,7 +93,7 @@ class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
   testWithMemoryLeakDetection("supported schemas") {
     assert(supportsAggregationBufferSchema(
       StructType(StructField("x", DecimalType.USER_DEFAULT) :: Nil)))
-    assert(!supportsAggregationBufferSchema(
+    assert(supportsAggregationBufferSchema(
       StructType(StructField("x", DecimalType.SYSTEM_DEFAULT) :: Nil)))
     assert(!supportsAggregationBufferSchema(StructType(StructField("x", StringType) :: Nil)))
     assert(
@@ -228,6 +228,112 @@ class UnsafeFixedWidthAggregationMapSuite extends SparkFunSuite with Matchers {
     }
 
     assert(out === (keys ++ additionalKeys).sorted)
+
+    map.free()
+  }
+
+  testWithMemoryLeakDetection("test external sorting with an empty map") {
+    // Calling this make sure we have block manager and everything else setup.
+    TestSQLContext
+
+    val map = new UnsafeFixedWidthAggregationMap(
+      emptyAggregationBuffer,
+      aggBufferSchema,
+      groupKeySchema,
+      taskMemoryManager,
+      shuffleMemoryManager,
+      128, // initial capacity
+      PAGE_SIZE_BYTES,
+      false // disable perf metrics
+    )
+
+    // Convert the map into a sorter
+    val sorter = map.destructAndCreateExternalSorter()
+
+    // Add more keys to the sorter and make sure the results come out sorted.
+    val additionalKeys = randomStrings(1024)
+    val keyConverter = UnsafeProjection.create(groupKeySchema)
+    val valueConverter = UnsafeProjection.create(aggBufferSchema)
+
+    additionalKeys.zipWithIndex.foreach { case (str, i) =>
+      val k = InternalRow(UTF8String.fromString(str))
+      val v = InternalRow(str.length)
+      sorter.insertKV(keyConverter.apply(k), valueConverter.apply(v))
+
+      if ((i % 100) == 0) {
+        shuffleMemoryManager.markAsOutOfMemory()
+        sorter.closeCurrentPage()
+      }
+    }
+
+    val out = new scala.collection.mutable.ArrayBuffer[String]
+    val iter = sorter.sortedIterator()
+    while (iter.next()) {
+      // At here, we also test if copy is correct.
+      val key = iter.getKey.copy()
+      val value = iter.getValue.copy()
+      assert(key.getString(0).length === value.getInt(0))
+      out += key.getString(0)
+    }
+
+    assert(out === (additionalKeys).sorted)
+
+    map.free()
+  }
+
+  testWithMemoryLeakDetection("test external sorting with empty records") {
+    // Calling this make sure we have block manager and everything else setup.
+    TestSQLContext
+
+    // Memory consumption in the beginning of the task.
+    val initialMemoryConsumption = shuffleMemoryManager.getMemoryConsumptionForThisTask()
+
+    val map = new UnsafeFixedWidthAggregationMap(
+      emptyAggregationBuffer,
+      StructType(Nil),
+      StructType(Nil),
+      taskMemoryManager,
+      shuffleMemoryManager,
+      128, // initial capacity
+      PAGE_SIZE_BYTES,
+      false // disable perf metrics
+    )
+
+    (1 to 10).foreach { i =>
+      val buf = map.getAggregationBuffer(UnsafeRow.createFromByteArray(0, 0))
+      assert(buf != null)
+    }
+
+    // Convert the map into a sorter. Right now, it contains one record.
+    val sorter = map.destructAndCreateExternalSorter()
+
+    withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
+      // 4096 * 16 is the initial size allocated for the pointer/prefix array in the in-mem sorter.
+      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() ===
+        initialMemoryConsumption + 4096 * 16)
+    }
+
+    // Add more keys to the sorter and make sure the results come out sorted.
+    (1 to 4096).foreach { i =>
+      sorter.insertKV(UnsafeRow.createFromByteArray(0, 0), UnsafeRow.createFromByteArray(0, 0))
+
+      if ((i % 100) == 0) {
+        shuffleMemoryManager.markAsOutOfMemory()
+        sorter.closeCurrentPage()
+      }
+    }
+
+    var count = 0
+    val iter = sorter.sortedIterator()
+    while (iter.next()) {
+      // At here, we also test if copy is correct.
+      iter.getKey.copy()
+      iter.getValue.copy()
+      count += 1;
+    }
+
+    // 1 record was from the map and 4096 records were explicitly inserted.
+    assert(count === 4097)
 
     map.free()
   }

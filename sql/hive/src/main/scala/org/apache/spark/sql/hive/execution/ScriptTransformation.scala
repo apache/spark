@@ -88,6 +88,7 @@ case class ScriptTransformation(
       // external process. That process's output will be read by this current thread.
       val writerThread = new ScriptTransformationWriterThread(
         inputIterator,
+        input.map(_.dataType),
         outputProjection,
         inputSerde,
         inputSoi,
@@ -201,6 +202,7 @@ case class ScriptTransformation(
 
 private class ScriptTransformationWriterThread(
     iter: Iterator[InternalRow],
+    inputSchema: Seq[DataType],
     outputProjection: Projection,
     @Nullable inputSerde: AbstractSerDe,
     @Nullable inputSoi: ObjectInspector,
@@ -226,12 +228,25 @@ private class ScriptTransformationWriterThread(
     // We can't use Utils.tryWithSafeFinally here because we also need a `catch` block, so
     // let's use a variable to record whether the `finally` block was hit due to an exception
     var threwException: Boolean = true
+    val len = inputSchema.length
     try {
       iter.map(outputProjection).foreach { row =>
         if (inputSerde == null) {
-          val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
-            ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
-          outputStream.write(data)
+          val data = if (len == 0) {
+            ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")
+          } else {
+            val sb = new StringBuilder
+            sb.append(row.get(0, inputSchema(0)))
+            var i = 1
+            while (i < len) {
+              sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
+              sb.append(row.get(i, inputSchema(i)))
+              i += 1
+            }
+            sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES"))
+            sb.toString()
+          }
+          outputStream.write(data.getBytes("utf-8"))
         } else {
           val writable = inputSerde.serialize(
             row.asInstanceOf[GenericInternalRow].values, inputSoi)

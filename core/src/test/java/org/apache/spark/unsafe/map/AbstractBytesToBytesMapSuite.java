@@ -48,7 +48,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Before
   public void setup() {
-    shuffleMemoryManager = new ShuffleMemoryManager(Long.MAX_VALUE);
+    shuffleMemoryManager = ShuffleMemoryManager.create(Long.MAX_VALUE, PAGE_SIZE_BYTES);
     taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(getMemoryAllocator()));
     // Mocked memory manager for tests that check the maximum array size, since actually allocating
     // such large arrays will cause us to run out of memory in our tests.
@@ -183,8 +183,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     }
   }
 
-  @Test
-  public void iteratorTest() throws Exception {
+  private void iteratorTestBase(boolean destructive) throws Exception {
     final int size = 4096;
     BytesToBytesMap map = new BytesToBytesMap(
       taskMemoryManager, shuffleMemoryManager, size / 2, PAGE_SIZE_BYTES);
@@ -216,7 +215,14 @@ public abstract class AbstractBytesToBytesMapSuite {
         }
       }
       final java.util.BitSet valuesSeen = new java.util.BitSet(size);
-      final Iterator<BytesToBytesMap.Location> iter = map.iterator();
+      final Iterator<BytesToBytesMap.Location> iter;
+      if (destructive) {
+        iter = map.destructiveIterator();
+      } else {
+        iter = map.iterator();
+      }
+      int numPages = map.getNumDataPages();
+      int countFreedPages = 0;
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
         Assert.assertTrue(loc.isDefined());
@@ -228,16 +234,37 @@ public abstract class AbstractBytesToBytesMapSuite {
         if (keyLength == 0) {
           Assert.assertTrue("value " + value + " was not divisible by 5", value % 5 == 0);
         } else {
-        final long key = PlatformDependent.UNSAFE.getLong(
-          keyAddress.getBaseObject(), keyAddress.getBaseOffset());
+          final long key = PlatformDependent.UNSAFE.getLong(
+            keyAddress.getBaseObject(), keyAddress.getBaseOffset());
           Assert.assertEquals(value, key);
         }
         valuesSeen.set((int) value);
+        if (destructive) {
+          // The iterator moves onto next page and frees previous page
+          if (map.getNumDataPages() < numPages) {
+            numPages = map.getNumDataPages();
+            countFreedPages++;
+          }
+        }
+      }
+      if (destructive) {
+        // Latest page is not freed by iterator but by map itself
+        Assert.assertEquals(countFreedPages, numPages - 1);
       }
       Assert.assertEquals(size, valuesSeen.cardinality());
     } finally {
       map.free();
     }
+  }
+
+  @Test
+  public void iteratorTest() throws Exception {
+    iteratorTestBase(false);
+  }
+
+  @Test
+  public void destructiveIteratorTest() throws Exception {
+    iteratorTestBase(true);
   }
 
   @Test
@@ -414,7 +441,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void failureToAllocateFirstPage() {
-    shuffleMemoryManager = new ShuffleMemoryManager(1024);
+    shuffleMemoryManager = ShuffleMemoryManager.createForTesting(1024);
     BytesToBytesMap map =
       new BytesToBytesMap(taskMemoryManager, shuffleMemoryManager, 1, PAGE_SIZE_BYTES);
     try {
@@ -434,7 +461,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void failureToGrow() {
-    shuffleMemoryManager = new ShuffleMemoryManager(1024 * 10);
+    shuffleMemoryManager = ShuffleMemoryManager.createForTesting(1024 * 10);
     BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, shuffleMemoryManager, 1, 1024);
     try {
       boolean success = true;
@@ -498,7 +525,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   }
 
   @Test
-  public void testTotalMemoryConsumption() {
+  public void testPeakMemoryUsed() {
     final long recordLengthBytes = 24;
     final long pageSizeBytes = 256 + 8; // 8 bytes for end-of-page marker
     final long numRecordsPerPage = (pageSizeBytes - 8) / recordLengthBytes;
@@ -509,8 +536,8 @@ public abstract class AbstractBytesToBytesMapSuite {
     // monotonically increasing. More specifically, every time we allocate a new page it
     // should increase by exactly the size of the page. In this regard, the memory usage
     // at any given time is also the peak memory used.
-    long previousMemory = map.getTotalMemoryConsumption();
-    long newMemory;
+    long previousPeakMemory = map.getPeakMemoryUsedBytes();
+    long newPeakMemory;
     try {
       for (long i = 0; i < numRecordsPerPage * 10; i++) {
         final long[] value = new long[]{i};
@@ -521,15 +548,21 @@ public abstract class AbstractBytesToBytesMapSuite {
           value,
           PlatformDependent.LONG_ARRAY_OFFSET,
           8);
-        newMemory = map.getTotalMemoryConsumption();
+        newPeakMemory = map.getPeakMemoryUsedBytes();
         if (i % numRecordsPerPage == 0) {
           // We allocated a new page for this record, so peak memory should change
-          assertEquals(previousMemory + pageSizeBytes, newMemory);
+          assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
         } else {
-          assertEquals(previousMemory, newMemory);
+          assertEquals(previousPeakMemory, newPeakMemory);
         }
-        previousMemory = newMemory;
+        previousPeakMemory = newPeakMemory;
       }
+
+      // Freeing the map should not change the peak memory
+      map.free();
+      newPeakMemory = map.getPeakMemoryUsedBytes();
+      assertEquals(previousPeakMemory, newPeakMemory);
+
     } finally {
       map.free();
     }
