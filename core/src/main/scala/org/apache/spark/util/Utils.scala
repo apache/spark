@@ -20,12 +20,11 @@ package org.apache.spark.util
 
 import java.util.{PriorityQueue, Properties, Locale, Random, UUID}
 
-
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
-import scala.util.{Failure, Success, Try}
+import scala.util.{Random, Failure, Success, Try}
 import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.google.common.io.{ByteStreams, Files}
@@ -188,7 +187,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.DataOutput]]
+   * Primitive often used when writing java.nio.ByteBuffer to java.io.DataOutput
    */
   def writeByteBuffer(bb: ByteBuffer, out: ObjectOutput): Unit = {
     if (bb.hasArray) {
@@ -2001,6 +2000,8 @@ private[spark] object Utils extends Logging {
    * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
    *
    * @param startPort The initial port to start the service on.
+   * @param port This array will hold the minimum and the maximum port to start a service on
+   *             If the maximum is not specified, it will be minPort + maxRetries
    * @param startService Function to start service on a given port.
    *                     This is expected to throw java.net.BindException on port collision.
    * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
@@ -2008,6 +2009,7 @@ private[spark] object Utils extends Logging {
    */
   def startServiceOnPort[T](
       startPort: Int,
+      port: Array[Int],
       startService: Int => (T, Int),
       conf: SparkConf,
       serviceName: String = ""): (T, Int) = {
@@ -2015,8 +2017,19 @@ private[spark] object Utils extends Logging {
     require(startPort == 0 || (1024 <= startPort && startPort < 65536),
       "startPort should be between 1024 and 65535 (inclusive), or 0 for a random free port.")
 
+    var minPort, maxPort = 0
+
+    if(port.length == 2) {
+      minPort = port{0}
+      maxPort = port{1}
+    }
+    require(minPort <= maxPort)
+    require(minPort == 0 || minPort >=1024 && minPort <= 65536)
+    require(maxPort >=1024 && maxPort <= 65536)
+
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
     val maxRetries = portMaxRetries(conf)
+
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
       val tryPort = if (startPort == 0) {
