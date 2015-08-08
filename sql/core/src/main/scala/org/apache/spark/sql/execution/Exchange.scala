@@ -230,7 +230,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
         val newChildren = operator.children.zip(operator.requiredChildDistribution).map {
           case (child, requiredDistribution) =>
             val targetPartitioning = canonicalPartitioning(requiredDistribution)
-            if (child.outputPartitioning.guarantees(targetPartitioning)) {
+            if (child.outputPartitioning.compatibleWith(targetPartitioning)) {
               child
             } else {
               Exchange(targetPartitioning, child)

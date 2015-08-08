@@ -242,8 +242,8 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
     assert(rightPartitioning.satisfies(distribution))
     // However, these partitionings are not compatible with each other, so we still need to
     // repartition both inputs prior to performing the join:
-    assert(!leftPartitioning.guarantees(rightPartitioning))
-    assert(!rightPartitioning.guarantees(leftPartitioning))
+    assert(!leftPartitioning.compatibleWith(rightPartitioning))
+    assert(!rightPartitioning.compatibleWith(leftPartitioning))
     val inputPlan = DummySparkPlan(
       children = Seq(
         DummySparkPlan(outputPartitioning = leftPartitioning),
