@@ -122,7 +122,18 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  case class TestData(key: Int, value: String)
+  case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
+  case class ArrayData(data: Seq[Int], nestedData: Seq[Seq[Int]])
   test("SortMergeJoin shouldn't work on unsortable columns") {
+    Seq(
+      ComplexData(Map("1" -> 1), TestData(1, "1"), Seq(1), true),
+      ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2), false)
+    ).toDF().registerTempTable("complexData")
+    Seq(ArrayData(1 to 3, Seq(1 to 3)), ArrayData(2 to 4, Seq(2 to 4)))
+      .toDF()
+      .registerTempTable("arrayData")
+
     withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true") {
       Seq(
         ("SELECT * FROM arrayData JOIN complexData ON data = a", classOf[ShuffledHashJoin])
