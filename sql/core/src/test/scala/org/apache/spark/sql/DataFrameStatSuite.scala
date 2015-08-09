@@ -35,7 +35,7 @@ class DataFrameStatSuite extends QueryTest {
     val data = sqlCtx.sparkContext.parallelize(1 to n, 2).toDF("id")
     checkAnswer(
       data.sample(withReplacement = true, 0.05, seed = 13),
-      Seq(12, 17, 34, 37, 66, 91, 100).map(Row(_))
+      Seq(5, 10, 52, 73).map(Row(_))
     )
   }
 

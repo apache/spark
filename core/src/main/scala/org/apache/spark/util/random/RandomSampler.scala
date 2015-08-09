@@ -215,7 +215,7 @@ class PoissonSampler[T: ClassTag](
     }
   }
 
-  override def clone: PoissonSampler[T] = new PoissonSampler[T](fraction)
+  override def clone: PoissonSampler[T] = new PoissonSampler[T](fraction, useGapSamplingIfPossible)
 }
 
 
