@@ -187,7 +187,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Primitive often used when writing java.nio.ByteBuffer to java.io.DataOutput
+   * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.DataOutput]]
    */
   def writeByteBuffer(bb: ByteBuffer, out: ObjectOutput): Unit = {
     if (bb.hasArray) {
@@ -2000,8 +2000,6 @@ private[spark] object Utils extends Logging {
    * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
    *
    * @param startPort The initial port to start the service on.
-   * @param port This array will hold the minimum and the maximum port to start a service on
-   *             If the maximum is not specified, it will be minPort + maxRetries
    * @param startService Function to start service on a given port.
    *                     This is expected to throw java.net.BindException on port collision.
    * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
@@ -2009,39 +2007,26 @@ private[spark] object Utils extends Logging {
    */
   def startServiceOnPort[T](
       startPort: Int,
-      maxPort: Int,
-      failedPorts: ArrayBuffer[Int],
       startService: Int => (T, Int),
       conf: SparkConf,
       serviceName: String = ""): (T, Int) = {
 
+    val maxPort = 65536
+    val failedPorts  = new ArrayBuffer[Int]()
     require(startPort == 0 || (1024 <= startPort && startPort < 65536),
       "startPort should be between 1024 and 65535 (inclusive), or 0 for a random free port.")
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
     val maxRetries = portMaxRetries(conf)
-    if(startPort + maxRetries <=  65536) {
-      maxPort = startPort + maxRetries
-    }
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
       val tryPort = if (startPort == 0) {
         startPort
       }
       else {
-        // If the new port wraps around, do not try a privilege port
+        // If the new port wraps around, do not try a privilege port or a failedPort
         while(!failedPorts.contains((startPort + Math.random() * (maxPort - startPort + 1))) &&
           (((startPort + offset - 1024) % (65536 - 1024)) + 1024) != (startPort + Math.random() * (maxPort - startPort + 1))) {
           (startPort + Math.random() * (maxPort - startPort + 1))
-        }
-        // This condition here checks whether there are sufficient successful ports to try the retry attempt.
-        // If yes, tryPort is adjusted, else increasing the maxPort limit by 1 to help accommodate the maxRetries
-        if ((maxPort - startPort) - failedPorts.length < (maxRetries - offset)) {
-          if (maxPort + 1 > 65536) {
-            maxPort + 1
-          }
-          else {
-            maxPort = 65536
-          }
         }
       }
       try {
