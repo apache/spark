@@ -99,12 +99,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   private[sql] def metrics: Map[String, SQLMetric[_, _]] = defaultMetrics
 
   /**
-   * Return a IntSQLMetric according to the name.
-   */
-  private[sql] def intMetric(name: String): IntSQLMetric =
-    metrics(name).asInstanceOf[IntSQLMetric]
-
-  /**
    * Return a LongSQLMetric according to the name.
    */
   private[sql] def longMetric(name: String): LongSQLMetric =

@@ -93,22 +93,6 @@ private[sql] class LongSQLMetric private[metric](name: String)
   }
 }
 
-/**
- * A specialized int Accumulable to avoid boxing and unboxing when using Accumulator's
- * `+=` and `add`.
- */
-private[sql] class IntSQLMetric private[metric](name: String)
-  extends SQLMetric[IntSQLMetricValue, Int](name, IntSQLMetricParam) {
-
-  override def +=(term: Int): Unit = {
-    localValue.add(term)
-  }
-
-  override def add(term: Int): Unit = {
-    localValue.add(term)
-  }
-}
-
 private object LongSQLMetricParam extends SQLMetricParam[LongSQLMetricValue, Long] {
 
   override def addAccumulator(r: LongSQLMetricValue, t: Long): LongSQLMetricValue = r.add(t)
@@ -121,25 +105,7 @@ private object LongSQLMetricParam extends SQLMetricParam[LongSQLMetricValue, Lon
   override def zero: LongSQLMetricValue = new LongSQLMetricValue(0L)
 }
 
-private object IntSQLMetricParam extends SQLMetricParam[IntSQLMetricValue, Int] {
-
-  override def addAccumulator(r: IntSQLMetricValue, t: Int): IntSQLMetricValue = r.add(t)
-
-  override def addInPlace(r1: IntSQLMetricValue, r2: IntSQLMetricValue): IntSQLMetricValue =
-    r1.add(r2.value)
-
-  override def zero(initialValue: IntSQLMetricValue): IntSQLMetricValue = zero
-
-  override def zero: IntSQLMetricValue = new IntSQLMetricValue(0)
-}
-
 private[sql] object SQLMetrics {
-
-  def createIntMetric(sc: SparkContext, name: String): IntSQLMetric = {
-    val acc = new IntSQLMetric(name)
-    sc.cleaner.foreach(_.registerAccumulatorForCleanup(acc))
-    acc
-  }
 
   def createLongMetric(sc: SparkContext, name: String): LongSQLMetric = {
     val acc = new LongSQLMetric(name)
