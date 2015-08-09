@@ -37,6 +37,7 @@ case class CreateTableAsSelect(
     allowExisting: Boolean)
   extends RunnableCommand {
 
+  override def children: Seq[LogicalPlan] = query :: Nil
   def database: String = tableDesc.database
   def tableName: String = tableDesc.name
 
@@ -91,6 +92,6 @@ case class CreateTableAsSelect(
   }
 
   override def argString: String = {
-    s"[Database:$database, TableName: $tableName, InsertIntoHiveTable]\n" + query.toString
+    s"[AllowExisting: $allowExisting, HiveTable: $tableDesc]"
   }
 }

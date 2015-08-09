@@ -42,19 +42,19 @@ class HiveExplainSuite extends QueryTest {
   test("explain create table command") {
     checkExistence(sql("explain create table temp__b as select * from src limit 2"), true,
                    "== Physical Plan ==",
-                   "InsertIntoHiveTable",
+                   "ExecutedCommand [cmd:CreateTableAsSelect [",
                    "Limit",
                    "src")
 
-    checkExistence(sql("explain extended create table temp__b as select * from src limit 2"), true,
+    checkExistence(
+      sql("explain create table temp__b as select *, 1+4 from src limit 2"), false,
       "== Parsed Logical Plan ==",
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
-      "== Physical Plan ==",
-      "CreateTableAsSelect",
-      "InsertIntoHiveTable",
-      "Limit",
-      "src")
+      "unresolvedalias(*)", // parsed plan
+      "unresolvedalias((1 + 4))", // parsed plan
+      "(1 + 4) AS") // analyzed plan
+
 
     checkExistence(sql(
       """
@@ -63,15 +63,24 @@ class HiveExplainSuite extends QueryTest {
         | WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
         | STORED AS RCFile
         | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
-        | AS SELECT * FROM src LIMIT 2
+        | AS SELECT *, 4+1 FROM src LIMIT 2
       """.stripMargin), true,
       "== Parsed Logical Plan ==",
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
       "== Physical Plan ==",
       "CreateTableAsSelect",
-      "InsertIntoHiveTable",
+      "HiveTable",
       "Limit",
+      "Map(tbl_p1 -> p11, tbl_p2 -> p22)",
+      "Map(serde_p1 -> p1, serde_p2 -> p2)",
+      "unresolvedalias(*)", // parsed logical plan
+      "unresolvedalias((4 + 1))", // parsed logical plan
+      "(4 + 1) AS", // analyzed logical plan
+      "key", // analyzed logical plan
+      "value", // analyzed logical plan
+      "5 AS", // optimized logical plan
+      "ExecutedCommand [cmd:", // pyhsical plan
       "src")
   }
 }
