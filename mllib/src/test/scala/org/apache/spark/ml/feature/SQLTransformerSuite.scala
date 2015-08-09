@@ -31,7 +31,7 @@ class SQLTransformerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val original = sqlContext.createDataFrame(
       Seq((0, 1.0, 3.0), (2, 2.0, 5.0))).toDF("id", "v1", "v2")
     val sqlTrans = new SQLTransformer().setStatement(
-      "SELECT (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__")
+      "SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__")
     val result = sqlTrans.transform(original)
     val resultSchema = sqlTrans.transformSchema(original.schema)
     val expected = sqlContext.createDataFrame(
@@ -40,15 +40,5 @@ class SQLTransformerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(result.schema.toString == resultSchema.toString)
     assert(resultSchema == expected.schema)
     assert(result.collect().toSeq == expected.collect().toSeq)
-  }
-
-  test("output column already exists") {
-    val original = sqlContext.createDataFrame(
-      Seq((0, 1.0, 3.0, 4.0), (2, 2.0, 5.0, 8.0))).toDF("id", "v1", "v2", "v3")
-    val sqlTrans = new SQLTransformer().setStatement(
-      "SELECT (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__")
-    intercept[IllegalArgumentException] {
-      sqlTrans.transform(original)
-    }
   }
 }

@@ -46,20 +46,16 @@ class SQLTransformer (override val uid: String) extends Transformer {
   def setStatement(value: String): this.type = set(statement, value)
 
   /** @group getParam */
-  def getStatement(): String = $(statement)
+  def getStatement: String = $(statement)
 
   private val tableIdentifier: String = "__THIS__"
 
   override def transform(dataset: DataFrame): DataFrame = {
-    val outputSchema = transformSchema(dataset.schema, logging = true)
-    val tableName = Identifiable.randomUID("sql")
+    val tableName = Identifiable.randomUID(uid)
     dataset.registerTempTable(tableName)
     val realStatement = $(statement).replace(tableIdentifier, tableName)
-    val additiveDF = dataset.sqlContext.sql(realStatement)
-    val rdd = dataset.rdd.zip(additiveDF.rdd).map {
-      case (r1, r2) => Row.merge(r1, r2)
-    }
-    dataset.sqlContext.createDataFrame(rdd, outputSchema)
+    val outputDF = dataset.sqlContext.sql(realStatement)
+    outputDF
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -68,12 +64,7 @@ class SQLTransformer (override val uid: String) extends Transformer {
     val dummyRDD = sc.parallelize(Seq(Row.empty))
     val dummyDF = sqlContext.createDataFrame(dummyRDD, schema)
     dummyDF.registerTempTable(tableIdentifier)
-    val additiveSchema = sqlContext.sql($(statement)).schema
-    additiveSchema.fieldNames.foreach {
-      case name =>
-        require(!schema.fieldNames.contains(name), s"Output column $name already exists.")
-    }
-    val outputSchema = StructType(Array.concat(schema.fields, additiveSchema.fields))
+    val outputSchema = sqlContext.sql($(statement)).schema
     outputSchema
   }
 
