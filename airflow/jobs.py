@@ -1,3 +1,5 @@
+from builtins import str
+from past.builtins import basestring
 from collections import defaultdict
 from datetime import datetime
 import getpass
@@ -425,7 +427,7 @@ class SchedulerJob(BaseJob):
             else:
                 d[ti.pool].append(ti)
 
-        for pool, tis in d.items():
+        for pool, tis in list(d.items()):
             open_slots = pools[pool].open_slots(session=session)
             if open_slots > 0:
                 tis = sorted(
@@ -593,7 +595,7 @@ class BackfillJob(BaseJob):
 
         # Triggering what is ready to get triggered
         while tasks_to_run:
-            for key, ti in tasks_to_run.items():
+            for key, ti in list(tasks_to_run.items()):
                 ti.refresh_from_db()
                 if ti.state == State.SUCCESS and key in tasks_to_run:
                     succeeded.append(key)
@@ -612,7 +614,7 @@ class BackfillJob(BaseJob):
             executor.heartbeat()
 
             # Reacting to events
-            for key, state in executor.get_event_buffer().items():
+            for key, state in list(executor.get_event_buffer().items()):
                 dag_id, task_id, execution_date = key
                 if key not in tasks_to_run:
                     continue

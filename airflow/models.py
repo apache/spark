@@ -1,4 +1,7 @@
 from __future__ import print_function
+from builtins import str
+from past.builtins import basestring
+from builtins import object
 import copy
 from datetime import datetime, timedelta
 import getpass
@@ -164,7 +167,7 @@ class DagBag(object):
                 self.file_last_changed[filepath] = dttm
                 return
 
-            for dag in m.__dict__.values():
+            for dag in list(m.__dict__.values()):
                 if isinstance(dag, DAG):
                     dag.full_filepath = filepath
                     dag.is_subdag = False
@@ -246,7 +249,7 @@ class DagBag(object):
                         pass
 
     def deactivate_inactive_dags(self):
-        active_dag_ids = [dag.dag_id for dag in self.dags.values()]
+        active_dag_ids = [dag.dag_id for dag in list(self.dags.values())]
         session = settings.Session()
         for dag in session.query(
                 DagModel).filter(~DagModel.dag_id.in_(active_dag_ids)).all():
@@ -275,7 +278,7 @@ class BaseUser(Base):
         return self.username
 
     def get_id(self):
-        return unicode(self.id)
+        return str(self.id)
 
 
 class Connection(Base):
@@ -963,7 +966,7 @@ class TaskInstance(Base):
                 elif isinstance(content, dict):
                     result = {
                         k: rt(v, jinja_context)
-                        for k, v in content.items()}
+                        for k, v in list(content.items())}
                 else:
                     raise AirflowException("Type not supported for templating")
                 setattr(task, attr, result)
@@ -1255,7 +1258,7 @@ class BaseOperator(object):
 
         self._upstream_list = sorted(self._upstream_list, key=lambda x: x.task_id)
         self._downstream_list = sorted(self._downstream_list, key=lambda x: x.task_id)
-        for k, v in self.__dict__.items():
+        for k, v in list(self.__dict__.items()):
             if k not in ('user_defined_macros', 'params'):
                 setattr(result, k, copy.deepcopy(v, memo))
 
@@ -1761,7 +1764,7 @@ class DAG(object):
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
-        for k, v in self.__dict__.items():
+        for k, v in list(self.__dict__.items()):
             if k not in ('user_defined_macros', 'params'):
                 setattr(result, k, copy.deepcopy(v, memo))
 
