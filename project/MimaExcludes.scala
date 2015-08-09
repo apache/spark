@@ -62,8 +62,6 @@ object MimaExcludes {
               "org.apache.spark.ml.classification.LogisticCostFun.this"),
             // SQL execution is considered private.
             excludePackage("org.apache.spark.sql.execution"),
-            // Parquet support is considered private.
-            excludePackage("org.apache.spark.sql.parquet"),
             // The old JSON RDD is removed in favor of streaming Jackson
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD$"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD"),
@@ -155,7 +153,27 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.SqlNewHadoopRDD$NewHadoopMapPartitionsWithSplitRDD$"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.PartitionSpec$"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DescribeCommand"),
-            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DDLException")
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DDLException"),
+            // SPARK-9763 Minimize exposure of internal SQL classes
+            excludePackage("org.apache.spark.sql.parquet"),
+            excludePackage("org.apache.spark.sql.json"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCRDD$DecimalConversion$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCPartition"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JdbcUtils$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCRDD$DecimalConversion"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCPartitioningInfo$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCPartition$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.package"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCRDD$JDBCConversion"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCRDD$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.package$DriverWrapper"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCRDD"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCPartitioningInfo"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JdbcUtils"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.DefaultSource"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCRelation$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.package$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCRelation")
           ) ++ Seq(
             // SPARK-4751 Dynamic allocation for standalone mode
             ProblemFilters.exclude[MissingMethodProblem](
