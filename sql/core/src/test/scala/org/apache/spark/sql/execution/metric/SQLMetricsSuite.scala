@@ -41,16 +41,6 @@ class SQLMetricsSuite extends SparkFunSuite {
     }
   }
 
-  test("IntSQLMetric should not box Int") {
-    val l = SQLMetrics.createIntMetric(TestSQLContext.sparkContext, "Int")
-    val f = () => { l += 1 }
-    BoxingFinder.getClassReader(f.getClass).foreach { cl =>
-      val boxingFinder = new BoxingFinder()
-      cl.accept(boxingFinder, 0)
-      assert(boxingFinder.boxingInvokes.isEmpty, s"Found boxing: ${boxingFinder.boxingInvokes}")
-    }
-  }
-
   test("Normal accumulator should do boxing") {
     // We need this test to make sure BoxingFinder works.
     val l = TestSQLContext.sparkContext.accumulator(0L)
