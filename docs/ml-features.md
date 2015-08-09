@@ -1193,7 +1193,7 @@ v_N
 This example below demonstrates how to transform vectors using a transforming vector value.
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 {% highlight scala %}
 import org.apache.spark.ml.feature.ElementwiseProduct
 import org.apache.spark.mllib.linalg.Vectors
@@ -1215,7 +1215,7 @@ val transformedData = transformer.transform(dataFrame)
 {% endhighlight %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
 {% highlight java %}
 import com.google.common.collect.Lists;
 
@@ -1252,6 +1252,21 @@ DataFrame transformedData = transformer.transform(dataFrame);
 
 {% endhighlight %}
 </div>
+
+<div data-lang="python" markdown="1">
+{% highlight python %}
+from pyspark.ml.feature import ElementwiseProduct
+from pyspark.mllib.linalg import Vectors
+
+data = [(Vectors.dense([1.0, 2.0, 3.0]),), (Vectors.dense([4.0, 5.0, 6.0]),)]
+df = sqlContext.createDataFrame(data, ["vector"])
+transformer = ElementwiseProduct(scalingVec=Vectors.dense([0.0, 1.0, 2.0]), 
+              inputCol="vector", outputCol="transformedVector")
+transformer.transform(df).show()
+
+{% endhighlight %}
+</div>
+
 </div>
 
 ## VectorAssembler
