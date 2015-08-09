@@ -332,7 +332,8 @@ private[spark] class TaskSchedulerImpl(
           // We lost this entire executor, so remember that it's gone
           val execId = taskIdToExecutorId(tid)
           if (activeExecutorIds.contains(execId)) {
-            removeExecutor(execId)
+            // TODO: Put something real here
+            removeExecutor(execId, new ExecutorLossReason("Unknown"))
             failedExecutor = Some(execId)
           }
         }

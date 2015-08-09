@@ -114,6 +114,7 @@ private[spark] abstract class YarnSchedulerBackend(
         addWebUIFilter(filterName, filterParams, proxyBase)
 
       case RemoveExecutor(executorId, reason) =>
+        logWarning(reason)
         removeExecutor(executorId, reason)
 
       case ContainerExited(containerExitStatus, msg) =>
