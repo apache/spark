@@ -362,6 +362,24 @@ class SparkSubmitSuite
     }
   }
 
+  // SPARK-9760
+  test("--packages without repository throws RuntimeException") {
+    intercept[RuntimeException] {
+      val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+      val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
+      val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
+      val args = Seq(
+        "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--master", "local-cluster[2,1,1024]",
+        "--packages", Seq(main, dep).mkString(","),
+        "--conf", "spark.ui.enabled=false",
+        unusedJar.toString,
+        "my.great.lib.MyLib", "my.great.dep.MyLib")
+      runSparkSubmit(args)
+    }
+  }
+
   test("correctly builds R packages included in a jar with --packages") {
     // TODO(SPARK-9603): Building a package to $SPARK_HOME/R/lib is unavailable on Jenkins.
     // It's hard to write the test in SparkR (because we can't create the repository dynamically)
