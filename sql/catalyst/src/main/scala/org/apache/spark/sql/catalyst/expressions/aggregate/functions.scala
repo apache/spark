@@ -302,3 +302,87 @@ case class Sum(child: Expression) extends AlgebraicAggregate {
 
   override val evaluateExpression = Cast(currentSum, resultType)
 }
+
+/**
+ * Calculates the unbiased Standard Deviation using the online formula here:
+ * https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
+ */
+case class StandardDeviation(child: Expression) extends AlgebraicAggregate {
+
+  override def children: Seq[Expression] = child :: Nil
+
+  override def nullable: Boolean = true
+
+  // Return data type.
+  override def dataType: DataType = resultType
+
+  // Expected input data type.
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
+
+  private lazy val resultType = child.dataType match {
+    case DecimalType.Fixed(p, s) =>
+      DecimalType.bounded(p + 4, s + 4)
+    case _ => DoubleType
+  }
+
+  private lazy val sumDataType = child.dataType match {
+    case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
+    case _ => DoubleType
+  }
+
+  private lazy val currentCount = AttributeReference("currentCount", LongType)()
+  private lazy val currentAvg = AttributeReference("currentAverage", sumDataType)()
+  private lazy val currentMk = AttributeReference("currentMoment", sumDataType)()
+
+  // the values should be updated in a special order, because they re-use each other
+  override lazy val bufferAttributes = currentCount :: currentAvg :: currentMk :: Nil
+
+  override lazy val initialValues = Seq(
+    /* currentCount = */ Literal(0L),
+    /* currentAvg = */ Cast(Literal(0), sumDataType),
+    /* currentMk = */ Cast(Literal(0), sumDataType)
+  )
+
+  override lazy val updateExpressions = {
+    val currentValue = Coalesce(Cast(child, sumDataType) :: Cast(Literal(0), sumDataType) :: Nil)
+    val deltaX = Subtract(currentValue, currentAvg)
+    val updatedCount = If(IsNull(child), currentCount, currentCount + 1L)
+    val updatedAvg = Add(currentAvg, Divide(deltaX, updatedCount))
+    Seq(
+      /* currentCount = */ updatedCount,
+      /* currentAvg = */ If(IsNull(child), currentAvg, updatedAvg),
+      /* currentMk = */ If(IsNull(child),
+        currentMk, Add(currentMk, deltaX * Subtract(currentValue, updatedAvg)))
+    )
+  }
+
+  override lazy val mergeExpressions = {
+    val totalCount = currentCount.left + currentCount.right
+    val deltaX = currentAvg.left - currentAvg.right
+    val deltaX2 = deltaX * deltaX
+    val sumMoments = currentMk.left + currentMk.right
+    val sumLeft = currentAvg.left * currentCount.left
+    val sumRight = currentAvg.right * currentCount.right
+    Seq(
+      /* currentCount = */ totalCount,
+      /* currentAvg = */ If(EqualTo(totalCount, Cast(Literal(0L), LongType)),
+        Cast(Literal(0), sumDataType), (sumLeft + sumRight) / totalCount),
+      /* currentMk = */ If(EqualTo(totalCount, Cast(Literal(0L), LongType)),
+        Cast(Literal(0), sumDataType),
+        sumMoments + deltaX2 * currentCount.left / totalCount * currentCount.right)
+    )
+  }
+
+  override lazy val evaluateExpression = {
+    val count = If(EqualTo(currentCount, Cast(Literal(0L), LongType)),
+      currentCount, currentCount - Cast(Literal(1L), LongType))
+    child.dataType match {
+      case DecimalType.Fixed(p, s) =>
+        // increase the precision and scale to prevent precision loss
+        val dt = DecimalType.bounded(p + 14, s + 4)
+        Cast(Sqrt(Cast(currentMk, dt) / Cast(count, dt)), resultType)
+      case _ =>
+        Sqrt(Cast(currentMk, resultType) / Cast(count, resultType))
+    }
+  }
+}

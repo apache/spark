@@ -164,4 +164,12 @@ object Utils {
       }
     case other => None
   }
+
+  def standardDeviation(e: Expression): Expression = {
+    val std = aggregate.AggregateExpression2(
+      aggregateFunction = aggregate.StandardDeviation(e),
+      mode = aggregate.Complete,
+      isDistinct = false)
+    Alias(std, s"std(${e.prettyString})")()
+  }
 }

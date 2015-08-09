@@ -22,6 +22,7 @@ import scala.reflect.runtime.universe.{TypeTag, typeTag}
 import scala.util.Try
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.expressions.aggregate.StandardDeviation
 import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
@@ -293,6 +294,22 @@ object functions {
    * @since 1.3.0
    */
   def min(columnName: String): Column = min(Column(columnName))
+
+  /**
+   * Aggregate function: returns the sample standard deviation of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.5.0
+   */
+  def std(e: Column): Column = aggregate.Utils.standardDeviation(e.expr)
+
+  /**
+   * Aggregate function: returns the sample standard deviation of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.5.0
+   */
+  def std(columnName: String): Column = std(Column(columnName))
 
   /**
    * Aggregate function: returns the sum of all values in the expression.

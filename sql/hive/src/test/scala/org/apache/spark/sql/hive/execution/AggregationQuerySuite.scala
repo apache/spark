@@ -22,6 +22,7 @@ import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions.std
 import org.scalatest.BeforeAndAfterAll
 import _root_.test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 
@@ -82,6 +83,32 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
     sqlContext.sql("DROP TABLE IF EXISTS agg2")
     sqlContext.dropTempTable("emptyTable")
     sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2.key, originalUseAggregate2.toString)
+  }
+
+  test("test standard deviation") {
+    val df = Seq.tabulate(10)(i => (i, 1)).toDF("val", "key")
+    checkAnswer(
+      df.select(std("val")),
+      Row(3.0276503540974917) :: Nil)
+
+    checkAnswer(
+      sqlContext.table("agg1").groupBy("key").std("value"),
+      Row(1, 10.0) :: Row(2, 0.7071067811865476) :: Row(3, null) ::
+        Row(null, 81.8535277187245) :: Nil)
+
+    checkAnswer(
+      sqlContext.table("agg1").select(std("key"), std("value")),
+      Row(0.7817359599705717, 44.898098909801135) :: Nil)
+
+    checkAnswer(
+      sqlContext.table("agg2").groupBy("key", "value1").std("value2"),
+      Row(1, 10, null) :: Row(1, 30, 42.42640687119285) :: Row(2, -1, null) ::
+        Row(2, 1, 0.0) :: Row(2, null, null) :: Row(3, null, null) :: Row(null, -10, null) ::
+        Row(null, -60, null) :: Row(null, 100, null) :: Row(null, null, null) :: Nil)
+
+    checkAnswer(
+      sqlContext.table("emptyTable").select(std("value")),
+      Row(null) :: Nil)
   }
 
   test("empty table") {

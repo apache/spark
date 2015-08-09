@@ -34,6 +34,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.StandardDeviation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
@@ -1268,15 +1269,11 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def describe(cols: String*): DataFrame = {
 
-    // TODO: Add stddev as an expression, and remove it from here.
-    def stddevExpr(expr: Expression): Expression =
-      Sqrt(Subtract(Average(Multiply(expr, expr)), Multiply(Average(expr), Average(expr))))
-
     // The list of summary statistics to compute, in the form of expressions.
     val statistics = List[(String, Expression => Expression)](
       "count" -> Count,
       "mean" -> Average,
-      "stddev" -> stddevExpr,
+      "stddev" -> aggregate.Utils.standardDeviation,
       "min" -> Min,
       "max" -> Max)
 
