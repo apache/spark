@@ -17,5 +17,8 @@
 
 package org.apache.spark.storage
 
+import org.apache.spark.SparkException
+
 private[spark]
-case class BlockFetchException(throwable: Throwable) extends Exception(throwable)
+case class BlockFetchException(messages: String, throwable: Throwable)
+  extends SparkException(messages, throwable)

@@ -606,7 +606,8 @@ private[spark] class BlockManager(
         case t: Throwable =>
           // Throw BlockFetchException wraps the last Exception when
           // there is no block we can fetch
-          throw new BlockFetchException(t)
+          throw new BlockFetchException(s"Failed to fetch block from" +
+            s" ${locations.size} locations. Most recent failure cause:", t)
       }
 
       if (data != null) {
