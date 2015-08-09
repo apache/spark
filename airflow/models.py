@@ -968,7 +968,11 @@ class TaskInstance(Base):
                         k: rt(v, jinja_context)
                         for k, v in list(content.items())}
                 else:
-                    raise AirflowException("Type not supported for templating")
+                    param_type = type(content)
+                    msg = (
+                        "Type '{param_type}' used for parameter '{attr}' is "
+                        "not supported for templating").format(**locals())
+                    raise AirflowException(msg)
                 setattr(task, attr, result)
 
     def email_alert(self, exception, is_retry=False):
