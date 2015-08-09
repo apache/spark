@@ -2029,21 +2029,20 @@ private[spark] object Utils extends Logging {
       }
       else {
         // If the new port wraps around, do not try a privilege port
-
-        if(!failedPorts.contains((startPort + Math.random() * (maxPort - startPort + 1)))) {
+        while(!failedPorts.contains((startPort + Math.random() * (maxPort - startPort + 1))) &&
+          (((startPort + offset - 1024) % (65536 - 1024)) + 1024) != (startPort + Math.random() * (maxPort - startPort + 1))) {
           (startPort + Math.random() * (maxPort - startPort + 1))
         }
-          else {
-          // This condition here checks whether there are sufficient successful ports to try the retry attempt.
-          // If yes, tryPort is adjusted, else increasing the maxPort limit by 1 to help accommodate the maxRetries
-          if ((maxPort - startPort) - failedPorts.length < (maxRetries - offset))
-            if (maxPort + 1 > 65536) {
-              maxPort + 1
-            }
-            else {
-              maxPort = 65536
-            }
+        // This condition here checks whether there are sufficient successful ports to try the retry attempt.
+        // If yes, tryPort is adjusted, else increasing the maxPort limit by 1 to help accommodate the maxRetries
+        if ((maxPort - startPort) - failedPorts.length < (maxRetries - offset)) {
+          if (maxPort + 1 > 65536) {
+            maxPort + 1
           }
+          else {
+            maxPort = 65536
+          }
+        }
       }
       try {
         val (service, port) = startService(tryPort)
@@ -2056,7 +2055,7 @@ private[spark] object Utils extends Logging {
               s"${e.getMessage}: Service$serviceString failed after $maxRetries retries!"
             failedPorts.insert(tryPort)
             val exception = new BindException(exceptionMessage)
-            // restore original stack trace
+            // restore original stack traceg
             exception.setStackTrace(e.getStackTrace)
             throw exception
           }
