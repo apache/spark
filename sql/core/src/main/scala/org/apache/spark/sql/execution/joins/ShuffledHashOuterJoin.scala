@@ -42,12 +42,23 @@ case class ShuffledHashOuterJoin(
     right: SparkPlan) extends BinaryNode with HashOuterJoin {
 
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+    ClusteredDistribution(leftKeys, nullSafe = false) ::
+      ClusteredDistribution(rightKeys, nullSafe = false) :: Nil
 
   override def outputPartitioning: Partitioning = joinType match {
-    case LeftOuter => left.outputPartitioning
-    case RightOuter => right.outputPartitioning
-    case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
+    case LeftOuter =>
+      val partitions =
+        left.outputPartitioning :: right.outputPartitioning.withNullSafeSetting(false) :: Nil
+      PartitioningCollection(partitions)
+    case RightOuter =>
+      val partitions =
+        Seq(right.outputPartitioning, left.outputPartitioning.withNullSafeSetting(false))
+      PartitioningCollection(partitions)
+    case FullOuter =>
+      val partitions =
+        left.outputPartitioning.withNullSafeSetting(false) ::
+          right.outputPartitioning.withNullSafeSetting(false) :: Nil
+      PartitioningCollection(partitions)
     case x =>
       throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
   }

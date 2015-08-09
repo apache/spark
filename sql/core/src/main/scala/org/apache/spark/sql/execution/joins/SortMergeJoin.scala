@@ -46,7 +46,8 @@ case class SortMergeJoin(
     PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
 
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+    ClusteredDistribution(leftKeys, nullSafe = false) ::
+      ClusteredDistribution(rightKeys, nullSafe = false) :: Nil
 
   override def outputOrdering: Seq[SortOrder] = requiredOrders(leftKeys)
 

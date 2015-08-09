@@ -49,12 +49,19 @@ case object AllTuples extends Distribution
  * can mean such tuples are either co-located in the same partition or they will be contiguous
  * within a single partition.
  */
-case class ClusteredDistribution(clustering: Seq[Expression]) extends Distribution {
+case class ClusteredDistribution(
+    clustering: Seq[Expression],
+    nullSafe: Boolean) extends Distribution {
   require(
     clustering != Nil,
     "The clustering expressions of a ClusteredDistribution should not be Nil. " +
       "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
+}
+
+object ClusteredDistribution {
+  def apply(clustering: Seq[Expression]): ClusteredDistribution =
+    ClusteredDistribution(clustering, nullSafe = true)
 }
 
 /**
@@ -90,9 +97,22 @@ sealed trait Partitioning {
   /**
    * Returns true iff we can say that the partitioning scheme of this [[Partitioning]]
    * guarantees the same partitioning scheme described by `other`.
+   *
+   * If a [[Partitioning]] supports `nullSafe` setting, the nullSafe version of this
+   * [[Partitioning]] should always `guarantees` its nullUnsafe version.
+   * For example, HashPartitioning(expressions = 'a, numPartitions = 10, nullSafe = true)
+   * guarantees HashPartitioning(expressions = 'a, numPartitions = 10, nullSafe = false).
+   * However, HashPartitioning(expressions = 'a, numPartitions = 10, nullSafe = false) does not
+   * guarantees HashPartitioning(expressions = 'a, numPartitions = 10, nullSafe = true).
    */
-  // TODO: Add an example once we have the `nullSafe` concept.
   def guarantees(other: Partitioning): Boolean
+
+  /**
+   * If a [[Partitioning]] supports `nullSafe` setting, returns a new instance of this
+   * [[Partitioning]] with the given nullSafe setting. Otherwise, returns this
+   * [[Partitioning]].
+   */
+  def withNullSafeSetting(newNullSafe: Boolean): Partitioning
 }
 
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
@@ -102,6 +122,8 @@ case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
   }
 
   override def guarantees(other: Partitioning): Boolean = false
+
+  override def withNullSafeSetting(newNullSafe: Boolean): Partitioning = this
 }
 
 case object SinglePartition extends Partitioning {
@@ -113,6 +135,8 @@ case object SinglePartition extends Partitioning {
     case SinglePartition => true
     case _ => false
   }
+
+  override def withNullSafeSetting(newNullSafe: Boolean): Partitioning = this
 }
 
 case object BroadcastPartitioning extends Partitioning {
@@ -124,6 +148,8 @@ case object BroadcastPartitioning extends Partitioning {
     case BroadcastPartitioning => true
     case _ => false
   }
+
+  override def withNullSafeSetting(newNullSafe: Boolean): Partitioning = this
 }
 
 /**
@@ -131,7 +157,10 @@ case object BroadcastPartitioning extends Partitioning {
  * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
  * in the same partition.
  */
-case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
+case class HashPartitioning(
+    expressions: Seq[Expression],
+    numPartitions: Int,
+    nullSafe: Boolean)
   extends Expression with Partitioning with Unevaluable {
 
   override def children: Seq[Expression] = expressions
@@ -142,16 +171,30 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
-    case ClusteredDistribution(requiredClustering) =>
+    case ClusteredDistribution(requiredClustering, _) if nullSafe =>
+      clusteringSet.subsetOf(requiredClustering.toSet)
+    case ClusteredDistribution(requiredClustering, false) if !nullSafe =>
       clusteringSet.subsetOf(requiredClustering.toSet)
     case _ => false
   }
 
   override def guarantees(other: Partitioning): Boolean = other match {
-    case o: HashPartitioning =>
+    case o: HashPartitioning if (nullSafe || (!nullSafe && !o.nullSafe)) =>
       this.clusteringSet == o.clusteringSet && this.numPartitions == o.numPartitions
     case _ => false
   }
+
+  override def withNullSafeSetting(newNullSafe: Boolean): Partitioning = {
+    HashPartitioning(expressions, numPartitions, nullSafe = newNullSafe)
+  }
+
+  override def toString: String =
+    s"${super.toString} numPartitions=$numPartitions nullSafe=$nullSafe"
+}
+
+object HashPartitioning {
+  def apply(expressions: Seq[Expression], numPartitions: Int): HashPartitioning =
+    HashPartitioning(expressions, numPartitions, nullSafe = true)
 }
 
 /**
@@ -180,7 +223,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     case OrderedDistribution(requiredOrdering) =>
       val minSize = Seq(requiredOrdering.size, ordering.size).min
       requiredOrdering.take(minSize) == ordering.take(minSize)
-    case ClusteredDistribution(requiredClustering) =>
+    case ClusteredDistribution(requiredClustering, _) =>
       clusteringSet.subsetOf(requiredClustering.toSet)
     case _ => false
   }
@@ -189,6 +232,10 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     case o: RangePartitioning => this == o
     case _ => false
   }
+
+  override def withNullSafeSetting(newNullSafe: Boolean): Partitioning = this
+
+  override def toString: String = s"${super.toString} numPartitions=$numPartitions"
 }
 
 /**
@@ -234,6 +281,10 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
    */
   override def guarantees(other: Partitioning): Boolean =
     partitionings.exists(_.guarantees(other))
+
+  override def withNullSafeSetting(newNullSafe: Boolean): Partitioning = {
+    PartitioningCollection(partitionings.map(_.withNullSafeSetting(newNullSafe)))
+  }
 
   override def toString: String = {
     partitionings.map(_.toString).mkString("(", " or ", ")")

@@ -104,6 +104,80 @@ class DistributionSuite extends SparkFunSuite {
     */
   }
 
+  test("HashPartitioning (with nullSafe = false) is the output partitioning") {
+    // Cases which do not need an exchange between two data properties.
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b, 'c), 10, false),
+      UnspecifiedDistribution,
+      true)
+
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b, 'c), 10, false),
+      ClusteredDistribution(Seq('a, 'b, 'c), false),
+      true)
+
+    checkSatisfied(
+      HashPartitioning(Seq('b, 'c), 10, false),
+      ClusteredDistribution(Seq('a, 'b, 'c), false),
+      true)
+
+    checkSatisfied(
+      SinglePartition,
+      ClusteredDistribution(Seq('a, 'b, 'c), false),
+      true)
+
+    checkSatisfied(
+      SinglePartition,
+      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      true)
+
+    // Cases which need an exchange between two data properties.
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b, 'c), 10, false),
+      ClusteredDistribution(Seq('a, 'b, 'c)),
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq('b, 'c), 10, false),
+      ClusteredDistribution(Seq('a, 'b, 'c)),
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b, 'c), 10, false),
+      ClusteredDistribution(Seq('b, 'c)),
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b, 'c), 10, false),
+      ClusteredDistribution(Seq('d, 'e)),
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b, 'c), 10, false),
+      ClusteredDistribution(Seq('b, 'c), false),
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b, 'c), 10, false),
+      ClusteredDistribution(Seq('d, 'e), false),
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b, 'c), 10, false),
+      AllTuples,
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b, 'c), 10, false),
+      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq('b, 'c), 10, false),
+      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      false)
+  }
+
   test("RangePartitioning is the output partitioning") {
     // Cases which do not need an exchange between two data properties.
     checkSatisfied(
