@@ -51,17 +51,14 @@ private[sql] class SQLListener(sqlContext: SQLContext) extends SparkListener wit
 
   private val completedExecutions = mutable.ListBuffer[SQLExecutionUIData]()
 
-  @VisibleForTesting
   def executionIdToData: Map[Long, SQLExecutionUIData] = synchronized {
     _executionIdToData.toMap
   }
 
-  @VisibleForTesting
   def jobIdToExecutionId: Map[Long, Long] = synchronized {
     _jobIdToExecutionId.toMap
   }
 
-  @VisibleForTesting
   def stageIdToStageMetrics: Map[Long, SQLStageMetrics] = synchronized {
     _stageIdToStageMetrics.toMap
   }
