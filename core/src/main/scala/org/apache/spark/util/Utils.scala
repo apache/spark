@@ -2055,7 +2055,7 @@ private[spark] object Utils extends Logging {
               s"${e.getMessage}: Service$serviceString failed after $maxRetries retries!"
             failedPorts.insert(tryPort)
             val exception = new BindException(exceptionMessage)
-            // restore original stack traceg
+            // restore original stack trace
             exception.setStackTrace(e.getStackTrace)
             throw exception
           }
