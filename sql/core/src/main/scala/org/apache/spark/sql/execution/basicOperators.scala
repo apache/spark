@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.{RDD, ShuffledRDD}
+import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -30,6 +30,7 @@ import org.apache.spark.sql.metric.SQLMetrics
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
+import org.apache.spark.util.random.PoissonSampler
 import org.apache.spark.util.{CompletionIterator, MutablePair}
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
@@ -130,12 +131,21 @@ case class Sample(
 {
   override def output: Seq[Attribute] = child.output
 
-  // TODO: How to pick seed?
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
+
   protected override def doExecute(): RDD[InternalRow] = {
     if (withReplacement) {
-      child.execute().map(_.copy()).sample(withReplacement, upperBound - lowerBound, seed)
+      // Disable gap sampling since the gap sampling method buffers two rows internally,
+      // requiring us to copy the row, which is more expensive than the random number generator.
+      new PartitionwiseSampledRDD[InternalRow, InternalRow](
+        child.execute(),
+        new PoissonSampler[InternalRow](upperBound - lowerBound, useGapSamplingIfPossible = false),
+        preservesPartitioning = true,
+        seed)
     } else {
-      child.execute().map(_.copy()).randomSampleWithRange(lowerBound, upperBound, seed)
+      child.execute().randomSampleWithRange(lowerBound, upperBound, seed)
     }
   }
 }
