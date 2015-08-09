@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.sql.metric.SQLMetrics
 import org.apache.spark.util.collection.CompactBuffer
 
 /**
@@ -38,7 +39,10 @@ case class SortMergeJoin(
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode {
 
-  override protected[sql] val trackNumOfRowsEnabled = true
+  override private[sql] lazy val metrics = Map(
+    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
+    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = left.output ++ right.output
 
@@ -62,8 +66,18 @@ case class SortMergeJoin(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val leftResults = left.execute().map(_.copy())
-    val rightResults = right.execute().map(_.copy())
+    val numLeftRows = longMetric("numLeftRows")
+    val numRightRows = longMetric("numRightRows")
+    val numOutputRows = longMetric("numOutputRows")
+
+    val leftResults = left.execute().map { row =>
+      numLeftRows += 1
+      row.copy()
+    }
+    val rightResults = right.execute().map { row =>
+      numRightRows += 1
+      row.copy()
+    }
 
     leftResults.zipPartitions(rightResults) { (leftIter, rightIter) =>
       new Iterator[InternalRow] {
@@ -98,6 +112,7 @@ case class SortMergeJoin(
                 rightMatches = null
               }
             }
+            numOutputRows += 1
             joinedRow
           } else {
             // no more result

@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{UnspecifiedDistribution, ClusteredDistribution, AllTuples, Distribution}
 import org.apache.spark.sql.execution.{UnaryNode, SparkPlan}
+import org.apache.spark.sql.metric.SQLMetrics
 
 case class TungstenAggregate(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
@@ -34,6 +35,10 @@ case class TungstenAggregate(
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends UnaryNode {
+
+  override private[sql] lazy val metrics = Map(
+    "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def outputsUnsafeRows: Boolean = true
 
@@ -61,7 +66,13 @@ case class TungstenAggregate(
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
-    child.execute().mapPartitions { iter =>
+    val numInputRows = longMetric("numInputRows")
+    val numOutputRows = longMetric("numOutputRows")
+    child.execute().mapPartitions { _iter =>
+      val iter = _iter.map { row =>
+        numInputRows += 1
+        row
+      }
       val hasInput = iter.hasNext
       if (!hasInput && groupingExpressions.nonEmpty) {
         // This is a grouped aggregate and the input iterator is empty,
@@ -81,9 +92,13 @@ case class TungstenAggregate(
             testFallbackStartsAt)
 
         if (!hasInput && groupingExpressions.isEmpty) {
+          numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
         } else {
-          aggregationIterator
+          aggregationIterator.map { row =>
+            numOutputRows += 1
+            row
+          }
         }
       }
     }

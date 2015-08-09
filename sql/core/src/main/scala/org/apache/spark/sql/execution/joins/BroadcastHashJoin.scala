@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryNode, SQLExecution, SparkPlan}
+import org.apache.spark.sql.metric.SQLMetrics
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.{InternalAccumulator, TaskContext}
 
@@ -45,7 +46,10 @@ case class BroadcastHashJoin(
     right: SparkPlan)
   extends BinaryNode with HashJoin {
 
-  override protected[sql] val trackNumOfRowsEnabled = true
+  override private[sql] lazy val metrics = Map(
+    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
+    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   val timeout: Duration = {
     val timeoutValue = sqlContext.conf.broadcastTimeout
@@ -65,6 +69,11 @@ case class BroadcastHashJoin(
   // for the same query.
   @transient
   private lazy val broadcastFuture = {
+    val numBuildRows = buildSide match {
+      case BuildLeft => longMetric("numLeftRows")
+      case BuildRight => longMetric("numRightRows")
+    }
+
     // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     future {
@@ -73,7 +82,10 @@ case class BroadcastHashJoin(
       SQLExecution.withExecutionId(sparkContext, executionId) {
         // Note that we use .execute().collect() because we don't want to convert data to Scala
         // types
-        val input: Array[InternalRow] = buildPlan.execute().map(_.copy()).collect()
+        val input: Array[InternalRow] = buildPlan.execute().map { row =>
+          numBuildRows += 1
+          row.copy()
+        }.collect()
         val hashed = HashedRelation(input.iterator, buildSideKeyGenerator, input.size)
         sparkContext.broadcast(hashed)
       }
@@ -85,6 +97,12 @@ case class BroadcastHashJoin(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
+    val numStreamedRows = buildSide match {
+      case BuildLeft => longMetric("numRightRows")
+      case BuildRight => longMetric("numLeftRows")
+    }
+    val numOutputRows = longMetric("numOutputRows")
+
     val broadcastRelation = Await.result(broadcastFuture, timeout)
 
     streamedPlan.execute().mapPartitions { streamedIter =>
@@ -95,7 +113,13 @@ case class BroadcastHashJoin(
             InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getUnsafeSize)
         case _ =>
       }
-      hashJoin(streamedIter, hashedRelation)
+      hashJoin(streamedIter.map { row =>
+        numStreamedRows += 1
+        row
+      }, hashedRelation).map { row =>
+        numOutputRows += 1
+        row
+      }
     }
   }
 }

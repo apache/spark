@@ -23,6 +23,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.sql.metric.SQLMetrics
 
 /**
  * :: DeveloperApi ::
@@ -37,21 +38,44 @@ case class BroadcastLeftSemiJoinHash(
     right: SparkPlan,
     condition: Option[Expression]) extends BinaryNode with HashSemiJoin {
 
+  override private[sql] lazy val metrics = Map(
+    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
+    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
   protected override def doExecute(): RDD[InternalRow] = {
-    val input = right.execute().map(_.copy()).collect()
+    val numLeftRows = longMetric("numLeftRows")
+    val numRightRows = longMetric("numRightRows")
+    val numOutputRows = longMetric("numOutputRows")
+
+    val input = right.execute().map { row =>
+      numRightRows += 1
+      row.copy()
+    }.collect()
 
     if (condition.isEmpty) {
       val hashSet = buildKeyHashSet(input.toIterator)
       val broadcastedRelation = sparkContext.broadcast(hashSet)
 
-      left.execute().mapPartitions { streamIter =>
-        hashSemiJoin(streamIter, broadcastedRelation.value)
+      left.execute().mapPartitions { _streamIter =>
+        val streamIter = _streamIter.map { row =>
+          numLeftRows += 1
+          row
+        }
+        hashSemiJoin(streamIter, broadcastedRelation.value).map { row =>
+          numOutputRows += 1
+          row
+        }
       }
     } else {
       val hashRelation = HashedRelation(input.toIterator, rightKeyGenerator, input.size)
       val broadcastedRelation = sparkContext.broadcast(hashRelation)
 
-      left.execute().mapPartitions { streamIter =>
+      left.execute().mapPartitions { _streamIter =>
+        val streamIter = _streamIter.map { row =>
+          numLeftRows += 1
+          row
+        }
         val hashedRelation = broadcastedRelation.value
         hashedRelation match {
           case unsafe: UnsafeHashedRelation =>
@@ -59,7 +83,10 @@ case class BroadcastLeftSemiJoinHash(
               InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getUnsafeSize)
           case _ =>
         }
-        hashSemiJoin(streamIter, hashedRelation)
+        hashSemiJoin(streamIter, hashedRelation).map { row =>
+          numOutputRows += 1
+          row
+        }
       }
     }
   }

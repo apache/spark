@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.sql.metric.SQLMetrics
 
 /**
  * :: DeveloperApi ::
@@ -41,6 +42,11 @@ case class ShuffledHashOuterJoin(
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode with HashOuterJoin {
 
+  override private[sql] lazy val metrics = Map(
+    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
+    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
@@ -53,8 +59,21 @@ case class ShuffledHashOuterJoin(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
+    val numLeftRows = longMetric("numLeftRows")
+    val numRightRows = longMetric("numRightRows")
+    val numOutputRows = longMetric("numOutputRows")
     val joinedRow = new JoinedRow()
-    left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
+
+    val leftResults = left.execute().map { row =>
+      numLeftRows += 1
+      row
+    }
+    val rightResults = right.execute().map { row =>
+      numRightRows += 1
+      row
+    }
+
+    leftResults.zipPartitions(rightResults) { (leftIter, rightIter) =>
       // TODO this probably can be replaced by external sort (sort merged join?)
       joinType match {
         case LeftOuter =>
@@ -92,6 +111,9 @@ case class ShuffledHashOuterJoin(
           throw new IllegalArgumentException(
             s"ShuffledHashOuterJoin should not take $x as the JoinType")
       }
+    }.map { row =>
+      numOutputRows += 1
+      row
     }
   }
 }

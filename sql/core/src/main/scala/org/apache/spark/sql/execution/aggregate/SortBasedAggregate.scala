@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical.{UnspecifiedDistribution, ClusteredDistribution, AllTuples, Distribution}
 import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, SparkPlan, UnaryNode}
+import org.apache.spark.sql.metric.SQLMetrics
 import org.apache.spark.sql.types.StructType
 
 case class SortBasedAggregate(
@@ -37,6 +38,10 @@ case class SortBasedAggregate(
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends UnaryNode {
+
+  override private[sql] lazy val metrics = Map(
+    "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def outputsUnsafeRows: Boolean = false
 
@@ -63,7 +68,13 @@ case class SortBasedAggregate(
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
-    child.execute().mapPartitions { iter =>
+    val numInputRows = longMetric("numInputRows")
+    val numOutputRows = longMetric("numOutputRows")
+    child.execute().mapPartitions { _iter =>
+      val iter = _iter.map { row =>
+        numInputRows += 1
+        row
+      }
       // Because the constructor of an aggregation iterator will read at least the first row,
       // we need to get the value of iter.hasNext first.
       val hasInput = iter.hasNext
@@ -88,9 +99,13 @@ case class SortBasedAggregate(
         if (!hasInput && groupingExpressions.isEmpty) {
           // There is no input and there is no grouping expressions.
           // We need to output a single row as the output.
+          numOutputRows += 1
           Iterator[InternalRow](outputIter.outputForEmptyGroupingKeyWithoutInput())
         } else {
-          outputIter
+          outputIter.map { row =>
+            numOutputRows += 1
+            row
+          }
         }
       }
     }

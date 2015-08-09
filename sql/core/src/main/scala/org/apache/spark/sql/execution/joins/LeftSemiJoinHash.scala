@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, Distribution, ClusteredDistribution}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.sql.metric.SQLMetrics
 
 /**
  * :: DeveloperApi ::
@@ -37,19 +38,42 @@ case class LeftSemiJoinHash(
     right: SparkPlan,
     condition: Option[Expression]) extends BinaryNode with HashSemiJoin {
 
+  override private[sql] lazy val metrics = Map(
+    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
+    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
   override def outputPartitioning: Partitioning = left.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = {
-    right.execute().zipPartitions(left.execute()) { (buildIter, streamIter) =>
+    val numLeftRows = longMetric("numLeftRows")
+    val numRightRows = longMetric("numRightRows")
+    val numOutputRows = longMetric("numOutputRows")
+
+    val leftResults = left.execute().map { row =>
+      numLeftRows += 1
+      row
+    }
+    val rightResults = right.execute().map { row =>
+      numRightRows += 1
+      row
+    }
+    rightResults.zipPartitions(leftResults) { (buildIter, streamIter) =>
       if (condition.isEmpty) {
         val hashSet = buildKeyHashSet(buildIter)
-        hashSemiJoin(streamIter, hashSet)
+        hashSemiJoin(streamIter, hashSet).map { row =>
+          numOutputRows += 1
+          row
+        }
       } else {
         val hashRelation = HashedRelation(buildIter, rightKeyGenerator)
-        hashSemiJoin(streamIter, hashRelation)
+        hashSemiJoin(streamIter, hashRelation)map { row =>
+          numOutputRows += 1
+          row
+        }
       }
     }
   }
