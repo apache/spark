@@ -30,6 +30,41 @@ class DataFrameStatSuite extends QueryTest {
 
   private def toLetter(i: Int): String = (i + 97).toChar.toString
 
+  test("sample with replacement") {
+    val n = 100
+    val data = sqlCtx.sparkContext.parallelize(1 to n, 2).toDF("id")
+    checkAnswer(
+      data.sample(withReplacement = true, 0.05, seed = 13),
+      Seq(5, 10, 52, 73).map(Row(_))
+    )
+  }
+
+  test("sample without replacement") {
+    val n = 100
+    val data = sqlCtx.sparkContext.parallelize(1 to n, 2).toDF("id")
+    checkAnswer(
+      data.sample(withReplacement = false, 0.05, seed = 13),
+      Seq(16, 23, 88, 100).map(Row(_))
+    )
+  }
+
+  test("randomSplit") {
+    val n = 600
+    val data = sqlCtx.sparkContext.parallelize(1 to n, 2).toDF("id")
+    for (seed <- 1 to 5) {
+      val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
+      assert(splits.length == 3, "wrong number of splits")
+
+      assert(splits.reduce((a, b) => a.unionAll(b)).sort("id").collect().toList ==
+        data.collect().toList, "incomplete or wrong split")
+
+      val s = splits.map(_.count())
+      assert(math.abs(s(0) - 100) < 50) // std =  9.13
+      assert(math.abs(s(1) - 200) < 50) // std = 11.55
+      assert(math.abs(s(2) - 300) < 50) // std = 12.25
+    }
+  }
+
   test("pearson correlation") {
     val df = Seq.tabulate(10)(i => (i, 2 * i, i * -1.0)).toDF("a", "b", "c")
     val corr1 = df.stat.corr("a", "b", "pearson")
