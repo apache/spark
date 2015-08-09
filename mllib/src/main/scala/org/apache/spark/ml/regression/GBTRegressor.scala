@@ -189,7 +189,7 @@ final class GBTRegressionModel(
   }
 
   override def toString: String = {
-    s"GBTRegressionModel with $numTrees trees"
+    s"${super.toString} GBTRegressionModel with $numTrees trees"
   }
 
   /** (private[ml]) Convert to a model in the old API */

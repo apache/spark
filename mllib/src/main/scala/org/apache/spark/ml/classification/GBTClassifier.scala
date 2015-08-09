@@ -200,7 +200,7 @@ final class GBTClassificationModel(
   }
 
   override def toString: String = {
-    s"GBTClassificationModel with $numTrees trees"
+    s"${super.toString} GBTClassificationModel with $numTrees trees"
   }
 
   /** (private[ml]) Convert to a model in the old API */

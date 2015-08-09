@@ -144,7 +144,7 @@ final class DecisionTreeClassificationModel private[ml] (
   }
 
   override def toString: String = {
-    s"DecisionTreeClassificationModel of depth $depth with $numNodes nodes"
+    s"${super.toString} DecisionTreeClassificationModel of depth $depth with $numNodes nodes"
   }
 
   /** (private[ml]) Convert to a model in the old API */

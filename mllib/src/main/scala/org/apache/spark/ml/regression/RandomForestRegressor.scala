@@ -155,7 +155,7 @@ final class RandomForestRegressionModel private[ml] (
   }
 
   override def toString: String = {
-    s"RandomForestRegressionModel with $numTrees trees"
+    s"${super.toString} RandomForestRegressionModel with $numTrees trees"
   }
 
   /**
