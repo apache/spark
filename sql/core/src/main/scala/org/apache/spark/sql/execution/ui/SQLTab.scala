@@ -38,12 +38,12 @@ private[sql] class SQLTab(sqlContext: SQLContext, sparkUI: SparkUI)
 
 private[sql] object SQLTab {
 
-  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/ui/static"
+  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
 
   private val nextTabId = new AtomicInteger(0)
 
   private def nextTabName: String = {
     val nextId = nextTabId.getAndIncrement()
-    if (nextId == 0) "SQL" else s"SQL${nextId}"
+    if (nextId == 0) "SQL" else s"SQL$nextId"
   }
 }
