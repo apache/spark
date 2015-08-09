@@ -34,6 +34,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                          HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol):
     """
     Logistic regression.
+    Currently, this class only supports binary classification.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.mllib.linalg import Vectors
@@ -96,8 +97,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         #  is an L2 penalty. For alpha = 1, it is an L1 penalty.
         self.elasticNetParam = \
             Param(self, "elasticNetParam",
-                  "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty " +
-                  "is an L2 penalty. For alpha = 1, it is an L1 penalty.")
+                  "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
+                  "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
         #: param for whether to fit an intercept term.
         self.fitIntercept = Param(self, "fitIntercept", "whether to fit an intercept term.")
         #: param for threshold in binary classification prediction, in range [0, 1].
@@ -656,6 +657,13 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
                  HasRawPredictionCol):
     """
     Naive Bayes Classifiers.
+    It supports both Multinomial NB
+    (`http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html`)
+    which can handle finitely supported discrete data. For example, by converting documents into
+    TF-IDF vectors, it can be used for document classification. By making every vector a
+    binary (0/1) data, it can also be used as Bernoulli NB
+    (`http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html`).
+    The input feature values must be nonnegative.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.mllib.linalg import Vectors
