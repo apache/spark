@@ -142,7 +142,7 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
       }.queryExecution.assertAnalyzed()
     }
     assert(e.getMessage.contains(
-      "* is not considered as valid explode input, use concrete column instead"))
+      "Cannot explode *, explode can only be applied on a specific column."))
 
     df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
       csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq

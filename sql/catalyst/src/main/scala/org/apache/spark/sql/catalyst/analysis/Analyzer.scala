@@ -603,7 +603,7 @@ class Analyzer(
   object ResolveGenerate extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case g: Generate if ResolveReferences.containsStar(g.generator.children) =>
-        failAnalysis("* is not considered as valid explode input, use concrete column instead")
+        failAnalysis("Cannot explode *, explode can only be applied on a specific column.")
       case p: Generate if !p.child.resolved || !p.generator.resolved => p
       case g: Generate if !g.resolved =>
         g.copy(generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
