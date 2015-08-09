@@ -53,10 +53,12 @@ import org.apache.spark.sql.{AnalysisException, SQLConf}
  *        backwards-compatible with these settings.  If this argument is set to `false`, we fallback
  *        to old style non-standard behaviors.
  */
-private[parquet] class CatalystSchemaConverter(
-    private val assumeBinaryIsString: Boolean,
-    private val assumeInt96IsTimestamp: Boolean,
-    private val followParquetFormatSpec: Boolean) extends SchemaConverter{
+private[parquet] class ProtobufCatalystSchemaConverter(
+      private val assumeBinaryIsString: Boolean,
+      private val assumeInt96IsTimestamp: Boolean,
+      private val followParquetFormatSpec: Boolean) extends SchemaConverter {
+
+
 
   // Only used when constructing converter for converting Spark SQL schema to Parquet schema, in
   // which case `assumeInt96IsTimestamp` and `assumeBinaryIsString` are irrelevant.
@@ -99,8 +101,7 @@ private[parquet] class CatalystSchemaConverter(
           StructField(field.getName, convertField(field), nullable = false)
 
         case REPEATED =>
-          throw new AnalysisException(
-            s"REPEATED not supported outside LIST or MAP. Type: $field")
+          StructField(field.getName, convertField(field), nullable = false)
       }
     }
 
@@ -118,6 +119,7 @@ private[parquet] class CatalystSchemaConverter(
   private def convertPrimitiveField(field: PrimitiveType): DataType = {
     val typeName = field.getPrimitiveTypeName
     val originalType = field.getOriginalType
+    val repetition = field.getRepetition
 
     def typeString =
       if (originalType == null) s"$typeName" else s"$typeName ($originalType)"
@@ -142,118 +144,130 @@ private[parquet] class CatalystSchemaConverter(
       DecimalType(precision, scale)
     }
 
-    typeName match {
-      case BOOLEAN => BooleanType
+    def toPrimitiveType: AtomicType with Product with Serializable = {
+      typeName match {
+        case BOOLEAN => BooleanType
 
-      case FLOAT => FloatType
+        case FLOAT => FloatType
 
-      case DOUBLE => DoubleType
+        case DOUBLE => DoubleType
 
-      case INT32 =>
-        originalType match {
-          case INT_8 => ByteType
-          case INT_16 => ShortType
-          case INT_32 | null => IntegerType
-          case DATE => DateType
-          case DECIMAL => makeDecimalType(maxPrecisionForBytes(4))
-          case TIME_MILLIS => typeNotImplemented()
-          case _ => illegalType()
-        }
+        case INT32 =>
+          originalType match {
+            case INT_8 => ByteType
+            case INT_16 => ShortType
+            case INT_32 | null => IntegerType
+            case DATE => DateType
+            case DECIMAL => makeDecimalType(maxPrecisionForBytes(4))
+            case TIME_MILLIS => typeNotImplemented()
+            case _ => illegalType()
+          }
 
-      case INT64 =>
-        originalType match {
-          case INT_64 | null => LongType
-          case DECIMAL => makeDecimalType(maxPrecisionForBytes(8))
-          case TIMESTAMP_MILLIS => typeNotImplemented()
-          case _ => illegalType()
-        }
+        case INT64 =>
+          originalType match {
+            case INT_64 | null => LongType
+            case DECIMAL => makeDecimalType(maxPrecisionForBytes(8))
+            case TIMESTAMP_MILLIS => typeNotImplemented()
+            case _ => illegalType()
+          }
 
-      case INT96 =>
-        CatalystSchemaConverter.analysisRequire(
-          assumeInt96IsTimestamp,
-          "INT96 is not supported unless it's interpreted as timestamp. " +
-            s"Please try to set ${SQLConf.PARQUET_INT96_AS_TIMESTAMP.key} to true.")
-        TimestampType
+        case INT96 =>
+          CatalystSchemaConverter.analysisRequire(
+            assumeInt96IsTimestamp,
+            "INT96 is not supported unless it's interpreted as timestamp. " +
+              s"Please try to set ${SQLConf.PARQUET_INT96_AS_TIMESTAMP.key} to true.")
+          TimestampType
 
-      case BINARY =>
-        originalType match {
-          case UTF8 | ENUM => StringType
-          case null if assumeBinaryIsString => StringType
-          case null => BinaryType
-          case DECIMAL => makeDecimalType()
-          case _ => illegalType()
-        }
+        case BINARY =>
+          originalType match {
+            case UTF8 | ENUM => StringType
+            case null if assumeBinaryIsString => StringType
+            case null => BinaryType
+            case DECIMAL => makeDecimalType()
+            case _ => illegalType()
+          }
 
-      case FIXED_LEN_BYTE_ARRAY =>
-        originalType match {
-          case DECIMAL => makeDecimalType(maxPrecisionForBytes(field.getTypeLength))
-          case INTERVAL => typeNotImplemented()
-          case _ => illegalType()
-        }
+        case FIXED_LEN_BYTE_ARRAY =>
+          originalType match {
+            case DECIMAL => makeDecimalType(maxPrecisionForBytes(field.getTypeLength))
+            case INTERVAL => typeNotImplemented()
+            case _ => illegalType()
+          }
 
-      case _ => illegalType()
+        case _ => illegalType()
+      }
     }
+    if(repetition.equals(Type.Repetition.REPEATED)) {
+      ArrayType(toPrimitiveType, false)
+    } else {
+      toPrimitiveType
+    }
+
   }
 
   private def convertGroupField(field: GroupType): DataType = {
-    Option(field.getOriginalType).fold(convert(field): DataType) {
-      // A Parquet list is represented as a 3-level structure:
-      //
-      //   <list-repetition> group <name> (LIST) {
-      //     repeated group list {
-      //       <element-repetition> <element-type> element;
-      //     }
-      //   }
-      //
-      // However, according to the most recent Parquet format spec (not released yet up until
-      // writing), some 2-level structures are also recognized for backwards-compatibility.  Thus,
-      // we need to check whether the 2nd level or the 3rd level refers to list element type.
-      //
-      // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
-      case LIST =>
-        CatalystSchemaConverter.analysisRequire(
-          field.getFieldCount == 1, s"Invalid list type $field")
+    if (field.getRepetition.equals(Type.Repetition.REPEATED)) {
+      ArrayType(convert(field), false)
+    } else {
+      Option(field.getOriginalType).fold(convert(field): DataType) {
+        // A Parquet list is represented as a 3-level structure:
+        //
+        //   <list-repetition> group <name> (LIST) {
+        //     repeated group list {
+        //       <element-repetition> <element-type> element;
+        //     }
+        //   }
+        //
+        // However, according to the most recent Parquet format spec (not released yet up until
+        // writing), some 2-level structures are also recognized for backwards-compatibility.  Thus,
+        // we need to check whether the 2nd level or the 3rd level refers to list element type.
+        //
+        // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
+        case LIST =>
+          CatalystSchemaConverter.analysisRequire(
+            field.getFieldCount == 1, s"Invalid list type $field")
 
-        val repeatedType = field.getType(0)
-        CatalystSchemaConverter.analysisRequire(
-          repeatedType.isRepetition(REPEATED), s"Invalid list type $field")
+          val repeatedType = field.getType(0)
+          CatalystSchemaConverter.analysisRequire(
+            repeatedType.isRepetition(REPEATED), s"Invalid list type $field")
 
-        if (isElementType(repeatedType, field.getName)) {
-          ArrayType(convertField(repeatedType), containsNull = false)
-        } else {
-          val elementType = repeatedType.asGroupType().getType(0)
-          val optional = elementType.isRepetition(OPTIONAL)
-          ArrayType(convertField(elementType), containsNull = optional)
-        }
+          if (isElementType(repeatedType, field.getName)) {
+            ArrayType(convertField(repeatedType), containsNull = false)
+          } else {
+            val elementType = repeatedType.asGroupType().getType(0)
+            val optional = elementType.isRepetition(OPTIONAL)
+            ArrayType(convertField(elementType), containsNull = optional)
+          }
 
-      // scalastyle:off
-      // `MAP_KEY_VALUE` is for backwards-compatibility
-      // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules-1
-      // scalastyle:on
-      case MAP | MAP_KEY_VALUE =>
-        CatalystSchemaConverter.analysisRequire(
-          field.getFieldCount == 1 && !field.getType(0).isPrimitive,
-          s"Invalid map type: $field")
+        // scalastyle:off
+        // `MAP_KEY_VALUE` is for backwards-compatibility
+        // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules-1
+        // scalastyle:on
+        case MAP | MAP_KEY_VALUE =>
+          CatalystSchemaConverter.analysisRequire(
+            field.getFieldCount == 1 && !field.getType(0).isPrimitive,
+            s"Invalid map type: $field")
 
-        val keyValueType = field.getType(0).asGroupType()
-        CatalystSchemaConverter.analysisRequire(
-          keyValueType.isRepetition(REPEATED) && keyValueType.getFieldCount == 2,
-          s"Invalid map type: $field")
+          val keyValueType = field.getType(0).asGroupType()
+          CatalystSchemaConverter.analysisRequire(
+            keyValueType.isRepetition(REPEATED) && keyValueType.getFieldCount == 2,
+            s"Invalid map type: $field")
 
-        val keyType = keyValueType.getType(0)
-        CatalystSchemaConverter.analysisRequire(
-          keyType.isPrimitive,
-          s"Map key type is expected to be a primitive type, but found: $keyType")
+          val keyType = keyValueType.getType(0)
+          CatalystSchemaConverter.analysisRequire(
+            keyType.isPrimitive,
+            s"Map key type is expected to be a primitive type, but found: $keyType")
 
-        val valueType = keyValueType.getType(1)
-        val valueOptional = valueType.isRepetition(OPTIONAL)
-        MapType(
-          convertField(keyType),
-          convertField(valueType),
-          valueContainsNull = valueOptional)
+          val valueType = keyValueType.getType(1)
+          val valueOptional = valueType.isRepetition(OPTIONAL)
+          MapType(
+            convertField(keyType),
+            convertField(valueType),
+            valueContainsNull = valueOptional)
 
-      case _ =>
-        throw new AnalysisException(s"Unrecognized Parquet type: $field")
+        case _ =>
+          throw new AnalysisException(s"Unrecognized Parquet type: $field")
+      }
     }
   }
 
@@ -544,44 +558,3 @@ private[parquet] class CatalystSchemaConverter(
   }
 }
 
-
-private[parquet] object CatalystSchemaConverter {
-  def checkFieldName(name: String): Unit = {
-    // ,;{}()\n\t= and space are special characters in Parquet schema
-    analysisRequire(
-      !name.matches(".*[ ,;{}()\n\t=].*"),
-      s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\\n\\t=".
-         |Please use alias to rename it.
-       """.stripMargin.split("\n").mkString(" "))
-  }
-
-  def checkFieldNames(schema: StructType): StructType = {
-    schema.fieldNames.foreach(checkFieldName)
-    schema
-  }
-
-  def analysisRequire(f: => Boolean, message: String): Unit = {
-    if (!f) {
-      throw new AnalysisException(message)
-    }
-  }
-
-  private def computeMinBytesForPrecision(precision : Int) : Int = {
-    var numBytes = 1
-    while (math.pow(2.0, 8 * numBytes - 1) < math.pow(10.0, precision)) {
-      numBytes += 1
-    }
-    numBytes
-  }
-
-  private val MIN_BYTES_FOR_PRECISION = Array.tabulate[Int](39)(computeMinBytesForPrecision)
-
-  // Returns the minimum number of bytes needed to store a decimal with a given `precision`.
-  def minBytesForPrecision(precision : Int) : Int = {
-    if (precision < MIN_BYTES_FOR_PRECISION.length) {
-      MIN_BYTES_FOR_PRECISION(precision)
-    } else {
-      computeMinBytesForPrecision(precision)
-    }
-  }
-}

@@ -705,8 +705,22 @@ private[sql] object ParquetRelation extends Logging {
               assumeInt96IsTimestamp = assumeInt96IsTimestamp,
               followParquetFormatSpec = followParquetFormatSpec)
 
-          footers.map { footer =>
-            ParquetRelation.readSchemaFromFooter(footer, converter)
+        val protobufConverter =
+          new ProtobufCatalystSchemaConverter(
+            assumeBinaryIsString = assumeBinaryIsString,
+            assumeInt96IsTimestamp = assumeInt96IsTimestamp,
+            followParquetFormatSpec = followParquetFormatSpec)
+
+        footers.map { footer => {
+            val myConverter =
+              if (footer.getParquetMetadata.getFileMetaData.
+                  getKeyValueMetaData.containsKey("parquet.proto.class")) {
+                protobufConverter
+              } else {
+                converter
+              }
+            ParquetRelation.readSchemaFromFooter(footer, myConverter)
+            }
           }.reduceOption(_ merge _).iterator
         }.collect()
 
@@ -719,7 +733,7 @@ private[sql] object ParquetRelation extends Logging {
    * a [[StructType]] converted from the [[MessageType]] stored in this footer.
    */
   def readSchemaFromFooter(
-      footer: Footer, converter: CatalystSchemaConverter): StructType = {
+      footer: Footer, converter: SchemaConverter): StructType = {
     val fileMetaData = footer.getParquetMetadata.getFileMetaData
     fileMetaData
       .getKeyValueMetaData

@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{QueryTest, Row, SQLConf}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row, SQLConf}
 import org.apache.spark.util.Utils
 
 /**
@@ -198,7 +198,8 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
       val df = sqlContext.createDataFrame(rowRDD, schema)
       df.write.parquet(basePath)
 
-      val decimal = sqlContext.read.parquet(basePath).first().getDecimal(0)
+      val parquet: DataFrame = sqlContext.read.parquet(basePath)
+      val decimal = parquet.first().getDecimal(0)
       assert(Decimal("67123.45") === Decimal(decimal))
     }
   }

@@ -39,7 +39,12 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
       readContext: ReadContext): RecordMaterializer[InternalRow] = {
     log.debug(s"Preparing for read Parquet file with message type: $fileSchema")
 
-    val toCatalyst = new CatalystSchemaConverter(conf)
+    val toCatalyst = if (keyValueMetaData.containsKey("parquet.proto.class")) {
+      new ProtobufCatalystSchemaConverter(conf)
+    } else {
+      new CatalystSchemaConverter(conf)
+    }
+
     val parquetRequestedSchema = readContext.getRequestedSchema
 
     val catalystRequestedSchema =
