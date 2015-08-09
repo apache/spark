@@ -29,23 +29,6 @@ import org.apache.spark.sql.catalyst.InternalRow
  * calls: Scala's iterator allows users to call `hasNext()` without immediately advancing the
  * iterator to consume the next row, whereas RowIterator combines these calls into a single
  * [[advanceNext()]] method.
- *
- * In some cases, significant work may need to be performed in order to determine whether there is a
- * next element (for example, a `filter`ed iterator may need to consume many elements of its parent
- * iterator in order to determine whether there is a next row). As a result, many Scala iterators
- * perform implicit internal buffering, which can cause problems with iterators that return the same
- * mutable Row on every `next()` call. If we call `.filter()` on a Scala iterator of InternalRow,
- * calling `hasNext()` may mutate the row that has already been returned from the iterator. This
- * can cause problems unless the caller expects to immediately call `next()` after `hasNext()`
- * returned true.
- *
- * We can guard against this anomaly by automatically copying rows before returning them to a Scala
- * iterator; RowIterator's [[toScala]] method returns a wrapper which automatically performs this
- * defensive copying. These copies carry a performance penalty, though, so ideally we should avoid
- * this. The `RowIterator.fromScala` method wraps a Scala iterator behind our more restrictive
- * iterator interface. As an optimization, calling `RowIterator.fromScala` on a wrapped RowIterator
- * will return the underlying RowIterator, avoiding the copying. Thus, by gradually re-writing
- * operators to use our [[RowIterator]] wrappers we can safely remove this defensive row copying.
  */
 private[sql] abstract class RowIterator {
   /**
@@ -89,7 +72,6 @@ private final class RowIteratorToScala(val rowIter: RowIterator) extends Iterato
   }
   override def next(): InternalRow = {
     if (!hasNext) throw new NoSuchElementException
-    // TODO(josh): see whether we need to re-add the copy() here:
     hasNextWasCalled = false
     rowIter.getRow
   }
