@@ -208,66 +208,37 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     }
   }
 
-  /**
-   * Return true if all of the operator's children satisfy their output distribution requirements.
-   */
-  private def childPartitioningsSatisfyDistributionRequirements(operator: SparkPlan): Boolean = {
-    operator.children.zip(operator.requiredChildDistribution).forall {
-      case (child, distribution) => child.outputPartitioning.satisfies(distribution)
-    }
-  }
-
-  /**
-   * Given an operator, check whether the operator requires its children to have compatible
-   * output partitionings and add Exchanges to fix any detected incompatibilities.
-   */
-  private def ensureChildPartitioningsAreCompatible(operator: SparkPlan): SparkPlan = {
-    // If an operator has multiple children and the operator requires a specific child output
-    // distribution then we need to ensure that all children have compatible output partitionings.
-    if (operator.children.length > 1
-        && operator.requiredChildDistribution.toSet != Set(UnspecifiedDistribution)) {
-      if (!Partitioning.allCompatible(operator.children.map(_.outputPartitioning))) {
-        val newChildren = operator.children.zip(operator.requiredChildDistribution).map {
-          case (child, requiredDistribution) =>
-            val targetPartitioning = canonicalPartitioning(requiredDistribution)
-            if (child.outputPartitioning.guarantees(targetPartitioning)) {
-              child
-            } else {
-              Exchange(targetPartitioning, child)
-            }
-        }
-        val newOperator = operator.withNewChildren(newChildren)
-        assert(childPartitioningsSatisfyDistributionRequirements(newOperator))
-        newOperator
-      } else {
-        operator
-      }
-    } else {
-      operator
-    }
-  }
-
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
+    val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
+    val requiredChildOrderings: Seq[Seq[SortOrder]] = operator.requiredChildOrdering
+    var children: Seq[SparkPlan] = operator.children
 
-    def addShuffleIfNecessary(child: SparkPlan, requiredDistribution: Distribution): SparkPlan = {
-      // A pre-condition of ensureDistributionAndOrdering is that joins' children have compatible
-      // partitionings. Thus, we only need to check whether the output partitionings satisfy
-      // the required distribution. In the case where the children are all compatible, then they
-      // will either all satisfy the required distribution or will all fail to satisfy it, since
-      // A.guarantees(B) implies that A and B satisfy the same set of distributions.
-      // Therefore, if all children are compatible then either all or none of them will shuffled to
-      // ensure that the distribution requirements are met.
-      //
-      // Note that this reasoning implicitly assumes that operators which require compatible
-      // child partitionings have equivalent required distributions for those children.
-      if (child.outputPartitioning.satisfies(requiredDistribution)) {
+    // Ensure that the operator's children satisfy their output distribution requirements:
+    children = children.zip(requiredChildDistributions).map { case (child, distribution) =>
+      if (child.outputPartitioning.satisfies(distribution)) {
         child
       } else {
-        Exchange(canonicalPartitioning(requiredDistribution), child)
+        Exchange(canonicalPartitioning(distribution), child)
       }
     }
 
-    def addSortIfNecessary(child: SparkPlan, requiredOrdering: Seq[SortOrder]): SparkPlan = {
+    // If the operator has multiple children and specifies child output distributions (e.g. join),
+    // then the children's output partitionings must be compatible:
+    if (children.length > 1
+        && requiredChildDistributions.toSet != Set(UnspecifiedDistribution)
+        && !Partitioning.allCompatible(children.map(_.outputPartitioning))) {
+      children = children.zip(requiredChildDistributions).map { case (child, distribution) =>
+        val targetPartitioning = canonicalPartitioning(distribution)
+        if (child.outputPartitioning.guarantees(targetPartitioning)) {
+          child
+        } else {
+          Exchange(targetPartitioning, child)
+        }
+      }
+    }
+
+    // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
+    children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
       if (requiredOrdering.nonEmpty) {
         // If child.outputOrdering is [a, b] and requiredOrdering is [a], we do not need to sort.
         val minSize = Seq(requiredOrdering.size, child.outputOrdering.size).min
@@ -281,20 +252,10 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       }
     }
 
-    val children = operator.children
-    val requiredChildDistribution = operator.requiredChildDistribution
-    val requiredChildOrdering = operator.requiredChildOrdering
-    assert(children.length == requiredChildDistribution.length)
-    assert(children.length == requiredChildOrdering.length)
-    val newChildren = (children, requiredChildDistribution, requiredChildOrdering).zipped.map {
-      case (child, requiredDistribution, requiredOrdering) =>
-        addSortIfNecessary(addShuffleIfNecessary(child, requiredDistribution), requiredOrdering)
-    }
-    operator.withNewChildren(newChildren)
+    operator.withNewChildren(children)
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
-    case operator: SparkPlan =>
-      ensureDistributionAndOrdering(ensureChildPartitioningsAreCompatible(operator))
+    case operator: SparkPlan => ensureDistributionAndOrdering(operator)
   }
 }
