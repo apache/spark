@@ -227,11 +227,7 @@ private[joins] class SortMergeJoinScanner(
    *         join results.
    */
   final def findNextOuterJoinRows(): Boolean = {
-    while (advancedStreamed() && streamedRowKey.anyNull) {
-      // Advance the streamed side of the join until we find the next row whose join key contains
-      // no nulls or we hit the end of the streamed iterator.
-    }
-    if (streamedRow == null) {
+    if (!advancedStreamed()) {
       // We have consumed the entire streamed iterator, so there can be no more matches.
       matchJoinKey = null
       bufferedMatches.clear()
@@ -243,7 +239,7 @@ private[joins] class SortMergeJoinScanner(
         // The streamed row does not match the current group.
         matchJoinKey = null
         bufferedMatches.clear()
-        if (bufferedRow != null) {
+        if (bufferedRow != null && !streamedRowKey.anyNull) {
           // The buffered iterator could still contain matching rows, so we'll need to walk through
           // it until we either find matches or pass where they would be found.
           var comp =
@@ -263,7 +259,7 @@ private[joins] class SortMergeJoinScanner(
           }
         }
       }
-      // If there is a streamed input with a non-null join key, then we always return true
+      // If there is a streamed input then we always return true
       true
     }
   }
