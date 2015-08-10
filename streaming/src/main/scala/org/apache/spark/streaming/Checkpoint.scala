@@ -205,7 +205,9 @@ class CheckpointWriter(
           // If the checkpoint file exists, back it up
           // If the backup exists as well, just delete it, otherwise rename will fail
           if (fs.exists(checkpointFile)) {
-            fs.delete(backupFile, true) // just in case it exists
+            if (fs.exists(backupFile)){
+              fs.delete(backupFile, true) // just in case it exists
+            }
             if (!fs.rename(checkpointFile, backupFile)) {
               logWarning("Could not rename " + checkpointFile + " to " + backupFile)
             }
