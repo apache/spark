@@ -165,6 +165,11 @@ object Utils {
     case other => None
   }
 
+  /**
+   * All Aggregate functions have previous versions as expressions in the old AggregateExpression
+   * format, but standard deviation uses the new format directly. We wrap it here in one place,
+   * and use an Alias so that the column name looks pretty as well instead of a long identifier.
+   */
   def standardDeviation(e: Expression): Expression = {
     val std = aggregate.AggregateExpression2(
       aggregateFunction = aggregate.StandardDeviation(e),

@@ -87,8 +87,6 @@ class SortBasedAggregationIterator(
   // The aggregation buffer used by the sort-based aggregation.
   private[this] val sortBasedAggregationBuffer: MutableRow = newBuffer
 
-  private val dataTypes = allAggregateFunctions.flatMap(_.bufferAttributes).map(_.dataType)
-
   /** Processes rows in the current group. It will stop when it find a new group. */
   protected def processCurrentSortedGroup(): Unit = {
     currentGroupingKey = nextGroupingKey
@@ -97,7 +95,6 @@ class SortBasedAggregationIterator(
     var findNextPartition = false
     // firstRowInNextGroup is the first row of this group. We first process it.
     processRow(sortBasedAggregationBuffer, firstRowInNextGroup)
-    println(dataTypes.zipWithIndex.map(d => sortBasedAggregationBuffer.get(d._2, d._1)).mkString("[", ",", "]"))
 
     // The search will stop when we see the next group or there is no
     // input row left in the iter.
@@ -110,9 +107,6 @@ class SortBasedAggregationIterator(
       // Check if the current row belongs the current input row.
       if (currentGroupingKey == groupingKey) {
         processRow(sortBasedAggregationBuffer, currentRow)
-        println("Second")
-        println(currentRow)
-        println(dataTypes.zipWithIndex.map(d => sortBasedAggregationBuffer.get(d._2, d._1)).mkString("[", ",", "]"))
         hasNext = inputKVIterator.next()
       } else {
         // We find a new group.

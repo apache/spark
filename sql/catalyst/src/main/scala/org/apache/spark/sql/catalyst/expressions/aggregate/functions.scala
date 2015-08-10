@@ -331,14 +331,21 @@ case class StandardDeviation(child: Expression) extends AlgebraicAggregate {
   }
 
   private lazy val currentCount = AttributeReference("currentCount", LongType)()
+  private lazy val leftCount = AttributeReference("leftCount", LongType)()
+  private lazy val rightCount = AttributeReference("rightCount", LongType)()
+  private lazy val currentDelta = AttributeReference("currentDelta", sumDataType)()
   private lazy val currentAvg = AttributeReference("currentAverage", sumDataType)()
   private lazy val currentMk = AttributeReference("currentMoment", sumDataType)()
 
   // the values should be updated in a special order, because they re-use each other
-  override lazy val bufferAttributes = currentCount :: currentAvg :: currentMk :: Nil
+  override lazy val bufferAttributes =
+    leftCount :: rightCount :: currentCount :: currentDelta :: currentAvg :: currentMk :: Nil
 
   override lazy val initialValues = Seq(
+    /* leftCount = */ Literal(0L),
+    /* rightCount = */ Literal(0L),
     /* currentCount = */ Literal(0L),
+    /* currentDelta = */ Cast(Literal(0), sumDataType),
     /* currentAvg = */ Cast(Literal(0), sumDataType),
     /* currentMk = */ Cast(Literal(0), sumDataType)
   )
@@ -347,12 +354,15 @@ case class StandardDeviation(child: Expression) extends AlgebraicAggregate {
     val currentValue = Coalesce(Cast(child, sumDataType) :: Cast(Literal(0), sumDataType) :: Nil)
     val deltaX = Subtract(currentValue, currentAvg)
     val updatedCount = If(IsNull(child), currentCount, currentCount + 1L)
-    val updatedAvg = Add(currentAvg, Divide(deltaX, updatedCount))
+    val updatedAvg = Add(currentAvg, Divide(currentDelta, currentCount))
     Seq(
+      /* leftCount = */ leftCount, // used only during merging. dummy value
+      /* rightCount = */ rightCount, // used only during merging. dummy value
       /* currentCount = */ updatedCount,
-      /* currentAvg = */ currentAvg,
+      /* currentDelta = */ deltaX,
+      /* currentAvg = */ updatedAvg,
       /* currentMk = */ If(IsNull(child),
-        currentMk, Add(currentMk, deltaX * Subtract(currentValue, updatedAvg)))
+        currentMk, Add(currentMk, currentDelta * Subtract(currentValue, currentAvg)))
     )
   }
 
@@ -361,15 +371,19 @@ case class StandardDeviation(child: Expression) extends AlgebraicAggregate {
     val deltaX = currentAvg.left - currentAvg.right
     val deltaX2 = deltaX * deltaX
     val sumMoments = currentMk.left + currentMk.right
-    val sumLeft = currentAvg.left * currentCount.left
-    val sumRight = currentAvg.right * currentCount.right
+    val sumLeft = currentAvg.left * leftCount
+    val sumRight = currentAvg.right * rightCount
+    val mergedAvg = (sumLeft + sumRight) / currentCount
+    val mergedMk = sumMoments + currentDelta * leftCount / currentCount * rightCount
     Seq(
+      /* leftCount = */ currentCount.left,
+      /* rightCount = */ currentCount.right,
       /* currentCount = */ totalCount,
-      /* currentAvg = */ If(EqualTo(totalCount, Cast(Literal(0L), LongType)),
-        Cast(Literal(0), sumDataType), (sumLeft + sumRight) / totalCount),
-      /* currentMk = */ If(EqualTo(totalCount, Cast(Literal(0L), LongType)),
-        Cast(Literal(0), sumDataType),
-        sumMoments + deltaX2 * currentCount.left / totalCount * currentCount.right)
+      /* currentDelta = */ deltaX2,
+      /* currentAvg = */ If(EqualTo(leftCount, Cast(Literal(0L), LongType)), currentAvg.right,
+        If(EqualTo(rightCount, Cast(Literal(0L), LongType)), currentAvg.left, mergedAvg)),
+      /* currentMk = */ If(EqualTo(leftCount, Cast(Literal(0L), LongType)), currentMk.right,
+        If(EqualTo(rightCount, Cast(Literal(0L), LongType)), currentMk.left, mergedMk))
     )
   }
 

@@ -21,6 +21,8 @@ import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConversions._
 
+import org.scalactic.TripleEqualsSupport.Spread
+
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.columnar.InMemoryRelation
@@ -114,6 +116,7 @@ object QueryTest {
         Row.fromSeq(s.toSeq.map {
           case d: java.math.BigDecimal => BigDecimal(d)
           case b: Array[Byte] => b.toSeq
+          case d: Double => BigDecimal(d).setScale(10, BigDecimal.RoundingMode.HALF_UP)
           case o => o
         })
       }
