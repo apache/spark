@@ -392,6 +392,7 @@ class LogisticRegressionModel private[ml] (
    * The behavior of this can be adjusted using [[thresholds]].
    */
   override protected def predict(features: Vector): Double = {
+    // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
     if (score(features) > getThreshold) 1 else 0
   }
 
@@ -421,6 +422,7 @@ class LogisticRegressionModel private[ml] (
   }
 
   override protected def raw2prediction(rawPrediction: Vector): Double = {
+    // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
     val t = getThreshold
     val rawThreshold = if (t == 0.0) {
       Double.NegativeInfinity
@@ -433,6 +435,7 @@ class LogisticRegressionModel private[ml] (
   }
 
   override protected def probability2prediction(probability: Vector): Double = {
+    // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
     if (probability(1) > getThreshold) 1 else 0
   }
 }
