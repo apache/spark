@@ -223,9 +223,7 @@ class CheckpointWriter(
           if (allCheckpointFiles.size > 10) {
             allCheckpointFiles.take(allCheckpointFiles.size - 10).foreach(file => {
               logInfo("Deleting " + file)
-              if (fs.exists(file)) {
-                fs.delete(file, true)
-              }
+              fs.delete(file, true)
             })
           }
 
