@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 

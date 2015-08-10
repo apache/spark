@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SQLTestData._
 
 class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfter with SQLTestUtils {
   import testImplicits._

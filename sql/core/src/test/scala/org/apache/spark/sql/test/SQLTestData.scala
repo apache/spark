@@ -32,8 +32,9 @@ private[sql] trait SQLTestData { self =>
   }
 
   import internalImplicits._
+  import SQLTestData._
 
-  // All test data should be lazy because the SQLContext is not set up yet
+  // Note: all test data should be lazy because the SQLContext is not set up yet.
 
   lazy val testData: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
@@ -262,27 +263,28 @@ private[sql] trait SQLTestData { self =>
     salary
     complexData
   }
+}
 
-  /* ------------------------------ *
-   | Case classes used in test data |
-   * ------------------------------ */
-
-  private[sql] case class TestData(key: Int, value: String)
-  private[sql] case class TestData2(a: Int, b: Int)
-  private[sql] case class TestData3(a: Int, b: Option[Int])
-  private[sql] case class LargeAndSmallInts(a: Int, b: Int)
-  private[sql] case class DecimalData(a: BigDecimal, b: BigDecimal)
-  private[sql] case class BinaryData(a: Array[Byte], b: Int)
-  private[sql] case class UpperCaseData(N: Int, L: String)
-  private[sql] case class LowerCaseData(n: Int, l: String)
-  private[sql] case class ArrayData(data: Seq[Int], nestedData: Seq[Seq[Int]])
-  private[sql] case class MapData(data: scala.collection.Map[Int, String])
-  private[sql] case class StringData(s: String)
-  private[sql] case class IntField(i: Int)
-  private[sql] case class NullInts(a: Integer)
-  private[sql] case class NullStrings(n: Int, s: String)
-  private[sql] case class TableName(tableName: String)
-  private[sql] case class Person(id: Int, name: String, age: Int)
-  private[sql] case class Salary(personId: Int, salary: Double)
-  private[sql] case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
+/**
+ * Case classes used in test data.
+ */
+private[sql] object SQLTestData {
+  case class TestData(key: Int, value: String)
+  case class TestData2(a: Int, b: Int)
+  case class TestData3(a: Int, b: Option[Int])
+  case class LargeAndSmallInts(a: Int, b: Int)
+  case class DecimalData(a: BigDecimal, b: BigDecimal)
+  case class BinaryData(a: Array[Byte], b: Int)
+  case class UpperCaseData(N: Int, L: String)
+  case class LowerCaseData(n: Int, l: String)
+  case class ArrayData(data: Seq[Int], nestedData: Seq[Seq[Int]])
+  case class MapData(data: scala.collection.Map[Int, String])
+  case class StringData(s: String)
+  case class IntField(i: Int)
+  case class NullInts(a: Integer)
+  case class NullStrings(n: Int, s: String)
+  case class TableName(tableName: String)
+  case class Person(id: Int, name: String, age: Int)
+  case class Salary(personId: Int, salary: Double)
+  case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
 }
