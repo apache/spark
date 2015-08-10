@@ -249,46 +249,6 @@ case class TakeOrderedAndProject(
 /**
  * :: DeveloperApi ::
  * Return a new RDD that has exactly `numPartitions` partitions.
- */
-@DeveloperApi
-case class Repartition(numPartitions: Int, child: SparkPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
-
-  override def outputPartitioning: Partitioning = {
-    if (numPartitions == 1) SinglePartition
-    else UnknownPartitioning(numPartitions)
-  }
-
-  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
-  override def canProcessSafeRows: Boolean = true
-  override def canProcessUnsafeRows: Boolean = true
-
-  protected override def doExecute(): RDD[InternalRow] = {
-    // Distribute elements evenly across output partitions, starting from a random partition.
-    val rddWithPartitionIds: RDD[Product2[Int, InternalRow]] = {
-      child.execute().mapPartitionsWithIndex { (index, rows) =>
-        var position = new Random(index).nextInt(numPartitions)
-        val mutablePair = new MutablePair[Int, InternalRow]()
-        rows.map { row =>
-          position = (position + 1) % numPartitions
-          mutablePair.update(position, row)
-        }
-      }
-    }
-    val serializer: Serializer = {
-      if (child.outputsUnsafeRows) {
-        new UnsafeRowSerializer(child.output.size)
-      } else {
-        new SparkSqlSerializer(child.sqlContext.sparkContext.getConf)
-      }
-    }
-    new ShuffledRowRDD(rddWithPartitionIds, serializer, numPartitions)
-  }
-}
-
-/**
- * :: DeveloperApi ::
- * Return a new RDD that has exactly `numPartitions` partitions.
  * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
  * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
  * the 100 new partitions will claim 10 of the current partitions.

@@ -194,6 +194,17 @@ case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
   override def guarantees(other: Partitioning): Boolean = false
 }
 
+case class RandomPartitioning(numPartitions: Int) extends Partitioning {
+  override def satisfies(required: Distribution): Boolean = required match {
+    case UnspecifiedDistribution => true
+    case _ => false
+  }
+
+  override def compatibleWith(other: Partitioning): Boolean = false
+
+  override def guarantees(other: Partitioning): Boolean = false
+}
+
 case object SinglePartition extends Partitioning {
   val numPartitions = 1
 
