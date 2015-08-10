@@ -86,7 +86,6 @@ a dependency.
 </div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
-from pyspark.mllib.linalg import Matrix
 from pyspark.mllib.linalg.distributed import RowMatrix
 from numpy.random import RandomState
 
@@ -152,14 +151,13 @@ The following code demonstrates how to compute principal components on a `RowMat
 and use them to project the vectors into a low-dimensional space.
 
 {% highlight python %}
-from pyspark.mllib.linalg import Matrix
 from pyspark.mllib.linalg.distributed import RowMatrix
 from numpy.random import RandomState
 
 # Generate random data with 50 samples and 30 features.
 rng = RandomState(0)
-mat = sc.parallelize(rng.randn(50, 30))
-rm = RowMatrix(mat)
+data = sc.parallelize(rng.randn(50, 30))
+mat = RowMatrix(data)
 
 # Compute the top 10 principal components stored in a local dense matrix.
 pc = rm.computePrincipalComponents(10)

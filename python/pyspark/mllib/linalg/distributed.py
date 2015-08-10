@@ -308,23 +308,25 @@ class RowMatrix(DistributedMatrix):
         """
         Computes the singular value decomposition of the RowMatrix.
 
-        The given row matrix A of dimension (m X n) is decomposed into U * s * V'T where
+        The given row matrix A of dimension (m X n) is decomposed into
+        U * s * V'T where
 
-        * U: (m X k) (left singular vectors) is a RowMatrix whose columns are the
-             eigenvectors of (A X A')
-        * s: DenseVector consisting of square root of the eigenvalues (singular values)
-             in descending order.
-        * v: (n X k) (right singular vectors) is a Matrix whose columns are the
-             eigenvectors of (A' X A)
+        * U: (m X k) (left singular vectors) is a RowMatrix whose
+             columns are the eigenvectors of (A X A')
+        * s: DenseVector consisting of square root of the eigenvalues
+             (singular values) in descending order.
+        * v: (n X k) (right singular vectors) is a Matrix whose columns
+             are the eigenvectors of (A' X A)
 
-        For more specific details on implementation, please refer the scala documentation.
+        For more specific details on implementation, please refer
+        the scala documentation.
 
         :param k: Set the number of singular values to keep.
-        :param computeU: Whether of not to compute U. If set to be True, then U is computed
-                         by A * V * s^-1
-        :param rCond: Reciprocal condition number. All singular values smaller than
-                      rCond * s[0] are treated as zero, where s[0] is the largest
-                      singular value.
+        :param computeU: Whether or not to compute U. If set to be
+                         True, then U is computed by A * V * s^-1
+        :param rCond: Reciprocal condition number. All singular values
+                      smaller than rCond * s[0] are treated as zero
+                      where s[0] is the largest singular value.
         :returns: SingularValueDecomposition object
 
         >>> data = [(3, 1, 1), (-1, 3, 1)]
@@ -337,7 +339,8 @@ class RowMatrix(DistributedMatrix):
         >>> svd_model.V
         DenseMatrix(3, 2, [-0.4082, -0.8165, -0.4082, 0.8944, -0.4472, 0.0], 0)
         """
-        j_model = self._java_matrix_wrapper.call("computeSVD", int(k), computeU, float(rCond))
+        j_model = self._java_matrix_wrapper.call(
+            "computeSVD", int(k), bool(computeU), float(rCond))
         return SingularValueDecomposition(j_model)
 
     def computePrincipalComponents(self, k):
@@ -384,8 +387,9 @@ class SingularValueDecomposition(JavaModelWrapper):
     @property
     def U(self):
         """
-        Returns a distributed matrix whose columns are the left singular vectors of the
-        SingularValueDecomposition if computeU was set to be True.
+        Returns a distributed matrix whose columns are the left
+        singular vectors of the SingularValueDecomposition if
+        computeU was set to be True.
         """
         u = self.call("U")
         if u is not None:
@@ -399,14 +403,17 @@ class SingularValueDecomposition(JavaModelWrapper):
 
     @property
     def s(self):
-        """Returns a DenseVector with singular values in descending order."""
+        """
+        Returns a DenseVector with singular values in
+        descending order.
+        """
         return self.call("s")
 
     @property
     def V(self):
         """
-        Returns a DenseMatrix whose columns are the right singular vectors of the
-        SingularValueDecomposition.
+        Returns a DenseMatrix whose columns are the right singular
+        vectors of the SingularValueDecomposition.
         """
         return self.call("V")
 
@@ -644,23 +651,25 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         Computes the singular value decomposition of the IndexedRowMatrix.
 
-        The given row matrix A of dimension (m X n) is decomposed into U * s * V'T where
+        The given row matrix A of dimension (m X n) is decomposed into
+        U * s * V'T where
 
-        * U: (m X k) (left singular vectors) is a IndexedRowMatrix whose columns are the
-             eigenvectors of (A X A')
-        * s: DenseVector consisting of square root of the eigenvalues (singular values)
-             in descending order.
-        * v: (n X k) (right singular vectors) is a Matrix whose columns are the
-             eigenvectors of (A' X A)
+        * U: (m X k) (left singular vectors) is a IndexedRowMatrix
+             whose columns are the eigenvectors of (A X A')
+        * s: DenseVector consisting of square root of the eigenvalues
+             (singular values) in descending order.
+        * v: (n X k) (right singular vectors) is a Matrix whose columns
+             are the eigenvectors of (A' X A)
 
-        For more specific details on implementation, please refer the scala documentation.
+        For more specific details on implementation, please refer
+        the scala documentation.
 
         :param k: Set the number of singular values to keep.
-        :param computeU: Whether of not to compute U. If set to be True, then U is computed
-                         by A * V * s^-1
-        :param rCond: Reciprocal condition number. All singular values smaller than
-                      rCond * s[0] are treated as zero, where s[0] is the largest
-                      singular value.
+        :param computeU: Whether or not to compute U. If set to be
+                         True, then U is computed by A * V * s^-1
+        :param rCond: Reciprocal condition number. All singular values
+                      smaller than rCond * s[0] are treated as zero
+                      where s[0] is the largest singular value.
         :returns: SingularValueDecomposition object
 
         >>> data = [(0, (3, 1, 1)), (1, (-1, 3, 1))]
@@ -674,7 +683,8 @@ class IndexedRowMatrix(DistributedMatrix):
         >>> svd_model.V
         DenseMatrix(3, 2, [-0.4082, -0.8165, -0.4082, 0.8944, -0.4472, 0.0], 0)
         """
-        j_model = self._java_matrix_wrapper.call("computeSVD", int(k), computeU, float(rCond))
+        j_model = self._java_matrix_wrapper.call(
+            "computeSVD", int(k), bool(computeU), float(rCond))
         return SingularValueDecomposition(j_model)
 
     def multiply(self, matrix):
@@ -684,8 +694,8 @@ class IndexedRowMatrix(DistributedMatrix):
         :param matrix: Matrix to multiply with.
         :returns: IndexedRowMatrix
 
-        >>> data = IndexedRowMatrix(sc.parallelize([(0, (0, 1)), (1, (2, 3))]))
-        >>> data.multiply(DenseMatrix(2, 2, [0, 2, 1, 3])).rows.collect()
+        >>> mat = IndexedRowMatrix(sc.parallelize([(0, (0, 1)), (1, (2, 3))]))
+        >>> mat.multiply(DenseMatrix(2, 2, [0, 2, 1, 3])).rows.collect()
         [IndexedRow(0, [2.0,3.0]), IndexedRow(1, [6.0,11.0])]
         """
         return IndexedRowMatrix(self._java_matrix_wrapper.call("multiply", matrix))
