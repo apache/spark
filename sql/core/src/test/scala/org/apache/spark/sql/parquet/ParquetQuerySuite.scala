@@ -189,4 +189,17 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
       }
     }
   }
+
+  test("SPARK-9119 Decimal should be correctly written into parquet") {
+    withTempPath { dir =>
+      val basePath = dir.getCanonicalPath
+      val schema = StructType(Array(StructField("name", DecimalType(10, 5), false)))
+      val rowRDD = sqlContext.sparkContext.parallelize(Array(Row(Decimal("67123.45"))))
+      val df = sqlContext.createDataFrame(rowRDD, schema)
+      df.write.parquet(basePath)
+
+      val decimal = sqlContext.read.parquet(basePath).first().getDecimal(0)
+      assert(Decimal("67123.45") === Decimal(decimal))
+    }
+  }
 }

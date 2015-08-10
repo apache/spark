@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{DataInputStream, DataOutputStream, OutputStream, InputStream}
+import java.io._
 import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
@@ -58,12 +58,14 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
    */
   override def serializeStream(out: OutputStream): SerializationStream = new SerializationStream {
     private[this] var writeBuffer: Array[Byte] = new Array[Byte](4096)
-    private[this] val dOut: DataOutputStream = new DataOutputStream(out)
+    private[this] val dOut: DataOutputStream =
+      new DataOutputStream(new BufferedOutputStream(out))
 
     override def writeValue[T: ClassTag](value: T): SerializationStream = {
       val row = value.asInstanceOf[UnsafeRow]
+
       dOut.writeInt(row.getSizeInBytes)
-      row.writeToStream(out, writeBuffer)
+      row.writeToStream(dOut, writeBuffer)
       this
     }
 
@@ -97,7 +99,7 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
 
   override def deserializeStream(in: InputStream): DeserializationStream = {
     new DeserializationStream {
-      private[this] val dIn: DataInputStream = new DataInputStream(in)
+      private[this] val dIn: DataInputStream = new DataInputStream(new BufferedInputStream(in))
       // 1024 is a default buffer size; this buffer will grow to accommodate larger rows
       private[this] var rowBuffer: Array[Byte] = new Array[Byte](1024)
       private[this] var row: UnsafeRow = new UnsafeRow()
@@ -113,7 +115,7 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
             if (rowBuffer.length < rowSize) {
               rowBuffer = new Array[Byte](rowSize)
             }
-            ByteStreams.readFully(in, rowBuffer, 0, rowSize)
+            ByteStreams.readFully(dIn, rowBuffer, 0, rowSize)
             row.pointTo(rowBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, rowSize)
             rowSize = dIn.readInt() // read the next row's size
             if (rowSize == EOF) { // We are returning the last row in this stream
@@ -147,7 +149,7 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
         if (rowBuffer.length < rowSize) {
           rowBuffer = new Array[Byte](rowSize)
         }
-        ByteStreams.readFully(in, rowBuffer, 0, rowSize)
+        ByteStreams.readFully(dIn, rowBuffer, 0, rowSize)
         row.pointTo(rowBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, rowSize)
         row.asInstanceOf[T]
       }

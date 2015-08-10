@@ -56,7 +56,7 @@ package object client {
         "net.hydromatic:linq4j",
         "net.hydromatic:quidem"))
 
-    case object v1_2 extends HiveVersion("1.2.0",
+    case object v1_2 extends HiveVersion("1.2.1",
       exclusions = Seq("eigenbase:eigenbase-properties",
         "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm",

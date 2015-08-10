@@ -19,10 +19,7 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.fs.Path
-
-import org.apache.spark._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.Partition
 
 /**
  * Enumeration to manage state transitions of an RDD through checkpointing
@@ -39,39 +36,31 @@ private[spark] object CheckpointState extends Enumeration {
  * as well as, manages the post-checkpoint state by providing the updated partitions,
  * iterator and preferred locations of the checkpointed RDD.
  */
-private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
-  extends Logging with Serializable {
+private[spark] abstract class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
+  extends Serializable {
 
   import CheckpointState._
 
   // The checkpoint state of the associated RDD.
-  private var cpState = Initialized
+  protected var cpState = Initialized
 
-  // The file to which the associated RDD has been checkpointed to
-  private var cpFile: Option[String] = None
-
-  // The CheckpointRDD created from the checkpoint file, that is, the new parent the associated RDD.
-  // This is defined if and only if `cpState` is `Checkpointed`.
+  // The RDD that contains our checkpointed data
   private var cpRDD: Option[CheckpointRDD[T]] = None
 
   // TODO: are we sure we need to use a global lock in the following methods?
 
-  // Is the RDD already checkpointed
+  /**
+   * Return whether the checkpoint data for this RDD is already persisted.
+   */
   def isCheckpointed: Boolean = RDDCheckpointData.synchronized {
     cpState == Checkpointed
   }
 
-  // Get the file to which this RDD was checkpointed to as an Option
-  def getCheckpointFile: Option[String] = RDDCheckpointData.synchronized {
-    cpFile
-  }
-
   /**
-   * Materialize this RDD and write its content to a reliable DFS.
+   * Materialize this RDD and persist its content.
    * This is called immediately after the first action invoked on this RDD has completed.
    */
-  def doCheckpoint(): Unit = {
-
+  final def checkpoint(): Unit = {
     // Guard against multiple threads checkpointing the same RDD by
     // atomically flipping the state of this RDDCheckpointData
     RDDCheckpointData.synchronized {
@@ -82,64 +71,41 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
       }
     }
 
-    // Create the output path for the checkpoint
-    val path = RDDCheckpointData.rddCheckpointDataPath(rdd.context, rdd.id).get
-    val fs = path.getFileSystem(rdd.context.hadoopConfiguration)
-    if (!fs.mkdirs(path)) {
-      throw new SparkException(s"Failed to create checkpoint path $path")
-    }
+    val newRDD = doCheckpoint()
 
-    // Save to file, and reload it as an RDD
-    val broadcastedConf = rdd.context.broadcast(
-      new SerializableConfiguration(rdd.context.hadoopConfiguration))
-    val newRDD = new CheckpointRDD[T](rdd.context, path.toString)
-    if (rdd.conf.getBoolean("spark.cleaner.referenceTracking.cleanCheckpoints", false)) {
-      rdd.context.cleaner.foreach { cleaner =>
-        cleaner.registerRDDCheckpointDataForCleanup(newRDD, rdd.id)
-      }
-    }
-
-    // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582)
-    rdd.context.runJob(rdd, CheckpointRDD.writeToFile[T](path.toString, broadcastedConf) _)
-    if (newRDD.partitions.length != rdd.partitions.length) {
-      throw new SparkException(
-        "Checkpoint RDD " + newRDD + "(" + newRDD.partitions.length + ") has different " +
-          "number of partitions than original RDD " + rdd + "(" + rdd.partitions.length + ")")
-    }
-
-    // Change the dependencies and partitions of the RDD
+    // Update our state and truncate the RDD lineage
     RDDCheckpointData.synchronized {
-      cpFile = Some(path.toString)
       cpRDD = Some(newRDD)
-      rdd.markCheckpointed(newRDD)   // Update the RDD's dependencies and partitions
       cpState = Checkpointed
+      rdd.markCheckpointed()
     }
-    logInfo(s"Done checkpointing RDD ${rdd.id} to $path, new parent is RDD ${newRDD.id}")
   }
 
+  /**
+   * Materialize this RDD and persist its content.
+   *
+   * Subclasses should override this method to define custom checkpointing behavior.
+   * @return the checkpoint RDD created in the process.
+   */
+  protected def doCheckpoint(): CheckpointRDD[T]
+
+  /**
+   * Return the RDD that contains our checkpointed data.
+   * This is only defined if the checkpoint state is `Checkpointed`.
+   */
+  def checkpointRDD: Option[CheckpointRDD[T]] = RDDCheckpointData.synchronized { cpRDD }
+
+  /**
+   * Return the partitions of the resulting checkpoint RDD.
+   * For tests only.
+   */
   def getPartitions: Array[Partition] = RDDCheckpointData.synchronized {
-    cpRDD.get.partitions
+    cpRDD.map(_.partitions).getOrElse { Array.empty }
   }
 
-  def checkpointRDD: Option[CheckpointRDD[T]] = RDDCheckpointData.synchronized {
-    cpRDD
-  }
 }
 
-private[spark] object RDDCheckpointData {
-
-  /** Return the path of the directory to which this RDD's checkpoint data is written. */
-  def rddCheckpointDataPath(sc: SparkContext, rddId: Int): Option[Path] = {
-    sc.checkpointDir.map { dir => new Path(dir, s"rdd-$rddId") }
-  }
-
-  /** Clean up the files associated with the checkpoint data for this RDD. */
-  def clearRDDCheckpointData(sc: SparkContext, rddId: Int): Unit = {
-    rddCheckpointDataPath(sc, rddId).foreach { path =>
-      val fs = path.getFileSystem(sc.hadoopConfiguration)
-      if (fs.exists(path)) {
-        fs.delete(path, true)
-      }
-    }
-  }
-}
+/**
+ * Global lock for synchronizing checkpoint operations.
+ */
+private[spark] object RDDCheckpointData

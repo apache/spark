@@ -40,7 +40,7 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
 
-private[worker] class Worker(
+private[deploy] class Worker(
     override val rpcEnv: RpcEnv,
     webUiPort: Int,
     cores: Int,
@@ -228,7 +228,7 @@ private[worker] class Worker(
   /**
    * Re-register with the master because a network failure or a master failure has occurred.
    * If the re-registration attempt threshold is exceeded, the worker exits with error.
-   * Note that for thread-safety this should only be called from the actor.
+   * Note that for thread-safety this should only be called from the rpcEndpoint.
    */
   private def reregisterWithMaster(): Unit = {
     Utils.tryOrExit {
@@ -365,7 +365,8 @@ private[worker] class Worker(
       if (connected) { sendToMaster(Heartbeat(workerId, self)) }
 
     case WorkDirCleanup =>
-      // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker actor
+      // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker
+      // rpcEndpoint.
       // Copy ids so that it can be used in the cleanup thread.
       val appIds = executors.values.map(_.appId).toSet
       val cleanupFuture = concurrent.future {
@@ -427,7 +428,9 @@ private[worker] class Worker(
           // application finishes.
           val appLocalDirs = appDirectories.get(appId).getOrElse {
             Utils.getOrCreateLocalRootDirs(conf).map { dir =>
-              Utils.createDirectory(dir, namePrefix = "executor").getAbsolutePath()
+              val appDir = Utils.createDirectory(dir, namePrefix = "executor")
+              Utils.chmod700(appDir)
+              appDir.getAbsolutePath()
             }.toSeq
           }
           appDirectories(appId) = appLocalDirs
@@ -553,6 +556,7 @@ private[worker] class Worker(
           Utils.deleteRecursively(new File(dir))
         }
       }
+      shuffleService.applicationRemoved(id)
     }
   }
 
@@ -660,6 +664,9 @@ private[worker] class Worker(
 }
 
 private[deploy] object Worker extends Logging {
+  val SYSTEM_NAME = "sparkWorker"
+  val ENDPOINT_NAME = "Worker"
+
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
     val conf = new SparkConf
@@ -680,14 +687,13 @@ private[deploy] object Worker extends Logging {
       workerNumber: Option[Int] = None,
       conf: SparkConf = new SparkConf): RpcEnv = {
 
-    // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
-    val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
-    val actorName = "Worker"
+    // The LocalSparkCluster runs multiple local sparkWorkerX RPC Environments
+    val systemName = SYSTEM_NAME + workerNumber.map(_.toString).getOrElse("")
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create(systemName, host, port, conf, securityMgr)
     val masterAddresses = masterUrls.map(RpcAddress.fromSparkURL(_))
-    rpcEnv.setupEndpoint(actorName, new Worker(rpcEnv, webUiPort, cores, memory, masterAddresses,
-      systemName, actorName, workDir, conf, securityMgr))
+    rpcEnv.setupEndpoint(ENDPOINT_NAME, new Worker(rpcEnv, webUiPort, cores, memory,
+      masterAddresses, systemName, ENDPOINT_NAME, workDir, conf, securityMgr))
     rpcEnv
   }
 

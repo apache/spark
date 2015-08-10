@@ -44,7 +44,8 @@ trait HashJoin {
   override def output: Seq[Attribute] = left.output ++ right.output
 
   protected[this] def isUnsafeMode: Boolean = {
-    (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys)
+    (self.codegenEnabled && self.unsafeEnabled
+      && UnsafeProjection.canSupport(buildKeys)
       && UnsafeProjection.canSupport(self.schema))
   }
 
@@ -52,14 +53,14 @@ trait HashJoin {
   override def canProcessUnsafeRows: Boolean = isUnsafeMode
   override def canProcessSafeRows: Boolean = !isUnsafeMode
 
-  @transient protected lazy val buildSideKeyGenerator: Projection =
+  protected def buildSideKeyGenerator: Projection =
     if (isUnsafeMode) {
       UnsafeProjection.create(buildKeys, buildPlan.output)
     } else {
       newMutableProjection(buildKeys, buildPlan.output)()
     }
 
-  @transient protected lazy val streamSideKeyGenerator: Projection =
+  protected def streamSideKeyGenerator: Projection =
     if (isUnsafeMode) {
       UnsafeProjection.create(streamedKeys, streamedPlan.output)
     } else {

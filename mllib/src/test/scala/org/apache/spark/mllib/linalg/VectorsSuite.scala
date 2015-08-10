@@ -367,4 +367,11 @@ class VectorsSuite extends SparkFunSuite with Logging {
     val sv1c = sv1.compressed.asInstanceOf[DenseVector]
     assert(sv1 === sv1c)
   }
+
+  test("SparseVector.slice") {
+    val v = new SparseVector(5, Array(1, 2, 4), Array(1.1, 2.2, 4.4))
+    assert(v.slice(Array(0, 2)) === new SparseVector(2, Array(1), Array(2.2)))
+    assert(v.slice(Array(2, 0)) === new SparseVector(2, Array(0), Array(2.2)))
+    assert(v.slice(Array(2, 0, 3, 4)) === new SparseVector(4, Array(0, 3), Array(2.2, 4.4)))
+  }
 }

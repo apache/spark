@@ -18,15 +18,17 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.SparkContext
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{VectorUDT, Vectors}
+import org.apache.spark.mllib.linalg.{VectorUDT, Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types._
 
 /**
@@ -145,6 +147,40 @@ class Word2VecModel private[ml] (
     override val uid: String,
     wordVectors: feature.Word2VecModel)
   extends Model[Word2VecModel] with Word2VecBase {
+
+
+  /**
+   * Returns a dataframe with two fields, "word" and "vector", with "word" being a String and
+   * and the vector the DenseVector that it is mapped to.
+   */
+  @transient lazy val getVectors: DataFrame = {
+    val sc = SparkContext.getOrCreate()
+    val sqlContext = SQLContext.getOrCreate(sc)
+    import sqlContext.implicits._
+    val wordVec = wordVectors.getVectors.mapValues(vec => Vectors.dense(vec.map(_.toDouble)))
+    sc.parallelize(wordVec.toSeq).toDF("word", "vector")
+  }
+
+  /**
+   * Find "num" number of words closest in similarity to the given word.
+   * Returns a dataframe with the words and the cosine similarities between the
+   * synonyms and the given word.
+   */
+  def findSynonyms(word: String, num: Int): DataFrame = {
+    findSynonyms(wordVectors.transform(word), num)
+  }
+
+  /**
+   * Find "num" number of words closest to similarity to the given vector representation
+   * of the word. Returns a dataframe with the words and the cosine similarities between the
+   * synonyms and the given word vector.
+   */
+  def findSynonyms(word: Vector, num: Int): DataFrame = {
+    val sc = SparkContext.getOrCreate()
+    val sqlContext = SQLContext.getOrCreate(sc)
+    import sqlContext.implicits._
+    sc.parallelize(wordVectors.findSynonyms(word, num)).toDF("word", "similarity")
+  }
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)

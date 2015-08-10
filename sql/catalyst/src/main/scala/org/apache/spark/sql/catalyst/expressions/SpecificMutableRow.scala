@@ -192,7 +192,8 @@ final class MutableAny extends MutableValue {
  * based on the dataTypes of each column.  The intent is to decrease garbage when modifying the
  * values of primitive columns.
  */
-final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableRow {
+final class SpecificMutableRow(val values: Array[MutableValue])
+  extends MutableRow with BaseGenericInternalRow {
 
   def this(dataTypes: Seq[DataType]) =
     this(
@@ -213,16 +214,8 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def numFields: Int = values.length
 
-  override def toSeq: Seq[Any] = values.map(_.boxed).toSeq
-
   override def setNullAt(i: Int): Unit = {
     values(i).isNull = true
-  }
-
-  override def get(i: Int, dataType: DataType): Any = values(i).boxed
-
-  override def getStruct(ordinal: Int, numFields: Int): InternalRow = {
-    values(ordinal).boxed.asInstanceOf[InternalRow]
   }
 
   override def isNullAt(i: Int): Boolean = values(i).isNull
@@ -238,6 +231,8 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
     new GenericInternalRow(newValues)
   }
 
+  override protected def genericGet(i: Int): Any = values(i).boxed
+
   override def update(ordinal: Int, value: Any) {
     if (value == null) {
       setNullAt(ordinal)
@@ -245,9 +240,6 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
       values(ordinal).update(value)
     }
   }
-
-  override def setString(ordinal: Int, value: String): Unit =
-    update(ordinal, UTF8String.fromString(value))
 
   override def setInt(ordinal: Int, value: Int): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableInt]

@@ -19,9 +19,9 @@ package org.apache.spark.sql.json
 
 import java.io.ByteArrayOutputStream
 
-import scala.collection.Map
-
 import com.fasterxml.jackson.core._
+
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-
 
 private[sql] object JacksonParser {
   def apply(
@@ -85,9 +84,8 @@ private[sql] object JacksonParser {
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, DoubleType) =>
         parser.getDoubleValue
 
-      case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, DecimalType()) =>
-        // TODO: add fixed precision and scale handling
-        Decimal(parser.getDecimalValue)
+      case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, dt: DecimalType) =>
+        Decimal(parser.getDecimalValue, dt.precision, dt.scale)
 
       case (VALUE_NUMBER_INT, ByteType) =>
         parser.getByteValue
@@ -127,7 +125,7 @@ private[sql] object JacksonParser {
         convertMap(factory, parser, kt)
 
       case (_, udt: UserDefinedType[_]) =>
-        udt.deserialize(convertField(factory, parser, udt.sqlType))
+        convertField(factory, parser, udt.sqlType)
     }
   }
 
@@ -160,21 +158,21 @@ private[sql] object JacksonParser {
   private def convertMap(
       factory: JsonFactory,
       parser: JsonParser,
-      valueType: DataType): Map[UTF8String, Any] = {
-    val builder = Map.newBuilder[UTF8String, Any]
+      valueType: DataType): MapData = {
+    val keys = ArrayBuffer.empty[UTF8String]
+    val values = ArrayBuffer.empty[Any]
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      builder +=
-        UTF8String.fromString(parser.getCurrentName) -> convertField(factory, parser, valueType)
+      keys += UTF8String.fromString(parser.getCurrentName)
+      values += convertField(factory, parser, valueType)
     }
-
-    builder.result()
+    ArrayBasedMapData(keys.toArray, values.toArray)
   }
 
   private def convertArray(
       factory: JsonFactory,
       parser: JsonParser,
       elementType: DataType): ArrayData = {
-    val values = scala.collection.mutable.ArrayBuffer.empty[Any]
+    val values = ArrayBuffer.empty[Any]
     while (nextUntil(parser, JsonToken.END_ARRAY)) {
       values += convertField(factory, parser, elementType)
     }
@@ -213,7 +211,7 @@ private[sql] object JacksonParser {
               if (array.numElements() == 0) {
                 Nil
               } else {
-                array.toArray().map(_.asInstanceOf[InternalRow])
+                array.toArray[InternalRow](schema)
               }
             case _ =>
               sys.error(

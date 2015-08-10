@@ -30,6 +30,41 @@ class DataFrameStatSuite extends QueryTest {
 
   private def toLetter(i: Int): String = (i + 97).toChar.toString
 
+  test("sample with replacement") {
+    val n = 100
+    val data = sqlCtx.sparkContext.parallelize(1 to n, 2).toDF("id")
+    checkAnswer(
+      data.sample(withReplacement = true, 0.05, seed = 13),
+      Seq(5, 10, 52, 73).map(Row(_))
+    )
+  }
+
+  test("sample without replacement") {
+    val n = 100
+    val data = sqlCtx.sparkContext.parallelize(1 to n, 2).toDF("id")
+    checkAnswer(
+      data.sample(withReplacement = false, 0.05, seed = 13),
+      Seq(16, 23, 88, 100).map(Row(_))
+    )
+  }
+
+  test("randomSplit") {
+    val n = 600
+    val data = sqlCtx.sparkContext.parallelize(1 to n, 2).toDF("id")
+    for (seed <- 1 to 5) {
+      val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
+      assert(splits.length == 3, "wrong number of splits")
+
+      assert(splits.reduce((a, b) => a.unionAll(b)).sort("id").collect().toList ==
+        data.collect().toList, "incomplete or wrong split")
+
+      val s = splits.map(_.count())
+      assert(math.abs(s(0) - 100) < 50) // std =  9.13
+      assert(math.abs(s(1) - 200) < 50) // std = 11.55
+      assert(math.abs(s(2) - 300) < 50) // std = 12.25
+    }
+  }
+
   test("pearson correlation") {
     val df = Seq.tabulate(10)(i => (i, 2 * i, i * -1.0)).toDF("a", "b", "c")
     val corr1 = df.stat.corr("a", "b", "pearson")
@@ -123,12 +158,30 @@ class DataFrameStatSuite extends QueryTest {
 
     val results = df.stat.freqItems(Array("numbers", "letters"), 0.1)
     val items = results.collect().head
-    items.getSeq[Int](0) should contain (1)
-    items.getSeq[String](1) should contain (toLetter(1))
+    assert(items.getSeq[Int](0).contains(1))
+    assert(items.getSeq[String](1).contains(toLetter(1)))
 
     val singleColResults = df.stat.freqItems(Array("negDoubles"), 0.1)
     val items2 = singleColResults.collect().head
-    items2.getSeq[Double](0) should contain (-1.0)
+    assert(items2.getSeq[Double](0).contains(-1.0))
+  }
+
+  test("Frequent Items 2") {
+    val rows = sqlCtx.sparkContext.parallelize(Seq.empty[Int], 4)
+    // this is a regression test, where when merging partitions, we omitted values with higher
+    // counts than those that existed in the map when the map was full. This test should also fail
+    // if anything like SPARK-9614 is observed once again
+    val df = rows.mapPartitionsWithIndex { (idx, iter) =>
+      if (idx == 3) { // must come from one of the later merges, therefore higher partition index
+        Iterator("3", "3", "3", "3", "3")
+      } else {
+        Iterator("0", "1", "2", "3", "4")
+      }
+    }.toDF("a")
+    val results = df.stat.freqItems(Array("a"), 0.25)
+    val items = results.collect().head.getSeq[String](0)
+    assert(items.contains("3"))
+    assert(items.length === 1)
   }
 
   test("sampleBy") {

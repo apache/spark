@@ -209,11 +209,11 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
         tpe match {
           case 0 =>
             val size = row.getInt(1)
-            val indices = row.getArray(2).toArray().map(_.asInstanceOf[Int])
-            val values = row.getArray(3).toArray().map(_.asInstanceOf[Double])
+            val indices = row.getArray(2).toIntArray()
+            val values = row.getArray(3).toDoubleArray()
             new SparseVector(size, indices, values)
           case 1 =>
-            val values = row.getArray(3).toArray().map(_.asInstanceOf[Double])
+            val values = row.getArray(3).toDoubleArray()
             new DenseVector(values)
         }
     }
@@ -765,6 +765,30 @@ class SparseVector(
 
       maxIdx
     }
+  }
+
+  /**
+   * Create a slice of this vector based on the given indices.
+   * @param selectedIndices Unsorted list of indices into the vector.
+   *                        This does NOT do bound checking.
+   * @return  New SparseVector with values in the order specified by the given indices.
+   *
+   * NOTE: The API needs to be discussed before making this public.
+   *       Also, if we have a version assuming indices are sorted, we should optimize it.
+   */
+  private[spark] def slice(selectedIndices: Array[Int]): SparseVector = {
+    var currentIdx = 0
+    val (sliceInds, sliceVals) = selectedIndices.flatMap { origIdx =>
+      val iIdx = java.util.Arrays.binarySearch(this.indices, origIdx)
+      val i_v = if (iIdx >= 0) {
+        Iterator((currentIdx, this.values(iIdx)))
+      } else {
+        Iterator()
+      }
+      currentIdx += 1
+      i_v
+    }.unzip
+    new SparseVector(selectedIndices.length, sliceInds.toArray, sliceVals.toArray)
   }
 }
 

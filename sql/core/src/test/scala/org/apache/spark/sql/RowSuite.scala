@@ -19,9 +19,9 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.SparkSqlSerializer
-
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, SpecificMutableRow}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class RowSuite extends SparkFunSuite {
 
@@ -31,7 +31,7 @@ class RowSuite extends SparkFunSuite {
   test("create row") {
     val expected = new GenericMutableRow(4)
     expected.setInt(0, 2147483647)
-    expected.setString(1, "this is a string")
+    expected.update(1, UTF8String.fromString("this is a string"))
     expected.setBoolean(2, false)
     expected.setNullAt(3)
 
