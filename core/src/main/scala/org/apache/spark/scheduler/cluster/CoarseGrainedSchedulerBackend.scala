@@ -19,6 +19,9 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.regex.Pattern
+
+import org.apache.hadoop.yarn.api.records.ContainerExitStatus
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
@@ -241,9 +244,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           scheduler.executorLost(executorId, SlaveLost(reason))
           listenerBus.post(
             SparkListenerExecutorRemoved(System.currentTimeMillis(), executorId, reason))
-        case None =>
-          // TODO: Update reason
-          logInfo(s"Asked to remove non-existent executor $executorId")
+        case None => logInfo(s"Asked to remove non-existent executor $executorId")
       }
     }
 

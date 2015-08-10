@@ -424,7 +424,7 @@ private[yarn] class YarnAllocator(
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
       val alreadyReleased = releasedContainers.remove(containerId)
-      var completedContainerReason : String = ""
+      var completedContainerReason : String = null
       if (!alreadyReleased) {
         // Decrement the number of executors running. The next iteration of
         // the ApplicationMaster's reporting thread will take care of allocating.
@@ -437,24 +437,29 @@ private[yarn] class YarnAllocator(
         // there are some exit status' we shouldn't necessarily count against us, but for
         // now I think its ok as none of the containers are expected to exit
         if (completedContainer.getExitStatus == ContainerExitStatus.PREEMPTED) {
-          val completedContainerReason = "Container preempted: " + containerId
-          logInfo(completedContainerReason)
+          val msg = "Container preempted: " + containerId
+          logInfo(msg)
+          completedContainerReason = msg
+          driverRef.send(completedContainer.getExitStatus, msg)
         } else if (completedContainer.getExitStatus == -103) { // vmem limit exceeded
           logWarning(memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
             VMEM_EXCEEDED_PATTERN))
           completedContainerReason = completedContainer.getDiagnostics
+          driverRef.send(ContainerExited(completedContainer.getExitStatus, completedContainer.getDiagnostics))
         } else if (completedContainer.getExitStatus == -104) { // pmem limit exceeded
           logWarning(memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
             PMEM_EXCEEDED_PATTERN))
           completedContainerReason = completedContainer.getDiagnostics
+          driverRef.send(ContainerExited(completedContainer.getExitStatus, completedContainer.getDiagnostics))
         } else if (completedContainer.getExitStatus != 0) {
           val msg = "Container marked as failed: " + containerId +
             ". Exit status: " + completedContainer.getExitStatus +
             ". Diagnostics: " + completedContainer.getDiagnostics
           logInfo(msg)
           completedContainerReason = msg
+          driverRef.send(ContainerExited(completedContainer.getExitStatus, msg))
           numExecutorsFailed += 1
         }
       }
