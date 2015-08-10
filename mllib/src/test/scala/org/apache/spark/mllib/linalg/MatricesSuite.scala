@@ -84,10 +84,12 @@ class MatricesSuite extends SparkFunSuite {
 
     val sm1 = dm1.asInstanceOf[DenseMatrix].toSparse
     assert(sm1 === sm1)
+    assert(sm1 === dm1)
     assert(sm1 !== sm1.transpose)
 
     val sm2 = dm2.asInstanceOf[DenseMatrix].toSparse
     assert(sm1 === sm2.transpose)
+    assert(sm1 === dm2.transpose)
   }
 
   test("matrix copies are deep copies") {

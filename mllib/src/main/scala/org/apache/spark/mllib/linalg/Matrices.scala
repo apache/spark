@@ -257,7 +257,7 @@ class DenseMatrix(
     this(numRows, numCols, values, false)
 
   override def equals(o: Any): Boolean = o match {
-    case m: DenseMatrix =>
+    case m: Matrix =>
       m.numRows == numRows && m.numCols == numCols && Arrays.equals(toArray, m.toArray)
     case _ => false
   }
@@ -520,7 +520,8 @@ class SparseMatrix(
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
 
   override def equals(o: Any): Boolean = o match {
-    case m: SparseMatrix => toBreeze == m.toBreeze
+    case m: Matrix =>
+      m.numRows == numRows && m.numCols == numCols && Arrays.equals(toArray, m.toArray)
     case _ => false
   }
 
