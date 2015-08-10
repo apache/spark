@@ -43,19 +43,24 @@ import org.apache.spark.util.SerializableConfiguration
  * This allows users to give the data source alias as the format type over the fully qualified
  * class name.
  *
- * ex: parquet.DefaultSource.format = "parquet".
- *
  * A new instance of this class with be instantiated each time a DDL call is made.
+ *
+ * @since 1.5.0
  */
 @DeveloperApi
 trait DataSourceRegister {
 
   /**
    * The string that represents the format that this data source provider uses. This is
-   * overridden by children to provide a nice alias for the data source,
-   * ex: override def format(): String = "parquet"
+   * overridden by children to provide a nice alias for the data source. For example:
+   *
+   * {{{
+   *   override def format(): String = "parquet"
+   * }}}
+   *
+   * @since 1.5.0
    */
-  def format(): String
+  def shortName(): String
 }
 
 /**
