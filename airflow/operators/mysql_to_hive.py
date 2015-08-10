@@ -68,7 +68,7 @@ class MySqlToHiveTransfer(BaseOperator):
         self.partition = partition
         self.create = create
         self.recreate = recreate
-        self.delimiter = delimiter
+        self.delimiter = str(delimiter)
         self.mysql_conn_id = mysql_conn_id
         self.hive_cli_conn_id = hive_cli_conn_id
         self.partition = partition or {}
