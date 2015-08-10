@@ -366,7 +366,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(getClass.getClassLoader)
-    evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.codegen.GeneratedClass")
+    // Cannot be under package codegen, or fail with java.lang.InstantiationException
+    evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
     evaluator.setDefaultImports(Array(
       classOf[PlatformDependent].getName,
       classOf[InternalRow].getName,
