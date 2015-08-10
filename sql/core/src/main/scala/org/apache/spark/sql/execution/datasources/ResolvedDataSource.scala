@@ -41,8 +41,11 @@ object ResolvedDataSource extends Logging {
   /** A map to maintain backward compatibility in case we move data sources around. */
   private val backwardCompatibilityMap = Map(
     "org.apache.spark.sql.jdbc" -> classOf[jdbc.DefaultSource].getName,
+    "org.apache.spark.sql.jdbc.DefaultSource" -> classOf[jdbc.DefaultSource].getName,
     "org.apache.spark.sql.json" -> classOf[json.DefaultSource].getName,
-    "org.apache.spark.sql.parquet" -> classOf[parquet.DefaultSource].getName
+    "org.apache.spark.sql.json.DefaultSource" -> classOf[json.DefaultSource].getName,
+    "org.apache.spark.sql.parquet" -> classOf[parquet.DefaultSource].getName,
+    "org.apache.spark.sql.parquet.DefaultSource" -> classOf[parquet.DefaultSource].getName
   )
 
   /** Given a provider name, look up the data source class definition. */
