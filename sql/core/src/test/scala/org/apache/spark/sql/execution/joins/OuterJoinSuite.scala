@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.Join
+import org.apache.spark.sql.types.{IntegerType, DoubleType, StructType}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -69,17 +70,19 @@ class OuterJoinSuite extends SparkPlanTest {
     }
   }
 
-  val left = Seq(
-    (1, 2.0),
-    (2, 1.0),
-    (3, 3.0)
-  ).toDF("a", "b")
+  val left = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(Seq(
+    Row(1, 2.0),
+    Row(2, 1.0),
+    Row(3, 3.0),
+    Row(null, null)
+  )), new StructType().add("a", IntegerType).add("b", DoubleType))
 
-  val right = Seq(
-    (2, 3.0),
-    (3, 2.0),
-    (4, 1.0)
-  ).toDF("c", "d")
+  val right = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(Seq(
+    Row(2, 3.0),
+    Row(3, 2.0),
+    Row(4, 1.0),
+    Row(null, null)
+  )), new StructType().add("c", IntegerType).add("d", DoubleType))
 
   val condition = {
     And(
@@ -98,7 +101,8 @@ class OuterJoinSuite extends SparkPlanTest {
     Seq(
       (1, 2.0, null, null),
       (2, 1.0, 2, 3.0),
-      (3, 3.0, null, null)
+      (3, 3.0, null, null),
+      (null, null, null, null)
     )
   )
 
@@ -111,7 +115,8 @@ class OuterJoinSuite extends SparkPlanTest {
     Seq(
       (2, 1.0, 2, 3.0),
       (null, null, 3, 2.0),
-      (null, null, 4, 1.0)
+      (null, null, 4, 1.0),
+      (null, null, null, null)
     )
   )
 
@@ -126,7 +131,9 @@ class OuterJoinSuite extends SparkPlanTest {
       (2, 1.0, 2, 3.0),
       (3, 3.0, null, null),
       (null, null, 3, 2.0),
-      (null, null, 4, 1.0)
+      (null, null, 4, 1.0),
+      (null, null, null, null),
+      (null, null, null, null)
     )
   )
 
