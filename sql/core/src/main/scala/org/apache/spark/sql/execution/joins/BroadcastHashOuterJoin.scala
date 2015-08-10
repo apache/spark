@@ -89,7 +89,11 @@ case class BroadcastHashOuterJoin(
           numBuildRows += 1
           row.copy()
         }.collect()
-        val hashed = HashedRelation(input.iterator, buildKeyGenerator, input.size)
+        // The following line doesn't run in a job so we cannot track the metric value. However, we
+        // have already tracked it in the above lines. So here we can use
+        // `SQLMetrics.nullLongMetric` to ignore it.
+        val hashed = HashedRelation(
+          input.iterator, SQLMetrics.nullLongMetric, buildKeyGenerator, input.size)
         sparkContext.broadcast(hashed)
       }
     }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
@@ -111,11 +115,7 @@ case class BroadcastHashOuterJoin(
 
     val broadcastRelation = Await.result(broadcastFuture, timeout)
 
-    streamedPlan.execute().mapPartitions { _streamedIter =>
-      val streamedIter = _streamedIter.map { row =>
-        numStreamedRows += 1
-        row
-      }
+    streamedPlan.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow()
       val hashTable = broadcastRelation.value
       val keyGenerator = streamedKeyGenerator
@@ -131,25 +131,24 @@ case class BroadcastHashOuterJoin(
       joinType match {
         case LeftOuter =>
           streamedIter.flatMap(currentRow => {
+            numStreamedRows += 1
             val rowKey = keyGenerator(currentRow)
             joinedRow.withLeft(currentRow)
-            leftOuterIterator(rowKey, joinedRow, hashTable.get(rowKey), resultProj)
+            leftOuterIterator(rowKey, joinedRow, hashTable.get(rowKey), resultProj, numOutputRows)
           })
 
         case RightOuter =>
           streamedIter.flatMap(currentRow => {
+            numStreamedRows += 1
             val rowKey = keyGenerator(currentRow)
             joinedRow.withRight(currentRow)
-            rightOuterIterator(rowKey, hashTable.get(rowKey), joinedRow, resultProj)
+            rightOuterIterator(rowKey, hashTable.get(rowKey), joinedRow, resultProj, numOutputRows)
           })
 
         case x =>
           throw new IllegalArgumentException(
             s"BroadcastHashOuterJoin should not take $x as the JoinType")
       }
-    }.map { row =>
-      numOutputRows += 1
-      row
     }
   }
 }

@@ -86,7 +86,11 @@ case class BroadcastHashJoin(
           numBuildRows += 1
           row.copy()
         }.collect()
-        val hashed = HashedRelation(input.iterator, buildSideKeyGenerator, input.size)
+        // The following line doesn't run in a job so we cannot track the metric value. However, we
+        // have already tracked it in the above lines. So here we can use
+        // `SQLMetrics.nullLongMetric` to ignore it.
+        val hashed = HashedRelation(
+          input.iterator, SQLMetrics.nullLongMetric, buildSideKeyGenerator, input.size)
         sparkContext.broadcast(hashed)
       }
     }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
@@ -113,13 +117,7 @@ case class BroadcastHashJoin(
             InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getUnsafeSize)
         case _ =>
       }
-      hashJoin(streamedIter.map { row =>
-        numStreamedRows += 1
-        row
-      }, hashedRelation).map { row =>
-        numOutputRows += 1
-        row
-      }
+      hashJoin(streamedIter, numStreamedRows, hashedRelation, numOutputRows)
     }
   }
 }

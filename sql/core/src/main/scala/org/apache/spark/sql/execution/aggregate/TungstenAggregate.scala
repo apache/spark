@@ -68,11 +68,7 @@ case class TungstenAggregate(
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numInputRows = longMetric("numInputRows")
     val numOutputRows = longMetric("numOutputRows")
-    child.execute().mapPartitions { _iter =>
-      val iter = _iter.map { row =>
-        numInputRows += 1
-        row
-      }
+    child.execute().mapPartitions { iter =>
       val hasInput = iter.hasNext
       if (!hasInput && groupingExpressions.nonEmpty) {
         // This is a grouped aggregate and the input iterator is empty,
@@ -89,16 +85,15 @@ case class TungstenAggregate(
             newMutableProjection,
             child.output,
             iter,
-            testFallbackStartsAt)
+            testFallbackStartsAt,
+            numInputRows,
+            numOutputRows)
 
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
         } else {
-          aggregationIterator.map { row =>
-            numOutputRows += 1
-            row
-          }
+          aggregationIterator
         }
       }
     }

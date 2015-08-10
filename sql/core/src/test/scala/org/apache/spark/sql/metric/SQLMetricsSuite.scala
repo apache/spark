@@ -180,6 +180,8 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   test("SortBasedAggregate metrics") {
+    // Because SortBasedAggregate may skip different rows if the number of partitions is different,
+    // this test should use the deterministic number of partitions.
     withSQLConf(
       SQLConf.UNSAFE_ENABLED.key -> "false",
       SQLConf.CODEGEN_ENABLED.key -> "true",
@@ -247,6 +249,8 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   test("SortMergeJoin metrics") {
+    // Because SortMergeJoin may skip different rows if the number of partitions is different, this
+    // test should use the deterministic number of partitions.
     withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true") {
       val testDataForJoin = TestData.testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
       testDataForJoin.registerTempTable("testDataForJoin")
@@ -302,36 +306,58 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   test("ShuffledHashOuterJoin metrics") {
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
-      val testDataForJoin = TestData.testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-      testDataForJoin.registerTempTable("testDataForJoin")
-      withTempTable("testDataForJoin") {
-        // Assume the execution plan is
-        // ... -> ShuffledHashOuterJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-        val df = sqlContext.sql(
-          "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
-        testSparkPlanMetrics(df, 1, Map(
-          1L -> ("ShuffledHashOuterJoin", Map(
-            "number of left rows" -> 6L,
-            "number of right rows" -> 2L,
-            "number of output rows" -> 8L)))
-        )
-      }
+    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      val df1 = Seq((1, "a"), (1, "b"), (4, "c")).toDF("key", "value")
+      val df2 = Seq((1, "a"), (1, "b"), (2, "c"), (3, "d")).toDF("key2", "value")
+      // Assume the execution plan is
+      // ... -> ShuffledHashOuterJoin(nodeId = 0)
+      val df = df1.join(df2, $"key" === $"key2", "left_outer")
+      testSparkPlanMetrics(df, 1, Map(
+        0L -> ("ShuffledHashOuterJoin", Map(
+          "number of left rows" -> 3L,
+          "number of right rows" -> 4L,
+          "number of output rows" -> 5L)))
+      )
+
+      val df3 = df1.join(df2, $"key" === $"key2", "right_outer")
+      testSparkPlanMetrics(df3, 1, Map(
+        0L -> ("ShuffledHashOuterJoin", Map(
+          "number of left rows" -> 3L,
+          "number of right rows" -> 4L,
+          "number of output rows" -> 6L)))
+      )
+
+      val df4 = df1.join(df2, $"key" === $"key2", "outer")
+      testSparkPlanMetrics(df4, 1, Map(
+        0L -> ("ShuffledHashOuterJoin", Map(
+          "number of left rows" -> 3L,
+          "number of right rows" -> 4L,
+          "number of output rows" -> 7L)))
+      )
     }
   }
 
   test("BroadcastHashOuterJoin metrics") {
     withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
-      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
-      val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
+      val df1 = Seq((1, "a"), (1, "b"), (4, "c")).toDF("key", "value")
+      val df2 = Seq((1, "a"), (1, "b"), (2, "c"), (3, "d")).toDF("key2", "value")
       // Assume the execution plan is
       // ... -> BroadcastHashOuterJoin(nodeId = 0)
       val df = df1.join(broadcast(df2), $"key" === $"key2", "left_outer")
       testSparkPlanMetrics(df, 2, Map(
         0L -> ("BroadcastHashOuterJoin", Map(
-          "number of left rows" -> 2L,
+          "number of left rows" -> 3L,
           "number of right rows" -> 4L,
-          "number of output rows" -> 2L)))
+          "number of output rows" -> 5L)))
+      )
+
+      val df3 = df1.join(broadcast(df2), $"key" === $"key2", "right_outer")
+      testSparkPlanMetrics(df3, 2, Map(
+        0L -> ("BroadcastHashOuterJoin", Map(
+          "number of left rows" -> 3L,
+          "number of right rows" -> 4L,
+          "number of output rows" -> 6L)))
       )
     }
   }

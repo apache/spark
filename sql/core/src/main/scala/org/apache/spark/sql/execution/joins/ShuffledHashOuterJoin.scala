@@ -62,58 +62,51 @@ case class ShuffledHashOuterJoin(
     val numLeftRows = longMetric("numLeftRows")
     val numRightRows = longMetric("numRightRows")
     val numOutputRows = longMetric("numOutputRows")
+
     val joinedRow = new JoinedRow()
-
-    val leftResults = left.execute().map { row =>
-      numLeftRows += 1
-      row
-    }
-    val rightResults = right.execute().map { row =>
-      numRightRows += 1
-      row
-    }
-
-    leftResults.zipPartitions(rightResults) { (leftIter, rightIter) =>
+    left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       // TODO this probably can be replaced by external sort (sort merged join?)
       joinType match {
         case LeftOuter =>
-          val hashed = HashedRelation(rightIter, buildKeyGenerator)
+          val hashed = HashedRelation(rightIter, numRightRows, buildKeyGenerator)
           val keyGenerator = streamedKeyGenerator
           val resultProj = resultProjection
           leftIter.flatMap( currentRow => {
+            numLeftRows += 1
             val rowKey = keyGenerator(currentRow)
             joinedRow.withLeft(currentRow)
-            leftOuterIterator(rowKey, joinedRow, hashed.get(rowKey), resultProj)
+            leftOuterIterator(rowKey, joinedRow, hashed.get(rowKey), resultProj, numOutputRows)
           })
 
         case RightOuter =>
-          val hashed = HashedRelation(leftIter, buildKeyGenerator)
+          val hashed = HashedRelation(leftIter, numLeftRows, buildKeyGenerator)
           val keyGenerator = streamedKeyGenerator
           val resultProj = resultProjection
           rightIter.flatMap ( currentRow => {
+            numRightRows += 1
             val rowKey = keyGenerator(currentRow)
             joinedRow.withRight(currentRow)
-            rightOuterIterator(rowKey, hashed.get(rowKey), joinedRow, resultProj)
+            rightOuterIterator(rowKey, hashed.get(rowKey), joinedRow, resultProj, numOutputRows)
           })
 
         case FullOuter =>
           // TODO(davies): use UnsafeRow
-          val leftHashTable = buildHashTable(leftIter, newProjection(leftKeys, left.output))
-          val rightHashTable = buildHashTable(rightIter, newProjection(rightKeys, right.output))
+          val leftHashTable =
+            buildHashTable(leftIter, numLeftRows, newProjection(leftKeys, left.output))
+          val rightHashTable =
+            buildHashTable(rightIter, numRightRows, newProjection(rightKeys, right.output))
           (leftHashTable.keySet ++ rightHashTable.keySet).iterator.flatMap { key =>
             fullOuterIterator(key,
               leftHashTable.getOrElse(key, EMPTY_LIST),
               rightHashTable.getOrElse(key, EMPTY_LIST),
-              joinedRow)
+              joinedRow,
+              numOutputRows)
           }
 
         case x =>
           throw new IllegalArgumentException(
             s"ShuffledHashOuterJoin should not take $x as the JoinType")
       }
-    }.map { row =>
-      numOutputRows += 1
-      row
     }
   }
 }

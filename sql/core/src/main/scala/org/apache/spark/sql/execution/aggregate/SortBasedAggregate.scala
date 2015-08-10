@@ -70,11 +70,7 @@ case class SortBasedAggregate(
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numInputRows = longMetric("numInputRows")
     val numOutputRows = longMetric("numOutputRows")
-    child.execute().mapPartitions { _iter =>
-      val iter = _iter.map { row =>
-        numInputRows += 1
-        row
-      }
+    child.execute().mapPartitions { iter =>
       // Because the constructor of an aggregation iterator will read at least the first row,
       // we need to get the value of iter.hasNext first.
       val hasInput = iter.hasNext
@@ -95,17 +91,16 @@ case class SortBasedAggregate(
           newProjection _,
           child.output,
           iter,
-          outputsUnsafeRows)
+          outputsUnsafeRows,
+          numInputRows,
+          numOutputRows)
         if (!hasInput && groupingExpressions.isEmpty) {
           // There is no input and there is no grouping expressions.
           // We need to output a single row as the output.
           numOutputRows += 1
           Iterator[InternalRow](outputIter.outputForEmptyGroupingKeyWithoutInput())
         } else {
-          outputIter.map { row =>
-            numOutputRows += 1
-            row
-          }
+          outputIter
         }
       }
     }

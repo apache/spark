@@ -81,22 +81,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Whether track the number of rows output by this SparkPlan
-   */
-  protected[sql] def trackNumOfRowsEnabled: Boolean = false
-
-  private lazy val defaultMetrics: Map[String, SQLMetric[_, _]] =
-    if (trackNumOfRowsEnabled) {
-      Map("numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
-    }
-    else {
-      Map.empty
-    }
-
-  /**
    * Return all metrics containing metrics of this SparkPlan.
    */
-  private[sql] def metrics: Map[String, SQLMetric[_, _]] = defaultMetrics
+  private[sql] def metrics: Map[String, SQLMetric[_, _]] = Map.empty
 
   /**
    * Return a IntSQLMetric according to the name.
@@ -156,15 +143,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
-      if (trackNumOfRowsEnabled) {
-        val numRows = longMetric("numRows")
-        doExecute().map { row =>
-          numRows += 1
-          row
-        }
-      } else {
-        doExecute()
-      }
+      doExecute()
     }
   }
 

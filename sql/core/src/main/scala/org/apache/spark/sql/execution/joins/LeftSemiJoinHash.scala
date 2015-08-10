@@ -53,27 +53,13 @@ case class LeftSemiJoinHash(
     val numRightRows = longMetric("numRightRows")
     val numOutputRows = longMetric("numOutputRows")
 
-    val leftResults = left.execute().map { row =>
-      numLeftRows += 1
-      row
-    }
-    val rightResults = right.execute().map { row =>
-      numRightRows += 1
-      row
-    }
-    rightResults.zipPartitions(leftResults) { (buildIter, streamIter) =>
+    right.execute().zipPartitions(left.execute()) { (buildIter, streamIter) =>
       if (condition.isEmpty) {
-        val hashSet = buildKeyHashSet(buildIter)
-        hashSemiJoin(streamIter, hashSet).map { row =>
-          numOutputRows += 1
-          row
-        }
+        val hashSet = buildKeyHashSet(buildIter, numRightRows)
+        hashSemiJoin(streamIter, numLeftRows, hashSet, numOutputRows)
       } else {
-        val hashRelation = HashedRelation(buildIter, rightKeyGenerator)
-        hashSemiJoin(streamIter, hashRelation)map { row =>
-          numOutputRows += 1
-          row
-        }
+        val hashRelation = HashedRelation(buildIter, numRightRows, rightKeyGenerator)
+        hashSemiJoin(streamIter, numLeftRows, hashRelation, numOutputRows)
       }
     }
   }

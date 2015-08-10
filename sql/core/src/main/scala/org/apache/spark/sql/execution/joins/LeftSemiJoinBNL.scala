@@ -68,14 +68,11 @@ case class LeftSemiJoinBNL(
         row.copy()
       }.collect().toIndexedSeq)
 
-    streamed.execute().mapPartitions { _streamedIter =>
-      val streamedIter = _streamedIter.map { row =>
-        numLeftRows += 1
-        row
-      }
+    streamed.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow
 
       streamedIter.filter(streamedRow => {
+        numLeftRows += 1
         var i = 0
         var matched = false
 
@@ -86,11 +83,11 @@ case class LeftSemiJoinBNL(
           }
           i += 1
         }
+        if (matched) {
+          numOutputRows += 1
+        }
         matched
-      }).map { row =>
-        numOutputRows += 1
-        row
-      }
+      })
     }
   }
 }

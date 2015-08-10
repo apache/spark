@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.{UnsafeKVExternalSorter, UnsafeFixedWidthAggregationMap}
+import org.apache.spark.sql.metric.LongSQLMetric
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -83,7 +84,9 @@ class TungstenAggregationIterator(
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
     originalInputAttributes: Seq[Attribute],
     inputIter: Iterator[InternalRow],
-    testFallbackStartsAt: Option[Int])
+    testFallbackStartsAt: Option[Int],
+    numInputRows: LongSQLMetric,
+    numOutputRows: LongSQLMetric)
   extends Iterator[UnsafeRow] with Logging {
 
   ///////////////////////////////////////////////////////////////////////////
@@ -352,6 +355,7 @@ class TungstenAggregationIterator(
   private def processInputs(): Unit = {
     while (!sortBased && inputIter.hasNext) {
       val newInput = inputIter.next()
+      numInputRows += 1
       val groupingKey = groupProjection.apply(newInput)
       val buffer: UnsafeRow = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
       if (buffer == null) {
@@ -371,6 +375,7 @@ class TungstenAggregationIterator(
     var i = 0
     while (!sortBased && inputIter.hasNext) {
       val newInput = inputIter.next()
+      numInputRows += 1
       val groupingKey = groupProjection.apply(newInput)
       val buffer: UnsafeRow = if (i < fallbackStartsAt) {
         hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
@@ -439,6 +444,7 @@ class TungstenAggregationIterator(
       // Process the rest of input rows.
       while (inputIter.hasNext) {
         val newInput = inputIter.next()
+        numInputRows += 1
         val groupingKey = groupProjection.apply(newInput)
         buffer.copyFrom(initialAggregationBuffer)
         processRow(buffer, newInput)
@@ -462,6 +468,7 @@ class TungstenAggregationIterator(
       // Insert the rest of input rows.
       while (inputIter.hasNext) {
         val newInput = inputIter.next()
+        numInputRows += 1
         val groupingKey = groupProjection.apply(newInput)
         bufferExtractor(newInput)
         externalSorter.insertKV(groupingKey, buffer)
@@ -657,7 +664,7 @@ class TungstenAggregationIterator(
         TaskContext.get().internalMetricsToAccumulators(
           InternalAccumulator.PEAK_EXECUTION_MEMORY).add(peakMemory)
       }
-
+      numOutputRows += 1
       res
     } else {
       // no more result

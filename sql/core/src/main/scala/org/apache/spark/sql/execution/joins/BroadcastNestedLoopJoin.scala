@@ -179,6 +179,7 @@ case class BroadcastNestedLoopJoin(
       matchesOrStreamedRowsWithNulls.flatMap(_._1),
       sparkContext.makeRDD(broadcastRowsWithNulls)
     ).map { row =>
+      // `broadcastRowsWithNulls` doesn't run in a job so that we have to track numOutputRows here.
       numOutputRows += 1
       row
     }

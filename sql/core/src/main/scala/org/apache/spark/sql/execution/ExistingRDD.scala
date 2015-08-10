@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
+import org.apache.spark.sql.metric.SQLMetrics
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.{Row, SQLContext}
@@ -99,9 +100,16 @@ private[sql] case class PhysicalRDD(
     rdd: RDD[InternalRow],
     extraInformation: String) extends LeafNode {
 
-  override protected[sql] val trackNumOfRowsEnabled = true
+  override private[sql] lazy val metrics = Map(
+    "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
 
-  protected override def doExecute(): RDD[InternalRow] = rdd
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numRows = longMetric("numRows")
+    rdd.map { row =>
+      numRows += 1
+      row
+    }
+  }
 
   override def simpleString: String = "Scan " + extraInformation + output.mkString("[", ",", "]")
 }

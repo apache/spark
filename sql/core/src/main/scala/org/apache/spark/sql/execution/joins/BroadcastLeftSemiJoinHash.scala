@@ -54,28 +54,18 @@ case class BroadcastLeftSemiJoinHash(
     }.collect()
 
     if (condition.isEmpty) {
-      val hashSet = buildKeyHashSet(input.toIterator)
+      val hashSet = buildKeyHashSet(input.toIterator, SQLMetrics.nullLongMetric)
       val broadcastedRelation = sparkContext.broadcast(hashSet)
 
-      left.execute().mapPartitions { _streamIter =>
-        val streamIter = _streamIter.map { row =>
-          numLeftRows += 1
-          row
-        }
-        hashSemiJoin(streamIter, broadcastedRelation.value).map { row =>
-          numOutputRows += 1
-          row
-        }
+      left.execute().mapPartitions { streamIter =>
+        hashSemiJoin(streamIter, numLeftRows, broadcastedRelation.value, numOutputRows)
       }
     } else {
-      val hashRelation = HashedRelation(input.toIterator, rightKeyGenerator, input.size)
+      val hashRelation =
+        HashedRelation(input.toIterator, SQLMetrics.nullLongMetric, rightKeyGenerator, input.size)
       val broadcastedRelation = sparkContext.broadcast(hashRelation)
 
-      left.execute().mapPartitions { _streamIter =>
-        val streamIter = _streamIter.map { row =>
-          numLeftRows += 1
-          row
-        }
+      left.execute().mapPartitions { streamIter =>
         val hashedRelation = broadcastedRelation.value
         hashedRelation match {
           case unsafe: UnsafeHashedRelation =>
@@ -83,10 +73,7 @@ case class BroadcastLeftSemiJoinHash(
               InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getUnsafeSize)
           case _ =>
         }
-        hashSemiJoin(streamIter, hashedRelation).map { row =>
-          numOutputRows += 1
-          row
-        }
+        hashSemiJoin(streamIter, numLeftRows, hashedRelation, numOutputRows)
       }
     }
   }

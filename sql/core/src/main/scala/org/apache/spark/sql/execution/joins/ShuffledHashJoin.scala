@@ -57,18 +57,9 @@ case class ShuffledHashJoin(
     }
     val numOutputRows = longMetric("numOutputRows")
 
-    buildPlan.execute().map { row =>
-      numBuildRows += 1
-      row
-    }.zipPartitions(streamedPlan.execute().map { row =>
-      numStreamedRows += 1
-      row
-    }) { (buildIter, streamIter) =>
-      val hashed = HashedRelation(buildIter, buildSideKeyGenerator)
-      hashJoin(streamIter, hashed).map { row =>
-        numOutputRows += 1
-        row
-      }
+    buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
+      val hashed = HashedRelation(buildIter, numBuildRows, buildSideKeyGenerator)
+      hashJoin(streamIter, numStreamedRows, hashed, numOutputRows)
     }
   }
 }
