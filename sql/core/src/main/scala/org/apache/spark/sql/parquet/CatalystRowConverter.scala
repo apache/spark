@@ -20,12 +20,12 @@ package org.apache.spark.sql.parquet
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
 
+
 import scala.collection.JavaConversions._
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
-import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
+import org.apache.parquet.io.api._
 import org.apache.parquet.schema.Type.Repetition
 import org.apache.parquet.schema.{GroupType, PrimitiveType, Type}
 
@@ -103,15 +103,21 @@ private[parquet] class CatalystRowConverter(
     }.toArray
   }
 
+  private val needsArrayReset =
+    fieldConverters.filter(converter => converter.isInstanceOf[NeedsResetArray])
   override def getConverter(fieldIndex: Int): Converter = fieldConverters(fieldIndex)
 
   override def end(): Unit = updater.set(currentRow)
+
 
   override def start(): Unit = {
     var i = 0
     while (i < currentRow.numFields) {
       currentRow.setNullAt(i)
       i += 1
+    }
+    needsArrayReset.foreach {
+      converter => converter.asInstanceOf[NeedsResetArray].resetArray()
     }
   }
 
@@ -171,8 +177,20 @@ private[parquet] class CatalystRowConverter(
           }
         }
 
-      case t: ArrayType =>
-        new CatalystArrayConverter(parquetType.asGroupType(), t, updater)
+      case t: ArrayType => {
+        parquetType.isRepetition(Type.Repetition.REPEATED) match {
+          case true => {
+            t match {
+              case ArrayType(elementType: StructType, _) =>
+                new CatalystRepeatedStructConverter(parquetType.asGroupType(), elementType, updater)
+              case ArrayType(elementType: DataType, _) =>
+                new CatalystRepeatedPrimitiveConverter(parquetType, elementType, updater)
+            }
+          }
+          case false =>
+            new CatalystArrayConverter(parquetType.asGroupType(), t, updater)
+        }
+      }
 
       case t: MapType =>
         new CatalystMapConverter(parquetType.asGroupType(), t, updater)
@@ -378,6 +396,66 @@ private[parquet] class CatalystRowConverter(
     }
   }
 
+  /**
+   * Support Protobuf native repeated. parquet-protobuf does a 1 - 1 conversion, i.e.,
+   * repeated int32 myInt;
+   * @param parquetType
+   * @param catalystType
+   * @param updater
+   */
+  private final class CatalystRepeatedPrimitiveConverter(
+      parquetType: Type,
+      myCatalystType: DataType,
+      updater: ParentContainerUpdater)
+    extends PrimitiveConverter with NeedsResetArray {
+
+    private var elements: Int = 0
+    private var buffer: ArrayBuffer[Any] = ArrayBuffer.empty[Any]
+
+    private val stringConverter = new CatalystStringConverter(new ParentContainerUpdater {
+      override def set(value: Any): Unit = addValue(value)
+    })
+
+    override def hasDictionarySupport: Boolean = true
+
+    override def addValueFromDictionary(dictionaryId: Int): Unit =
+      stringConverter.addValueFromDictionary(dictionaryId)
+
+    override def setDictionary(dictionary: Dictionary): Unit =
+      stringConverter.setDictionary(dictionary)
+
+    private def addValue(value: Any): Unit = {
+      buffer+=  value
+      elements +=1
+      updater.set(new GenericArrayData(buffer.slice(0, elements).toArray))
+    }
+
+    override def addBinary(value: Binary): Unit =
+      myCatalystType match {
+        case StringType => stringConverter.addBinary(value)
+        case _ => addValue(value)
+      }
+
+
+    override def addDouble(value: Double): Unit = addValue(value)
+
+    override def addInt(value: Int): Unit = {
+      addValue(value)
+    }
+
+    override def addBoolean(value: Boolean): Unit = addValue(value)
+
+    override def addFloat(value: Float): Unit = addValue(value)
+
+    override def addLong(value: Long): Unit = addValue(value)
+
+    override def resetArray(): Unit = {
+      buffer.clear()
+      elements = 0
+    }
+  }
+
+
   /** Parquet converter for maps */
   private final class CatalystMapConverter(
       parquetType: GroupType,
@@ -446,4 +524,32 @@ private[parquet] class CatalystRowConverter(
       }
     }
   }
+
+  trait NeedsResetArray {
+    def resetArray(): Unit
+  }
+
+  private class CatalystRepeatedStructConverter(
+    groupType: GroupType,
+    structType: StructType,
+    updater: ParentContainerUpdater)
+   extends CatalystRowConverter(groupType, structType, updater)
+    with NeedsResetArray {
+
+    private var rowBuffer: ArrayBuffer[Any] = ArrayBuffer.empty
+    private var elements = 0
+
+    override def end(): Unit = {
+      rowBuffer += currentRow.copy()
+      elements += 1
+      updater.set(new GenericArrayData(rowBuffer.slice(0, elements).toArray))
+    }
+
+    def resetArray(): Unit = {
+      rowBuffer.clear()
+      elements = 0
+    }
+
+  }
+
 }

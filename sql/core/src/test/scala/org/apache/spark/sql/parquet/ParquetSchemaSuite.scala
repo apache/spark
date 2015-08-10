@@ -57,11 +57,19 @@ abstract class ParquetSchemaTest extends SparkFunSuite with ParquetTest {
       binaryAsString: Boolean = true,
       int96AsTimestamp: Boolean = true,
       followParquetFormatSpec: Boolean = false,
-      isThriftDerived: Boolean = false): Unit = {
-    val converter = new CatalystSchemaConverter(
-      assumeBinaryIsString = binaryAsString,
-      assumeInt96IsTimestamp = int96AsTimestamp,
-      followParquetFormatSpec = followParquetFormatSpec)
+      isThriftDerived: Boolean = false,
+      isProtobufDerived: Boolean = false): Unit = {
+    val converter =
+      isProtobufDerived match {
+        case false => new CatalystSchemaConverter(
+          assumeBinaryIsString = binaryAsString,
+          assumeInt96IsTimestamp = int96AsTimestamp,
+          followParquetFormatSpec = followParquetFormatSpec)
+        case true =>
+          new ProtobufCatalystSchemaConverter(assumeBinaryIsString = binaryAsString,
+            assumeInt96IsTimestamp = int96AsTimestamp,
+            followParquetFormatSpec = followParquetFormatSpec)
+      }
 
     test(s"sql <= parquet: $testName") {
       val actual = converter.convert(MessageTypeParser.parseMessageType(parquetSchema))
@@ -457,6 +465,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
   // Tests for converting Parquet LIST to Catalyst ArrayType
   // =======================================================
 
+
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with nullable element type - 1 - standard",
     StructType(Seq(
@@ -584,6 +593,52 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin)
+
+  testParquetToCatalyst(
+    "parquet-protobuf primitive list compatibility",
+    StructType(Seq(
+      StructField(
+        "f1",
+        ArrayType(IntegerType, containsNull = false),
+        nullable = false))),
+    """message root {
+      |  repeated int32 f1;
+      |}
+    """.stripMargin,isProtobufDerived = true)
+
+  testParquetToCatalyst(
+    "parquet-protobuf struct list compatibility",
+    StructType(Seq(
+      StructField(
+        "inner",
+        ArrayType(
+          StructType(Seq(
+            StructField("one", StringType, nullable=true),
+            StructField("two", StringType, nullable=true),
+            StructField("three", StringType, nullable=true))), containsNull = false),
+        nullable = false))),
+    """message root {
+      |  repeated group inner {
+      |    optional binary one (UTF8);
+      |    optional binary two (UTF8);
+      |    optional binary three (UTF8);
+      |  }
+      |}
+    """.stripMargin,isProtobufDerived = true)
+
+  testParquetToCatalyst(
+    "parquet-protobuf string list compatibility",
+    StructType(Seq(
+      StructField(
+        "f1",
+        ArrayType(StringType, containsNull = false),
+        nullable = false))),
+    """message root {
+      |  repeated binary f1 (UTF8);
+      |}
+    """.stripMargin,isProtobufDerived = true)
+
+
 
   // =======================================================
   // Tests for converting Catalyst ArrayType to Parquet LIST
