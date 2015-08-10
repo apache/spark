@@ -420,6 +420,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     unknownExecutors.foreach { id =>
       logWarning(s"Executor to kill $id does not exist!")
     }
+    executorsPendingToRemove --= knownExecutors
 
     // If we do not wish to replace the executors we kill, sync the target number of executors
     // with the cluster manager to avoid allocating new ones. When computing the new target,
