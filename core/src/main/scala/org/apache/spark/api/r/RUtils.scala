@@ -67,7 +67,11 @@ private[spark] object RUtils {
 
   /** Check if R is installed before running tests that use R commands. */
   def isRInstalled: Boolean = {
-    val builder = new ProcessBuilder(Seq("R", "--version"))
-    builder.start().waitFor() == 0
+    try {
+      val builder = new ProcessBuilder(Seq("R", "--version"))
+      builder.start().waitFor() == 0
+    } catch {
+      case e: Exception => false
+    }
   }
 }

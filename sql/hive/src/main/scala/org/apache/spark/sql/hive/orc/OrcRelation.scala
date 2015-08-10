@@ -47,7 +47,10 @@ import org.apache.spark.util.SerializableConfiguration
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
-private[sql] class DefaultSource extends HadoopFsRelationProvider {
+private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
+
+  def format(): String = "orc"
+
   def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
@@ -66,7 +69,7 @@ private[orc] class OrcOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
-  extends OutputWriterInternal with SparkHadoopMapRedUtil with HiveInspectors {
+  extends OutputWriter with SparkHadoopMapRedUtil with HiveInspectors {
 
   private val serializer = {
     val table = new Properties()
@@ -120,7 +123,9 @@ private[orc] class OrcOutputWriter(
     ).asInstanceOf[RecordWriter[NullWritable, Writable]]
   }
 
-  override def writeInternal(row: InternalRow): Unit = {
+  override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
+
+  override protected[sql] def writeInternal(row: InternalRow): Unit = {
     var i = 0
     while (i < row.numFields) {
       reusableOutputBuffer(i) = wrappers(i)(row.get(i, dataSchema(i).dataType))

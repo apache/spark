@@ -284,7 +284,7 @@ object SparkSubmit {
         Nil
       }
     val resolvedMavenCoordinates = SparkSubmitUtils.resolveMavenCoordinates(args.packages,
-      Some(args.repositories), Some(args.ivyRepoPath), exclusions = exclusions)
+      Option(args.repositories), Option(args.ivyRepoPath), exclusions = exclusions)
     if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
       args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
       if (args.isPython) {

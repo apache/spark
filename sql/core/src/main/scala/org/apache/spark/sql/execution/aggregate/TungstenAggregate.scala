@@ -40,7 +40,7 @@ case class TungstenAggregate(
 
   override def canProcessUnsafeRows: Boolean = true
 
-  override def canProcessSafeRows: Boolean = false
+  override def canProcessSafeRows: Boolean = true
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -84,7 +84,7 @@ case class TungstenAggregate(
         context: TaskContext,
         partitionIndex: Int,
         aggregationIterator: TungstenAggregationIterator,
-        parentIterator: Iterator[UnsafeRow]): Iterator[UnsafeRow] = {
+        parentIterator: Iterator[InternalRow]): Iterator[UnsafeRow] = {
       val hasInput = parentIterator.hasNext
       if (!hasInput) {
         // We're not using the underlying map, so we just can free it here
@@ -104,9 +104,9 @@ case class TungstenAggregate(
 
     // Note: we need to set up the iterator in each partition before computing the
     // parent partition, so we cannot simply use `mapPartitions` here (SPARK-9747).
-    val parentPartition = child.execute().asInstanceOf[RDD[UnsafeRow]]
+    val parentPartition = child.execute()
     val resultRdd = {
-      new MapPartitionsWithPreparationRDD[UnsafeRow, UnsafeRow, TungstenAggregationIterator](
+      new MapPartitionsWithPreparationRDD[UnsafeRow, InternalRow, TungstenAggregationIterator](
         parentPartition, preparePartition, executePartition, preservesPartitioning = true)
     }
     resultRdd.asInstanceOf[RDD[InternalRow]]
