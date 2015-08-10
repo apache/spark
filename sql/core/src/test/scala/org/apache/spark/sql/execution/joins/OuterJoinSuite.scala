@@ -19,13 +19,14 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.Join
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, DoubleType, StructType}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{SQLConf, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.{EnsureRequirements, joins, SparkPlan, SparkPlanTest}
 
-class OuterJoinSuite extends SparkPlanTest {
+class OuterJoinSuite extends SparkPlanTest with SQLTestUtils {
 
   private def testOuterJoin(
       testName: String,
@@ -34,39 +35,41 @@ class OuterJoinSuite extends SparkPlanTest {
       joinType: JoinType,
       condition: Expression,
       expectedAnswer: Seq[Product]): Unit = {
-    val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
-    ExtractEquiJoinKeys.unapply(join).foreach {
-      case (_, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
-        test(s"$testName using ShuffledHashOuterJoin") {
-          checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements(left.sqlContext).apply(
-              ShuffledHashOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right)),
-            expectedAnswer.map(Row.fromTuple),
-            sortAnswers = false)
-        }
-
-        if (joinType != FullOuter) {
-          test(s"$testName using BroadcastHashOuterJoin") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
+      ExtractEquiJoinKeys.unapply(join).foreach {
+        case (_, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
+          test(s"$testName using ShuffledHashOuterJoin") {
             checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-              BroadcastHashOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right),
+              EnsureRequirements(sqlContext).apply(
+                ShuffledHashOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right)),
               expectedAnswer.map(Row.fromTuple),
-              sortAnswers = false)
+              sortAnswers = true)
           }
-        }
-    }
 
-    test(s"$testName using BroadcastNestedLoopJoin (build=left)") {
-      checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-        joins.BroadcastNestedLoopJoin(left, right, joins.BuildLeft, joinType, Some(condition)),
-        expectedAnswer.map(Row.fromTuple),
-        sortAnswers = true)
-    }
+          if (joinType != FullOuter) {
+            test(s"$testName using BroadcastHashOuterJoin") {
+              checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+                BroadcastHashOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right),
+                expectedAnswer.map(Row.fromTuple),
+                sortAnswers = true)
+            }
+          }
+      }
 
-    test(s"$testName using BroadcastNestedLoopJoin (build=right)") {
-      checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-        joins.BroadcastNestedLoopJoin(left, right, joins.BuildRight, joinType, Some(condition)),
-        expectedAnswer.map(Row.fromTuple),
-        sortAnswers = true)
+      test(s"$testName using BroadcastNestedLoopJoin (build=left)") {
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          joins.BroadcastNestedLoopJoin(left, right, joins.BuildLeft, joinType, Some(condition)),
+          expectedAnswer.map(Row.fromTuple),
+          sortAnswers = true)
+      }
+
+      test(s"$testName using BroadcastNestedLoopJoin (build=right)") {
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          joins.BroadcastNestedLoopJoin(left, right, joins.BuildRight, joinType, Some(condition)),
+          expectedAnswer.map(Row.fromTuple),
+          sortAnswers = true)
+      }
     }
   }
 

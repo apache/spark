@@ -20,11 +20,13 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.Join
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
+import org.apache.spark.sql.{SQLConf, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{And, LessThan, Expression}
 import org.apache.spark.sql.execution.{EnsureRequirements, SparkPlan, SparkPlanTest}
 
-class SemiJoinSuite extends SparkPlanTest {
+class SemiJoinSuite extends SparkPlanTest with SQLTestUtils {
 
   private def testLeftSemiJoin(
       testName: String,
@@ -32,48 +34,55 @@ class SemiJoinSuite extends SparkPlanTest {
       rightRows: DataFrame,
       condition: Expression,
       expectedAnswer: Seq[Product]): Unit = {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
+      ExtractEquiJoinKeys.unapply(join).foreach {
+        case (joinType, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
+          test(s"$testName using LeftSemiJoinHash") {
+            checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+              EnsureRequirements(left.sqlContext).apply(
+                LeftSemiJoinHash(leftKeys, rightKeys, left, right, boundCondition)),
+              expectedAnswer.map(Row.fromTuple),
+              sortAnswers = true)
+          }
 
-    val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
-    ExtractEquiJoinKeys.unapply(join).foreach {
-      case (joinType, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
-        test(s"$testName using LeftSemiJoinHash") {
-          checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements(left.sqlContext).apply(
-              LeftSemiJoinHash(leftKeys, rightKeys, left, right, boundCondition)),
-            expectedAnswer.map(Row.fromTuple),
-            sortAnswers = true)
-        }
+          test(s"$testName using BroadcastLeftSemiJoinHash") {
+            checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+              BroadcastLeftSemiJoinHash(leftKeys, rightKeys, left, right, boundCondition),
+              expectedAnswer.map(Row.fromTuple),
+              sortAnswers = true)
+          }
+      }
 
-        test(s"$testName using BroadcastLeftSemiJoinHash") {
-          checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            BroadcastLeftSemiJoinHash(leftKeys, rightKeys, left, right, boundCondition),
-            expectedAnswer.map(Row.fromTuple),
-            sortAnswers = true)
-        }
-    }
-
-    test(s"$testName using LeftSemiJoinBNL") {
-      checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-        LeftSemiJoinBNL(left, right, Some(condition)),
-        expectedAnswer.map(Row.fromTuple),
-        sortAnswers = true)
+      test(s"$testName using LeftSemiJoinBNL") {
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          LeftSemiJoinBNL(left, right, Some(condition)),
+          expectedAnswer.map(Row.fromTuple),
+          sortAnswers = true)
+      }
     }
   }
 
-  val left = Seq(
-    (1, 2.0),
-    (1, 2.0),
-    (2, 1.0),
-    (2, 1.0),
-    (3, 3.0)
-  ).toDF("a", "b")
+  val left = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(Seq(
+    Row(1, 2.0),
+    Row(1, 2.0),
+    Row(2, 1.0),
+    Row(2, 1.0),
+    Row(3, 3.0),
+    Row(null, null),
+    Row(null, 5.0),
+    Row(6, null)
+  )), new StructType().add("a", IntegerType).add("b", DoubleType))
 
-  val right = Seq(
-    (2, 3.0),
-    (2, 3.0),
-    (3, 2.0),
-    (4, 1.0)
-  ).toDF("c", "d")
+  val right = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(Seq(
+    Row(2, 3.0),
+    Row(2, 3.0),
+    Row(3, 2.0),
+    Row(4, 1.0),
+    Row(null, null),
+    Row(null, 5.0),
+    Row(6, null)
+  )), new StructType().add("c", IntegerType).add("d", DoubleType))
 
   val condition = {
     And(
