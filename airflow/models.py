@@ -672,10 +672,10 @@ class TaskInstance(Base):
             qry = (
                 session
                 .query(
-                    func.sum(
-                        case([(TI.state == State.SUCCESS, 1)], else_=0)),
-                    func.sum(
-                        case([(TI.state == State.SKIPPED, 1)], else_=0)),
+                    func.coalesce(func.sum(
+                        case([(TI.state == State.SUCCESS, 1)], else_=0)), 0),
+                    func.coalesce(func.sum(
+                        case([(TI.state == State.SKIPPED, 1)], else_=0)), 0),
                     func.count(TI.task_id),
                 )
                 .filter(
