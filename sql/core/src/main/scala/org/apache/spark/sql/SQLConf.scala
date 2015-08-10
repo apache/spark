@@ -366,16 +366,20 @@ private[spark] object SQLConf {
       "storing additional schema information in Hive's metastore.",
     isPublic = false)
 
-  // Whether to perform partition discovery when loading external data sources.  Default to true.
   val PARTITION_DISCOVERY_ENABLED = booleanConf("spark.sql.sources.partitionDiscovery.enabled",
     defaultValue = Some(true),
     doc = "When true, automtically discover data partitions.")
 
-  // Whether to perform partition column type inference. Default to true.
   val PARTITION_COLUMN_TYPE_INFERENCE =
     booleanConf("spark.sql.sources.partitionColumnTypeInference.enabled",
       defaultValue = Some(true),
       doc = "When true, automatically infer the data types for partitioned columns.")
+
+  val PARTITION_MAX_FILES =
+    intConf("spark.sql.sources.maxConcurrentWrites",
+      defaultValue = Some(5),
+      doc = "The maximum number of concurent files to open before falling back on sorting when " +
+            "writing out files using dynamic partitioning.")
 
   // The output committer class used by HadoopFsRelation. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.

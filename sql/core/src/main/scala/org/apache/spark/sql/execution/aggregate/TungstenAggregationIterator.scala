@@ -22,6 +22,7 @@ import org.apache.spark.{InternalAccumulator, Logging, SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.{UnsafeKVExternalSorter, UnsafeFixedWidthAggregationMap}
 import org.apache.spark.sql.types.StructType
 
@@ -46,8 +47,7 @@ import org.apache.spark.sql.types.StructType
  *            processing input rows from inputIter, and generating output
  *            rows.
  *  - Part 3: Methods and fields used by hash-based aggregation.
- *  - Part 4: The function used to switch this iterator from hash-based
- *            aggregation to sort-based aggregation.
+ *  - Part 4: Methods and fields used when we switch to sort-based aggregation.
  *  - Part 5: Methods and fields used by sort-based aggregation.
  *  - Part 6: Loads input and process input rows.
  *  - Part 7: Public methods of this iterator.
@@ -82,7 +82,7 @@ class TungstenAggregationIterator(
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
     originalInputAttributes: Seq[Attribute],
-    inputIter: Iterator[UnsafeRow],
+    inputIter: Iterator[InternalRow],
     testFallbackStartsAt: Option[Int])
   extends Iterator[UnsafeRow] with Logging {
 
@@ -174,13 +174,10 @@ class TungstenAggregationIterator(
 
   // Creates a function used to process a row based on the given inputAttributes.
   private def generateProcessRow(
-      inputAttributes: Seq[Attribute]): (UnsafeRow, UnsafeRow) => Unit = {
+      inputAttributes: Seq[Attribute]): (UnsafeRow, InternalRow) => Unit = {
 
     val aggregationBufferAttributes = allAggregateFunctions.flatMap(_.bufferAttributes)
-    val aggregationBufferSchema = StructType.fromAttributes(aggregationBufferAttributes)
-    val inputSchema = StructType.fromAttributes(inputAttributes)
-    val unsafeRowJoiner =
-      GenerateUnsafeRowJoiner.create(aggregationBufferSchema, inputSchema)
+    val joinedRow = new JoinedRow()
 
     aggregationMode match {
       // Partial-only
@@ -189,9 +186,9 @@ class TungstenAggregationIterator(
         val algebraicUpdateProjection =
           newMutableProjection(updateExpressions, aggregationBufferAttributes ++ inputAttributes)()
 
-        (currentBuffer: UnsafeRow, row: UnsafeRow) => {
+        (currentBuffer: UnsafeRow, row: InternalRow) => {
           algebraicUpdateProjection.target(currentBuffer)
-          algebraicUpdateProjection(unsafeRowJoiner.join(currentBuffer, row))
+          algebraicUpdateProjection(joinedRow(currentBuffer, row))
         }
 
       // PartialMerge-only or Final-only
@@ -203,10 +200,10 @@ class TungstenAggregationIterator(
             mergeExpressions,
             aggregationBufferAttributes ++ inputAttributes)()
 
-        (currentBuffer: UnsafeRow, row: UnsafeRow) => {
+        (currentBuffer: UnsafeRow, row: InternalRow) => {
           // Process all algebraic aggregate functions.
           algebraicMergeProjection.target(currentBuffer)
-          algebraicMergeProjection(unsafeRowJoiner.join(currentBuffer, row))
+          algebraicMergeProjection(joinedRow(currentBuffer, row))
         }
 
       // Final-Complete
@@ -233,8 +230,8 @@ class TungstenAggregationIterator(
         val completeAlgebraicUpdateProjection =
           newMutableProjection(updateExpressions, aggregationBufferAttributes ++ inputAttributes)()
 
-        (currentBuffer: UnsafeRow, row: UnsafeRow) => {
-          val input = unsafeRowJoiner.join(currentBuffer, row)
+        (currentBuffer: UnsafeRow, row: InternalRow) => {
+          val input = joinedRow(currentBuffer, row)
           // For all aggregate functions with mode Complete, update the given currentBuffer.
           completeAlgebraicUpdateProjection.target(currentBuffer)(input)
 
@@ -253,14 +250,14 @@ class TungstenAggregationIterator(
         val completeAlgebraicUpdateProjection =
           newMutableProjection(updateExpressions, aggregationBufferAttributes ++ inputAttributes)()
 
-        (currentBuffer: UnsafeRow, row: UnsafeRow) => {
+        (currentBuffer: UnsafeRow, row: InternalRow) => {
           completeAlgebraicUpdateProjection.target(currentBuffer)
           // For all aggregate functions with mode Complete, update the given currentBuffer.
-          completeAlgebraicUpdateProjection(unsafeRowJoiner.join(currentBuffer, row))
+          completeAlgebraicUpdateProjection(joinedRow(currentBuffer, row))
         }
 
       // Grouping only.
-      case (None, None) => (currentBuffer: UnsafeRow, row: UnsafeRow) => {}
+      case (None, None) => (currentBuffer: UnsafeRow, row: InternalRow) => {}
 
       case other =>
         throw new IllegalStateException(
@@ -272,15 +269,16 @@ class TungstenAggregationIterator(
   private def generateResultProjection(): (UnsafeRow, UnsafeRow) => UnsafeRow = {
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
-    val groupingKeySchema = StructType.fromAttributes(groupingAttributes)
     val bufferAttributes = allAggregateFunctions.flatMap(_.bufferAttributes)
-    val bufferSchema = StructType.fromAttributes(bufferAttributes)
-    val unsafeRowJoiner = GenerateUnsafeRowJoiner.create(groupingKeySchema, bufferSchema)
 
     aggregationMode match {
       // Partial-only or PartialMerge-only: every output row is basically the values of
       // the grouping expressions and the corresponding aggregation buffer.
       case (Some(Partial), None) | (Some(PartialMerge), None) =>
+        val groupingKeySchema = StructType.fromAttributes(groupingAttributes)
+        val bufferSchema = StructType.fromAttributes(bufferAttributes)
+        val unsafeRowJoiner = GenerateUnsafeRowJoiner.create(groupingKeySchema, bufferSchema)
+
         (currentGroupingKey: UnsafeRow, currentBuffer: UnsafeRow) => {
           unsafeRowJoiner.join(currentGroupingKey, currentBuffer)
         }
@@ -288,11 +286,12 @@ class TungstenAggregationIterator(
       // Final-only, Complete-only and Final-Complete: a output row is generated based on
       // resultExpressions.
       case (Some(Final), None) | (Some(Final) | None, Some(Complete)) =>
+        val joinedRow = new JoinedRow()
         val resultProjection =
           UnsafeProjection.create(resultExpressions, groupingAttributes ++ bufferAttributes)
 
         (currentGroupingKey: UnsafeRow, currentBuffer: UnsafeRow) => {
-          resultProjection(unsafeRowJoiner.join(currentGroupingKey, currentBuffer))
+          resultProjection(joinedRow(currentGroupingKey, currentBuffer))
         }
 
       // Grouping-only: a output row is generated from values of grouping expressions.
@@ -316,7 +315,7 @@ class TungstenAggregationIterator(
 
   // A function used to process a input row. Its first argument is the aggregation buffer
   // and the second argument is the input row.
-  private[this] var processRow: (UnsafeRow, UnsafeRow) => Unit =
+  private[this] var processRow: (UnsafeRow, InternalRow) => Unit =
     generateProcessRow(originalInputAttributes)
 
   // A function used to generate output rows based on the grouping keys (first argument)
@@ -354,7 +353,7 @@ class TungstenAggregationIterator(
     while (!sortBased && inputIter.hasNext) {
       val newInput = inputIter.next()
       val groupingKey = groupProjection.apply(newInput)
-      val buffer: UnsafeRow = hashMap.getAggregationBuffer(groupingKey)
+      val buffer: UnsafeRow = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
       if (buffer == null) {
         // buffer == null means that we could not allocate more memory.
         // Now, we need to spill the map and switch to sort-based aggregation.
@@ -374,7 +373,7 @@ class TungstenAggregationIterator(
       val newInput = inputIter.next()
       val groupingKey = groupProjection.apply(newInput)
       val buffer: UnsafeRow = if (i < fallbackStartsAt) {
-        hashMap.getAggregationBuffer(groupingKey)
+        hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
       } else {
         null
       }
@@ -397,7 +396,7 @@ class TungstenAggregationIterator(
   private[this] var mapIteratorHasNext: Boolean = false
 
   ///////////////////////////////////////////////////////////////////////////
-  // Part 3: Methods and fields used by sort-based aggregation.
+  // Part 4: Methods and fields used when we switch to sort-based aggregation.
   ///////////////////////////////////////////////////////////////////////////
 
   // This sorter is used for sort-based aggregation. It is initialized as soon as
@@ -407,7 +406,7 @@ class TungstenAggregationIterator(
   /**
    * Switch to sort-based aggregation when the hash-based approach is unable to acquire memory.
    */
-  private def switchToSortBasedAggregation(firstKey: UnsafeRow, firstInput: UnsafeRow): Unit = {
+  private def switchToSortBasedAggregation(firstKey: UnsafeRow, firstInput: InternalRow): Unit = {
     logInfo("falling back to sort based aggregation.")
     // Step 1: Get the ExternalSorter containing sorted entries of the map.
     externalSorter = hashMap.destructAndCreateExternalSorter()
