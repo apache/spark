@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
 
 
 class SemiJoinSuite extends SparkPlanTest {
-  val left = Seq(
+  private lazy val left = Seq(
     (1, 2.0),
     (1, 2.0),
     (2, 1.0),
@@ -32,16 +32,16 @@ class SemiJoinSuite extends SparkPlanTest {
     (3, 3.0)
   ).toDF("a", "b")
 
-  val right = Seq(
+  private lazy val right = Seq(
     (2, 3.0),
     (2, 3.0),
     (3, 2.0),
     (4, 1.0)
   ).toDF("c", "d")
 
-  val leftKeys: List[Expression] = 'a :: Nil
-  val rightKeys: List[Expression] = 'c :: Nil
-  val condition = Some(LessThan('b, 'd))
+  private val leftKeys: List[Expression] = 'a :: Nil
+  private val rightKeys: List[Expression] = 'c :: Nil
+  private val condition = Some(LessThan('b, 'd))
 
   test("left semi join hash") {
     checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>

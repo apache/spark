@@ -73,6 +73,7 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with SQLTestUtils {
   var useSerializer2: Boolean = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     numShufflePartitions = ctx.conf.numShufflePartitions
     useSerializer2 = ctx.conf.useSqlSerializer2
 
@@ -111,8 +112,6 @@ abstract class SparkSqlSerializer2Suite extends QueryTest with SQLTestUtils {
       }
 
     ctx.createDataFrame(rdd, schema).registerTempTable("shuffle")
-
-    super.beforeAll()
   }
 
   override def afterAll(): Unit = {

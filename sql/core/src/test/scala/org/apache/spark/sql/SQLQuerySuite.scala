@@ -36,7 +36,7 @@ class MyDialect extends DefaultParserDialect
 class SQLQuerySuite extends QueryTest with SQLTestUtils {
   import testImplicits._
 
-  loadTestData()
+  setupTestData()
 
   test("having clause") {
     Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v").registerTempTable("hav")

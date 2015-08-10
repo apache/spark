@@ -97,10 +97,8 @@ object FiltersPushed {
 
 class FilteredScanSuite extends DataSourceTest {
 
-  import caseInsensitiveContext.sql
-
   before {
-    sql(
+    caseInsensitiveContext.sql(
       """
         |CREATE TEMPORARY TABLE oneToTenFiltered
         |USING org.apache.spark.sql.sources.FilteredScanSource
@@ -237,7 +235,7 @@ class FilteredScanSuite extends DataSourceTest {
 
   def testPushDown(sqlString: String, expectedCount: Int): Unit = {
     test(s"PushDown Returns $expectedCount: $sqlString") {
-      val queryExecution = sql(sqlString).queryExecution
+      val queryExecution = caseInsensitiveContext.sql(sqlString).queryExecution
       val rawPlan = queryExecution.executedPlan.collect {
         case p: execution.PhysicalRDD => p
       } match {

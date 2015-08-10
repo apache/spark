@@ -25,18 +25,15 @@ import org.apache.spark.sql.{SaveMode, AnalysisException, Row}
 import org.apache.spark.util.Utils
 
 class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
-
-  import caseInsensitiveContext.sql
-
   private lazy val sparkContext = caseInsensitiveContext.sparkContext
+  private var path: File = null
 
-  var path: File = null
-
-  override def beforeAll: Unit = {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     path = Utils.createTempDir()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
     caseInsensitiveContext.read.json(rdd).registerTempTable("jt")
-    sql(
+    caseInsensitiveContext.sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable (a int, b string)
         |USING org.apache.spark.sql.json.DefaultSource
@@ -50,45 +47,46 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
     caseInsensitiveContext.dropTempTable("jsonTable")
     caseInsensitiveContext.dropTempTable("jt")
     Utils.deleteRecursively(path)
+    super.afterAll()
   }
 
   test("Simple INSERT OVERWRITE a JSONRelation") {
-    sql(
+    caseInsensitiveContext.sql(
       s"""
         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
       """.stripMargin)
 
     checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable"),
       (1 to 10).map(i => Row(i, s"str$i"))
     )
   }
 
   test("PreInsert casting and renaming") {
-    sql(
+    caseInsensitiveContext.sql(
       s"""
         |INSERT OVERWRITE TABLE jsonTable SELECT a * 2, a * 4 FROM jt
       """.stripMargin)
 
     checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable"),
       (1 to 10).map(i => Row(i * 2, s"${i * 4}"))
     )
 
-    sql(
+    caseInsensitiveContext.sql(
       s"""
         |INSERT OVERWRITE TABLE jsonTable SELECT a * 4 AS A, a * 6 as c FROM jt
       """.stripMargin)
 
     checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable"),
       (1 to 10).map(i => Row(i * 4, s"${i * 6}"))
     )
   }
 
   test("SELECT clause generating a different number of columns is not allowed.") {
     val message = intercept[RuntimeException] {
-      sql(
+      caseInsensitiveContext.sql(
         s"""
         |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
       """.stripMargin)
@@ -100,45 +98,45 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
   }
 
   test("INSERT OVERWRITE a JSONRelation multiple times") {
-    sql(
+    caseInsensitiveContext.sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
     """.stripMargin)
     checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable"),
       (1 to 10).map(i => Row(i, s"str$i"))
     )
 
     // Writing the table to less part files.
     val rdd1 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""), 5)
     caseInsensitiveContext.read.json(rdd1).registerTempTable("jt1")
-    sql(
+    caseInsensitiveContext.sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt1
     """.stripMargin)
     checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable"),
       (1 to 10).map(i => Row(i, s"str$i"))
     )
 
     // Writing the table to more part files.
     val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""), 10)
     caseInsensitiveContext.read.json(rdd2).registerTempTable("jt2")
-    sql(
+    caseInsensitiveContext.sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt2
     """.stripMargin)
     checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable"),
       (1 to 10).map(i => Row(i, s"str$i"))
     )
 
-    sql(
+    caseInsensitiveContext.sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a * 10, b FROM jt1
     """.stripMargin)
     checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable"),
       (1 to 10).map(i => Row(i * 10, s"str$i"))
     )
 
@@ -148,7 +146,7 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
 
   test("INSERT INTO not supported for JSONRelation for now") {
     intercept[RuntimeException]{
-      sql(
+      caseInsensitiveContext.sql(
         s"""
         |INSERT INTO TABLE jsonTable SELECT a, b FROM jt
       """.stripMargin)
@@ -159,20 +157,20 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
     caseInsensitiveContext.table("jt").selectExpr("a * 5 as a", "b")
       .write.mode(SaveMode.Overwrite).json(path.toString)
     checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable"),
       (1 to 10).map(i => Row(i * 5, s"str$i"))
     )
 
     caseInsensitiveContext.table("jt").write.mode(SaveMode.Overwrite).json(path.toString)
     checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable"),
       (1 to 10).map(i => Row(i, s"str$i"))
     )
   }
 
   test("it is not allowed to write to a table while querying it.") {
     val message = intercept[AnalysisException] {
-      sql(
+      caseInsensitiveContext.sql(
         s"""
         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jsonTable
       """.stripMargin)
@@ -185,50 +183,50 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
   test("Caching")  {
     // Cached Query Execution
     caseInsensitiveContext.cacheTable("jsonTable")
-    assertCached(sql("SELECT * FROM jsonTable"))
+    assertCached(caseInsensitiveContext.sql("SELECT * FROM jsonTable"))
     checkAnswer(
-      sql("SELECT * FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT * FROM jsonTable"),
       (1 to 10).map(i => Row(i, s"str$i")))
 
-    assertCached(sql("SELECT a FROM jsonTable"))
+    assertCached(caseInsensitiveContext.sql("SELECT a FROM jsonTable"))
     checkAnswer(
-      sql("SELECT a FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT a FROM jsonTable"),
       (1 to 10).map(Row(_)).toSeq)
 
-    assertCached(sql("SELECT a FROM jsonTable WHERE a < 5"))
+    assertCached(caseInsensitiveContext.sql("SELECT a FROM jsonTable WHERE a < 5"))
     checkAnswer(
-      sql("SELECT a FROM jsonTable WHERE a < 5"),
+      caseInsensitiveContext.sql("SELECT a FROM jsonTable WHERE a < 5"),
       (1 to 4).map(Row(_)).toSeq)
 
-    assertCached(sql("SELECT a * 2 FROM jsonTable"))
+    assertCached(caseInsensitiveContext.sql("SELECT a * 2 FROM jsonTable"))
     checkAnswer(
-      sql("SELECT a * 2 FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT a * 2 FROM jsonTable"),
       (1 to 10).map(i => Row(i * 2)).toSeq)
 
-    assertCached(sql("SELECT x.a, y.a FROM jsonTable x JOIN jsonTable y ON x.a = y.a + 1"), 2)
+    assertCached(caseInsensitiveContext.sql("SELECT x.a, y.a FROM jsonTable x JOIN jsonTable y ON x.a = y.a + 1"), 2)
     checkAnswer(
-      sql("SELECT x.a, y.a FROM jsonTable x JOIN jsonTable y ON x.a = y.a + 1"),
+      caseInsensitiveContext.sql("SELECT x.a, y.a FROM jsonTable x JOIN jsonTable y ON x.a = y.a + 1"),
       (2 to 10).map(i => Row(i, i - 1)).toSeq)
 
     // Insert overwrite and keep the same schema.
-    sql(
+    caseInsensitiveContext.sql(
       s"""
         |INSERT OVERWRITE TABLE jsonTable SELECT a * 2, b FROM jt
       """.stripMargin)
     // jsonTable should be recached.
-    assertCached(sql("SELECT * FROM jsonTable"))
+    assertCached(caseInsensitiveContext.sql("SELECT * FROM jsonTable"))
     // The cached data is the new data.
     checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
-      sql("SELECT a * 2, b FROM jt").collect())
+      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT a * 2, b FROM jt").collect())
 
     // Verify uncaching
     caseInsensitiveContext.uncacheTable("jsonTable")
-    assertCached(sql("SELECT * FROM jsonTable"), 0)
+    assertCached(caseInsensitiveContext.sql("SELECT * FROM jsonTable"), 0)
   }
 
   test("it's not allowed to insert into a relation that is not an InsertableRelation") {
-    sql(
+    caseInsensitiveContext.sql(
       """
         |CREATE TEMPORARY TABLE oneToTen
         |USING org.apache.spark.sql.sources.SimpleScanSource
@@ -239,12 +237,12 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
       """.stripMargin)
 
     checkAnswer(
-      sql("SELECT * FROM oneToTen"),
+      caseInsensitiveContext.sql("SELECT * FROM oneToTen"),
       (1 to 10).map(Row(_)).toSeq
     )
 
     val message = intercept[AnalysisException] {
-      sql(
+      caseInsensitiveContext.sql(
         s"""
         |INSERT OVERWRITE TABLE oneToTen SELECT CAST(a AS INT) FROM jt
         """.stripMargin)

@@ -39,10 +39,10 @@ private[sql] trait SharedSQLContext extends SparkFunSuite with BeforeAndAfterAll
    * This is a no-op if the user explicitly switched to a custom context before this is called.
    */
   protected override def beforeAll(): Unit = {
-    super.beforeAll()
     if (_ctx == null) {
       _ctx = new TestSQLContext
     }
+    super.beforeAll()
   }
 
   /**

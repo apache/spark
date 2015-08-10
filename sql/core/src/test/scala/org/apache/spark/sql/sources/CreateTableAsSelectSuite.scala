@@ -26,14 +26,11 @@ import org.apache.spark.sql.execution.datasources.DDLException
 import org.apache.spark.util.Utils
 
 class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
-
-  import caseInsensitiveContext.sql
-
   private lazy val sparkContext = caseInsensitiveContext.sparkContext
-
-  var path: File = null
+  private var path: File = null
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     path = Utils.createTempDir()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
     caseInsensitiveContext.read.json(rdd).registerTempTable("jt")
@@ -41,6 +38,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     caseInsensitiveContext.dropTempTable("jt")
+    super.afterAll()
   }
 
   after {
@@ -48,7 +46,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT") {
-    sql(
+    caseInsensitiveContext.sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
         |USING org.apache.spark.sql.json.DefaultSource
@@ -59,8 +57,8 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       """.stripMargin)
 
     checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
-      sql("SELECT a, b FROM jt").collect())
+      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT a, b FROM jt").collect())
 
     caseInsensitiveContext.dropTempTable("jsonTable")
   }
@@ -72,7 +70,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
     path.setWritable(false)
 
     val e = intercept[IOException] {
-      sql(
+      caseInsensitiveContext.sql(
         s"""
            |CREATE TEMPORARY TABLE jsonTable
            |USING org.apache.spark.sql.json.DefaultSource
@@ -81,7 +79,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
            |) AS
            |SELECT a, b FROM jt
         """.stripMargin)
-      sql("SELECT a, b FROM jsonTable").collect()
+      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable").collect()
     }
     assert(e.getMessage().contains("Unable to clear output directory"))
 
@@ -89,7 +87,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
   }
 
   test("create a table, drop it and create another one with the same name") {
-    sql(
+    caseInsensitiveContext.sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
         |USING org.apache.spark.sql.json.DefaultSource
@@ -100,11 +98,11 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       """.stripMargin)
 
     checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
-      sql("SELECT a, b FROM jt").collect())
+      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT a, b FROM jt").collect())
 
     val message = intercept[DDLException]{
-      sql(
+      caseInsensitiveContext.sql(
         s"""
         |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
         |USING org.apache.spark.sql.json.DefaultSource
@@ -119,7 +117,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       "CREATE TEMPORARY TABLE IF NOT EXISTS should not be allowed.")
 
     // Overwrite the temporary table.
-    sql(
+    caseInsensitiveContext.sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
         |USING org.apache.spark.sql.json.DefaultSource
@@ -129,14 +127,14 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
         |SELECT a * 4 FROM jt
       """.stripMargin)
     checkAnswer(
-      sql("SELECT * FROM jsonTable"),
-      sql("SELECT a * 4 FROM jt").collect())
+      caseInsensitiveContext.sql("SELECT * FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT a * 4 FROM jt").collect())
 
     caseInsensitiveContext.dropTempTable("jsonTable")
     // Explicitly delete the data.
     if (path.exists()) Utils.deleteRecursively(path)
 
-    sql(
+    caseInsensitiveContext.sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
         |USING org.apache.spark.sql.json.DefaultSource
@@ -147,15 +145,15 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       """.stripMargin)
 
     checkAnswer(
-      sql("SELECT * FROM jsonTable"),
-      sql("SELECT b FROM jt").collect())
+      caseInsensitiveContext.sql("SELECT * FROM jsonTable"),
+      caseInsensitiveContext.sql("SELECT b FROM jt").collect())
 
     caseInsensitiveContext.dropTempTable("jsonTable")
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT with IF NOT EXISTS is not allowed") {
     val message = intercept[DDLException]{
-      sql(
+      caseInsensitiveContext.sql(
         s"""
         |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
         |USING org.apache.spark.sql.json.DefaultSource
@@ -172,7 +170,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
 
   test("a CTAS statement with column definitions is not allowed") {
     intercept[DDLException]{
-      sql(
+      caseInsensitiveContext.sql(
         s"""
         |CREATE TEMPORARY TABLE jsonTable (a int, b string)
         |USING org.apache.spark.sql.json.DefaultSource
@@ -185,7 +183,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
   }
 
   test("it is not allowed to write to a table while querying it.") {
-    sql(
+    caseInsensitiveContext.sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
         |USING org.apache.spark.sql.json.DefaultSource
@@ -196,7 +194,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       """.stripMargin)
 
     val message = intercept[AnalysisException] {
-      sql(
+      caseInsensitiveContext.sql(
         s"""
         |CREATE TEMPORARY TABLE jsonTable
         |USING org.apache.spark.sql.json.DefaultSource

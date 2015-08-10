@@ -24,6 +24,7 @@ import scala.util.Try
 import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, SQLContext, SQLImplicits}
@@ -45,8 +46,15 @@ private[sql] trait SQLTestUtils extends AbstractSQLTestUtils with SharedSQLConte
  * data prepared in advance as well as all implicit conversions used extensively by dataframes.
  * To use implicit methods, import `testImplicits._` instead of through the [[SQLContext]].
  */
-private[sql] trait AbstractSQLTestUtils extends SparkFunSuite with SQLTestData { self =>
+private[sql] trait AbstractSQLTestUtils
+  extends SparkFunSuite
+  with BeforeAndAfterAll
+  with SQLTestData { self =>
+
   protected def _sqlContext: SQLContext
+
+  // Whether to materialize all test data before the first test is run
+  private var loadTestDataBeforeTests = false
 
   /**
    * A helper object for importing SQL implicits.
@@ -57,6 +65,21 @@ private[sql] trait AbstractSQLTestUtils extends SparkFunSuite with SQLTestData {
    */
   protected object testImplicits extends SQLImplicits {
     protected override def _sqlContext: SQLContext = self._sqlContext
+  }
+
+  /**
+   * Materialize the test data immediately after the [[SQLContext]] is set up.
+   * This is necessary if the data is accessed by name but not through direct reference.
+   */
+  protected def setupTestData(): Unit = {
+    loadTestDataBeforeTests = true
+  }
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    if (loadTestDataBeforeTests) {
+      loadTestData()
+    }
   }
 
   /**

@@ -30,7 +30,7 @@ import org.apache.spark.sql.{execution, Row, SQLConf}
 class PlannerSuite extends SparkFunSuite with SQLTestUtils {
   import testImplicits._
 
-  loadTestData()
+  setupTestData()
 
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val _ctx = ctx

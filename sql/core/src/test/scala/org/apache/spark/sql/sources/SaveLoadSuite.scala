@@ -19,25 +19,18 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.sql.{SaveMode, SQLConf, DataFrame}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
-
-  import caseInsensitiveContext.sql
-
+class SaveLoadSuite extends DataSourceTest {
   private lazy val sparkContext = caseInsensitiveContext.sparkContext
-
-  var originalDefaultSource: String = null
-
-  var path: File = null
-
-  var df: DataFrame = null
+  private var originalDefaultSource: String = null
+  private var path: File = null
+  private var df: DataFrame = null
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     originalDefaultSource = caseInsensitiveContext.conf.defaultDataSourceName
 
     path = Utils.createTempDir()
@@ -50,6 +43,7 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
+    super.afterAll()
   }
 
   after {
@@ -69,7 +63,7 @@ class SaveLoadSuite extends DataSourceTest with BeforeAndAfterAll {
     val schema = StructType(StructField("b", StringType, true) :: Nil)
     checkAnswer(
       caseInsensitiveContext.read.format("json").schema(schema).load(path.toString),
-      sql("SELECT b FROM jsonTable").collect())
+      caseInsensitiveContext.sql("SELECT b FROM jsonTable").collect())
   }
 
   test("save with path and load") {

@@ -28,7 +28,7 @@ import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 class InMemoryColumnarQuerySuite extends QueryTest with SQLTestUtils {
   import testImplicits._
 
-  loadTestData()
+  setupTestData()
 
   test("simple columnar query") {
     val plan = ctx.executePlan(testData.logicalPlan).executedPlan
