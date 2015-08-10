@@ -82,6 +82,21 @@ class LDA private (
   def getAsymmetricDocConcentration: Vector = this.docConcentration
 
   /**
+   * Gets the concentration parameter, assuming the document-topic Dirichlet distribution is
+   * symmetric. Included for backwards compatibility. This method should fail if
+   * [[docConcentration]] is asymmetric.
+   */
+  def getDocConcentration: Double = {
+    val parameter = docConcentration(0)
+    if (docConcentration.size == 1) {
+      parameter
+    } else {
+      require(docConcentration.toArray.forall(_ == parameter))
+      parameter
+    }
+  }
+
+  /**
    * Concentration parameter (commonly named "alpha") for the prior placed on documents'
    * distributions over topics ("theta").
    *
@@ -105,24 +120,9 @@ class LDA private (
    *     - default = uniformly (1.0 / k), following the implementation from
    *       [[https://github.com/Blei-Lab/onlineldavb]].
    */
-  def setAsymmetricDocConcentration(docConcentration: Vector): this.type = {
+  def setDocConcentration(docConcentration: Vector): this.type = {
     this.docConcentration = docConcentration
     this
-  }
-
-  /**
-   * Gets the concentration parameter, assuming the document-topic Dirichlet distribution is
-   * symmetric. Included for backwards compatibility. This method should fail if
-   * [[docConcentration]] is asymmetric.
-   */
-  def getDocConcentration: Double = {
-    val parameter = docConcentration(0)
-    if (docConcentration.size == 1) {
-      parameter
-    } else {
-      require(docConcentration.toArray.forall(_ == parameter))
-      parameter
-    }
   }
 
   /** Replicates a [[Double]] docConcentration to create a symmetric prior. */
@@ -131,11 +131,14 @@ class LDA private (
     this
   }
 
-  /** Alias for [[setAsymmetricDocConcentration()]] */
-  def getAlpha: Vector = getAsymmetricDocConcentration
+  /** Alias for [[getAsymmetricDocConcentration]] */
+  def getAsymmetricAlpha: Vector = getAsymmetricDocConcentration
 
-  /** Alias for [[setAsymmetricDocConcentration()]] */
-  def setAlpha(alpha: Vector): this.type = setAsymmetricDocConcentration(alpha)
+  /** Alias for [[getDocConcentration]] */
+  def getAlpha: Double = getDocConcentration
+
+  /** Alias for [[setDocConcentration()]] */
+  def setAlpha(alpha: Vector): this.type = setDocConcentration(alpha)
 
   /** Alias for [[setDocConcentration()]] */
   def setAlpha(alpha: Double): this.type = setDocConcentration(alpha)
