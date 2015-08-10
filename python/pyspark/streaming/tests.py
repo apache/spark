@@ -1099,7 +1099,6 @@ def search_kinesis_asl_assembly_jar():
                      "target/scala-*/spark-streaming-kinesis-asl-assembly-*.jar"))
     if not jars:
         return None
-
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Kinesis ASL assembly JARs in %s; please "
                          "remove all but one") % kinesis_asl_assembly_dir)
@@ -1111,14 +1110,12 @@ def search_kinesis_asl_assembly_jar():
 kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
 are_kinesis_tests_enabled = os.environ.get(kinesis_test_environ_var) == '1'
 
-
 if __name__ == "__main__":
     kafka_assembly_jar = search_kafka_assembly_jar()
     flume_assembly_jar = search_flume_assembly_jar()
     mqtt_assembly_jar = search_mqtt_assembly_jar()
     mqtt_test_jar = search_mqtt_test_jar()
     kinesis_asl_assembly_jar = search_kinesis_asl_assembly_jar()
-
 
     if kinesis_asl_assembly_jar is None:
         kinesis_jar_present = False
