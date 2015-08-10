@@ -27,10 +27,9 @@ import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.evaluation.Evaluator
-import org.apache.spark.ml.param._
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -54,7 +53,8 @@ private[ml] trait TrainValidationSplitParams extends ValidatorParams {
    * Default: "None"
    * @group param
    */
-  val stratifiedCol: Param[String] = new Param[String](this, "stratifiedCol", "stratified column name")
+  val stratifiedCol: Param[String] = new Param[String](this, "stratifiedCol",
+    "stratified column name")
 
   /** @group getParam */
   def getTrainRatio: Double = $(trainRatio)
@@ -115,12 +115,12 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val Array(trainingDataset, validationDataset) =
       if (dataset.columns.contains($(stratifiedCol))) {
         val stratifiedColIndex = dataset.columns.indexOf($(stratifiedCol))
-        val keyedRDD = dataset.toDF.rdd.map(row => (row(stratifiedColIndex), row))
-        val keys = keyedRDD.keys.distinct.collect()
+        val pairData = dataset.rdd.map(row => (row(stratifiedColIndex), row))
+        val keys = pairData.keys.distinct.collect()
         val weights: Array[scala.collection.Map[Any, Double]] =
           Array(keys.map(k => (k, $(trainRatio))).toMap,
             keys.map(k => (k, 1 - $(trainRatio))).toMap)
-        val splitsWithKeys = keyedRDD.randomSplitByKey(weights, exact = true, 0)
+        val splitsWithKeys = pairData.randomSplitByKey(weights, exact = true, 0)
         val Array(training, validation) =
           splitsWithKeys.map { case (subsample, complement) => subsample.values }
         (sqlCtx.createDataFrame(training, schema).cache(),

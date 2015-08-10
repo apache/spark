@@ -26,21 +26,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.{MatrixUDT => MLMatrixUDT, VectorUDT => MLVectorUDT}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS.dot
-
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, PairRDDFunctions}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.BernoulliCellSampler
-
-// My changes
-import scala.util.Random
-import org.apache.spark.util.random.StratifiedSamplingUtils
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-import org.apache.spark.util.random.XORShiftRandom
-
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
@@ -237,13 +228,17 @@ object MLUtils extends Logging {
   }
 
   /**
-   * Seth Code
+   * Return a k element array of pairs of RDDs with the first element of each pair
+   * containing the training data, a complement of the validation data and the second
+   * element, the validation data, containing a unique 1/kth of the data. Where k=numFolds.
+   * The training and validation data are stratified by the key of the rdd, and the key
+   * ratios in the original data are maintained in each stratum of the train and validation
+   * data.
    */
-  @Experimental
-  def kFoldStrat[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)],
+  def kFoldStratified[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)],
       numFolds: Int,
       seed: Int): Array[(RDD[(K, V)], RDD[(K, V)])] = {
-    val keys: Array[K] = rdd.keys.collect().distinct
+    val keys = rdd.keys.distinct().collect()
     val weights: Array[scala.collection.Map[K, Double]] = (1 to numFolds).map {
       n => keys.map(k => (k, 1 / numFolds.toDouble)).toMap
     }.toArray

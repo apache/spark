@@ -49,6 +49,8 @@ class TrainValidationSplitSuite
       .setEvaluator(eval)
       .setTrainRatio(0.5)
       .setSeed(42L)
+      .setStratifiedCol("label")
+
     val cvModel = cv.fit(dataset)
     val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
     assert(cv.getTrainRatio === 0.5)
@@ -102,6 +104,7 @@ class TrainValidationSplitSuite
       .setEstimatorParamMaps(paramMaps)
       .setEvaluator(eval)
       .setTrainRatio(0.5)
+      .setStratifiedCol("label")
     cv.transformSchema(new StructType()) // This should pass.
 
     val invalidParamMaps = paramMaps :+ ParamMap(est.inputCol -> "")

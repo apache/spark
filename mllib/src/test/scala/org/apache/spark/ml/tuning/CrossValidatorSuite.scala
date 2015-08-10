@@ -55,6 +55,7 @@ class CrossValidatorSuite
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setNumFolds(3)
+      .setStratifiedCol("label")
     val cvModel = cv.fit(dataset)
 
     // copied model must have the same paren.
@@ -109,6 +110,8 @@ class CrossValidatorSuite
       .setEstimator(est)
       .setEstimatorParamMaps(paramMaps)
       .setEvaluator(eval)
+      .setNumFolds(3)
+      .setStratifiedCol("label")
 
     cv.transformSchema(new StructType()) // This should pass.
 
