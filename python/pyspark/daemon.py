@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import re
+import resource
 
 import numbers
 import os
@@ -26,7 +28,7 @@ import time
 import gc
 from errno import EINTR, EAGAIN
 from socket import AF_INET, SOCK_STREAM, SOMAXCONN
-from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
+from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT, SIGPROF
 
 from pyspark.worker import main as worker_main
 from pyspark.serializers import read_int, write_int
@@ -51,12 +53,39 @@ def worker(sock):
     # it's useful for debugging (show the stacktrace before exit)
     signal.signal(SIGINT, signal.default_int_handler)
 
+    # Shopify added profiling signal handler
+    profiling = [False]
+
+    def handle_sigprof(*args):
+        import yappi
+
+        if not profiling[0]:
+            profiling[0] = True
+            yappi.start()
+        else:
+            profiling[0] = False
+            yappi.get_func_stats().print_all()
+            yappi.get_thread_stats().print_all()
+    signal.signal(SIGPROF, handle_sigprof)
+
+    # Blocks until the socket is closed by draining the input stream
+    # until it raises an exception or returns EOF.
+    def waitSocketClose(sock):
+        try:
+            while True:
+                # Empty string is returned upon EOF (and only then).
+                if sock.recv(4096) == '':
+                    return
+        except:
+            pass
+
     # Read the socket using fdopen instead of socket.makefile() because the latter
     # seems to be very slow; note that we need to dup() the file descriptor because
     # otherwise writes also cause a seek that makes us miss data on the read side.
     infile = os.fdopen(os.dup(sock.fileno()), "rb", 65536)
     outfile = os.fdopen(os.dup(sock.fileno()), "wb", 65536)
     exit_code = 0
+
     try:
         worker_main(infile, outfile)
     except SystemExit as exc:

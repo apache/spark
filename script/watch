@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+set -x
+set -e
+
+FWDIR="$(cd `dirname $0`/..; pwd)"
+export HADOOP_OPTIONS="$(cat $FWDIR/SHOPIFY_HADOOP_OPTIONS)"
+export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
+mvn $HADOOP_OPTIONS scala:cc

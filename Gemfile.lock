@@ -1,0 +1,34 @@
+GIT
+  remote: git@github.com:Shopify/capistrano-recipes
+  revision: 57bd4ed4accc5561d4774ec2f072bb71bd1b2ea7
+  ref: 57bd4ed4accc5561d4774ec2f072bb71bd1b2ea7
+  specs:
+    capistrano-recipes (1.1.0)
+      capistrano (~> 2.15.5)
+      json (>= 1.8.1)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    capistrano (2.15.5)
+      highline
+      net-scp (>= 1.0.0)
+      net-sftp (>= 2.0.0)
+      net-ssh (>= 2.0.14)
+      net-ssh-gateway (>= 1.1.0)
+    highline (1.6.21)
+    json (1.8.1)
+    net-scp (1.1.2)
+      net-ssh (>= 2.6.5)
+    net-sftp (2.1.2)
+      net-ssh (>= 2.6.5)
+    net-ssh (2.8.0)
+    net-ssh-gateway (1.2.0)
+      net-ssh (>= 2.6.5)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  capistrano (~> 2)
+  capistrano-recipes!

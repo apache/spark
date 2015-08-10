@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+set -x
+set -e
+
+if [ "$CI" = "" ]; then
+  ./script/get_config
+fi
+
+FWDIR="$(cd `dirname $0`/..; pwd)"
+export HADOOP_OPTIONS="$(cat $FWDIR/SHOPIFY_HADOOP_OPTIONS)"
+export JAVA_HOME=$(/usr/libexec/java_home -v 1.8)
+build/mvn $HADOOP_OPTIONS -DskipTests clean package

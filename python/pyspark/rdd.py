@@ -53,6 +53,7 @@ from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, \
 from pyspark.traceback_utils import SCCallSiteSync
 
 from py4j.java_collections import ListConverter, MapConverter
+from statsd import DogStatsd as statsd
 
 
 __all__ = ["RDD"]
@@ -1694,10 +1695,13 @@ class RDD(object):
 
         def add_shuffle_key(split, iterator):
 
+            client = statsd()
             buckets = defaultdict(list)
+            record_count = 0
             c, batch = 0, min(10 * numPartitions, 1000)
 
             for k, v in iterator:
+                record_count += 1
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
                 c += 1
 
