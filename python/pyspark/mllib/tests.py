@@ -86,7 +86,7 @@ class MLLibStreamingTestCase(unittest.TestCase):
         self.ssc.stop(False)
 
     @staticmethod
-    def _ssc_wait(start_time, end_time):
+    def _ssc_wait(start_time, end_time, sleep_time):
         while time() - start_time < end_time:
             sleep(0.01)
 
@@ -1083,7 +1083,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         predict_val.foreachRDD(update)
         t = time()
         self.ssc.start()
-        self._ssc_wait(t, 6.0)
+        self._ssc_wait(t, 6.0, 0.01)
         self.assertEquals(result, [[0], [1], [2], [3]])
 
     def test_trainOn_predictOn(self):
@@ -1112,7 +1112,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
 
         t = time()
         self.ssc.start()
-        self._ssc_wait(t, 6.0)
+        self._ssc_wait(t, 6.0, 0.01)
         self.assertEqual(predict_results, [[0, 1, 1], [1, 0, 1]])
 
 
@@ -1173,7 +1173,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
 
         t = time()
         self.ssc.start()
-        self._ssc_wait(t, 20.0)
+        self._ssc_wait(t, 20.0, 0.01)
         rel = (1.5 - slr.latestModel().weights.array[0]) / 1.5
         self.assertAlmostEqual(rel, 0.1, 1)
 
@@ -1196,7 +1196,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
 
         t = time()
         self.ssc.start()
-        self._ssc_wait(t, 15.0)
+        self._ssc_wait(t, 15.0, 0.01)
         t_models = array(models)
         diff = t_models[1:] - t_models[:-1]
 
@@ -1225,7 +1225,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         predict_stream.foreachRDD(lambda x: true_predicted.append(x.collect()))
         t = time()
         self.ssc.start()
-        self._ssc_wait(t, 5.0)
+        self._ssc_wait(t, 5.0, 0.01)
 
         # Test that the accuracy error is no more than 0.4 on each batch.
         for batch in true_predicted:
@@ -1259,7 +1259,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
 
         t = time()
         self.ssc.start()
-        self._ssc_wait(t, 20.0)
+        self._ssc_wait(t, 20.0, 0.01)
 
         # Test that the improvement in error is atleast 0.3
         self.assertTrue(errors[1] - errors[-1] > 0.3)
@@ -1292,7 +1292,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         t = time()
         slr.trainOn(input_stream)
         self.ssc.start()
-        self._ssc_wait(t, 10)
+        self._ssc_wait(t, 10, 0.01)
         self.assertArrayAlmostEqual(
             slr.latestModel().weights.array, [10., 10.], 1)
         self.assertAlmostEqual(slr.latestModel().intercept, 0.0, 1)
@@ -1316,7 +1316,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         t = time()
         slr.trainOn(input_stream)
         self.ssc.start()
-        self._ssc_wait(t, 10)
+        self._ssc_wait(t, 10, 0.01)
 
         model_weights = array(model_weights)
         diff = model_weights[1:] - model_weights[:-1]
@@ -1344,7 +1344,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         output_stream.foreachRDD(lambda x: samples.append(x.collect()))
 
         self.ssc.start()
-        self._ssc_wait(t, 5)
+        self._ssc_wait(t, 5, 0.01)
 
         # Test that mean absolute error on each batch is less than 0.1
         for batch in samples:
@@ -1379,7 +1379,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         output_stream = slr.predictOnValues(output_stream)
         output_stream.foreachRDD(func)
         self.ssc.start()
-        self._ssc_wait(t, 10)
+        self._ssc_wait(t, 10, 0.01)
         self.assertTrue(mean_absolute_errors[1] - mean_absolute_errors[-1] > 2)
 
 
