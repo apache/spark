@@ -492,7 +492,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
         """.stripMargin
         logWarning(warning)
 
-        set("spark.executor.instances", value.toString())
+        set("spark.executor.instances", value)
       }
     }
   }
