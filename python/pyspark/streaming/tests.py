@@ -537,7 +537,6 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self.ssc._jssc.stop()
         self.assertEqual(StreamingContext.getActive(), None)
 
-
     def test_get_active_or_create(self):
         # Test StreamingContext.getActiveOrCreate()
         self.ssc = None
@@ -667,6 +666,7 @@ class CheckpointTests(unittest.TestCase):
         self.setupCalled = False
         self.ssc = StreamingContext.getActiveOrCreate(cpd, setup)
         self.assertTrue(self.setupCalled)
+
 
 class KafkaStreamTests(PySparkStreamingTestCase):
     timeout = 20  # seconds

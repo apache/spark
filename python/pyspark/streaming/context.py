@@ -238,7 +238,6 @@ class StreamingContext(object):
         StreamingContext._activeContext = self
         print("Setting active " + str(StreamingContext._activeContext))
 
-
     def awaitTermination(self, timeout=None):
         """
         Wait for the execution to stop.
