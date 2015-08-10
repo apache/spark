@@ -41,10 +41,7 @@ case class ParquetDataWithKey(intField: Int, pi: Int, stringField: String, ps: S
 
 class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
   import PartitioningUtils._
-
-  private val ctx = sqlContext
-  import ctx.implicits._
-  import ctx._
+  import testImplicits._
 
   val defaultPartitionName = "__HIVE_DEFAULT_PARTITION__"
 
@@ -284,7 +281,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
 
       withTempTable("t") {
         checkAnswer(
-          sql("SELECT * FROM t"),
+          ctx.sql("SELECT * FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -292,7 +289,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
-          sql("SELECT intField, pi FROM t"),
+          ctx.sql("SELECT intField, pi FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -300,14 +297,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           } yield Row(i, pi))
 
         checkAnswer(
-          sql("SELECT * FROM t WHERE pi = 1"),
+          ctx.sql("SELECT * FROM t WHERE pi = 1"),
           for {
             i <- 1 to 10
             ps <- Seq("foo", "bar")
           } yield Row(i, i.toString, 1, ps))
 
         checkAnswer(
-          sql("SELECT * FROM t WHERE ps = 'foo'"),
+          ctx.sql("SELECT * FROM t WHERE ps = 'foo'"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -331,7 +328,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
 
       withTempTable("t") {
         checkAnswer(
-          sql("SELECT * FROM t"),
+          ctx.sql("SELECT * FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -339,7 +336,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           } yield Row(i, pi, i.toString, ps))
 
         checkAnswer(
-          sql("SELECT intField, pi FROM t"),
+          ctx.sql("SELECT intField, pi FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -347,14 +344,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           } yield Row(i, pi))
 
         checkAnswer(
-          sql("SELECT * FROM t WHERE pi = 1"),
+          ctx.sql("SELECT * FROM t WHERE pi = 1"),
           for {
             i <- 1 to 10
             ps <- Seq("foo", "bar")
           } yield Row(i, 1, i.toString, ps))
 
         checkAnswer(
-          sql("SELECT * FROM t WHERE ps = 'foo'"),
+          ctx.sql("SELECT * FROM t WHERE ps = 'foo'"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -380,7 +377,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
 
       withTempTable("t") {
         checkAnswer(
-          sql("SELECT * FROM t"),
+          ctx.sql("SELECT * FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, null.asInstanceOf[Integer])
@@ -388,14 +385,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
-          sql("SELECT * FROM t WHERE pi IS NULL"),
+          ctx.sql("SELECT * FROM t WHERE pi IS NULL"),
           for {
             i <- 1 to 10
             ps <- Seq("foo", null.asInstanceOf[String])
           } yield Row(i, i.toString, null, ps))
 
         checkAnswer(
-          sql("SELECT * FROM t WHERE ps IS NULL"),
+          ctx.sql("SELECT * FROM t WHERE ps IS NULL"),
           for {
             i <- 1 to 10
             pi <- Seq(1, null.asInstanceOf[Integer])
@@ -420,7 +417,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
 
       withTempTable("t") {
         checkAnswer(
-          sql("SELECT * FROM t"),
+          ctx.sql("SELECT * FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -428,7 +425,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
           } yield Row(i, pi, i.toString, ps))
 
         checkAnswer(
-          sql("SELECT * FROM t WHERE ps IS NULL"),
+          ctx.sql("SELECT * FROM t WHERE ps IS NULL"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -456,7 +453,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
 
       withTempTable("t") {
         checkAnswer(
-          sql("SELECT * FROM t"),
+          ctx.sql("SELECT * FROM t"),
           (1 to 10).map(i => Row(i, null, 1)) ++ (1 to 10).map(i => Row(i, i.toString, 2)))
       }
     }

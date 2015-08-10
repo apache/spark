@@ -22,11 +22,10 @@ import java.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestUtils
 
-class DataFrameStatSuite extends QueryTest with SharedSQLContext {
-  private val ctx = sqlContext
-  import ctx.implicits._
+class DataFrameStatSuite extends QueryTest with SQLTestUtils {
+  import testImplicits._
 
   private def toLetter(i: Int): String = (i + 97).toChar.toString
 

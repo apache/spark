@@ -63,8 +63,7 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
  * A test suite that tests basic Parquet I/O.
  */
 class ParquetIOSuite extends QueryTest with ParquetTest {
-  private val ctx = sqlContext
-  import ctx.implicits._
+  import testImplicits._
 
   /**
    * Writes `data` to a Parquet file, reads it back and check file contents.

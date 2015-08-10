@@ -22,11 +22,11 @@ import java.sql.{Timestamp, Date}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.{ShuffleDependency, SparkFunSuite}
 import org.apache.spark.sql.{MyDenseVectorUDT, QueryTest}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
 
-class SparkSqlSerializer2DataTypeSuite extends SparkFunSuite with SharedSQLContext {
+class SparkSqlSerializer2DataTypeSuite extends SparkFunSuite with SQLTestUtils {
   // Make sure that we will not use serializer2 for unsupported data types.
   def checkSupported(dataType: DataType, isSupported: Boolean): Unit = {
     val testName =
@@ -65,9 +65,7 @@ class SparkSqlSerializer2DataTypeSuite extends SparkFunSuite with SharedSQLConte
   checkSupported(new MyDenseVectorUDT, isSupported = false)
 }
 
-abstract class SparkSqlSerializer2Suite extends QueryTest with SharedSQLContext {
-  protected val ctx = sqlContext
-
+abstract class SparkSqlSerializer2Suite extends QueryTest with SQLTestUtils {
   var allColumns: String = _
   val serializerClass: Class[Serializer] =
     classOf[SparkSqlSerializer2].asInstanceOf[Class[Serializer]]

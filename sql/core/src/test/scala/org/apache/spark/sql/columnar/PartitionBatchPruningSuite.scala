@@ -21,12 +21,10 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestUtils
 
-class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
-  private val ctx = sqlContext
-  import ctx.implicits._
-  import ctx._
+class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfter with SQLTestUtils {
+  import testImplicits._
 
   private lazy val originalColumnBatchSize = ctx.conf.columnBatchSize
   private lazy val originalInMemoryPartitionPruning = ctx.conf.inMemoryPartitionPruning

@@ -20,10 +20,10 @@ package org.apache.spark.sql.sources
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestUtils
 
 
-abstract class DataSourceTest extends QueryTest with BeforeAndAfter with SharedSQLContext {
+abstract class DataSourceTest extends QueryTest with BeforeAndAfter with SQLTestUtils {
   // We want to test some edge cases.
   protected implicit lazy val caseInsensitiveContext = {
     val ctx = new SQLContext(sqlContext.sparkContext)

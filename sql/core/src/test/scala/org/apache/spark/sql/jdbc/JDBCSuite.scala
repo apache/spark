@@ -25,14 +25,12 @@ import org.h2.jdbc.JdbcSQLException
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
-  private val ctx = sqlContext
-  import ctx.implicits._
-  import ctx._
+class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SQLTestUtils {
+  import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
   val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
@@ -66,14 +64,14 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
       "insert into test.people values ('joe ''foo'' \"bar\"', 3)").executeUpdate()
     conn.commit()
 
-    sql(
+    ctx.sql(
       s"""
         |CREATE TEMPORARY TABLE foobar
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
-    sql(
+    ctx.sql(
       s"""
         |CREATE TEMPORARY TABLE fetchtwo
         |USING org.apache.spark.sql.jdbc
@@ -81,7 +79,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
         |         fetchSize '2')
       """.stripMargin.replaceAll("\n", " "))
 
-    sql(
+    ctx.sql(
       s"""
         |CREATE TEMPORARY TABLE parts
         |USING org.apache.spark.sql.jdbc
@@ -96,7 +94,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     conn.prepareStatement("insert into test.inttypes values (null, null, null, null, null)"
         ).executeUpdate()
     conn.commit()
-    sql(
+    ctx.sql(
       s"""
         |CREATE TEMPORARY TABLE inttypes
         |USING org.apache.spark.sql.jdbc
@@ -113,7 +111,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     stmt.setBytes(5, testBytes)
     stmt.setString(6, "I am a clob!")
     stmt.executeUpdate()
-    sql(
+    ctx.sql(
       s"""
         |CREATE TEMPORARY TABLE strtypes
         |USING org.apache.spark.sql.jdbc
@@ -127,7 +125,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     conn.prepareStatement("insert into test.timetypes values ('12:34:56', "
       + "null, '2002-02-20 11:22:33.543543543')").executeUpdate()
     conn.commit()
-    sql(
+    ctx.sql(
       s"""
         |CREATE TEMPORARY TABLE timetypes
         |USING org.apache.spark.sql.jdbc
@@ -142,7 +140,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
       + "1.00000011920928955078125, "
       + "123456789012345.543215432154321)").executeUpdate()
     conn.commit()
-    sql(
+    ctx.sql(
       s"""
         |CREATE TEMPORARY TABLE flttypes
         |USING org.apache.spark.sql.jdbc
@@ -159,7 +157,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
       + "null, null, null, null, null, null, null, null, null, "
       + "null, null, null, null, null, null)").executeUpdate()
     conn.commit()
-    sql(
+    ctx.sql(
       s"""
          |CREATE TEMPORARY TABLE nulltypes
          |USING org.apache.spark.sql.jdbc
@@ -174,24 +172,24 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("SELECT *") {
-    assert(sql("SELECT * FROM foobar").collect().size === 3)
+    assert(ctx.sql("SELECT * FROM foobar").collect().size === 3)
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    assert(sql("SELECT * FROM foobar WHERE THEID < 1").collect().size === 0)
-    assert(sql("SELECT * FROM foobar WHERE THEID != 2").collect().size === 2)
-    assert(sql("SELECT * FROM foobar WHERE THEID = 1").collect().size === 1)
-    assert(sql("SELECT * FROM foobar WHERE NAME = 'fred'").collect().size === 1)
-    assert(sql("SELECT * FROM foobar WHERE NAME > 'fred'").collect().size === 2)
-    assert(sql("SELECT * FROM foobar WHERE NAME != 'fred'").collect().size === 2)
+    assert(ctx.sql("SELECT * FROM foobar WHERE THEID < 1").collect().size === 0)
+    assert(ctx.sql("SELECT * FROM foobar WHERE THEID != 2").collect().size === 2)
+    assert(ctx.sql("SELECT * FROM foobar WHERE THEID = 1").collect().size === 1)
+    assert(ctx.sql("SELECT * FROM foobar WHERE NAME = 'fred'").collect().size === 1)
+    assert(ctx.sql("SELECT * FROM foobar WHERE NAME > 'fred'").collect().size === 2)
+    assert(ctx.sql("SELECT * FROM foobar WHERE NAME != 'fred'").collect().size === 2)
   }
 
   test("SELECT * WHERE (quoted strings)") {
-    assert(sql("select * from foobar").where('NAME === "joe 'foo' \"bar\"").collect().size === 1)
+    assert(ctx.sql("select * from foobar").where('NAME === "joe 'foo' \"bar\"").collect().size === 1)
   }
 
   test("SELECT first field") {
-    val names = sql("SELECT NAME FROM foobar").collect().map(x => x.getString(0)).sortWith(_ < _)
+    val names = ctx.sql("SELECT NAME FROM foobar").collect().map(x => x.getString(0)).sortWith(_ < _)
     assert(names.size === 3)
     assert(names(0).equals("fred"))
     assert(names(1).equals("joe 'foo' \"bar\""))
@@ -199,7 +197,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("SELECT first field when fetchSize is two") {
-    val names = sql("SELECT NAME FROM fetchtwo").collect().map(x => x.getString(0)).sortWith(_ < _)
+    val names = ctx.sql("SELECT NAME FROM fetchtwo").collect().map(x => x.getString(0)).sortWith(_ < _)
     assert(names.size === 3)
     assert(names(0).equals("fred"))
     assert(names(1).equals("joe 'foo' \"bar\""))
@@ -207,7 +205,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("SELECT second field") {
-    val ids = sql("SELECT THEID FROM foobar").collect().map(x => x.getInt(0)).sortWith(_ < _)
+    val ids = ctx.sql("SELECT THEID FROM foobar").collect().map(x => x.getInt(0)).sortWith(_ < _)
     assert(ids.size === 3)
     assert(ids(0) === 1)
     assert(ids(1) === 2)
@@ -215,7 +213,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("SELECT second field when fetchSize is two") {
-    val ids = sql("SELECT THEID FROM fetchtwo").collect().map(x => x.getInt(0)).sortWith(_ < _)
+    val ids = ctx.sql("SELECT THEID FROM fetchtwo").collect().map(x => x.getInt(0)).sortWith(_ < _)
     assert(ids.size === 3)
     assert(ids(0) === 1)
     assert(ids(1) === 2)
@@ -223,17 +221,17 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("SELECT * partitioned") {
-    assert(sql("SELECT * FROM parts").collect().size == 3)
+    assert(ctx.sql("SELECT * FROM parts").collect().size == 3)
   }
 
   test("SELECT WHERE (simple predicates) partitioned") {
-    assert(sql("SELECT * FROM parts WHERE THEID < 1").collect().size === 0)
-    assert(sql("SELECT * FROM parts WHERE THEID != 2").collect().size === 2)
-    assert(sql("SELECT THEID FROM parts WHERE THEID = 1").collect().size === 1)
+    assert(ctx.sql("SELECT * FROM parts WHERE THEID < 1").collect().size === 0)
+    assert(ctx.sql("SELECT * FROM parts WHERE THEID != 2").collect().size === 2)
+    assert(ctx.sql("SELECT THEID FROM parts WHERE THEID = 1").collect().size === 1)
   }
 
   test("SELECT second field partitioned") {
-    val ids = sql("SELECT THEID FROM parts").collect().map(x => x.getInt(0)).sortWith(_ < _)
+    val ids = ctx.sql("SELECT THEID FROM parts").collect().map(x => x.getInt(0)).sortWith(_ < _)
     assert(ids.size === 3)
     assert(ids(0) === 1)
     assert(ids(1) === 2)
@@ -242,7 +240,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
 
   test("Register JDBC query with renamed fields") {
     // Regression test for bug SPARK-7345
-    sql(
+    ctx.sql(
       s"""
         |CREATE TEMPORARY TABLE renamed
         |USING org.apache.spark.sql.jdbc
@@ -250,7 +248,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
         |user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
-    val df = sql("SELECT * FROM renamed")
+    val df = ctx.sql("SELECT * FROM renamed")
     assert(df.schema.fields.size == 2)
     assert(df.schema.fields(0).name == "NAME1")
     assert(df.schema.fields(1).name == "NAME2")
@@ -281,7 +279,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("H2 integral types") {
-    val rows = sql("SELECT * FROM inttypes WHERE A IS NOT NULL").collect()
+    val rows = ctx.sql("SELECT * FROM inttypes WHERE A IS NOT NULL").collect()
     assert(rows.length === 1)
     assert(rows(0).getInt(0) === 1)
     assert(rows(0).getBoolean(1) === false)
@@ -291,7 +289,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("H2 null entries") {
-    val rows = sql("SELECT * FROM inttypes WHERE A IS NULL").collect()
+    val rows = ctx.sql("SELECT * FROM inttypes WHERE A IS NULL").collect()
     assert(rows.length === 1)
     assert(rows(0).isNullAt(0))
     assert(rows(0).isNullAt(1))
@@ -301,7 +299,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("H2 string types") {
-    val rows = sql("SELECT * FROM strtypes").collect()
+    val rows = ctx.sql("SELECT * FROM strtypes").collect()
     assert(rows(0).getAs[Array[Byte]](0).sameElements(testBytes))
     assert(rows(0).getString(1).equals("Sensitive"))
     assert(rows(0).getString(2).equals("Insensitive"))
@@ -311,7 +309,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("H2 time types") {
-    val rows = sql("SELECT * FROM timetypes").collect()
+    val rows = ctx.sql("SELECT * FROM timetypes").collect()
     val cal = new GregorianCalendar(java.util.Locale.ROOT)
     cal.setTime(rows(0).getAs[java.sql.Timestamp](0))
     assert(cal.get(Calendar.HOUR_OF_DAY) === 12)
@@ -345,7 +343,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     val rows = ctx.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
     ctx.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
       .cache().registerTempTable("mycached_date")
-    val cachedRows = sql("select * from mycached_date").collect()
+    val cachedRows = ctx.sql("select * from mycached_date").collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
   }
@@ -357,26 +355,26 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   }
 
   test("H2 floating-point types") {
-    val rows = sql("SELECT * FROM flttypes").collect()
+    val rows = ctx.sql("SELECT * FROM flttypes").collect()
     assert(rows(0).getDouble(0) === 1.00000000000000022)
     assert(rows(0).getDouble(1) === 1.00000011920928955)
     assert(rows(0).getAs[BigDecimal](2) ===
       new BigDecimal("123456789012345.543215432154321000"))
     assert(rows(0).schema.fields(2).dataType === DecimalType(38, 18))
-    val result = sql("SELECT C FROM flttypes where C > C - 1").collect()
+    val result = ctx.sql("SELECT C FROM flttypes where C > C - 1").collect()
     assert(result(0).getAs[BigDecimal](0) ===
       new BigDecimal("123456789012345.543215432154321000"))
   }
 
   test("SQL query as table name") {
-    sql(
+    ctx.sql(
       s"""
         |CREATE TEMPORARY TABLE hack
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable '(SELECT B, B*B FROM TEST.FLTTYPES)',
         |         user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
-    val rows = sql("SELECT * FROM hack").collect()
+    val rows = ctx.sql("SELECT * FROM hack").collect()
     assert(rows(0).getDouble(0) === 1.00000011920928955) // Yes, I meant ==.
     // For some reason, H2 computes this square incorrectly...
     assert(math.abs(rows(0).getDouble(1) - 1.00000023841859331) < 1e-12)
@@ -386,7 +384,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     // We set rowId to false during setup, which means that _ROWID_ column should be absent from
     // all tables. If rowId is true (default), the query below doesn't throw an exception.
     intercept[JdbcSQLException] {
-      sql(
+      ctx.sql(
         s"""
           |CREATE TEMPORARY TABLE abc
           |USING org.apache.spark.sql.jdbc

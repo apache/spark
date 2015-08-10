@@ -25,9 +25,16 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.SQLTestUtils
 
 class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
-  private val ctx = sqlContext
-  import ctx.implicits._
-  import ctx._
+  import testImplicits._
+
+  private lazy val booleanData = {
+    ctx.createDataFrame(ctx.sparkContext.parallelize(
+      Row(false, false) ::
+      Row(false, true) ::
+      Row(true, false) ::
+      Row(true, true) :: Nil),
+      StructType(Seq(StructField("a", BooleanType), StructField("b", BooleanType))))
+  }
 
   test("alias") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
@@ -355,13 +362,6 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
     checkAnswer(df.filter($"b".in("z", "y")),
       df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "y"))
   }
-
-  val booleanData = ctx.createDataFrame(ctx.sparkContext.parallelize(
-    Row(false, false) ::
-      Row(false, true) ::
-      Row(true, false) ::
-      Row(true, true) :: Nil),
-    StructType(Seq(StructField("a", BooleanType), StructField("b", BooleanType))))
 
   test("&&") {
     checkAnswer(

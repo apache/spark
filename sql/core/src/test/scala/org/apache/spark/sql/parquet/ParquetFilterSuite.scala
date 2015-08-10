@@ -40,7 +40,6 @@ import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row, SQLConf}
  *    data type is nullable.
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest {
-  private val ctx = sqlContext
 
   private def checkFilterPredicate(
       df: DataFrame,
@@ -301,7 +300,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
   }
 
   test("SPARK-6554: don't push down predicates which reference partition columns") {
-    import ctx.implicits._
+    import testImplicits._
 
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withTempPath { dir =>

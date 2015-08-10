@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestUtils
 
-class DataFrameImplicitsSuite extends QueryTest with SharedSQLContext {
-  private val ctx = sqlContext
-  import ctx.implicits._
+class DataFrameImplicitsSuite extends QueryTest with SQLTestUtils {
+  import testImplicits._
 
   test("RDD of tuples") {
     checkAnswer(

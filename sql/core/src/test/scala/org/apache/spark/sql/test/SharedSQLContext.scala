@@ -32,17 +32,35 @@ private[sql] trait SharedSQLContext extends SparkFunSuite with BeforeAndAfterAll
    * By default, the underlying [[org.apache.spark.SparkContext]] will be run in local
    * mode with the default test configurations.
    */
-  private var _ctx: TestSQLContext = new TestSQLContext
+  private var _ctx: TestSQLContext = null
+
+  /**
+   * Initialize the [[TestSQLContext]].
+   * This is a no-op if the user explicitly switched to a custom context before this is called.
+   */
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    if (_ctx == null) {
+      _ctx = new TestSQLContext
+    }
+  }
+
+  /**
+   * Stop the underlying [[org.apache.spark.SparkContext]], if any.
+   */
+  protected override def afterAll(): Unit = {
+    if (_ctx != null) {
+      _ctx.sparkContext.stop()
+      _ctx = null
+    }
+    super.afterAll()
+  }
 
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
    */
+  protected def ctx: TestSQLContext = _ctx
   protected def sqlContext: TestSQLContext = _ctx
-
-  /**
-   * Initialize all test data such that all temp tables are properly registered.
-   */
-  protected final def loadTestData(): Unit = _ctx.loadTestData()
 
   /**
    * Switch to a custom [[TestSQLContext]].
@@ -54,8 +72,8 @@ private[sql] trait SharedSQLContext extends SparkFunSuite with BeforeAndAfterAll
   protected def switchSQLContext(newContext: () => TestSQLContext): Unit = {
     if (_ctx != null) {
       _ctx.sparkContext.stop()
-      _ctx = newContext()
     }
+    _ctx = newContext()
   }
 
   /**
@@ -69,14 +87,6 @@ private[sql] trait SharedSQLContext extends SparkFunSuite with BeforeAndAfterAll
     } finally {
       switchSQLContext(() => new TestSQLContext)
     }
-  }
-
-  protected override def afterAll(): Unit = {
-    if (_ctx != null) {
-      _ctx.sparkContext.stop()
-      _ctx = null
-    }
-    super.afterAll()
   }
 
 }

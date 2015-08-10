@@ -33,35 +33,34 @@ import org.apache.spark.sql.types._
 class MyDialect extends DefaultParserDialect
 
 class SQLQuerySuite extends QueryTest with SQLTestUtils {
-  private val ctx = sqlContext
-  import ctx.implicits._
-  import ctx._
+  import testImplicits._
 
-  ctx.loadTestData()
+  loadTestData()
 
   test("having clause") {
     Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v").registerTempTable("hav")
     checkAnswer(
-      sql("SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2"),
+      ctx.sql("SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2"),
       Row("one", 6) :: Row("three", 3) :: Nil)
   }
 
   test("SPARK-8010: promote numeric to string") {
     val df = Seq((1, 1)).toDF("key", "value")
     df.registerTempTable("src")
-    val queryCaseWhen = sql("select case when true then 1.0 else '1' end from src ")
-    val queryCoalesce = sql("select coalesce(null, 1, '1') from src ")
+    val queryCaseWhen = ctx.sql("select case when true then 1.0 else '1' end from src ")
+    val queryCoalesce = ctx.sql("select coalesce(null, 1, '1') from src ")
 
     checkAnswer(queryCaseWhen, Row("1.0") :: Nil)
     checkAnswer(queryCoalesce, Row("1") :: Nil)
   }
 
   test("show functions") {
-    checkAnswer(sql("SHOW functions"), FunctionRegistry.builtin.listFunction().sorted.map(Row(_)))
+    checkAnswer(ctx.sql("SHOW functions"),
+      FunctionRegistry.builtin.listFunction().sorted.map(Row(_)))
   }
 
   test("describe functions") {
-    checkExistence(sql("describe function extended upper"), true,
+    checkExistence(ctx.sql("describe function extended upper"), true,
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
       "Usage: upper(str) - Returns str with all characters changed to uppercase",
@@ -69,15 +68,15 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
       "> SELECT upper('SparkSql');",
       "'SPARKSQL'")
 
-    checkExistence(sql("describe functioN Upper"), true,
+    checkExistence(ctx.sql("describe functioN Upper"), true,
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
       "Usage: upper(str) - Returns str with all characters changed to uppercase")
 
-    checkExistence(sql("describe functioN Upper"), false,
+    checkExistence(ctx.sql("describe functioN Upper"), false,
       "Extended Usage")
 
-    checkExistence(sql("describe functioN abcadf"), true,
+    checkExistence(ctx.sql("describe functioN abcadf"), true,
       "Function: abcadf is not found.")
   }
 
@@ -90,7 +89,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
     sqlContext.cacheTable("cachedData")
     checkAnswer(
-      sql("SELECT t1.b FROM cachedData, cachedData t1 GROUP BY t1.b"),
+      ctx.sql("SELECT t1.b FROM cachedData, cachedData t1 GROUP BY t1.b"),
       Row(0) :: Row(81) :: Nil)
   }
 
@@ -98,7 +97,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str").registerTempTable("df")
 
     checkAnswer(
-      sql(
+      ctx.sql(
         """
           |SELECT x.str, COUNT(*)
           |FROM df x JOIN df y ON x.str = y.str
@@ -109,7 +108,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("support table.star") {
     checkAnswer(
-      sql(
+      ctx.sql(
         """
           |SELECT r.*
           |FROM testData l join testData2 r on (l.key = r.a)
@@ -126,7 +125,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
         .registerTempTable("df")
 
     checkAnswer(
-      sql(
+      ctx.sql(
         """
           |SELECT x.str, SUM(x.strCount)
           |FROM df x JOIN df y ON x.str = y.str
@@ -165,7 +164,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
     checkAnswer(
-      sql("SELECT a FROM testData2 SORT BY a"),
+      ctx.sql("SELECT a FROM testData2 SORT BY a"),
       Seq(1, 1, 2, 2, 3, 3).map(Row(_))
     )
   }
@@ -201,7 +200,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
      .registerTempTable("rows")
 
     checkAnswer(
-      sql(
+      ctx.sql(
         """
           |select attribute, sum(cnt)
           |from (
@@ -220,7 +219,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
       .registerTempTable("d")
 
     checkAnswer(
-      sql("select * from d where d.a in (1,2)"),
+      ctx.sql("select * from d where d.a in (1,2)"),
       Seq(Row("1"), Row("2")))
   }
 
@@ -228,13 +227,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "true") {
       withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
         checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
+          ctx.sql("select sum(a), avg(a) from allNulls"),
           Seq(Row(null, null))
         )
       }
       withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
         checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
+          ctx.sql("select sum(a), avg(a) from allNulls"),
           Seq(Row(null, null))
         )
       }
@@ -242,13 +241,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
       withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
         checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
+          ctx.sql("select sum(a), avg(a) from allNulls"),
           Seq(Row(null, null))
         )
       }
       withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
         checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
+          ctx.sql("select sum(a), avg(a) from allNulls"),
           Seq(Row(null, null))
         )
       }
@@ -256,7 +255,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   }
 
   private def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
-    val df = sql(sqlText)
+    val df = ctx.sql(sqlText)
     // First, check if we have GeneratedAggregate.
     val hasGeneratedAgg = df.queryExecution.executedPlan
       .collect { case _: GeneratedAggregate | _: aggregate.Aggregate => true }
@@ -358,82 +357,82 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("Add Parser of SQL COALESCE()") {
     checkAnswer(
-      sql("""SELECT COALESCE(1, 2)"""),
+      ctx.sql("""SELECT COALESCE(1, 2)"""),
       Row(1))
     checkAnswer(
-      sql("SELECT COALESCE(null, 1, 1.5)"),
+      ctx.sql("SELECT COALESCE(null, 1, 1.5)"),
       Row(BigDecimal(1)))
     checkAnswer(
-      sql("SELECT COALESCE(null, null, null)"),
+      ctx.sql("SELECT COALESCE(null, null, null)"),
       Row(null))
   }
 
   test("SPARK-3176 Added Parser of SQL LAST()") {
     checkAnswer(
-      sql("SELECT LAST(n) FROM lowerCaseData"),
+      ctx.sql("SELECT LAST(n) FROM lowerCaseData"),
       Row(4))
   }
 
   test("SPARK-2041 column name equals tablename") {
     checkAnswer(
-      sql("SELECT tableName FROM tableName"),
+      ctx.sql("SELECT tableName FROM tableName"),
       Row("test"))
   }
 
   test("SQRT") {
     checkAnswer(
-      sql("SELECT SQRT(key) FROM testData"),
+      ctx.sql("SELECT SQRT(key) FROM testData"),
       (1 to 100).map(x => Row(math.sqrt(x.toDouble))).toSeq
     )
   }
 
   test("SQRT with automatic string casts") {
     checkAnswer(
-      sql("SELECT SQRT(CAST(key AS STRING)) FROM testData"),
+      ctx.sql("SELECT SQRT(CAST(key AS STRING)) FROM testData"),
       (1 to 100).map(x => Row(math.sqrt(x.toDouble))).toSeq
     )
   }
 
   test("SPARK-2407 Added Parser of SQL SUBSTR()") {
     checkAnswer(
-      sql("SELECT substr(tableName, 1, 2) FROM tableName"),
+      ctx.sql("SELECT substr(tableName, 1, 2) FROM tableName"),
       Row("te"))
     checkAnswer(
-      sql("SELECT substr(tableName, 3) FROM tableName"),
+      ctx.sql("SELECT substr(tableName, 3) FROM tableName"),
       Row("st"))
     checkAnswer(
-      sql("SELECT substring(tableName, 1, 2) FROM tableName"),
+      ctx.sql("SELECT substring(tableName, 1, 2) FROM tableName"),
       Row("te"))
     checkAnswer(
-      sql("SELECT substring(tableName, 3) FROM tableName"),
+      ctx.sql("SELECT substring(tableName, 3) FROM tableName"),
       Row("st"))
   }
 
   test("SPARK-3173 Timestamp support in the parser") {
     (0 to 3).map(i => Tuple1(new Timestamp(i))).toDF("time").registerTempTable("timestamps")
 
-    checkAnswer(sql(
+    checkAnswer(ctx.sql(
       "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.0'"),
       Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00")))
 
-    checkAnswer(sql(
+    checkAnswer(ctx.sql(
       "SELECT time FROM timestamps WHERE time=CAST('1969-12-31 16:00:00.001' AS TIMESTAMP)"),
       Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
-    checkAnswer(sql(
+    checkAnswer(ctx.sql(
       "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.001'"),
       Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
-    checkAnswer(sql(
+    checkAnswer(ctx.sql(
       "SELECT time FROM timestamps WHERE '1969-12-31 16:00:00.001'=time"),
       Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
-    checkAnswer(sql(
+    checkAnswer(ctx.sql(
       """SELECT time FROM timestamps WHERE time<'1969-12-31 16:00:00.003'
           AND time>'1969-12-31 16:00:00.001'"""),
       Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002")))
 
-    checkAnswer(sql(
+    checkAnswer(ctx.sql(
       """
         |SELECT time FROM timestamps
         |WHERE time IN ('1969-12-31 16:00:00.001','1969-12-31 16:00:00.002')
@@ -441,39 +440,41 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
       Seq(Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")),
         Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002"))))
 
-    checkAnswer(sql(
+    checkAnswer(ctx.sql(
       "SELECT time FROM timestamps WHERE time='123'"),
       Nil)
   }
 
   test("index into array") {
     checkAnswer(
-      sql("SELECT data, data[0], data[0] + data[1], data[0 + 1] FROM arrayData"),
+      ctx.sql("SELECT data, data[0], data[0] + data[1], data[0 + 1] FROM arrayData"),
       arrayData.map(d => Row(d.data, d.data(0), d.data(0) + d.data(1), d.data(1))).collect())
   }
 
   test("left semi greater than predicate") {
     checkAnswer(
-      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.a >= y.a + 2"),
+      ctx.sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.a >= y.a + 2"),
       Seq(Row(3, 1), Row(3, 2))
     )
   }
 
   test("left semi greater than predicate and equal operator") {
     checkAnswer(
-      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.b and x.a >= y.a + 2"),
+      ctx.sql(
+        "SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.b and x.a >= y.a + 2"),
       Seq(Row(3, 1), Row(3, 2))
     )
 
     checkAnswer(
-      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.a and x.a >= y.b + 1"),
+      ctx.sql(
+        "SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.a and x.a >= y.b + 1"),
       Seq(Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2))
     )
   }
 
   test("index into array of arrays") {
     checkAnswer(
-      sql(
+      ctx.sql(
         "SELECT nestedData, nestedData[0][0], nestedData[0][0] + nestedData[0][1] FROM arrayData"),
       arrayData.map(d =>
         Row(d.nestedData,
@@ -483,28 +484,28 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("agg") {
     checkAnswer(
-      sql("SELECT a, SUM(b) FROM testData2 GROUP BY a"),
+      ctx.sql("SELECT a, SUM(b) FROM testData2 GROUP BY a"),
       Seq(Row(1, 3), Row(2, 3), Row(3, 3)))
   }
 
   test("literal in agg grouping expressions") {
     def literalInAggTest(): Unit = {
       checkAnswer(
-        sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
+        ctx.sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
         Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
       checkAnswer(
-        sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
+        ctx.sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
         Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
 
       checkAnswer(
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1"),
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+        ctx.sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1"),
+        ctx.sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
       checkAnswer(
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1 + 2"),
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+        ctx.sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1 + 2"),
+        ctx.sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
       checkAnswer(
-        sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
-        sql("SELECT 1, 2, sum(b) FROM testData2"))
+        ctx.sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
+        ctx.sql("SELECT 1, 2, sum(b) FROM testData2"))
     }
 
     literalInAggTest()
@@ -515,62 +516,62 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("aggregates with nulls") {
     checkAnswer(
-      sql("SELECT MIN(a), MAX(a), AVG(a), SUM(a), COUNT(a) FROM nullInts"),
+      ctx.sql("SELECT MIN(a), MAX(a), AVG(a), SUM(a), COUNT(a) FROM nullInts"),
       Row(1, 3, 2, 6, 3)
     )
   }
 
   test("select *") {
     checkAnswer(
-      sql("SELECT * FROM testData"),
+      ctx.sql("SELECT * FROM testData"),
       testData.collect().toSeq)
   }
 
   test("simple select") {
     checkAnswer(
-      sql("SELECT value FROM testData WHERE key = 1"),
+      ctx.sql("SELECT value FROM testData WHERE key = 1"),
       Row("1"))
   }
 
   def sortTest(): Unit = {
     checkAnswer(
-      sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC"),
+      ctx.sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC"),
       Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2)))
 
     checkAnswer(
-      sql("SELECT * FROM testData2 ORDER BY a ASC, b DESC"),
+      ctx.sql("SELECT * FROM testData2 ORDER BY a ASC, b DESC"),
       Seq(Row(1, 2), Row(1, 1), Row(2, 2), Row(2, 1), Row(3, 2), Row(3, 1)))
 
     checkAnswer(
-      sql("SELECT * FROM testData2 ORDER BY a DESC, b DESC"),
+      ctx.sql("SELECT * FROM testData2 ORDER BY a DESC, b DESC"),
       Seq(Row(3, 2), Row(3, 1), Row(2, 2), Row(2, 1), Row(1, 2), Row(1, 1)))
 
     checkAnswer(
-      sql("SELECT * FROM testData2 ORDER BY a DESC, b ASC"),
+      ctx.sql("SELECT * FROM testData2 ORDER BY a DESC, b ASC"),
       Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2, 2), Row(1, 1), Row(1, 2)))
 
     checkAnswer(
-      sql("SELECT b FROM binaryData ORDER BY a ASC"),
+      ctx.sql("SELECT b FROM binaryData ORDER BY a ASC"),
       (1 to 5).map(Row(_)))
 
     checkAnswer(
-      sql("SELECT b FROM binaryData ORDER BY a DESC"),
+      ctx.sql("SELECT b FROM binaryData ORDER BY a DESC"),
       (1 to 5).map(Row(_)).toSeq.reverse)
 
     checkAnswer(
-      sql("SELECT * FROM arrayData ORDER BY data[0] ASC"),
+      ctx.sql("SELECT * FROM arrayData ORDER BY data[0] ASC"),
       arrayData.collect().sortBy(_.data(0)).map(Row.fromTuple).toSeq)
 
     checkAnswer(
-      sql("SELECT * FROM arrayData ORDER BY data[0] DESC"),
+      ctx.sql("SELECT * FROM arrayData ORDER BY data[0] DESC"),
       arrayData.collect().sortBy(_.data(0)).reverse.map(Row.fromTuple).toSeq)
 
     checkAnswer(
-      sql("SELECT * FROM mapData ORDER BY data[1] ASC"),
+      ctx.sql("SELECT * FROM mapData ORDER BY data[1] ASC"),
       mapData.collect().sortBy(_.data(1)).map(Row.fromTuple).toSeq)
 
     checkAnswer(
-      sql("SELECT * FROM mapData ORDER BY data[1] DESC"),
+      ctx.sql("SELECT * FROM mapData ORDER BY data[1] DESC"),
       mapData.collect().sortBy(_.data(1)).reverse.map(Row.fromTuple).toSeq)
   }
 
@@ -602,25 +603,25 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("limit") {
     checkAnswer(
-      sql("SELECT * FROM testData LIMIT 10"),
+      ctx.sql("SELECT * FROM testData LIMIT 10"),
       testData.take(10).toSeq)
 
     checkAnswer(
-      sql("SELECT * FROM arrayData LIMIT 1"),
+      ctx.sql("SELECT * FROM arrayData LIMIT 1"),
       arrayData.collect().take(1).map(Row.fromTuple).toSeq)
 
     checkAnswer(
-      sql("SELECT * FROM mapData LIMIT 1"),
+      ctx.sql("SELECT * FROM mapData LIMIT 1"),
       mapData.collect().take(1).map(Row.fromTuple).toSeq)
   }
 
   test("CTE feature") {
     checkAnswer(
-      sql("with q1 as (select * from testData limit 10) select * from q1"),
+      ctx.sql("with q1 as (select * from testData limit 10) select * from q1"),
       testData.take(10).toSeq)
 
     checkAnswer(
-      sql("""
+      ctx.sql("""
         |with q1 as (select * from testData where key= '5'),
         |q2 as (select * from testData where key = '4')
         |select * from q1 union all select * from q2""".stripMargin),
@@ -630,20 +631,20 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("Allow only a single WITH clause per query") {
     intercept[RuntimeException] {
-      sql(
+      ctx.sql(
         "with q1 as (select * from testData) with q2 as (select * from q1) select * from q2")
     }
   }
 
   test("date row") {
-    checkAnswer(sql(
+    checkAnswer(ctx.sql(
       """select cast("2015-01-28" as date) from testData limit 1"""),
       Row(java.sql.Date.valueOf("2015-01-28"))
     )
   }
 
   test("from follow multiple brackets") {
-    checkAnswer(sql(
+    checkAnswer(ctx.sql(
       """
         |select key from ((select * from testData limit 1)
         |  union all (select * from testData limit 1)) x limit 1
@@ -651,12 +652,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
       Row(1)
     )
 
-    checkAnswer(sql(
+    checkAnswer(ctx.sql(
       "select key from (select * from testData) x limit 1"),
       Row(1)
     )
 
-    checkAnswer(sql(
+    checkAnswer(ctx.sql(
       """
         |select key from
         |  (select * from testData limit 1 union all select * from testData limit 1) x
@@ -668,50 +669,48 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("average") {
     checkAnswer(
-      sql("SELECT AVG(a) FROM testData2"),
+      ctx.sql("SELECT AVG(a) FROM testData2"),
       Row(2.0))
   }
 
   test("average overflow") {
     checkAnswer(
-      sql("SELECT AVG(a),b FROM largeAndSmallInts group by b"),
+      ctx.sql("SELECT AVG(a),b FROM largeAndSmallInts group by b"),
       Seq(Row(2147483645.0, 1), Row(2.0, 2)))
   }
 
   test("count") {
     checkAnswer(
-      sql("SELECT COUNT(*) FROM testData2"),
+      ctx.sql("SELECT COUNT(*) FROM testData2"),
       Row(testData2.count()))
   }
 
   test("count distinct") {
     checkAnswer(
-      sql("SELECT COUNT(DISTINCT b) FROM testData2"),
+      ctx.sql("SELECT COUNT(DISTINCT b) FROM testData2"),
       Row(2))
   }
 
   test("approximate count distinct") {
     checkAnswer(
-      sql("SELECT APPROXIMATE COUNT(DISTINCT a) FROM testData2"),
+      ctx.sql("SELECT APPROXIMATE COUNT(DISTINCT a) FROM testData2"),
       Row(3))
   }
 
   test("approximate count distinct with user provided standard deviation") {
     checkAnswer(
-      sql("SELECT APPROXIMATE(0.04) COUNT(DISTINCT a) FROM testData2"),
+      ctx.sql("SELECT APPROXIMATE(0.04) COUNT(DISTINCT a) FROM testData2"),
       Row(3))
   }
 
   test("null count") {
     checkAnswer(
-      sql("SELECT a, COUNT(b) FROM testData3 GROUP BY a"),
+      ctx.sql("SELECT a, COUNT(b) FROM testData3 GROUP BY a"),
       Seq(Row(1, 0), Row(2, 1)))
 
     checkAnswer(
-      sql(
-        """
-          |SELECT COUNT(a), COUNT(b), COUNT(1), COUNT(DISTINCT a), COUNT(DISTINCT b) FROM testData3
-        """.stripMargin),
+      ctx.sql(
+        "SELECT COUNT(a), COUNT(b), COUNT(1), COUNT(DISTINCT a), COUNT(DISTINCT b) FROM testData3"),
       Row(2, 1, 2, 2, 1))
   }
 
@@ -719,14 +718,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     withTempTable("t") {
       Seq.empty[(Int, Int)].toDF("a", "b").registerTempTable("t")
       checkAnswer(
-        sql("select count(a) from t"),
+        ctx.sql("select count(a) from t"),
         Row(0))
     }
   }
 
   test("inner join where, one match per row") {
     checkAnswer(
-      sql("SELECT * FROM upperCaseData JOIN lowerCaseData WHERE n = N"),
+      ctx.sql("SELECT * FROM upperCaseData JOIN lowerCaseData WHERE n = N"),
       Seq(
         Row(1, "A", 1, "a"),
         Row(2, "B", 2, "b"),
@@ -736,7 +735,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("inner join ON, one match per row") {
     checkAnswer(
-      sql("SELECT * FROM upperCaseData JOIN lowerCaseData ON n = N"),
+      ctx.sql("SELECT * FROM upperCaseData JOIN lowerCaseData ON n = N"),
       Seq(
         Row(1, "A", 1, "a"),
         Row(2, "B", 2, "b"),
@@ -746,7 +745,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("inner join, where, multiple matches") {
     checkAnswer(
-      sql("""
+      ctx.sql("""
         |SELECT * FROM
         |  (SELECT * FROM testData2 WHERE a = 1) x JOIN
         |  (SELECT * FROM testData2 WHERE a = 1) y
@@ -759,7 +758,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("inner join, no matches") {
     checkAnswer(
-      sql(
+      ctx.sql(
         """
           |SELECT * FROM
           |  (SELECT * FROM testData2 WHERE a = 1) x JOIN
@@ -770,7 +769,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("big inner join, 4 matches per row") {
     checkAnswer(
-      sql(
+      ctx.sql(
         """
           |SELECT * FROM
           |  (SELECT * FROM testData UNION ALL
@@ -797,7 +796,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("left outer join") {
     checkAnswer(
-      sql("SELECT * FROM upperCaseData LEFT OUTER JOIN lowerCaseData ON n = N"),
+      ctx.sql("SELECT * FROM upperCaseData LEFT OUTER JOIN lowerCaseData ON n = N"),
       Row(1, "A", 1, "a") ::
       Row(2, "B", 2, "b") ::
       Row(3, "C", 3, "c") ::
@@ -808,7 +807,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("right outer join") {
     checkAnswer(
-      sql("SELECT * FROM lowerCaseData RIGHT OUTER JOIN upperCaseData ON n = N"),
+      ctx.sql("SELECT * FROM lowerCaseData RIGHT OUTER JOIN upperCaseData ON n = N"),
       Row(1, "a", 1, "A") ::
       Row(2, "b", 2, "B") ::
       Row(3, "c", 3, "C") ::
@@ -819,7 +818,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("full outer join") {
     checkAnswer(
-      sql(
+      ctx.sql(
         """
           |SELECT * FROM
           |  (SELECT * FROM upperCaseData WHERE N <= 4) leftTable FULL OUTER JOIN
@@ -835,25 +834,25 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-3349 partitioning after limit") {
-    sql("SELECT DISTINCT n FROM lowerCaseData ORDER BY n DESC")
+    ctx.sql("SELECT DISTINCT n FROM lowerCaseData ORDER BY n DESC")
       .limit(2)
       .registerTempTable("subset1")
-    sql("SELECT DISTINCT n FROM lowerCaseData")
+    ctx.sql("SELECT DISTINCT n FROM lowerCaseData")
       .limit(2)
       .registerTempTable("subset2")
     checkAnswer(
-      sql("SELECT * FROM lowerCaseData INNER JOIN subset1 ON subset1.n = lowerCaseData.n"),
+      ctx.sql("SELECT * FROM lowerCaseData INNER JOIN subset1 ON subset1.n = lowerCaseData.n"),
       Row(3, "c", 3) ::
       Row(4, "d", 4) :: Nil)
     checkAnswer(
-      sql("SELECT * FROM lowerCaseData INNER JOIN subset2 ON subset2.n = lowerCaseData.n"),
+      ctx.sql("SELECT * FROM lowerCaseData INNER JOIN subset2 ON subset2.n = lowerCaseData.n"),
       Row(1, "a", 1) ::
       Row(2, "b", 2) :: Nil)
   }
 
   test("mixed-case keywords") {
     checkAnswer(
-      sql(
+      ctx.sql(
         """
           |SeleCT * from
           |  (select * from upperCaseData WherE N <= 4) leftTable fuLL OUtER joiN
@@ -870,13 +869,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("select with table name as qualifier") {
     checkAnswer(
-      sql("SELECT testData.value FROM testData WHERE testData.key = 1"),
+      ctx.sql("SELECT testData.value FROM testData WHERE testData.key = 1"),
       Row("1"))
   }
 
   test("inner join ON with table name as qualifier") {
     checkAnswer(
-      sql("SELECT * FROM upperCaseData JOIN lowerCaseData ON lowerCaseData.n = upperCaseData.N"),
+      ctx.sql(
+        "SELECT * FROM upperCaseData JOIN lowerCaseData ON lowerCaseData.n = upperCaseData.N"),
       Seq(
         Row(1, "A", 1, "a"),
         Row(2, "B", 2, "b"),
@@ -886,7 +886,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("qualified select with inner join ON with table name as qualifier") {
     checkAnswer(
-      sql("SELECT upperCaseData.N, upperCaseData.L FROM upperCaseData JOIN lowerCaseData " +
+      ctx.sql("SELECT upperCaseData.N, upperCaseData.L FROM upperCaseData JOIN lowerCaseData " +
         "ON lowerCaseData.n = upperCaseData.N"),
       Seq(
         Row(1, "A"),
@@ -897,7 +897,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("system function upper()") {
     checkAnswer(
-      sql("SELECT n,UPPER(l) FROM lowerCaseData"),
+      ctx.sql("SELECT n,UPPER(l) FROM lowerCaseData"),
       Seq(
         Row(1, "A"),
         Row(2, "B"),
@@ -905,7 +905,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
         Row(4, "D")))
 
     checkAnswer(
-      sql("SELECT n, UPPER(s) FROM nullStrings"),
+      ctx.sql("SELECT n, UPPER(s) FROM nullStrings"),
       Seq(
         Row(1, "ABC"),
         Row(2, "ABC"),
@@ -914,7 +914,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("system function lower()") {
     checkAnswer(
-      sql("SELECT N,LOWER(L) FROM upperCaseData"),
+      ctx.sql("SELECT N,LOWER(L) FROM upperCaseData"),
       Seq(
         Row(1, "a"),
         Row(2, "b"),
@@ -924,7 +924,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
         Row(6, "f")))
 
     checkAnswer(
-      sql("SELECT n, LOWER(s) FROM nullStrings"),
+      ctx.sql("SELECT n, LOWER(s) FROM nullStrings"),
       Seq(
         Row(1, "abc"),
         Row(2, "abc"),
@@ -933,14 +933,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("UNION") {
     checkAnswer(
-      sql("SELECT * FROM lowerCaseData UNION SELECT * FROM upperCaseData"),
+      ctx.sql("SELECT * FROM lowerCaseData UNION SELECT * FROM upperCaseData"),
       Row(1, "A") :: Row(1, "a") :: Row(2, "B") :: Row(2, "b") :: Row(3, "C") :: Row(3, "c") ::
       Row(4, "D") :: Row(4, "d") :: Row(5, "E") :: Row(6, "F") :: Nil)
     checkAnswer(
-      sql("SELECT * FROM lowerCaseData UNION SELECT * FROM lowerCaseData"),
+      ctx.sql("SELECT * FROM lowerCaseData UNION SELECT * FROM lowerCaseData"),
       Row(1, "a") :: Row(2, "b") :: Row(3, "c") :: Row(4, "d") :: Nil)
     checkAnswer(
-      sql("SELECT * FROM lowerCaseData UNION ALL SELECT * FROM lowerCaseData"),
+      ctx.sql("SELECT * FROM lowerCaseData UNION ALL SELECT * FROM lowerCaseData"),
       Row(1, "a") :: Row(1, "a") :: Row(2, "b") :: Row(2, "b") :: Row(3, "c") :: Row(3, "c") ::
       Row(4, "d") :: Row(4, "d") :: Nil)
   }
@@ -948,63 +948,63 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   test("UNION with column mismatches") {
     // Column name mismatches are allowed.
     checkAnswer(
-      sql("SELECT n,l FROM lowerCaseData UNION SELECT N as x1, L as x2 FROM upperCaseData"),
+      ctx.sql("SELECT n,l FROM lowerCaseData UNION SELECT N as x1, L as x2 FROM upperCaseData"),
       Row(1, "A") :: Row(1, "a") :: Row(2, "B") :: Row(2, "b") :: Row(3, "C") :: Row(3, "c") ::
       Row(4, "D") :: Row(4, "d") :: Row(5, "E") :: Row(6, "F") :: Nil)
     // Column type mismatches are not allowed, forcing a type coercion.
     checkAnswer(
-      sql("SELECT n FROM lowerCaseData UNION SELECT L FROM upperCaseData"),
+      ctx.sql("SELECT n FROM lowerCaseData UNION SELECT L FROM upperCaseData"),
       ("1" :: "2" :: "3" :: "4" :: "A" :: "B" :: "C" :: "D" :: "E" :: "F" :: Nil).map(Row(_)))
     // Column type mismatches where a coercion is not possible, in this case between integer
     // and array types, trigger a TreeNodeException.
     intercept[AnalysisException] {
-      sql("SELECT data FROM arrayData UNION SELECT 1 FROM arrayData").collect()
+      ctx.sql("SELECT data FROM arrayData UNION SELECT 1 FROM arrayData").collect()
     }
   }
 
   test("EXCEPT") {
     checkAnswer(
-      sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM upperCaseData"),
+      ctx.sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM upperCaseData"),
       Row(1, "a") ::
       Row(2, "b") ::
       Row(3, "c") ::
       Row(4, "d") :: Nil)
     checkAnswer(
-      sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM lowerCaseData"), Nil)
+      ctx.sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM lowerCaseData"), Nil)
     checkAnswer(
-      sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData"), Nil)
+      ctx.sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData"), Nil)
   }
 
   test("INTERSECT") {
     checkAnswer(
-      sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM lowerCaseData"),
+      ctx.sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM lowerCaseData"),
       Row(1, "a") ::
       Row(2, "b") ::
       Row(3, "c") ::
       Row(4, "d") :: Nil)
     checkAnswer(
-      sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM upperCaseData"), Nil)
+      ctx.sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM upperCaseData"), Nil)
   }
 
-  test("SET commands semantics using sql()") {
+  test("SET commands semantics using ctx.sql()") {
     sqlContext.conf.clear()
     val testKey = "test.key.0"
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
 
     // "set" itself returns all config variables currently specified in SQLConf.
-    assert(sql("SET").collect().size == 0)
+    assert(ctx.sql("SET").collect().size == 0)
 
     // "set key=val"
-    sql(s"SET $testKey=$testVal")
+    ctx.sql(s"SET $testKey=$testVal")
     checkAnswer(
-      sql("SET"),
+      ctx.sql("SET"),
       Row(testKey, testVal)
     )
 
-    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
+    ctx.sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     checkAnswer(
-      sql("set"),
+      ctx.sql("set"),
       Seq(
         Row(testKey, testVal),
         Row(testKey + testKey, testVal + testVal))
@@ -1012,11 +1012,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
     // "set key"
     checkAnswer(
-      sql(s"SET $testKey"),
+      ctx.sql(s"SET $testKey"),
       Row(testKey, testVal)
     )
     checkAnswer(
-      sql(s"SET $nonexistentKey"),
+      ctx.sql(s"SET $nonexistentKey"),
       Row(nonexistentKey, "<undefined>")
     )
     sqlContext.conf.clear()
@@ -1026,9 +1026,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     sqlContext.conf.clear()
     // Set negative mapred.reduce.tasks for automatically determing
     // the number of reducers is not supported
-    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-1"))
-    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-01"))
-    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-2"))
+    intercept[IllegalArgumentException](ctx.sql(s"SET mapred.reduce.tasks=-1"))
+    intercept[IllegalArgumentException](ctx.sql(s"SET mapred.reduce.tasks=-01"))
+    intercept[IllegalArgumentException](ctx.sql(s"SET mapred.reduce.tasks=-2"))
     sqlContext.conf.clear()
   }
 
@@ -1050,14 +1050,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     val df1 = sqlContext.createDataFrame(rowRDD1, schema1)
     df1.registerTempTable("applySchema1")
     checkAnswer(
-      sql("SELECT * FROM applySchema1"),
+      ctx.sql("SELECT * FROM applySchema1"),
       Row(1, "A1", true, null) ::
       Row(2, "B2", false, null) ::
       Row(3, "C3", true, null) ::
       Row(4, "D4", true, 2147483644) :: Nil)
 
     checkAnswer(
-      sql("SELECT f1, f4 FROM applySchema1"),
+      ctx.sql("SELECT f1, f4 FROM applySchema1"),
       Row(1, null) ::
       Row(2, null) ::
       Row(3, null) ::
@@ -1080,14 +1080,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     val df2 = sqlContext.createDataFrame(rowRDD2, schema2)
     df2.registerTempTable("applySchema2")
     checkAnswer(
-      sql("SELECT * FROM applySchema2"),
+      ctx.sql("SELECT * FROM applySchema2"),
       Row(Row(1, true), Map("A1" -> null)) ::
       Row(Row(2, false), Map("B2" -> null)) ::
       Row(Row(3, true), Map("C3" -> null)) ::
       Row(Row(4, true), Map("D4" -> 2147483644)) :: Nil)
 
     checkAnswer(
-      sql("SELECT f1.f11, f2['D4'] FROM applySchema2"),
+      ctx.sql("SELECT f1.f11, f2['D4'] FROM applySchema2"),
       Row(1, null) ::
       Row(2, null) ::
       Row(3, null) ::
@@ -1106,7 +1106,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     df3.registerTempTable("applySchema3")
 
     checkAnswer(
-      sql("SELECT f1.f11, f2['D4'] FROM applySchema3"),
+      ctx.sql("SELECT f1.f11, f2['D4'] FROM applySchema3"),
       Row(1, null) ::
       Row(2, null) ::
       Row(3, null) ::
@@ -1115,17 +1115,17 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-3423 BETWEEN") {
     checkAnswer(
-      sql("SELECT key, value FROM testData WHERE key BETWEEN 5 and 7"),
+      ctx.sql("SELECT key, value FROM testData WHERE key BETWEEN 5 and 7"),
       Seq(Row(5, "5"), Row(6, "6"), Row(7, "7"))
     )
 
     checkAnswer(
-      sql("SELECT key, value FROM testData WHERE key BETWEEN 7 and 7"),
+      ctx.sql("SELECT key, value FROM testData WHERE key BETWEEN 7 and 7"),
       Row(7, "7")
     )
 
     checkAnswer(
-      sql("SELECT key, value FROM testData WHERE key BETWEEN 9 and 7"),
+      ctx.sql("SELECT key, value FROM testData WHERE key BETWEEN 9 and 7"),
       Nil
     )
   }
@@ -1133,12 +1133,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   test("cast boolean to string") {
     // TODO Ensure true/false string letter casing is consistent with Hive in all cases.
     checkAnswer(
-      sql("SELECT CAST(TRUE AS STRING), CAST(FALSE AS STRING) FROM testData LIMIT 1"),
+      ctx.sql("SELECT CAST(TRUE AS STRING), CAST(FALSE AS STRING) FROM testData LIMIT 1"),
       Row("true", "false"))
   }
 
   test("metadata is propagated correctly") {
-    val person: DataFrame = sql("SELECT * FROM person")
+    val person: DataFrame = ctx.sql("SELECT * FROM person")
     val schema = person.schema
     val docKey = "doc"
     val docValue = "first name"
@@ -1155,39 +1155,41 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     validateMetadata(personWithMeta.select($"name"))
     validateMetadata(personWithMeta.select($"name"))
     validateMetadata(personWithMeta.select($"id", $"name"))
-    validateMetadata(sql("SELECT * FROM personWithMeta"))
-    validateMetadata(sql("SELECT id, name FROM personWithMeta"))
-    validateMetadata(sql("SELECT * FROM personWithMeta JOIN salary ON id = personId"))
-    validateMetadata(sql("SELECT name, salary FROM personWithMeta JOIN salary ON id = personId"))
+    validateMetadata(ctx.sql("SELECT * FROM personWithMeta"))
+    validateMetadata(ctx.sql("SELECT id, name FROM personWithMeta"))
+    validateMetadata(ctx.sql("SELECT * FROM personWithMeta JOIN salary ON id = personId"))
+    validateMetadata(ctx.sql(
+      "SELECT name, salary FROM personWithMeta JOIN salary ON id = personId"))
   }
 
   test("SPARK-3371 Renaming a function expression with group by gives error") {
     sqlContext.udf.register("len", (s: String) => s.length)
     checkAnswer(
-      sql("SELECT len(value) as temp FROM testData WHERE key = 1 group by len(value)"),
+      ctx.sql("SELECT len(value) as temp FROM testData WHERE key = 1 group by len(value)"),
       Row(1))
   }
 
   test("SPARK-3813 CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END") {
     checkAnswer(
-      sql("SELECT CASE key WHEN 1 THEN 1 ELSE 0 END FROM testData WHERE key = 1 group by key"),
+      ctx.sql("SELECT CASE key WHEN 1 THEN 1 ELSE 0 END FROM testData WHERE key = 1 group by key"),
       Row(1))
   }
 
   test("SPARK-3813 CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END") {
     checkAnswer(
-      sql("SELECT CASE WHEN key = 1 THEN 1 ELSE 2 END FROM testData WHERE key = 1 group by key"),
+      ctx.sql(
+        "SELECT CASE WHEN key = 1 THEN 1 ELSE 2 END FROM testData WHERE key = 1 group by key"),
       Row(1))
   }
 
   test("throw errors for non-aggregate attributes with aggregation") {
     def checkAggregation(query: String, isInvalidQuery: Boolean = true) {
       if (isInvalidQuery) {
-        val e = intercept[AnalysisException](sql(query).queryExecution.analyzed)
+        val e = intercept[AnalysisException](ctx.sql(query).queryExecution.analyzed)
         assert(e.getMessage contains "group by")
       } else {
         // Should not throw
-        sql(query).queryExecution.analyzed
+        ctx.sql(query).queryExecution.analyzed
       }
     }
 
@@ -1203,137 +1205,137 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("Test to check we can use Long.MinValue") {
     checkAnswer(
-      sql(s"SELECT ${Long.MinValue} FROM testData ORDER BY key LIMIT 1"), Row(Long.MinValue)
+      ctx.sql(s"SELECT ${Long.MinValue} FROM testData ORDER BY key LIMIT 1"), Row(Long.MinValue)
     )
 
     checkAnswer(
-      sql(s"SELECT key FROM testData WHERE key > ${Long.MinValue}"),
+      ctx.sql(s"SELECT key FROM testData WHERE key > ${Long.MinValue}"),
       (1 to 100).map(Row(_)).toSeq
     )
   }
 
   test("Floating point number format") {
     checkAnswer(
-      sql("SELECT 0.3"), Row(BigDecimal(0.3).underlying())
+      ctx.sql("SELECT 0.3"), Row(BigDecimal(0.3).underlying())
     )
 
     checkAnswer(
-      sql("SELECT -0.8"), Row(BigDecimal(-0.8).underlying())
+      ctx.sql("SELECT -0.8"), Row(BigDecimal(-0.8).underlying())
     )
 
     checkAnswer(
-      sql("SELECT .5"), Row(BigDecimal(0.5))
+      ctx.sql("SELECT .5"), Row(BigDecimal(0.5))
     )
 
     checkAnswer(
-      sql("SELECT -.18"), Row(BigDecimal(-0.18))
+      ctx.sql("SELECT -.18"), Row(BigDecimal(-0.18))
     )
   }
 
   test("Auto cast integer type") {
     checkAnswer(
-      sql(s"SELECT ${Int.MaxValue + 1L}"), Row(Int.MaxValue + 1L)
+      ctx.sql(s"SELECT ${Int.MaxValue + 1L}"), Row(Int.MaxValue + 1L)
     )
 
     checkAnswer(
-      sql(s"SELECT ${Int.MinValue - 1L}"), Row(Int.MinValue - 1L)
+      ctx.sql(s"SELECT ${Int.MinValue - 1L}"), Row(Int.MinValue - 1L)
     )
 
     checkAnswer(
-      sql("SELECT 9223372036854775808"), Row(new java.math.BigDecimal("9223372036854775808"))
+      ctx.sql("SELECT 9223372036854775808"), Row(new java.math.BigDecimal("9223372036854775808"))
     )
 
     checkAnswer(
-      sql("SELECT -9223372036854775809"), Row(new java.math.BigDecimal("-9223372036854775809"))
+      ctx.sql("SELECT -9223372036854775809"), Row(new java.math.BigDecimal("-9223372036854775809"))
     )
   }
 
   test("Test to check we can apply sign to expression") {
 
     checkAnswer(
-      sql("SELECT -100"), Row(-100)
+      ctx.sql("SELECT -100"), Row(-100)
     )
 
     checkAnswer(
-      sql("SELECT +230"), Row(230)
+      ctx.sql("SELECT +230"), Row(230)
     )
 
     checkAnswer(
-      sql("SELECT -5.2"), Row(BigDecimal(-5.2))
+      ctx.sql("SELECT -5.2"), Row(BigDecimal(-5.2))
     )
 
     checkAnswer(
-      sql("SELECT +6.8"), Row(BigDecimal(6.8))
+      ctx.sql("SELECT +6.8"), Row(BigDecimal(6.8))
     )
 
     checkAnswer(
-      sql("SELECT -key FROM testData WHERE key = 2"), Row(-2)
+      ctx.sql("SELECT -key FROM testData WHERE key = 2"), Row(-2)
     )
 
     checkAnswer(
-      sql("SELECT +key FROM testData WHERE key = 3"), Row(3)
+      ctx.sql("SELECT +key FROM testData WHERE key = 3"), Row(3)
     )
 
     checkAnswer(
-      sql("SELECT -(key + 1) FROM testData WHERE key = 1"), Row(-2)
+      ctx.sql("SELECT -(key + 1) FROM testData WHERE key = 1"), Row(-2)
     )
 
     checkAnswer(
-      sql("SELECT - key + 1 FROM testData WHERE key = 10"), Row(-9)
+      ctx.sql("SELECT - key + 1 FROM testData WHERE key = 10"), Row(-9)
     )
 
     checkAnswer(
-      sql("SELECT +(key + 5) FROM testData WHERE key = 5"), Row(10)
+      ctx.sql("SELECT +(key + 5) FROM testData WHERE key = 5"), Row(10)
     )
 
     checkAnswer(
-      sql("SELECT -MAX(key) FROM testData"), Row(-100)
+      ctx.sql("SELECT -MAX(key) FROM testData"), Row(-100)
     )
 
     checkAnswer(
-      sql("SELECT +MAX(key) FROM testData"), Row(100)
+      ctx.sql("SELECT +MAX(key) FROM testData"), Row(100)
     )
 
     checkAnswer(
-      sql("SELECT - (-10)"), Row(10)
+      ctx.sql("SELECT - (-10)"), Row(10)
     )
 
     checkAnswer(
-      sql("SELECT + (-key) FROM testData WHERE key = 32"), Row(-32)
+      ctx.sql("SELECT + (-key) FROM testData WHERE key = 32"), Row(-32)
     )
 
     checkAnswer(
-      sql("SELECT - (+Max(key)) FROM testData"), Row(-100)
+      ctx.sql("SELECT - (+Max(key)) FROM testData"), Row(-100)
     )
 
     checkAnswer(
-      sql("SELECT - - 3"), Row(3)
+      ctx.sql("SELECT - - 3"), Row(3)
     )
 
     checkAnswer(
-      sql("SELECT - + 20"), Row(-20)
+      ctx.sql("SELECT - + 20"), Row(-20)
     )
 
     checkAnswer(
-      sql("SELEcT - + 45"), Row(-45)
+      ctx.sql("SELEcT - + 45"), Row(-45)
     )
 
     checkAnswer(
-      sql("SELECT + + 100"), Row(100)
+      ctx.sql("SELECT + + 100"), Row(100)
     )
 
     checkAnswer(
-      sql("SELECT - - Max(key) FROM testData"), Row(100)
+      ctx.sql("SELECT - - Max(key) FROM testData"), Row(100)
     )
 
     checkAnswer(
-      sql("SELECT + - key FROM testData WHERE key = 33"), Row(-33)
+      ctx.sql("SELECT + - key FROM testData WHERE key = 33"), Row(-33)
     )
   }
 
   test("Multiple join") {
     checkAnswer(
-      sql(
+      ctx.sql(
         """SELECT a.key, b.key, c.key
           |FROM testData a
           |JOIN testData b ON a.key = b.key
@@ -1346,28 +1348,28 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     val data = sqlContext.sparkContext.parallelize(
       Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
     sqlContext.read.json(data).registerTempTable("records")
-    sql("SELECT `key?number1`, `key.number2` FROM records")
+    ctx.sql("SELECT `key?number1`, `key.number2` FROM records")
   }
 
   test("SPARK-3814 Support Bitwise & operator") {
-    checkAnswer(sql("SELECT key&1 FROM testData WHERE key = 1 "), Row(1))
+    checkAnswer(ctx.sql("SELECT key&1 FROM testData WHERE key = 1 "), Row(1))
   }
 
   test("SPARK-3814 Support Bitwise | operator") {
-    checkAnswer(sql("SELECT key|0 FROM testData WHERE key = 1 "), Row(1))
+    checkAnswer(ctx.sql("SELECT key|0 FROM testData WHERE key = 1 "), Row(1))
   }
 
   test("SPARK-3814 Support Bitwise ^ operator") {
-    checkAnswer(sql("SELECT key^0 FROM testData WHERE key = 1 "), Row(1))
+    checkAnswer(ctx.sql("SELECT key^0 FROM testData WHERE key = 1 "), Row(1))
   }
 
   test("SPARK-3814 Support Bitwise ~ operator") {
-    checkAnswer(sql("SELECT ~key FROM testData WHERE key = 1 "), Row(-2))
+    checkAnswer(ctx.sql("SELECT ~key FROM testData WHERE key = 1 "), Row(-2))
   }
 
   test("SPARK-4120 Join of multiple tables does not work in SparkSQL") {
     checkAnswer(
-      sql(
+      ctx.sql(
         """SELECT a.key, b.key, c.key
           |FROM testData a,testData b,testData c
           |where a.key = b.key and a.key = c.key
@@ -1376,37 +1378,37 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {
-    checkAnswer(sql("SELECT key FROM testData WHERE key not between 0 and 10 order by key"),
+    checkAnswer(ctx.sql("SELECT key FROM testData WHERE key not between 0 and 10 order by key"),
         (11 to 100).map(i => Row(i)))
   }
 
   test("SPARK-4207 Query which has syntax like 'not like' is not working in Spark SQL") {
-    checkAnswer(sql("SELECT key FROM testData WHERE value not like '100%' order by key"),
+    checkAnswer(ctx.sql("SELECT key FROM testData WHERE value not like '100%' order by key"),
         (1 to 99).map(i => Row(i)))
   }
 
   test("SPARK-4322 Grouping field with struct field as sub expression") {
     sqlContext.read.json(sqlContext.sparkContext.makeRDD("""{"a": {"b": [{"c": 1}]}}""" :: Nil))
       .registerTempTable("data")
-    checkAnswer(sql("SELECT a.b[0].c FROM data GROUP BY a.b[0].c"), Row(1))
+    checkAnswer(ctx.sql("SELECT a.b[0].c FROM data GROUP BY a.b[0].c"), Row(1))
     sqlContext.dropTempTable("data")
 
     sqlContext.read.json(
       sqlContext.sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("data")
-    checkAnswer(sql("SELECT a.b + 1 FROM data GROUP BY a.b + 1"), Row(2))
+    checkAnswer(ctx.sql("SELECT a.b + 1 FROM data GROUP BY a.b + 1"), Row(2))
     sqlContext.dropTempTable("data")
   }
 
   test("SPARK-4432 Fix attribute reference resolution error when using ORDER BY") {
     checkAnswer(
-      sql("SELECT a + b FROM testData2 ORDER BY a"),
+      ctx.sql("SELECT a + b FROM testData2 ORDER BY a"),
       Seq(2, 3, 3, 4, 4, 5).map(Row(_))
     )
   }
 
   test("oder by asc by default when not specify ascending and descending") {
     checkAnswer(
-      sql("SELECT a, b FROM testData2 ORDER BY a desc, b"),
+      ctx.sql("SELECT a, b FROM testData2 ORDER BY a desc, b"),
       Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2, 2), Row(1, 1), Row(1, 2))
     )
   }
@@ -1418,7 +1420,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     val nullCheckData2 = TestData(1, "1") :: TestData(2, null) :: Nil
     val rdd2 = sqlContext.sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
     rdd2.toDF().registerTempTable("nulldata2")
-    checkAnswer(sql("SELECT nulldata1.key FROM nulldata1 join " +
+    checkAnswer(ctx.sql("SELECT nulldata1.key FROM nulldata1 join " +
       "nulldata2 on nulldata1.value <=> nulldata2.value"),
         (1 to 2).map(i => Row(i)))
   }
@@ -1427,7 +1429,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
     val rdd = sqlContext.sparkContext.parallelize((0 to 1).map(i => data(i)))
     rdd.toDF().registerTempTable("distinctData")
-    checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
+    checkAnswer(ctx.sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
   }
 
   test("SPARK-4699 case sensitivity SQL query") {
@@ -1435,7 +1437,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
     val rdd = sqlContext.sparkContext.parallelize((0 to 1).map(i => data(i)))
     rdd.toDF().registerTempTable("testTable1")
-    checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
+    checkAnswer(ctx.sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
     sqlContext.setConf(SQLConf.CASE_SENSITIVE, true)
   }
 
@@ -1444,19 +1446,19 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
         """{"a": {"b": 1, "a": {"a": 1}}, "c": [{"d": 1}]}""" :: Nil))
       .registerTempTable("nestedOrder")
 
-    checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY a.b"), Row(1))
-    checkAnswer(sql("SELECT a.b FROM nestedOrder ORDER BY a.b"), Row(1))
-    checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY a.a.a"), Row(1))
-    checkAnswer(sql("SELECT a.a.a FROM nestedOrder ORDER BY a.a.a"), Row(1))
-    checkAnswer(sql("SELECT 1 FROM nestedOrder ORDER BY c[0].d"), Row(1))
-    checkAnswer(sql("SELECT c[0].d FROM nestedOrder ORDER BY c[0].d"), Row(1))
+    checkAnswer(ctx.sql("SELECT 1 FROM nestedOrder ORDER BY a.b"), Row(1))
+    checkAnswer(ctx.sql("SELECT a.b FROM nestedOrder ORDER BY a.b"), Row(1))
+    checkAnswer(ctx.sql("SELECT 1 FROM nestedOrder ORDER BY a.a.a"), Row(1))
+    checkAnswer(ctx.sql("SELECT a.a.a FROM nestedOrder ORDER BY a.a.a"), Row(1))
+    checkAnswer(ctx.sql("SELECT 1 FROM nestedOrder ORDER BY c[0].d"), Row(1))
+    checkAnswer(ctx.sql("SELECT c[0].d FROM nestedOrder ORDER BY c[0].d"), Row(1))
   }
 
   test("SPARK-6145: special cases") {
     sqlContext.read.json(sqlContext.sparkContext.makeRDD(
       """{"a": {"b": [1]}, "b": [{"a": 1}], "_c0": {"a": 1}}""" :: Nil)).registerTempTable("t")
-    checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY _c0.a"), Row(1))
-    checkAnswer(sql("SELECT b[0].a FROM t ORDER BY _c0.a"), Row(1))
+    checkAnswer(ctx.sql("SELECT a.b[0] FROM t ORDER BY _c0.a"), Row(1))
+    checkAnswer(ctx.sql("SELECT b[0].a FROM t ORDER BY _c0.a"), Row(1))
   }
 
   test("SPARK-6898: complete support for special chars in column names") {
@@ -1464,7 +1466,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
       """{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""" :: Nil))
       .registerTempTable("t")
 
-    checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
+    checkAnswer(ctx.sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
   }
 
   test("SPARK-6583 order by aggregated function") {
@@ -1472,7 +1474,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
       .toDF("a", "b").registerTempTable("orderByData")
 
     checkAnswer(
-      sql(
+      ctx.sql(
         """
           |SELECT a
           |FROM orderByData
@@ -1482,7 +1484,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
       Row("4") :: Row("1") :: Row("3") :: Row("2") :: Nil)
 
     checkAnswer(
-      sql(
+      ctx.sql(
         """
           |SELECT sum(b)
           |FROM orderByData
@@ -1492,7 +1494,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
       Row(3) :: Row(7) :: Row(11) :: Row(15) :: Nil)
 
     checkAnswer(
-      sql(
+      ctx.sql(
         """
           |SELECT a, sum(b)
           |FROM orderByData
@@ -1502,7 +1504,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
       Row("4", 3) :: Row("1", 7) :: Row("3", 11) :: Row("2", 15) :: Nil)
 
     checkAnswer(
-      sql(
+      ctx.sql(
         """
             |SELECT a, sum(b)
             |FROM orderByData
@@ -1527,8 +1529,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
         (null, null, null, true)
       ).toDF("i", "b", "r1", "r2").registerTempTable("t")
 
-      checkAnswer(sql("select i = b from t"), sql("select r1 from t"))
-      checkAnswer(sql("select i <=> b from t"), sql("select r2 from t"))
+      checkAnswer(ctx.sql("select i = b from t"), ctx.sql("select r1 from t"))
+      checkAnswer(ctx.sql("select i <=> b from t"), ctx.sql("select r2 from t"))
     }
   }
 
@@ -1536,14 +1538,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     withTempTable("t") {
       sqlContext.read.json(sqlContext.sparkContext.makeRDD(
         """{"a": {"b": [{"c": 1}]}, "b": [{"d": 1}]}""" :: Nil)).registerTempTable("t")
-      checkAnswer(sql("SELECT a.b FROM t ORDER BY b[0].d"), Row(Seq(Row(1))))
+      checkAnswer(ctx.sql("SELECT a.b FROM t ORDER BY b[0].d"), Row(Seq(Row(1))))
     }
   }
 
   test("SPARK-8782: ORDER BY NULL") {
     withTempTable("t") {
       Seq((1, 2), (1, 2)).toDF("a", "b").registerTempTable("t")
-      checkAnswer(sql("SELECT * FROM t ORDER BY NULL"), Seq(Row(1, 2), Row(1, 2)))
+      checkAnswer(ctx.sql("SELECT * FROM t ORDER BY NULL"), Seq(Row(1, 2), Row(1, 2)))
     }
   }
 
@@ -1552,14 +1554,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
       val df = Seq(1 -> "a").toDF("count", "sort")
       checkAnswer(df.filter("count > 0"), Row(1, "a"))
       df.registerTempTable("t")
-      checkAnswer(sql("select count, sort from t"), Row(1, "a"))
+      checkAnswer(ctx.sql("select count, sort from t"), Row(1, "a"))
     }
   }
 
   test("SPARK-8753: add interval type") {
     import org.apache.spark.unsafe.types.CalendarInterval
 
-    val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
+    val df = ctx.sql("select interval 3 years -3 month 7 week 123 microseconds")
     checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123 )))
     withTempPath(f => {
       // Currently we don't yet support saving out values of interval data type.
@@ -1571,7 +1573,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
     def checkIntervalParseError(s: String): Unit = {
       val e = intercept[AnalysisException] {
-        sql(s)
+        ctx.sql(s)
       }
       e.message.contains("at least one time unit should be given for interval literal")
     }
@@ -1585,7 +1587,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     import org.apache.spark.unsafe.types.CalendarInterval
     import org.apache.spark.unsafe.types.CalendarInterval.MICROS_PER_WEEK
 
-    val df = sql("select interval 3 years -3 month 7 week 123 microseconds as i")
+    val df = ctx.sql("select interval 3 years -3 month 7 week 123 microseconds as i")
     checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7L * MICROS_PER_WEEK + 123)))
 
     checkAnswer(df.select(df("i") + new CalendarInterval(2, 123)),
@@ -1626,7 +1628,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
       .toDF("num", "str")
     df.registerTempTable("1one")
 
-    checkAnswer(sqlContext.sql("select count(num) from 1one"), Row(10))
+    checkAnswer(ctx.sql("select count(num) from 1one"), Row(10))
 
     sqlContext.dropTempTable("1one")
   }

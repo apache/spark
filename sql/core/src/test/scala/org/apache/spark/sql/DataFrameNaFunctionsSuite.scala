@@ -19,12 +19,11 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConversions._
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestUtils
 
 
-class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
-  private val ctx = sqlContext
-  import ctx.implicits._
+class DataFrameNaFunctionsSuite extends QueryTest with SQLTestUtils {
+  import testImplicits._
 
   def createDF(): DataFrame = {
     Seq[(String, java.lang.Integer, java.lang.Double)](

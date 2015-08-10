@@ -21,7 +21,6 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Literal, IsNull}
 
 class RowFormatConvertersSuite extends SparkPlanTest {
-  private val ctx = sqlContext
 
   private def getConverters(plan: SparkPlan): Seq[SparkPlan] = plan.collect {
     case c: ConvertToUnsafe => c

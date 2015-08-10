@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestUtils
 
 case class ReflectData(
     stringField: String,
@@ -72,9 +72,8 @@ case class ComplexReflectData(
     mapFieldContainsNull: Map[Int, Option[Long]],
     dataField: Data)
 
-class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSQLContext {
-  private val ctx = sqlContext
-  import ctx.implicits._
+class ScalaReflectionRelationSuite extends SparkFunSuite with SQLTestUtils {
+  import testImplicits._
 
   test("query case class RDD") {
     val data = ReflectData("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true,

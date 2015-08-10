@@ -28,7 +28,6 @@ import org.apache.spark.sql.types._
  * A test suite that generates randomized data to test the [[TungstenSort]] operator.
  */
 class TungstenSortSuite extends SparkPlanTest {
-  private val ctx = sqlContext
 
   override def beforeAll(): Unit = {
     ctx.conf.setConf(SQLConf.CODEGEN_ENABLED, true)

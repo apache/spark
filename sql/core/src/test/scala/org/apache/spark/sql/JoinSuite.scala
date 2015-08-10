@@ -25,11 +25,9 @@ import org.apache.spark.sql.test.SQLTestUtils
 
 
 class JoinSuite extends QueryTest with BeforeAndAfterEach with SQLTestUtils {
-  private val ctx = sqlContext
-  import ctx.implicits._
-  import ctx._
+  import testImplicits._
 
-  ctx.loadTestData()
+  loadTestData()
 
   test("equi-join is hash-join") {
     val x = testData2.as("x")

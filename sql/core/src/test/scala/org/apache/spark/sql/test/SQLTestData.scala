@@ -18,14 +18,20 @@
 package org.apache.spark.sql.test
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLContext, SQLImplicits}
 
 /**
  * A collection of sample data used in SQL tests.
  */
-private[sql] trait SQLTestData {
-  protected val _sqlContext: SQLContext
-  import _sqlContext.implicits._
+private[sql] trait SQLTestData { self =>
+  protected def _sqlContext: SQLContext
+
+  // Helper object to import SQL implicits without a concrete SQLContext
+  private object internalImplicits extends SQLImplicits {
+    protected override def _sqlContext: SQLContext = self._sqlContext
+  }
+
+  import internalImplicits._
 
   // All test data should be lazy because the SQLContext is not set up yet
 
@@ -258,8 +264,8 @@ private[sql] trait SQLTestData {
   }
 
   /* ------------------------------ *
- | Case classes used in test data |
- * ------------------------------ */
+   | Case classes used in test data |
+   * ------------------------------ */
 
   private[sql] case class TestData(key: Int, value: String)
   private[sql] case class TestData2(a: Int, b: Int)

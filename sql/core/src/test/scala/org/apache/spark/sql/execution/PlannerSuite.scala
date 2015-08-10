@@ -28,14 +28,13 @@ import org.apache.spark.sql.{execution, Row, SQLConf}
 
 
 class PlannerSuite extends SparkFunSuite with SQLTestUtils {
-  private val ctx = sqlContext
-  import ctx.implicits._
-  import ctx.planner._
-  import ctx._
+  import testImplicits._
 
-  ctx.loadTestData()
+  loadTestData()
 
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
+    val _ctx = ctx
+    import _ctx.planner._
     val plannedOption = HashAggregation(query).headOption.orElse(Aggregation(query).headOption)
     val planned =
       plannedOption.getOrElse(
@@ -50,6 +49,8 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   test("unions are collapsed") {
+    val _ctx = ctx
+    import _ctx.planner._
     val query = testData.unionAll(testData).unionAll(testData).logicalPlan
     val planned = BasicOperators(query).head
     val logicalUnions = query collect { case u: logical.Union => u }
@@ -77,16 +78,16 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
 
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
     def checkPlan(fieldTypes: Seq[DataType], newThreshold: Int): Unit = {
-      setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, newThreshold)
+      ctx.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, newThreshold)
       val fields = fieldTypes.zipWithIndex.map {
         case (dataType, index) => StructField(s"c${index}", dataType, true)
       } :+ StructField("key", IntegerType, true)
       val schema = StructType(fields)
       val row = Row.fromSeq(Seq.fill(fields.size)(null))
       val rowRDD = ctx.sparkContext.parallelize(row :: Nil)
-      createDataFrame(rowRDD, schema).registerTempTable("testLimit")
+      ctx.createDataFrame(rowRDD, schema).registerTempTable("testLimit")
 
-      val planned = sql(
+      val planned = ctx.sql(
         """
           |SELECT l.a, l.b
           |FROM testData2 l JOIN (SELECT * FROM testLimit LIMIT 1) r ON (l.a = r.key)
@@ -98,10 +99,10 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
       assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
       assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
 
-      dropTempTable("testLimit")
+      ctx.dropTempTable("testLimit")
     }
 
-    val origThreshold = conf.autoBroadcastJoinThreshold
+    val origThreshold = ctx.conf.autoBroadcastJoinThreshold
 
     val simpleTypes =
       NullType ::
@@ -133,18 +134,18 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
 
     checkPlan(complexTypes, newThreshold = 901617)
 
-    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold)
+    ctx.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold)
   }
 
   test("InMemoryRelation statistics propagation") {
-    val origThreshold = conf.autoBroadcastJoinThreshold
-    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 81920)
+    val origThreshold = ctx.conf.autoBroadcastJoinThreshold
+    ctx.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 81920)
 
     testData.limit(3).registerTempTable("tiny")
-    sql("CACHE TABLE tiny")
+    ctx.sql("CACHE TABLE tiny")
 
     val a = testData.as("a")
-    val b = table("tiny").as("b")
+    val b = ctx.table("tiny").as("b")
     val planned = a.join(b, $"a.key" === $"b.key").queryExecution.executedPlan
 
     val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
@@ -153,12 +154,12 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
     assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
     assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
 
-    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold)
+    ctx.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold)
   }
 
   test("efficient limit -> project -> sort") {
     val query = testData.sort('key).select('value).limit(2).logicalPlan
-    val planned = planner.TakeOrderedAndProject(query)
+    val planned = ctx.planner.TakeOrderedAndProject(query)
     assert(planned.head.isInstanceOf[execution.TakeOrderedAndProject])
   }
 
@@ -171,7 +172,7 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
       // Disable broadcast join
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         {
-          val numExchanges = sql(
+          val numExchanges = ctx.sql(
             """
               |SELECT *
               |FROM
@@ -186,7 +187,7 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
 
         {
           // This second query joins on different keys:
-          val numExchanges = sql(
+          val numExchanges = ctx.sql(
             """
               |SELECT *
               |FROM

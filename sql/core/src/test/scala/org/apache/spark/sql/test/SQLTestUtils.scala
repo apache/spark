@@ -23,29 +23,48 @@ import java.util.UUID
 import scala.util.Try
 import scala.language.implicitConversions
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLContext, SQLImplicits}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.util.Utils
 
 /**
- * General helper trait for common functionality in SQL tests.
+ * Helper trait that should be extended by all SQL test suites involving a
+ * [[org.apache.spark.sql.SQLContext]].
  */
-private[sql] trait SQLTestUtils
-  extends SparkFunSuite
-  with AbstractSQLTestUtils
-  with SharedSQLContext {
-
+private[sql] trait SQLTestUtils extends AbstractSQLTestUtils with SharedSQLContext {
   protected final override def _sqlContext = sqlContext
 }
 
 /**
- * Abstract helper trait for SQL tests with a pluggable [[SQLContext]].
+ * Helper trait that should be extended by all SQL test suites.
+ *
+ * This base trait allows subclasses to plugin a custom [[SQLContext]]. It comes with test
+ * data prepared in advance as well as all implicit conversions used extensively by dataframes.
+ * To use implicit methods, import `testImplicits._` instead of through the [[SQLContext]].
  */
-private[sql] trait AbstractSQLTestUtils { this: SparkFunSuite =>
+private[sql] trait AbstractSQLTestUtils extends SparkFunSuite with SQLTestData { self =>
   protected def _sqlContext: SQLContext
 
-  protected def configuration = _sqlContext.sparkContext.hadoopConfiguration
+  /**
+   * A helper object for importing SQL implicits.
+   *
+   * Note that the alternative of importing `sqlContext.implicits._` is not possible here.
+   * This is because we create the [[SQLContext]] immediately before the first test is run,
+   * but the implicits import is needed in the constructor.
+   */
+  protected object testImplicits extends SQLImplicits {
+    protected override def _sqlContext: SQLContext = self._sqlContext
+  }
+
+  /**
+   * The Hadoop configuration used by the active [[SQLContext]].
+   */
+  protected def configuration: Configuration = {
+    _sqlContext.sparkContext.hadoopConfiguration
+  }
 
   /**
    * Sets all SQL configurations specified in `pairs`, calls `f`, and then restore all SQL
@@ -131,12 +150,11 @@ private[sql] trait AbstractSQLTestUtils { this: SparkFunSuite =>
     try f finally _sqlContext.sql(s"USE default")
   }
 
-
   /**
    * Turn a logical plan into a [[DataFrame]]. This should be removed once we have an easier
    * way to construct [[DataFrame]] directly out of local data without relying on implicits.
    */
-  protected[sql] implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
+  protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
     DataFrame(_sqlContext, plan)
   }
 }

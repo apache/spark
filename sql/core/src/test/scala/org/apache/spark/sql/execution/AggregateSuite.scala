@@ -21,7 +21,6 @@ import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.expressions._
 
 class AggregateSuite extends SparkPlanTest {
-  private val ctx = sqlContext
 
   test("SPARK-8357 unsafe aggregation path should not leak memory with empty input") {
     val codegenDefault = ctx.getConf(SQLConf.CODEGEN_ENABLED)

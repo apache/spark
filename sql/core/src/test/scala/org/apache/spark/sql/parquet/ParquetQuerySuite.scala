@@ -29,34 +29,33 @@ import org.apache.spark.util.Utils
  * A test suite that tests various Parquet queries.
  */
 class ParquetQuerySuite extends QueryTest with ParquetTest {
-  private val ctx = sqlContext
-  import ctx._
 
   test("simple select queries") {
     withParquetTable((0 until 10).map(i => (i, i.toString)), "t") {
-      checkAnswer(sql("SELECT _1 FROM t where t._1 > 5"), (6 until 10).map(Row.apply(_)))
-      checkAnswer(sql("SELECT _1 FROM t as tmp where tmp._1 < 5"), (0 until 5).map(Row.apply(_)))
+      checkAnswer(ctx.sql("SELECT _1 FROM t where t._1 > 5"), (6 until 10).map(Row.apply(_)))
+      checkAnswer(
+        ctx.sql("SELECT _1 FROM t as tmp where tmp._1 < 5"), (0 until 5).map(Row.apply(_)))
     }
   }
 
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
-    sqlContext.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    ctx.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
     withParquetTable(data, "t") {
-      sql("INSERT INTO TABLE t SELECT * FROM tmp")
-      checkAnswer(sqlContext.table("t"), (data ++ data).map(Row.fromTuple))
+      ctx.sql("INSERT INTO TABLE t SELECT * FROM tmp")
+      checkAnswer(ctx.table("t"), (data ++ data).map(Row.fromTuple))
     }
-    sqlContext.catalog.unregisterTable(Seq("tmp"))
+    ctx.catalog.unregisterTable(Seq("tmp"))
   }
 
   test("overwriting") {
     val data = (0 until 10).map(i => (i, i.toString))
-    sqlContext.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    ctx.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
     withParquetTable(data, "t") {
-      sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
-      checkAnswer(sqlContext.table("t"), data.map(Row.fromTuple))
+      ctx.sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
+      checkAnswer(ctx.table("t"), data.map(Row.fromTuple))
     }
-    sqlContext.catalog.unregisterTable(Seq("tmp"))
+    ctx.catalog.unregisterTable(Seq("tmp"))
   }
 
   test("self-join") {
@@ -67,7 +66,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
     }
 
     withParquetTable(data, "t") {
-      val selfJoin = sql("SELECT * FROM t x JOIN t y WHERE x._1 = y._1")
+      val selfJoin = ctx.sql("SELECT * FROM t x JOIN t y WHERE x._1 = y._1")
       val queryOutput = selfJoin.queryExecution.analyzed.output
 
       assertResult(4, "Field count mismatches")(queryOutput.size)
@@ -82,7 +81,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
   test("nested data - struct with array field") {
     val data = (1 to 10).map(i => Tuple1((i, Seq("val_$i"))))
     withParquetTable(data, "t") {
-      checkAnswer(sql("SELECT _1._2[0] FROM t"), data.map {
+      checkAnswer(ctx.sql("SELECT _1._2[0] FROM t"), data.map {
         case Tuple1((_, Seq(string))) => Row(string)
       })
     }
@@ -91,7 +90,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
   test("nested data - array of struct") {
     val data = (1 to 10).map(i => Tuple1(Seq(i -> "val_$i")))
     withParquetTable(data, "t") {
-      checkAnswer(sql("SELECT _1[0]._2 FROM t"), data.map {
+      checkAnswer(ctx.sql("SELECT _1[0]._2 FROM t"), data.map {
         case Tuple1(Seq((_, string))) => Row(string)
       })
     }
@@ -99,17 +98,17 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
 
   test("SPARK-1913 regression: columns only referenced by pushed down filters should remain") {
     withParquetTable((1 to 10).map(Tuple1.apply), "t") {
-      checkAnswer(sql("SELECT _1 FROM t WHERE _1 < 10"), (1 to 9).map(Row.apply(_)))
+      checkAnswer(ctx.sql("SELECT _1 FROM t WHERE _1 < 10"), (1 to 9).map(Row.apply(_)))
     }
   }
 
   test("SPARK-5309 strings stored using dictionary compression in parquet") {
     withParquetTable((0 until 1000).map(i => ("same", "run_" + i /100, 1)), "t") {
 
-      checkAnswer(sql("SELECT _1, _2, SUM(_3) FROM t GROUP BY _1, _2"),
+      checkAnswer(ctx.sql("SELECT _1, _2, SUM(_3) FROM t GROUP BY _1, _2"),
         (0 until 10).map(i => Row("same", "run_" + i, 100)))
 
-      checkAnswer(sql("SELECT _1, _2, SUM(_3) FROM t WHERE _2 = 'run_5' GROUP BY _1, _2"),
+      checkAnswer(ctx.sql("SELECT _1, _2, SUM(_3) FROM t WHERE _2 = 'run_5' GROUP BY _1, _2"),
         List(Row("same", "run_5", 100)))
     }
   }
@@ -119,9 +118,9 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
     val schema = StructType(List(StructField("d", DecimalType(18, 0), false),
       StructField("time", TimestampType, false)).toArray)
     withTempPath { file =>
-      val df = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(data), schema)
+      val df = ctx.createDataFrame(ctx.sparkContext.parallelize(data), schema)
       df.write.parquet(file.getCanonicalPath)
-      val df2 = sqlContext.read.parquet(file.getCanonicalPath)
+      val df2 = ctx.read.parquet(file.getCanonicalPath)
       checkAnswer(df2, df.collect().toSeq)
     }
   }
@@ -130,12 +129,12 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
     def testSchemaMerging(expectedColumnNumber: Int): Unit = {
       withTempDir { dir =>
         val basePath = dir.getCanonicalPath
-        sqlContext.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
-        sqlContext.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=2").toString)
+        ctx.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+        ctx.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=2").toString)
         // delete summary files, so if we don't merge part-files, one column will not be included.
         Utils.deleteRecursively(new File(basePath + "/foo=1/_metadata"))
         Utils.deleteRecursively(new File(basePath + "/foo=1/_common_metadata"))
-        assert(sqlContext.read.parquet(basePath).columns.length === expectedColumnNumber)
+        assert(ctx.read.parquet(basePath).columns.length === expectedColumnNumber)
       }
     }
 
@@ -154,9 +153,9 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
     def testSchemaMerging(expectedColumnNumber: Int): Unit = {
       withTempDir { dir =>
         val basePath = dir.getCanonicalPath
-        sqlContext.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
-        sqlContext.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=2").toString)
-        assert(sqlContext.read.parquet(basePath).columns.length === expectedColumnNumber)
+        ctx.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+        ctx.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=2").toString)
+        assert(ctx.read.parquet(basePath).columns.length === expectedColumnNumber)
       }
     }
 
@@ -172,19 +171,19 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
   test("SPARK-8990 DataFrameReader.parquet() should respect user specified options") {
     withTempPath { dir =>
       val basePath = dir.getCanonicalPath
-      sqlContext.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
-      sqlContext.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=a").toString)
+      ctx.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+      ctx.range(0, 10).toDF("b").write.parquet(new Path(basePath, "foo=a").toString)
 
       // Disables the global SQL option for schema merging
       withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "false") {
         assertResult(2) {
           // Disables schema merging via data source option
-          sqlContext.read.option("mergeSchema", "false").parquet(basePath).columns.length
+          ctx.read.option("mergeSchema", "false").parquet(basePath).columns.length
         }
 
         assertResult(3) {
           // Enables schema merging via data source option
-          sqlContext.read.option("mergeSchema", "true").parquet(basePath).columns.length
+          ctx.read.option("mergeSchema", "true").parquet(basePath).columns.length
         }
       }
     }

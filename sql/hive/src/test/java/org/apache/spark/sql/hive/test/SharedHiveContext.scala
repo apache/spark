@@ -34,11 +34,33 @@ private[spark] trait SharedHiveContext extends SparkFunSuite with BeforeAndAfter
    * By default, the underlying [[org.apache.spark.SparkContext]] will be run in local
    * mode with the default test configurations.
    */
-  private var _ctx: TestHiveContext = new TestHiveContext
+  private var _ctx: TestHiveContext = null
+
+  /**
+   * Initialize the [[TestHiveContext]].
+   * This is a no-op if the user explicitly switched to a custom context before this is called.
+   */
+  protected override def beforeAll(): Unit = {
+    if (_ctx != null) {
+      _ctx = new TestHiveContext
+    }
+  }
+
+  /**
+   * Stop the underlying [[org.apache.spark.SparkContext]], if any.
+   */
+  protected override def afterAll(): Unit = {
+    if (_ctx != null) {
+      _ctx.sparkContext.stop()
+      _ctx = null
+    }
+    super.afterAll()
+  }
 
   /**
    * The [[TestHiveContext]] to use for all tests in this suite.
    */
+  protected def ctx: TestHiveContext = _ctx
   protected def hiveContext: TestHiveContext = _ctx
 
   /**
@@ -66,14 +88,6 @@ private[spark] trait SharedHiveContext extends SparkFunSuite with BeforeAndAfter
     } finally {
       switchHiveContext(() => new TestHiveContext)
     }
-  }
-
-  protected override def afterAll(): Unit = {
-    if (_ctx != null) {
-      _ctx.sparkContext.stop()
-      _ctx = null
-    }
-    super.afterAll()
   }
 
 }

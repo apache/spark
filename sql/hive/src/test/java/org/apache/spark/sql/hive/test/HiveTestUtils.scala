@@ -17,16 +17,14 @@
 
 package org.apache.spark.sql.hive.test
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.AbstractSQLTestUtils
 
 /**
- * Helper trait analogous to [[org.apache.spark.sql.test.SQLTestUtils]] but for hive tests.
+ * Helper trait that should be extended by all SQL test suites involving a
+ * [[org.apache.spark.sql.hive.HiveContext]].
+ *
+ * This is analogous to [[org.apache.spark.sql.test.SQLTestUtils]] but for hive tests.
  */
-private[spark] trait HiveTestUtils
-  extends SparkFunSuite
-  with AbstractSQLTestUtils
-  with SharedHiveContext {
-
+private[spark] trait HiveTestUtils extends AbstractSQLTestUtils with SharedHiveContext {
   protected final override def _sqlContext = hiveContext
 }

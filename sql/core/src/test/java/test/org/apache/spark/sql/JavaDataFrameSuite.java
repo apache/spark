@@ -45,7 +45,6 @@ public class JavaDataFrameSuite {
   @Before
   public void setUp() {
     // Trigger static initializer of TestData
-    // TODO: restore the test data here somehow: TestData$.MODULE$.testData();
     SparkContext sc = new SparkContext("local[*]", "testing");
     jsc = new JavaSparkContext(sc);
     context = new TestSQLContext(sc);

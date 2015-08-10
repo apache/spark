@@ -28,8 +28,7 @@ import org.apache.spark.sql.types._
  * end-to-end test infra. In the long run this should just go away.
  */
 class DataFrameTungstenSuite extends QueryTest with SQLTestUtils {
-  private val ctx = sqlContext
-  import ctx.implicits._
+  import testImplicits._
 
   test("test simple types") {
     withSQLConf(SQLConf.UNSAFE_ENABLED.key -> "true") {

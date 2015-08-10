@@ -23,15 +23,12 @@ import java.util.Properties
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{SaveMode, Row}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCWriteSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
-  private val ctx = sqlContext
-  import ctx.implicits._
-  import ctx._
+class JDBCWriteSuite extends SparkFunSuite with BeforeAndAfter with SQLTestUtils {
 
   val url = "jdbc:h2:mem:testdb2"
   var conn: java.sql.Connection = null

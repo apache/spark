@@ -31,9 +31,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SQLTestUtils}
 
 class DataFrameSuite extends QueryTest with SQLTestUtils {
-  private val ctx = sqlContext
-  import ctx.implicits._
-  import ctx._
+  import testImplicits._
 
   test("analysis error should be eagerly reported") {
     // Eager analysis.
