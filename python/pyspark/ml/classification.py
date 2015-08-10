@@ -774,6 +774,125 @@ class NaiveBayesModel(JavaModel):
         return self._call_java("theta")
 
 
+@inherit_doc
+class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
+                                     HasMaxIter, HasTol, HasSeed):
+    """
+    Classifier trainer based on the Multilayer Perceptron.
+    Each layer has sigmoid activation function, output layer has softmax.
+    Number of inputs has to be equal to the size of feature vectors.
+    Number of outputs has to be equal to the total number of labels.
+
+    >>> from pyspark.sql import Row
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sc.parallelize([
+    ...     Row(label=0.0, features=Vectors.dense([0.0, 0.0])),
+    ...     Row(label=1.0, features=Vectors.dense([0.0, 1.0])),
+    ...     Row(label=1.0, features=Vectors.dense([1.0, 0.0])),
+    ...     Row(label=0.0, features=Vectors.dense([1.0, 1.0]))]).toDF()
+    >>> layers = [2, 5, 2]
+    >>> lr = MultilayerPerceptronClassifier(maxIter=100, layers=layers, blockSize=1, seed=11)
+    >>> model = lr.fit(df)
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense([1.0, 0.0]))]).toDF()
+    >>> model.transform(test0).head().prediction
+    1.0
+    >>> test1 = sc.parallelize([Row(features=Vectors.dense([0.0, 0.0]))]).toDF()
+    >>> model.transform(test1).head().prediction
+    0.0
+    """
+
+    # a placeholder to make it appear in the generated doc
+    layers = Param(Params._dummy(), "layers", "Sizes of layers from input layer to output layer " +
+                   "E.g., Array(780, 100, 10) means 780 inputs, one hidden layer with 100 " +
+                   "neurons and output layer of 10 neurons, default is [1, 1].")
+    blockSize = Param(Params._dummy(), "blockSize", "Block size for stacking input data in " +
+                      "matrices. Data is stacked within partitions. If block size is more than " +
+                      "remaining data in a partition then it is adjusted to the size of this " +
+                      "data. Recommended size is between 10 and 1000, default is 128.")
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 maxIter=100, tol=1e-4, seed=None, layers=[1, 1], blockSize=128):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 maxIter=100, tol=1e-4, seed=None, layers=[1, 1], blockSize=128)
+        """
+        super(MultilayerPerceptronClassifier, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.classification.MultilayerPerceptronClassifier", self.uid)
+        self.layers = Param(self, "layers", "Sizes of layers from input layer to output layer " +
+                            "E.g., Array(780, 100, 10) means 780 inputs, one hidden layer with " +
+                            "100 neurons and output layer of 10 neurons, default is [1, 1].")
+        self.blockSize = Param(self, "blockSize", "Block size for stacking input data in " +
+                               "matrices. Data is stacked within partitions. If block size is " +
+                               "more than remaining data in a partition then it is adjusted to " +
+                               "the size of this data. Recommended size is between 10 and 1000, " +
+                               "default is 128.")
+        self._setDefault(maxIter=100, tol=1E-4, layers=[1, 1], blockSize=128)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  maxIter=100, tol=1e-4, seed=None, layers=[1, 1], blockSize=128):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  maxIter=100, tol=1e-4, seed=None, layers=[1, 1], blockSize=128)
+        Sets params for MultilayerPerceptronClassifier.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return MultilayerPerceptronClassifierModel(java_model)
+
+    def setLayers(self, value):
+        """
+        Sets the value of :py:attr:`layers`.
+        """
+        self._paramMap[self.layers] = value
+        return self
+
+    def getLayers(self):
+        """
+        Gets the value of layers or its default value.
+        """
+        return self.getOrDefault(self.layers)
+
+    def setBlockSize(self, value):
+        """
+        Sets the value of :py:attr:`blockSize`.
+        """
+        self._paramMap[self.blockSize] = value
+        return self
+
+    def getBlockSize(self):
+        """
+        Gets the value of blockSize or its default value.
+        """
+        return self.getOrDefault(self.blockSize)
+
+
+class MultilayerPerceptronClassifierModel(JavaModel):
+    """
+    Model fitted by MultilayerPerceptronClassifier.
+    """
+
+    @property
+    def layers(self):
+        """
+        array of layer sizes including input and output layers.
+        """
+        return self._call_java("layers")
+
+    @property
+    def weights(self):
+        """
+        vector of initial weights for the model that consists of the weights of layers.
+        """
+        return self._call_java("weights")
+
+
 if __name__ == "__main__":
     import doctest
     from pyspark.context import SparkContext

@@ -172,8 +172,8 @@ class MultilayerPerceptronClassifier(override val uid: String)
 @Experimental
 class MultilayerPerceptronClassifierModel private[ml] (
     override val uid: String,
-    layers: Array[Int],
-    weights: Vector)
+    val layers: Array[Int],
+    val weights: Vector)
   extends PredictionModel[Vector, MultilayerPerceptronClassifierModel]
   with Serializable {
 
