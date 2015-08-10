@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.text.DecimalFormat
 import java.util.Arrays
+import java.util.{Map => JMap, HashMap}
 import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
@@ -350,6 +351,103 @@ case class EndsWith(left: Expression, right: Expression)
   }
 }
 
+object StringTranslate {
+
+  def buildDict(matchingString: UTF8String, replaceString: UTF8String)
+    : JMap[Character, Character] = {
+    val matching = matchingString.toString()
+    val replace = replaceString.toString()
+    val dict = new HashMap[Character, Character]()
+    var i = 0
+    while (i < matching.length()) {
+      val rep = if (i < replace.length()) replace.charAt(i) else '\0'
+      if (null == dict.get(matching.charAt(i))) {
+        dict.put(matching.charAt(i), rep)
+      }
+      i += 1
+    }
+    dict
+  }
+}
+
+/**
+ * A function translate any character in the `srcExpr` by a character in `replaceExpr`.
+ * The characters in `replaceExpr` is corresponding to the characters in `matchingExpr`.
+ * The translate will happen when any character in the string matching with the character
+ * in the `matchingExpr`.
+ */
+case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replaceExpr: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes {
+
+  @transient private var lastMatching: UTF8String = _
+  @transient private var lastReplace: UTF8String = _
+  @transient private var dict: JMap[Character, Character] = _
+
+  override def nullSafeEval(srcEval: Any, matchingEval: Any, replaceEval: Any): Any = {
+    if (matchingEval != lastMatching || replaceEval != lastReplace) {
+      lastMatching = matchingEval.asInstanceOf[UTF8String].clone()
+      lastReplace = replaceEval.asInstanceOf[UTF8String].clone()
+      dict = StringTranslate.buildDict(lastMatching, lastReplace)
+    }
+    srcEval.asInstanceOf[UTF8String].translate(dict)
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val termLastMatching = ctx.freshName("lastMatching")
+    val termLastReplace = ctx.freshName("lastReplace")
+    val termDict = ctx.freshName("dict")
+    val classNameDict = classOf[JMap[Character, Character]].getCanonicalName
+
+    ctx.addMutableState("UTF8String", termLastMatching, s"${termLastMatching} = null;")
+    ctx.addMutableState("UTF8String", termLastReplace, s"${termLastReplace} = null;")
+    ctx.addMutableState(classNameDict, termDict, s"${termDict} = null;")
+
+    nullSafeCodeGen(ctx, ev, (src, matching, replace) => {
+      val check = if (matchingExpr.foldable && replaceExpr.foldable) {
+        s"${termDict} == null"
+      } else {
+        s"!${matching}.equals(${termLastMatching}) || !${replace}.equals(${termLastReplace})"
+      }
+      s"""if ($check) {
+        // Not all of them is literal or matching or replace value changed
+        ${termLastMatching} = ${matching}.clone();
+        ${termLastReplace} = ${replace}.clone();
+        ${termDict} = org.apache.spark.sql.catalyst.expressions.StringTranslate
+          .buildDict(${termLastMatching}, ${termLastReplace});
+      }
+      ${ev.primitive} = ${src}.translate(${termDict});
+      """
+    })
+  }
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
+  override def children: Seq[Expression] = srcExpr :: matchingExpr :: replaceExpr :: Nil
+  override def prettyName: String = "translate"
+}
+
+/**
+ * A function that returns the index (1-based) of the given string (left) in the comma-
+ * delimited list (right). Returns 0, if the string wasn't found or if the given
+ * string (left) contains a comma.
+ */
+case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
+    with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+
+  override protected def nullSafeEval(word: Any, set: Any): Any =
+    set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String])
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, (word, set) =>
+      s"${ev.primitive} = $set.findInSet($word);"
+    )
+  }
+
+  override def dataType: DataType = IntegerType
+}
+
 /**
  * A function that trim the spaces from both ends for the specified string.
  */
@@ -595,6 +693,23 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
   }
 
   override def prettyName: String = "format_string"
+}
+
+/**
+ * Returns string, with the first letter of each word in uppercase.
+ * Words are delimited by whitespace.
+ */
+case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def dataType: DataType = StringType
+
+  override def nullSafeEval(string: Any): Any = {
+    string.asInstanceOf[UTF8String].toTitleCase
+  }
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    defineCodeGen(ctx, ev, str => s"$str.toTitleCase()")
+  }
 }
 
 /**
@@ -954,12 +1069,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
     if (!p.equals(lastRegex)) {
       // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String]
+      lastRegex = p.asInstanceOf[UTF8String].clone()
       pattern = Pattern.compile(lastRegex.toString)
     }
     if (!r.equals(lastReplacementInUTF8)) {
       // replacement string changed
-      lastReplacementInUTF8 = r.asInstanceOf[UTF8String]
+      lastReplacementInUTF8 = r.asInstanceOf[UTF8String].clone()
       lastReplacement = lastReplacementInUTF8.toString
     }
     val m = pattern.matcher(s.toString())
@@ -1005,12 +1120,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     s"""
       if (!$regexp.equals(${termLastRegex})) {
         // regex value changed
-        ${termLastRegex} = $regexp;
+        ${termLastRegex} = $regexp.clone();
         ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
       }
       if (!$rep.equals(${termLastReplacementInUTF8})) {
         // replacement string changed
-        ${termLastReplacementInUTF8} = $rep;
+        ${termLastReplacementInUTF8} = $rep.clone();
         ${termLastReplacement} = ${termLastReplacementInUTF8}.toString();
       }
       ${termResult}.delete(0, ${termResult}.length());
@@ -1044,7 +1159,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
     if (!p.equals(lastRegex)) {
       // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String]
+      lastRegex = p.asInstanceOf[UTF8String].clone()
       pattern = Pattern.compile(lastRegex.toString)
     }
     val m = pattern.matcher(s.toString())
@@ -1073,7 +1188,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
       s"""
       if (!$regexp.equals(${termLastRegex})) {
         // regex value changed
-        ${termLastRegex} = $regexp;
+        ${termLastRegex} = $regexp.clone();
         ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
       }
       java.util.regex.Matcher m =

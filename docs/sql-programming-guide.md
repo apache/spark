@@ -1884,12 +1884,11 @@ that these options will be deprecated in future release as more optimizations ar
     </td>
   </tr>
   <tr>
-    <td><code>spark.sql.codegen</code></td>
-    <td>false</td>
+    <td><code>spark.sql.tungsten.enabled</code></td>
+    <td>true</td>
     <td>
-      When true, code will be dynamically generated at runtime for expression evaluation in a specific
-      query.  For some queries with complicated expression this option can lead to significant speed-ups.
-      However, for simple queries this can actually slow down query execution.
+      When true, use the optimized Tungsten physical execution backend which explicitly manages memory
+      and dynamically generates bytecode for expression evaluation.
     </td>
   </tr>
   <tr>
@@ -1901,7 +1900,7 @@ that these options will be deprecated in future release as more optimizations ar
   </tr>
   <tr>
     <td><code>spark.sql.planner.externalSort</code></td>
-    <td>false</td>
+    <td>true</td>
     <td>
       When true, performs sorts spilling to disk as needed otherwise sort each partition in memory.
     </td>

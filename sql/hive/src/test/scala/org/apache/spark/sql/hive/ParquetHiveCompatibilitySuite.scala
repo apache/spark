@@ -17,14 +17,23 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.conf.HiveConf
+
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.parquet.ParquetCompatibilityTest
+import org.apache.spark.sql.execution.datasources.parquet.ParquetCompatibilityTest
 import org.apache.spark.sql.{Row, SQLConf, SQLContext}
 
 class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest {
   import ParquetCompatibilityTest.makeNullable
 
   override val sqlContext: SQLContext = TestHive
+
+  /**
+   * Set the staging directory (and hence path to ignore Parquet files under)
+   * to that set by [[HiveConf.ConfVars.STAGINGDIR]].
+   */
+  override val stagingDir: Option[String] =
+    Some(new HiveConf().getVar(HiveConf.ConfVars.STAGINGDIR))
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()

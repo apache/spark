@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateMutableProjection}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
+import org.apache.spark.sql.types.{DataType, Decimal, StructType, _}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -114,8 +114,7 @@ object UnsafeProjection {
    * Returns an UnsafeProjection for given Array of DataTypes.
    */
   def create(fields: Array[DataType]): UnsafeProjection = {
-    val exprs = fields.zipWithIndex.map(x => new BoundReference(x._2, x._1, true))
-    create(exprs)
+    create(fields.zipWithIndex.map(x => new BoundReference(x._2, x._1, true)))
   }
 
   /**
@@ -139,133 +138,28 @@ object UnsafeProjection {
 /**
  * A projection that could turn UnsafeRow into GenericInternalRow
  */
-case class FromUnsafeProjection(fields: Seq[DataType]) extends Projection {
+object FromUnsafeProjection {
 
-  def this(schema: StructType) = this(schema.fields.map(_.dataType))
-
-  private[this] val expressions = fields.zipWithIndex.map { case (dt, idx) =>
-    new BoundReference(idx, dt, true)
+  /**
+   * Returns an Projection for given StructType.
+   */
+  def apply(schema: StructType): Projection = {
+    apply(schema.fields.map(_.dataType))
   }
 
-  @transient private[this] lazy val generatedProj =
-    GenerateMutableProjection.generate(expressions)()
-
-  override def apply(input: InternalRow): InternalRow = {
-    generatedProj(input)
-  }
-}
-
-/**
- * A mutable wrapper that makes two rows appear as a single concatenated row.  Designed to
- * be instantiated once per thread and reused.
- */
-class JoinedRow extends InternalRow {
-  private[this] var row1: InternalRow = _
-  private[this] var row2: InternalRow = _
-
-  def this(left: InternalRow, right: InternalRow) = {
-    this()
-    row1 = left
-    row2 = right
+  /**
+   * Returns an UnsafeProjection for given Array of DataTypes.
+   */
+  def apply(fields: Seq[DataType]): Projection = {
+    create(fields.zipWithIndex.map(x => {
+      new BoundReference(x._2, x._1, true)
+    }))
   }
 
-  /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: InternalRow, r2: InternalRow): InternalRow = {
-    row1 = r1
-    row2 = r2
-    this
-  }
-
-  /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: InternalRow): InternalRow = {
-    row1 = newLeft
-    this
-  }
-
-  /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: InternalRow): InternalRow = {
-    row2 = newRight
-    this
-  }
-
-  override def toSeq: Seq[Any] = row1.toSeq ++ row2.toSeq
-
-  override def numFields: Int = row1.numFields + row2.numFields
-
-  override def genericGet(i: Int): Any =
-    if (i < row1.numFields) row1.genericGet(i) else row2.genericGet(i - row1.numFields)
-
-  override def isNullAt(i: Int): Boolean =
-    if (i < row1.numFields) row1.isNullAt(i) else row2.isNullAt(i - row1.numFields)
-
-  override def getBoolean(i: Int): Boolean =
-    if (i < row1.numFields) row1.getBoolean(i) else row2.getBoolean(i - row1.numFields)
-
-  override def getByte(i: Int): Byte =
-    if (i < row1.numFields) row1.getByte(i) else row2.getByte(i - row1.numFields)
-
-  override def getShort(i: Int): Short =
-    if (i < row1.numFields) row1.getShort(i) else row2.getShort(i - row1.numFields)
-
-  override def getInt(i: Int): Int =
-    if (i < row1.numFields) row1.getInt(i) else row2.getInt(i - row1.numFields)
-
-  override def getLong(i: Int): Long =
-    if (i < row1.numFields) row1.getLong(i) else row2.getLong(i - row1.numFields)
-
-  override def getFloat(i: Int): Float =
-    if (i < row1.numFields) row1.getFloat(i) else row2.getFloat(i - row1.numFields)
-
-  override def getDouble(i: Int): Double =
-    if (i < row1.numFields) row1.getDouble(i) else row2.getDouble(i - row1.numFields)
-
-  override def getDecimal(i: Int, precision: Int, scale: Int): Decimal = {
-    if (i < row1.numFields) {
-      row1.getDecimal(i, precision, scale)
-    } else {
-      row2.getDecimal(i - row1.numFields, precision, scale)
-    }
-  }
-
-  override def getUTF8String(i: Int): UTF8String =
-    if (i < row1.numFields) row1.getUTF8String(i) else row2.getUTF8String(i - row1.numFields)
-
-  override def getBinary(i: Int): Array[Byte] =
-    if (i < row1.numFields) row1.getBinary(i) else row2.getBinary(i - row1.numFields)
-
-  override def getArray(i: Int): ArrayData =
-    if (i < row1.numFields) row1.getArray(i) else row2.getArray(i - row1.numFields)
-
-  override def getInterval(i: Int): CalendarInterval =
-    if (i < row1.numFields) row1.getInterval(i) else row2.getInterval(i - row1.numFields)
-
-  override def getMap(i: Int): MapData =
-    if (i < row1.numFields) row1.getMap(i) else row2.getMap(i - row1.numFields)
-
-  override def getStruct(i: Int, numFields: Int): InternalRow = {
-    if (i < row1.numFields) {
-      row1.getStruct(i, numFields)
-    } else {
-      row2.getStruct(i - row1.numFields, numFields)
-    }
-  }
-
-  override def copy(): InternalRow = {
-    val copy1 = row1.copy()
-    val copy2 = row2.copy()
-    new JoinedRow(copy1, copy2)
-  }
-
-  override def toString: String = {
-    // Make sure toString never throws NullPointerException.
-    if ((row1 eq null) && (row2 eq null)) {
-      "[ empty row ]"
-    } else if (row1 eq null) {
-      row2.mkString("[", ",", "]")
-    } else if (row2 eq null) {
-      row1.mkString("[", ",", "]")
-    } else {
-      mkString("[", ",", "]")
-    }
+  /**
+   * Returns an Projection for given sequence of Expressions (bounded).
+   */
+  private def create(exprs: Seq[Expression]): Projection = {
+    GenerateSafeProjection.generate(exprs)
   }
 }

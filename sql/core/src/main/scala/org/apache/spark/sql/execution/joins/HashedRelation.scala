@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.execution.joins
 
-import java.io.{IOException, Externalizable, ObjectInput, ObjectOutput}
+import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.nio.ByteOrder
 import java.util.{HashMap => JavaHashMap}
 
 import org.apache.spark.shuffle.ShuffleMemoryManager
-import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkSqlSerializer
@@ -31,6 +30,7 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.{SparkConf, SparkEnv}
 
 
 /**
@@ -183,7 +183,26 @@ private[joins] final class UnsafeHashedRelation(
   private[joins] def this() = this(null)  // Needed for serialization
 
   // Use BytesToBytesMap in executor for better performance (it's created when deserialization)
+  // This is used in broadcast joins and distributed mode only
   @transient private[this] var binaryMap: BytesToBytesMap = _
+
+  /**
+   * Return the size of the unsafe map on the executors.
+   *
+   * For broadcast joins, this hashed relation is bigger on the driver because it is
+   * represented as a Java hash map there. While serializing the map to the executors,
+   * however, we rehash the contents in a binary map to reduce the memory footprint on
+   * the executors.
+   *
+   * For non-broadcast joins or in local mode, return 0.
+   */
+  def getUnsafeSize: Long = {
+    if (binaryMap != null) {
+      binaryMap.getTotalMemoryConsumption
+    } else {
+      0
+    }
+  }
 
   override def get(key: InternalRow): Seq[InternalRow] = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
@@ -214,7 +233,7 @@ private[joins] final class UnsafeHashedRelation(
       }
 
     } else {
-      // Use the JavaHashMap in Local mode or ShuffleHashJoin
+      // Use the Java HashMap in local mode or for non-broadcast joins (e.g. ShuffleHashJoin)
       hashTable.get(unsafeKey)
     }
   }
@@ -263,17 +282,15 @@ private[joins] final class UnsafeHashedRelation(
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
     val taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
 
+    val pageSizeBytes = Option(SparkEnv.get).map(_.shuffleMemoryManager.pageSizeBytes)
+      .getOrElse(new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "16m"))
+
     // Dummy shuffle memory manager which always grants all memory allocation requests.
     // We use this because it doesn't make sense count shared broadcast variables' memory usage
     // towards individual tasks' quotas. In the future, we should devise a better way of handling
     // this.
-    val shuffleMemoryManager = new ShuffleMemoryManager(new SparkConf()) {
-      override def tryToAcquire(numBytes: Long): Long = numBytes
-      override def release(numBytes: Long): Unit = {}
-    }
-
-    val pageSizeBytes = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
-      .getSizeAsBytes("spark.buffer.pageSize", "64m")
+    val shuffleMemoryManager =
+      ShuffleMemoryManager.create(maxMemory = Long.MaxValue, pageSizeBytes = pageSizeBytes)
 
     binaryMap = new BytesToBytesMap(
       taskMemoryManager,
@@ -287,11 +304,11 @@ private[joins] final class UnsafeHashedRelation(
     while (i < nKeys) {
       val keySize = in.readInt()
       val valuesSize = in.readInt()
-      if (keySize > keyBuffer.size) {
+      if (keySize > keyBuffer.length) {
         keyBuffer = new Array[Byte](keySize)
       }
       in.readFully(keyBuffer, 0, keySize)
-      if (valuesSize > valuesBuffer.size) {
+      if (valuesSize > valuesBuffer.length) {
         valuesBuffer = new Array[Byte](valuesSize)
       }
       in.readFully(valuesBuffer, 0, valuesSize)
@@ -316,6 +333,7 @@ private[joins] object UnsafeHashedRelation {
       keyGenerator: UnsafeProjection,
       sizeEstimate: Int): HashedRelation = {
 
+    // Use a Java hash table here because unsafe maps expect fixed size records
     val hashTable = new JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]](sizeEstimate)
 
     // Create a mapping of buildKeys -> rows

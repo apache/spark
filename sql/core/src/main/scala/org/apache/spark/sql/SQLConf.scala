@@ -200,7 +200,7 @@ private[spark] object SQLConf {
 
   val IN_MEMORY_PARTITION_PRUNING =
     booleanConf("spark.sql.inMemoryColumnarStorage.partitionPruning",
-      defaultValue = Some(false),
+      defaultValue = Some(true),
       doc = "When true, enable partition pruning for in-memory columnar tables.",
       isPublic = false)
 
@@ -223,14 +223,21 @@ private[spark] object SQLConf {
     defaultValue = Some(200),
     doc = "The default number of partitions to use when shuffling data for joins or aggregations.")
 
-  val CODEGEN_ENABLED = booleanConf("spark.sql.codegen",
+  val TUNGSTEN_ENABLED = booleanConf("spark.sql.tungsten.enabled",
     defaultValue = Some(true),
+    doc = "When true, use the optimized Tungsten physical execution backend which explicitly " +
+          "manages memory and dynamically generates bytecode for expression evaluation.")
+
+  val CODEGEN_ENABLED = booleanConf("spark.sql.codegen",
+    defaultValue = Some(true),  // use TUNGSTEN_ENABLED as default
     doc = "When true, code will be dynamically generated at runtime for expression evaluation in" +
-      " a specific query.")
+      " a specific query.",
+    isPublic = false)
 
   val UNSAFE_ENABLED = booleanConf("spark.sql.unsafe.enabled",
-    defaultValue = Some(true),
-    doc = "When true, use the new optimized Tungsten physical execution backend.")
+    defaultValue = Some(true),  // use TUNGSTEN_ENABLED as default
+    doc = "When true, use the new optimized Tungsten physical execution backend.",
+    isPublic = false)
 
   val DIALECT = stringConf(
     "spark.sql.dialect",
@@ -359,16 +366,20 @@ private[spark] object SQLConf {
       "storing additional schema information in Hive's metastore.",
     isPublic = false)
 
-  // Whether to perform partition discovery when loading external data sources.  Default to true.
   val PARTITION_DISCOVERY_ENABLED = booleanConf("spark.sql.sources.partitionDiscovery.enabled",
     defaultValue = Some(true),
     doc = "When true, automtically discover data partitions.")
 
-  // Whether to perform partition column type inference. Default to true.
   val PARTITION_COLUMN_TYPE_INFERENCE =
     booleanConf("spark.sql.sources.partitionColumnTypeInference.enabled",
       defaultValue = Some(true),
       doc = "When true, automatically infer the data types for partitioned columns.")
+
+  val PARTITION_MAX_FILES =
+    intConf("spark.sql.sources.maxConcurrentWrites",
+      defaultValue = Some(5),
+      doc = "The maximum number of concurent files to open before falling back on sorting when " +
+            "writing out files using dynamic partitioning.")
 
   // The output committer class used by HadoopFsRelation. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
@@ -409,10 +420,6 @@ private[spark] object SQLConf {
   val USE_SQL_AGGREGATE2 = booleanConf("spark.sql.useAggregate2",
     defaultValue = Some(true), doc = "<TODO>")
 
-  val USE_SQL_SERIALIZER2 = booleanConf(
-    "spark.sql.useSerializer2",
-    defaultValue = Some(true), isPublic = false)
-
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -427,7 +434,6 @@ private[spark] object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-
 private[sql] class SQLConf extends Serializable with CatalystConf {
   import SQLConf._
 
@@ -474,15 +480,13 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN)
 
-  private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED)
+  private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, getConf(TUNGSTEN_ENABLED))
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
-  private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED)
+  private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, getConf(TUNGSTEN_ENABLED))
 
   private[spark] def useSqlAggregate2: Boolean = getConf(USE_SQL_AGGREGATE2)
-
-  private[spark] def useSqlSerializer2: Boolean = getConf(USE_SQL_SERIALIZER2)
 
   private[spark] def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 

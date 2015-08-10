@@ -18,19 +18,27 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.{SQLTestUtils, TestSQLContext}
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.test.TestSQLContext.planner._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, SQLConf, execution}
+import org.apache.spark.sql.{SQLContext, Row, SQLConf, execution}
 
 
-class PlannerSuite extends SparkFunSuite {
+class PlannerSuite extends SparkFunSuite with SQLTestUtils {
+
+  override def sqlContext: SQLContext = TestSQLContext
+
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val plannedOption = HashAggregation(query).headOption.orElse(Aggregation(query).headOption)
     val planned =
@@ -157,4 +165,192 @@ class PlannerSuite extends SparkFunSuite {
     val planned = planner.TakeOrderedAndProject(query)
     assert(planned.head.isInstanceOf[execution.TakeOrderedAndProject])
   }
+
+  test("PartitioningCollection") {
+    withTempTable("normal", "small", "tiny") {
+      testData.registerTempTable("normal")
+      testData.limit(10).registerTempTable("small")
+      testData.limit(3).registerTempTable("tiny")
+
+      // Disable broadcast join
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        {
+          val numExchanges = sql(
+            """
+              |SELECT *
+              |FROM
+              |  normal JOIN small ON (normal.key = small.key)
+              |  JOIN tiny ON (small.key = tiny.key)
+            """.stripMargin
+          ).queryExecution.executedPlan.collect {
+            case exchange: Exchange => exchange
+          }.length
+          assert(numExchanges === 3)
+        }
+
+        {
+          // This second query joins on different keys:
+          val numExchanges = sql(
+            """
+              |SELECT *
+              |FROM
+              |  normal JOIN small ON (normal.key = small.key)
+              |  JOIN tiny ON (normal.key = tiny.key)
+            """.stripMargin
+          ).queryExecution.executedPlan.collect {
+            case exchange: Exchange => exchange
+          }.length
+          assert(numExchanges === 3)
+        }
+
+      }
+    }
+  }
+
+  // --- Unit tests of EnsureRequirements ---------------------------------------------------------
+
+  // When it comes to testing whether EnsureRequirements properly ensures distribution requirements,
+  // there two dimensions that need to be considered: are the child partitionings compatible and
+  // do they satisfy the distribution requirements? As a result, we need at least four test cases.
+
+  private def assertDistributionRequirementsAreSatisfied(outputPlan: SparkPlan): Unit = {
+    if (outputPlan.children.length > 1
+        && outputPlan.requiredChildDistribution.toSet != Set(UnspecifiedDistribution)) {
+      val childPartitionings = outputPlan.children.map(_.outputPartitioning)
+      if (!Partitioning.allCompatible(childPartitionings)) {
+        fail(s"Partitionings are not compatible: $childPartitionings")
+      }
+    }
+    outputPlan.children.zip(outputPlan.requiredChildDistribution).foreach {
+      case (child, requiredDist) =>
+        assert(child.outputPartitioning.satisfies(requiredDist),
+          s"$child output partitioning does not satisfy $requiredDist:\n$outputPlan")
+    }
+  }
+
+  test("EnsureRequirements with incompatible child partitionings which satisfy distribution") {
+    // Consider an operator that requires inputs that are clustered by two expressions (e.g.
+    // sort merge join where there are multiple columns in the equi-join condition)
+    val clusteringA = Literal(1) :: Nil
+    val clusteringB = Literal(2) :: Nil
+    val distribution = ClusteredDistribution(clusteringA ++ clusteringB)
+    // Say that the left and right inputs are each partitioned by _one_ of the two join columns:
+    val leftPartitioning = HashPartitioning(clusteringA, 1)
+    val rightPartitioning = HashPartitioning(clusteringB, 1)
+    // Individually, each input's partitioning satisfies the clustering distribution:
+    assert(leftPartitioning.satisfies(distribution))
+    assert(rightPartitioning.satisfies(distribution))
+    // However, these partitionings are not compatible with each other, so we still need to
+    // repartition both inputs prior to performing the join:
+    assert(!leftPartitioning.compatibleWith(rightPartitioning))
+    assert(!rightPartitioning.compatibleWith(leftPartitioning))
+    val inputPlan = DummySparkPlan(
+      children = Seq(
+        DummySparkPlan(outputPartitioning = leftPartitioning),
+        DummySparkPlan(outputPartitioning = rightPartitioning)
+      ),
+      requiredChildDistribution = Seq(distribution, distribution),
+      requiredChildOrdering = Seq(Seq.empty, Seq.empty)
+    )
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case Exchange(_, _) => true }.isEmpty) {
+      fail(s"Exchange should have been added:\n$outputPlan")
+    }
+  }
+
+  test("EnsureRequirements with child partitionings with different numbers of output partitions") {
+    // This is similar to the previous test, except it checks that partitionings are not compatible
+    // unless they produce the same number of partitions.
+    val clustering = Literal(1) :: Nil
+    val distribution = ClusteredDistribution(clustering)
+    val inputPlan = DummySparkPlan(
+      children = Seq(
+        DummySparkPlan(outputPartitioning = HashPartitioning(clustering, 1)),
+        DummySparkPlan(outputPartitioning = HashPartitioning(clustering, 2))
+      ),
+      requiredChildDistribution = Seq(distribution, distribution),
+      requiredChildOrdering = Seq(Seq.empty, Seq.empty)
+    )
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+  }
+
+  test("EnsureRequirements with compatible child partitionings that do not satisfy distribution") {
+    val distribution = ClusteredDistribution(Literal(1) :: Nil)
+    // The left and right inputs have compatible partitionings but they do not satisfy the
+    // distribution because they are clustered on different columns. Thus, we need to shuffle.
+    val childPartitioning = HashPartitioning(Literal(2) :: Nil, 1)
+    assert(!childPartitioning.satisfies(distribution))
+    val inputPlan = DummySparkPlan(
+      children = Seq(
+        DummySparkPlan(outputPartitioning = childPartitioning),
+        DummySparkPlan(outputPartitioning = childPartitioning)
+      ),
+      requiredChildDistribution = Seq(distribution, distribution),
+      requiredChildOrdering = Seq(Seq.empty, Seq.empty)
+    )
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case Exchange(_, _) => true }.isEmpty) {
+      fail(s"Exchange should have been added:\n$outputPlan")
+    }
+  }
+
+  test("EnsureRequirements with compatible child partitionings that satisfy distribution") {
+    // In this case, all requirements are satisfied and no exchange should be added.
+    val distribution = ClusteredDistribution(Literal(1) :: Nil)
+    val childPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
+    assert(childPartitioning.satisfies(distribution))
+    val inputPlan = DummySparkPlan(
+      children = Seq(
+        DummySparkPlan(outputPartitioning = childPartitioning),
+        DummySparkPlan(outputPartitioning = childPartitioning)
+      ),
+      requiredChildDistribution = Seq(distribution, distribution),
+      requiredChildOrdering = Seq(Seq.empty, Seq.empty)
+    )
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case Exchange(_, _) => true }.nonEmpty) {
+      fail(s"Exchange should not have been added:\n$outputPlan")
+    }
+  }
+
+  // This is a regression test for SPARK-9703
+  test("EnsureRequirements should not repartition if only ordering requirement is unsatisfied") {
+    // Consider an operator that imposes both output distribution and  ordering requirements on its
+    // children, such as sort sort merge join. If the distribution requirements are satisfied but
+    // the output ordering requirements are unsatisfied, then the planner should only add sorts and
+    // should not need to add additional shuffles / exchanges.
+    val outputOrdering = Seq(SortOrder(Literal(1), Ascending))
+    val distribution = ClusteredDistribution(Literal(1) :: Nil)
+    val inputPlan = DummySparkPlan(
+      children = Seq(
+        DummySparkPlan(outputPartitioning = SinglePartition),
+        DummySparkPlan(outputPartitioning = SinglePartition)
+      ),
+      requiredChildDistribution = Seq(distribution, distribution),
+      requiredChildOrdering = Seq(outputOrdering, outputOrdering)
+    )
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case Exchange(_, _) => true }.nonEmpty) {
+      fail(s"No Exchanges should have been added:\n$outputPlan")
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+}
+
+// Used for unit-testing EnsureRequirements
+private case class DummySparkPlan(
+    override val children: Seq[SparkPlan] = Nil,
+    override val outputOrdering: Seq[SortOrder] = Nil,
+    override val outputPartitioning: Partitioning = UnknownPartitioning(0),
+    override val requiredChildDistribution: Seq[Distribution] = Nil,
+    override val requiredChildOrdering: Seq[Seq[SortOrder]] = Nil
+  ) extends SparkPlan {
+  override protected def doExecute(): RDD[InternalRow] = throw new NotImplementedError
+  override def output: Seq[Attribute] = Seq.empty
 }

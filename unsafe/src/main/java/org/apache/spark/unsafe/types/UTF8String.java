@@ -20,7 +20,9 @@ package org.apache.spark.unsafe.types;
 import javax.annotation.Nonnull;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
+import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.Map;
 
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -43,6 +45,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   private final long offset;
   private final int numBytes;
 
+  public Object getBaseObject() { return base; }
+  public long getBaseOffset() { return offset; }
+
   private static int[] bytesOfCodePointInUTF8 = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
@@ -50,6 +55,9 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     5, 5, 5, 5,
     6, 6};
 
+  private static boolean isLittleEndian = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
+
+  private static final UTF8String COMMA_UTF8 = UTF8String.fromString(",");
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
 
   /**
@@ -73,6 +81,17 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
   public static UTF8String fromBytes(byte[] bytes, int offset, int numBytes) {
     if (bytes != null) {
       return new UTF8String(bytes, BYTE_ARRAY_OFFSET + offset, numBytes);
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * Creates an UTF8String from given address (base and offset) and length.
+   */
+  public static UTF8String fromAddress(Object base, long offset, int numBytes) {
+    if (base != null) {
+      return new UTF8String(base, offset, numBytes);
     } else {
       return null;
     }
@@ -161,18 +180,35 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     // If size is greater than 4, assume we have at least 8 bytes of data to fetch.
     // After getting the data, we use a mask to mask out data that is not part of the string.
     long p;
-    if (numBytes >= 8) {
-      p = PlatformDependent.UNSAFE.getLong(base, offset);
-    } else  if (numBytes > 4) {
-      p = PlatformDependent.UNSAFE.getLong(base, offset);
-      p = p & ((1L << numBytes * 8) - 1);
-    } else if (numBytes > 0) {
-      p = (long) PlatformDependent.UNSAFE.getInt(base, offset);
-      p = p & ((1L << numBytes * 8) - 1);
+    long mask = 0;
+    if (isLittleEndian) {
+      if (numBytes >= 8) {
+        p = PlatformDependent.UNSAFE.getLong(base, offset);
+      } else if (numBytes > 4) {
+        p = PlatformDependent.UNSAFE.getLong(base, offset);
+        mask = (1L << (8 - numBytes) * 8) - 1;
+      } else if (numBytes > 0) {
+        p = (long) PlatformDependent.UNSAFE.getInt(base, offset);
+        mask = (1L << (8 - numBytes) * 8) - 1;
+      } else {
+        p = 0;
+      }
+      p = java.lang.Long.reverseBytes(p);
     } else {
-      p = 0;
+      // byteOrder == ByteOrder.BIG_ENDIAN
+      if (numBytes >= 8) {
+        p = PlatformDependent.UNSAFE.getLong(base, offset);
+      } else if (numBytes > 4) {
+        p = PlatformDependent.UNSAFE.getLong(base, offset);
+        mask = (1L << (8 - numBytes) * 8) - 1;
+      } else if (numBytes > 0) {
+        p = ((long) PlatformDependent.UNSAFE.getInt(base, offset)) << 32;
+        mask = (1L << (8 - numBytes) * 8) - 1;
+      } else {
+        p = 0;
+      }
     }
-    p = java.lang.Long.reverseBytes(p);
+    p &= ~mask;
     return p;
   }
 
@@ -279,6 +315,29 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Returns the upper case of this string
    */
   public UTF8String toUpperCase() {
+    if (numBytes == 0) {
+      return EMPTY_UTF8;
+    }
+
+    byte[] bytes = new byte[numBytes];
+    bytes[0] = (byte) Character.toTitleCase(getByte(0));
+    for (int i = 0; i < numBytes; i++) {
+      byte b = getByte(i);
+      if (numBytesForFirstByte(b) != 1) {
+        // fallback
+        return toUpperCaseSlow();
+      }
+      int upper = Character.toUpperCase((int) b);
+      if (upper > 127) {
+        // fallback
+        return toUpperCaseSlow();
+      }
+      bytes[i] = (byte) upper;
+    }
+    return fromBytes(bytes);
+  }
+
+  private UTF8String toUpperCaseSlow() {
     return fromString(toString().toUpperCase());
   }
 
@@ -286,7 +345,102 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Returns the lower case of this string
    */
   public UTF8String toLowerCase() {
+    if (numBytes == 0) {
+      return EMPTY_UTF8;
+    }
+
+    byte[] bytes = new byte[numBytes];
+    bytes[0] = (byte) Character.toTitleCase(getByte(0));
+    for (int i = 0; i < numBytes; i++) {
+      byte b = getByte(i);
+      if (numBytesForFirstByte(b) != 1) {
+        // fallback
+        return toLowerCaseSlow();
+      }
+      int lower = Character.toLowerCase((int) b);
+      if (lower > 127) {
+        // fallback
+        return toLowerCaseSlow();
+      }
+      bytes[i] = (byte) lower;
+    }
+    return fromBytes(bytes);
+  }
+
+  private UTF8String toLowerCaseSlow() {
     return fromString(toString().toLowerCase());
+  }
+
+  /**
+   * Returns the title case of this string, that could be used as title.
+   */
+  public UTF8String toTitleCase() {
+    if (numBytes == 0) {
+      return EMPTY_UTF8;
+    }
+
+    byte[] bytes = new byte[numBytes];
+    for (int i = 0; i < numBytes; i++) {
+      byte b = getByte(i);
+      if (i == 0 || getByte(i - 1) == ' ') {
+        if (numBytesForFirstByte(b) != 1) {
+          // fallback
+          return toTitleCaseSlow();
+        }
+        int upper = Character.toTitleCase(b);
+        if (upper > 127) {
+          // fallback
+          return toTitleCaseSlow();
+        }
+        bytes[i] = (byte) upper;
+      } else {
+        bytes[i] = b;
+      }
+    }
+    return fromBytes(bytes);
+  }
+
+  private UTF8String toTitleCaseSlow() {
+    StringBuffer sb = new StringBuffer();
+    String s = toString();
+    sb.append(s);
+    sb.setCharAt(0, Character.toTitleCase(sb.charAt(0)));
+    for (int i = 1; i < s.length(); i++) {
+      if (sb.charAt(i - 1) == ' ') {
+        sb.setCharAt(i, Character.toTitleCase(sb.charAt(i)));
+      }
+    }
+    return fromString(sb.toString());
+  }
+
+  /*
+   * Returns the index of the string `match` in this String. This string has to be a comma separated
+   * list. If `match` contains a comma 0 will be returned. If the `match` isn't part of this String,
+   * 0 will be returned, else the index of match (1-based index)
+   */
+  public int findInSet(UTF8String match) {
+    if (match.contains(COMMA_UTF8)) {
+      return 0;
+    }
+
+    int n = 1, lastComma = -1;
+    for (int i = 0; i < numBytes; i++) {
+      if (getByte(i) == (byte) ',') {
+        if (i - (lastComma + 1) == match.numBytes &&
+          ByteArrayMethods.arrayEquals(base, offset + (lastComma + 1), match.base, match.offset,
+            match.numBytes)) {
+          return n;
+        }
+        lastComma = i;
+        n++;
+      }
+    }
+    if (numBytes - (lastComma + 1) == match.numBytes &&
+      ByteArrayMethods.arrayEquals(base, offset + (lastComma + 1), match.base, match.offset,
+        match.numBytes)) {
+      return n;
+    }
+    return 0;
   }
 
   /**
@@ -349,7 +503,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     while (i < numBytes) {
       int len = numBytesForFirstByte(getByte(i));
       copyMemory(this.base, this.offset + i, result,
-              BYTE_ARRAY_OFFSET + result.length - i - len, len);
+        BYTE_ARRAY_OFFSET + result.length - i - len, len);
 
       i += len;
     }
@@ -640,6 +794,21 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       res[i] = fromString(splits[i]);
     }
     return res;
+  }
+
+  // TODO: Need to use `Code Point` here instead of Char in case the character longer than 2 bytes
+  public UTF8String translate(Map<Character, Character> dict) {
+    String srcStr = this.toString();
+
+    StringBuilder sb = new StringBuilder();
+    for(int k = 0; k< srcStr.length(); k++) {
+      if (null == dict.get(srcStr.charAt(k))) {
+        sb.append(srcStr.charAt(k));
+      } else if ('\0' != dict.get(srcStr.charAt(k))){
+        sb.append(dict.get(srcStr.charAt(k)));
+      }
+    }
+    return fromString(sb.toString());
   }
 
   @Override

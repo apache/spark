@@ -26,6 +26,9 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
 
   @Override
   public MemoryBlock allocate(long size) throws OutOfMemoryError {
+    if (size % 8 != 0) {
+      throw new IllegalArgumentException("Size " + size + " was not a multiple of 8");
+    }
     long address = PlatformDependent.UNSAFE.allocateMemory(size);
     return new MemoryBlock(null, address, size);
   }
