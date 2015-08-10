@@ -76,6 +76,7 @@ NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 BASE_DIR=$(pwd)
 
+MVN="build/mvn --force"
 PUBLISH_PROFILES="-Pyarn -Phive -Phadoop-2.2"
 PUBLISH_PROFILES="$PUBLISH_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl"
 
@@ -87,7 +88,7 @@ git_hash=`git rev-parse --short HEAD`
 echo "Checked out Spark git hash $git_hash"
 
 if [ -z "$SPARK_VERSION" ]; then
-  SPARK_VERSION=$(mvn help:evaluate -Dexpression=project.version \
+  SPARK_VERSION=$($MVN help:evaluate -Dexpression=project.version \
     | grep -v INFO | grep -v WARNING | grep -v Download)
 fi
 
@@ -212,7 +213,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
     exit 1
   fi
   # Coerce the requested version
-  build/mvn --force versions:set -DnewVersion=$SPARK_VERSION
+  $MVN versions:set -DnewVersion=$SPARK_VERSION
   tmp_settings="tmp-settings.xml"
   echo "<settings><servers><server>" > $tmp_settings
   echo "<id>apache.snapshots.https</id><username>$ASF_USERNAME</username>" >> $tmp_settings
@@ -222,10 +223,10 @@ if [[ "$1" == "publish-snapshot" ]]; then
   # Generate random point for Zinc
   export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
 
-  build/mvn --force -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $PUBLISH_PROFILES \
+  $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $PUBLISH_PROFILES \
     -Phive-thriftserver deploy
   ./dev/change-scala-version.sh 2.10
-  build/mvn --force -DzincPort=$ZINC_PORT -Dscala-2.11 --settings $tmp_settings \
+  $MVN -DzincPort=$ZINC_PORT -Dscala-2.11 --settings $tmp_settings \
     -DskipTests $PUBLISH_PROFILES deploy
 
   # Clean-up Zinc nailgun process
@@ -242,7 +243,7 @@ if [[ "$1" == "publish-release" ]]; then
   echo "Publishing Spark checkout at '$GIT_REF' ($git_hash)"
   echo "Publish version is $SPARK_VERSION"
   # Coerce the requested version
-  build/mvn --force versions:set -DnewVersion=$SPARK_VERSION
+  $MVN versions:set -DnewVersion=$SPARK_VERSION
 
   # Using Nexus API documented here:
   # https://support.sonatype.com/entries/39720203-Uploading-to-a-Staging-Repository-via-REST-API
@@ -259,12 +260,12 @@ if [[ "$1" == "publish-release" ]]; then
   # Generate random point for Zinc
   export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
 
-  build/mvn -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests $PUBLISH_PROFILES \
+  $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests $PUBLISH_PROFILES \
     -Phive-thriftserver clean install
 
   ./dev/change-scala-version.sh 2.11
 
-  build/mvn -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -Dscala-2.11 \
+  $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -Dscala-2.11 \
     -DskipTests $PUBLISH_PROFILES clean install
 
   # Clean-up Zinc nailgun process

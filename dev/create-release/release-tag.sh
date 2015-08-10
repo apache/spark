@@ -49,6 +49,7 @@ for env in ASF_USERNAME ASF_PASSWORD RELEASE_VERSION RELEASE_TAG NEXT_VERSION GI
 done
 
 ASF_SPARK_REPO="git-wip-us.apache.org/repos/asf/spark.git"
+MVN="build/mvn --force"
 
 rm -rf spark
 git clone https://$ASF_USERNAME:$ASF_PASSWORD@$ASF_SPARK_REPO -b $GIT_BRANCH
@@ -58,7 +59,7 @@ git config user.name "$GIT_NAME"
 git config user.email $GIT_EMAIL
 
 # Create release version
-mvn versions:set -DnewVersion=$RELEASE_VERSION | grep -v "no value" # silence logs
+$MVN versions:set -DnewVersion=$RELEASE_VERSION | grep -v "no value" # silence logs
 git commit -a -m "Preparing Spark release $RELEASE_TAG"
 echo "Creating tag $RELEASE_TAG at the head of $GIT_BRANCH"
 git tag $RELEASE_TAG
@@ -67,7 +68,7 @@ git tag $RELEASE_TAG
 #       i.e. check whether ec2 scripts have the new version
 
 # Create next version
-mvn versions:set -DnewVersion=$NEXT_VERSION | grep -v "no value" # silence logs
+$MVN versions:set -DnewVersion=$NEXT_VERSION | grep -v "no value" # silence logs
 git commit -a -m "Preparing development version $NEXT_VERSION"
 
 # Push changes
