@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.hadoop.hive.conf.HiveConf
 
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.parquet.ParquetCompatibilityTest
+import org.apache.spark.sql.execution.datasources.parquet.ParquetCompatibilityTest
 import org.apache.spark.sql.{Row, SQLConf, SQLContext}
 
 class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest {
