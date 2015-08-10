@@ -42,7 +42,8 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val output = ctx.freshName("safeRow")
     val values = ctx.freshName("values")
     // These expressions could be splitted into multiple functions
-    ctx.addMutableState("final Object[]", values, s"this.$values = new Object[${schema.length}];")
+    ctx.addMutableState("Object[]", values, s"this.$values = null;")
+
     val rowClass = classOf[GenericInternalRow].getName
 
     val fieldWriters = schema.map(_.dataType).zipWithIndex.map { case (dt, i) =>
@@ -57,6 +58,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val allFields = ctx.splitExpressions(tmp, fieldWriters)
     val code = s"""
       final InternalRow $tmp = $input;
+      this.$values = new Object[${schema.length}];
       $allFields
       final InternalRow $output = new $rowClass($values);
     """
