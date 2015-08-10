@@ -74,3 +74,19 @@ object MQTTUtils {
     createStream(jssc.ssc, brokerUrl, topic, storageLevel)
   }
 }
+
+/**
+ * This is a helper class that wraps the methods in MQTTUtils into more Python-friendly class and
+ * function so that it can be easily instantiated and called from Python's MQTTUtils.
+ */
+private class MQTTUtilsPythonHelper {
+
+  def createStream(
+      jssc: JavaStreamingContext,
+      brokerUrl: String,
+      topic: String,
+      storageLevel: StorageLevel
+    ): JavaDStream[String] = {
+    MQTTUtils.createStream(jssc, brokerUrl, topic, storageLevel)
+  }
+}
