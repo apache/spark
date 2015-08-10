@@ -757,7 +757,7 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       val graph: Graph[LDA.TopicCounts, LDA.TokenCount] = Graph(vertices, edges)
 
       new DistributedLDAModel(graph, globalTopicTotals, globalTopicTotals.length, vocabSize,
-        docConcentration, topicConcentration, gammaShape, iterationTimes)
+        docConcentration, topicConcentration, iterationTimes, gammaShape)
     }
 
   }

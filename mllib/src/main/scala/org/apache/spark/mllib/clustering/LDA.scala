@@ -79,7 +79,7 @@ class LDA private (
    *
    * This is the parameter to a Dirichlet distribution.
    */
-  def getDocConcentration: Vector = this.docConcentration
+  def getAsymmetricDocConcentration: Vector = this.docConcentration
 
   /**
    * Concentration parameter (commonly named "alpha") for the prior placed on documents'
@@ -105,22 +105,37 @@ class LDA private (
    *     - default = uniformly (1.0 / k), following the implementation from
    *       [[https://github.com/Blei-Lab/onlineldavb]].
    */
-  def setDocConcentration(docConcentration: Vector): this.type = {
+  def setAsymmetricDocConcentration(docConcentration: Vector): this.type = {
     this.docConcentration = docConcentration
     this
   }
 
-  /** Replicates Double to create a symmetric prior */
+  /**
+   * Gets the concentration parameter, assuming the document-topic Dirichlet distribution is
+   * symmetric. Included for backwards compatibility. This method should fail if
+   * [[docConcentration]] is asymmetric.
+   */
+  def getDocConcentration: Double = {
+    val parameter = docConcentration(0)
+    if (docConcentration.size == 1) {
+      parameter
+    } else {
+      require(docConcentration.toArray.forall(_ == parameter))
+      parameter
+    }
+  }
+
+  /** Replicates a [[Double]] docConcentration to create a symmetric prior. */
   def setDocConcentration(docConcentration: Double): this.type = {
     this.docConcentration = Vectors.dense(docConcentration)
     this
   }
 
-  /** Alias for [[getDocConcentration]] */
-  def getAlpha: Vector = getDocConcentration
+  /** Alias for [[setAsymmetricDocConcentration()]] */
+  def getAlpha: Vector = getAsymmetricDocConcentration
 
-  /** Alias for [[setDocConcentration()]] */
-  def setAlpha(alpha: Vector): this.type = setDocConcentration(alpha)
+  /** Alias for [[setAsymmetricDocConcentration()]] */
+  def setAlpha(alpha: Vector): this.type = setAsymmetricDocConcentration(alpha)
 
   /** Alias for [[setDocConcentration()]] */
   def setAlpha(alpha: Double): this.type = setDocConcentration(alpha)
