@@ -1108,11 +1108,4 @@ if __name__ == "__main__":
     jars = "%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, kinesis_asl_assembly_jar)
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
-    #unittest.main()
-
-    suite = unittest.TestSuite()
-    suite.addTest(StreamingContextTests('test_get_active'))
-    suite.addTest(StreamingContextTests('test_get_active_or_create'))
-    suite.addTest(CheckpointTests('test_get_or_create_and_get_active_or_create'))
-
-    unittest.TextTestRunner(verbosity=2).run(suite)
+    unittest.main()
