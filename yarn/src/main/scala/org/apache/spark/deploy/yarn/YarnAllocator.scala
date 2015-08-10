@@ -424,7 +424,7 @@ private[yarn] class YarnAllocator(
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
       val alreadyReleased = releasedContainers.remove(containerId)
-      var completedContainerReason : String = null
+      var completedContainerReason : String = ""
       if (!alreadyReleased) {
         // Decrement the number of executors running. The next iteration of
         // the ApplicationMaster's reporting thread will take care of allocating.
@@ -440,7 +440,7 @@ private[yarn] class YarnAllocator(
           val msg = "Container preempted: " + containerId
           logInfo(msg)
           completedContainerReason = msg
-          driverRef.send(completedContainer.getExitStatus, msg)
+          driverRef.send(ContainerExited(completedContainer.getExitStatus, msg))
         } else if (completedContainer.getExitStatus == -103) { // vmem limit exceeded
           logWarning(memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
