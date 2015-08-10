@@ -48,6 +48,20 @@ Some of the commonly used options are:
 * `application-jar`: Path to a bundled jar including your application and all dependencies. The URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes.
 * `application-arguments`: Arguments passed to the main method of your main class, if any
 
+Alternatively, for submitting on yarn, 
+
+{% highlight bash %}
+./bin/spark-submit \
+  --class <main-class>
+  --master <yarn-deploy-mode>
+  --conf <key>=<value> \
+  ... # other options
+  <application-jar> \
+  [application-arguments] 
+{% endhighlight %}
+
+* `--master`: The --master parameter is either `yarn-client` or `yarn-cluster`. Defaults to `yarn-client`
+
 # Master URLs
 
 The master URL passed to Spark can be in one of the following formats:
