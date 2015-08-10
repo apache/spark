@@ -46,7 +46,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
   /**
    * Set threshold in binary classification prediction, in range [0, 1].
-   * The [[threshold]] is overridden by [[thresholds]] if [[thresholds]] is set.
+   * If [[thresholds]] is set, then [[threshold]] is ignored.
    *
    * If the estimated probability of class label 1 is > threshold, then predict 1, else 0.
    * A high threshold encourages the model to predict 0 more often;
@@ -61,7 +61,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
   /**
    * Get threshold for binary classification prediction.
-   * The [[threshold]] is overridden by [[thresholds]] if [[thresholds]] is set.
+   * If [[thresholds]] is set, then [[threshold]] is ignored.
    *
    * @return If [[thresholds]] is set with length 2 (i.e., binary classification), this returns
    *         the equivalent threshold: {{{1 / (1 + thresholds(0) / thresholds(1))}}}.
@@ -80,6 +80,22 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
       1.0 / (1.0 + thresholdValues(0) / thresholdValues(1))
     } else {
       $(threshold)
+    }
+  }
+
+  /**
+   * If [[thresholds]] is set, return its value.
+   * Otherwise, if [[threshold]] is set, return the equivalent thresholds for binary
+   * classification: (1-threshold, threshold).
+   * If neither are set, throw an exception.
+   * @group getParam
+   */
+  override def getThresholds: Array[Double] = {
+    if (!isSet(thresholds) && isSet(threshold)) {
+      val t = $(threshold)
+      Array(1-t, t)
+    } else {
+      $(thresholds)
     }
   }
 }
@@ -156,21 +172,7 @@ class LogisticRegression(override val uid: String)
 
   override def getThreshold: Double = super.getThreshold
 
-  /**
-   * If [[thresholds]] is set, return its value.
-   * Otherwise, if [[threshold]] is set, return the equivalent thresholds for binary
-   * classification: (1-threshold, threshold).
-   * If neither are set, throw an exception.
-   * @group getParam
-   */
-  override def getThresholds: Array[Double] = {
-    if (!isSet(thresholds) && isSet(threshold)) {
-      val t = $(threshold)
-      Array(1-t, t)
-    } else {
-      $(thresholds)
-    }
-  }
+  override def getThresholds: Array[Double] = super.getThresholds
 
   override protected def train(dataset: DataFrame): LogisticRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
@@ -337,6 +339,8 @@ class LogisticRegressionModel private[ml] (
   override def setThreshold(value: Double): this.type = set(threshold, value)
 
   override def getThreshold: Double = super.getThreshold
+
+  override def getThresholds: Array[Double] = super.getThresholds
 
   /** Margin (rawPrediction) for class label 1.  For binary classification only. */
   private val margin: Vector => Double = (features) => {
