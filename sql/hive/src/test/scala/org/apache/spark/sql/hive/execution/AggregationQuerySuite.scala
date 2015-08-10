@@ -22,7 +22,7 @@ import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions.std
+import org.apache.spark.sql.functions.{stddev, stddevPop}
 import org.scalatest.BeforeAndAfterAll
 import _root_.test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 
@@ -285,30 +285,63 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
       Row(11.125) :: Nil)
   }
 
+  /** For resilience against rounding mismatches. */
+  private def about(d: Double): BigDecimal = BigDecimal(d).setScale(10, BigDecimal.RoundingMode.HALF_UP)
+
   test("test standard deviation") {
     // All results generated in R. Comparisons will be performed up to 10 digits of precision.
     val df = Seq.tabulate(10)(i => (i, 1)).toDF("val", "key")
     checkAnswer(
-      df.select(std("val")),
-      Row(3.0276503540974917) :: Nil)
+      df.select(stddev("val").cast("decimal(12, 10)")),
+      Row(about(3.0276503540974917)) :: Nil)
 
     checkAnswer(
-      sqlContext.table("agg1").groupBy("key").std("value"),
-      Row(1, 10.0) :: Row(2, 0.7071067811865476) :: Row(3, null) ::
-        Row(null, 81.8535277187245) :: Nil)
+      df.select(stddevPop("val").cast("decimal(12, 10)")),
+      Row(about(2.8722813232690148)) :: Nil)
 
     checkAnswer(
-      sqlContext.table("agg1").select(std("key"), std("value")),
-      Row(0.7817359599705717, 44.898098909801135) :: Nil)
+      sqlContext.table("agg1").groupBy("key").stddev("value")
+        .select($"key", $"stddev_samp(value)".cast("decimal(12, 10)")),
+      Row(1, about(10.0)) :: Row(2, about(0.7071067811865476)) :: Row(3, null) ::
+        Row(null, about(81.8535277187245)) :: Nil)
 
     checkAnswer(
-      sqlContext.table("agg2").groupBy("key", "value1").std("value2"),
-      Row(1, 10, null) :: Row(1, 30, 42.42640687119285) :: Row(2, -1, null) ::
-        Row(2, 1, 0.0) :: Row(2, null, null) :: Row(3, null, null) :: Row(null, -10, null) ::
+      sqlContext.table("agg1").groupBy("key").stddevPop("value")
+        .select($"key", $"stddev_pop(value)".cast("decimal(12, 10)")),
+      Row(1, about(8.16496580927726)) :: Row(2, about(0.5)) :: Row(3, null) ::
+        Row(null, about(66.83312551921139)) :: Nil)
+
+    checkAnswer(
+      sqlContext.table("agg1").select(stddev("key").cast("decimal(12, 10)"),
+        stddev("value").cast("decimal(12, 10)")),
+      Row(about(0.7817359599705717), about(44.898098909801135)) :: Nil)
+
+    checkAnswer(
+      sqlContext.table("agg1").select(stddevPop("key").cast("decimal(12, 10)"),
+        stddevPop("value").cast("decimal(12, 10)")),
+      Row(about(0.7370277311900889), about(41.99832585949111)) :: Nil)
+
+    checkAnswer(
+      sqlContext.table("agg2").groupBy("key", "value1").stddev("value2")
+        .select($"key", $"value1", $"stddev_samp(value2)".cast("decimal(12, 10)")),
+      Row(1, 10, null) :: Row(1, 30, about(42.42640687119285)) :: Row(2, -1, null) ::
+        Row(2, 1, about(0.0)) :: Row(2, null, null) :: Row(3, null, null) :: Row(null, -10, null) ::
         Row(null, -60, null) :: Row(null, 100, null) :: Row(null, null, null) :: Nil)
 
     checkAnswer(
-      sqlContext.table("emptyTable").select(std("value")),
+      sqlContext.table("agg2").groupBy("key", "value1").stddevPop("value2")
+        .select($"key", $"value1", $"stddev_pop(value2)".cast("decimal(12, 10)")),
+      Row(1, 10, about(0.0)) :: Row(1, 30, about(30.0)) :: Row(2, -1, null) ::
+        Row(2, 1, about(0.0)) :: Row(2, null, about(0.0)) :: Row(3, null, about(0.0)) ::
+        Row(null, -10, about(0.0)) :: Row(null, -60, about(0.0)) :: Row(null, 100, about(0.0)) :: 
+        Row(null, null, null) :: Nil)
+
+    checkAnswer(
+      sqlContext.table("emptyTable").select(stddev("value")),
+      Row(null) :: Nil)
+
+    checkAnswer(
+      sqlContext.table("emptyTable").select(stddevPop("value")),
       Row(null) :: Nil)
   }
 

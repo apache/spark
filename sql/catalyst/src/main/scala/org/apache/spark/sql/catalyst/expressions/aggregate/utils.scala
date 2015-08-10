@@ -170,11 +170,13 @@ object Utils {
    * format, but standard deviation uses the new format directly. We wrap it here in one place,
    * and use an Alias so that the column name looks pretty as well instead of a long identifier.
    */
-  def standardDeviation(e: Expression): Expression = {
+  def standardDeviation(e: Expression, sample: Boolean, name: String): Expression = {
     val std = aggregate.AggregateExpression2(
-      aggregateFunction = aggregate.StandardDeviation(e),
+      aggregateFunction = aggregate.StandardDeviation(e, sample),
       mode = aggregate.Complete,
       isDistinct = false)
-    Alias(std, s"std(${e.prettyString})")()
+    Alias(std, s"$name(${e.prettyString})")()
   }
+
+  def sampleStandardDeviation(e: Expression): Expression = standardDeviation(e, true, "stddev_samp")
 }

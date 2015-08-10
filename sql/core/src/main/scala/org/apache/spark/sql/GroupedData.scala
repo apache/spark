@@ -291,8 +291,33 @@ class GroupedData protected[sql](
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def std(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(aggregate.Utils.standardDeviation)
+  def stddev(colNames: String*): DataFrame = {
+    stddevSamp(colNames : _*)
+  }
+
+  /**
+   * Compute the population standard deviation for each numeric column for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the standard deviation for them.
+   *
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def stddevPop(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(aggregate.Utils.standardDeviation(_, sample = false,
+      "stddev_pop"))
+  }
+
+  /**
+   * Compute the sample standard deviation for each numeric column for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the standard deviation for them.
+   *
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def stddevSamp(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames : _*)(aggregate.Utils.sampleStandardDeviation)
   }
 
   /**

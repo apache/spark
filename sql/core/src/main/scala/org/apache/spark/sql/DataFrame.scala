@@ -1273,7 +1273,7 @@ class DataFrame private[sql](
     val statistics = List[(String, Expression => Expression)](
       "count" -> Count,
       "mean" -> Average,
-      "stddev" -> aggregate.Utils.standardDeviation,
+      "stddev" -> aggregate.Utils.sampleStandardDeviation,
       "min" -> Min,
       "max" -> Max)
 

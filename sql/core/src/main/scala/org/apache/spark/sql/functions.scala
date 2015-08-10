@@ -22,7 +22,6 @@ import scala.reflect.runtime.universe.{TypeTag, typeTag}
 import scala.util.Try
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.expressions.aggregate.StandardDeviation
 import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.expressions._
@@ -297,11 +296,37 @@ object functions {
 
   /**
    * Aggregate function: returns the sample standard deviation of the values in a group.
+   * Alias for stddevSamp.
    *
    * @group agg_funcs
    * @since 1.5.0
    */
-  def std(e: Column): Column = aggregate.Utils.standardDeviation(e.expr)
+  def stddev(e: Column): Column = stddevSamp(e)
+
+  /**
+   * Aggregate function: returns the sample standard deviation of the values in a group.
+   * Alias for stddevSamp.
+   *
+   * @group agg_funcs
+   * @since 1.5.0
+   */
+  def stddev(columnName: String): Column = stddev(Column(columnName))
+
+  /**
+   * Aggregate function: returns the population standard deviation of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.5.0
+   */
+  def stddevPop(e: Column): Column = aggregate.Utils.standardDeviation(e.expr, false, "stddev_pomp")
+
+  /**
+   * Aggregate function: returns the population standard deviation of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.5.0
+   */
+  def stddevPop(columnName: String): Column = stddevPop(Column(columnName))
 
   /**
    * Aggregate function: returns the sample standard deviation of the values in a group.
@@ -309,7 +334,15 @@ object functions {
    * @group agg_funcs
    * @since 1.5.0
    */
-  def std(columnName: String): Column = std(Column(columnName))
+  def stddevSamp(e: Column): Column = aggregate.Utils.sampleStandardDeviation(e.expr)
+
+  /**
+   * Aggregate function: returns the sample standard deviation of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.5.0
+   */
+  def stddevSamp(columnName: String): Column = stddev(Column(columnName))
 
   /**
    * Aggregate function: returns the sum of all values in the expression.

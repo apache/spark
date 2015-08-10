@@ -87,7 +87,10 @@ _functions = {
     'sum': 'Aggregate function: returns the sum of all values in the expression.',
     'avg': 'Aggregate function: returns the average of the values in a group.',
     'mean': 'Aggregate function: returns the average of the values in a group.',
-    'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.',
+    'stddev': 'Aggregate function: returns the sample standard deviation in a group.',
+    'stddevSamp': 'Aggregate function: returns the sample standard deviation in a group.',
+    'stddevPop': 'Aggregate function: returns the population standard deviation in a group.',
+    'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.'
 }
 
 _functions_1_4 = {

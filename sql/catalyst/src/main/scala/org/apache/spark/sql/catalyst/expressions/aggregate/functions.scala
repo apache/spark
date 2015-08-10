@@ -304,10 +304,11 @@ case class Sum(child: Expression) extends AlgebraicAggregate {
 }
 
 /**
- * Calculates the unbiased Standard Deviation using the online formula here:
+ * Calculates the Standard Deviation using the online formula here:
  * https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
+ * If sample is true, then we will return the unbiased standard deviation.
  */
-case class StandardDeviation(child: Expression) extends AlgebraicAggregate {
+case class StandardDeviation(child: Expression, sample: Boolean) extends AlgebraicAggregate {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -388,8 +389,14 @@ case class StandardDeviation(child: Expression) extends AlgebraicAggregate {
   }
 
   override lazy val evaluateExpression = {
-    val count = If(EqualTo(currentCount, Cast(Literal(0L), LongType)),
-      currentCount, currentCount - Cast(Literal(1L), LongType))
+    val count =
+      if (sample) {
+        If(EqualTo(currentCount, Cast(Literal(0L), LongType)), currentCount,
+          currentCount - Cast(Literal(1L), LongType))
+      } else {
+        currentCount
+      }
+
     child.dataType match {
       case DecimalType.Fixed(p, s) =>
         // increase the precision and scale to prevent precision loss
