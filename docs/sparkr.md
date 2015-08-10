@@ -210,6 +210,43 @@ head(df)
 {% endhighlight %}
 </div>
 
+### Model Formulae
+
+SparkR allows the fitting of generalized linear models over DataFrames using the glm() function. Under the hood, SparkR uses MLlib to train a model of the specified family. In Spark 1.5, we support a subset of the available R formula operators for model fitting, including '~', '.', '+', and '-'. The example below shows the use of R formulae with SparkR.
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+# Create the DataFrame
+df <- createDataFrame(sqlContext, iris)
+
+# Fit a linear model over the dataset.
+model <- glm(Sepal_Length ~ Sepal_Width + Species, data = df, family = "gaussian")
+
+# Model coefficients are returned in a similar format to R's native glm().
+summary(model)
+##$coefficients
+##                    Estimate
+##(Intercept)        2.2513930
+##Sepal_Width        0.8035609
+##Species_versicolor 1.4587432
+##Species_virginica  1.9468169
+
+# Make predictions based on the model.
+predictions <- predict(model, newData = df)
+predictions
+##DataFrame[Sepal_Length:double, Sepal_Width:double, Petal_Length:double, Petal_Width:double, Species:string, features:vector, label:double, prediction:double]
+
+head(select(predictions, "Sepal_Length", "prediction"))
+##  Sepal_Length prediction
+##1          5.1   5.063856
+##2          4.9   4.662076
+##3          4.7   4.822788
+##4          4.6   4.742432
+##5          5.0   5.144212
+##6          5.4   5.385281
+{% endhighlight %}
+</div>
+
 ## Running SQL Queries from SparkR
 A SparkR DataFrame can also be registered as a temporary table in Spark SQL and registering a DataFrame as a table allows you to run SQL queries over its data.
 The `sql` function enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
