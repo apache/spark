@@ -1031,7 +1031,6 @@ if __name__ == "__main__":
 
     if kinesis_jar_present is True:
         testcases.append(KinesisStreamTests)
-
     elif are_kinesis_tests_enabled is False:
         sys.stderr.write("Skipping all Kinesis Python tests as the optional Kinesis project was "
                          "not compiled with -Pkinesis-asl profile. To run these tests, "
