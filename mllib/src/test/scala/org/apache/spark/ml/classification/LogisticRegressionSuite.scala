@@ -94,8 +94,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("setThreshold, getThreshold") {
     val lr = new LogisticRegression
     // default
+    assert(lr.getThreshold === 0.5, "LogisticRegression.threshold should default to 0.5")
     withClue("LogisticRegression should not have thresholds set by default") {
-      intercept[java.util.NoSuchElementException] {
+      intercept[java.util.NoSuchElementException] { // Note: The exception type may change in future
         lr.getThresholds
       }
     }
@@ -111,6 +112,14 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     lr.setThresholds(Array(0.3, 0.7))
     val expectedThreshold = 1.0 / (1.0 + 0.3 / 0.7)
     assert(lr.getThreshold ~== expectedThreshold relTol 1E-7)
+    // thresholds overrides threshold
+    lr.setThresholds(Array(0.1, 0.2, 0.3))
+    withClue("LogisticRegression.getThreshold should throw error if thresholds has length != 2") {
+      intercept[RuntimeException] {
+        lr.getThreshold
+      }
+    }
+    assert(lr.getThresholds === Array(0.1, 0.2, 0.3))
   }
 
   test("logistic regression doesn't fit intercept when fitIntercept is off") {

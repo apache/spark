@@ -34,8 +34,7 @@ import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -43,36 +42,44 @@ import org.apache.spark.storage.StorageLevel
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
-  with HasStandardization {
+  with HasStandardization with HasThreshold {
 
   /**
-   * Version of setThresholds() for binary classification, available for backwards
-   * compatibility.
+   * Set threshold in binary classification prediction, in range [0, 1].
+   * The [[threshold]] is overridden by [[thresholds]] if [[thresholds]] is set.
    *
-   * Calling this with threshold p will effectively call `setThresholds(Array(1-p, p))`.
+   * If the estimated probability of class label 1 is > threshold, then predict 1, else 0.
+   * A high threshold encourages the model to predict 0 more often;
+   * a low threshold encourages the model to predict 1 more often.
    *
-   * Default is effectively 0.5.
+   * Note: Calling this with threshold p is equivalent to calling `setThresholds(Array(1-p, p))`.
+   *
+   * Default is 0.5.
    * @group setParam
    */
-  def setThreshold(value: Double): this.type = set(thresholds, Array(1.0 - value, value))
+  def setThreshold(value: Double): this.type
 
   /**
-   * Version of [[getThresholds()]] for binary classification, available for backwards
-   * compatibility.
+   * Get threshold for binary classification prediction.
+   * The [[threshold]] is overridden by [[thresholds]] if [[thresholds]] is set.
    *
-   * Param thresholds must have length 2 (or not be specified).
-   * This returns {{{1 / (1 + thresholds(0) / thresholds(1))}}}.
+   * @return If [[thresholds]] is set with length 2 (i.e., binary classification), this returns
+   *         the equivalent threshold: {{{1 / (1 + thresholds(0) / thresholds(1))}}}.
+   *         Otherwise, returns [[threshold]] value.
    * @group getParam
+   * @throws RuntimeException if [[thresholds]] is set to an array of length other than 2.
    */
-  def getThreshold: Double = {
-    if (isDefined(thresholds)) {
+  override def getThreshold: Double = {
+    if (isSet(thresholds)) {
       val thresholdValues = $(thresholds)
-      assert(thresholdValues.length == 2, "Logistic Regression getThreshold only applies to" +
-        " binary classification, but thresholds has length != 2." +
-        s"  thresholds: ${thresholdValues.mkString(",")}")
+      if (thresholdValues.length != 2) {
+        throw new RuntimeException("Logistic Regression getThreshold only applies to" +
+          " binary classification, but thresholds has length != 2.  thresholds: " +
+          thresholdValues.mkString(","))
+      }
       1.0 / (1.0 + thresholdValues(0) / thresholdValues(1))
     } else {
-      0.5
+      $(threshold)
     }
   }
 }
@@ -80,7 +87,8 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 /**
  * :: Experimental ::
  * Logistic regression.
- * Currently, this class only supports binary classification.
+ * Currently, this class only supports binary classification.  It will support multiclass
+ * in the future.
  */
 @Experimental
 class LogisticRegression(override val uid: String)
@@ -128,7 +136,7 @@ class LogisticRegression(override val uid: String)
    * Whether to fit an intercept term.
    * Default is true.
    * @group setParam
-   * */
+   */
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
   setDefault(fitIntercept -> true)
 
@@ -140,13 +148,29 @@ class LogisticRegression(override val uid: String)
    * is applied. In R's GLMNET package, the default behavior is true as well.
    * Default is true.
    * @group setParam
-   * */
+   */
   def setStandardization(value: Boolean): this.type = set(standardization, value)
   setDefault(standardization -> true)
 
-  override def setThreshold(value: Double): this.type = super.setThreshold(value)
+  override def setThreshold(value: Double): this.type = set(threshold, value)
 
   override def getThreshold: Double = super.getThreshold
+
+  /**
+   * If [[thresholds]] is set, return its value.
+   * Otherwise, if [[threshold]] is set, return the equivalent thresholds for binary
+   * classification: (1-threshold, threshold).
+   * If neither are set, throw an exception.
+   * @group getParam
+   */
+  override def getThresholds: Array[Double] = {
+    if (!isSet(thresholds) && isSet(threshold)) {
+      val t = $(threshold)
+      Array(1-t, t)
+    } else {
+      $(thresholds)
+    }
+  }
 
   override protected def train(dataset: DataFrame): LogisticRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
@@ -310,7 +334,7 @@ class LogisticRegressionModel private[ml] (
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams {
 
-  override def setThreshold(value: Double): this.type = super.setThreshold(value)
+  override def setThreshold(value: Double): this.type = set(threshold, value)
 
   override def getThreshold: Double = super.getThreshold
 
