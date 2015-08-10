@@ -64,36 +64,47 @@ val splits = data.randomSplit(Array(0.7, 0.3))
 val (trainingData, testData) = (splits(0), splits(1))
 
 // Index labels, adding metadata to the label column.
-StringIndexer labelIndexer = new StringIndexer()
+val labelIndexer = new StringIndexer()
   .setInputCol("label")
   .setOutputCol("indexedLabel")
 
 // Automatically identify categorical features, and index them.
-VectorIndexer featureIndexer = new VectorIndexer()
+val featureIndexer = new VectorIndexer()
   .setInputCol("features")
   .setOutputCol("indexedFeatures")
   .setMaxCategories(4) // features with > 4 distinct values are treated as continuous
 
 // Train a DecisionTree model.
-DecisionTreeClassifier dt = new DecisionTreeClassifier()
+val dt = new DecisionTreeClassifier()
   .setLabelCol("indexedLabel") // "label" is the default
   .setFeaturesCol("indexedFeatures") // "features" is the default
 
-// Chain indexer and tree in a Pipeline
-val pipeline = new Pipeline()
-  .setStages(Array(labelIndexer, featureIndexer, dt))
+// Convert indexed labels back to original labels.
+val labelConverter = new StringIndexerInverse()
+  .setInputCol("prediction")
+  .setOutputCol("predictedLabel")
 
-// Train model.  This also runs the indexer.
+// Chain indexers and tree in a Pipeline
+val pipeline = new Pipeline()
+  .setStages(Array(labelIndexer, featureIndexer, dt, labelConverter))
+
+// Train model.  This also runs the indexers.
 val model = pipeline.fit(trainingData)
 
 // Make predictions.
 val predictions = model.transform(testData)
 
 // Select (prediction, true label) and compute test error
-val labelAndPreds = predictions.select("prediction", "label").map {
+val labelAndPreds = predictions.select("predictedLabel", "label").map {
   case Row(pred: Double, label: Double) =>
     (pred, label)
 }
+
+val testErr = new MulticlassClassificationEvaluator()
+  .setPredictionCol("predictedLabel")
+  .setLabelCol("label")
+  .setMetricName("precision")
+
 val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.count()
 println("Test Error = " + testErr)
 println("Learned classification tree model:\n" + model.toDebugString)
