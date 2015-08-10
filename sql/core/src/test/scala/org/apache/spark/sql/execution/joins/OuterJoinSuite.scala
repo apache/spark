@@ -82,12 +82,14 @@ class OuterJoinSuite extends SparkPlanTest with SQLTestUtils {
 
   val left = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(Seq(
     Row(1, 2.0),
+    Row(2, 1.0), // This row is duplicated to ensure that we will have multiple buffered matches
     Row(2, 1.0),
     Row(3, 3.0),
     Row(null, null)
   )), new StructType().add("a", IntegerType).add("b", DoubleType))
 
   val right = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(Seq(
+    Row(2, 3.0), // This row is duplicated to ensure that we will have multiple buffered matches
     Row(2, 3.0),
     Row(3, 2.0),
     Row(4, 1.0),
@@ -112,6 +114,9 @@ class OuterJoinSuite extends SparkPlanTest with SQLTestUtils {
       (null, null, null, null),
       (1, 2.0, null, null),
       (2, 1.0, 2, 3.0),
+      (2, 1.0, 2, 3.0),
+      (2, 1.0, 2, 3.0),
+      (2, 1.0, 2, 3.0),
       (3, 3.0, null, null)
     )
   )
@@ -124,6 +129,9 @@ class OuterJoinSuite extends SparkPlanTest with SQLTestUtils {
     condition,
     Seq(
       (null, null, null, null),
+      (2, 1.0, 2, 3.0),
+      (2, 1.0, 2, 3.0),
+      (2, 1.0, 2, 3.0),
       (2, 1.0, 2, 3.0),
       (null, null, 3, 2.0),
       (null, null, 4, 1.0)
@@ -138,6 +146,9 @@ class OuterJoinSuite extends SparkPlanTest with SQLTestUtils {
     condition,
     Seq(
       (1, 2.0, null, null),
+      (2, 1.0, 2, 3.0),
+      (2, 1.0, 2, 3.0),
+      (2, 1.0, 2, 3.0),
       (2, 1.0, 2, 3.0),
       (3, 3.0, null, null),
       (null, null, 3, 2.0),
