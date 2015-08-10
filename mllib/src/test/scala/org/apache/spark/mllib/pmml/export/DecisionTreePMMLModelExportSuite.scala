@@ -21,8 +21,10 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node, Predict, Split}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+
 import org.dmg.pmml.CompoundPredicate.BooleanOperator
 import org.dmg.pmml._
+
 import org.scalatest.PrivateMethodTester
 
 import scala.collection.JavaConverters._

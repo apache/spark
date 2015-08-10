@@ -20,6 +20,7 @@ package org.apache.spark.mllib.pmml.export
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node}
+
 import org.dmg.pmml.{Node => PMMLNode, _}
 
 import scala.annotation.tailrec
@@ -29,7 +30,7 @@ import scala.collection.mutable.MutableList
 private[mllib] object TreeModelUtils {
 
 
-  def getPMMLTree(mllibTreeModel: DecisionTreeModel, modelName: String): TreeModel = {
+  def toPMMLTree(mllibTreeModel: DecisionTreeModel, modelName: String): TreeModel = {
 
     val miningFunctionType = getPMMLMiningFunctionType(mllibTreeModel.algo)
 
