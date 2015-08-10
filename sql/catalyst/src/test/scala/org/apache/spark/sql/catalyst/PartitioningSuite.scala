@@ -34,17 +34,16 @@ class PartitioningSuite extends SparkFunSuite {
     val distribution = ClusteredDistribution(expressions)
     assert(partitioningA.satisfies(distribution))
     assert(partitioningB.satisfies(distribution))
-    // Both partitionings are compatible with and guarantee each other:
-    assert(partitioningA.compatibleWith(partitioningB))
-    assert(partitioningB.compatibleWith(partitioningA))
-    assert(partitioningA.guarantees(partitioningB))
-    assert(partitioningB.guarantees(partitioningA))
-    // Given all of this, we would expect these partitionings to compute the same hashcode for
-    // any given row:
+    // These partitionings compute different hashcodes for the same input row:
     def computeHashCode(partitioning: HashPartitioning): Int = {
       val hashExprProj = new InterpretedMutableProjection(partitioning.expressions, Seq.empty)
       hashExprProj.apply(InternalRow.empty).hashCode()
     }
-    assert(computeHashCode(partitioningA) === computeHashCode(partitioningB))
+    assert(computeHashCode(partitioningA) != computeHashCode(partitioningB))
+    // Thus, these partitionings are incompatible:
+    assert(!partitioningA.compatibleWith(partitioningB))
+    assert(!partitioningB.compatibleWith(partitioningA))
+    assert(!partitioningA.guarantees(partitioningB))
+    assert(!partitioningB.guarantees(partitioningA))
   }
 }
