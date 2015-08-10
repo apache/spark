@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.scalactic.TripleEqualsSupport.Spread
-
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
