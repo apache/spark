@@ -40,10 +40,6 @@ abstract class AbstractGenerateProjection[OutType <: AnyRef]
     extends CodeGenerator[Seq[Expression], OutType] {
   protected def projectionType: String
 
-  protected def inputNames: Seq[String]
-
-  protected def input(prefix: String) = inputNames.map(n => s"$prefix$n").mkString(", ")
-
   // Make Mutablility optional...
   protected def create(expressions: Seq[Expression]): OutType = {
     val ctx = newCodeGenContext()

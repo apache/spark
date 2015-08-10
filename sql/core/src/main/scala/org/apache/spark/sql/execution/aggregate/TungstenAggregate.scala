@@ -82,6 +82,7 @@ case class TungstenAggregate(
         initialInputBufferOffset,
         resultExpressions,
         newMutableProjection,
+        newMutableJoinedProjection,
         child.output,
         testFallbackStartsAt,
         numInputRows,

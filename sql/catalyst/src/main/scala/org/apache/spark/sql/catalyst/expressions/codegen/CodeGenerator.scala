@@ -349,6 +349,10 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
   protected def joinedRowArg(ctx: CodeGenContext, prefix: String): String = ""
 
+  protected def inputNames: Seq[String] = Seq("i")
+
+  protected def input(prefix: String) = inputNames.map(n => s"$prefix$n").mkString(", ")
+
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
    * already available.
@@ -446,8 +450,6 @@ trait ExpressionCodeGen[InType <: Expression, OutType <: AnyRef] {
 
   override protected def canonicalize(in: Seq[InType]): Seq[InType] =
     in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[InType])
-
-  protected def inputNames = Seq("i")
 }
 
 trait JoinedExpressionCodeGen[OutType <: AnyRef] {
@@ -482,5 +484,5 @@ trait JoinedExpressionCodeGen[OutType <: AnyRef] {
     } else ""
   }
 
-  protected def inputNames = Seq("left", "right")
+  override protected def inputNames = Seq("left", "right")
 }
