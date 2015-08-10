@@ -29,7 +29,7 @@ import org.apache.spark.unsafe.types.UTF8String
 class GeneratedProjectionSuite extends SparkFunSuite {
 
   test("generated projections on wider table") {
-    val N = 10
+    val N = 1000
     val wideRow1 = new GenericInternalRow((1 to N).toArray[Any])
     val schema1 = StructType((1 to N).map(i => StructField("", IntegerType)))
     val wideRow2 = new GenericInternalRow(

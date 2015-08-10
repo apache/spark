@@ -271,7 +271,7 @@ class CodeGenContext {
    * Splits the generated code of expressions into multiple functions, because function has
    * 64kb code size limit in JVM
    */
-  def splitExpressions(input: String, expressions: Seq[String]): String = {
+  def splitExpressions(row: String, expressions: Seq[String]): String = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
@@ -292,7 +292,7 @@ class CodeGenContext {
       val functions = blocks.zipWithIndex.map { case (body, i) =>
         val name = s"${apply}_$i"
         val code = s"""
-           |private void $name(InternalRow $input) {
+           |private void $name(InternalRow $row) {
            |  $body
            |}
          """.stripMargin
@@ -300,7 +300,7 @@ class CodeGenContext {
          name
       }
 
-      functions.map(name => s"$name($input);").mkString("\n")
+      functions.map(name => s"$name($row);").mkString("\n")
     }
   }
 }
