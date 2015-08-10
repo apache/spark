@@ -959,8 +959,10 @@ object Client extends Logging {
     val sparkConf = new SparkConf
 
     val args = new ClientArguments(argStrings, sparkConf)
-    // to maintan backwards-compatibility
-    sparkConf.setIfMissing("spark.executor.instances", args.numExecutors.toString)
+    // to maintain backwards-compatibility
+    if(!Utils.isDynamicAllocationEnabled(sparkConf)){
+      sparkConf.setIfMissing("spark.executor.instances", args.numExecutors.toString)
+    }
     new Client(args, sparkConf).run()
   }
 

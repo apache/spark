@@ -2294,7 +2294,7 @@ private[spark] object Utils extends Logging {
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
     conf.contains("spark.dynamicAllocation.enabled") &&
-      !conf.contains("spark.executor.instances")
+      (conf.getInt("spark.executor.instances", 0) == 0)
   }
 
 }
