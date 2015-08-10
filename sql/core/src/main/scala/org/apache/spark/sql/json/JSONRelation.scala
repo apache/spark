@@ -22,22 +22,27 @@ import java.io.CharArrayWriter
 import com.fasterxml.jackson.core.JsonFactory
 import com.google.common.base.Objects
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.{Text, LongWritable, NullWritable}
+import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
 import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
-import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext, Job}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-import org.apache.spark.Logging
-import org.apache.spark.mapred.SparkHadoopMapRedUtil
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 
+import org.apache.spark.Logging
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.util.SerializableConfiguration
 
-private[sql] class DefaultSource extends HadoopFsRelationProvider {
+private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
+
+  def format(): String = "json"
+
   override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
@@ -105,6 +110,15 @@ private[sql] class JSONRelation(
     jsonSchema
   }
 
+  override private[sql] def buildScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputPaths: Array[String],
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
+    refresh()
+    super.buildScan(requiredColumns, filters, inputPaths, broadcastedConf)
+  }
+
   override def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
@@ -152,7 +166,7 @@ private[json] class JsonOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
-  extends OutputWriterInternal with SparkHadoopMapRedUtil with Logging {
+  extends OutputWriter with SparkHadoopMapRedUtil with Logging {
 
   val writer = new CharArrayWriter()
   // create the Generator without separator inserted between 2 records
@@ -170,7 +184,9 @@ private[json] class JsonOutputWriter(
     }.getRecordWriter(context)
   }
 
-  override def writeInternal(row: InternalRow): Unit = {
+  override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
+
+  override protected[sql] def writeInternal(row: InternalRow): Unit = {
     JacksonGenerator(dataSchema, gen, row)
     gen.flush()
 

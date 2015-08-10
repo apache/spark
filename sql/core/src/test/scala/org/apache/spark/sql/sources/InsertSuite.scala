@@ -32,9 +32,9 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
 
   var path: File = null
 
-  override def beforeAll: Unit = {
+  override def beforeAll(): Unit = {
     path = Utils.createTempDir()
-    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
+    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
     caseInsensitiveContext.read.json(rdd).registerTempTable("jt")
     sql(
       s"""
@@ -46,7 +46,7 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
       """.stripMargin)
   }
 
-  override def afterAll: Unit = {
+  override def afterAll(): Unit = {
     caseInsensitiveContext.dropTempTable("jsonTable")
     caseInsensitiveContext.dropTempTable("jt")
     Utils.deleteRecursively(path)
@@ -110,7 +110,7 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
     )
 
     // Writing the table to less part files.
-    val rdd1 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""), 5)
+    val rdd1 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""), 5)
     caseInsensitiveContext.read.json(rdd1).registerTempTable("jt1")
     sql(
       s"""
@@ -122,7 +122,7 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
     )
 
     // Writing the table to more part files.
-    val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""), 10)
+    val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""), 10)
     caseInsensitiveContext.read.json(rdd2).registerTempTable("jt2")
     sql(
       s"""

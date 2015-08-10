@@ -32,9 +32,9 @@ class RowFormatConvertersSuite extends SparkPlanTest {
     case c: ConvertToSafe => c
   }
 
-  private val outputsSafe = ExternalSort(Nil, false, PhysicalRDD(Seq.empty, null))
+  private val outputsSafe = ExternalSort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
   assert(!outputsSafe.outputsUnsafeRows)
-  private val outputsUnsafe = TungstenSort(Nil, false, PhysicalRDD(Seq.empty, null))
+  private val outputsUnsafe = TungstenSort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
   assert(outputsUnsafe.outputsUnsafeRows)
 
   test("planner should insert unsafe->safe conversions when required") {
@@ -112,7 +112,9 @@ case class DummyPlan(child: SparkPlan) extends UnaryNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions { iter =>
-      // cache all strings to make sure we have deep copied UTF8String inside incoming
+      // This `DummyPlan` is in safe mode, so we don't need to do copy even we hold some
+      // values gotten from the incoming rows.
+      // we cache all strings here to make sure we have deep copied UTF8String inside incoming
       // safe InternalRow.
       val strings = new scala.collection.mutable.ArrayBuffer[UTF8String]
       iter.foreach { row =>

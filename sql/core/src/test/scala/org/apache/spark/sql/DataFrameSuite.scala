@@ -134,6 +134,21 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     )
   }
 
+  test("SPARK-8930: explode should fail with a meaningful message if it takes a star") {
+    val df = Seq(("1", "1,2"), ("2", "4"), ("3", "7,8,9")).toDF("prefix", "csv")
+    val e = intercept[AnalysisException] {
+      df.explode($"*") { case Row(prefix: String, csv: String) =>
+        csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
+      }.queryExecution.assertAnalyzed()
+    }
+    assert(e.getMessage.contains(
+      "Cannot explode *, explode can only be applied on a specific column."))
+
+    df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
+      csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
+    }.queryExecution.assertAnalyzed()
+  }
+
   test("explode alias and star") {
     val df = Seq((Array("a"), 1)).toDF("a", "b")
 
@@ -413,23 +428,6 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
         Row(key, value, key + 1)
       }.toSeq)
     assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newCol"))
-  }
-
-  test("randomSplit") {
-    val n = 600
-    val data = sqlContext.sparkContext.parallelize(1 to n, 2).toDF("id")
-    for (seed <- 1 to 5) {
-      val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
-      assert(splits.length == 3, "wrong number of splits")
-
-      assert(splits.reduce((a, b) => a.unionAll(b)).sort("id").collect().toList ==
-        data.collect().toList, "incomplete or wrong split")
-
-      val s = splits.map(_.count())
-      assert(math.abs(s(0) - 100) < 50) // std =  9.13
-      assert(math.abs(s(1) - 200) < 50) // std = 11.55
-      assert(math.abs(s(2) - 300) < 50) // std = 12.25
-    }
   }
 
   test("describe") {

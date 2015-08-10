@@ -169,7 +169,7 @@ class DataFrame private[sql](
   }
 
   /**
-   * Internal API for Python
+   * Compose the string representing rows for output
    * @param _numRows Number of rows to show
    * @param truncate Whether truncate long strings and align cells right
    */

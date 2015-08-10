@@ -25,8 +25,4 @@ class DebuggingSuite extends SparkFunSuite {
   test("DataFrame.debug()") {
     testData.debug()
   }
-
-  test("DataFrame.typeCheck()") {
-    testData.typeCheck()
-  }
 }

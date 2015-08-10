@@ -267,7 +267,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     if (!hasGeneratedAgg) {
       fail(
         s"""
-           |Codegen is enabled, but query $sqlText does not have GeneratedAggregate in the plan.
+           |Codegen is enabled, but query $sqlText does not have TungstenAggregate in the plan.
            |${df.queryExecution.simpleString}
          """.stripMargin)
     }
@@ -1602,10 +1602,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       Row(new CalendarInterval(-(12 * 3 - 3), -(7L * MICROS_PER_WEEK + 123))))
   }
 
-  ignore("aggregation with codegen updates peak execution memory") {
-    withSQLConf(
-        (SQLConf.CODEGEN_ENABLED.key, "true"),
-        (SQLConf.USE_SQL_AGGREGATE2.key, "false")) {
+  test("aggregation with codegen updates peak execution memory") {
+    withSQLConf((SQLConf.CODEGEN_ENABLED.key, "true")) {
       val sc = sqlContext.sparkContext
       AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "aggregation with codegen") {
         testCodeGen(
