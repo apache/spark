@@ -266,6 +266,11 @@ class HomeView(AdminIndexView):
         DM = models.DagModel
         qry = session.query(DM).filter(~DM.is_subdag, DM.is_active).all()
         orm_dags = {dag.dag_id: dag for dag in qry}
+        import_errors = session.query(models.ImportError).all()
+        for ie in import_errors:
+            flash(
+                "Broken DAG: [{ie.filename}] {ie.stacktrace}".format(ie=ie),
+                "error")
         session.expunge_all()
         session.commit()
         session.close()
