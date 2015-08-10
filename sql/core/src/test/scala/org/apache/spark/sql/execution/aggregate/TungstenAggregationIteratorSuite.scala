@@ -39,7 +39,7 @@ class TungstenAggregationIteratorSuite extends SparkFunSuite with LocalSparkCont
       }
       iter = new TungstenAggregationIterator(
         Seq.empty, Seq.empty, Seq.empty, 0, Seq.empty, newMutableProjection, Seq.empty, None)
-      val numPages = iter.hashMap.getNumDataPages
+      val numPages = iter.getHashMap.getNumDataPages
       assert(numPages === 1)
     } finally {
       // Clean up

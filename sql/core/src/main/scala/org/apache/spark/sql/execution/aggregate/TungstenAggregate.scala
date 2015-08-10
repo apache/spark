@@ -90,10 +90,10 @@ case class TungstenAggregate(
         // We're not using the underlying map, so we just can free it here
         aggregationIterator.free()
         if (groupingExpressions.isEmpty) {
-          // This is a grouped aggregate and the input iterator is empty,
-          // so return an empty iterator.
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
         } else {
+          // This is a grouped aggregate and the input iterator is empty,
+          // so return an empty iterator.
           Iterator[UnsafeRow]()
         }
       } else {
@@ -104,10 +104,9 @@ case class TungstenAggregate(
 
     // Note: we need to set up the iterator in each partition before computing the
     // parent partition, so we cannot simply use `mapPartitions` here (SPARK-9747).
-    val parentPartition = child.execute()
     val resultRdd = {
       new MapPartitionsWithPreparationRDD[UnsafeRow, InternalRow, TungstenAggregationIterator](
-        parentPartition, preparePartition, executePartition, preservesPartitioning = true)
+        child.execute(), preparePartition, executePartition, preservesPartitioning = true)
     }
     resultRdd.asInstanceOf[RDD[InternalRow]]
   }
