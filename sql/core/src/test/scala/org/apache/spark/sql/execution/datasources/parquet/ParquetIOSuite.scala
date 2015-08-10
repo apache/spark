@@ -373,7 +373,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     // _temporary should be missing if direct output committer works.
     try {
       configuration.set("spark.sql.parquet.output.committer.class",
-        "org.apache.spark.sql.parquet.DirectParquetOutputCommitter")
+        classOf[DirectParquetOutputCommitter].getCanonicalName)
       sqlContext.udf.register("div0", (x: Int) => x / 0)
       withTempPath { dir =>
         intercept[org.apache.spark.SparkException] {
