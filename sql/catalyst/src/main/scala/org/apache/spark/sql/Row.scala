@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
@@ -151,7 +152,7 @@ trait Row extends Serializable {
    *   StructType -> org.apache.spark.sql.Row
    * }}}
    */
-  def apply(i: Int): Any
+  def apply(i: Int): Any = get(i)
 
   /**
    * Returns the value at position i. If the value is null, null is returned. The following
@@ -176,10 +177,10 @@ trait Row extends Serializable {
    *   StructType -> org.apache.spark.sql.Row
    * }}}
    */
-  def get(i: Int): Any = apply(i)
+  def get(i: Int): Any
 
   /** Checks whether the value at position i is null. */
-  def isNullAt(i: Int): Boolean
+  def isNullAt(i: Int): Boolean = get(i) == null
 
   /**
    * Returns the value at position i as a primitive boolean.
@@ -187,7 +188,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getBoolean(i: Int): Boolean
+  def getBoolean(i: Int): Boolean = getAs[Boolean](i)
 
   /**
    * Returns the value at position i as a primitive byte.
@@ -195,7 +196,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getByte(i: Int): Byte
+  def getByte(i: Int): Byte = getAs[Byte](i)
 
   /**
    * Returns the value at position i as a primitive short.
@@ -203,7 +204,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getShort(i: Int): Short
+  def getShort(i: Int): Short = getAs[Short](i)
 
   /**
    * Returns the value at position i as a primitive int.
@@ -211,7 +212,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getInt(i: Int): Int
+  def getInt(i: Int): Int = getAs[Int](i)
 
   /**
    * Returns the value at position i as a primitive long.
@@ -219,7 +220,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getLong(i: Int): Long
+  def getLong(i: Int): Long = getAs[Long](i)
 
   /**
    * Returns the value at position i as a primitive float.
@@ -228,7 +229,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getFloat(i: Int): Float
+  def getFloat(i: Int): Float = getAs[Float](i)
 
   /**
    * Returns the value at position i as a primitive double.
@@ -236,7 +237,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getDouble(i: Int): Double
+  def getDouble(i: Int): Double = getAs[Double](i)
 
   /**
    * Returns the value at position i as a String object.
@@ -244,35 +245,35 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getString(i: Int): String
+  def getString(i: Int): String = getAs[String](i)
 
   /**
    * Returns the value at position i of decimal type as java.math.BigDecimal.
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getDecimal(i: Int): java.math.BigDecimal = apply(i).asInstanceOf[java.math.BigDecimal]
+  def getDecimal(i: Int): java.math.BigDecimal = getAs[java.math.BigDecimal](i)
 
   /**
    * Returns the value at position i of date type as java.sql.Date.
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getDate(i: Int): java.sql.Date = apply(i).asInstanceOf[java.sql.Date]
+  def getDate(i: Int): java.sql.Date = getAs[java.sql.Date](i)
 
   /**
    * Returns the value at position i of date type as java.sql.Timestamp.
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getTimestamp(i: Int): java.sql.Timestamp = apply(i).asInstanceOf[java.sql.Timestamp]
+  def getTimestamp(i: Int): java.sql.Timestamp = getAs[java.sql.Timestamp](i)
 
   /**
    * Returns the value at position i of array type as a Scala Seq.
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getSeq[T](i: Int): Seq[T] = apply(i).asInstanceOf[Seq[T]]
+  def getSeq[T](i: Int): Seq[T] = getAs[Seq[T]](i)
 
   /**
    * Returns the value at position i of array type as [[java.util.List]].
@@ -288,7 +289,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getMap[K, V](i: Int): scala.collection.Map[K, V] = apply(i).asInstanceOf[Map[K, V]]
+  def getMap[K, V](i: Int): scala.collection.Map[K, V] = getAs[Map[K, V]](i)
 
   /**
    * Returns the value at position i of array type as a [[java.util.Map]].
@@ -311,7 +312,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getAs[T](i: Int): T = apply(i).asInstanceOf[T]
+  def getAs[T](i: Int): T = get(i).asInstanceOf[T]
 
   /**
    * Returns the value of a given fieldName.
@@ -363,12 +364,88 @@ trait Row extends Serializable {
     false
   }
 
+  /**
+   * Returns true if we can check equality for these 2 rows.
+   * Equality check between external row and internal row is not allowed.
+   * Here we do this check to prevent call `equals` on external row with internal row.
+   */
+  protected def canEqual(other: Row) = {
+    // Note that `Row` is not only the interface of external row but also the parent
+    // of `InternalRow`, so we have to ensure `other` is not a internal row here to prevent
+    // call `equals` on external row with internal row.
+    // `InternalRow` overrides canEqual, and these two canEquals together makes sure that
+    // equality check between external Row and InternalRow will always fail.
+    // In the future, InternalRow should not extend Row. In that case, we can remove these
+    // canEqual methods.
+    !other.isInstanceOf[InternalRow]
+  }
+
+  override def equals(o: Any): Boolean = {
+    if (!o.isInstanceOf[Row]) return false
+    val other = o.asInstanceOf[Row]
+
+    if (!canEqual(other)) {
+      throw new UnsupportedOperationException(
+        "cannot check equality between external and internal rows")
+    }
+
+    if (other eq null) return false
+
+    if (length != other.length) {
+      return false
+    }
+
+    var i = 0
+    while (i < length) {
+      if (isNullAt(i) != other.isNullAt(i)) {
+        return false
+      }
+      if (!isNullAt(i)) {
+        val o1 = get(i)
+        val o2 = other.get(i)
+        o1 match {
+          case b1: Array[Byte] =>
+            if (!o2.isInstanceOf[Array[Byte]] ||
+                !java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
+              return false
+            }
+          case f1: Float if java.lang.Float.isNaN(f1) =>
+            if (!o2.isInstanceOf[Float] || ! java.lang.Float.isNaN(o2.asInstanceOf[Float])) {
+              return false
+            }
+          case d1: Double if java.lang.Double.isNaN(d1) =>
+            if (!o2.isInstanceOf[Double] || ! java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
+              return false
+            }
+          case d1: java.math.BigDecimal if o2.isInstanceOf[java.math.BigDecimal] =>
+            if (d1.compareTo(o2.asInstanceOf[java.math.BigDecimal]) != 0) {
+              return false
+            }
+          case _ => if (o1 != o2) {
+            return false
+          }
+        }
+      }
+      i += 1
+    }
+    true
+  }
+
   /* ---------------------- utility methods for Scala ---------------------- */
 
   /**
-   * Return a Scala Seq representing the row. ELements are placed in the same order in the Seq.
+   * Return a Scala Seq representing the row. Elements are placed in the same order in the Seq.
    */
-  def toSeq: Seq[Any]
+  def toSeq: Seq[Any] = {
+    val n = length
+    val values = new Array[Any](n)
+    var i = 0
+    while (i < n) {
+      values.update(i, get(i))
+      i += 1
+    }
+    values.toSeq
+  }
 
   /** Displays all elements of this sequence in a string (without a separator). */
   def mkString: String = toSeq.mkString

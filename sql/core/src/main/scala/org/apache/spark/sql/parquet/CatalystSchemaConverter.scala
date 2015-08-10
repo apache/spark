@@ -25,6 +25,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition._
 import org.apache.parquet.schema._
 
+import org.apache.spark.sql.parquet.CatalystSchemaConverter.{MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64, maxPrecisionForBytes}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, SQLConf}
 
@@ -142,7 +143,7 @@ private[parquet] class CatalystSchemaConverter(
       DecimalType(precision, scale)
     }
 
-    field.getPrimitiveTypeName match {
+    typeName match {
       case BOOLEAN => BooleanType
 
       case FLOAT => FloatType
@@ -150,20 +151,20 @@ private[parquet] class CatalystSchemaConverter(
       case DOUBLE => DoubleType
 
       case INT32 =>
-        field.getOriginalType match {
+        originalType match {
           case INT_8 => ByteType
           case INT_16 => ShortType
           case INT_32 | null => IntegerType
           case DATE => DateType
-          case DECIMAL => makeDecimalType(maxPrecisionForBytes(4))
+          case DECIMAL => makeDecimalType(MAX_PRECISION_FOR_INT32)
           case TIME_MILLIS => typeNotImplemented()
           case _ => illegalType()
         }
 
       case INT64 =>
-        field.getOriginalType match {
+        originalType match {
           case INT_64 | null => LongType
-          case DECIMAL => makeDecimalType(maxPrecisionForBytes(8))
+          case DECIMAL => makeDecimalType(MAX_PRECISION_FOR_INT64)
           case TIMESTAMP_MILLIS => typeNotImplemented()
           case _ => illegalType()
         }
@@ -176,8 +177,8 @@ private[parquet] class CatalystSchemaConverter(
         TimestampType
 
       case BINARY =>
-        field.getOriginalType match {
-          case UTF8 => StringType
+        originalType match {
+          case UTF8 | ENUM => StringType
           case null if assumeBinaryIsString => StringType
           case null => BinaryType
           case DECIMAL => makeDecimalType()
@@ -185,7 +186,7 @@ private[parquet] class CatalystSchemaConverter(
         }
 
       case FIXED_LEN_BYTE_ARRAY =>
-        field.getOriginalType match {
+        originalType match {
           case DECIMAL => makeDecimalType(maxPrecisionForBytes(field.getTypeLength))
           case INTERVAL => typeNotImplemented()
           case _ => illegalType()
@@ -261,7 +262,7 @@ private[parquet] class CatalystSchemaConverter(
   // Here we implement Parquet LIST backwards-compatibility rules.
   // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules
   // scalastyle:on
-  private def isElementType(repeatedType: Type, parentName: String) = {
+  private def isElementType(repeatedType: Type, parentName: String): Boolean = {
     {
       // For legacy 2-level list types with primitive element type, e.g.:
       //
@@ -358,9 +359,24 @@ private[parquet] class CatalystSchemaConverter(
       case DateType =>
         Types.primitive(INT32, repetition).as(DATE).named(field.name)
 
-      // NOTE: !! This timestamp type is not specified in Parquet format spec !!
-      // However, Impala and older versions of Spark SQL use INT96 to store timestamps with
-      // nanosecond precision (not TIME_MILLIS or TIMESTAMP_MILLIS described in the spec).
+      // NOTE: Spark SQL TimestampType is NOT a well defined type in Parquet format spec.
+      //
+      // As stated in PARQUET-323, Parquet `INT96` was originally introduced to represent nanosecond
+      // timestamp in Impala for some historical reasons, it's not recommended to be used for any
+      // other types and will probably be deprecated in future Parquet format spec.  That's the
+      // reason why Parquet format spec only defines `TIMESTAMP_MILLIS` and `TIMESTAMP_MICROS` which
+      // are both logical types annotating `INT64`.
+      //
+      // Originally, Spark SQL uses the same nanosecond timestamp type as Impala and Hive.  Starting
+      // from Spark 1.5.0, we resort to a timestamp type with 100 ns precision so that we can store
+      // a timestamp into a `Long`.  This design decision is subject to change though, for example,
+      // we may resort to microsecond precision in the future.
+      //
+      // For Parquet, we plan to write all `TimestampType` value as `TIMESTAMP_MICROS`, but it's
+      // currently not implemented yet because parquet-mr 1.7.0 (the version we're currently using)
+      // hasn't implemented `TIMESTAMP_MICROS` yet.
+      //
+      // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
       case TimestampType =>
         Types.primitive(INT96, repetition).named(field.name)
 
@@ -372,23 +388,17 @@ private[parquet] class CatalystSchemaConverter(
       // =====================================
 
       // Spark 1.4.x and prior versions only support decimals with a maximum precision of 18 and
-      // always store decimals in fixed-length byte arrays.
-      case DecimalType.Fixed(precision, scale)
-        if precision <= maxPrecisionForBytes(8) && !followParquetFormatSpec =>
+      // always store decimals in fixed-length byte arrays.  To keep compatibility with these older
+      // versions, here we convert decimals with all precisions to `FIXED_LEN_BYTE_ARRAY` annotated
+      // by `DECIMAL`.
+      case DecimalType.Fixed(precision, scale) if !followParquetFormatSpec =>
         Types
           .primitive(FIXED_LEN_BYTE_ARRAY, repetition)
           .as(DECIMAL)
           .precision(precision)
           .scale(scale)
-          .length(minBytesForPrecision(precision))
+          .length(CatalystSchemaConverter.minBytesForPrecision(precision))
           .named(field.name)
-
-      case dec @ DecimalType() if !followParquetFormatSpec =>
-        throw new AnalysisException(
-          s"Data type $dec is not supported. " +
-            s"When ${SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key} is set to false," +
-            "decimal precision and scale must be specified, " +
-            "and precision must be less than or equal to 18.")
 
       // =====================================
       // Decimals (follow Parquet format spec)
@@ -396,7 +406,7 @@ private[parquet] class CatalystSchemaConverter(
 
       // Uses INT32 for 1 <= precision <= 9
       case DecimalType.Fixed(precision, scale)
-        if precision <= maxPrecisionForBytes(4) && followParquetFormatSpec =>
+          if precision <= MAX_PRECISION_FOR_INT32 && followParquetFormatSpec =>
         Types
           .primitive(INT32, repetition)
           .as(DECIMAL)
@@ -406,7 +416,7 @@ private[parquet] class CatalystSchemaConverter(
 
       // Uses INT64 for 1 <= precision <= 18
       case DecimalType.Fixed(precision, scale)
-        if precision <= maxPrecisionForBytes(8) && followParquetFormatSpec =>
+          if precision <= MAX_PRECISION_FOR_INT64 && followParquetFormatSpec =>
         Types
           .primitive(INT64, repetition)
           .as(DECIMAL)
@@ -421,12 +431,8 @@ private[parquet] class CatalystSchemaConverter(
           .as(DECIMAL)
           .precision(precision)
           .scale(scale)
-          .length(minBytesForPrecision(precision))
+          .length(CatalystSchemaConverter.minBytesForPrecision(precision))
           .named(field.name)
-
-      case dec @ DecimalType.Unlimited if followParquetFormatSpec =>
-        throw new AnalysisException(
-          s"Data type $dec is not supported. Decimal precision and scale must be specified.")
 
       // ===================================================
       // ArrayType and MapType (for Spark versions <= 1.4.x)
@@ -446,7 +452,8 @@ private[parquet] class CatalystSchemaConverter(
           field.name,
           Types
             .buildGroup(REPEATED)
-            .addField(convertField(StructField("element", elementType, nullable)))
+            // "array_element" is the name chosen by parquet-hive (1.7.0 and prior version)
+            .addField(convertField(StructField("array_element", elementType, nullable)))
             .named(CatalystConverter.ARRAY_CONTAINS_NULL_BAG_SCHEMA_NAME))
 
       // Spark 1.4.x and prior versions convert ArrayType with non-nullable elements into a 2-level
@@ -459,7 +466,8 @@ private[parquet] class CatalystSchemaConverter(
         ConversionPatterns.listType(
           repetition,
           field.name,
-          convertField(StructField("element", elementType, nullable), REPEATED))
+          // "array" is the name chosen by parquet-avro (1.7.0 and prior version)
+          convertField(StructField("array", elementType, nullable), REPEATED))
 
       // Spark 1.4.x and prior versions convert MapType into a 3-level group annotated by
       // MAP_KEY_VALUE.  This is covered by `convertGroupField(field: GroupType): DataType`.
@@ -527,23 +535,6 @@ private[parquet] class CatalystSchemaConverter(
         throw new AnalysisException(s"Unsupported data type $field.dataType")
     }
   }
-
-  // Max precision of a decimal value stored in `numBytes` bytes
-  private def maxPrecisionForBytes(numBytes: Int): Int = {
-    Math.round(                               // convert double to long
-      Math.floor(Math.log10(                  // number of base-10 digits
-        Math.pow(2, 8 * numBytes - 1) - 1)))  // max value stored in numBytes
-      .asInstanceOf[Int]
-  }
-
-  // Min byte counts needed to store decimals with various precisions
-  private val minBytesForPrecision: Array[Int] = Array.tabulate(38) { precision =>
-    var numBytes = 1
-    while (math.pow(2.0, 8 * numBytes - 1) < math.pow(10.0, precision)) {
-      numBytes += 1
-    }
-    numBytes
-  }
 }
 
 
@@ -557,9 +548,45 @@ private[parquet] object CatalystSchemaConverter {
        """.stripMargin.split("\n").mkString(" "))
   }
 
+  def checkFieldNames(schema: StructType): StructType = {
+    schema.fieldNames.foreach(checkFieldName)
+    schema
+  }
+
   def analysisRequire(f: => Boolean, message: String): Unit = {
     if (!f) {
       throw new AnalysisException(message)
     }
+  }
+
+  private def computeMinBytesForPrecision(precision : Int) : Int = {
+    var numBytes = 1
+    while (math.pow(2.0, 8 * numBytes - 1) < math.pow(10.0, precision)) {
+      numBytes += 1
+    }
+    numBytes
+  }
+
+  private val MIN_BYTES_FOR_PRECISION = Array.tabulate[Int](39)(computeMinBytesForPrecision)
+
+  // Returns the minimum number of bytes needed to store a decimal with a given `precision`.
+  def minBytesForPrecision(precision : Int) : Int = {
+    if (precision < MIN_BYTES_FOR_PRECISION.length) {
+      MIN_BYTES_FOR_PRECISION(precision)
+    } else {
+      computeMinBytesForPrecision(precision)
+    }
+  }
+
+  val MAX_PRECISION_FOR_INT32 = maxPrecisionForBytes(4)
+
+  val MAX_PRECISION_FOR_INT64 = maxPrecisionForBytes(8)
+
+  // Max precision of a decimal value stored in `numBytes` bytes
+  def maxPrecisionForBytes(numBytes: Int): Int = {
+    Math.round(                               // convert double to long
+      Math.floor(Math.log10(                  // number of base-10 digits
+        Math.pow(2, 8 * numBytes - 1) - 1)))  // max value stored in numBytes
+      .asInstanceOf[Int]
   }
 }

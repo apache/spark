@@ -24,14 +24,14 @@ import org.scalatest.PrivateMethodTester
 import scala.language.postfixOps
 
 class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
-  test("creating decimals") {
-    /** Check that a Decimal has the given string representation, precision and scale */
-    def checkDecimal(d: Decimal, string: String, precision: Int, scale: Int): Unit = {
-      assert(d.toString === string)
-      assert(d.precision === precision)
-      assert(d.scale === scale)
-    }
+  /** Check that a Decimal has the given string representation, precision and scale */
+  private def checkDecimal(d: Decimal, string: String, precision: Int, scale: Int): Unit = {
+    assert(d.toString === string)
+    assert(d.precision === precision)
+    assert(d.scale === scale)
+  }
 
+  test("creating decimals") {
     checkDecimal(new Decimal(), "0", 1, 0)
     checkDecimal(Decimal(BigDecimal("10.030")), "10.030", 5, 3)
     checkDecimal(Decimal(BigDecimal("10.030"), 4, 1), "10.0", 4, 1)
@@ -51,6 +51,15 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     intercept[IllegalArgumentException](Decimal(BigDecimal("10.030"), 2, 1))
     intercept[IllegalArgumentException](Decimal(BigDecimal("-9.95"), 2, 1))
     intercept[IllegalArgumentException](Decimal(1e17.toLong, 17, 0))
+  }
+
+  test("creating decimals with negative scale") {
+    checkDecimal(Decimal(BigDecimal("98765"), 5, -3), "9.9E+4", 5, -3)
+    checkDecimal(Decimal(BigDecimal("314.159"), 6, -2), "3E+2", 6, -2)
+    checkDecimal(Decimal(BigDecimal(1.579e12), 4, -9), "1.579E+12", 4, -9)
+    checkDecimal(Decimal(BigDecimal(1.579e12), 4, -10), "1.58E+12", 4, -10)
+    checkDecimal(Decimal(103050709L, 9, -10), "1.03050709E+18", 9, -10)
+    checkDecimal(Decimal(1e8.toLong, 10, -10), "1.00000000E+18", 10, -10)
   }
 
   test("double and long values") {
@@ -157,14 +166,30 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     assert(Decimal(100) % Decimal(0) === null)
   }
 
+  // regression test for SPARK-8359
+  test("accurate precision after multiplication") {
+    val decimal = (Decimal(Long.MaxValue, 38, 0) * Decimal(Long.MaxValue, 38, 0)).toJavaBigDecimal
+    assert(decimal.unscaledValue.toString === "85070591730234615847396907784232501249")
+  }
+
+  // regression test for SPARK-8677
+  test("fix non-terminating decimal expansion problem") {
+    val decimal = Decimal(1.0, 10, 3) / Decimal(3.0, 10, 3)
+    // The difference between decimal should not be more than 0.001.
+    assert(decimal.toDouble - 0.333 < 0.001)
+  }
+
+  // regression test for SPARK-8800
+  test("fix loss of precision/scale when doing division operation") {
+    val a = Decimal(2) / Decimal(3)
+    assert(a.toDouble < 1.0 && a.toDouble > 0.6)
+    val b = Decimal(1) / Decimal(8)
+    assert(b.toDouble === 0.125)
+  }
+
   test("set/setOrNull") {
     assert(new Decimal().set(10L, 10, 0).toUnscaledLong === 10L)
     assert(new Decimal().set(100L, 10, 0).toUnscaledLong === 100L)
     assert(Decimal(Long.MaxValue, 100, 0).toUnscaledLong === Long.MaxValue)
-  }
-
-  test("accurate precision after multiplication") {
-    val decimal = (Decimal(Long.MaxValue, 38, 0) * Decimal(Long.MaxValue, 38, 0)).toJavaBigDecimal
-    assert(decimal.unscaledValue.toString === "85070591730234615847396907784232501249")
   }
 }

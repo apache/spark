@@ -184,6 +184,14 @@ acquire. By default, it will acquire *all* cores in the cluster (that get offere
 only makes sense if you run just one application at a time. You can cap the maximum number of cores
 using `conf.set("spark.cores.max", "10")` (for example).
 
+You may also make use of `spark.mesos.constraints` to set attribute based constraints on mesos resource offers. By default, all resource offers will be accepted.
+
+{% highlight scala %}
+conf.set("spark.mesos.constraints", "tachyon=true;us-east-1=false")
+{% endhighlight %}
+
+For example, Let's say `spark.mesos.constraints` is set to `tachyon=true;us-east-1=false`, then the resource offers will be checked to see if they meet both these constraints and only then will be accepted to start new executors.
+
 # Mesos Docker Support
 
 Spark can make use of a Mesos Docker containerizer by setting the property `spark.mesos.executor.docker.image`
@@ -296,6 +304,42 @@ See the [configuration page](configuration.html) for information on Spark config
     The amount of additional memory, specified in MB, to be allocated per executor. By default,
     the overhead will be larger of either 384 or 10% of `spark.executor.memory`. If it's set,
     the final overhead will be this value.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.principal</code></td>
+  <td>Framework principal to authenticate to Mesos</td>
+  <td>
+    Set the principal with which Spark framework will use to authenticate with Mesos.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.secret</code></td>
+  <td>Framework secret to authenticate to Mesos</td>
+  <td>
+    Set the secret with which Spark framework will use to authenticate with Mesos.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.role</code></td>
+  <td>Role for the Spark framework</td>
+  <td>
+    Set the role of this Spark framework for Mesos. Roles are used in Mesos for reservations
+    and resource weight sharing.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.constraints</code></td>
+  <td>Attribute based constraints to be matched against when accepting resource offers.</td>
+  <td>
+    Attribute based constraints on mesos resource offers. By default, all resource offers will be accepted. Refer to <a href="http://mesos.apache.org/documentation/attributes-resources/">Mesos Attributes & Resources</a> for more information on attributes.
+    <ul>
+      <li>Scalar constraints are matched with "less than equal" semantics i.e. value in the constraint must be less than or equal to the value in the resource offer.</li>
+      <li>Range constraints are matched with "contains" semantics i.e. value in the constraint must be within the resource offer's value.</li>
+      <li>Set constraints are matched with "subset of" semantics i.e. value in the constraint must be a subset of the resource offer's value.</li>
+      <li>Text constraints are metched with "equality" semantics i.e. value in the constraint must be exactly equal to the resource offer's value.</li>
+      <li>In case there is no value present as a part of the constraint any offer with the corresponding attribute will be accepted (without value check).</li>
+    </ul>
   </td>
 </tr>
 </table>

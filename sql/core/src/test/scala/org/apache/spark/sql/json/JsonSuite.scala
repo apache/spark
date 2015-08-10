@@ -17,23 +17,27 @@
 
 package org.apache.spark.sql.json
 
-import java.io.StringWriter
+import java.io.{File, StringWriter}
 import java.sql.{Date, Timestamp}
 
 import com.fasterxml.jackson.core.JsonFactory
+import org.apache.spark.rdd.RDD
 import org.scalactic.Tolerance._
 
-import org.apache.spark.sql.{QueryTest, Row, SQLConf}
+import org.apache.spark.sql.{SQLContext, QueryTest, Row, SQLConf}
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.datasources.{ResolvedDataSource, LogicalRelation}
 import org.apache.spark.sql.json.InferSchema.compatibleType
-import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
-class JsonSuite extends QueryTest with TestJsonData {
+class JsonSuite extends QueryTest with SQLTestUtils with TestJsonData {
 
   protected lazy val ctx = org.apache.spark.sql.test.TestSQLContext
+  override def sqlContext: SQLContext = ctx // used by SQLTestUtils
+
   import ctx.sql
   import ctx.implicits._
 
@@ -63,18 +67,16 @@ class JsonSuite extends QueryTest with TestJsonData {
     checkTypePromotion(intNumber.toLong, enforceCorrectType(intNumber, LongType))
     checkTypePromotion(intNumber.toDouble, enforceCorrectType(intNumber, DoubleType))
     checkTypePromotion(
-      Decimal(intNumber), enforceCorrectType(intNumber, DecimalType.Unlimited))
+      Decimal(intNumber), enforceCorrectType(intNumber, DecimalType.SYSTEM_DEFAULT))
 
     val longNumber: Long = 9223372036854775807L
     checkTypePromotion(longNumber, enforceCorrectType(longNumber, LongType))
     checkTypePromotion(longNumber.toDouble, enforceCorrectType(longNumber, DoubleType))
     checkTypePromotion(
-      Decimal(longNumber), enforceCorrectType(longNumber, DecimalType.Unlimited))
+      Decimal(longNumber), enforceCorrectType(longNumber, DecimalType.SYSTEM_DEFAULT))
 
     val doubleNumber: Double = 1.7976931348623157E308d
     checkTypePromotion(doubleNumber.toDouble, enforceCorrectType(doubleNumber, DoubleType))
-    checkTypePromotion(
-      Decimal(doubleNumber), enforceCorrectType(doubleNumber, DecimalType.Unlimited))
 
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(intNumber)),
         enforceCorrectType(intNumber, TimestampType))
@@ -115,7 +117,7 @@ class JsonSuite extends QueryTest with TestJsonData {
     checkDataType(NullType, IntegerType, IntegerType)
     checkDataType(NullType, LongType, LongType)
     checkDataType(NullType, DoubleType, DoubleType)
-    checkDataType(NullType, DecimalType.Unlimited, DecimalType.Unlimited)
+    checkDataType(NullType, DecimalType.SYSTEM_DEFAULT, DecimalType.SYSTEM_DEFAULT)
     checkDataType(NullType, StringType, StringType)
     checkDataType(NullType, ArrayType(IntegerType), ArrayType(IntegerType))
     checkDataType(NullType, StructType(Nil), StructType(Nil))
@@ -126,7 +128,7 @@ class JsonSuite extends QueryTest with TestJsonData {
     checkDataType(BooleanType, IntegerType, StringType)
     checkDataType(BooleanType, LongType, StringType)
     checkDataType(BooleanType, DoubleType, StringType)
-    checkDataType(BooleanType, DecimalType.Unlimited, StringType)
+    checkDataType(BooleanType, DecimalType.SYSTEM_DEFAULT, StringType)
     checkDataType(BooleanType, StringType, StringType)
     checkDataType(BooleanType, ArrayType(IntegerType), StringType)
     checkDataType(BooleanType, StructType(Nil), StringType)
@@ -135,7 +137,7 @@ class JsonSuite extends QueryTest with TestJsonData {
     checkDataType(IntegerType, IntegerType, IntegerType)
     checkDataType(IntegerType, LongType, LongType)
     checkDataType(IntegerType, DoubleType, DoubleType)
-    checkDataType(IntegerType, DecimalType.Unlimited, DecimalType.Unlimited)
+    checkDataType(IntegerType, DecimalType.SYSTEM_DEFAULT, DecimalType.SYSTEM_DEFAULT)
     checkDataType(IntegerType, StringType, StringType)
     checkDataType(IntegerType, ArrayType(IntegerType), StringType)
     checkDataType(IntegerType, StructType(Nil), StringType)
@@ -143,23 +145,24 @@ class JsonSuite extends QueryTest with TestJsonData {
     // LongType
     checkDataType(LongType, LongType, LongType)
     checkDataType(LongType, DoubleType, DoubleType)
-    checkDataType(LongType, DecimalType.Unlimited, DecimalType.Unlimited)
+    checkDataType(LongType, DecimalType.SYSTEM_DEFAULT, DecimalType.SYSTEM_DEFAULT)
     checkDataType(LongType, StringType, StringType)
     checkDataType(LongType, ArrayType(IntegerType), StringType)
     checkDataType(LongType, StructType(Nil), StringType)
 
     // DoubleType
     checkDataType(DoubleType, DoubleType, DoubleType)
-    checkDataType(DoubleType, DecimalType.Unlimited, DecimalType.Unlimited)
+    checkDataType(DoubleType, DecimalType.SYSTEM_DEFAULT, DoubleType)
     checkDataType(DoubleType, StringType, StringType)
     checkDataType(DoubleType, ArrayType(IntegerType), StringType)
     checkDataType(DoubleType, StructType(Nil), StringType)
 
-    // DoubleType
-    checkDataType(DecimalType.Unlimited, DecimalType.Unlimited, DecimalType.Unlimited)
-    checkDataType(DecimalType.Unlimited, StringType, StringType)
-    checkDataType(DecimalType.Unlimited, ArrayType(IntegerType), StringType)
-    checkDataType(DecimalType.Unlimited, StructType(Nil), StringType)
+    // DecimalType
+    checkDataType(DecimalType.SYSTEM_DEFAULT, DecimalType.SYSTEM_DEFAULT,
+      DecimalType.SYSTEM_DEFAULT)
+    checkDataType(DecimalType.SYSTEM_DEFAULT, StringType, StringType)
+    checkDataType(DecimalType.SYSTEM_DEFAULT, ArrayType(IntegerType), StringType)
+    checkDataType(DecimalType.SYSTEM_DEFAULT, StructType(Nil), StringType)
 
     // StringType
     checkDataType(StringType, StringType, StringType)
@@ -213,7 +216,7 @@ class JsonSuite extends QueryTest with TestJsonData {
     checkDataType(
       StructType(
         StructField("f1", IntegerType, true) :: Nil),
-      DecimalType.Unlimited,
+      DecimalType.SYSTEM_DEFAULT,
       StringType)
   }
 
@@ -240,7 +243,7 @@ class JsonSuite extends QueryTest with TestJsonData {
     val jsonDF = ctx.read.json(primitiveFieldAndType)
 
     val expectedSchema = StructType(
-      StructField("bigInteger", DecimalType.Unlimited, true) ::
+      StructField("bigInteger", DecimalType(20, 0), true) ::
       StructField("boolean", BooleanType, true) ::
       StructField("double", DoubleType, true) ::
       StructField("integer", LongType, true) ::
@@ -270,7 +273,7 @@ class JsonSuite extends QueryTest with TestJsonData {
     val expectedSchema = StructType(
       StructField("arrayOfArray1", ArrayType(ArrayType(StringType, true), true), true) ::
       StructField("arrayOfArray2", ArrayType(ArrayType(DoubleType, true), true), true) ::
-      StructField("arrayOfBigInteger", ArrayType(DecimalType.Unlimited, true), true) ::
+      StructField("arrayOfBigInteger", ArrayType(DecimalType(21, 0), true), true) ::
       StructField("arrayOfBoolean", ArrayType(BooleanType, true), true) ::
       StructField("arrayOfDouble", ArrayType(DoubleType, true), true) ::
       StructField("arrayOfInteger", ArrayType(LongType, true), true) ::
@@ -284,7 +287,7 @@ class JsonSuite extends QueryTest with TestJsonData {
           StructField("field3", StringType, true) :: Nil), true), true) ::
       StructField("struct", StructType(
         StructField("field1", BooleanType, true) ::
-        StructField("field2", DecimalType.Unlimited, true) :: Nil), true) ::
+        StructField("field2", DecimalType(20, 0), true) :: Nil), true) ::
       StructField("structWithArrayFields", StructType(
         StructField("field1", ArrayType(LongType, true), true) ::
         StructField("field2", ArrayType(StringType, true), true) :: Nil), true) :: Nil)
@@ -385,7 +388,7 @@ class JsonSuite extends QueryTest with TestJsonData {
     val expectedSchema = StructType(
       StructField("num_bool", StringType, true) ::
       StructField("num_num_1", LongType, true) ::
-      StructField("num_num_2", DecimalType.Unlimited, true) ::
+      StructField("num_num_2", DoubleType, true) ::
       StructField("num_num_3", DoubleType, true) ::
       StructField("num_str", StringType, true) ::
       StructField("str_bool", StringType, true) :: Nil)
@@ -397,11 +400,9 @@ class JsonSuite extends QueryTest with TestJsonData {
     checkAnswer(
       sql("select * from jsonTable"),
       Row("true", 11L, null, 1.1, "13.1", "str1") ::
-        Row("12", null, new java.math.BigDecimal("21474836470.9"), null, null, "true") ::
-        Row("false", 21474836470L,
-          new java.math.BigDecimal("92233720368547758070"), 100, "str1", "false") ::
-        Row(null, 21474836570L,
-          new java.math.BigDecimal("1.1"), 21474836470L, "92233720368547758070", null) :: Nil
+        Row("12", null, 21474836470.9, null, null, "true") ::
+        Row("false", 21474836470L, 92233720368547758070d, 100, "str1", "false") ::
+        Row(null, 21474836570L, 1.1, 21474836470L, "92233720368547758070", null) :: Nil
     )
 
     // Number and Boolean conflict: resolve the type as number in this query.
@@ -423,12 +424,12 @@ class JsonSuite extends QueryTest with TestJsonData {
 
     // Widening to DecimalType
     checkAnswer(
-      sql("select num_num_2 + 1.2 from jsonTable where num_num_2 > 1.1"),
-      Row(new java.math.BigDecimal("21474836472.1")) ::
-        Row(new java.math.BigDecimal("92233720368547758071.2")) :: Nil
+      sql("select num_num_2 + 1.3 from jsonTable where num_num_2 > 1.1"),
+      Row(21474836472.2) ::
+        Row(92233720368547758071.3) :: Nil
     )
 
-    // Widening to DoubleType
+    // Widening to Double
     checkAnswer(
       sql("select num_num_3 + 1.2 from jsonTable where num_num_3 > 1.1"),
       Row(101.2) :: Row(21474836471.2) :: Nil
@@ -437,13 +438,13 @@ class JsonSuite extends QueryTest with TestJsonData {
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
       sql("select num_str + 1.2 from jsonTable where num_str > 14"),
-      Row(92233720368547758071.2)
+      Row(BigDecimal("92233720368547758071.2"))
     )
 
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
-      sql("select num_str + 1.2 from jsonTable where num_str > 92233720368547758060"),
-      Row(new java.math.BigDecimal("92233720368547758061.2").doubleValue)
+      sql("select num_str + 1.2 from jsonTable where num_str >= 92233720368547758060"),
+      Row(new java.math.BigDecimal("92233720368547758071.2"))
     )
 
     // String and Boolean conflict: resolve the type as string.
@@ -489,9 +490,9 @@ class JsonSuite extends QueryTest with TestJsonData {
     // in the Project.
     checkAnswer(
       jsonDF.
-        where('num_str > BigDecimal("92233720368547758060")).
+        where('num_str >= BigDecimal("92233720368547758060")).
         select(('num_str + 1.2).as("num")),
-      Row(new java.math.BigDecimal("92233720368547758061.2"))
+      Row(new java.math.BigDecimal("92233720368547758071.2").doubleValue())
     )
 
     // The following test will fail. The type of num_str is StringType.
@@ -502,7 +503,7 @@ class JsonSuite extends QueryTest with TestJsonData {
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
       sql("select num_str + 1.2 from jsonTable where num_str > 13"),
-      Row(14.3) :: Row(92233720368547758071.2) :: Nil
+      Row(BigDecimal("14.3")) :: Row(BigDecimal("92233720368547758071.2")) :: Nil
     )
   }
 
@@ -577,7 +578,7 @@ class JsonSuite extends QueryTest with TestJsonData {
   test("jsonFile should be based on JSONRelation") {
     val dir = Utils.createTempDir()
     dir.delete()
-    val path = dir.getCanonicalPath
+    val path = dir.getCanonicalFile.toURI.toString
     ctx.sparkContext.parallelize(1 to 100)
       .map(i => s"""{"a": 1, "b": "str$i"}""").saveAsTextFile(path)
     val jsonDF = ctx.read.option("samplingRatio", "0.49").json(path)
@@ -590,14 +591,14 @@ class JsonSuite extends QueryTest with TestJsonData {
     assert(
       relation.isInstanceOf[JSONRelation],
       "The DataFrame returned by jsonFile should be based on JSONRelation.")
-    assert(relation.asInstanceOf[JSONRelation].path === Some(path))
+    assert(relation.asInstanceOf[JSONRelation].paths === Array(path))
     assert(relation.asInstanceOf[JSONRelation].samplingRatio === (0.49 +- 0.001))
 
     val schema = StructType(StructField("a", LongType, true) :: Nil)
     val logicalRelation =
       ctx.read.schema(schema).json(path).queryExecution.analyzed.asInstanceOf[LogicalRelation]
     val relationWithSchema = logicalRelation.relation.asInstanceOf[JSONRelation]
-    assert(relationWithSchema.path === Some(path))
+    assert(relationWithSchema.paths === Array(path))
     assert(relationWithSchema.schema === schema)
     assert(relationWithSchema.samplingRatio > 0.99)
   }
@@ -610,7 +611,7 @@ class JsonSuite extends QueryTest with TestJsonData {
     val jsonDF = ctx.read.json(path)
 
     val expectedSchema = StructType(
-      StructField("bigInteger", DecimalType.Unlimited, true) ::
+      StructField("bigInteger", DecimalType(20, 0), true) ::
       StructField("boolean", BooleanType, true) ::
       StructField("double", DoubleType, true) ::
       StructField("integer", LongType, true) ::
@@ -668,7 +669,7 @@ class JsonSuite extends QueryTest with TestJsonData {
     primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
 
     val schema = StructType(
-      StructField("bigInteger", DecimalType.Unlimited, true) ::
+      StructField("bigInteger", DecimalType.SYSTEM_DEFAULT, true) ::
       StructField("boolean", BooleanType, true) ::
       StructField("double", DoubleType, true) ::
       StructField("integer", IntegerType, true) ::
@@ -1040,24 +1041,35 @@ class JsonSuite extends QueryTest with TestJsonData {
 
   test("JSONRelation equality test") {
     val context = org.apache.spark.sql.test.TestSQLContext
-    val relation1 = new JSONRelation(
-      "path",
+
+    val relation0 = new JSONRelation(
+      Some(empty),
       1.0,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      context)
+      None, None)(context)
+    val logicalRelation0 = LogicalRelation(relation0)
+    val relation1 = new JSONRelation(
+      Some(singleRow),
+      1.0,
+      Some(StructType(StructField("a", IntegerType, true) :: Nil)),
+      None, None)(context)
     val logicalRelation1 = LogicalRelation(relation1)
     val relation2 = new JSONRelation(
-      "path",
+      Some(singleRow),
       0.5,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      context)
+      None, None)(context)
     val logicalRelation2 = LogicalRelation(relation2)
     val relation3 = new JSONRelation(
-      "path",
+      Some(singleRow),
       1.0,
-      Some(StructType(StructField("b", StringType, true) :: Nil)),
-      context)
+      Some(StructType(StructField("b", IntegerType, true) :: Nil)),
+      None, None)(context)
     val logicalRelation3 = LogicalRelation(relation3)
+
+    assert(relation0 !== relation1)
+    assert(!logicalRelation0.sameResult(logicalRelation1),
+      s"$logicalRelation0 and $logicalRelation1 should be considered not having the same result.")
 
     assert(relation1 === relation2)
     assert(logicalRelation1.sameResult(logicalRelation2),
@@ -1070,6 +1082,27 @@ class JsonSuite extends QueryTest with TestJsonData {
     assert(relation2 !== relation3)
     assert(!logicalRelation2.sameResult(logicalRelation3),
       s"$logicalRelation2 and $logicalRelation3 should be considered not having the same result.")
+
+    withTempPath(dir => {
+      val path = dir.getCanonicalFile.toURI.toString
+      ctx.sparkContext.parallelize(1 to 100)
+        .map(i => s"""{"a": 1, "b": "str$i"}""").saveAsTextFile(path)
+
+      val d1 = ResolvedDataSource(
+        context,
+        userSpecifiedSchema = None,
+        partitionColumns = Array.empty[String],
+        provider = classOf[DefaultSource].getCanonicalName,
+        options = Map("path" -> path))
+
+      val d2 = ResolvedDataSource(
+        context,
+        userSpecifiedSchema = None,
+        partitionColumns = Array.empty[String],
+        provider = classOf[DefaultSource].getCanonicalName,
+        options = Map("path" -> path))
+      assert(d1 === d2)
+    })
   }
 
   test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
@@ -1079,28 +1112,23 @@ class JsonSuite extends QueryTest with TestJsonData {
   }
 
   test("SPARK-7565 MapType in JsonRDD") {
-    val useStreaming = ctx.conf.useJacksonStreamingAPI
     val oldColumnNameOfCorruptRecord = ctx.conf.columnNameOfCorruptRecord
     ctx.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, "_unparsed")
 
     val schemaWithSimpleMap = StructType(
       StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
-    try{
-      for (useStreaming <- List(true, false)) {
-        ctx.setConf(SQLConf.USE_JACKSON_STREAMING_API, useStreaming)
-        val temp = Utils.createTempDir().getPath
+    try {
+      val temp = Utils.createTempDir().getPath
 
-        val df = ctx.read.schema(schemaWithSimpleMap).json(mapType1)
-        df.write.mode("overwrite").parquet(temp)
-        // order of MapType is not defined
-        assert(ctx.read.parquet(temp).count() == 5)
+      val df = ctx.read.schema(schemaWithSimpleMap).json(mapType1)
+      df.write.mode("overwrite").parquet(temp)
+      // order of MapType is not defined
+      assert(ctx.read.parquet(temp).count() == 5)
 
-        val df2 = ctx.read.json(corruptRecords)
-        df2.write.mode("overwrite").parquet(temp)
-        checkAnswer(ctx.read.parquet(temp), df2.collect())
-      }
+      val df2 = ctx.read.json(corruptRecords)
+      df2.write.mode("overwrite").parquet(temp)
+      checkAnswer(ctx.read.parquet(temp), df2.collect())
     } finally {
-      ctx.setConf(SQLConf.USE_JACKSON_STREAMING_API, useStreaming)
       ctx.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, oldColumnNameOfCorruptRecord)
     }
   }
@@ -1108,5 +1136,37 @@ class JsonSuite extends QueryTest with TestJsonData {
   test("SPARK-8093 Erase empty structs") {
     val emptySchema = InferSchema(emptyRecords, 1.0, "")
     assert(StructType(Seq()) === emptySchema)
+  }
+
+  test("JSON with Partition") {
+    def makePartition(rdd: RDD[String], parent: File, partName: String, partValue: Any): File = {
+      val p = new File(parent, s"$partName=${partValue.toString}")
+      rdd.saveAsTextFile(p.getCanonicalPath)
+      p
+    }
+
+    withTempPath(root => {
+      val d1 = new File(root, "d1=1")
+      // root/dt=1/col1=abc
+      val p1_col1 = makePartition(
+        ctx.sparkContext.parallelize(2 to 5).map(i => s"""{"a": 1, "b": "str$i"}"""),
+        d1,
+        "col1",
+        "abc")
+
+      // root/dt=1/col1=abd
+      val p2 = makePartition(
+        ctx.sparkContext.parallelize(6 to 10).map(i => s"""{"a": 1, "b": "str$i"}"""),
+        d1,
+        "col1",
+        "abd")
+
+        ctx.read.json(root.getAbsolutePath).registerTempTable("test_myjson_with_part")
+        checkAnswer(
+          sql("SELECT count(a) FROM test_myjson_with_part where d1 = 1 and col1='abc'"), Row(4))
+        checkAnswer(
+          sql("SELECT count(a) FROM test_myjson_with_part where d1 = 1 and col1='abd'"), Row(5))
+        checkAnswer(sql("SELECT count(a) FROM test_myjson_with_part where d1 = 1"), Row(9))
+    })
   }
 }

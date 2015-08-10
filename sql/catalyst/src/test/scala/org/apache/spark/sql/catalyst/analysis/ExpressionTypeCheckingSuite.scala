@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{TypeCollection, StringType}
 
 class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
@@ -49,13 +49,13 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
   def assertErrorForDifferingTypes(expr: Expression): Unit = {
     assertError(expr,
-      s"differing types in ${expr.getClass.getSimpleName} (IntegerType and BooleanType).")
+      s"differing types in '${expr.prettyString}'")
   }
 
   test("check types for unary arithmetic") {
-    assertError(UnaryMinus('stringField), "operator - accepts numeric type")
-    assertError(Abs('stringField), "function abs accepts numeric type")
-    assertError(BitwiseNot('stringField), "operator ~ accepts integral type")
+    assertError(UnaryMinus('stringField), "(numeric or calendarinterval) type")
+    assertError(Abs('stringField), "requires numeric type")
+    assertError(BitwiseNot('stringField), "requires integral type")
   }
 
   test("check types for binary arithmetic") {
@@ -78,18 +78,21 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(MaxOf('intField, 'booleanField))
     assertErrorForDifferingTypes(MinOf('intField, 'booleanField))
 
-    assertError(Add('booleanField, 'booleanField), "operator + accepts numeric type")
-    assertError(Subtract('booleanField, 'booleanField), "operator - accepts numeric type")
-    assertError(Multiply('booleanField, 'booleanField), "operator * accepts numeric type")
-    assertError(Divide('booleanField, 'booleanField), "operator / accepts numeric type")
-    assertError(Remainder('booleanField, 'booleanField), "operator % accepts numeric type")
+    assertError(Add('booleanField, 'booleanField), "requires (numeric or calendarinterval) type")
+    assertError(Subtract('booleanField, 'booleanField),
+      "requires (numeric or calendarinterval) type")
+    assertError(Multiply('booleanField, 'booleanField), "requires numeric type")
+    assertError(Divide('booleanField, 'booleanField), "requires numeric type")
+    assertError(Remainder('booleanField, 'booleanField), "requires numeric type")
 
-    assertError(BitwiseAnd('booleanField, 'booleanField), "operator & accepts integral type")
-    assertError(BitwiseOr('booleanField, 'booleanField), "operator | accepts integral type")
-    assertError(BitwiseXor('booleanField, 'booleanField), "operator ^ accepts integral type")
+    assertError(BitwiseAnd('booleanField, 'booleanField), "requires integral type")
+    assertError(BitwiseOr('booleanField, 'booleanField), "requires integral type")
+    assertError(BitwiseXor('booleanField, 'booleanField), "requires integral type")
 
-    assertError(MaxOf('complexField, 'complexField), "function maxOf accepts non-complex type")
-    assertError(MinOf('complexField, 'complexField), "function minOf accepts non-complex type")
+    assertError(MaxOf('complexField, 'complexField),
+      s"requires ${TypeCollection.Ordered.simpleString} type")
+    assertError(MinOf('complexField, 'complexField),
+      s"requires ${TypeCollection.Ordered.simpleString} type")
   }
 
   test("check types for predicates") {
@@ -105,25 +108,23 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertSuccess(EqualTo('intField, 'booleanField))
     assertSuccess(EqualNullSafe('intField, 'booleanField))
 
-    assertError(EqualTo('intField, 'complexField), "differing types")
-    assertError(EqualNullSafe('intField, 'complexField), "differing types")
-
+    assertErrorForDifferingTypes(EqualTo('intField, 'complexField))
+    assertErrorForDifferingTypes(EqualNullSafe('intField, 'complexField))
     assertErrorForDifferingTypes(LessThan('intField, 'booleanField))
     assertErrorForDifferingTypes(LessThanOrEqual('intField, 'booleanField))
     assertErrorForDifferingTypes(GreaterThan('intField, 'booleanField))
     assertErrorForDifferingTypes(GreaterThanOrEqual('intField, 'booleanField))
 
-    assertError(
-      LessThan('complexField, 'complexField), "operator < accepts non-complex type")
-    assertError(
-      LessThanOrEqual('complexField, 'complexField), "operator <= accepts non-complex type")
-    assertError(
-      GreaterThan('complexField, 'complexField), "operator > accepts non-complex type")
-    assertError(
-      GreaterThanOrEqual('complexField, 'complexField), "operator >= accepts non-complex type")
+    assertError(LessThan('complexField, 'complexField),
+      s"requires ${TypeCollection.Ordered.simpleString} type")
+    assertError(LessThanOrEqual('complexField, 'complexField),
+      s"requires ${TypeCollection.Ordered.simpleString} type")
+    assertError(GreaterThan('complexField, 'complexField),
+      s"requires ${TypeCollection.Ordered.simpleString} type")
+    assertError(GreaterThanOrEqual('complexField, 'complexField),
+      s"requires ${TypeCollection.Ordered.simpleString} type")
 
-    assertError(
-      If('intField, 'stringField, 'stringField),
+    assertError(If('intField, 'stringField, 'stringField),
       "type of predicate expression in If should be boolean")
     assertErrorForDifferingTypes(If('booleanField, 'intField, 'booleanField))
 
@@ -144,11 +145,11 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertSuccess(SumDistinct('stringField))
     assertSuccess(Average('stringField))
 
-    assertError(Min('complexField), "function min accepts non-complex type")
-    assertError(Max('complexField), "function max accepts non-complex type")
-    assertError(Sum('booleanField), "function sum accepts numeric type")
-    assertError(SumDistinct('booleanField), "function sumDistinct accepts numeric type")
-    assertError(Average('booleanField), "function average accepts numeric type")
+    assertError(Min('complexField), "min does not support ordering on type")
+    assertError(Max('complexField), "max does not support ordering on type")
+    assertError(Sum('booleanField), "function sum requires numeric type")
+    assertError(SumDistinct('booleanField), "function sumDistinct requires numeric type")
+    assertError(Average('booleanField), "function average requires numeric type")
   }
 
   test("check types for others") {
@@ -159,5 +160,29 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(Coalesce(Nil), "input to function coalesce cannot be empty")
     assertError(Explode('intField),
       "input to function explode should be array or map type")
+  }
+
+  test("check types for CreateNamedStruct") {
+    assertError(
+      CreateNamedStruct(Seq("a", "b", 2.0)), "even number of arguments")
+    assertError(
+      CreateNamedStruct(Seq(1, "a", "b", 2.0)),
+        "Only foldable StringType expressions are allowed to appear at odd position")
+    assertError(
+      CreateNamedStruct(Seq('a.string.at(0), "a", "b", 2.0)),
+        "Only foldable StringType expressions are allowed to appear at odd position")
+    assertError(
+      CreateNamedStruct(Seq(Literal.create(null, StringType), "a")),
+        "Field name should not be null")
+  }
+
+  test("check types for ROUND") {
+    assertSuccess(Round(Literal(null), Literal(null)))
+    assertSuccess(Round('intField, Literal(1)))
+
+    assertError(Round('intField, 'intField), "Only foldable Expression is allowed")
+    assertError(Round('intField, 'booleanField), "requires int type")
+    assertError(Round('intField, 'complexField), "requires int type")
+    assertError(Round('booleanField, 'intField), "requires numeric type")
   }
 }

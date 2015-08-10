@@ -65,6 +65,8 @@ private[yarn] class AMDelegationTokenRenewer(
     sparkConf.getInt("spark.yarn.credentials.file.retention.days", 5)
   private val numFilesToKeep =
     sparkConf.getInt("spark.yarn.credentials.file.retention.count", 5)
+  private val freshHadoopConf =
+    hadoopUtil.getConfBypassingFSCache(hadoopConf, new Path(credentialsFile).toUri.getScheme)
 
   /**
    * Schedule a login from the keytab and principal set using the --principal and --keytab
@@ -123,7 +125,7 @@ private[yarn] class AMDelegationTokenRenewer(
   private def cleanupOldFiles(): Unit = {
     import scala.concurrent.duration._
     try {
-      val remoteFs = FileSystem.get(hadoopConf)
+      val remoteFs = FileSystem.get(freshHadoopConf)
       val credentialsPath = new Path(credentialsFile)
       val thresholdTime = System.currentTimeMillis() - (daysToKeepFiles days).toMillis
       hadoopUtil.listFilesSorted(
@@ -169,13 +171,13 @@ private[yarn] class AMDelegationTokenRenewer(
       // Get a copy of the credentials
       override def run(): Void = {
         val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + dst
-        hadoopUtil.obtainTokensForNamenodes(nns, hadoopConf, tempCreds)
+        hadoopUtil.obtainTokensForNamenodes(nns, freshHadoopConf, tempCreds)
         null
       }
     })
     // Add the temp credentials back to the original ones.
     UserGroupInformation.getCurrentUser.addCredentials(tempCreds)
-    val remoteFs = FileSystem.get(hadoopConf)
+    val remoteFs = FileSystem.get(freshHadoopConf)
     // If lastCredentialsFileSuffix is 0, then the AM is either started or restarted. If the AM
     // was restarted, then the lastCredentialsFileSuffix might be > 0, so find the newest file
     // and update the lastCredentialsFileSuffix.
@@ -194,7 +196,7 @@ private[yarn] class AMDelegationTokenRenewer(
     val tempTokenPath = new Path(tokenPathStr + SparkHadoopUtil.SPARK_YARN_CREDS_TEMP_EXTENSION)
     logInfo("Writing out delegation tokens to " + tempTokenPath.toString)
     val credentials = UserGroupInformation.getCurrentUser.getCredentials
-    credentials.writeTokenStorageFile(tempTokenPath, hadoopConf)
+    credentials.writeTokenStorageFile(tempTokenPath, freshHadoopConf)
     logInfo(s"Delegation Tokens written out successfully. Renaming file to $tokenPathStr")
     remoteFs.rename(tempTokenPath, tokenPath)
     logInfo("Delegation token file rename complete.")

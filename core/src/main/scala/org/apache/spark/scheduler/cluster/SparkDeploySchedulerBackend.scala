@@ -85,7 +85,7 @@ private[spark] class SparkDeploySchedulerBackend(
     val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory,
       command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
-    client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
+    client = new AppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
     waitForRegistration()
   }
@@ -151,6 +151,34 @@ private[spark] class SparkDeploySchedulerBackend(
       logWarning("Application ID is not initialized yet.")
       super.applicationId
     }
+
+  /**
+   * Request executors from the Master by specifying the total number desired,
+   * including existing pending and running executors.
+   *
+   * @return whether the request is acknowledged.
+   */
+  protected override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
+    Option(client) match {
+      case Some(c) => c.requestTotalExecutors(requestedTotal)
+      case None =>
+        logWarning("Attempted to request executors before driver fully initialized.")
+        false
+    }
+  }
+
+  /**
+   * Kill the given list of executors through the Master.
+   * @return whether the kill request is acknowledged.
+   */
+  protected override def doKillExecutors(executorIds: Seq[String]): Boolean = {
+    Option(client) match {
+      case Some(c) => c.killExecutors(executorIds)
+      case None =>
+        logWarning("Attempted to kill executors before driver fully initialized.")
+        false
+    }
+  }
 
   private def waitForRegistration() = {
     registrationBarrier.acquire()

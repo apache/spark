@@ -24,7 +24,9 @@ from pyspark import RDD
 from pyspark.streaming import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
 from pyspark.mllib.linalg import DenseVector, SparseVector, _convert_to_vector
-from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_train_wrapper
+from pyspark.mllib.regression import (
+    LabeledPoint, LinearModel, _regression_train_wrapper,
+    StreamingLinearAlgorithm)
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
 
 
@@ -585,55 +587,13 @@ class NaiveBayes(object):
         return NaiveBayesModel(labels.toArray(), pi.toArray(), numpy.array(theta))
 
 
-class StreamingLinearAlgorithm(object):
-    """
-    Base class that has to be inherited by any StreamingLinearAlgorithm.
-
-    Prevents reimplementation of methods predictOn and predictOnValues.
-    """
-    def __init__(self, model):
-        self._model = model
-
-    def latestModel(self):
-        """
-        Returns the latest model.
-        """
-        return self._model
-
-    def _validate(self, dstream):
-        if not isinstance(dstream, DStream):
-            raise TypeError(
-                "dstream should be a DStream object, got %s" % type(dstream))
-        if not self._model:
-            raise ValueError(
-                "Model must be intialized using setInitialWeights")
-
-    def predictOn(self, dstream):
-        """
-        Make predictions on a dstream.
-
-        :return: Transformed dstream object.
-        """
-        self._validate(dstream)
-        return dstream.map(lambda x: self._model.predict(x))
-
-    def predictOnValues(self, dstream):
-        """
-        Make predictions on a keyed dstream.
-
-        :return: Transformed dstream object.
-        """
-        self._validate(dstream)
-        return dstream.mapValues(lambda x: self._model.predict(x))
-
-
 @inherit_doc
 class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
     """
-    Run LogisticRegression with SGD on a stream of data.
+    Run LogisticRegression with SGD on a batch of data.
 
     The weights obtained at the end of training a stream are used as initial
-    weights for the next stream.
+    weights for the next batch.
 
     :param stepSize: Step size for each iteration of gradient descent.
     :param numIterations: Number of iterations run for each batch of data.

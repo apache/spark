@@ -24,9 +24,9 @@ import scala.collection.mutable.{ArrayBuilder => MArrayBuilder, HashSet => MHash
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types._
 
 /**
  * Trait for a local matrix.
@@ -98,7 +98,7 @@ sealed trait Matrix extends Serializable {
   /** Map the values of this matrix using a function. Generates a new matrix. Performs the
     * function on only the backing array. For example, an operation such as addition or
     * subtraction will only be performed on the non-zero values in a `SparseMatrix`. */
-  private[mllib] def map(f: Double => Double): Matrix
+  private[spark] def map(f: Double => Double): Matrix
 
   /** Update all the values of this matrix using the function f. Performed in-place on the
     * backing array. For example, an operation such as addition or subtraction will only be
@@ -114,6 +114,16 @@ sealed trait Matrix extends Serializable {
    *          corresponding value in the matrix with type `Double`.
    */
   private[spark] def foreachActive(f: (Int, Int, Double) => Unit)
+
+  /**
+   * Find the number of non-zero active values.
+   */
+  def numNonzeros: Int
+
+  /**
+   * Find the number of values stored explicitly. These values can be zero as well.
+   */
+  def numActives: Int
 }
 
 @DeveloperApi
@@ -137,16 +147,16 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
       ))
   }
 
-  override def serialize(obj: Any): Row = {
+  override def serialize(obj: Any): InternalRow = {
     val row = new GenericMutableRow(7)
     obj match {
       case sm: SparseMatrix =>
         row.setByte(0, 0)
         row.setInt(1, sm.numRows)
         row.setInt(2, sm.numCols)
-        row.update(3, sm.colPtrs.toSeq)
-        row.update(4, sm.rowIndices.toSeq)
-        row.update(5, sm.values.toSeq)
+        row.update(3, new GenericArrayData(sm.colPtrs.map(_.asInstanceOf[Any])))
+        row.update(4, new GenericArrayData(sm.rowIndices.map(_.asInstanceOf[Any])))
+        row.update(5, new GenericArrayData(sm.values.map(_.asInstanceOf[Any])))
         row.setBoolean(6, sm.isTransposed)
 
       case dm: DenseMatrix =>
@@ -155,7 +165,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
         row.setInt(2, dm.numCols)
         row.setNullAt(3)
         row.setNullAt(4)
-        row.update(5, dm.values.toSeq)
+        row.update(5, new GenericArrayData(dm.values.map(_.asInstanceOf[Any])))
         row.setBoolean(6, dm.isTransposed)
     }
     row
@@ -163,20 +173,18 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
 
   override def deserialize(datum: Any): Matrix = {
     datum match {
-      // TODO: something wrong with UDT serialization, should never happen.
-      case m: Matrix => m
-      case row: Row =>
-        require(row.length == 7,
-          s"MatrixUDT.deserialize given row with length ${row.length} but requires length == 7")
+      case row: InternalRow =>
+        require(row.numFields == 7,
+          s"MatrixUDT.deserialize given row with length ${row.numFields} but requires length == 7")
         val tpe = row.getByte(0)
         val numRows = row.getInt(1)
         val numCols = row.getInt(2)
-        val values = row.getAs[Iterable[Double]](5).toArray
+        val values = row.getArray(5).toDoubleArray()
         val isTransposed = row.getBoolean(6)
         tpe match {
           case 0 =>
-            val colPtrs = row.getAs[Iterable[Int]](3).toArray
-            val rowIndices = row.getAs[Iterable[Int]](4).toArray
+            val colPtrs = row.getArray(3).toIntArray()
+            val rowIndices = row.getArray(4).toIntArray()
             new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
           case 1 =>
             new DenseMatrix(numRows, numCols, values, isTransposed)
@@ -193,7 +201,8 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
     }
   }
 
-  override def hashCode(): Int = 1994
+  // see [SPARK-8647], this achieves the needed constant hash code without constant no.
+  override def hashCode(): Int = classOf[MatrixUDT].getName.hashCode()
 
   override def typeName: String = "matrix"
 
@@ -280,7 +289,7 @@ class DenseMatrix(
 
   override def copy: DenseMatrix = new DenseMatrix(numRows, numCols, values.clone())
 
-  private[mllib] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
+  private[spark] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
     isTransposed)
 
   private[mllib] def update(f: Double => Double): DenseMatrix = {
@@ -322,6 +331,10 @@ class DenseMatrix(
       }
     }
   }
+
+  override def numNonzeros: Int = values.count(_ != 0)
+
+  override def numActives: Int = values.length
 
   /**
    * Generate a `SparseMatrix` from the given `DenseMatrix`. The new matrix will have isTransposed
@@ -542,7 +555,7 @@ class SparseMatrix(
     new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.clone())
   }
 
-  private[mllib] def map(f: Double => Double) =
+  private[spark] def map(f: Double => Double) =
     new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.map(f), isTransposed)
 
   private[mllib] def update(f: Double => Double): SparseMatrix = {
@@ -592,6 +605,11 @@ class SparseMatrix(
   def toDense: DenseMatrix = {
     new DenseMatrix(numRows, numCols, toArray)
   }
+
+  override def numNonzeros: Int = values.count(_ != 0)
+
+  override def numActives: Int = values.length
+
 }
 
 /**

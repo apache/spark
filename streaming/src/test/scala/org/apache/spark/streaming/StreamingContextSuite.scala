@@ -20,18 +20,23 @@ package org.apache.spark.streaming
 import java.io.{File, NotSerializableException}
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.Queue
+
 import org.apache.commons.io.FileUtils
+import org.scalatest.{Assertions, BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
-import org.scalatest.{Assertions, BeforeAndAfter}
 
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException, SparkFunSuite}
 
 
 class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeouts with Logging {
@@ -108,6 +113,15 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     assert(newCp.createSparkConf().getTimeAsSeconds("spark.cleaner.ttl", "-1") === 10)
     ssc = new StreamingContext(null, newCp, null)
     assert(ssc.conf.getTimeAsSeconds("spark.cleaner.ttl", "-1") === 10)
+  }
+
+  test("checkPoint from conf") {
+    val checkpointDirectory = Utils.createTempDir().getAbsolutePath()
+
+    val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
+    myConf.set("spark.streaming.checkpoint.directory", checkpointDirectory)
+    ssc = new StreamingContext(myConf, batchDuration)
+    assert(ssc.checkpointDir != null)
   }
 
   test("state matching") {
@@ -247,7 +261,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     for (i <- 1 to 4) {
       logInfo("==================================\n\n\n")
       ssc = new StreamingContext(sc, Milliseconds(100))
-      var runningCount = 0
+      @volatile var runningCount = 0
       TestReceiver.counter.set(1)
       val input = ssc.receiverStream(new TestReceiver)
       input.count().foreachRDD { rdd =>
@@ -256,18 +270,33 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
         logInfo("Count = " + count + ", Running count = " + runningCount)
       }
       ssc.start()
-      ssc.awaitTerminationOrTimeout(500)
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(runningCount > 0)
+      }
       ssc.stop(stopSparkContext = false, stopGracefully = true)
       logInfo("Running count = " + runningCount)
       logInfo("TestReceiver.counter = " + TestReceiver.counter.get())
-      assert(runningCount > 0)
       assert(
-        (TestReceiver.counter.get() == runningCount + 1) ||
-          (TestReceiver.counter.get() == runningCount + 2),
+        TestReceiver.counter.get() == runningCount + 1,
         "Received records = " + TestReceiver.counter.get() + ", " +
           "processed records = " + runningCount
       )
       Thread.sleep(100)
+    }
+  }
+
+  test("stop gracefully even if a receiver misses StopReceiver") {
+    // This is not a deterministic unit. But if this unit test is flaky, then there is definitely
+    // something wrong. See SPARK-5681
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    sc = new SparkContext(conf)
+    ssc = new StreamingContext(sc, Milliseconds(100))
+    val input = ssc.receiverStream(new TestReceiver)
+    input.foreachRDD(_ => {})
+    ssc.start()
+    // Call `ssc.stop` at once so that it's possible that the receiver will miss "StopReceiver"
+    failAfter(30000 millis) {
+      ssc.stop(stopSparkContext = true, stopGracefully = true)
     }
   }
 
@@ -297,6 +326,25 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     Thread.sleep(100)
   }
 
+  test ("registering and de-registering of streamingSource") {
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    ssc = new StreamingContext(conf, batchDuration)
+    assert(ssc.getState() === StreamingContextState.INITIALIZED)
+    addInputStream(ssc).register()
+    ssc.start()
+
+    val sources = StreamingContextSuite.getSources(ssc.env.metricsSystem)
+    val streamingSource = StreamingContextSuite.getStreamingSource(ssc)
+    assert(sources.contains(streamingSource))
+    assert(ssc.getState() === StreamingContextState.ACTIVE)
+
+    ssc.stop()
+    val sourcesAfterStop = StreamingContextSuite.getSources(ssc.env.metricsSystem)
+    val streamingSourceAfterStop = StreamingContextSuite.getStreamingSource(ssc)
+    assert(ssc.getState() === StreamingContextState.STOPPED)
+    assert(!sourcesAfterStop.contains(streamingSourceAfterStop))
+  }
+
   test("awaitTermination") {
     ssc = new StreamingContext(master, appName, batchDuration)
     val inputStream = addInputStream(ssc)
@@ -321,16 +369,22 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     }
     assert(exception.isInstanceOf[TestFailedDueToTimeoutException], "Did not wait for stop")
 
+    var t: Thread = null
     // test whether wait exits if context is stopped
     failAfter(10000 millis) { // 10 seconds because spark takes a long time to shutdown
-      new Thread() {
+      t = new Thread() {
         override def run() {
           Thread.sleep(500)
           ssc.stop()
         }
-      }.start()
+      }
+      t.start()
       ssc.awaitTermination()
     }
+    // SparkContext.stop will set SparkEnv.env to null. We need to make sure SparkContext is stopped
+    // before running the next test. Otherwise, it's possible that we set SparkEnv.env to null after
+    // the next test creates the new SparkContext and fail the test.
+    t.join()
   }
 
   test("awaitTermination after stop") {
@@ -382,16 +436,22 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
       assert(ssc.awaitTerminationOrTimeout(500) === false)
     }
 
+    var t: Thread = null
     // test whether awaitTerminationOrTimeout() return true if context is stopped
     failAfter(10000 millis) { // 10 seconds because spark takes a long time to shutdown
-      new Thread() {
+      t = new Thread() {
         override def run() {
           Thread.sleep(500)
           ssc.stop()
         }
-      }.start()
+      }
+      t.start()
       assert(ssc.awaitTerminationOrTimeout(10000) === true)
     }
+    // SparkContext.stop will set SparkEnv.env to null. We need to make sure SparkContext is stopped
+    // before running the next test. Otherwise, it's possible that we set SparkEnv.env to null after
+    // the next test creates the new SparkContext and fail the test.
+    t.join()
   }
 
   test("getOrCreate") {
@@ -665,6 +725,19 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
       transformed.foreachRDD { rdd => rdd.collect() } }
   }
 
+  test("queueStream doesn't support checkpointing") {
+    val checkpointDir = Utils.createTempDir()
+    ssc = new StreamingContext(master, appName, batchDuration)
+    val rdd = ssc.sparkContext.parallelize(1 to 10)
+    ssc.queueStream[Int](Queue(rdd)).print()
+    ssc.checkpoint(checkpointDir.getAbsolutePath)
+    val e = intercept[NotSerializableException] {
+      ssc.start()
+    }
+    // StreamingContext.validate changes the message, so use "contains" here
+    assert(e.getMessage.contains("queueStream doesn't support checkpointing"))
+  }
+
   def addInputStream(s: StreamingContext): DStream[Int] = {
     val input = (1 to 100).map(i => 1 to i)
     val inputStream = new TestInputStream(s, input, 1)
@@ -716,7 +789,8 @@ class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging 
   }
 
   def onStop() {
-    // no clean to be done, the receiving thread should stop on it own
+    // no clean to be done, the receiving thread should stop on it own, so just wait for it.
+    receivingThreadOption.foreach(_.join())
   }
 }
 
@@ -794,5 +868,20 @@ package object testPackage extends Assertions {
     } finally {
       ssc.stop()
     }
+  }
+}
+
+/**
+ * Helper methods for testing StreamingContextSuite
+ * This includes methods to access private methods and fields in StreamingContext and MetricsSystem
+ */
+private object StreamingContextSuite extends PrivateMethodTester {
+  private val _sources = PrivateMethod[ArrayBuffer[Source]]('sources)
+  private def getSources(metricsSystem: MetricsSystem): ArrayBuffer[Source] = {
+    metricsSystem.invokePrivate(_sources())
+  }
+  private val _streamingSource = PrivateMethod[StreamingSource]('streamingSource)
+  private def getStreamingSource(streamingContext: StreamingContext): StreamingSource = {
+    streamingContext.invokePrivate(_streamingSource())
   }
 }

@@ -20,17 +20,17 @@ package org.apache.spark.sql
 import java.util.Properties
 
 import org.apache.hadoop.fs.Path
-import org.apache.spark.Partition
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.json.{JsonRDD, JSONRelation}
-import org.apache.spark.sql.parquet.ParquetRelation2
-import org.apache.spark.sql.sources.{LogicalRelation, ResolvedDataSource}
+import org.apache.spark.sql.json.JSONRelation
+import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.{Logging, Partition}
 
 /**
  * :: Experimental ::
@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.StructType
  * @since 1.4.0
  */
 @Experimental
-class DataFrameReader private[sql](sqlContext: SQLContext) {
+class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
 
   /**
    * Specifies the input data source format.
@@ -236,17 +236,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
     val samplingRatio = extraOptions.getOrElse("samplingRatio", "1.0").toDouble
-    if (sqlContext.conf.useJacksonStreamingAPI) {
-      sqlContext.baseRelationToDataFrame(
-        new JSONRelation(() => jsonRDD, None, samplingRatio, userSpecifiedSchema)(sqlContext))
-    } else {
-      val columnNameOfCorruptJsonRecord = sqlContext.conf.columnNameOfCorruptRecord
-      val appliedSchema = userSpecifiedSchema.getOrElse(
-        JsonRDD.nullTypeToStringType(
-          JsonRDD.inferSchema(jsonRDD, 1.0, columnNameOfCorruptJsonRecord)))
-      val rowRDD = JsonRDD.jsonStringToRow(jsonRDD, appliedSchema, columnNameOfCorruptJsonRecord)
-      sqlContext.internalCreateDataFrame(rowRDD, appliedSchema)
-    }
+    sqlContext.baseRelationToDataFrame(
+      new JSONRelation(Some(jsonRDD), samplingRatio, userSpecifiedSchema, None, None)(sqlContext))
   }
 
   /**
@@ -260,12 +251,27 @@ class DataFrameReader private[sql](sqlContext: SQLContext) {
     if (paths.isEmpty) {
       sqlContext.emptyDataFrame
     } else {
-      val globbedPaths = paths.map(new Path(_)).flatMap(SparkHadoopUtil.get.globPath).toArray
+      val globbedPaths = paths.flatMap { path =>
+        val hdfsPath = new Path(path)
+        val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+        val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+        SparkHadoopUtil.get.globPathIfNecessary(qualified)
+      }.toArray
+
       sqlContext.baseRelationToDataFrame(
-        new ParquetRelation2(
-          globbedPaths.map(_.toString), None, None, Map.empty[String, String])(sqlContext))
+        new ParquetRelation(
+          globbedPaths.map(_.toString), userSpecifiedSchema, None, extraOptions.toMap)(sqlContext))
     }
   }
+
+  /**
+   * Loads an ORC file and returns the result as a [[DataFrame]].
+   *
+   * @param path input path
+   * @since 1.5.0
+   * @note Currently, this method can only be used together with `HiveContext`.
+   */
+  def orc(path: String): DataFrame = format("orc").load(path)
 
   /**
    * Returns the specified table as a [[DataFrame]].

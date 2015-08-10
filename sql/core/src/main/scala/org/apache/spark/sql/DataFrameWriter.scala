@@ -20,10 +20,12 @@ package org.apache.spark.sql
 import java.util.Properties
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, ResolvedDataSource}
 import org.apache.spark.sql.jdbc.{JDBCWriteDetails, JdbcUtils}
-import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
+import org.apache.spark.sql.sources.HadoopFsRelation
 
 
 /**
@@ -159,15 +161,19 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
-    val partitions =
-      partitioningColumns.map(_.map(col => col -> (None: Option[String])).toMap)
-    val overwrite = (mode == SaveMode.Overwrite)
-    df.sqlContext.executePlan(InsertIntoTable(
-      UnresolvedRelation(Seq(tableName)),
-      partitions.getOrElse(Map.empty[String, Option[String]]),
-      df.logicalPlan,
-      overwrite,
-      ifNotExists = false)).toRdd
+    insertInto(new SqlParser().parseTableIdentifier(tableName))
+  }
+
+  private def insertInto(tableIdent: TableIdentifier): Unit = {
+    val partitions = partitioningColumns.map(_.map(col => col -> (None: Option[String])).toMap)
+    val overwrite = mode == SaveMode.Overwrite
+    df.sqlContext.executePlan(
+      InsertIntoTable(
+        UnresolvedRelation(tableIdent.toSeq),
+        partitions.getOrElse(Map.empty[String, Option[String]]),
+        df.logicalPlan,
+        overwrite,
+        ifNotExists = false)).toRdd
   }
 
   /**
@@ -180,35 +186,46 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * When `mode` is `Append`, the schema of the [[DataFrame]] need to be
    * the same as that of the existing table, and format or options will be ignored.
    *
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
+   *
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    if (df.sqlContext.catalog.tableExists(tableName :: Nil) && mode != SaveMode.Overwrite) {
-      mode match {
-        case SaveMode.Ignore =>
-          // Do nothing
+    saveAsTable(new SqlParser().parseTableIdentifier(tableName))
+  }
 
-        case SaveMode.ErrorIfExists =>
-          throw new AnalysisException(s"Table $tableName already exists.")
+  private def saveAsTable(tableIdent: TableIdentifier): Unit = {
+    val tableExists = df.sqlContext.catalog.tableExists(tableIdent.toSeq)
 
-        case SaveMode.Append =>
-          // If it is Append, we just ask insertInto to handle it. We will not use insertInto
-          // to handle saveAsTable with Overwrite because saveAsTable can change the schema of
-          // the table. But, insertInto with Overwrite requires the schema of data be the same
-          // the schema of the table.
-          insertInto(tableName)
-      }
-    } else {
-      val cmd =
-        CreateTableUsingAsSelect(
-          tableName,
-          source,
-          temporary = false,
-          partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
-          mode,
-          extraOptions.toMap,
-          df.logicalPlan)
-      df.sqlContext.executePlan(cmd).toRdd
+    (tableExists, mode) match {
+      case (true, SaveMode.Ignore) =>
+        // Do nothing
+
+      case (true, SaveMode.ErrorIfExists) =>
+        throw new AnalysisException(s"Table $tableIdent already exists.")
+
+      case (true, SaveMode.Append) =>
+        // If it is Append, we just ask insertInto to handle it. We will not use insertInto
+        // to handle saveAsTable with Overwrite because saveAsTable can change the schema of
+        // the table. But, insertInto with Overwrite requires the schema of data be the same
+        // the schema of the table.
+        insertInto(tableIdent)
+
+      case _ =>
+        val cmd =
+          CreateTableUsingAsSelect(
+            tableIdent.unquotedString,
+            source,
+            temporary = false,
+            partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
+            mode,
+            extraOptions.toMap,
+            df.logicalPlan)
+        df.sqlContext.executePlan(cmd).toRdd
     }
   }
 
@@ -279,6 +296,18 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def parquet(path: String): Unit = format("parquet").save(path)
+
+  /**
+   * Saves the content of the [[DataFrame]] in ORC format at the specified path.
+   * This is equivalent to:
+   * {{{
+   *   format("orc").save(path)
+   * }}}
+   *
+   * @since 1.5.0
+   * @note Currently, this method can only be used together with `HiveContext`.
+   */
+  def orc(path: String): Unit = format("orc").save(path)
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

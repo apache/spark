@@ -169,8 +169,8 @@ setMethod("isLocal",
 #'}
 setMethod("showDF",
           signature(x = "DataFrame"),
-          function(x, numRows = 20) {
-            s <- callJMethod(x@sdf, "showString", numToInt(numRows))
+          function(x, numRows = 20, truncate = TRUE) {
+            s <- callJMethod(x@sdf, "showString", numToInt(numRows), truncate)
             cat(s)
           })
 
@@ -253,6 +253,16 @@ setMethod("names",
           signature(x = "DataFrame"),
           function(x) {
             columns(x)
+          })
+
+#' @rdname columns
+setMethod("names<-",
+          signature(x = "DataFrame"),
+          function(x, value) {
+            if (!is.null(value)) {
+              sdf <- callJMethod(x@sdf, "toDF", listToSeq(as.list(value)))
+              dataFrame(sdf)
+            }
           })
 
 #' Register Temporary Table
@@ -473,6 +483,18 @@ setMethod("distinct",
             dataFrame(sdf)
           })
 
+#' @title Distinct rows in a DataFrame
+#
+#' @description Returns a new DataFrame containing distinct rows in this DataFrame
+#'
+#' @rdname unique
+#' @aliases unique
+setMethod("unique",
+          signature(x = "DataFrame"),
+          function(x) {
+            distinct(x)
+          })
+
 #' Sample
 #'
 #' Return a sampled subset of this DataFrame using a random seed.
@@ -532,6 +554,58 @@ setMethod("count",
           signature(x = "DataFrame"),
           function(x) {
             callJMethod(x@sdf, "count")
+          })
+
+#' @title Number of rows for a DataFrame
+#' @description Returns number of rows in a DataFrames
+#'
+#' @name nrow
+#'
+#' @rdname nrow
+#' @aliases count
+setMethod("nrow",
+          signature(x = "DataFrame"),
+          function(x) {
+            count(x)
+          })
+
+#' Returns the number of columns in a DataFrame
+#'
+#' @param x a SparkSQL DataFrame
+#'
+#' @rdname ncol
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlContext, path)
+#' ncol(df)
+#' }
+setMethod("ncol",
+          signature(x = "DataFrame"),
+          function(x) {
+            length(columns(x))
+          })
+
+#' Returns the dimentions (number of rows and columns) of a DataFrame
+#' @param x a SparkSQL DataFrame
+#'
+#' @rdname dim
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlContext, path)
+#' dim(df)
+#' }
+setMethod("dim",
+          signature(x = "DataFrame"),
+          function(x) {
+            c(count(x), ncol(x))
           })
 
 #' Collects all the elements of a Spark DataFrame and coerces them into an R data.frame.
@@ -1205,6 +1279,15 @@ setMethod("join",
             dataFrame(sdf)
           })
 
+#' rdname merge
+#' aliases join
+setMethod("merge",
+          signature(x = "DataFrame", y = "DataFrame"),
+          function(x, y, joinExpr = NULL, joinType = NULL, ...) {
+            join(x, y, joinExpr, joinType)
+          })
+
+
 #' UnionAll
 #'
 #' Return a new DataFrame containing the union of rows in this DataFrame
@@ -1229,6 +1312,22 @@ setMethod("unionAll",
           function(x, y) {
             unioned <- callJMethod(x@sdf, "unionAll", y@sdf)
             dataFrame(unioned)
+          })
+
+#' @title Union two or more DataFrames
+#
+#' @description Returns a new DataFrame containing rows of all parameters.
+#
+#' @rdname rbind
+#' @aliases unionAll
+setMethod("rbind",
+          signature(... = "DataFrame"),
+          function(x, ..., deparse.level = 1) {
+            if (nargs() == 3) {
+              unionAll(x, ...)
+            } else {
+              unionAll(x, Recall(..., deparse.level = 1))
+            }
           })
 
 #' Intersect
@@ -1314,7 +1413,7 @@ setMethod("except",
 #' write.df(df, "myfile", "parquet", "overwrite")
 #' }
 setMethod("write.df",
-          signature(df = "DataFrame", path = 'character'),
+          signature(df = "DataFrame", path = "character"),
           function(df, path, source = NULL, mode = "append", ...){
             if (is.null(source)) {
               sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
@@ -1322,13 +1421,15 @@ setMethod("write.df",
                                     "org.apache.spark.sql.parquet")
             }
             allModes <- c("append", "overwrite", "error", "ignore")
+            # nolint start
             if (!(mode %in% allModes)) {
               stop('mode should be one of "append", "overwrite", "error", "ignore"')
             }
+            # nolint end
             jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
             options <- varargsToEnv(...)
             if (!is.null(path)) {
-                options[['path']] = path
+                options[["path"]] <- path
             }
             callJMethod(df@sdf, "save", source, jmode, options)
           })
@@ -1337,7 +1438,7 @@ setMethod("write.df",
 #' @aliases saveDF
 #' @export
 setMethod("saveDF",
-          signature(df = "DataFrame", path = 'character'),
+          signature(df = "DataFrame", path = "character"),
           function(df, path, source = NULL, mode = "append", ...){
             write.df(df, path, source, mode, ...)
           })
@@ -1375,8 +1476,8 @@ setMethod("saveDF",
 #' saveAsTable(df, "myfile")
 #' }
 setMethod("saveAsTable",
-          signature(df = "DataFrame", tableName = 'character', source = 'character',
-                    mode = 'character'),
+          signature(df = "DataFrame", tableName = "character", source = "character",
+                    mode = "character"),
           function(df, tableName, source = NULL, mode="append", ...){
             if (is.null(source)) {
               sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
@@ -1384,9 +1485,11 @@ setMethod("saveAsTable",
                                     "org.apache.spark.sql.parquet")
             }
             allModes <- c("append", "overwrite", "error", "ignore")
+            # nolint start
             if (!(mode %in% allModes)) {
               stop('mode should be one of "append", "overwrite", "error", "ignore"')
             }
+            # nolint end
             jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
             options <- varargsToEnv(...)
             callJMethod(df@sdf, "saveAsTable", tableName, source, jmode, options)
@@ -1429,6 +1532,19 @@ setMethod("describe",
             sdf <- callJMethod(x@sdf, "describe", listToSeq(colList))
             dataFrame(sdf)
           })
+
+#' @title Summary
+#'
+#' @description Computes statistics for numeric columns of the DataFrame
+#'
+#' @rdname summary
+#' @aliases describe
+setMethod("summary",
+          signature(x = "DataFrame"),
+          function(x) {
+            describe(x)
+          })
+
 
 #' dropna
 #'
@@ -1553,4 +1669,32 @@ setMethod("fillna",
               callJMethod(naFunctions, "fill", value, listToSeq(as.list(cols)))
             }
             dataFrame(sdf)
+          })
+
+#' crosstab
+#'
+#' Computes a pair-wise frequency table of the given columns. Also known as a contingency
+#' table. The number of distinct values for each column should be less than 1e4. At most 1e6
+#' non-zero pair frequencies will be returned.
+#'
+#' @param col1 name of the first column. Distinct items will make the first item of each row.
+#' @param col2 name of the second column. Distinct items will make the column names of the output.
+#' @return a local R data.frame representing the contingency table. The first column of each row
+#'         will be the distinct values of `col1` and the column names will be the distinct values
+#'         of `col2`. The name of the first column will be `$col1_$col2`. Pairs that have no
+#'         occurrences will have zero as their counts.
+#'
+#' @rdname statfunctions
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- jsonFile(sqlCtx, "/path/to/file.json")
+#' ct = crosstab(df, "title", "gender")
+#' }
+setMethod("crosstab",
+          signature(x = "DataFrame", col1 = "character", col2 = "character"),
+          function(x, col1, col2) {
+            statFunctions <- callJMethod(x@sdf, "stat")
+            sct <- callJMethod(statFunctions, "crosstab", col1, col2)
+            collect(dataFrame(sct))
           })

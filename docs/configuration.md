@@ -31,7 +31,6 @@ which can help detect bugs that only exist when we run in a distributed context.
 val conf = new SparkConf()
              .setMaster("local[2]")
              .setAppName("CountingSheep")
-             .set("spark.executor.memory", "1g")
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
@@ -84,7 +83,7 @@ Running `./bin/spark-submit --help` will show the entire list of these options.
 each line consists of a key and a value separated by whitespace. For example:
 
     spark.master            spark://5.6.7.8:7077
-    spark.executor.memory   512m
+    spark.executor.memory   4g
     spark.eventLog.enabled  true
     spark.serializer        org.apache.spark.serializer.KryoSerializer
 
@@ -137,10 +136,10 @@ of the most common options to set are:
 </tr>
 <tr>
   <td><code>spark.driver.memory</code></td>
-  <td>512m</td>
+  <td>1g</td>
   <td>
     Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
-    (e.g. <code>512m</code>, <code>2g</code>).
+    (e.g. <code>1g</code>, <code>2g</code>).
     
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
@@ -150,10 +149,9 @@ of the most common options to set are:
 </tr>
 <tr>
   <td><code>spark.executor.memory</code></td>
-  <td>512m</td>
+  <td>1g</td>
   <td>
-    Amount of memory to use per executor process, in the same format as JVM memory strings
-    (e.g. <code>512m</code>, <code>2g</code>).
+    Amount of memory to use per executor process (e.g. <code>2g</code>, <code>8g</code>).
   </td>
 </tr>
 <tr>
@@ -205,7 +203,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.driver.extraClassPath</code></td>
   <td>(none)</td>
   <td>
-    Extra classpath entries to append to the classpath of the driver.
+    Extra classpath entries to prepend to the classpath of the driver.
 
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
@@ -252,7 +250,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.executor.extraClassPath</code></td>
   <td>(none)</td>
   <td>
-    Extra classpath entries to append to the classpath of executors. This exists primarily for 
+    Extra classpath entries to prepend to the classpath of executors. This exists primarily for 
     backwards-compatibility with older versions of Spark. Users typically should not need to set 
     this option.
   </td>
@@ -476,6 +474,25 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.service.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enables the external shuffle service. This service preserves the shuffle files written by 
+    executors so the executors can be safely removed. This must be enabled if 
+    <code>spark.dynamicAllocation.enabled</code> is "true". The external shuffle service
+    must be set up in order to enable it. See
+    <a href="job-scheduling.html#configuration-and-setup">dynamic allocation 
+    configuration and setup documentation</a> for more information.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.port</code></td>
+  <td>7337</td>
+  <td>
+    Port on which the external shuffle service will run.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.sort.bypassMergeThreshold</code></td>
   <td>200</td>
   <td>
@@ -557,6 +574,20 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How many stages the Spark UI and status APIs remember before garbage
     collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.ui.retainedExecutors</code></td>
+  <td>1000</td>
+  <td>
+    How many finished executors the Spark UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.ui.retainedDrivers</code></td>
+  <td>1000</td>
+  <td>
+    How many finished drivers the Spark UI and status APIs remember before garbage collecting.
   </td>
 </tr>
 </table>
@@ -665,7 +696,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Initial size of Kryo's serialization buffer. Note that there will be one buffer
      <i>per core</i> on each worker. This buffer will grow up to
-     <code>spark.kryoserializer.buffer.max.mb</code> if needed.
+     <code>spark.kryoserializer.buffer.max</code> if needed.
   </td>
 </tr>
 <tr>
@@ -886,11 +917,11 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.akka.frameSize</code></td>
-  <td>10</td>
+  <td>128</td>
   <td>
-    Maximum message size to allow in "control plane" communication (for serialized tasks and task
-    results), in MB. Increase this if your tasks need to send back large results to the driver
-    (e.g. using <code>collect()</code> on a large dataset).
+    Maximum message size to allow in "control plane" communication; generally only applies to map
+    output size information sent between executors and the driver. Increase this if you are running
+    jobs with many thousands of map and reduce tasks and see messages about the frame size.
   </td>
 </tr>
 <tr>
@@ -1007,9 +1038,9 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.rpc.numRetries</code></td>
   <td>3</td>
+  <td>
     Number of times to retry before an RPC task gives up.
     An RPC task will run at most times of this number.
-  <td>
   </td>
 </tr>
 <tr>
@@ -1029,8 +1060,8 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.rpc.lookupTimeout</code></td>
   <td>120s</td>
-    Duration for an RPC remote endpoint lookup operation to wait before timing out.
   <td>
+    Duration for an RPC remote endpoint lookup operation to wait before timing out.  
   </td>
 </tr>
 </table>
@@ -1048,15 +1079,6 @@ Apart from these, the following properties are also available, and may be useful
     across the cluster (not from each machine). If not set, the default will be
     <code>spark.deploy.defaultCores</code> on Spark's standalone cluster manager, or
     infinite (all available cores) on Mesos.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.localExecution.enabled</code></td>
-  <td>false</td>
-  <td>
-    Enables Spark to run certain jobs, such as first() or take() on the driver, without sending
-    tasks to the cluster. This can make certain jobs execute very quickly, but may require
-    shipping a whole partition of data to the driver.
   </td>
 </tr>
 <tr>
@@ -1206,7 +1228,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.cachedExecutorIdleTimeout</code></td>
-  <td>2 * executorIdleTimeout</td>
+  <td>infinity</td>
   <td>
     If dynamic allocation is enabled and an executor which has cached data blocks has been idle for more than this duration,
     the executor will be removed. For more details, see this
@@ -1222,7 +1244,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.maxExecutors</code></td>
-  <td>Integer.MAX_VALUE</td>
+  <td>infinity</td>
   <td>
     Upper bound for the number of executors if dynamic allocation is enabled.
   </td>

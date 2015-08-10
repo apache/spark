@@ -22,10 +22,8 @@ import java.util.Date
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import akka.actor.ActorRef
-
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.ApplicationDescription
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 private[spark] class ApplicationInfo(
@@ -33,7 +31,7 @@ private[spark] class ApplicationInfo(
     val id: String,
     val desc: ApplicationDescription,
     val submitDate: Date,
-    val driver: ActorRef,
+    val driver: RpcEndpointRef,
     defaultCores: Int)
   extends Serializable {
 
@@ -43,6 +41,11 @@ private[spark] class ApplicationInfo(
   @transient var coresGranted: Int = _
   @transient var endTime: Long = _
   @transient var appSource: ApplicationSource = _
+
+  // A cap on the number of executors this application can have at any given time.
+  // By default, this is infinite. Only after the first allocation request is issued by the
+  // application will this be set to a finite value. This is used for dynamic allocation.
+  @transient private[master] var executorLimit: Int = _
 
   @transient private var nextExecutorId: Int = _
 
@@ -61,6 +64,7 @@ private[spark] class ApplicationInfo(
     appSource = new ApplicationSource(this)
     nextExecutorId = 0
     removedExecutors = new ArrayBuffer[ExecutorDesc]
+    executorLimit = Integer.MAX_VALUE
   }
 
   private def newExecutorId(useID: Option[Int] = None): Int = {
@@ -116,6 +120,12 @@ private[spark] class ApplicationInfo(
   private[master] def isFinished: Boolean = {
     state != ApplicationState.WAITING && state != ApplicationState.RUNNING
   }
+
+  /**
+   * Return the limit on the number of executors this application can have.
+   * For testing only.
+   */
+  private[deploy] def getExecutorLimit: Int = executorLimit
 
   def duration: Long = {
     if (endTime != -1) {

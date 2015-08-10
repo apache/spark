@@ -161,12 +161,20 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """.stripMargin,
     binaryAsString = true)
 
+  testSchemaInference[Tuple1[String]](
+    "binary enum as string",
+    """
+      |message root {
+      |  optional binary _1 (ENUM);
+      |}
+    """.stripMargin)
+
   testSchemaInference[Tuple1[Seq[Int]]](
     "non-nullable array - non-standard",
     """
       |message root {
       |  optional group _1 (LIST) {
-      |    repeated int32 element;
+      |    repeated int32 array;
       |  }
       |}
     """.stripMargin)
@@ -190,7 +198,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |message root {
       |  optional group _1 (LIST) {
       |    repeated group bag {
-      |      optional int32 element;
+      |      optional int32 array_element;
       |    }
       |  }
       |}
@@ -259,7 +267,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
       |        optional binary _1 (UTF8);
       |        optional group _2 (LIST) {
       |          repeated group bag {
-      |            optional group element {
+      |            optional group array_element {
       |              required int32 _1;
       |              required double _2;
       |            }
@@ -370,7 +378,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         StructField("lowerCase", StringType),
         StructField("UPPERCase", DoubleType, nullable = false)))) {
 
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      ParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("lowercase", StringType),
           StructField("uppercase", DoubleType, nullable = false))),
@@ -385,7 +393,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       StructType(Seq(
         StructField("UPPERCase", DoubleType, nullable = false)))) {
 
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      ParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("uppercase", DoubleType, nullable = false))),
 
@@ -396,7 +404,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
     // Metastore schema contains additional non-nullable fields.
     assert(intercept[Throwable] {
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      ParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("uppercase", DoubleType, nullable = false),
           StructField("lowerCase", BinaryType, nullable = false))),
@@ -407,7 +415,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
     // Conflicting non-nullable field names
     intercept[Throwable] {
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      ParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(StructField("lower", StringType, nullable = false))),
         StructType(Seq(StructField("lowerCase", BinaryType))))
     }
@@ -421,7 +429,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         StructField("firstField", StringType, nullable = true),
         StructField("secondField", StringType, nullable = true),
         StructField("thirdfield", StringType, nullable = true)))) {
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      ParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("firstfield", StringType, nullable = true),
           StructField("secondfield", StringType, nullable = true),
@@ -434,7 +442,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     // Merge should fail if the Metastore contains any additional fields that are not
     // nullable.
     assert(intercept[Throwable] {
-      ParquetRelation2.mergeMetastoreParquetSchema(
+      ParquetRelation.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("firstfield", StringType, nullable = true),
           StructField("secondfield", StringType, nullable = true),
@@ -608,7 +616,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     """message root {
       |  optional group f1 (LIST) {
       |    repeated group bag {
-      |      optional int32 element;
+      |      optional int32 array_element;
       |    }
       |  }
       |}
@@ -640,7 +648,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         nullable = true))),
     """message root {
       |  optional group f1 (LIST) {
-      |    repeated int32 element;
+      |    repeated int32 array;
       |  }
       |}
     """.stripMargin)

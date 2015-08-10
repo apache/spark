@@ -86,7 +86,9 @@ infer_type <- function(x) {
 createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0) {
   if (is.data.frame(data)) {
       # get the names of columns, they will be put into RDD
-      schema <- names(data)
+      if (is.null(schema)) {
+        schema <- names(data)
+      }
       n <- nrow(data)
       m <- ncol(data)
       # get rid of factor type
@@ -455,7 +457,7 @@ dropTempTable <- function(sqlContext, tableName) {
 read.df <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
   options <- varargsToEnv(...)
   if (!is.null(path)) {
-    options[['path']] <- path
+    options[["path"]] <- path
   }
   if (is.null(source)) {
     sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
@@ -504,7 +506,7 @@ loadDF <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
 createExternalTable <- function(sqlContext, tableName, path = NULL, source = NULL, ...) {
   options <- varargsToEnv(...)
   if (!is.null(path)) {
-    options[['path']] <- path
+    options[["path"]] <- path
   }
   sdf <- callJMethod(sqlContext, "createExternalTable", tableName, source, options)
   dataFrame(sdf)

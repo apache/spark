@@ -19,8 +19,7 @@ package org.apache.spark.deploy
 
 import scala.collection.mutable.ArrayBuffer
 
-import akka.actor.ActorSystem
-
+import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.deploy.master.Master
@@ -41,8 +40,8 @@ class LocalSparkCluster(
   extends Logging {
 
   private val localHostname = Utils.localHostName()
-  private val masterActorSystems = ArrayBuffer[ActorSystem]()
-  private val workerActorSystems = ArrayBuffer[ActorSystem]()
+  private val masterRpcEnvs = ArrayBuffer[RpcEnv]()
+  private val workerRpcEnvs = ArrayBuffer[RpcEnv]()
   // exposed for testing
   var masterWebUIPort = -1
 
@@ -55,18 +54,17 @@ class LocalSparkCluster(
       .set("spark.shuffle.service.enabled", "false")
 
     /* Start the Master */
-    val (masterSystem, masterPort, webUiPort, _) =
-      Master.startSystemAndActor(localHostname, 0, 0, _conf)
+    val (rpcEnv, webUiPort, _) = Master.startRpcEnvAndEndpoint(localHostname, 0, 0, _conf)
     masterWebUIPort = webUiPort
-    masterActorSystems += masterSystem
-    val masterUrl = "spark://" + Utils.localHostNameForURI() + ":" + masterPort
+    masterRpcEnvs += rpcEnv
+    val masterUrl = "spark://" + Utils.localHostNameForURI() + ":" + rpcEnv.address.port
     val masters = Array(masterUrl)
 
     /* Start the Workers */
     for (workerNum <- 1 to numWorkers) {
-      val (workerSystem, _) = Worker.startSystemAndActor(localHostname, 0, 0, coresPerWorker,
+      val workerEnv = Worker.startRpcEnvAndEndpoint(localHostname, 0, 0, coresPerWorker,
         memoryPerWorker, masters, null, Some(workerNum), _conf)
-      workerActorSystems += workerSystem
+      workerRpcEnvs += workerEnv
     }
 
     masters
@@ -75,13 +73,9 @@ class LocalSparkCluster(
   def stop() {
     logInfo("Shutting down local Spark cluster.")
     // Stop the workers before the master so they don't get upset that it disconnected
-    // TODO: In Akka 2.1.x, ActorSystem.awaitTermination hangs when you have remote actors!
-    //       This is unfortunate, but for now we just comment it out.
-    workerActorSystems.foreach(_.shutdown())
-    // workerActorSystems.foreach(_.awaitTermination())
-    masterActorSystems.foreach(_.shutdown())
-    // masterActorSystems.foreach(_.awaitTermination())
-    masterActorSystems.clear()
-    workerActorSystems.clear()
+    workerRpcEnvs.foreach(_.shutdown())
+    masterRpcEnvs.foreach(_.shutdown())
+    masterRpcEnvs.clear()
+    workerRpcEnvs.clear()
   }
 }

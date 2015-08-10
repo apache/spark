@@ -1016,7 +1016,9 @@ private[spark] object ConnectionManager {
     val conf = new SparkConf
     val manager = new ConnectionManager(9999, conf, new SecurityManager(conf))
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
+      // scalastyle:off println
       println("Received [" + msg + "] from [" + id + "]")
+      // scalastyle:on println
       None
     })
 
@@ -1033,6 +1035,7 @@ private[spark] object ConnectionManager {
     System.gc()
   }
 
+  // scalastyle:off println
   def testSequentialSending(manager: ConnectionManager) {
     println("--------------------------")
     println("Sequential Sending")
@@ -1150,4 +1153,5 @@ private[spark] object ConnectionManager {
       println()
     }
   }
+  // scalastyle:on println
 }

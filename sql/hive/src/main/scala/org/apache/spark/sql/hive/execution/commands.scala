@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.sources._
-import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, InternalRow}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.execution.datasources.{ResolvedDataSource, LogicalRelation}
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -39,9 +39,9 @@ import org.apache.spark.util.Utils
 private[hive]
 case class AnalyzeTable(tableName: String) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     sqlContext.asInstanceOf[HiveContext].analyze(tableName)
-    Seq.empty[InternalRow]
+    Seq.empty[Row]
   }
 }
 
@@ -53,7 +53,7 @@ case class DropTable(
     tableName: String,
     ifExists: Boolean) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
     try {
@@ -70,7 +70,7 @@ case class DropTable(
     hiveContext.invalidateTable(tableName)
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
     hiveContext.catalog.unregisterTable(Seq(tableName))
-    Seq.empty[InternalRow]
+    Seq.empty[Row]
   }
 }
 
@@ -83,12 +83,12 @@ case class AddJar(path: String) extends RunnableCommand {
     schema.toAttributes
   }
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val currentClassLoader = Utils.getContextOrSparkClassLoader
 
     // Add jar to current context
-    val jarURL = new java.io.File(path).toURL
+    val jarURL = new java.io.File(path).toURI.toURL
     val newClassLoader = new java.net.URLClassLoader(Array(jarURL), currentClassLoader)
     Thread.currentThread.setContextClassLoader(newClassLoader)
     // We need to explicitly set the class loader associated with the conf in executionHive's
@@ -105,18 +105,18 @@ case class AddJar(path: String) extends RunnableCommand {
     // Add jar to executors
     hiveContext.sparkContext.addJar(path)
 
-    Seq(InternalRow(0))
+    Seq(Row(0))
   }
 }
 
 private[hive]
 case class AddFile(path: String) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     hiveContext.runSqlHive(s"ADD FILE $path")
     hiveContext.sparkContext.addFile(path)
-    Seq.empty[InternalRow]
+    Seq.empty[Row]
   }
 }
 
@@ -129,12 +129,12 @@ case class CreateMetastoreDataSource(
     allowExisting: Boolean,
     managedIfNoPath: Boolean) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
 
     if (hiveContext.catalog.tableExists(tableName :: Nil)) {
       if (allowExisting) {
-        return Seq.empty[InternalRow]
+        return Seq.empty[Row]
       } else {
         throw new AnalysisException(s"Table $tableName already exists.")
       }
@@ -157,7 +157,7 @@ case class CreateMetastoreDataSource(
       optionsWithPath,
       isExternal)
 
-    Seq.empty[InternalRow]
+    Seq.empty[Row]
   }
 }
 
@@ -170,7 +170,7 @@ case class CreateMetastoreDataSourceAsSelect(
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[InternalRow] = {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     var createMetastoreTable = false
     var isExternal = true
@@ -194,7 +194,7 @@ case class CreateMetastoreDataSourceAsSelect(
             s"Or, if you are using SQL CREATE TABLE, you need to drop $tableName first.")
         case SaveMode.Ignore =>
           // Since the table already exists and the save mode is Ignore, we will just return.
-          return Seq.empty[InternalRow]
+          return Seq.empty[Row]
         case SaveMode.Append =>
           // Check if the specified data source match the data source of the existing table.
           val resolved = ResolvedDataSource(
@@ -259,6 +259,6 @@ case class CreateMetastoreDataSourceAsSelect(
 
     // Refresh the cache of the table in the catalog.
     hiveContext.refreshTable(tableName)
-    Seq.empty[InternalRow]
+    Seq.empty[Row]
   }
 }

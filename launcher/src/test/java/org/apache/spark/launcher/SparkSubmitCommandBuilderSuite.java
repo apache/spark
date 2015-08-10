@@ -194,7 +194,7 @@ public class SparkSubmitCommandBuilderSuite {
         if (isDriver) {
           assertEquals("-XX:MaxPermSize=256m", arg);
         } else {
-          assertEquals("-XX:MaxPermSize=128m", arg);
+          assertEquals("-XX:MaxPermSize=256m", arg);
         }
       }
     }

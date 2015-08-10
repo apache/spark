@@ -28,7 +28,11 @@ import org.apache.spark.sql.types._
  */
 object ScalaReflection extends ScalaReflection {
   val universe: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
-  val mirror: universe.Mirror = universe.runtimeMirror(Thread.currentThread().getContextClassLoader)
+  // Since we are creating a runtime mirror usign the class loader of current thread,
+  // we need to use def at here. So, every time we call mirror, it is using the
+  // class loader of the current thread.
+  override def mirror: universe.Mirror =
+    universe.runtimeMirror(Thread.currentThread().getContextClassLoader)
 }
 
 /**
@@ -39,7 +43,7 @@ trait ScalaReflection {
   val universe: scala.reflect.api.Universe
 
   /** The mirror used to access types in the universe */
-  val mirror: universe.Mirror
+  def mirror: universe.Mirror
 
   import universe._
 
@@ -127,10 +131,10 @@ trait ScalaReflection {
       case t if t <:< localTypeOf[String] => Schema(StringType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Timestamp] => Schema(TimestampType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Date] => Schema(DateType, nullable = true)
-      case t if t <:< localTypeOf[BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
+      case t if t <:< localTypeOf[BigDecimal] => Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if t <:< localTypeOf[java.math.BigDecimal] =>
-        Schema(DecimalType.Unlimited, nullable = true)
-      case t if t <:< localTypeOf[Decimal] => Schema(DecimalType.Unlimited, nullable = true)
+        Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
+      case t if t <:< localTypeOf[Decimal] => Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if t <:< localTypeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Long] => Schema(LongType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Double] => Schema(DoubleType, nullable = true)
@@ -163,8 +167,8 @@ trait ScalaReflection {
     case obj: Float => FloatType
     case obj: Double => DoubleType
     case obj: java.sql.Date => DateType
-    case obj: java.math.BigDecimal => DecimalType.Unlimited
-    case obj: Decimal => DecimalType.Unlimited
+    case obj: java.math.BigDecimal => DecimalType.SYSTEM_DEFAULT
+    case obj: Decimal => DecimalType.SYSTEM_DEFAULT
     case obj: java.sql.Timestamp => TimestampType
     case null => NullType
     // For other cases, there is no obvious mapping from the type of the given object to a

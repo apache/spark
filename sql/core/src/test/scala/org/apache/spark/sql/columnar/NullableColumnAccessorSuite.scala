@@ -21,17 +21,17 @@ import java.nio.ByteBuffer
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{StringType, ArrayType, DataType}
 
-class TestNullableColumnAccessor[T <: DataType, JvmType](
+class TestNullableColumnAccessor[JvmType](
     buffer: ByteBuffer,
-    columnType: ColumnType[T, JvmType])
+    columnType: ColumnType[JvmType])
   extends BasicColumnAccessor(buffer, columnType)
   with NullableColumnAccessor
 
 object TestNullableColumnAccessor {
-  def apply[T <: DataType, JvmType](buffer: ByteBuffer, columnType: ColumnType[T, JvmType])
-    : TestNullableColumnAccessor[T, JvmType] = {
+  def apply[JvmType](buffer: ByteBuffer, columnType: ColumnType[JvmType])
+    : TestNullableColumnAccessor[JvmType] = {
     // Skips the column type ID
     buffer.getInt()
     new TestNullableColumnAccessor(buffer, columnType)
@@ -42,14 +42,14 @@ class NullableColumnAccessorSuite extends SparkFunSuite {
   import ColumnarTestUtils._
 
   Seq(
-    INT, LONG, SHORT, BOOLEAN, BYTE, STRING, DOUBLE, FLOAT, FIXED_DECIMAL(15, 10), BINARY, GENERIC,
-    DATE, TIMESTAMP
-  ).foreach {
+    BOOLEAN, BYTE, SHORT, INT, DATE, LONG, TIMESTAMP, FLOAT, DOUBLE,
+    STRING, BINARY, FIXED_DECIMAL(15, 10), GENERIC(ArrayType(StringType)))
+    .foreach {
     testNullableColumnAccessor(_)
   }
 
-  def testNullableColumnAccessor[T <: DataType, JvmType](
-      columnType: ColumnType[T, JvmType]): Unit = {
+  def testNullableColumnAccessor[JvmType](
+      columnType: ColumnType[JvmType]): Unit = {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
     val nullRow = makeNullRow(1)
@@ -75,7 +75,7 @@ class NullableColumnAccessorSuite extends SparkFunSuite {
       (0 until 4).foreach { _ =>
         assert(accessor.hasNext)
         accessor.extractTo(row, 0)
-        assert(row(0) === randomRow(0))
+        assert(row.get(0, columnType.dataType) === randomRow.get(0, columnType.dataType))
 
         assert(accessor.hasNext)
         accessor.extractTo(row, 0)

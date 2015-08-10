@@ -62,22 +62,47 @@ private[spark] abstract class Stage(
 
   var pendingTasks = new HashSet[Task[_]]
 
+  /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
 
   val name = callSite.shortForm
   val details = callSite.longForm
 
-  /** Pointer to the latest [StageInfo] object, set by DAGScheduler. */
-  var latestInfo: StageInfo = StageInfo.fromStage(this)
+  private var _internalAccumulators: Seq[Accumulator[Long]] = Seq.empty
 
-  /** Return a new attempt id, starting with 0. */
-  def newAttemptId(): Int = {
-    val id = nextAttemptId
-    nextAttemptId += 1
-    id
+  /** Internal accumulators shared across all tasks in this stage. */
+  def internalAccumulators: Seq[Accumulator[Long]] = _internalAccumulators
+
+  /**
+   * Re-initialize the internal accumulators associated with this stage.
+   *
+   * This is called every time the stage is submitted, *except* when a subset of tasks
+   * belonging to this stage has already finished. Otherwise, reinitializing the internal
+   * accumulators here again will override partial values from the finished tasks.
+   */
+  def resetInternalAccumulators(): Unit = {
+    _internalAccumulators = InternalAccumulator.create()
   }
 
-  def attemptId: Int = nextAttemptId
+  /**
+   * Pointer to the [StageInfo] object for the most recent attempt. This needs to be initialized
+   * here, before any attempts have actually been created, because the DAGScheduler uses this
+   * StageInfo to tell SparkListeners when a job starts (which happens before any stage attempts
+   * have been created).
+   */
+  private var _latestInfo: StageInfo = StageInfo.fromStage(this, nextAttemptId)
+
+  /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
+  def makeNewStageAttempt(
+      numPartitionsToCompute: Int,
+      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty): Unit = {
+    _latestInfo = StageInfo.fromStage(
+      this, nextAttemptId, Some(numPartitionsToCompute), taskLocalityPreferences)
+    nextAttemptId += 1
+  }
+
+  /** Returns the StageInfo for the most recent attempt for this stage. */
+  def latestInfo: StageInfo = _latestInfo
 
   override final def hashCode(): Int = id
   override final def equals(other: Any): Boolean = other match {

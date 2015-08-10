@@ -221,7 +221,7 @@ model = word2vec.fit(inp)
 synonyms = model.findSynonyms('china', 40)
 
 for word, cosine_distance in synonyms:
-    print "{}: {}".format(word, cosine_distance)
+    print("{}: {}".format(word, cosine_distance))
 {% endhighlight %}
 </div>
 </div>
@@ -384,7 +384,7 @@ data2 = labels.zip(normalizer2.transform(features))
 [Feature selection](http://en.wikipedia.org/wiki/Feature_selection) allows selecting the most relevant features for use in model construction. Feature selection reduces the size of the vector space and, in turn, the complexity of any subsequent operation with vectors. The number of features to select can be tuned using a held-out validation set.
 
 ### ChiSqSelector
-[`ChiSqSelector`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) stands for Chi-Squared feature selection. It operates on labeled data with categorical features. `ChiSqSelector` orders features based on a Chi-Squared test of independence from the class, and then filters (selects) the top features which are most closely related to the label.
+[`ChiSqSelector`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) stands for Chi-Squared feature selection. It operates on labeled data with categorical features. `ChiSqSelector` orders features based on a Chi-Squared test of independence from the class, and then filters (selects) the top features which the class label depends on the most. This is akin to yielding the features with the most predictive power.
 
 #### Model Fitting
 
@@ -405,7 +405,7 @@ Note that the user can also construct a `ChiSqSelectorModel` by hand by providin
 
 #### Example
 
-The following example shows the basic use of ChiSqSelector.
+The following example shows the basic use of ChiSqSelector. The data set used has a feature matrix consisting of greyscale values that vary from 0 to 255 for each feature.
 
 <div class="codetabs">
 <div data-lang="scala">
@@ -419,10 +419,11 @@ import org.apache.spark.mllib.feature.ChiSqSelector
 // Load some data in libsvm format
 val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 // Discretize data in 16 equal bins since ChiSqSelector requires categorical features
+// Even though features are doubles, the ChiSqSelector treats each unique value as a category
 val discretizedData = data.map { lp =>
-  LabeledPoint(lp.label, Vectors.dense(lp.features.toArray.map { x => x / 16 } ) )
+  LabeledPoint(lp.label, Vectors.dense(lp.features.toArray.map { x => (x / 16).floor } ) )
 }
-// Create ChiSqSelector that will select 50 features
+// Create ChiSqSelector that will select top 50 of 692 features
 val selector = new ChiSqSelector(50)
 // Create ChiSqSelector model (selecting features)
 val transformer = selector.fit(discretizedData)
@@ -451,19 +452,20 @@ JavaRDD<LabeledPoint> points = MLUtils.loadLibSVMFile(sc.sc(),
     "data/mllib/sample_libsvm_data.txt").toJavaRDD().cache();
 
 // Discretize data in 16 equal bins since ChiSqSelector requires categorical features
+// Even though features are doubles, the ChiSqSelector treats each unique value as a category
 JavaRDD<LabeledPoint> discretizedData = points.map(
     new Function<LabeledPoint, LabeledPoint>() {
       @Override
       public LabeledPoint call(LabeledPoint lp) {
         final double[] discretizedFeatures = new double[lp.features().size()];
         for (int i = 0; i < lp.features().size(); ++i) {
-          discretizedFeatures[i] = lp.features().apply(i) / 16;
+          discretizedFeatures[i] = Math.floor(lp.features().apply(i) / 16);
         }
         return new LabeledPoint(lp.label(), Vectors.dense(discretizedFeatures));
       }
     });
 
-// Create ChiSqSelector that will select 50 features
+// Create ChiSqSelector that will select top 50 of 692 features
 ChiSqSelector selector = new ChiSqSelector(50);
 // Create ChiSqSelector model (selecting features)
 final ChiSqSelectorModel transformer = selector.fit(discretizedData.rdd());
