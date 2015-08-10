@@ -37,7 +37,10 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 
-private[sql] class DefaultSource extends HadoopFsRelationProvider {
+private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
+
+  def format(): String = "json"
+
   override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
@@ -152,7 +155,7 @@ private[json] class JsonOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
-  extends OutputWriterInternal with SparkHadoopMapRedUtil with Logging {
+  extends OutputWriter with SparkHadoopMapRedUtil with Logging {
 
   val writer = new CharArrayWriter()
   // create the Generator without separator inserted between 2 records
@@ -170,7 +173,9 @@ private[json] class JsonOutputWriter(
     }.getRecordWriter(context)
   }
 
-  override def writeInternal(row: InternalRow): Unit = {
+  override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
+
+  override protected[sql] def writeInternal(row: InternalRow): Unit = {
     JacksonGenerator(dataSchema, gen, row)
     gen.flush()
 

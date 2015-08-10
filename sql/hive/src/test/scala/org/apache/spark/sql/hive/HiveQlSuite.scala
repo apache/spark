@@ -175,4 +175,19 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(desc.serde == Option("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
     assert(desc.properties == Map(("tbl_p1" -> "p11"), ("tbl_p2" -> "p22")))
   }
+
+  test("Invalid interval term should throw AnalysisException") {
+    def assertError(sql: String, errorMessage: String): Unit = {
+      val e = intercept[AnalysisException] {
+        HiveQl.parseSql(sql)
+      }
+      assert(e.getMessage.contains(errorMessage))
+    }
+    assertError("select interval '42-32' year to month",
+      "month 32 outside range [0, 11]")
+    assertError("select interval '5 49:12:15' day to second",
+      "hour 49 outside range [0, 23]")
+    assertError("select interval '.1111111111' second",
+      "nanosecond 1111111111 outside range")
+  }
 }

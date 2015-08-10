@@ -37,15 +37,7 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
   def copy(): InternalRow
 
   /** Returns true if there are any NULL values in this row. */
-  def anyNull: Boolean = {
-    val len = numFields
-    var i = 0
-    while (i < len) {
-      if (isNullAt(i)) { return true }
-      i += 1
-    }
-    false
-  }
+  def anyNull: Boolean
 
   /* ---------------------- utility methods for Scala ---------------------- */
 

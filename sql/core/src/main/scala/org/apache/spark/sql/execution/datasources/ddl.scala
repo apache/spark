@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.ServiceLoader
+
+import scala.collection.Iterator
+import scala.collection.JavaConversions._
 import scala.language.{existentials, implicitConversions}
+import scala.util.{Failure, Success, Try}
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
@@ -190,37 +195,32 @@ private[sql] class DDLParser(
     }
 }
 
-private[sql] object ResolvedDataSource {
-
-  private val builtinSources = Map(
-    "jdbc" -> "org.apache.spark.sql.jdbc.DefaultSource",
-    "json" -> "org.apache.spark.sql.json.DefaultSource",
-    "parquet" -> "org.apache.spark.sql.parquet.DefaultSource",
-    "orc" -> "org.apache.spark.sql.hive.orc.DefaultSource"
-  )
+private[sql] object ResolvedDataSource extends Logging {
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String): Class[_] = {
+    val provider2 = s"$provider.DefaultSource"
     val loader = Utils.getContextOrSparkClassLoader
+    val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
 
-    if (builtinSources.contains(provider)) {
-      return loader.loadClass(builtinSources(provider))
-    }
-
-    try {
-      loader.loadClass(provider)
-    } catch {
-      case cnf: java.lang.ClassNotFoundException =>
-        try {
-          loader.loadClass(provider + ".DefaultSource")
-        } catch {
-          case cnf: java.lang.ClassNotFoundException =>
-            if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
-              sys.error("The ORC data source must be used with Hive support enabled.")
-            } else {
-              sys.error(s"Failed to load class for data source: $provider")
-            }
+    serviceLoader.iterator().filter(_.format().equalsIgnoreCase(provider)).toList match {
+      /** the provider format did not match any given registered aliases */
+      case Nil => Try(loader.loadClass(provider)).orElse(Try(loader.loadClass(provider2))) match {
+        case Success(dataSource) => dataSource
+        case Failure(error) => if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
+          throw new ClassNotFoundException(
+            "The ORC data source must be used with Hive support enabled.", error)
+        } else {
+          throw new ClassNotFoundException(
+            s"Failed to load class for data source: $provider", error)
         }
+      }
+      /** there is exactly one registered alias */
+      case head :: Nil => head.getClass
+      /** There are multiple registered aliases for the input */
+      case sources => sys.error(s"Multiple sources found for $provider, " +
+        s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
+        "please specify the fully qualified class name")
     }
   }
 
