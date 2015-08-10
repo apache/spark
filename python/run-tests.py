@@ -78,6 +78,8 @@ def run_individual_python_test(test_name, pyspark_python):
     start_time = time.time()
     try:
         per_test_output = tempfile.TemporaryFile()
+        LOGGER.info([os.path.join(SPARK_HOME, "bin/pyspark"), test_name])
+        LOGGER.info(env)
         retcode = subprocess.Popen(
             [os.path.join(SPARK_HOME, "bin/pyspark"), test_name],
             stderr=per_test_output, stdout=per_test_output, env=env).wait()
@@ -158,7 +160,7 @@ def main():
     else:
         log_level = logging.INFO
     logging.basicConfig(stream=sys.stdout, level=log_level, format="%(message)s")
-    LOGGER.info("Running PySpark tests. Output is in python/%s", LOG_FILE)
+    LOGGER.info("Running PySpark tests. Output is in %s", LOG_FILE)
     if os.path.exists(LOG_FILE):
         os.remove(LOG_FILE)
     python_execs = opts.python_executables.split(',')

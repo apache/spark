@@ -24,6 +24,7 @@ import operator
 import tempfile
 import random
 import struct
+import shutil
 from functools import reduce
 
 if sys.version_info[:2] <= (2, 6):
@@ -63,7 +64,8 @@ class PySparkStreamingTestCase(unittest.TestCase):
         self.ssc = StreamingContext(self.sc, self.duration)
 
     def tearDown(self):
-        self.ssc.stop(False)
+        if self.ssc is not None:
+            self.ssc.stop(False)
 
     def wait_for(self, result, n):
         start_time = time.time()
@@ -441,6 +443,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
 class StreamingContextTests(PySparkStreamingTestCase):
 
     duration = 0.1
+    setupCalled = False
 
     def _add_input_stream(self):
         inputs = [range(1, x) for x in range(101)]
@@ -514,10 +517,76 @@ class StreamingContextTests(PySparkStreamingTestCase):
 
         self.assertEqual([2, 3, 1], self._take(dstream, 3))
 
+    def test_get_active(self):
+        self.assertEqual(StreamingContext.getActive(), None)
+
+        # Verify that getActive() returns the active context
+        self.ssc.queueStream([[1]]).foreachRDD(lambda rdd: rdd.count())
+        self.ssc.start()
+        self.assertEqual(StreamingContext.getActive(), self.ssc)
+
+        # Verify that getActive() returns None
+        self.ssc.stop(False)
+        self.assertEqual(StreamingContext.getActive(), None)
+
+        # Verify that if the Java context is stopped, then getActive() returns None
+        self.ssc = StreamingContext(self.sc, self.duration)
+        self.ssc.queueStream([[1]]).foreachRDD(lambda rdd: rdd.count())
+        self.ssc.start()
+        self.assertEqual(StreamingContext.getActive(), self.ssc)
+        self.ssc._jssc.stop()
+        self.assertEqual(StreamingContext.getActive(), None)
+
+
+    def test_get_active_or_create(self):
+        # Test StreamingContext.getActiveOrCreate()
+        self.ssc = None
+        self.assertEqual(StreamingContext.getActive(), None)
+
+        def setupFunc():
+            ssc = StreamingContext(self.sc, self.duration)
+            ssc.queueStream([[1]]).foreachRDD(lambda rdd: rdd.count())
+            print("Setup called")
+            self.setupCalled = True
+            return ssc
+
+        # Verify that getActiveOrCreate() (w/o checkpoint) calls setupFunc when no context is active
+        self.setupCalled = False
+        self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
+        self.assertTrue(self.setupCalled)
+
+        # Verify that getActiveOrCreate() retuns active context and does not call the setupFunc
+        self.ssc.start()
+        self.setupCalled = False
+        self.assertEqual(StreamingContext.getActiveOrCreate(None, setupFunc), self.ssc)
+        self.assertFalse(self.setupCalled)
+
+        # Verify that getActiveOrCreate() calls setupFunc after active context is stopped
+        self.ssc.stop(False)
+        self.setupCalled = False
+        self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
+        self.assertTrue(self.setupCalled)
+
+        # Verify that if the Java context is stopped, then getActive() returns None
+        self.ssc = StreamingContext(self.sc, self.duration)
+        self.ssc.queueStream([[1]]).foreachRDD(lambda rdd: rdd.count())
+        self.ssc.start()
+        self.assertEqual(StreamingContext.getActive(), self.ssc)
+        self.ssc._jssc.stop(False)
+        self.setupCalled = False
+        self.ssc = StreamingContext.getActiveOrCreate(setupFunc)
+        self.assertTrue(self.setupCalled)
+
 
 class CheckpointTests(unittest.TestCase):
 
-    def test_get_or_create(self):
+    setupCalled = False
+
+    def tearDown(self):
+        if self.ssc is not None:
+            self.ssc.stop(True)
+
+    def test_get_or_create_and_get_active_or_create(self):
         inputd = tempfile.mkdtemp()
         outputd = tempfile.mkdtemp() + "/"
 
@@ -532,11 +601,12 @@ class CheckpointTests(unittest.TestCase):
             wc = dstream.updateStateByKey(updater)
             wc.map(lambda x: "%s,%d" % x).saveAsTextFiles(outputd + "test")
             wc.checkpoint(.5)
+            self.setupCalled = True
             return ssc
 
         cpd = tempfile.mkdtemp("test_streaming_cps")
-        ssc = StreamingContext.getOrCreate(cpd, setup)
-        ssc.start()
+        self.ssc = StreamingContext.getOrCreate(cpd, setup)
+        self.ssc.start()
 
         def check_output(n):
             while not os.listdir(outputd):
@@ -551,7 +621,7 @@ class CheckpointTests(unittest.TestCase):
                     # not finished
                     time.sleep(0.01)
                     continue
-                ordd = ssc.sparkContext.textFile(p).map(lambda line: line.split(","))
+                ordd = self.ssc.sparkContext.textFile(p).map(lambda line: line.split(","))
                 d = ordd.values().map(int).collect()
                 if not d:
                     time.sleep(0.01)
@@ -567,14 +637,36 @@ class CheckpointTests(unittest.TestCase):
 
         check_output(1)
         check_output(2)
-        ssc.stop(True, True)
 
+        # Verify the getOrCreate() recovers from checkpoint files
+        self.ssc.stop(True, True)
         time.sleep(1)
-        ssc = StreamingContext.getOrCreate(cpd, setup)
-        ssc.start()
+        self.setupCalled = False
+        self.ssc = StreamingContext.getOrCreate(cpd, setup)
+        self.assertFalse(self.setupCalled)
+        self.ssc.start()
         check_output(3)
-        ssc.stop(True, True)
 
+        # Verify the getActiveOrCreate() recovers from checkpoint files
+        self.ssc.stop(True, True)
+        time.sleep(1)
+        self.setupCalled = False
+        self.ssc = StreamingContext.getActiveOrCreate(cpd, setup)
+        self.assertFalse(self.setupCalled)
+        self.ssc.start()
+        check_output(4)
+
+        # Verify that getActiveOrCreate() returns active context
+        self.setupCalled = False
+        self.assertEquals(StreamingContext.getActiveOrCreate(cpd, setup), self.ssc)
+        self.assertFalse(self.setupCalled)
+
+        # Verify that getActiveOrCreate() calls setup() in absence of checkpoint files
+        self.ssc.stop(True)
+        shutil.rmtree(cpd)  # delete checkpoint directory
+        self.setupCalled = False
+        self.ssc = StreamingContext.getActiveOrCreate(cpd, setup)
+        self.assertTrue(self.setupCalled)
 
 class KafkaStreamTests(PySparkStreamingTestCase):
     timeout = 20  # seconds
@@ -1016,4 +1108,11 @@ if __name__ == "__main__":
     jars = "%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, kinesis_asl_assembly_jar)
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
-    unittest.main()
+    #unittest.main()
+
+    suite = unittest.TestSuite()
+    suite.addTest(StreamingContextTests('test_get_active'))
+    suite.addTest(StreamingContextTests('test_get_active_or_create'))
+    suite.addTest(CheckpointTests('test_get_or_create_and_get_active_or_create'))
+
+    unittest.TextTestRunner(verbosity=2).run(suite)
