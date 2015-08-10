@@ -294,7 +294,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("ExecutorLostFailure backward compatibility") {
     // ExecutorLostFailure in Spark 1.1.0 does not have an "Executor ID" property.
-    val executorLostFailure = ExecutorLostFailure("100", "Unknown")
+    val executorLostFailure = ExecutorLostFailure("100", "Induced failure")
     val oldEvent = JsonProtocol.taskEndReasonToJson(executorLostFailure)
       .removeField({ _._1 == "Executor ID" })
     val expectedExecutorLostFailure = ExecutorLostFailure("Unknown", "Unknown")

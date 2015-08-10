@@ -446,13 +446,15 @@ private[yarn] class YarnAllocator(
             completedContainer.getDiagnostics,
             VMEM_EXCEEDED_PATTERN))
           completedContainerReason = completedContainer.getDiagnostics
-          driverRef.send(ContainerExited(completedContainer.getExitStatus, completedContainer.getDiagnostics))
+          driverRef.send(ContainerExited(completedContainer.getExitStatus,
+            completedContainer.getDiagnostics))
         } else if (completedContainer.getExitStatus == -104) { // pmem limit exceeded
           logWarning(memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
             PMEM_EXCEEDED_PATTERN))
           completedContainerReason = completedContainer.getDiagnostics
-          driverRef.send(ContainerExited(completedContainer.getExitStatus, completedContainer.getDiagnostics))
+          driverRef.send(ContainerExited(completedContainer.getExitStatus,
+            completedContainer.getDiagnostics))
         } else if (completedContainer.getExitStatus != 0) {
           val msg = "Container marked as failed: " + containerId +
             ". Exit status: " + completedContainer.getExitStatus +
@@ -486,7 +488,8 @@ private[yarn] class YarnAllocator(
           // Notify backend about the failure of the executor
           numUnexpectedContainerRelease += 1
           driverRef.send(RemoveExecutor(eid,
-            s"Yarn deallocated the executor $eid (container $containerId). Reason: $completedContainerReason"))
+            s"Yarn deallocated the executor $eid (container $containerId). " +
+              s"Reason: $completedContainerReason"))
         }
       }
     }

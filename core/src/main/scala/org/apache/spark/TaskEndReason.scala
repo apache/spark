@@ -163,7 +163,8 @@ case class TaskCommitDenied(jobID: Int, partitionID: Int, attemptID: Int) extend
  */
 @DeveloperApi
 case class ExecutorLostFailure(execId: String, reason: String) extends TaskFailedReason {
-  override def toErrorString: String = s"ExecutorLostFailure (executor ${execId} lost) Reason: ${reason}"
+  override def toErrorString: String = s"ExecutorLostFailure (executor ${execId} lost) " +
+    s"Reason: ${reason}"
 }
 
 /**
