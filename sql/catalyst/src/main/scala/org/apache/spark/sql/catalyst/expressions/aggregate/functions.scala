@@ -350,7 +350,7 @@ case class StandardDeviation(child: Expression) extends AlgebraicAggregate {
     val updatedAvg = Add(currentAvg, Divide(deltaX, updatedCount))
     Seq(
       /* currentCount = */ updatedCount,
-      /* currentAvg = */ If(IsNull(child), currentAvg, updatedAvg),
+      /* currentAvg = */ currentAvg,
       /* currentMk = */ If(IsNull(child),
         currentMk, Add(currentMk, deltaX * Subtract(currentValue, updatedAvg)))
     )
