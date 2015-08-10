@@ -408,7 +408,7 @@ class Analyzer(
     /**
      * Returns true if `exprs` contains a [[Star]].
      */
-    protected def containsStar(exprs: Seq[Expression]): Boolean =
+    def containsStar(exprs: Seq[Expression]): Boolean =
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
   }
 
@@ -602,6 +602,8 @@ class Analyzer(
    */
   object ResolveGenerate extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case g: Generate if ResolveReferences.containsStar(g.generator.children) =>
+        failAnalysis("Cannot explode *, explode can only be applied on a specific column.")
       case p: Generate if !p.child.resolved || !p.generator.resolved => p
       case g: Generate if !g.resolved =>
         g.copy(generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
