@@ -132,15 +132,14 @@ public final class UnsafeExternalSorter {
 
     if (existingInMemorySorter == null) {
       initializeForWriting();
+      // Acquire a new page as soon as we construct the sorter to ensure that we have at
+      // least one page to work with. Otherwise, other operators in the same task may starve
+      // this sorter (SPARK-9709). We don't need to do this if we already have an existing sorter.
+      acquireNewPage();
     } else {
       this.isInMemSorterExternal = true;
       this.inMemSorter = existingInMemorySorter;
     }
-
-    // Acquire a new page as soon as we construct the sorter to ensure that we have at
-    // least one page to work with. Otherwise, other operators in the same task may starve
-    // this sorter (SPARK-9709).
-    acquireNewPage();
 
     // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
     // the end of the task. This is necessary to avoid memory leaks in when the downstream operator

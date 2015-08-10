@@ -426,6 +426,10 @@ class TungstenAggregationIterator(
       case _ => false
     }
 
+    // Note: we spill the sorter's contents immediately after creating it. Therefore, we must
+    // insert something into the sorter here to ensure that we acquire at least a page of memory.
+    // Otherwise, children operators may steal the window of opportunity and starve our sorter.
+
     if (needsProcess) {
       // First, we create a buffer.
       val buffer = createNewAggregationBuffer()
