@@ -191,18 +191,15 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   // HiveTypeCoercion will take care of the precision, scale of result
-  def * (that: Decimal): Decimal = {
+  def * (that: Decimal): Decimal =
     Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
-  }
 
-  def / (that: Decimal): Decimal = {
+  def / (that: Decimal): Decimal =
+    if (that.isZero) null else Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal, MATH_CONTEXT))
+
+  def % (that: Decimal): Decimal =
     if (that.isZero) null
-    else Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal, MATH_CONTEXT))
-  }
-
-  def % (that: Decimal): Decimal = {
-    if (that.isZero) null else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal))
-  }
+    else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT))
 
   def remainder(that: Decimal): Decimal = this % that
 

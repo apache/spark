@@ -32,7 +32,6 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -47,8 +46,11 @@ import org.apache.spark.util.SerializableConfiguration
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
-private[sql] class DefaultSource extends HadoopFsRelationProvider {
-  def createRelation(
+private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
+
+  override def shortName(): String = "orc"
+
+  override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
       dataSchema: Option[StructType],
@@ -141,7 +143,6 @@ private[orc] class OrcOutputWriter(
   }
 }
 
-@DeveloperApi
 private[sql] class OrcRelation(
     override val paths: Array[String],
     maybeDataSchema: Option[StructType],

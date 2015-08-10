@@ -315,13 +315,13 @@ case class Cast(child: Expression, dataType: DataType)
     case TimestampType =>
       // Note that we lose precision here.
       buildCast[Long](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
-    case DecimalType() =>
+    case dt: DecimalType =>
       b => changePrecision(b.asInstanceOf[Decimal].clone(), target)
-    case LongType =>
-      b => changePrecision(Decimal(b.asInstanceOf[Long]), target)
-    case x: NumericType => // All other numeric types can be represented precisely as Doubles
+    case t: IntegralType =>
+      b => changePrecision(Decimal(t.integral.asInstanceOf[Integral[Any]].toLong(b)), target)
+    case x: FractionalType =>
       b => try {
-        changePrecision(Decimal(x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)), target)
+        changePrecision(Decimal(x.fractional.asInstanceOf[Fractional[Any]].toDouble(b)), target)
       } catch {
         case _: NumberFormatException => null
       }
@@ -543,12 +543,7 @@ case class Cast(child: Expression, dataType: DataType)
       case BooleanType =>
         (c, evPrim, evNull) =>
           s"""
-            Decimal tmpDecimal = null;
-            if ($c) {
-              tmpDecimal = new Decimal().set(1);
-            } else {
-              tmpDecimal = new Decimal().set(0);
-            }
+            Decimal tmpDecimal = $c ? Decimal.apply(1) : Decimal.apply(0);
             ${changePrecision("tmpDecimal", target, evPrim, evNull)}
           """
       case DateType =>
@@ -568,13 +563,13 @@ case class Cast(child: Expression, dataType: DataType)
             Decimal tmpDecimal = $c.clone();
             ${changePrecision("tmpDecimal", target, evPrim, evNull)}
           """
-      case ByteType | ShortType | IntegerType | LongType =>
+      case x: IntegralType =>
         (c, evPrim, evNull) =>
           s"""
             Decimal tmpDecimal = Decimal.apply((long) $c);
             ${changePrecision("tmpDecimal", target, evPrim, evNull)}
           """
-      case x: NumericType =>
+      case x: FractionalType =>
         // All other numeric types can be represented precisely as Doubles
         (c, evPrim, evNull) =>
           s"""

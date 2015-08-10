@@ -69,6 +69,8 @@ private[sql] case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan 
     val converted = sideEffectResult.map(convert(_).asInstanceOf[InternalRow])
     sqlContext.sparkContext.parallelize(converted, 1)
   }
+
+  override def argString: String = cmd.toString
 }
 
 /**
