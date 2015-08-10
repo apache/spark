@@ -288,8 +288,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def sampleByKeyExact(
       withReplacement: Boolean,
       fractions: Map[K, Double],
-      seed: Long = Utils.random.nextLong,
-      complement: Boolean = false): RDD[(K, V)] = self.withScope {
+      seed: Long = Utils.random.nextLong): RDD[(K, V)] = self.withScope {
 
     require(fractions.values.forall(v => v >= 0.0), "Negative sampling rates.")
 
@@ -307,14 +306,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * with each split containing exactly math.ceil(numItems * samplingRate) for each stratum.
    *
    * This method differs from [[sampleByKey]] and [[sampleByKeyExact]] in that it provides random
-   * splits (and their complements) instead of just a subsample of the data. This requires segmenting
-   * random keys into ranges with upper and lower bounds instead of segmenting the keys into a high/low
-   * bisection of the entire dataset.
+   * splits (and their complements) instead of just a subsample of the data. This requires
+   * segmenting random keys into ranges with upper and lower bounds instead of segmenting the keys
+   * into a high/low bisection of the entire dataset.
    *
-   * @param weights array of maps of specific keys to sampling rates for each split, normalized by key to sum to 1
+   * @param weights array of maps of (key -> samplingRate) pairs for each split, normed by key
    * @param exact boolean specifying whether to use exact subsampling
    * @param seed seed for the random number generator
-   * @return Array of tuples containing the subsample and complement RDDs for each split
+   * @return array of tuples containing the subsample and complement RDDs for each split
    */
   @Experimental
   def randomSplitByKey(
@@ -323,6 +322,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
      seed: Long = Utils.random.nextLong): Array[(RDD[(K, V)], RDD[(K, V)])] = self.withScope {
 
     require(weights.flatMap(_.values).forall(v => v >= 0.0), "Negative sampling rates.")
+    if (weights.length > 1) {
+      require(weights.map(m => m.keys.toList).sliding(2).forall(t => t(0) == t(1)),
+        "Inconsistent keys between splits.")
+    }
 
     // normalize and cumulative sum
     val baseFold = weights(0).map(x => (x._1, 0.0))
@@ -331,28 +334,28 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     }.drop(1)
 
     val weightSumsByKey = cumWeightsByKey.last
-    val normalizedCumWeightsByKey = cumWeightsByKey.dropRight(1).map(_.map { case (key, threshold) =>
+    val normedCumWeightsByKey = cumWeightsByKey.dropRight(1).map(_.map { case (key, threshold) =>
       (key, threshold / weightSumsByKey(key))
     })
 
     // compute exact thresholds for each stratum if required
-    val splitArray = if (exact) {
-      normalizedCumWeightsByKey.map { fractions =>
-        val finalResult = StratifiedSamplingUtils.getAcceptanceResults(self, false, fractions, None, seed)
-        StratifiedSamplingUtils.computeThresholdByKey(finalResult, fractions)
+    val splits = if (exact) {
+      normedCumWeightsByKey.map { w =>
+        val finalResult = StratifiedSamplingUtils.getAcceptanceResults(self, false, w, None, seed)
+        StratifiedSamplingUtils.computeThresholdByKey(finalResult, w)
       }
-    } else normalizedCumWeightsByKey
+    } else normedCumWeightsByKey
 
-    // get the exact threshold for each segment
-    val totalSplitArray = weights(0).map(x => (x._1, 0.0)) +: splitArray :+ weights(0).map(x => (x._1, 1.0))
-    totalSplitArray.sliding(2).map { x =>
-      (randomSampleByKeyWithRange(x(0), x(1), seed), randomSampleByKeyWithRange(x(0), x(1), seed, complement = true))
+    val allSplits = weights(0).map(x => (x._1, 0.0)) +: splits :+ weights(0).map(x => (x._1, 1.0))
+    allSplits.sliding(2).map { x =>
+      (randomSampleByKeyWithRange(x(0), x(1), seed),
+        randomSampleByKeyWithRange(x(0), x(1), seed, complement = true))
     }.toArray
   }
 
   /**
-   * Internal method exposed for Stratified Random Splits in DataFrames. Samples an RDD given probability
-   * bounds for each stratum.
+   * Internal method exposed for Stratified Random Splits in DataFrames. Samples an RDD given
+   * probability bounds for each stratum.
    *
    * @param lb map of lower bound for each key to use for the Bernoulli cell sampler
    * @param ub map of upper bound for each key to use for the Bernoulli cell sampler
@@ -364,7 +367,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       ub: Map[K, Double],
       seed: Long,
       complement: Boolean = false): RDD[(K, V)] = {
-    val samplingFunc = StratifiedSamplingUtils.getBernoulliCellSamplingFunction(self, lb, ub, seed, complement)
+    val samplingFunc = StratifiedSamplingUtils.getBernoulliCellSamplingFunction(self,
+      lb, ub, seed, complement)
     self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
   }
 

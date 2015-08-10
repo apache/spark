@@ -55,7 +55,8 @@ private[ml] trait CrossValidatorParams extends ValidatorParams with HasSeed {
    * Default: "None"
    * @group param
    */
-  val stratifiedCol: Param[String] = new Param[String](this, "stratifiedCol", "stratified column name")
+  val stratifiedCol: Param[String] = new Param[String](this, "stratifiedCol",
+    "stratified column name")
 
   /** @group getParam */
   def getStratifiedCol: String = $(stratifiedCol)
@@ -119,9 +120,9 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val metrics = new Array[Double](epm.length)
 
     val splits = if (dataset.columns.contains($(stratifiedCol))) {
-      // stratified kFold
       val stratifiedColIndex = dataset.columns.indexOf($(stratifiedCol))
-      val splitsWithKeys = MLUtils.kFoldStrat(dataset.rdd.map(row => (row(stratifiedColIndex), row)), $(numFolds), 0)
+      val pairData = dataset.rdd.map(row => (row(stratifiedColIndex), row))
+      val splitsWithKeys = MLUtils.kFoldStratified(pairData, $(numFolds), 0)
       splitsWithKeys.map { case (training, validation) => (training.values, validation.values)}
     } else {
       if (isSet(stratifiedCol)) logWarning(s"Stratified column does not exist. Performing regular k-fold subsampling.")

@@ -45,7 +45,8 @@ private[ml] trait TrainValidationSplitParams extends ValidatorParams {
    * Default: "None"
    * @group param
    */
-  val stratifiedCol: Param[String] = new Param[String](this, "stratifiedCol", "stratified column name")
+  val stratifiedCol: Param[String] = new Param[String](this, "stratifiedCol",
+    "stratified column name")
 
   /** @group getParam */
   def getTrainRatio: Double = $(trainRatio)
@@ -106,14 +107,14 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
 
     val Array(training, validation) = if (dataset.columns.contains($(stratifiedCol))) {
       val stratifiedColIndex = dataset.columns.indexOf($(stratifiedCol))
-      val keyedRDD = dataset.rdd.map(row => (row(stratifiedColIndex), row))
-      val keys = keyedRDD.keys.distinct.collect()
+      val pairData = dataset.rdd.map(row => (row(stratifiedColIndex), row))
+      val keys = pairData.keys.distinct.collect()
       val weights: Array[scala.collection.Map[Any, Double]] =
         Array(keys.map(k => (k, $(trainRatio))).toMap, keys.map(k => (k, 1 - $(trainRatio))).toMap)
-      val splitsWithKeys = keyedRDD.randomSplitByKey(weights, exact = true, 0)
+      val splitsWithKeys = pairData.randomSplitByKey(weights, exact = true, 0)
       splitsWithKeys.map { case (subsample, complement) => subsample.values }
     } else {
-      if (isSet(stratifiedCol)) logWarning(s"Stratified column does not exist. Performing approximate split.")
+      if (isSet(stratifiedCol)) logWarning("Stratified column not found. Using standard split.")
       dataset.rdd.randomSplit(Array($(trainRatio), 1 - $(trainRatio)))
     }
 

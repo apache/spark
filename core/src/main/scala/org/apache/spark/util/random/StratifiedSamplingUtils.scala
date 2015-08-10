@@ -216,7 +216,10 @@ private[spark] object StratifiedSamplingUtils extends Logging {
   }
 
   /**
-   * WIP sample with range
+   * Return the per partition sampling function used for partitioning a dataset without
+   * replacement.
+   *
+   * The sampling function has a unique seed per partition.
    */
   def getBernoulliCellSamplingFunction[K, V](rdd: RDD[(K, V)],
       lb: Map[K, Double],
@@ -226,8 +229,7 @@ private[spark] object StratifiedSamplingUtils extends Logging {
     (idx: Int, iter: Iterator[(K, V)]) => {
       val rng = new RandomDataGenerator()
       rng.reSeed(seed + idx)
-      // Must use the same invoke pattern on the rng as in getSeqOp for without replacement
-      // in order to generate the same sequence of random numbers when creating the sample
+
       if (complement) {
         iter.filter { t =>
           val x = rng.nextUniform()
