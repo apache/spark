@@ -127,7 +127,6 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
         public Object apply(Object _i) {
           InternalRow i = (InternalRow) _i;
-          ${ctx.unwrapJoinRow}
           $projectionCalls
 
           return mutableRow;

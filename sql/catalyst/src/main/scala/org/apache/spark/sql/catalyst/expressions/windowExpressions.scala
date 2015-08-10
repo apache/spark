@@ -422,7 +422,6 @@ case class RowNumber() extends RowNumberLike {
   override val evaluateExpression = Cast(rowNumber, IntegerType)
 }
 
-// TODO check if this works in combination with CodeGeneration?
 case class CumeDist(n: Expression) extends RowNumberLike with SizeBasedWindowFunction {
   def this() = this(Literal(0))
   override def dataType: DataType = DoubleType
@@ -432,9 +431,6 @@ case class CumeDist(n: Expression) extends RowNumberLike with SizeBasedWindowFun
   override val evaluateExpression = Cast(rowNumber, DoubleType) / Cast(n, DoubleType)
 }
 
-// TODO check if this works in combination with CodeGeneration?
-// TODO check logic
-// Check serialization
 case class NTile(buckets: Expression, n: Expression) extends RowNumberLike
     with SizeBasedWindowFunction {
   def this() = this(Literal(1), Literal(0))
@@ -513,7 +509,6 @@ case class DenseRank(order: Seq[Expression]) extends RankLike {
   override val initialValues = Literal(0) +: orderInit
 }
 
-// TODO check if this works in combination with CodeGeneration?
 case class PercentRank(order: Seq[Expression], n: Expression) extends RankLike
     with SizeBasedWindowFunction {
   def this() = this(Nil, MutableLiteral(0, IntegerType))

@@ -179,7 +179,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         $columns
 
         public SpecificRow(InternalRow i) {
-          ${ctx.unwrapJoinRow}
           $initColumns
         }
 
