@@ -22,11 +22,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.types.{Decimal, DataType, NullType, IntegerType}
+import org.apache.spark.sql.types._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.collection.CompactBuffer
-import scala.collection.mutable
+import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap}
 
 /**
  * :: DeveloperApi ::
@@ -171,11 +169,8 @@ case class Window(
       frame: (Char, WindowFrame),
       functions: Array[Expression],
       ordinal: Int,
-      result: MutableRow,
+      target: MutableRow,
       size: MutableLiteral): WindowFunctionFrame = {
-    // Construct the target row.
-    val target = if (ordinal == 0) result
-    else new OffsetMutableRow(ordinal, result)
 
     // Construct an aggregate processor if we have to.
     def processor = {
@@ -183,7 +178,7 @@ case class Window(
         case f: SizeBasedWindowFunction => f.withSize(size)
         case f => f
       }
-      AggregateProcessor(prepared, child.output, newMutableProjection)
+      AggregateProcessor(prepared, ordinal, child.output, newMutableProjection)
     }
 
     // Create the frame processor.
@@ -193,7 +188,13 @@ case class Window(
           FrameBoundaryExtractor(l),
           FrameBoundaryExtractor(h)))
           if l == h =>
-        new OffsetWindowFunctionFrame(target, functions, child.output, newMutableProjection, l)
+        new OffsetWindowFunctionFrame(
+          target,
+          ordinal,
+          functions,
+          child.output,
+          newMutableProjection,
+          l)
 
       // Growing Frame.
       case ('A', SpecifiedWindowFrame(frameType,
@@ -270,7 +271,7 @@ case class Window(
     // function result buffer.
     val factories = Array.ofDim[(MutableRow, MutableLiteral) =>
       WindowFunctionFrame](framedWindowExprs.size)
-    val unboundExpressions = mutable.Buffer.empty[Expression]
+    val unboundExpressions = Buffer.empty[Expression]
     framedWindowExprs.zipWithIndex.foreach {
       case ((frame, unboundFrameExpressions), index) =>
         // Track the ordinal.
@@ -312,7 +313,7 @@ case class Window(
         fetchNextRow()
 
         // Manage the current partition.
-        var rows: CompactBuffer[InternalRow] = _
+        val rows = ArrayBuffer.empty[InternalRow]
         val windowFunctionResult = new GenericMutableRow(unboundExpressions.size)
         val partitionSize = MutableLiteral(0, IntegerType, nullable = false)
         val frames: Array[WindowFunctionFrame] = factories.map{ f =>
@@ -322,7 +323,7 @@ case class Window(
         private[this] def fetchNextPartition() {
           // Collect all the rows in the current partition.
           val currentGroup = nextGroup
-          rows = new CompactBuffer
+          rows.clear()
           while (nextRowAvailable && nextGroup == currentGroup) {
             rows += nextRow.copy()
             fetchNextRow()
@@ -413,7 +414,7 @@ private[execution] abstract class WindowFunctionFrame {
    *
    * @param rows to calculate the frame results for.
    */
-  def prepare(rows: CompactBuffer[InternalRow]): Unit
+  def prepare(rows: ArrayBuffer[InternalRow]): Unit
 
   /**
    * Write the current results to the target row.
@@ -432,13 +433,14 @@ private[execution] abstract class WindowFunctionFrame {
  */
 private[execution] final class OffsetWindowFunctionFrame(
     target: MutableRow,
+    ordinal: Int,
     expressions: Array[Expression],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => () => MutableProjection,
     offset: Int) extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
-  private[this] var input: CompactBuffer[InternalRow] = null
+  private[this] var input: ArrayBuffer[InternalRow] = null
 
   /** Index of the input row currently used for output. */
   private[this] var inputIndex = 0
@@ -458,7 +460,7 @@ private[execution] final class OffsetWindowFunctionFrame(
     val defaultInputSchema = inputSchema.map(_.newInstance()) ++ inputSchema
 
     // Collect the expressions and bind them.
-    val boundExpressions = expressions.toSeq.map {
+    val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toSeq.map {
       case e: OffsetWindowFunction =>
         val input = BindReferences.bindReference(e.input, inputSchema)
         if (e.default == null || e.default.foldable && e.default.eval() == null) {
@@ -477,7 +479,7 @@ private[execution] final class OffsetWindowFunctionFrame(
     newMutableProjection(boundExpressions, Nil)().target(target)
   }
 
-  override def prepare(rows: CompactBuffer[InternalRow]): Unit = {
+  override def prepare(rows: ArrayBuffer[InternalRow]): Unit = {
     input = rows
     inputIndex = offset
     outputIndex = 0
@@ -512,7 +514,7 @@ private[execution] final class SlidingWindowFunctionFrame(
     ubound: BoundOrdering) extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
-  private[this] var input: CompactBuffer[InternalRow] = null
+  private[this] var input: ArrayBuffer[InternalRow] = null
 
   /** Index of the first input row with a value greater than the upper bound of the current
     * output row. */
@@ -526,7 +528,7 @@ private[execution] final class SlidingWindowFunctionFrame(
   private[this] var outputIndex = 0
 
   /** Prepare the frame for calculating a new partition. Reset all variables. */
-  override def prepare(rows: CompactBuffer[InternalRow]): Unit = {
+  override def prepare(rows: ArrayBuffer[InternalRow]): Unit = {
     input = rows
     inputHighIndex = 0
     inputLowIndex = 0
@@ -584,7 +586,7 @@ private[execution] final class UnboundedWindowFunctionFrame(
   private[this] var status: MutableRow = _
 
   /** Prepare the frame for calculating a new partition. Process all rows eagerly. */
-  override def prepare(rows: CompactBuffer[InternalRow]): Unit = {
+  override def prepare(rows: ArrayBuffer[InternalRow]): Unit = {
     status = processor.initialize
     processor.update(status, rows, 0, rows.size)
   }
@@ -616,7 +618,7 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
     ubound: BoundOrdering) extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
-  private[this] var input: CompactBuffer[InternalRow] = null
+  private[this] var input: ArrayBuffer[InternalRow] = null
 
   /** Index of the first input row with a value greater than the upper bound of the current
     * output row. */
@@ -629,7 +631,7 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
   private[this] var status: MutableRow = _
 
   /** Prepare the frame for calculating a new partition. */
-  override def prepare(rows: CompactBuffer[InternalRow]): Unit = {
+  override def prepare(rows: ArrayBuffer[InternalRow]): Unit = {
     input = rows
     inputIndex = 0
     outputIndex = 0
@@ -680,7 +682,7 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
     lbound: BoundOrdering) extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
-  private[this] var input: CompactBuffer[InternalRow] = null
+  private[this] var input: ArrayBuffer[InternalRow] = null
 
   /** Index of the first input row with a value equal to or greater than the lower bound of the
     * current output row. */
@@ -690,7 +692,7 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
   private[this] var outputIndex = 0
 
   /** Prepare the frame for calculating a new partition. */
-  override def prepare(rows: CompactBuffer[InternalRow]): Unit = {
+  override def prepare(rows: ArrayBuffer[InternalRow]): Unit = {
     input = rows
     inputIndex = 0
     outputIndex = 0
@@ -744,18 +746,19 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
  */
 private[execution] object AggregateProcessor {
   def apply(functions: Array[Expression],
+            ordinal: Int,
             inputSchema: Seq[Attribute],
             newMutableProjection: (Seq[Expression], Seq[Attribute]) => () => MutableProjection):
       AggregateProcessor = {
-    val bufferSchema = mutable.Buffer.empty[AttributeReference]
-    val initialValues = mutable.Buffer.empty[Expression]
-    val updateExpressions = mutable.Buffer.empty[Expression]
-    val evaluateExpressions = mutable.Buffer.empty[Expression]
-    val aggregates1 = mutable.Buffer.empty[AggregateExpression1]
-    val aggregates1BufferOffsets = mutable.Buffer.empty[Int]
-    val aggregates1OutputOffsets = mutable.Buffer.empty[Int]
-    val aggregates2 = mutable.Buffer.empty[AggregateFunction2]
-    val aggregates2OutputOffsets = mutable.Buffer.empty[Int]
+    val bufferSchema = Buffer.empty[AttributeReference]
+    val initialValues = Buffer.empty[Expression]
+    val updateExpressions = Buffer.empty[Expression]
+    val evaluateExpressions = Buffer.fill[Expression](ordinal)(NoOp)
+    val aggregates1 = Buffer.empty[AggregateExpression1]
+    val aggregates1BufferOffsets = Buffer.empty[Int]
+    val aggregates1OutputOffsets = Buffer.empty[Int]
+    val aggregates2 = Buffer.empty[AggregateFunction2]
+    val aggregates2OutputOffsets = Buffer.empty[Int]
 
     // Flatten AggregateExpression2's
     val flattened = functions.zipWithIndex.map {
@@ -764,7 +767,7 @@ private[execution] object AggregateProcessor {
     }
 
     // Add distinct evaluation path.
-    val distinctExpressionSchemaMap = mutable.HashMap.empty[Seq[Expression], AttributeReference]
+    val distinctExpressionSchemaMap = HashMap.empty[Seq[Expression], AttributeReference]
     flattened.filter(_._2).foreach {
       case (af2, _, _) =>
         // TODO cannocalize expressions?
@@ -800,7 +803,7 @@ private[execution] object AggregateProcessor {
       case (agg: AggregateFunction2, false, i) =>
         val boundAgg = BindReferences.bindReference(agg, inputSchema)
         aggregates2 += boundAgg
-        aggregates2OutputOffsets += i
+        aggregates2OutputOffsets += (i + ordinal)
         agg.withNewMutableBufferOffset(bufferSchema.size)
         bufferSchema ++= boundAgg.bufferAttributes
         val nops = Seq.fill(boundAgg.bufferAttributes.size)(NoOp)
@@ -810,7 +813,7 @@ private[execution] object AggregateProcessor {
       case (agg: AggregateExpression1, false, i) =>
         aggregates1 += BindReferences.bindReference(agg, inputSchema)
         aggregates1BufferOffsets += bufferSchema.size
-        aggregates1OutputOffsets += i
+        aggregates1OutputOffsets += (i + ordinal)
         // TODO typing - we would need to create UDT for this.
         bufferSchema += AttributeReference("agg", NullType, nullable = false)()
         initialValues += NoOp
@@ -885,7 +888,7 @@ private[execution] final class AggregateProcessor(
   }
 
   /** Bulk update the given buffer. */
-  def update(buffer: MutableRow, input: CompactBuffer[InternalRow], begin: Int, end: Int): Unit = {
+  def update(buffer: MutableRow, input: ArrayBuffer[InternalRow], begin: Int, end: Int): Unit = {
     var i = begin
     while (i < end) {
       update(buffer, input(i))
@@ -910,21 +913,4 @@ private[execution] final class AggregateProcessor(
       i += 1
     }
   }
-}
-
-private[execution] final class OffsetMutableRow(offset: Int, delegate: MutableRow)
-    extends MutableRow {
-  def setNullAt(i: Int): Unit = delegate.setNullAt(i + offset)
-  def update(i: Int, value: Any): Unit = delegate.update(i + offset, value)
-  override def setBoolean(i: Int, value: Boolean): Unit = delegate.setBoolean(i, value)
-  override def setByte(i: Int, value: Byte): Unit = delegate.setByte(i, value)
-  override def setShort(i: Int, value: Short): Unit = delegate.setShort(i, value)
-  override def setInt(i: Int, value: Int): Unit = delegate.setInt(i, value)
-  override def setLong(i: Int, value: Long): Unit = delegate.setLong(i, value)
-  override def setFloat(i: Int, value: Float): Unit = delegate.setFloat(i, value)
-  override def setDouble(i: Int, value: Double): Unit = delegate.setDouble(i, value)
-  override def setDecimal(i: Int, value: Decimal, precision: Int): Unit =
-    delegate.setDecimal(i, value, precision)
-  def numFields: Int = delegate.numFields - offset
-  def copy(): InternalRow = this
 }
