@@ -209,11 +209,11 @@ final class EMLDAOptimizer extends LDAOptimizer {
   override private[clustering] def getLDAModel(iterationTimes: Array[Double]): LDAModel = {
     require(graph != null, "graph is null, EMLDAOptimizer not initialized.")
     this.graphCheckpointer.deleteAllCheckpoints()
-    // This assumes gammaShape = 100 in OnlineLDAOptimizer to ensure equivalence in LDAModel.toLocal
-    // conversion
+    // The constructor's default arguments assume gammaShape = 100 to ensure equivalence in
+    // LDAModel.toLocal conversion
     new DistributedLDAModel(this.graph, this.globalTopicTotals, this.k, this.vocabSize,
       Vectors.dense(Array.fill(this.k)(this.docConcentration)), this.topicConcentration,
-      100, iterationTimes)
+      iterationTimes)
   }
 }
 
