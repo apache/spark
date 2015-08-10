@@ -1,6 +1,6 @@
 from builtins import chr
 from collections import OrderedDict
-import csv
+import unicodecsv as csv
 import logging
 from tempfile import NamedTemporaryFile
 import MySQLdb
