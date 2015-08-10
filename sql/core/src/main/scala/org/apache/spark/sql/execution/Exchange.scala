@@ -130,7 +130,6 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
   @transient private lazy val sparkConf = child.sqlContext.sparkContext.getConf
 
   private val serializer: Serializer = {
-    val rowDataTypes = child.output.map(_.dataType).toArray
     if (tungstenMode) {
       new UnsafeRowSerializer(child.output.size)
     } else {

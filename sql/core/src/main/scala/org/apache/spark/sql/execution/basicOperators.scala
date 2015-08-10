@@ -17,21 +17,20 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.Random
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, ShuffledRDD}
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.collection.ExternalSorter
-import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
 import org.apache.spark.util.random.PoissonSampler
-import org.apache.spark.util.{CompletionIterator, MutablePair}
+import org.apache.spark.util.MutablePair
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
 /**
@@ -252,8 +251,50 @@ case class TakeOrderedAndProject(
  * Return a new RDD that has exactly `numPartitions` partitions.
  */
 @DeveloperApi
-case class Repartition(numPartitions: Int, shuffle: Boolean, child: SparkPlan)
-  extends UnaryNode {
+case class Repartition(numPartitions: Int, child: SparkPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = {
+    if (numPartitions == 1) SinglePartition
+    else UnknownPartitioning(numPartitions)
+  }
+
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+  override def canProcessSafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    // Distribute elements evenly across output partitions, starting from a random partition.
+    val rddWithPartitionIds: RDD[Product2[Int, InternalRow]] = {
+      child.execute().mapPartitionsWithIndex { (index, rows) =>
+        var position = new Random(index).nextInt(numPartitions)
+        val mutablePair = new MutablePair[Int, InternalRow]()
+        rows.map { row =>
+          position = (position + 1) % numPartitions
+          mutablePair.update(position, row)
+        }
+      }
+    }
+    val serializer: Serializer = {
+      if (child.outputsUnsafeRows) {
+        new UnsafeRowSerializer(child.output.size)
+      } else {
+        new SparkSqlSerializer(child.sqlContext.sparkContext.getConf)
+      }
+    }
+    new ShuffledRowRDD(rddWithPartitionIds, serializer, numPartitions)
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Return a new RDD that has exactly `numPartitions` partitions.
+ * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
+ * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
+ * the 100 new partitions will claim 10 of the current partitions.
+ */
+@DeveloperApi
+case class Coalesce(numPartitions: Int, child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = {
@@ -262,10 +303,9 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: SparkPlan)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().map(_.copy()).coalesce(numPartitions, shuffle)
+    child.execute().map(_.copy()).coalesce(numPartitions, shuffle = false)
   }
 }
-
 
 /**
  * :: DeveloperApi ::
