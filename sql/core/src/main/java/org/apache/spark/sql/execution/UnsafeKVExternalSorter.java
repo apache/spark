@@ -86,7 +86,8 @@ public final class UnsafeKVExternalSorter {
       // UnsafeInMemorySorter. Because UnsafeInMemorySorter does not accept 0 as the initialSize,
       // we will use 1 as its initial size if the map is empty.
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
-        taskMemoryManager, recordComparator, prefixComparator, Math.max(1, map.numElements()));
+        taskMemoryManager, shuffleMemoryManager, recordComparator,
+        prefixComparator, Math.max(1, map.numElements()));
 
       // We cannot use the destructive iterator here because we are reusing the existing memory
       // pages in BytesToBytesMap to hold records during sorting.

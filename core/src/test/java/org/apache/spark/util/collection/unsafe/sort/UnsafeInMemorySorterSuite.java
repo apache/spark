@@ -26,6 +26,7 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
 
 import org.apache.spark.HashPartitioner;
+import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.unsafe.PlatformDependent;
 import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
@@ -45,9 +46,11 @@ public class UnsafeInMemorySorterSuite {
   }
 
   @Test
-  public void testSortingEmptyInput() {
+  public void testSortingEmptyInput() throws Exception {
+    ShuffleMemoryManager manager = ShuffleMemoryManager.createForTesting(10000L);
     final UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(
       new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP)),
+      manager,
       mock(RecordComparator.class),
       mock(PrefixComparator.class),
       100);
@@ -107,7 +110,8 @@ public class UnsafeInMemorySorterSuite {
         return (int) prefix1 - (int) prefix2;
       }
     };
-    UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(memoryManager, recordComparator,
+    ShuffleMemoryManager manager = ShuffleMemoryManager.createForTesting(10000L);
+    UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(memoryManager, manager, recordComparator,
       prefixComparator, dataToSort.length);
     // Given a page of records, insert those records into the sorter one-by-one:
     position = dataPage.getBaseOffset();

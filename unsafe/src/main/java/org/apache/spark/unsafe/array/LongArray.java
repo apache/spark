@@ -30,7 +30,7 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 public final class LongArray {
 
   // This is a long so that we perform long multiplications when computing offsets.
-  private static final long WIDTH = 8;
+  public static final long WIDTH = 8;
 
   private final MemoryBlock memory;
   private final Object baseObj;
@@ -56,6 +56,25 @@ public final class LongArray {
    */
   public long size() {
     return length;
+  }
+
+  /**
+   * Copy the elements from another LongArray to this array.
+   * The length of another array must be equal or less than this array.
+   */
+  public void copyFrom(LongArray that) {
+    assert that.length <= this.length: "Can't copy from a larger array";
+    PlatformDependent.copyMemory(
+      that.baseObj, that.baseOffset, this.baseObj, this.baseOffset, that.memory.size());
+  }
+
+  /**
+   * Copy the elements in a range from another LongArray to this array.
+   */
+  public void copyFrom(LongArray that, int srcPos, int dstPos, int length) {
+    PlatformDependent.copyMemory(
+      that.baseObj, that.baseOffset + srcPos * WIDTH,
+      this.baseObj, this.baseOffset + dstPos * WIDTH, length * WIDTH);
   }
 
   /**

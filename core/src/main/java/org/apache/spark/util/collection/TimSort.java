@@ -17,6 +17,7 @@
 
 package org.apache.spark.util.collection;
 
+import java.io.IOException;
 import java.util.Comparator;
 
 /**
@@ -98,7 +99,7 @@ class TimSort<K, Buffer> {
    *
    * @author Josh Bloch
    */
-  public void sort(Buffer a, int lo, int hi, Comparator<? super K> c) {
+  public void sort(Buffer a, int lo, int hi, Comparator<? super K> c) throws IOException {
     assert c != null;
 
     int nRemaining  = hi - lo;
@@ -164,7 +165,7 @@ class TimSort<K, Buffer> {
    * @param c comparator to used for the sort
    */
   @SuppressWarnings("fallthrough")
-  private void binarySort(Buffer a, int lo, int hi, int start, Comparator<? super K> c) {
+  private void binarySort(Buffer a, int lo, int hi, int start, Comparator<? super K> c) throws IOException {
     assert lo <= start && start <= hi;
     if (start == lo)
       start++;
@@ -373,7 +374,7 @@ class TimSort<K, Buffer> {
      * @param a the array to be sorted
      * @param c the comparator to determine the order of the sort
      */
-    private SortState(Buffer a, Comparator<? super K> c, int len) {
+    private SortState(Buffer a, Comparator<? super K> c, int len) throws IOException {
       this.aLength = len;
       this.a = a;
       this.c = c;
@@ -422,7 +423,7 @@ class TimSort<K, Buffer> {
      * so the invariants are guaranteed to hold for i < stackSize upon
      * entry to the method.
      */
-    private void mergeCollapse() {
+    private void mergeCollapse() throws IOException {
       while (stackSize > 1) {
         int n = stackSize - 2;
         if ( (n >= 1 && runLen[n-1] <= runLen[n] + runLen[n+1])
@@ -440,7 +441,7 @@ class TimSort<K, Buffer> {
      * Merges all runs on the stack until only one remains.  This method is
      * called once, to complete the sort.
      */
-    private void mergeForceCollapse() {
+    private void mergeForceCollapse() throws IOException {
       while (stackSize > 1) {
         int n = stackSize - 2;
         if (n > 0 && runLen[n - 1] < runLen[n + 1])
@@ -456,7 +457,7 @@ class TimSort<K, Buffer> {
      *
      * @param i stack index of the first of the two runs to merge
      */
-    private void mergeAt(int i) {
+    private void mergeAt(int i) throws IOException {
       assert stackSize >= 2;
       assert i >= 0;
       assert i == stackSize - 2 || i == stackSize - 3;
@@ -673,7 +674,7 @@ class TimSort<K, Buffer> {
      *        (must be aBase + aLen)
      * @param len2  length of second run to be merged (must be > 0)
      */
-    private void mergeLo(int base1, int len1, int base2, int len2) {
+    private void mergeLo(int base1, int len1, int base2, int len2) throws IOException {
       assert len1 > 0 && len2 > 0 && base1 + len1 == base2;
 
       // Copy first run into temp array
@@ -793,7 +794,7 @@ class TimSort<K, Buffer> {
      *        (must be aBase + aLen)
      * @param len2  length of second run to be merged (must be > 0)
      */
-    private void mergeHi(int base1, int len1, int base2, int len2) {
+    private void mergeHi(int base1, int len1, int base2, int len2) throws IOException {
       assert len1 > 0 && len2 > 0 && base1 + len1 == base2;
 
       // Copy second run into temp array
@@ -914,7 +915,7 @@ class TimSort<K, Buffer> {
      * @param minCapacity the minimum required capacity of the tmp array
      * @return tmp, whether or not it grew
      */
-    private Buffer ensureCapacity(int minCapacity) {
+    private Buffer ensureCapacity(int minCapacity) throws IOException {
       if (tmpLength < minCapacity) {
         // Compute smallest power of 2 > minCapacity
         int newSize = minCapacity;

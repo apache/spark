@@ -171,7 +171,8 @@ public final class UnsafeExternalSorter {
     }
 
     this.inMemSorter =
-      new UnsafeInMemorySorter(taskMemoryManager, recordComparator, prefixComparator, initialSize);
+      new UnsafeInMemorySorter(taskMemoryManager, shuffleMemoryManager, recordComparator,
+        prefixComparator, initialSize);
     this.isInMemSorterExternal = false;
   }
 

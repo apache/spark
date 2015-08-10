@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection
 
+import java.io.IOException
+
 import scala.reflect.ClassTag
 
 /**
@@ -71,7 +73,14 @@ abstract class SortDataFormat[K, Buffer] {
    * Allocates a Buffer that can hold up to 'length' elements.
    * All elements of the buffer should be considered invalid until data is explicitly copied in.
    */
+  @throws(classOf[IOException])
   def allocate(length: Int): Buffer
+
+  /**
+   * Releases a previously allocated Buffer.
+   * By default, it does nothing.
+   */
+  def release(buffer: Buffer): Unit = {}
 }
 
 /**
