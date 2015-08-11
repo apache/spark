@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
-import org.apache.spark.sql.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * :: DeveloperApi ::

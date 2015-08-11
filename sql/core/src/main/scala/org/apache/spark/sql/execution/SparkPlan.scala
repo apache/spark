@@ -32,7 +32,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.metric.{IntSQLMetric, LongSQLMetric, SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.DataType
 
 object SparkPlan {
@@ -84,12 +84,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Return all metrics containing metrics of this SparkPlan.
    */
   private[sql] def metrics: Map[String, SQLMetric[_, _]] = Map.empty
-
-  /**
-   * Return a IntSQLMetric according to the name.
-   */
-  private[sql] def intMetric(name: String): IntSQLMetric =
-    metrics(name).asInstanceOf[IntSQLMetric]
 
   /**
    * Return a LongSQLMetric according to the name.

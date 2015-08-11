@@ -25,7 +25,7 @@ import org.apache.spark.shuffle.ShuffleMemoryManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkSqlSerializer
-import org.apache.spark.sql.metric.LongSQLMetric
+import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.unsafe.PlatformDependent
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}

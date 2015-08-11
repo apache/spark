@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.metric.LongSQLMetric
+import org.apache.spark.sql.execution.metric.LongSQLMetric
 
 
 trait HashSemiJoin {

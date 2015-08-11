@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryNode, SQLExecution, SparkPlan}
-import org.apache.spark.sql.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.{InternalAccumulator, TaskContext}
 

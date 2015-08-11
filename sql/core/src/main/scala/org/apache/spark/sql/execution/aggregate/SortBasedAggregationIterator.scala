@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression2, AggregateFunction2}
-import org.apache.spark.sql.metric.LongSQLMetric
+import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.unsafe.KVIterator
 
 /**

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.{UnsafeKVExternalSorter, UnsafeFixedWidthAggregationMap}
-import org.apache.spark.sql.metric.LongSQLMetric
+import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.sql.types.StructType
 
 /**
