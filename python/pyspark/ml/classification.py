@@ -76,7 +76,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                        " The class with largest value p/t is predicted, where p is the original" +
                        " probability of that class and t is the class' threshold.")
     threshold = Param(Params._dummy(), "threshold",
-                      "threshold in binary classification prediction, in range [0, 1].")
+                      "Threshold in binary classification prediction, in range [0, 1]." +
+                      " If threshold and thresholds are both set, they must match.")
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -88,7 +89,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                  threshold=0.5, thresholds=None, \
                  probabilityCol="probability", rawPredictionCol="rawPrediction")
-        Param thresholds overrides Param threshold.
+        If the threshold and thresholds Params are both set, they must be equivalent.
         """
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -103,13 +104,13 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         self.fitIntercept = Param(self, "fitIntercept", "whether to fit an intercept term.")
         #: param for threshold in binary classification, in range [0, 1].
         self.threshold = Param(self, "threshold",
-                               "threshold in binary classification prediction, in range [0, 1].")
+                               "Threshold in binary classification prediction, in range [0, 1]." +
+                               " If threshold and thresholds are both set, they must match.")
         #: param for thresholds or cutoffs in binary or multiclass classification
         self.thresholds = \
             Param(self, "thresholds",
                   "Thresholds in multi-class classification" +
                   " to adjust the probability of predicting each class." +
-                  " Overrides threshold param." +
                   " Array must have length equal to the number of classes, with values >= 0." +
                   " The class with largest value p/t is predicted, where p is the original" +
                   " probability of that class and t is the class' threshold.")
@@ -129,7 +130,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                   threshold=0.5, thresholds=None, \
                   probabilityCol="probability", rawPredictionCol="rawPrediction")
         Sets params for logistic regression.
-        Param thresholds overrides Param threshold.
+        If the threshold and thresholds Params are both set, they must be equivalent.
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
@@ -174,13 +175,14 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         Gets the value of threshold or its default value.
         """
-        if self.isDefined(self.thresholds):
-            thresholds = self.getOrDefault(self.thresholds)
-            if len(thresholds) != 2:
+        self._checkThresholdConsistency()
+        if self.isSet(self.thresholds):
+            ts = self.getOrDefault(self.thresholds)
+            if len(ts) != 2:
                 raise ValueError("Logistic Regression getThreshold only applies to" +
                                  " binary classification, but thresholds has length != 2." +
-                                 "  thresholds: " + ",".join(thresholds))
-            return 1.0/(1.0+thresholds[0]/thresholds[1])
+                                 "  thresholds: " + ",".join(ts))
+            return 1.0/(1.0 + ts[0]/ts[1])
         else:
             return self.getOrDefault(self.threshold)
 
@@ -198,11 +200,25 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         classification: (1-threshold, threshold).
         If neither are set, throw an error.
         """
+        self._checkThresholdConsistency()
         if not self.isSet(self.thresholds) and self.isSet(self.threshold):
             t = self.getOrDefault(self.threshold)
             return [1.0-t, t]
         else:
             return self.getOrDefault(self.thresholds)
+
+    def _checkThresholdConsistency(self):
+        if self.isSet(self.threshold) and self.isSet(self.thresholds):
+            ts = self.getParam(self.thresholds)
+            if len(ts) != 2:
+                raise ValueError("Logistic Regression getThreshold only applies to" +
+                                 " binary classification, but thresholds has length != 2." +
+                                 " thresholds: " + ",".join(ts))
+            t = 1.0/(1.0 + ts[0]/ts[1])
+            t2 = self.getParam(self.threshold)
+            if abs(t2 - t) >= 1E-5:
+                raise ValueError("Logistic Regression getThreshold found inconsistent values for" +
+                                 " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
 
 
 class LogisticRegressionModel(JavaModel):

@@ -112,14 +112,26 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     lr.setThresholds(Array(0.3, 0.7))
     val expectedThreshold = 1.0 / (1.0 + 0.3 / 0.7)
     assert(lr.getThreshold ~== expectedThreshold relTol 1E-7)
-    // thresholds overrides threshold
+    // thresholds and threshold must be consistent: length
     lr.setThresholds(Array(0.1, 0.2, 0.3))
-    withClue("LogisticRegression.getThreshold should throw error if thresholds has length != 2") {
-      intercept[RuntimeException] {
+    withClue("getThreshold should throw error if thresholds has length != 2") {
+      intercept[IllegalArgumentException] {
         lr.getThreshold
       }
     }
-    assert(lr.getThresholds === Array(0.1, 0.2, 0.3))
+    withClue("getThresholds should throw error if threshold, thresholds do not match") {
+      intercept[IllegalArgumentException] {
+        lr.getThresholds
+      }
+    }
+    // thresholds and threshold must be consistent: values
+    val lr2 = new LogisticRegression
+    lr2.setThresholds(Array(0.1, 0.2)).setThreshold(0.0)
+    withClue("getThreshold should throw error if thresholds does not match") {
+      intercept[IllegalArgumentException] {
+        lr.getThreshold
+      }
+    }
   }
 
   test("logistic regression doesn't fit intercept when fitIntercept is off") {

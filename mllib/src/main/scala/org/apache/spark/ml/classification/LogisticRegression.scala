@@ -46,13 +46,14 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
   /**
    * Set threshold in binary classification prediction, in range [0, 1].
-   * If [[thresholds]] is set, then [[threshold]] is ignored.
    *
    * If the estimated probability of class label 1 is > threshold, then predict 1, else 0.
    * A high threshold encourages the model to predict 0 more often;
    * a low threshold encourages the model to predict 1 more often.
    *
    * Note: Calling this with threshold p is equivalent to calling `setThresholds(Array(1-p, p))`.
+   *       If both [[threshold]] and [[thresholds]] are set, then they must agree in this way,
+   *       else an [[IllegalArgumentException]] will be thrown.
    *
    * Default is 0.5.
    * @group setParam
@@ -61,23 +62,24 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
   /**
    * Get threshold for binary classification prediction.
-   * If [[thresholds]] is set, then [[threshold]] is ignored.
    *
-   * @return If [[thresholds]] is set with length 2 (i.e., binary classification), this returns
-   *         the equivalent threshold: {{{1 / (1 + thresholds(0) / thresholds(1))}}}.
-   *         Otherwise, returns [[threshold]] value.
+   * @return If [[threshold]] is set, returns that value.
+   *         Otherwise, if [[thresholds]] is set with length 2 (i.e., binary classification),
+   *         this returns the equivalent threshold: {{{1 / (1 + thresholds(0) / thresholds(1))}}}.
+   *         Otherwise, returns [[threshold]] default value.
    * @group getParam
    * @throws RuntimeException if [[thresholds]] is set to an array of length other than 2.
    */
   override def getThreshold: Double = {
+    checkThresholdConsistency()
     if (isSet(thresholds)) {
-      val thresholdValues = $(thresholds)
-      if (thresholdValues.length != 2) {
+      val ts = $(thresholds)
+      if (ts.length != 2) {
         throw new RuntimeException("Logistic Regression getThreshold only applies to" +
           " binary classification, but thresholds has length != 2.  thresholds: " +
-          thresholdValues.mkString(","))
+          ts.mkString(","))
       }
-      1.0 / (1.0 + thresholdValues(0) / thresholdValues(1))
+      1.0 / (1.0 + ts(0) / ts(1))
     } else {
       $(threshold)
     }
@@ -91,11 +93,25 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * @group getParam
    */
   override def getThresholds: Array[Double] = {
+    checkThresholdConsistency()
     if (!isSet(thresholds) && isSet(threshold)) {
       val t = $(threshold)
       Array(1-t, t)
     } else {
       $(thresholds)
+    }
+  }
+
+  private def checkThresholdConsistency(): Unit = {
+    if (isSet(threshold) && isSet(thresholds)) {
+      val ts = $(thresholds)
+      require(ts.length == 2, "Logistic Regression found inconsistent values for threshold and" +
+        s" thresholds.  Param threshold is set (${$(threshold)}), indicating binary" +
+        s" classification, but Param thresholds is set with length ${ts.length}." +
+        " Clear one Param value to fix this problem.")
+      val t = 1.0 / (1.0 + ts(0) / ts(1))
+      require(math.abs($(threshold) - t) < 1E-5, "Logistic Regression getThreshold found" +
+        s" inconsistent values for threshold (${$(threshold)}) and thresholds (equivalent to $t)")
     }
   }
 }
