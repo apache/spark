@@ -213,7 +213,7 @@ private[sql] class ParquetRelation(
     val committerClassname = conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key)
     if (committerClassname == "org.apache.spark.sql.parquet.DirectParquetOutputCommitter") {
       conf.set(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key,
-        classOf[ParquetOutputCommitter].getCanonicalName)
+        classOf[DirectParquetOutputCommitter].getCanonicalName)
     }
 
     val committerClass =
