@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe;
 
 import java.lang.reflect.Field;
+import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import sun.misc.Unsafe;
@@ -119,6 +120,7 @@ public final class PlatformDependent {
   // Support for resetting final fields while deserializing
   public static final long BIG_INTEGER_SIGNUM_OFFSET;
   public static final long BIG_INTEGER_MAG_OFFSET;
+  public static final long BIG_DECIMAL_INTCOMPACT_OFFSET;
 
   /**
    * Limits the number of bytes to copy per {@link Unsafe#copyMemory(long, long, long)} to
@@ -145,21 +147,27 @@ public final class PlatformDependent {
 
       long signumOffset = 0;
       long magOffset = 0;
+      long intCompactOffset = 0;
       try {
         signumOffset = _UNSAFE.objectFieldOffset(BigInteger.class.getDeclaredField("signum"));
         magOffset = _UNSAFE.objectFieldOffset(BigInteger.class.getDeclaredField("mag"));
+        intCompactOffset = _UNSAFE.objectFieldOffset(
+          BigDecimal.class.getDeclaredField("intCompact"));
       } catch (Exception ex) {
         // should not happen
       }
       BIG_INTEGER_SIGNUM_OFFSET = signumOffset;
       BIG_INTEGER_MAG_OFFSET = magOffset;
+      BIG_DECIMAL_INTCOMPACT_OFFSET = intCompactOffset;
     } else {
+      // should not happen
       BYTE_ARRAY_OFFSET = 0;
       INT_ARRAY_OFFSET = 0;
       LONG_ARRAY_OFFSET = 0;
       DOUBLE_ARRAY_OFFSET = 0;
       BIG_INTEGER_SIGNUM_OFFSET = 0;
       BIG_INTEGER_MAG_OFFSET = 0;
+      BIG_DECIMAL_INTCOMPACT_OFFSET = 0;
     }
   }
 

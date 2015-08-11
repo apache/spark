@@ -190,7 +190,7 @@ case class Cast(child: Expression, dataType: DataType)
   }
 
   private[this] def decimalToTimestamp(d: Decimal): Long = {
-    (d.toBigDecimal * 1000000L).longValue()
+    d.toJavaBigDecimal.multiply(java.math.BigDecimal.valueOf(1000000L)).longValue()
   }
   private[this] def doubleToTimestamp(d: Double): Any = {
     if (d.isNaN || d.isInfinite) null else (d * 1000000L).toLong
@@ -554,10 +554,10 @@ case class Cast(child: Expression, dataType: DataType)
         (c, evPrim, evNull) =>
           s"""
             Decimal tmpDecimal = Decimal.apply(
-              scala.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
+              java.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
             ${changePrecision("tmpDecimal", target, evPrim, evNull)}
           """
-      case DecimalType() =>
+      case dt: DecimalType =>
         (c, evPrim, evNull) =>
           s"""
             Decimal tmpDecimal = $c.clone();
@@ -574,7 +574,7 @@ case class Cast(child: Expression, dataType: DataType)
         (c, evPrim, evNull) =>
           s"""
             try {
-              Decimal tmpDecimal = Decimal.apply(scala.math.BigDecimal.valueOf((double) $c));
+              Decimal tmpDecimal = Decimal.apply(java.math.BigDecimal.valueOf((double) $c));
               ${changePrecision("tmpDecimal", target, evPrim, evNull)}
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
@@ -634,7 +634,7 @@ case class Cast(child: Expression, dataType: DataType)
   }
 
   private[this] def decimalToTimestampCode(d: String): String =
-    s"($d.toBigDecimal().bigDecimal().multiply(new java.math.BigDecimal(1000000L))).longValue()"
+    s"($d.toJavaBigDecimal().multiply(new java.math.BigDecimal(1000000L))).longValue()"
   private[this] def longToTimeStampCode(l: String): String = s"$l * 1000L"
   private[this] def timestampToIntegerCode(ts: String): String =
     s"java.lang.Math.floor((double) $ts / 1000000L)"
