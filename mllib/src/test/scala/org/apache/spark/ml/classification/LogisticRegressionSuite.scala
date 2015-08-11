@@ -100,7 +100,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         lr.getThresholds
       }
     }
-    // Set via thresholds.
+    // Set via threshold.
     // Intuition: Large threshold or large thresholds(1) makes class 0 more likely.
     lr.setThreshold(1.0)
     assert(lr.getThresholds === Array(0.0, 1.0))
@@ -108,26 +108,27 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(lr.getThresholds === Array(1.0, 0.0))
     lr.setThreshold(0.5)
     assert(lr.getThresholds === Array(0.5, 0.5))
-    // Test getThreshold
-    lr.setThresholds(Array(0.3, 0.7))
+    // Set via thresholds
+    val lr2 = new LogisticRegression
+    lr2.setThresholds(Array(0.3, 0.7))
     val expectedThreshold = 1.0 / (1.0 + 0.3 / 0.7)
-    assert(lr.getThreshold ~== expectedThreshold relTol 1E-7)
-    // thresholds and threshold must be consistent: length
-    lr.setThresholds(Array(0.1, 0.2, 0.3))
+    assert(lr2.getThreshold ~== expectedThreshold relTol 1E-7)
+    // thresholds and threshold must be consistent
+    lr2.setThresholds(Array(0.1, 0.2, 0.3))
     withClue("getThreshold should throw error if thresholds has length != 2") {
       intercept[IllegalArgumentException] {
-        lr.getThreshold
+        lr2.getThreshold
       }
     }
+    // thresholds and threshold must be consistent: values
+    lr2.setThresholds(Array(0.3, 0.7))
+    lr2.setThreshold(expectedThreshold / 2.0)
     withClue("getThresholds should throw error if threshold, thresholds do not match") {
       intercept[IllegalArgumentException] {
         lr.getThresholds
       }
     }
-    // thresholds and threshold must be consistent: values
-    val lr2 = new LogisticRegression
-    lr2.setThresholds(Array(0.1, 0.2)).setThreshold(0.0)
-    withClue("getThreshold should throw error if thresholds does not match") {
+    withClue("getThreshold should throw error if threshold, thresholds do not match") {
       intercept[IllegalArgumentException] {
         lr.getThreshold
       }

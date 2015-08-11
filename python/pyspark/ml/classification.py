@@ -118,6 +118,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                          fitIntercept=True, threshold=0.5)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
+        self._checkThresholdConsistency()
 
     @keyword_only
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -133,7 +134,9 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
         kwargs = self.setParams._input_kwargs
-        return self._set(**kwargs)
+        self._set(**kwargs)
+        self._checkThresholdConsistency()
+        return self
 
     def _create_model(self, java_model):
         return LogisticRegressionModel(java_model)
@@ -167,8 +170,11 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     def setThreshold(self, value):
         """
         Sets the value of :py:attr:`threshold`.
+        Clears value of :py:attr:`thresholds` if it has been set.
         """
         self._paramMap[self.threshold] = value
+        if self.isSet(self.thresholds):
+            del self._paramMap[self.thresholds]
         return self
 
     def getThreshold(self):
@@ -189,8 +195,11 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     def setThresholds(self, value):
         """
         Sets the value of :py:attr:`thresholds`.
+        Clears value of :py:attr:`threshold` if it has been set.
         """
         self._paramMap[self.thresholds] = value
+        if self.isSet(self.threshold):
+            del self._paramMap[self.threshold]
         return self
 
     def getThresholds(self):
