@@ -75,19 +75,19 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                        " Array must have length equal to the number of classes, with values >= 0." +
                        " The class with largest value p/t is predicted, where p is the original" +
                        " probability of that class and t is the class' threshold.")
-
+    threshold = Param(Params._dummy(), "threshold",
+                      "threshold in binary classification prediction, in range [0, 1].")
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                 threshold=None, thresholds=None,
+                 threshold=0.5, thresholds=None,
                  probabilityCol="probability", rawPredictionCol="rawPrediction"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                 threshold=None, thresholds=None, \
+                 threshold=0.5, thresholds=None, \
                  probabilityCol="probability", rawPredictionCol="rawPrediction")
-        Param thresholds overrides Param threshold; threshold is provided
-        for backwards compatibility and only applies to binary classification.
+        Param thresholds overrides Param threshold.
         """
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -100,36 +100,36 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                   "is an L2 penalty. For alpha = 1, it is an L1 penalty.")
         #: param for whether to fit an intercept term.
         self.fitIntercept = Param(self, "fitIntercept", "whether to fit an intercept term.")
-        #: param for threshold in binary classification prediction, in range [0, 1].
+        #: param for threshold in binary classification, in range [0, 1].
+        self.threshold = Param(self, "threshold",
+                               "threshold in binary classification prediction, in range [0, 1].")
+        #: param for thresholds or cutoffs in binary or multiclass classification
         self.thresholds = \
             Param(self, "thresholds",
                   "Thresholds in multi-class classification" +
                   " to adjust the probability of predicting each class." +
+                  " Overrides threshold param." +
                   " Array must have length equal to the number of classes, with values >= 0." +
                   " The class with largest value p/t is predicted, where p is the original" +
                   " probability of that class and t is the class' threshold.")
         self._setDefault(maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1E-6,
-                         fitIntercept=True)
+                         fitIntercept=True, threshold=0.5)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                  threshold=None, thresholds=None,
+                  threshold=0.5, thresholds=None,
                   probabilityCol="probability", rawPredictionCol="rawPrediction"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                  threshold=None, thresholds=None, \
+                  threshold=0.5, thresholds=None, \
                   probabilityCol="probability", rawPredictionCol="rawPrediction")
         Sets params for logistic regression.
-        Param thresholds overrides Param threshold; threshold is provided
-        for backwards compatibility and only applies to binary classification.
+        Param thresholds overrides Param threshold.
         """
-        # Under the hood we use thresholds so translate threshold to thresholds if applicable
-        if thresholds is None and threshold is not None:
-            kwargs[thresholds] = [1-threshold, threshold]
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
@@ -164,30 +164,10 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     def setThreshold(self, value):
         """
-        Sets the value of :py:attr:`thresholds` using [1-value, value].
-
-        >>> lr = LogisticRegression()
-        >>> lr.getThreshold()
-        0.5
-        >>> lr.setThreshold(0.6)
-        LogisticRegression_...
-        >>> abs(lr.getThreshold() - 0.6) < 1e-5
-        True
+        Sets the value of :py:attr:`threshold`.
         """
-        return self.setThresholds([1-value, value])
-
-    def setThresholds(self, value):
-        """
-        Sets the value of :py:attr:`thresholds`.
-        """
-        self._paramMap[self.thresholds] = value
+        self._paramMap[self.threshold] = value
         return self
-
-    def getThresholds(self):
-        """
-        Gets the value of thresholds or its default value.
-        """
-        return self.getOrDefault(self.thresholds)
 
     def getThreshold(self):
         """
@@ -201,7 +181,27 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                                  "  thresholds: " + ",".join(thresholds))
             return 1.0/(1.0+thresholds[0]/thresholds[1])
         else:
-            return 0.5
+            return self.getOrDefault(self.threshold)
+
+    def setThresholds(self, value):
+        """
+        Sets the value of :py:attr:`thresholds`.
+        """
+        self._paramMap[self.thresholds] = value
+        return self
+
+    def getThresholds(self):
+        """
+        If :py:attr:`thresholds` is set, return its value.
+        Otherwise, if :py:attr:`threshold` is set, return the equivalent thresholds for binary
+        classification: (1-threshold, threshold).
+        If neither are set, throw an error.
+        """
+        if not self.isSet(self.thresholds) and self.isSet(self.threshold):
+            t = self.getOrDefault(self.threshold)
+            return [1.0-t, t]
+        else:
+            return self.getOrDefault(self.thresholds)
 
 
 class LogisticRegressionModel(JavaModel):
