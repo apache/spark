@@ -31,7 +31,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("params") {
     ParamsSuite.checkParams(new Bucketizer)
-    MLTestingUtils.checkCopy(new Bucketizer)
   }
 
   test("Bucket continuous features, without -inf,inf") {
@@ -46,6 +45,9 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("feature")
       .setOutputCol("result")
       .setSplits(splits)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(bucketizer)
 
     bucketizer.transform(dataFrame).select("result", "expected").collect().foreach {
       case Row(x: Double, y: Double) =>

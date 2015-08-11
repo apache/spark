@@ -29,7 +29,6 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     ParamsSuite.checkParams(new StringIndexer)
     val model = new StringIndexerModel("indexer", Array("a", "b"))
     ParamsSuite.checkParams(model)
-    MLTestingUtils.checkCopy(model)
   }
 
   test("StringIndexer") {
@@ -39,6 +38,10 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("label")
       .setOutputCol("labelIndex")
       .fit(df)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(indexer)
+
     val transformed = indexer.transform(df)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]

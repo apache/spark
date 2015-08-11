@@ -34,7 +34,6 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
     val mat = Matrices.dense(2, 2, Array(0.0, 1.0, 2.0, 3.0)).asInstanceOf[DenseMatrix]
     val model = new PCAModel("pca", new OldPCAModel(2, mat))
     ParamsSuite.checkParams(model)
-    MLTestingUtils.checkCopy(model)
   }
 
   test("pca") {
@@ -57,6 +56,9 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("pca_features")
       .setK(3)
       .fit(df)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(pca)
 
     pca.transform(df).select("pca_features", "expected").collect().foreach {
       case Row(x: Vector, y: Vector) =>

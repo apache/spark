@@ -62,7 +62,6 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
       Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0, null))),
       Array(1.0))
     ParamsSuite.checkParams(model)
-    MLTestingUtils.checkCopy(model)
   }
 
   test("Binary classification with continuous features: Log Loss") {
@@ -93,6 +92,9 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setStepSize(0.1)
       .setCheckpointInterval(2)
     val model = gbt.fit(df)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
 
     sc.checkpointDir = None
     Utils.deleteRecursively(tempDir)

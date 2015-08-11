@@ -61,7 +61,6 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     ParamsSuite.checkParams(new LinearRegression)
     val model = new LinearRegressionModel("linearReg", Vectors.dense(0.0), 0.0)
     ParamsSuite.checkParams(model)
-    MLTestingUtils.checkCopy(model)
   }
 
   test("linear regression: default params") {
@@ -74,6 +73,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(lir.getFitIntercept)
     assert(lir.getStandardization)
     val model = lir.fit(dataset)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
+
     model.transform(dataset)
       .select("label", "prediction")
       .collect()

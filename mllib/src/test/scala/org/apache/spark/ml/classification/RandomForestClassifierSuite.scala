@@ -70,7 +70,6 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     val model = new RandomForestClassificationModel("rfc",
       Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 2)), 2, 2)
     ParamsSuite.checkParams(model)
-    MLTestingUtils.checkCopy(model)
   }
 
   test("Binary classification with continuous features:" +
@@ -136,6 +135,9 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
 
     val df: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
     val model = rf.fit(df)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
 
     val predictions = model.transform(df)
       .select(rf.getPredictionCol, rf.getRawPredictionCol, rf.getProbabilityCol)

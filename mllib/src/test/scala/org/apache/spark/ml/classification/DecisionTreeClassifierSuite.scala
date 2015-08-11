@@ -61,7 +61,6 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     ParamsSuite.checkParams(new DecisionTreeClassifier)
     val model = new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 2)
     ParamsSuite.checkParams(model)
-    MLTestingUtils.checkCopy(model)
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -245,6 +244,9 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
 
     val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(newTree)
 
     val predictions = newTree.transform(newData)
       .select(newTree.getPredictionCol, newTree.getRawPredictionCol, newTree.getProbabilityCol)

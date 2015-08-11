@@ -59,10 +59,8 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("params") {
     ParamsSuite.checkParams(new OneVsRest)
     val lrModel = new LogisticRegressionModel("lr", Vectors.dense(0.0), 0.0)
-    MLTestingUtils.checkCopy(lrModel)
     val model = new OneVsRestModel("ovr", Metadata.empty, Array(lrModel))
     ParamsSuite.checkParams(model)
-    MLTestingUtils.checkCopy(model)
   }
 
   test("one-vs-rest: default params") {
@@ -72,6 +70,10 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(ova.getLabelCol === "label")
     assert(ova.getPredictionCol === "prediction")
     val ovaModel = ova.fit(dataset)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(ovaModel)
+
     assert(ovaModel.models.size === numClasses)
     val transformedDataset = ovaModel.transform(dataset)
 

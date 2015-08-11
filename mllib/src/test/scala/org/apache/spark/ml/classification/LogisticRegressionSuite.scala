@@ -67,7 +67,6 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("params") {
     ParamsSuite.checkParams(new LogisticRegression)
     val model = new LogisticRegressionModel("logReg", Vectors.dense(0.0), 0.0)
-    MLTestingUtils.checkCopy(model)
   }
 
   test("logistic regression: default params") {
@@ -119,6 +118,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     lr.setFitIntercept(false)
     val model = lr.fit(dataset)
     assert(model.intercept === 0.0)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
   }
 
   test("logistic regression with setters") {

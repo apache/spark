@@ -32,7 +32,6 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
     ParamsSuite.checkParams(new Word2Vec)
     val model = new Word2VecModel("w2v", new OldWord2VecModel(Map("a" -> Array(0.0f))))
     ParamsSuite.checkParams(model)
-    MLTestingUtils.checkCopy(model)
   }
 
   test("Word2Vec") {
@@ -63,6 +62,9 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("result")
       .setSeed(42L)
       .fit(docDF)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
 
     model.transform(docDF).select("result", "expected").collect().foreach {
       case Row(vector1: Vector, vector2: Vector) =>

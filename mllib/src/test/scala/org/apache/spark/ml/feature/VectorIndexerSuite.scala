@@ -97,7 +97,6 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext with L
     ParamsSuite.checkParams(new VectorIndexer)
     val model = new VectorIndexerModel("indexer", 1, Map.empty)
     ParamsSuite.checkParams(model)
-    MLTestingUtils.checkCopy(model)
   }
 
   test("Cannot fit an empty DataFrame") {
@@ -111,6 +110,10 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext with L
   test("Throws error when given RDDs with different size vectors") {
     val vectorIndexer = getIndexer
     val model = vectorIndexer.fit(densePoints1) // vectors of length 3
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
+
     model.transform(densePoints1) // should work
     model.transform(sparsePoints1) // should work
     intercept[SparkException] {
