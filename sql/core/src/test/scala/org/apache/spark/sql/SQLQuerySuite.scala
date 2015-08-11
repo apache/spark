@@ -735,6 +735,20 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     )
   }
 
+  test("stddev_pop") {
+    checkAnswer(
+      sql("SELECT STDDEV_POP(a) FROM testData2"),
+      Row(math.sqrt(4/6.0))
+    )
+  }
+
+  test("stddev_samp") {
+    checkAnswer(
+      sql("SELECT STDDEV_SAMP(a) FROM testData2"),
+      Row(math.sqrt(4/5.0))
+    )
+  }
+
   test("inner join where, one match per row") {
     checkAnswer(
       sql("SELECT * FROM upperCaseData JOIN lowerCaseData WHERE n = N"),

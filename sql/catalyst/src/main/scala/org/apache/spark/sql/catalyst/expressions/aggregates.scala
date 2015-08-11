@@ -689,29 +689,56 @@ case class LastFunction(expr: Expression, base: AggregateExpression1) extends Ag
 
 // Compute standard deviation based on online algorithm specified here:
 // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
-case class Stddev(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
+abstract class StddevAgg(child: Expression) extends UnaryExpression with PartialAggregate1 {
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType match {
-    case DecimalType.Fixed(_, _) | DecimalType.Unlimited =>
-      DecimalType.Unlimited
-    case _ =>
-      DoubleType
+    case DecimalType.Fixed(p, s) =>
+      DecimalType.bounded(p + 14, s + 4)
+    case _ => DoubleType
   }
-  override def toString: String = s"STDDEV($child)"
+
+  def isSampleStddev: Boolean 
+
   override def asPartial: SplitEvaluation = {
     val partialStd = Alias(ComputePartialStd(Cast(child, dataType)), "PartialStddev")()
-    SplitEvaluation(CombinePartialStd(partialStd.toAttribute), partialStd :: Nil)
+    SplitEvaluation(MergePartialStd(partialStd.toAttribute, isSampleStddev), partialStd :: Nil)
   }
-  override def newInstance(): StddevFunction = new StddevFunction(child, this)
+
+  override def newInstance(): StddevFunction = new StddevFunction(child, this, isSampleStddev)
+
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForNumericExpr(child.dataType, "function stddev")
+
 }
 
-case class ComputePartialStd(child: Expression) extends AggregateExpression {
+// Compute the sample standard deviation of a column
+case class Stddev(child: Expression) extends StddevAgg(child) {
+
+  override def toString: String = s"STDDEV($child)"
+  override def isSampleStddev: Boolean = true
+}
+
+// Compute the population standard deviation of a column
+case class StddevPop(child: Expression) extends StddevAgg(child) {
+
+  override def toString: String = s"STDDEV_POP($child)"
+  override def isSampleStddev: Boolean = false
+}
+
+// Compute the sample standard deviation of a column
+case class StddevSamp(child: Expression) extends StddevAgg(child) {
+
+  override def toString: String = s"STDDEV_SAMP($child)"
+  override def isSampleStddev: Boolean = true
+}
+
+case class ComputePartialStd(child: Expression) extends UnaryExpression with AggregateExpression1 {
     def this() = this(null)
 
     override def children: Seq[Expression] = child :: Nil
     override def nullable: Boolean = false
     override def dataType: DataType = child.dataType match {
-      case DecimalType.Unlimited => ArrayType(DecimalType.Unlimited)
+      case DecimalType.Fixed(p, s) => ArrayType(DecimalType.bounded(p, s))
       case _ => ArrayType(DoubleType)
     }
     override def toString: String = s"computePartialStddev($child)"
@@ -719,25 +746,10 @@ case class ComputePartialStd(child: Expression) extends AggregateExpression {
       new ComputePartialStdFunction(child, this)
 }
 
-case class CombinePartialStd(child: Expression) extends AggregateExpression {
-  def this() = this(null)
-
-  override def children: Seq[Expression] = child:: Nil
-  override def nullable: Boolean = false
-  override def dataType: DataType = child.dataType match {
-    case ArrayType(DecimalType.Unlimited, _) => DecimalType.Unlimited
-    case _ => DoubleType
-  }
-  override def toString: String = s"CombinePartialStd($child)"
-  override def newInstance(): CombinePartialStdFunction = {
-    new CombinePartialStdFunction(child, this)
-  }
-}
-
 case class ComputePartialStdFunction (
     expr: Expression,
-    base: AggregateExpression
-) extends AggregateFunction {
+    base: AggregateExpression1
+) extends AggregateFunction1 {
   def this() = this(null, null)  // Required for serialization
 
   private val computeType = expr.dataType
@@ -783,14 +795,30 @@ case class ComputePartialStdFunction (
   }
 }
 
-case class CombinePartialStdFunction(
+case class MergePartialStd(child: Expression, isSample: Boolean) extends UnaryExpression with AggregateExpression1 {
+  def this() = this(null, false) //required for serialization
+
+  override def children: Seq[Expression] = child:: Nil
+  override def nullable: Boolean = false
+  override def dataType: DataType = child.dataType match {
+    case ArrayType(DecimalType.Fixed(p, s), _) => DecimalType.bounded(p, s)
+    case _ => DoubleType
+  }
+  override def toString: String = s"MergePartialStd($child)"
+  override def newInstance(): MergePartialStdFunction = {
+    new MergePartialStdFunction(child, this, isSample)
+  }
+}
+
+case class MergePartialStdFunction(
     expr: Expression,
-    base: AggregateExpression
-) extends AggregateFunction {
-  def this() = this (null, null) // Required for serialization
+    base: AggregateExpression1,
+    isSample: Boolean
+) extends AggregateFunction1 {
+  def this() = this (null, null, false) // Required for serialization
 
   private val computeType = expr.dataType match {
-    case ArrayType(DecimalType.Unlimited, _) => DecimalType.Unlimited
+    case ArrayType(DecimalType.Fixed(p, s), _) => DecimalType.bounded(p, s)
     case _ => DoubleType
   }
   private val zero = Cast(Literal(0), computeType)
@@ -844,8 +872,16 @@ case class CombinePartialStdFunction(
     else if (count < 2) zero.eval(null)
     else {
       // when total count > 2
-      // stddev = sqrt (combineMk/(combineCount -1))
-      val cov = Cast(Divide(combineMk, Cast(Literal(count - 1), computeType)), DoubleType)
+      // stddev_samp = sqrt (combineMk/(combineCount -1))
+      // stddev_pop = sqrt (combineMk/combineCount)
+      val cov = {
+        if (isSample) {
+          Cast(Divide(combineMk, Cast(Literal(count - 1), computeType)), DoubleType)
+        }
+        else {
+          Cast(Divide(combineMk, Cast(Literal(count), computeType)), DoubleType)
+        }
+      }
       Cast(Literal(math.sqrt(cov.eval(null).asInstanceOf[Double])), computeType).eval(null)
     }
   }
@@ -853,14 +889,14 @@ case class CombinePartialStdFunction(
 
 case class StddevFunction(
     expr: Expression,
-    base: AggregateExpression
-) extends AggregateFunction {
+    base: AggregateExpression1,
+    isSample: Boolean
+) extends AggregateFunction1 {
 
-  def this() = this(null, null) // Required for serialization
+  def this() = this(null, null, false) // Required for serialization
 
   private val computeType = expr.dataType match {
-    case DecimalType.Fixed(_, _) | DecimalType.Unlimited =>
-      DecimalType.Unlimited
+    case DecimalType.Fixed(p, s) => DecimalType.bounded(p + 14, s + 4)
     case _ => DoubleType
   }
   private var curCount: Long = 0L
@@ -893,8 +929,17 @@ case class StddevFunction(
     if (curCount == 0) null
     else if (curCount < 2) zero.eval(null)
     else {
-      // when total count > 2, stddev = sqrt(curMk/(curCount - 1))
-      val cov = Cast(Divide(curMk, Cast(Literal(curCount - 1), computeType)), DoubleType)
+      // when total count > 2, 
+      // stddev_samp = sqrt(curMk/(curCount - 1))
+      // stddev_pop = sqrt(curMk/curCount)
+      val cov = {
+        if(isSample) {
+          Cast(Divide(curMk, Cast(Literal(curCount - 1), computeType)), DoubleType)
+        }
+        else {
+          Cast(Divide(curMk, Cast(Literal(curCount), computeType)), DoubleType)
+        }
+      }
       Cast(Literal(math.sqrt(cov.eval(null).asInstanceOf[Double])), computeType).eval(null)
     }
   }

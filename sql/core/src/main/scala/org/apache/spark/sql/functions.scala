@@ -295,22 +295,58 @@ object functions {
   def min(columnName: String): Column = min(Column(columnName))
 
   /**
-   * Aggregate function: returns the standard deviation of the expression
-   * in a group.
+   * Aggregate function: returns the unbiased sample standard deviation
+   * of the expression in a group.
    *
    * @group agg_funcs
-   * @since 1.5.0
+   * @since 1.6.0
    */
   def stddev(e: Column): Column = Stddev(e.expr)
+
+  /**
+   * Aggregate function: returns the unbiased sample standard deviation
+   * of the column in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev(columnName: String): Column = stddev(Column(columnName))
+
+  /**
+   * Aggregate function: returns the population standard deviation of
+   * the expression in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev_pop(e: Column): Column = StddevPop(e.expr)
 
   /**
    * Aggregate function: returns the standard deviation of the column
    * in a group.
    *
    * @group agg_funcs
-   * @since 1.5.0
+   * @since 1.6.0
    */
-  def stddev(columnName: String): Column = stddev(Column(columnName))
+  def stddev_pop(columnName: String): Column = stddev_pop(Column(columnName))
+
+  /**
+   * Aggregate function: returns the unbiased sample standard deviation of
+   * the expression in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev_samp(e: Column): Column = StddevSamp(e.expr)
+
+  /**
+   * Aggregate function: returns the unbiased sample standard deviation of the
+   * column in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev_samp(columnName: String): Column = stddev_samp(Column(columnName))
 
   /**
    * Aggregate function: returns the sum of all values in the expression.
