@@ -100,8 +100,11 @@ private[parquet] class CatalystSchemaConverter(
           StructField(field.getName, convertField(field), nullable = false)
 
         case REPEATED =>
-          throw new AnalysisException(
-            s"REPEATED not supported outside LIST or MAP. Type: $field")
+          // A repeated field that is neither contained by a `LIST`- or `MAP`-annotated group nor
+          // annotated by `LIST` or `MAP` should be interpreted as a required list of required
+          // elements where the element type is the type of the field.
+          val arrayType = ArrayType(convertField(field), containsNull = false)
+          StructField(field.getName, arrayType, nullable = false)
       }
     }
 
