@@ -603,6 +603,29 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     }
   }
 
+  test("stages details page should have expected dotfile under DAG visualization") {
+    withSpark(newSparkContext()) { sc =>
+      // Create a multi-stage job with a long delay in the first stage:
+      val rdd = sc.parallelize(Seq(1, 2, 3)).map { x =>
+        // This long sleep call won't slow down the tests because we don't actually need to wait
+        // for the job to finish.
+        Thread.sleep(20000)
+      }.groupBy(identity).map(identity).groupBy(identity).map(identity)
+      // Start the job:
+      rdd.countAsync()
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        goToUi(sc, "/stages/stage/?id=0&attempt=0&expandDagViz=true")
+        find(className("dot-file")).get.text should be ("digraph G {\n  subgraph clusterstage_0" +
+          " {\n    label=&quot;Stage 0&quot;;\n    subgraph cluster2 {\n      label=&quot;" +
+          "groupBy&quot;;\n      2 [label=&quot;MapPartitionsRDD [2]&quot;];\n    }\n    " +
+          "subgraph cluster1 {\n      label=&quot;map&quot;;\n      1 [label=&quot;" +
+          "MapPartitionsRDD [1]&quot;];\n    }\n    subgraph cluster0 {\n      label=&quot;" +
+          "parallelize&quot;;\n      0 [label=&quot;ParallelCollectionRDD [0]&quot;];\n    " +
+          "}\n  }\n  1-&gt;2;\n  0-&gt;1;\n}")
+      }
+    }
+  }
+
   def goToUi(sc: SparkContext, path: String): Unit = {
     goToUi(sc.ui.get, path)
   }
