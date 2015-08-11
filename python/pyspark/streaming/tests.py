@@ -74,7 +74,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
         # Clean up in the JVM just in case there has been some issues in Python API
         jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
         if jStreamingContextOption.nonEmpty():
-            jStreamingContextOption.get().stop(false)
+            jStreamingContextOption.get().stop(False)
 
     def wait_for(self, result, n):
         start_time = time.time()
