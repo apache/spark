@@ -263,6 +263,16 @@ class FeatureTests(PySparkTestCase):
         transformedDF = ngram0.transform(dataset)
         self.assertEquals(transformedDF.head().output, ["a b c d", "b c d e"])
 
+    def test_stopwordsremover(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([
+            ([["a", "b", "c", "d", "e"]])], ["input"])
+        stopwordremover = StopWordsRemover()
+        stopwords = ["a", "b", "c", "d"]
+        stopwordremover.setStopWords(stopwords)
+        self.assertEquals(stopwordremover.getStopWords(), stopwords)
+        transformedDF = stopwordremover.transform(dataset)
+        self.assertEquals(transformedDF.head().output, ["e", "e"])
 
 if __name__ == "__main__":
     unittest.main()

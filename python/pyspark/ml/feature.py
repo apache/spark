@@ -29,7 +29,8 @@ from pyspark.mllib.linalg import _convert_to_vector
 __all__ = ['Binarizer', 'HashingTF', 'IDF', 'IDFModel', 'NGram', 'Normalizer', 'OneHotEncoder',
            'PolynomialExpansion', 'RegexTokenizer', 'StandardScaler', 'StandardScalerModel',
            'StringIndexer', 'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer',
-           'Word2Vec', 'Word2VecModel', 'PCA', 'PCAModel', 'RFormula', 'RFormulaModel']
+           'Word2Vec', 'Word2VecModel', 'PCA', 'PCAModel', 'RFormula', 'RFormulaModel',
+           'StopWordsRemover']
 
 
 @inherit_doc
@@ -760,6 +761,43 @@ class StringIndexerModel(JavaModel):
     Model fitted by StringIndexer.
     """
 
+
+class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
+    """
+    .. note:: Experimental
+
+    A feature transformer that filters out stop words from input.
+    Note: null values from input array are preserved unless adding null to stopWords explicitly.
+    """
+    def __init__(self, inputCol=None, outputCol=None, stopWords=[]):
+        """
+        Initialize this instace of the StopWordsRemover.
+        """
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover")
+        self.uid = self._java_obj.uid
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, inputCol=None, outputCol=None, stopWords=[]):
+        """
+        setParams(self, inputCol="input", outputCol="output")
+        Sets params for this StopWordRemover.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setStopWords(self, value):
+        """
+        Specify the stopwords to be filtered.
+        """
+        return self.setStopWords(value)
+
+    def getStopWords(self):
+        """
+        Get the stopwords.
+        """
+        return self._java_obj.getStopWords()
 
 @inherit_doc
 @ignore_unicode_prefix
