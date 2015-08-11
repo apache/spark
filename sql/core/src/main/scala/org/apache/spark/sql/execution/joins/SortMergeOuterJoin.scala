@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, RowIterator, SparkPlan}
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 
 /**
  * :: DeveloperApi ::
@@ -39,6 +40,11 @@ case class SortMergeOuterJoin(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode {
+
+  override private[sql] lazy val metrics = Map(
+    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
+    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = {
     joinType match {
@@ -108,6 +114,10 @@ case class SortMergeOuterJoin(
   }
 
   override def doExecute(): RDD[InternalRow] = {
+    val numLeftRows = longMetric("numLeftRows")
+    val numRightRows = longMetric("numRightRows")
+    val numOutputRows = longMetric("numOutputRows")
+
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       // An ordering that can be used to compare keys from both sides.
       val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
@@ -133,10 +143,13 @@ case class SortMergeOuterJoin(
             bufferedKeyGenerator = createRightKeyGenerator(),
             keyOrdering,
             streamedIter = RowIterator.fromScala(leftIter),
-            bufferedIter = RowIterator.fromScala(rightIter)
+            numLeftRows,
+            bufferedIter = RowIterator.fromScala(rightIter),
+            numRightRows
           )
           val rightNullRow = new GenericInternalRow(right.output.length)
-          new LeftOuterIterator(smjScanner, rightNullRow, boundCondition, resultProj).toScala
+          new LeftOuterIterator(
+            smjScanner, rightNullRow, boundCondition, resultProj, numOutputRows).toScala
 
         case RightOuter =>
           val smjScanner = new SortMergeJoinScanner(
@@ -144,10 +157,13 @@ case class SortMergeOuterJoin(
             bufferedKeyGenerator = createLeftKeyGenerator(),
             keyOrdering,
             streamedIter = RowIterator.fromScala(rightIter),
-            bufferedIter = RowIterator.fromScala(leftIter)
+            numRightRows,
+            bufferedIter = RowIterator.fromScala(leftIter),
+            numLeftRows
           )
           val leftNullRow = new GenericInternalRow(left.output.length)
-          new RightOuterIterator(smjScanner, leftNullRow, boundCondition, resultProj).toScala
+          new RightOuterIterator(
+            smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows).toScala
 
         case x =>
           throw new IllegalArgumentException(
@@ -162,7 +178,8 @@ private class LeftOuterIterator(
     smjScanner: SortMergeJoinScanner,
     rightNullRow: InternalRow,
     boundCondition: InternalRow => Boolean,
-    resultProj: InternalRow => InternalRow
+    resultProj: InternalRow => InternalRow,
+    numRows: LongSQLMetric
   ) extends RowIterator {
   private[this] val joinedRow: JoinedRow = new JoinedRow()
   private[this] var rightIdx: Int = 0
@@ -198,7 +215,9 @@ private class LeftOuterIterator(
   }
 
   override def advanceNext(): Boolean = {
-    advanceRightUntilBoundConditionSatisfied() || advanceLeft()
+    val r = advanceRightUntilBoundConditionSatisfied() || advanceLeft()
+    if (r) numRows += 1
+    r
   }
 
   override def getRow: InternalRow = resultProj(joinedRow)
@@ -208,7 +227,8 @@ private class RightOuterIterator(
     smjScanner: SortMergeJoinScanner,
     leftNullRow: InternalRow,
     boundCondition: InternalRow => Boolean,
-    resultProj: InternalRow => InternalRow
+    resultProj: InternalRow => InternalRow,
+    numRows: LongSQLMetric
   ) extends RowIterator {
   private[this] val joinedRow: JoinedRow = new JoinedRow()
   private[this] var leftIdx: Int = 0
@@ -244,7 +264,9 @@ private class RightOuterIterator(
   }
 
   override def advanceNext(): Boolean = {
-    advanceLeftUntilBoundConditionSatisfied() || advanceRight()
+    val r = advanceLeftUntilBoundConditionSatisfied() || advanceRight()
+    if (r) numRows += 1
+    r
   }
 
   override def getRow: InternalRow = resultProj(joinedRow)
