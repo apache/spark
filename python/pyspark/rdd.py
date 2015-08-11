@@ -711,6 +711,7 @@ class RDD(object):
         """
         if env is None:
             env = dict()
+
         def func(iterator):
             pipe = Popen(
                 shlex.split(command), env=env, stdin=PIPE, stdout=PIPE)

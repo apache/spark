@@ -60,14 +60,16 @@ class Params(Identifiable):
 
     __metaclass__ = ABCMeta
 
-    #: internal param map for user-supplied values param map
-    _paramMap = {}
+    def __init__(self):
+        super(Params, self).__init__()
+        #: internal param map for user-supplied values param map
+        self._paramMap = {}
 
-    #: internal param map for default values
-    _defaultParamMap = {}
+        #: internal param map for default values
+        self._defaultParamMap = {}
 
-    #: value returned by :py:func:`params`
-    _params = None
+        #: value returned by :py:func:`params`
+        self._params = None
 
     @property
     def params(self):
