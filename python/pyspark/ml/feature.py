@@ -950,6 +950,92 @@ class VectorIndexerModel(JavaModel):
 
 
 @inherit_doc
+class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
+    """
+    .. note:: Experimental
+
+    This class takes a feature vector and outputs a new feature vector with a subarray
+    of the original features.
+
+    The subset of features can be specified with either indices (`setIndices()`)
+    or names (`setNames()`).  At least one feature must be selected. Duplicate features
+    are not allowed, so there can be no overlap between selected indices and names.
+
+    The output vector will order features with the selected indices first (in the order given),
+    followed by the selected names (in the order given).
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame([
+    ...     (Vectors.dense([-2.0, 2.3, 0.0, 0.0, 1.0]),),
+    ...     (Vectors.dense([0.0, 0.0, 0.0, 0.0, 0.0]),),
+    ...     (Vectors.dense([0.6, -1.1, -3.0, 4.5, 3.3]),)], ["features"])
+    >>> vs = VectorSlicer(inputCol="features", outputCol="expected", indices=[1, 4])
+    >>> vs.transform(df).head().expected
+    DenseVector([2.3, 1.0])
+    """
+
+    # a placeholder to make it appear in the generated doc
+    indices = Param(Params._dummy(), "indices", "An array of indices to select features from " +
+                    "a vector column. There can be no overlap with `names`.")
+    names = Param(Params._dummy(), "names", "An array of feature names to select features from " +
+                  "a vector column. These names must be specified by ML " +
+                  "`org.apache.spark.ml.attribute.Attribute`s. There can be no overlap with " +
+                  "`indices`.")
+
+    @keyword_only
+    def __init__(self, inputCol=None, outputCol=None, indices=[], names=[]):
+        """
+        __init__(self, inputCol=None, outputCol=None, indices=[], names=[])
+        """
+        super(VectorSlicer, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorSlicer", self.uid)
+        self.indices = Param(self, "indices", "An array of indices to select features from " +
+                             "a vector column. There can be no overlap with `names`.")
+        self.names = Param(self, "names", "An array of feature names to select features from " +
+                           "a vector column. These names must be specified by ML " +
+                           "`org.apache.spark.ml.attribute.Attribute`s. There can be no overlap " +
+                           "with `indices`.")
+        self._setDefault(indices=[], names=[])
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, inputCol=None, outputCol=None, indices=[], names=[]):
+        """
+        setParams(self, inputCol=None, outputCol=None, indices=[], names=[]):
+        Sets params for this VectorSlicer.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setIndices(self, value):
+        """
+        Sets the value of :py:attr:`indices`.
+        """
+        self._paramMap[self.indices] = value
+        return self
+
+    def getIndices(self):
+        """
+        Gets the value of indices or its default value.
+        """
+        return self.getOrDefault(self.indices)
+
+    def setNames(self, value):
+        """
+        Sets the value of :py:attr:`names`.
+        """
+        self._paramMap[self.names] = value
+        return self
+
+    def getNames(self):
+        """
+        Gets the value of names or its default value.
+        """
+        return self.getOrDefault(self.names)
+
+
+@inherit_doc
 @ignore_unicode_prefix
 class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol):
     """
