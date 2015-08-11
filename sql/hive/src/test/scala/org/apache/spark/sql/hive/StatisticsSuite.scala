@@ -22,14 +22,15 @@ import scala.reflect.ClassTag
 import org.apache.spark.sql.{Row, SQLConf, QueryTest}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.HiveTestUtils
 
-class StatisticsSuite extends QueryTest with SharedHiveContext {
-  private val ctx = hiveContext
-  import ctx.sql
+class StatisticsSuite extends QueryTest with HiveTestUtils {
 
-  ctx.reset()
-  ctx.cacheTables = false
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    ctx.reset()
+    ctx.cacheTables = false
+  }
 
   test("parse analyze commands") {
     def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
@@ -78,32 +79,32 @@ class StatisticsSuite extends QueryTest with SharedHiveContext {
       ctx.catalog.lookupRelation(Seq(tableName)).statistics.sizeInBytes
 
     // Non-partitioned table
-    sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
-    sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
-    sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
+    ctx.sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
+    ctx.sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
+    ctx.sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
 
-    sql("ANALYZE TABLE analyzeTable COMPUTE STATISTICS noscan")
+    ctx.sql("ANALYZE TABLE analyzeTable COMPUTE STATISTICS noscan")
 
     assert(queryTotalSize("analyzeTable") === BigInt(11624))
 
-    sql("DROP TABLE analyzeTable").collect()
+    ctx.sql("DROP TABLE analyzeTable").collect()
 
     // Partitioned table
-    sql(
+    ctx.sql(
       """
         |CREATE TABLE analyzeTable_part (key STRING, value STRING) PARTITIONED BY (ds STRING)
       """.stripMargin).collect()
-    sql(
+    ctx.sql(
       """
         |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-01')
         |SELECT * FROM src
       """.stripMargin).collect()
-    sql(
+    ctx.sql(
       """
         |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-02')
         |SELECT * FROM src
       """.stripMargin).collect()
-    sql(
+    ctx.sql(
       """
         |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-03')
         |SELECT * FROM src
@@ -111,14 +112,14 @@ class StatisticsSuite extends QueryTest with SharedHiveContext {
 
     assert(queryTotalSize("analyzeTable_part") === ctx.conf.defaultSizeInBytes)
 
-    sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
+    ctx.sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
 
     assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
 
-    sql("DROP TABLE analyzeTable_part").collect()
+    ctx.sql("DROP TABLE analyzeTable_part").collect()
 
     // Try to analyze a temp table
-    sql("""SELECT * FROM src""").registerTempTable("tempTable")
+    ctx.sql("""SELECT * FROM src""").registerTempTable("tempTable")
     intercept[UnsupportedOperationException] {
       ctx.analyze("tempTable")
     }
@@ -126,7 +127,7 @@ class StatisticsSuite extends QueryTest with SharedHiveContext {
   }
 
   test("estimates the size of a test MetastoreRelation") {
-    val df = sql("""SELECT * FROM src""")
+    val df = ctx.sql("""SELECT * FROM src""")
     val sizes = df.queryExecution.analyzed.collect { case mr: MetastoreRelation =>
       mr.statistics.sizeInBytes
     }
@@ -144,7 +145,7 @@ class StatisticsSuite extends QueryTest with SharedHiveContext {
         ct: ClassTag[_]): Unit = {
       before()
 
-      var df = sql(query)
+      var df = ctx.sql(query)
 
       // Assert src has a size smaller than the threshold.
       val sizes = df.queryExecution.analyzed.collect {
@@ -165,8 +166,8 @@ class StatisticsSuite extends QueryTest with SharedHiveContext {
       ctx.conf.settings.synchronized {
         val tmp = ctx.conf.autoBroadcastJoinThreshold
 
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1""")
-        df = sql(query)
+        ctx.sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1""")
+        df = ctx.sql(query)
         bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoin => j }
         assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
 
@@ -174,7 +175,7 @@ class StatisticsSuite extends QueryTest with SharedHiveContext {
         assert(shj.size === 1,
           "ShuffledHashJoin should be planned when BroadcastHashJoin is turned off")
 
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp""")
+        ctx.sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp""")
       }
 
       after()
@@ -198,7 +199,7 @@ class StatisticsSuite extends QueryTest with SharedHiveContext {
         |left semi JOIN src b ON a.key=86 and a.key = b.key""".stripMargin
     val answer = Row(86, "val_86")
 
-    var df = sql(leftSemiJoinQuery)
+    var df = ctx.sql(leftSemiJoinQuery)
 
     // Assert src has a size smaller than the threshold.
     val sizes = df.queryExecution.analyzed.collect {
@@ -223,8 +224,8 @@ class StatisticsSuite extends QueryTest with SharedHiveContext {
     ctx.conf.settings.synchronized {
       val tmp = ctx.conf.autoBroadcastJoinThreshold
 
-      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1")
-      df = sql(leftSemiJoinQuery)
+      ctx.sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1")
+      df = ctx.sql(leftSemiJoinQuery)
       bhj = df.queryExecution.sparkPlan.collect {
         case j: BroadcastLeftSemiJoinHash => j
       }
@@ -236,7 +237,7 @@ class StatisticsSuite extends QueryTest with SharedHiveContext {
       assert(shj.size === 1,
         "LeftSemiJoinHash should be planned when BroadcastHashJoin is turned off")
 
-      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp")
+      ctx.sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp")
     }
 
   }

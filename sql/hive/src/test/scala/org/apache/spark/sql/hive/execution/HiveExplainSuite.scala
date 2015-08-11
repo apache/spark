@@ -18,23 +18,21 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.HiveTestUtils
 
 /**
  * A set of tests that validates support for Hive Explain command.
  */
-class HiveExplainSuite extends QueryTest with SharedHiveContext {
-  private val ctx = hiveContext
-  import ctx._
+class HiveExplainSuite extends QueryTest with HiveTestUtils {
 
   test("explain extended command") {
-    checkExistence(sql(" explain   select * from src where key=123 "), true,
+    checkExistence(ctx.sql(" explain   select * from src where key=123 "), true,
                    "== Physical Plan ==")
-    checkExistence(sql(" explain   select * from src where key=123 "), false,
+    checkExistence(ctx.sql(" explain   select * from src where key=123 "), false,
                    "== Parsed Logical Plan ==",
                    "== Analyzed Logical Plan ==",
                    "== Optimized Logical Plan ==")
-    checkExistence(sql(" explain   extended select * from src where key=123 "), true,
+    checkExistence(ctx.sql(" explain   extended select * from src where key=123 "), true,
                    "== Parsed Logical Plan ==",
                    "== Analyzed Logical Plan ==",
                    "== Optimized Logical Plan ==",
@@ -43,13 +41,13 @@ class HiveExplainSuite extends QueryTest with SharedHiveContext {
   }
 
   test("explain create table command") {
-    checkExistence(sql("explain create table temp__b as select * from src limit 2"), true,
+    checkExistence(ctx.sql("explain create table temp__b as select * from src limit 2"), true,
                    "== Physical Plan ==",
                    "InsertIntoHiveTable",
                    "Limit",
                    "src")
 
-    checkExistence(sql("explain extended create table temp__b as select * from src limit 2"), true,
+    checkExistence(ctx.sql("explain extended create table temp__b as select * from src limit 2"), true,
       "== Parsed Logical Plan ==",
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
@@ -59,7 +57,7 @@ class HiveExplainSuite extends QueryTest with SharedHiveContext {
       "Limit",
       "src")
 
-    checkExistence(sql(
+    checkExistence(ctx.sql(
       """
         | EXPLAIN EXTENDED CREATE TABLE temp__b
         | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"

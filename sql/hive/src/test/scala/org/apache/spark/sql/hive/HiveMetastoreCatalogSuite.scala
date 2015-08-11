@@ -19,12 +19,12 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.{Logging, SparkFunSuite}
 
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.HiveTestUtils
 import org.apache.spark.sql.test.ExamplePointUDT
 import org.apache.spark.sql.types.StructType
 
-class HiveMetastoreCatalogSuite extends SparkFunSuite with SharedHiveContext with Logging {
-  private val ctx = hiveContext
+class HiveMetastoreCatalogSuite extends SparkFunSuite with HiveTestUtils with Logging {
+  import testImplicits._
 
   test("struct field should accept underscore in sub-column name") {
     val metastr = "struct<a: int, b_1: string, c: string>"
@@ -39,7 +39,6 @@ class HiveMetastoreCatalogSuite extends SparkFunSuite with SharedHiveContext wit
   }
 
   test("duplicated metastore relations") {
-    import ctx.implicits._
     val df = ctx.sql("SELECT * FROM src")
     logInfo(df.queryExecution.toString)
     df.as('a).join(df.as('b), $"a.key" === $"b.key")

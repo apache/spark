@@ -41,9 +41,7 @@ class MetastoreDataSourcesSuite
   with HiveTestUtils
   with Logging {
 
-  private val ctx = hiveContext
-  import ctx.implicits._
-  import ctx._
+  import testImplicits._
 
   var jsonFilePath: String = _
 
@@ -53,7 +51,7 @@ class MetastoreDataSourcesSuite
 
   test("persistent JSON table") {
     withTable("jsonTable") {
-      sql(
+      ctx.sql(
         s"""CREATE TABLE jsonTable
            |USING org.apache.spark.sql.json.DefaultSource
            |OPTIONS (
@@ -62,14 +60,14 @@ class MetastoreDataSourcesSuite
          """.stripMargin)
 
       checkAnswer(
-        sql("SELECT * FROM jsonTable"),
-        read.json(jsonFilePath).collect().toSeq)
+        ctx.sql("SELECT * FROM jsonTable"),
+        ctx.read.json(jsonFilePath).collect().toSeq)
     }
   }
 
   test("persistent JSON table with a user specified schema") {
     withTable("jsonTable") {
-      sql(
+      ctx.sql(
         s"""CREATE TABLE jsonTable (
            |a string,
            |b String,
@@ -82,10 +80,10 @@ class MetastoreDataSourcesSuite
          """.stripMargin)
 
       withTempTable("expectedJsonTable") {
-        read.json(jsonFilePath).registerTempTable("expectedJsonTable")
+        ctx.read.json(jsonFilePath).registerTempTable("expectedJsonTable")
         checkAnswer(
-          sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM jsonTable"),
-          sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM expectedJsonTable"))
+          ctx.sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM jsonTable"),
+          ctx.sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM expectedJsonTable"))
       }
     }
   }
@@ -94,7 +92,7 @@ class MetastoreDataSourcesSuite
     withTable("jsonTable") {
       // This works because JSON objects are self-describing and JSONRelation can get needed
       // field values based on field names.
-      sql(
+      ctx.sql(
         s"""CREATE TABLE jsonTable (`<d>` Struct<`=`:array<struct<Dd2: boolean>>>, b String)
            |USING org.apache.spark.sql.json.DefaultSource
            |OPTIONS (
@@ -109,20 +107,20 @@ class MetastoreDataSourcesSuite
         StructField("<d>", innerStruct, true),
         StructField("b", StringType, true)))
 
-      assert(expectedSchema === table("jsonTable").schema)
+      assert(expectedSchema === ctx.table("jsonTable").schema)
 
       withTempTable("expectedJsonTable") {
-        read.json(jsonFilePath).registerTempTable("expectedJsonTable")
+        ctx.read.json(jsonFilePath).registerTempTable("expectedJsonTable")
         checkAnswer(
-          sql("SELECT b, `<d>`.`=` FROM jsonTable"),
-          sql("SELECT b, `<d>`.`=` FROM expectedJsonTable"))
+          ctx.sql("SELECT b, `<d>`.`=` FROM jsonTable"),
+          ctx.sql("SELECT b, `<d>`.`=` FROM expectedJsonTable"))
       }
     }
   }
 
   test("resolve shortened provider names") {
     withTable("jsonTable") {
-      sql(
+      ctx.sql(
         s"""
            |CREATE TABLE jsonTable
            |USING org.apache.spark.sql.json
@@ -132,14 +130,14 @@ class MetastoreDataSourcesSuite
          """.stripMargin)
 
       checkAnswer(
-        sql("SELECT * FROM jsonTable"),
-        read.json(jsonFilePath).collect().toSeq)
+        ctx.sql("SELECT * FROM jsonTable"),
+        ctx.read.json(jsonFilePath).collect().toSeq)
     }
   }
 
   test("drop table") {
     withTable("jsonTable") {
-      sql(
+      ctx.sql(
         s"""
            |CREATE TABLE jsonTable
            |USING org.apache.spark.sql.json
@@ -149,13 +147,13 @@ class MetastoreDataSourcesSuite
          """.stripMargin)
 
       checkAnswer(
-        sql("SELECT * FROM jsonTable"),
-        read.json(jsonFilePath))
+        ctx.sql("SELECT * FROM jsonTable"),
+        ctx.read.json(jsonFilePath))
 
-      sql("DROP TABLE jsonTable")
+      ctx.sql("DROP TABLE jsonTable")
 
       intercept[Exception] {
-        sql("SELECT * FROM jsonTable").collect()
+        ctx.sql("SELECT * FROM jsonTable").collect()
       }
 
       assert(
@@ -170,7 +168,7 @@ class MetastoreDataSourcesSuite
       withTable("jsonTable") {
         (("a", "b") :: Nil).toDF().toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
-        sql(
+        ctx.sql(
           s"""CREATE TABLE jsonTable
              |USING org.apache.spark.sql.json
              |OPTIONS (
@@ -179,7 +177,7 @@ class MetastoreDataSourcesSuite
            """.stripMargin)
 
         checkAnswer(
-          sql("SELECT * FROM jsonTable"),
+          ctx.sql("SELECT * FROM jsonTable"),
           Row("a", "b"))
 
         Utils.deleteRecursively(tempDir)
@@ -188,14 +186,14 @@ class MetastoreDataSourcesSuite
         // Schema is cached so the new column does not show. The updated values in existing columns
         // will show.
         checkAnswer(
-          sql("SELECT * FROM jsonTable"),
+          ctx.sql("SELECT * FROM jsonTable"),
           Row("a1", "b1"))
 
-        sql("REFRESH TABLE jsonTable")
+        ctx.sql("REFRESH TABLE jsonTable")
 
         // Check that the refresh worked
         checkAnswer(
-          sql("SELECT * FROM jsonTable"),
+          ctx.sql("SELECT * FROM jsonTable"),
           Row("a1", "b1", "c1"))
       }
     }
@@ -206,7 +204,7 @@ class MetastoreDataSourcesSuite
       (("a", "b") :: Nil).toDF().toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
       withTable("jsonTable") {
-        sql(
+        ctx.sql(
           s"""CREATE TABLE jsonTable
              |USING org.apache.spark.sql.json
              |OPTIONS (
@@ -215,15 +213,15 @@ class MetastoreDataSourcesSuite
            """.stripMargin)
 
         checkAnswer(
-          sql("SELECT * FROM jsonTable"),
+          ctx.sql("SELECT * FROM jsonTable"),
           Row("a", "b"))
 
         Utils.deleteRecursively(tempDir)
         (("a", "b", "c") :: Nil).toDF().toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
-        sql("DROP TABLE jsonTable")
+        ctx.sql("DROP TABLE jsonTable")
 
-        sql(
+        ctx.sql(
           s"""CREATE TABLE jsonTable
              |USING org.apache.spark.sql.json
              |OPTIONS (
@@ -233,7 +231,7 @@ class MetastoreDataSourcesSuite
 
         // New table should reflect new schema.
         checkAnswer(
-          sql("SELECT * FROM jsonTable"),
+          ctx.sql("SELECT * FROM jsonTable"),
           Row("a", "b", "c"))
       }
     }
@@ -241,7 +239,7 @@ class MetastoreDataSourcesSuite
 
   test("invalidate cache and reload") {
     withTable("jsonTable") {
-      sql(
+      ctx.sql(
         s"""CREATE TABLE jsonTable (`c_!@(3)` int)
            |USING org.apache.spark.sql.json.DefaultSource
            |OPTIONS (
@@ -250,23 +248,23 @@ class MetastoreDataSourcesSuite
          """.stripMargin)
 
       withTempTable("expectedJsonTable") {
-        read.json(jsonFilePath).registerTempTable("expectedJsonTable")
+        ctx.read.json(jsonFilePath).registerTempTable("expectedJsonTable")
 
         checkAnswer(
-          sql("SELECT * FROM jsonTable"),
-          sql("SELECT `c_!@(3)` FROM expectedJsonTable").collect().toSeq)
+          ctx.sql("SELECT * FROM jsonTable"),
+          ctx.sql("SELECT `c_!@(3)` FROM expectedJsonTable").collect().toSeq)
 
         // Discard the cached relation.
-        invalidateTable("jsonTable")
+        ctx.invalidateTable("jsonTable")
 
         checkAnswer(
-          sql("SELECT * FROM jsonTable"),
-          sql("SELECT `c_!@(3)` FROM expectedJsonTable").collect().toSeq)
+          ctx.sql("SELECT * FROM jsonTable"),
+          ctx.sql("SELECT `c_!@(3)` FROM expectedJsonTable").collect().toSeq)
 
-        invalidateTable("jsonTable")
+        ctx.invalidateTable("jsonTable")
         val expectedSchema = StructType(StructField("c_!@(3)", IntegerType, true) :: Nil)
 
-        assert(expectedSchema === table("jsonTable").schema)
+        assert(expectedSchema === ctx.table("jsonTable").schema)
       }
     }
   }
@@ -274,7 +272,7 @@ class MetastoreDataSourcesSuite
   test("CTAS") {
     withTempPath { tempPath =>
       withTable("jsonTable", "ctasJsonTable") {
-        sql(
+        ctx.sql(
           s"""CREATE TABLE jsonTable
              |USING org.apache.spark.sql.json.DefaultSource
              |OPTIONS (
@@ -282,7 +280,7 @@ class MetastoreDataSourcesSuite
              |)
            """.stripMargin)
 
-        sql(
+        ctx.sql(
           s"""CREATE TABLE ctasJsonTable
              |USING org.apache.spark.sql.json.DefaultSource
              |OPTIONS (
@@ -291,11 +289,11 @@ class MetastoreDataSourcesSuite
              |SELECT * FROM jsonTable
            """.stripMargin)
 
-        assert(table("ctasJsonTable").schema === table("jsonTable").schema)
+        assert(ctx.table("ctasJsonTable").schema === ctx.table("jsonTable").schema)
 
         checkAnswer(
-          sql("SELECT * FROM ctasJsonTable"),
-          sql("SELECT * FROM jsonTable").collect())
+          ctx.sql("SELECT * FROM ctasJsonTable"),
+          ctx.sql("SELECT * FROM jsonTable").collect())
       }
     }
   }
@@ -305,7 +303,7 @@ class MetastoreDataSourcesSuite
       val tempPath = path.getCanonicalPath
 
       withTable("jsonTable", "ctasJsonTable") {
-        sql(
+        ctx.sql(
           s"""CREATE TABLE jsonTable
              |USING org.apache.spark.sql.json.DefaultSource
              |OPTIONS (
@@ -313,7 +311,7 @@ class MetastoreDataSourcesSuite
              |)
            """.stripMargin)
 
-        sql(
+        ctx.sql(
           s"""CREATE TABLE ctasJsonTable
              |USING org.apache.spark.sql.json.DefaultSource
              |OPTIONS (
@@ -324,7 +322,7 @@ class MetastoreDataSourcesSuite
 
         // Create the table again should trigger a AnalysisException.
         val message = intercept[AnalysisException] {
-          sql(
+          ctx.sql(
             s"""CREATE TABLE ctasJsonTable
                |USING org.apache.spark.sql.json.DefaultSource
                |OPTIONS (
@@ -341,7 +339,7 @@ class MetastoreDataSourcesSuite
         // The following statement should be fine if it has IF NOT EXISTS.
         // It tries to create a table ctasJsonTable with a new schema.
         // The actual table's schema and data should not be changed.
-        sql(
+        ctx.sql(
           s"""CREATE TABLE IF NOT EXISTS ctasJsonTable
              |USING org.apache.spark.sql.json.DefaultSource
              |OPTIONS (
@@ -351,21 +349,21 @@ class MetastoreDataSourcesSuite
            """.stripMargin)
 
         // Discard the cached relation.
-        invalidateTable("ctasJsonTable")
+        ctx.invalidateTable("ctasJsonTable")
 
         // Schema should not be changed.
-        assert(table("ctasJsonTable").schema === table("jsonTable").schema)
+        assert(ctx.table("ctasJsonTable").schema === ctx.table("jsonTable").schema)
         // Table data should not be changed.
         checkAnswer(
-          sql("SELECT * FROM ctasJsonTable"),
-          sql("SELECT * FROM jsonTable").collect())
+          ctx.sql("SELECT * FROM ctasJsonTable"),
+          ctx.sql("SELECT * FROM jsonTable").collect())
       }
     }
   }
 
   test("CTAS a managed table") {
     withTable("jsonTable", "ctasJsonTable", "loadedTable") {
-      sql(
+      ctx.sql(
         s"""CREATE TABLE jsonTable
            |USING org.apache.spark.sql.json.DefaultSource
            |OPTIONS (
@@ -373,13 +371,13 @@ class MetastoreDataSourcesSuite
            |)
          """.stripMargin)
 
-      val expectedPath = catalog.hiveDefaultTableFilePath("ctasJsonTable")
+      val expectedPath = ctx.catalog.hiveDefaultTableFilePath("ctasJsonTable")
       val filesystemPath = new Path(expectedPath)
-      val fs = filesystemPath.getFileSystem(sparkContext.hadoopConfiguration)
+      val fs = filesystemPath.getFileSystem(ctx.sparkContext.hadoopConfiguration)
       if (fs.exists(filesystemPath)) fs.delete(filesystemPath, true)
 
       // It is a managed table when we do not specify the location.
-      sql(
+      ctx.sql(
         s"""CREATE TABLE ctasJsonTable
            |USING org.apache.spark.sql.json.DefaultSource
            |AS
@@ -388,7 +386,7 @@ class MetastoreDataSourcesSuite
 
       assert(fs.exists(filesystemPath), s"$expectedPath should exist after we create the table.")
 
-      sql(
+      ctx.sql(
         s"""CREATE TABLE loadedTable
            |USING org.apache.spark.sql.json.DefaultSource
            |OPTIONS (
@@ -396,20 +394,20 @@ class MetastoreDataSourcesSuite
            |)
          """.stripMargin)
 
-      assert(table("ctasJsonTable").schema === table("loadedTable").schema)
+      assert(ctx.table("ctasJsonTable").schema === ctx.table("loadedTable").schema)
 
       checkAnswer(
-        sql("SELECT * FROM ctasJsonTable"),
-        sql("SELECT * FROM loadedTable"))
+        ctx.sql("SELECT * FROM ctasJsonTable"),
+        ctx.sql("SELECT * FROM loadedTable"))
 
-      sql("DROP TABLE ctasJsonTable")
+      ctx.sql("DROP TABLE ctasJsonTable")
       assert(!fs.exists(filesystemPath), s"$expectedPath should not exist after we drop the table.")
     }
   }
 
   test("SPARK-5286 Fail to drop an invalid table when using the data source API") {
     withTable("jsonTable") {
-      sql(
+      ctx.sql(
         s"""CREATE TABLE jsonTable
            |USING org.apache.spark.sql.json.DefaultSource
            |OPTIONS (
@@ -417,7 +415,7 @@ class MetastoreDataSourcesSuite
            |)
          """.stripMargin)
 
-      sql("DROP TABLE jsonTable").collect().foreach(i => logInfo(i.toString))
+      ctx.sql("DROP TABLE jsonTable").collect().foreach(i => logInfo(i.toString))
     }
   }
 
@@ -432,21 +430,21 @@ class MetastoreDataSourcesSuite
         .saveAsTable("savedJsonTable")
 
       checkAnswer(
-        sql("SELECT * FROM savedJsonTable where savedJsonTable.a < 5"),
+        ctx.sql("SELECT * FROM savedJsonTable where savedJsonTable.a < 5"),
         (1 to 4).map(i => Row(i, s"str$i")))
 
       checkAnswer(
-        sql("SELECT * FROM savedJsonTable tmp where tmp.a > 5"),
+        ctx.sql("SELECT * FROM savedJsonTable tmp where tmp.a > 5"),
         (6 to 10).map(i => Row(i, s"str$i")))
 
-      invalidateTable("savedJsonTable")
+      ctx.invalidateTable("savedJsonTable")
 
       checkAnswer(
-        sql("SELECT * FROM savedJsonTable where savedJsonTable.a < 5"),
+        ctx.sql("SELECT * FROM savedJsonTable where savedJsonTable.a < 5"),
         (1 to 4).map(i => Row(i, s"str$i")))
 
       checkAnswer(
-        sql("SELECT * FROM savedJsonTable tmp where tmp.a > 5"),
+        ctx.sql("SELECT * FROM savedJsonTable tmp where tmp.a > 5"),
         (6 to 10).map(i => Row(i, s"str$i")))
     }
   }
@@ -462,7 +460,7 @@ class MetastoreDataSourcesSuite
           // Save the df as a managed table (by not specifying the path).
           df.write.saveAsTable("savedJsonTable")
 
-          checkAnswer(sql("SELECT * FROM savedJsonTable"), df)
+          checkAnswer(ctx.sql("SELECT * FROM savedJsonTable"), df)
 
           // Right now, we cannot append to an existing JSON table.
           intercept[RuntimeException] {
@@ -471,17 +469,17 @@ class MetastoreDataSourcesSuite
 
           // We can overwrite it.
           df.write.mode(SaveMode.Overwrite).saveAsTable("savedJsonTable")
-          checkAnswer(sql("SELECT * FROM savedJsonTable"), df)
+          checkAnswer(ctx.sql("SELECT * FROM savedJsonTable"), df)
 
           // When the save mode is Ignore, we will do nothing when the table already exists.
           df.select("b").write.mode(SaveMode.Ignore).saveAsTable("savedJsonTable")
-          assert(df.schema === table("savedJsonTable").schema)
-          checkAnswer(sql("SELECT * FROM savedJsonTable"), df)
+          assert(df.schema === ctx.table("savedJsonTable").schema)
+          checkAnswer(ctx.sql("SELECT * FROM savedJsonTable"), df)
 
           // Drop table will also delete the data.
-          sql("DROP TABLE savedJsonTable")
+          ctx.sql("DROP TABLE savedJsonTable")
           intercept[InvalidInputException] {
-            read.json(catalog.hiveDefaultTableFilePath("savedJsonTable"))
+            ctx.read.json(ctx.catalog.hiveDefaultTableFilePath("savedJsonTable"))
           }
         }
 
@@ -493,12 +491,12 @@ class MetastoreDataSourcesSuite
             .option("path", tempPath.toString)
             .saveAsTable("savedJsonTable")
 
-          checkAnswer(sql("SELECT * FROM savedJsonTable"), df)
+          checkAnswer(ctx.sql("SELECT * FROM savedJsonTable"), df)
         }
 
         // Data should not be deleted after we drop the table.
-        sql("DROP TABLE savedJsonTable")
-        checkAnswer(read.json(tempPath.toString), df)
+        ctx.sql("DROP TABLE savedJsonTable")
+        checkAnswer(ctx.read.json(tempPath.toString), df)
       }
     }
   }
@@ -506,7 +504,7 @@ class MetastoreDataSourcesSuite
   test("create external table") {
     withTempPath { tempPath =>
       withTable("savedJsonTable", "createdJsonTable") {
-        val df = read.json(sparkContext.parallelize((1 to 10).map { i =>
+        val df = ctx.read.json(ctx.sparkContext.parallelize((1 to 10).map { i =>
           s"""{ "a": $i, "b": "str$i" }"""
         }))
 
@@ -519,39 +517,39 @@ class MetastoreDataSourcesSuite
         }
 
         withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "json") {
-          createExternalTable("createdJsonTable", tempPath.toString)
-          assert(table("createdJsonTable").schema === df.schema)
-          checkAnswer(sql("SELECT * FROM createdJsonTable"), df)
+          ctx.createExternalTable("createdJsonTable", tempPath.toString)
+          assert(ctx.table("createdJsonTable").schema === df.schema)
+          checkAnswer(ctx.sql("SELECT * FROM createdJsonTable"), df)
 
           assert(
             intercept[AnalysisException] {
-              createExternalTable("createdJsonTable", jsonFilePath.toString)
+              ctx.createExternalTable("createdJsonTable", jsonFilePath.toString)
             }.getMessage.contains("Table createdJsonTable already exists."),
             "We should complain that createdJsonTable already exists")
         }
 
         // Data should not be deleted.
-        sql("DROP TABLE createdJsonTable")
-        checkAnswer(read.json(tempPath.toString), df)
+        ctx.sql("DROP TABLE createdJsonTable")
+        checkAnswer(ctx.read.json(tempPath.toString), df)
 
         // Try to specify the schema.
         withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "not a source name") {
           val schema = StructType(StructField("b", StringType, true) :: Nil)
-          createExternalTable(
+          ctx.createExternalTable(
             "createdJsonTable",
             "org.apache.spark.sql.json",
             schema,
             Map("path" -> tempPath.toString))
 
           checkAnswer(
-            sql("SELECT * FROM createdJsonTable"),
-            sql("SELECT b FROM savedJsonTable"))
+            ctx.sql("SELECT * FROM createdJsonTable"),
+            ctx.sql("SELECT b FROM savedJsonTable"))
 
-          sql("DROP TABLE createdJsonTable")
+          ctx.sql("DROP TABLE createdJsonTable")
 
           assert(
             intercept[RuntimeException] {
-              createExternalTable(
+              ctx.createExternalTable(
                 "createdJsonTable",
                 "org.apache.spark.sql.json",
                 schema,
@@ -569,16 +567,16 @@ class MetastoreDataSourcesSuite
         (1 to 10).map(i => i -> s"str$i").toDF("a", "b").registerTempTable("jt")
 
         withTable("test_parquet_ctas") {
-          sql(
+          ctx.sql(
             """CREATE TABLE test_parquet_ctas STORED AS PARQUET
               |AS SELECT tmp.a FROM jt tmp WHERE tmp.a < 5
             """.stripMargin)
 
           checkAnswer(
-            sql(s"SELECT a FROM test_parquet_ctas WHERE a > 2 "),
+            ctx.sql(s"SELECT a FROM test_parquet_ctas WHERE a > 2 "),
             Row(3) :: Row(4) :: Nil)
 
-          table("test_parquet_ctas").queryExecution.optimizedPlan match {
+          ctx.table("test_parquet_ctas").queryExecution.optimizedPlan match {
             case LogicalRelation(p: ParquetRelation) => // OK
             case _ =>
               fail(s"test_parquet_ctas should have be converted to ${classOf[ParquetRelation]}")
@@ -634,10 +632,10 @@ class MetastoreDataSourcesSuite
         .mode(SaveMode.Append)
         .saveAsTable("arrayInParquet")
 
-      refreshTable("arrayInParquet")
+      ctx.refreshTable("arrayInParquet")
 
       checkAnswer(
-        sql("SELECT a FROM arrayInParquet"),
+        ctx.sql("SELECT a FROM arrayInParquet"),
         Row(ArrayBuffer(1, null)) ::
           Row(ArrayBuffer(2, 3)) ::
           Row(ArrayBuffer(4, 5)) ::
@@ -693,10 +691,10 @@ class MetastoreDataSourcesSuite
         .mode(SaveMode.Append)
         .saveAsTable("mapInParquet")
 
-      refreshTable("mapInParquet")
+      ctx.refreshTable("mapInParquet")
 
       checkAnswer(
-        sql("SELECT a FROM mapInParquet"),
+        ctx.sql("SELECT a FROM mapInParquet"),
         Row(Map(1 -> null)) ::
           Row(Map(2 -> 3)) ::
           Row(Map(4 -> 5)) ::
@@ -711,7 +709,7 @@ class MetastoreDataSourcesSuite
         val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType, true)))
 
         // Manually create a metastore data source table.
-        catalog.createDataSourceTable(
+        ctx.catalog.createDataSourceTable(
           tableName = "wide_schema",
           userSpecifiedSchema = Some(schema),
           partitionColumns = Array.empty[String],
@@ -719,9 +717,9 @@ class MetastoreDataSourcesSuite
           options = Map("path" -> "just a dummy path"),
           isExternal = false)
 
-        invalidateTable("wide_schema")
+        ctx.invalidateTable("wide_schema")
 
-        val actualSchema = table("wide_schema").schema
+        val actualSchema = ctx.table("wide_schema").schema
         assert(schema === actualSchema)
       }
     }
@@ -742,12 +740,12 @@ class MetastoreDataSourcesSuite
           "EXTERNAL" -> "FALSE"),
         tableType = ManagedTable,
         serdeProperties = Map(
-          "path" -> catalog.hiveDefaultTableFilePath(tableName)))
+          "path" -> ctx.catalog.hiveDefaultTableFilePath(tableName)))
 
-      catalog.client.createTable(hiveTable)
+      ctx.catalog.client.createTable(hiveTable)
 
-      invalidateTable(tableName)
-      val actualSchema = table(tableName).schema
+      ctx.invalidateTable(tableName)
+      val actualSchema = ctx.table(tableName).schema
       assert(schema === actualSchema)
     }
   }
@@ -758,8 +756,8 @@ class MetastoreDataSourcesSuite
 
     withTable(tableName) {
       df.write.format("parquet").partitionBy("d", "b").saveAsTable(tableName)
-      invalidateTable(tableName)
-      val metastoreTable = catalog.client.getTable("default", tableName)
+      ctx.invalidateTable(tableName)
+      val metastoreTable = ctx.catalog.client.getTable("default", tableName)
       val expectedPartitionColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
       val actualPartitionColumns =
         StructType(
@@ -773,7 +771,7 @@ class MetastoreDataSourcesSuite
 
       // Check the content of the saved table.
       checkAnswer(
-        table(tableName).select("c", "b", "d", "a"),
+        ctx.table(tableName).select("c", "b", "d", "a"),
         df.select("c", "b", "d", "a"))
     }
   }
@@ -786,7 +784,7 @@ class MetastoreDataSourcesSuite
     withTable("insertParquet") {
       createDF(0, 9).write.format("parquet").saveAsTable("insertParquet")
       checkAnswer(
-        sql("SELECT p.c1, p.c2 FROM insertParquet p WHERE p.c1 > 5"),
+        ctx.sql("SELECT p.c1, p.c2 FROM insertParquet p WHERE p.c1 > 5"),
         (6 to 9).map(i => Row(i, s"str$i")))
 
       intercept[AnalysisException] {
@@ -795,12 +793,12 @@ class MetastoreDataSourcesSuite
 
       createDF(10, 19).write.mode(SaveMode.Append).format("parquet").saveAsTable("insertParquet")
       checkAnswer(
-        sql("SELECT p.c1, p.c2 FROM insertParquet p WHERE p.c1 > 5"),
+        ctx.sql("SELECT p.c1, p.c2 FROM insertParquet p WHERE p.c1 > 5"),
         (6 to 19).map(i => Row(i, s"str$i")))
 
       createDF(20, 29).write.mode(SaveMode.Append).format("parquet").saveAsTable("insertParquet")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 25"),
+        ctx.sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 25"),
         (6 to 24).map(i => Row(i, s"str$i")))
 
       intercept[AnalysisException] {
@@ -809,26 +807,26 @@ class MetastoreDataSourcesSuite
 
       createDF(30, 39).write.mode(SaveMode.Append).saveAsTable("insertParquet")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 35"),
+        ctx.sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 35"),
         (6 to 34).map(i => Row(i, s"str$i")))
 
       createDF(40, 49).write.mode(SaveMode.Append).insertInto("insertParquet")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 45"),
+        ctx.sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 45"),
         (6 to 44).map(i => Row(i, s"str$i")))
 
       createDF(50, 59).write.mode(SaveMode.Overwrite).saveAsTable("insertParquet")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 51 AND p.c1 < 55"),
+        ctx.sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 51 AND p.c1 < 55"),
         (52 to 54).map(i => Row(i, s"str$i")))
       createDF(60, 69).write.mode(SaveMode.Ignore).saveAsTable("insertParquet")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p"),
+        ctx.sql("SELECT p.c1, c2 FROM insertParquet p"),
         (50 to 59).map(i => Row(i, s"str$i")))
 
       createDF(70, 79).write.mode(SaveMode.Overwrite).insertInto("insertParquet")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p"),
+        ctx.sql("SELECT p.c1, c2 FROM insertParquet p"),
         (70 to 79).map(i => Row(i, s"str$i")))
     }
   }

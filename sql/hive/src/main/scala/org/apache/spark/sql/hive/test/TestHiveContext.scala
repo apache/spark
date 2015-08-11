@@ -53,6 +53,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   self =>
 
   import HiveContext._
+  import TestHiveContext._
 
   def this() {
     this(new SparkContext(
@@ -194,8 +195,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       analyzer.execute(logical)
     }
   }
-
-  case class TestTable(name: String, commands: (() => Unit)*)
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
@@ -453,4 +452,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         logError("FATAL ERROR: Failed to reset TestDB state.", e)
     }
   }
+}
+
+private[hive] object TestHiveContext {
+  case class TestTable(name: String, commands: (() => Unit)*)
 }

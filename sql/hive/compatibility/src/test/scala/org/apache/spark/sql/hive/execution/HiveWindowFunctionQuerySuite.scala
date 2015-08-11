@@ -31,8 +31,7 @@ import org.apache.spark.util.Utils
  * files, every `createQueryTest` calls should explicitly set `reset` to `false`.
  */
 class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfter {
-  import ctx._
-  
+
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
   private val testTempDir = Utils.createTempDir()
@@ -45,8 +44,8 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     Locale.setDefault(Locale.US)
 
     // Create the table used in windowing.q
-    sql("DROP TABLE IF EXISTS part")
-    sql(
+    ctx.sql("DROP TABLE IF EXISTS part")
+    ctx.sql(
       """
         |CREATE TABLE part(
         |  p_partkey INT,
@@ -60,13 +59,13 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
         |  p_comment STRING)
       """.stripMargin)
     val testData1 = ctx.getHiveFile("data/files/part_tiny.txt").getCanonicalPath
-    sql(
+    ctx.sql(
       s"""
         |LOAD DATA LOCAL INPATH '$testData1' overwrite into table part
       """.stripMargin)
 
-    sql("DROP TABLE IF EXISTS over1k")
-    sql(
+    ctx.sql("DROP TABLE IF EXISTS over1k")
+    ctx.sql(
       """
         |create table over1k(
         |  t tinyint,
@@ -84,7 +83,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
         |fields terminated by '|'
       """.stripMargin)
     val testData2 = ctx.getHiveFile("data/files/over1k").getCanonicalPath
-    sql(
+    ctx.sql(
       s"""
         |LOAD DATA LOCAL INPATH '$testData2' overwrite into table over1k
       """.stripMargin)
@@ -92,11 +91,11 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     // The following settings are used for generating golden files with Hive.
     // We have to use kryo to correctly let Hive serialize plans with window functions.
     // This is used to generate golden files.
-    sql("set hive.plan.serialization.format=kryo")
+    ctx.sql("set hive.plan.serialization.format=kryo")
     // Explicitly set fs to local fs.
-    sql(s"set fs.default.name=file://$testTempDir/")
+    ctx.sql(s"set fs.default.name=file://$testTempDir/")
     // Ask Hive to run jobs in-process as a single map and reduce task.
-    sql("set mapred.job.tracker=local")
+    ctx.sql("set mapred.job.tracker=local")
   }
 
   override def afterAll() {
@@ -775,11 +774,11 @@ class HiveWindowFunctionQueryFileSuite
     // The following settings are used for generating golden files with Hive.
     // We have to use kryo to correctly let Hive serialize plans with window functions.
     // This is used to generate golden files.
-    // sql("set hive.plan.serialization.format=kryo")
+    // ctx.sql("set hive.plan.serialization.format=kryo")
     // Explicitly set fs to local fs.
-    // sql(s"set fs.default.name=file://$testTempDir/")
+    // ctx.sql(s"set fs.default.name=file://$testTempDir/")
     // Ask Hive to run jobs in-process as a single map and reduce task.
-    // sql("set mapred.job.tracker=local")
+    // ctx.sql("set mapred.job.tracker=local")
   }
 
   override def afterAll() {

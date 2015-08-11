@@ -17,21 +17,22 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.scalatest.BeforeAndAfter
-
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
 /**
  * A set of test cases that validate partition and column pruning.
  */
-class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
-  ctx.cacheTables = false
+class PruningSuite extends HiveComparisonTest {
 
-  // Column/partition pruning is not implemented for `InMemoryColumnarTableScan` yet, need to reset
-  // the environment to ensure all referenced tables in this suites are not cached in-memory.
-  // Refer to https://issues.apache.org/jira/browse/SPARK-2283 for details.
-  ctx.reset()
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    ctx.cacheTables = false
+    // Column/partition pruning is not implemented for `InMemoryColumnarTableScan` yet, need to reset
+    // the environment to ensure all referenced tables in this suites are not cached in-memory.
+    // Refer to https://issues.apache.org/jira/browse/SPARK-2283 for details.
+    ctx.reset()
+  }
 
   // Column pruning tests
 
@@ -143,7 +144,8 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
       expectedScannedColumns: Seq[String],
       expectedPartValues: Seq[Seq[String]]): Unit = {
     test(s"$testCaseName - pruning test") {
-      val plan = new ctx.QueryExecution(sql).executedPlan
+      val _ctx = ctx
+      val plan = new _ctx.QueryExecution(sql).executedPlan
       val actualOutputColumns = plan.output.map(_.name)
       val (actualScannedColumns, actualPartValues) = plan.collect {
         case p @ HiveTableScan(columns, relation, _) =>

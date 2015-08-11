@@ -23,8 +23,6 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.hive.test.HiveTestUtils
 
 class CommitFailureTestRelationSuite extends SparkFunSuite with HiveTestUtils {
-  private val ctx = hiveContext
-
   // When committing a task, `CommitFailureTestSource` throws an exception for testing purpose.
   val dataSourceName: String = classOf[CommitFailureTestSource].getCanonicalName
 

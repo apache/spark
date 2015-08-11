@@ -27,9 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.HiveTestUtils
 
 private[sql] trait OrcTest extends SparkFunSuite with HiveTestUtils {
-  private val ctx = hiveContext
-  import ctx.implicits._
-  import ctx.sparkContext
+  import testImplicits._
 
   /**
    * Writes `data` to a Orc file, which is then passed to `f` and will be deleted after `f`
@@ -39,7 +37,7 @@ private[sql] trait OrcTest extends SparkFunSuite with HiveTestUtils {
       (data: Seq[T])
       (f: String => Unit): Unit = {
     withTempPath { file =>
-      sparkContext.parallelize(data).toDF().write.orc(file.getCanonicalPath)
+      ctx.sparkContext.parallelize(data).toDF().write.orc(file.getCanonicalPath)
       f(file.getCanonicalPath)
     }
   }

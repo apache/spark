@@ -20,14 +20,12 @@ package org.apache.spark.sql.hive.orc
 import java.io.File
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.HiveTestUtils
 
 case class OrcData(intField: Int, stringField: String)
 
-abstract class OrcSuite extends QueryTest with SharedHiveContext {
-  protected val ctx = hiveContext
-  import ctx.implicits._
-  import ctx._
+abstract class OrcSuite extends QueryTest with HiveTestUtils {
+  import testImplicits._
 
   var orcTableDir: File = null
   var orcTableAsDir: File = null
@@ -44,13 +42,13 @@ abstract class OrcSuite extends QueryTest with SharedHiveContext {
     orcTableDir.delete()
     orcTableDir.mkdir()
 
-    sparkContext
+    ctx.sparkContext
       .makeRDD(1 to 10)
       .map(i => OrcData(i, s"part-$i"))
       .toDF()
       .registerTempTable(s"orc_temp_table")
 
-    sql(
+    ctx.sql(
       s"""CREATE EXTERNAL TABLE normal_orc(
          |  intField INT,
          |  stringField STRING
@@ -59,7 +57,7 @@ abstract class OrcSuite extends QueryTest with SharedHiveContext {
          |LOCATION '${orcTableAsDir.getCanonicalPath}'
        """.stripMargin)
 
-    sql(
+    ctx.sql(
       s"""INSERT INTO TABLE normal_orc
          |SELECT intField, stringField FROM orc_temp_table
        """.stripMargin)
@@ -71,66 +69,65 @@ abstract class OrcSuite extends QueryTest with SharedHiveContext {
   }
 
   test("create temporary orc table") {
-    checkAnswer(sql("SELECT COUNT(*) FROM normal_orc_source"), Row(10))
+    checkAnswer(ctx.sql("SELECT COUNT(*) FROM normal_orc_source"), Row(10))
 
     checkAnswer(
-      sql("SELECT * FROM normal_orc_source"),
+      ctx.sql("SELECT * FROM normal_orc_source"),
       (1 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
-      sql("SELECT * FROM normal_orc_source where intField > 5"),
+      ctx.sql("SELECT * FROM normal_orc_source where intField > 5"),
       (6 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
-      sql("SELECT COUNT(intField), stringField FROM normal_orc_source GROUP BY stringField"),
+      ctx.sql("SELECT COUNT(intField), stringField FROM normal_orc_source GROUP BY stringField"),
       (1 to 10).map(i => Row(1, s"part-$i")))
   }
 
   test("create temporary orc table as") {
-    checkAnswer(sql("SELECT COUNT(*) FROM normal_orc_as_source"), Row(10))
+    checkAnswer(ctx.sql("SELECT COUNT(*) FROM normal_orc_as_source"), Row(10))
 
     checkAnswer(
-      sql("SELECT * FROM normal_orc_source"),
+      ctx.sql("SELECT * FROM normal_orc_source"),
       (1 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
-      sql("SELECT * FROM normal_orc_source WHERE intField > 5"),
+      ctx.sql("SELECT * FROM normal_orc_source WHERE intField > 5"),
       (6 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
-      sql("SELECT COUNT(intField), stringField FROM normal_orc_source GROUP BY stringField"),
+      ctx.sql("SELECT COUNT(intField), stringField FROM normal_orc_source GROUP BY stringField"),
       (1 to 10).map(i => Row(1, s"part-$i")))
   }
 
   test("appending insert") {
-    sql("INSERT INTO TABLE normal_orc_source SELECT * FROM orc_temp_table WHERE intField > 5")
+    ctx.sql("INSERT INTO TABLE normal_orc_source SELECT * FROM orc_temp_table WHERE intField > 5")
 
     checkAnswer(
-      sql("SELECT * FROM normal_orc_source"),
+      ctx.sql("SELECT * FROM normal_orc_source"),
       (1 to 5).map(i => Row(i, s"part-$i")) ++ (6 to 10).flatMap { i =>
         Seq.fill(2)(Row(i, s"part-$i"))
       })
   }
 
   test("overwrite insert") {
-    sql(
+    ctx.sql(
       """INSERT OVERWRITE TABLE normal_orc_as_source
         |SELECT * FROM orc_temp_table WHERE intField > 5
       """.stripMargin)
 
     checkAnswer(
-      sql("SELECT * FROM normal_orc_as_source"),
+      ctx.sql("SELECT * FROM normal_orc_as_source"),
       (6 to 10).map(i => Row(i, s"part-$i")))
   }
 }
 
 class OrcSourceSuite extends OrcSuite {
-  import ctx._
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    sql(
+    ctx.sql(
       s"""CREATE TEMPORARY TABLE normal_orc_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (
@@ -138,7 +135,7 @@ class OrcSourceSuite extends OrcSuite {
          |)
        """.stripMargin)
 
-    sql(
+    ctx.sql(
       s"""CREATE TEMPORARY TABLE normal_orc_as_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (

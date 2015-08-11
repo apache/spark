@@ -21,10 +21,7 @@ import org.apache.spark.sql.hive.test.HiveTestUtils
 import org.apache.spark.sql.{QueryTest, SaveMode}
 
 class MultiDatabaseSuite extends QueryTest with HiveTestUtils {
-  private val ctx = hiveContext
-  import ctx.sql
-
-  private val df = ctx.range(10).coalesce(1)
+  private lazy val df = ctx.range(10).coalesce(1)
 
   test(s"saveAsTable() to non-default database - with USE - Overwrite") {
     withTempDatabase { db =>
@@ -99,7 +96,7 @@ class MultiDatabaseSuite extends QueryTest with HiveTestUtils {
   test("Looks up tables in non-default database") {
     withTempDatabase { db =>
       activateDatabase(db) {
-        sql("CREATE TABLE t (key INT)")
+        ctx.sql("CREATE TABLE t (key INT)")
         checkAnswer(ctx.table("t"), ctx.emptyDataFrame)
       }
 
@@ -110,7 +107,7 @@ class MultiDatabaseSuite extends QueryTest with HiveTestUtils {
   test("Drops a table in a non-default database") {
     withTempDatabase { db =>
       activateDatabase(db) {
-        sql(s"CREATE TABLE t (key INT)")
+        ctx.sql(s"CREATE TABLE t (key INT)")
         assert(ctx.tableNames().contains("t"))
         assert(!ctx.tableNames("default").contains("t"))
       }
@@ -119,7 +116,7 @@ class MultiDatabaseSuite extends QueryTest with HiveTestUtils {
       assert(ctx.tableNames(db).contains("t"))
 
       activateDatabase(db) {
-        sql(s"DROP TABLE t")
+        ctx.sql(s"DROP TABLE t")
         assert(!ctx.tableNames().contains("t"))
         assert(!ctx.tableNames("default").contains("t"))
       }
@@ -137,7 +134,7 @@ class MultiDatabaseSuite extends QueryTest with HiveTestUtils {
         val path = dir.getCanonicalPath
 
         activateDatabase(db) {
-          sql(
+          ctx.sql(
             s"""CREATE EXTERNAL TABLE t (id BIGINT)
                |PARTITIONED BY (p INT)
                |STORED AS PARQUET
@@ -147,8 +144,8 @@ class MultiDatabaseSuite extends QueryTest with HiveTestUtils {
           checkAnswer(ctx.table("t"), ctx.emptyDataFrame)
 
           df.write.parquet(s"$path/p=1")
-          sql("ALTER TABLE t ADD PARTITION (p=1)")
-          sql("REFRESH TABLE t")
+          ctx.sql("ALTER TABLE t ADD PARTITION (p=1)")
+          ctx.sql("REFRESH TABLE t")
           checkAnswer(ctx.table("t"), df.withColumn("p", lit(1)))
         }
       }

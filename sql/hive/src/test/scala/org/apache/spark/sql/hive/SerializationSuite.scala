@@ -19,10 +19,9 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.HiveTestUtils
 
-class SerializationSuite extends SparkFunSuite with SharedHiveContext {
-  private val ctx = hiveContext
+class SerializationSuite extends SparkFunSuite with HiveTestUtils {
 
   test("[SPARK-5840] HiveContext should be serializable") {
     ctx.hiveconf

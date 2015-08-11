@@ -25,8 +25,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.hive.test.SharedHiveContext
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.hive.test.HiveTestUtils
 
 // The data where the partitioning key exists only in the directory structure.
 case class OrcParData(intField: Int, stringField: String)
@@ -35,23 +34,15 @@ case class OrcParData(intField: Int, stringField: String)
 case class OrcParDataWithKey(intField: Int, pi: Int, stringField: String, ps: String)
 
 // TODO This test suite duplicates ParquetPartitionDiscoverySuite a lot
-class OrcPartitionDiscoverySuite extends QueryTest with SharedHiveContext {
-  private val ctx = hiveContext
-  import ctx.implicits._
-  import ctx._
+class OrcPartitionDiscoverySuite extends QueryTest with HiveTestUtils {
+  import testImplicits._
 
   val defaultPartitionName = ConfVars.DEFAULTPARTITIONNAME.defaultStrVal
-
-  def withTempDir(f: File => Unit): Unit = {
-    val dir = Utils.createTempDir().getCanonicalFile
-    try f(dir) finally Utils.deleteRecursively(dir)
-  }
 
   def makeOrcFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = {
     data.toDF().write.mode("overwrite").orc(path.getCanonicalPath)
   }
-
 
   def makeOrcFile[T <: Product: ClassTag: TypeTag](
       df: DataFrame, path: File): Unit = {
@@ -90,11 +81,11 @@ class OrcPartitionDiscoverySuite extends QueryTest with SharedHiveContext {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      read.orc(base.getCanonicalPath).registerTempTable("t")
+      ctx.read.orc(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
-          sql("SELECT * FROM t"),
+          ctx.sql("SELECT * FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -102,7 +93,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with SharedHiveContext {
           } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
-          sql("SELECT intField, pi FROM t"),
+          ctx.sql("SELECT intField, pi FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -110,14 +101,14 @@ class OrcPartitionDiscoverySuite extends QueryTest with SharedHiveContext {
           } yield Row(i, pi))
 
         checkAnswer(
-          sql("SELECT * FROM t WHERE pi = 1"),
+          ctx.sql("SELECT * FROM t WHERE pi = 1"),
           for {
             i <- 1 to 10
             ps <- Seq("foo", "bar")
           } yield Row(i, i.toString, 1, ps))
 
         checkAnswer(
-          sql("SELECT * FROM t WHERE ps = 'foo'"),
+          ctx.sql("SELECT * FROM t WHERE ps = 'foo'"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -137,11 +128,11 @@ class OrcPartitionDiscoverySuite extends QueryTest with SharedHiveContext {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      read.orc(base.getCanonicalPath).registerTempTable("t")
+      ctx.read.orc(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
-          sql("SELECT * FROM t"),
+          ctx.sql("SELECT * FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -149,7 +140,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with SharedHiveContext {
           } yield Row(i, pi, i.toString, ps))
 
         checkAnswer(
-          sql("SELECT intField, pi FROM t"),
+          ctx.sql("SELECT intField, pi FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -157,14 +148,14 @@ class OrcPartitionDiscoverySuite extends QueryTest with SharedHiveContext {
           } yield Row(i, pi))
 
         checkAnswer(
-          sql("SELECT * FROM t WHERE pi = 1"),
+          ctx.sql("SELECT * FROM t WHERE pi = 1"),
           for {
             i <- 1 to 10
             ps <- Seq("foo", "bar")
           } yield Row(i, 1, i.toString, ps))
 
         checkAnswer(
-          sql("SELECT * FROM t WHERE ps = 'foo'"),
+          ctx.sql("SELECT * FROM t WHERE ps = 'foo'"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -186,14 +177,14 @@ class OrcPartitionDiscoverySuite extends QueryTest with SharedHiveContext {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      read
+      ctx.read
         .option(ConfVars.DEFAULTPARTITIONNAME.varname, defaultPartitionName)
         .orc(base.getCanonicalPath)
         .registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
-          sql("SELECT * FROM t"),
+          ctx.sql("SELECT * FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, null.asInstanceOf[Integer])
@@ -201,14 +192,14 @@ class OrcPartitionDiscoverySuite extends QueryTest with SharedHiveContext {
           } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
-          sql("SELECT * FROM t WHERE pi IS NULL"),
+          ctx.sql("SELECT * FROM t WHERE pi IS NULL"),
           for {
             i <- 1 to 10
             ps <- Seq("foo", null.asInstanceOf[String])
           } yield Row(i, i.toString, null, ps))
 
         checkAnswer(
-          sql("SELECT * FROM t WHERE ps IS NULL"),
+          ctx.sql("SELECT * FROM t WHERE ps IS NULL"),
           for {
             i <- 1 to 10
             pi <- Seq(1, null.asInstanceOf[Integer])
@@ -228,14 +219,14 @@ class OrcPartitionDiscoverySuite extends QueryTest with SharedHiveContext {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      read
+      ctx.read
         .option(ConfVars.DEFAULTPARTITIONNAME.varname, defaultPartitionName)
         .orc(base.getCanonicalPath)
         .registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
-          sql("SELECT * FROM t"),
+          ctx.sql("SELECT * FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -243,7 +234,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with SharedHiveContext {
           } yield Row(i, pi, i.toString, ps))
 
         checkAnswer(
-          sql("SELECT * FROM t WHERE ps IS NULL"),
+          ctx.sql("SELECT * FROM t WHERE ps IS NULL"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)

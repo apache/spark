@@ -24,8 +24,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
 import test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 
 abstract class AggregationQuerySuite extends QueryTest with HiveTestUtils {
-  protected final val ctx = hiveContext
-  import ctx.implicits._
+  import testImplicits._
 
   var originalUseAggregate2: Boolean = _
 
@@ -508,14 +507,14 @@ class SortBasedAggregationQuerySuite extends AggregationQuerySuite {
   var originalUnsafeEnabled: Boolean = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     originalUnsafeEnabled = ctx.conf.unsafeEnabled
     ctx.setConf(SQLConf.UNSAFE_ENABLED.key, "false")
-    super.beforeAll()
   }
 
   override def afterAll(): Unit = {
-    super.afterAll()
     ctx.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+    super.afterAll()
   }
 }
 
@@ -524,13 +523,13 @@ class TungstenAggregationQuerySuite extends AggregationQuerySuite {
   var originalUnsafeEnabled: Boolean = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     originalUnsafeEnabled = ctx.conf.unsafeEnabled
     ctx.setConf(SQLConf.UNSAFE_ENABLED.key, "true")
-    super.beforeAll()
   }
 
   override def afterAll(): Unit = {
-    super.afterAll()
     ctx.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+    super.afterAll()
   }
 }

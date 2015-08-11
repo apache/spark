@@ -17,23 +17,21 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.hive.test.SharedHiveContext
-
 /**
  * A set of tests that validates support for Hive SerDe.
  */
-class HiveSerDeSuite extends HiveComparisonTest with SharedHiveContext {
+class HiveSerDeSuite extends HiveComparisonTest {
   import org.apache.hadoop.hive.serde2.RegexSerDe
-  import ctx._
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     ctx.cacheTables = false
-    sql(s"""CREATE TABLE IF NOT EXISTS sales (key STRING, value INT)
+    ctx.sql(s"""CREATE TABLE IF NOT EXISTS sales (key STRING, value INT)
        |ROW FORMAT SERDE '${classOf[RegexSerDe].getCanonicalName}'
        |WITH SERDEPROPERTIES ("input.regex" = "([^ ]*)\t([^ ]*)")
        """.stripMargin)
-    sql(s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/sales.txt")}' INTO TABLE sales")
+    ctx.sql(
+      s"LOAD DATA LOCAL INPATH '${ctx.getHiveFile("data/files/sales.txt")}' INTO TABLE sales")
   }
 
   // table sales is not a cache table, and will be clear after reset

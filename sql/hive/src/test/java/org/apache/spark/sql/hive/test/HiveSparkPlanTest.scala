@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.test
 
 import org.apache.spark.sql.execution.AbstractSparkPlanTest
-import org.apache.spark.sql.SQLContext
 
 /**
  * Base class for writing tests for individual physical operators in hive.
@@ -26,7 +25,4 @@ import org.apache.spark.sql.SQLContext
  */
 private[sql] abstract class HiveSparkPlanTest
   extends AbstractSparkPlanTest
-  with SharedHiveContext {
-
-  protected override def _sqlContext: SQLContext = hiveContext
-}
+  with HiveTestUtils

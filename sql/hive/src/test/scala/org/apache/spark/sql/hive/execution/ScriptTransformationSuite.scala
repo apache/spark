@@ -29,7 +29,6 @@ import org.apache.spark.sql.hive.test.HiveSparkPlanTest
 import org.apache.spark.sql.types.StringType
 
 class ScriptTransformationSuite extends HiveSparkPlanTest {
-  private val ctx = hiveContext
 
   private val noSerdeIOSchema = HiveScriptIOSchema(
     inputRowFormat = Seq.empty,

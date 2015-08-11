@@ -28,7 +28,7 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.sql.hive.test.{TestHiveContext, SharedHiveContext}
+import org.apache.spark.sql.hive.test.{TestHiveContext, HiveTestUtils}
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 /**
@@ -39,10 +39,7 @@ class HiveSparkSubmitSuite
   with Matchers
   with ResetSystemProperties
   with Timeouts
-  with SharedHiveContext {
-
-  private val ctx = hiveContext
-  import ctx._
+  with HiveTestUtils {
 
   // TODO: rewrite these or mark them as slow tests to be run sparingly
 
@@ -50,8 +47,8 @@ class HiveSparkSubmitSuite
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
-    val jar3 = getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()
-    val jar4 = getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath()
+    val jar3 = ctx.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()
+    val jar4 = ctx.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath()
     val jarsString = Seq(jar1, jar2, jar3, jar4).map(j => j.toString).mkString(",")
     val args = Seq(
       "--class", SparkSubmitClassLoaderTest.getClass.getName.stripSuffix("$"),

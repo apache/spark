@@ -18,35 +18,33 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{Row, QueryTest}
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.HiveTestUtils
 
 /**
  * A set of tests that validates commands can also be queried by like a table
  */
-class HiveOperatorQueryableSuite extends QueryTest with SharedHiveContext {
-  private val ctx = hiveContext
-  import ctx._
+class HiveOperatorQueryableSuite extends QueryTest with HiveTestUtils {
 
   test("SPARK-5324 query result of describe command") {
-    loadTestTable("src")
+    ctx.loadTestTable("src")
 
     // register a describe command to be a temp table
-    sql("desc src").registerTempTable("mydesc")
+    ctx.sql("desc src").registerTempTable("mydesc")
     checkAnswer(
-      sql("desc mydesc"),
+      ctx.sql("desc mydesc"),
       Seq(
         Row("col_name", "string", "name of the column"),
         Row("data_type", "string", "data type of the column"),
         Row("comment", "string", "comment of the column")))
 
     checkAnswer(
-      sql("select * from mydesc"),
+      ctx.sql("select * from mydesc"),
       Seq(
         Row("key", "int", null),
         Row("value", "string", null)))
 
     checkAnswer(
-      sql("select col_name, data_type, comment from mydesc"),
+      ctx.sql("select col_name, data_type, comment from mydesc"),
       Seq(
         Row("key", "int", null),
         Row("value", "string", null)))

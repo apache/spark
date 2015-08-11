@@ -19,22 +19,26 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.TestHiveContext.TestTable
 
 /**
  * A set of test cases based on the big-data-benchmark.
  * https://amplab.cs.berkeley.edu/benchmark/
  */
-class BigDataBenchmarkSuite extends HiveComparisonTest with SharedHiveContext {
-  import ctx._
+class BigDataBenchmarkSuite extends HiveComparisonTest {
 
   private val testDataDirectory =
     new File("target" + File.separator + "big-data-benchmark-testdata")
   private val userVisitPath = new File(testDataDirectory, "uservisits").getCanonicalPath
-  private val testTables = Seq(
-    TestTable(
-      "rankings",
-      s"""
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    val _ctx = ctx
+    import _ctx._
+    val testTables = Seq(
+      TestTable(
+        "rankings",
+        s"""
         |CREATE EXTERNAL TABLE rankings (
         |  pageURL STRING,
         |  pageRank INT,
@@ -42,9 +46,9 @@ class BigDataBenchmarkSuite extends HiveComparisonTest with SharedHiveContext {
         |  ROW FORMAT DELIMITED FIELDS TERMINATED BY ","
         |  STORED AS TEXTFILE LOCATION "${new File(testDataDirectory, "rankings").getCanonicalPath}"
       """.stripMargin.cmd),
-    TestTable(
-      "scratch",
-      s"""
+      TestTable(
+        "scratch",
+        s"""
         |CREATE EXTERNAL TABLE scratch (
         |  pageURL STRING,
         |  pageRank INT,
@@ -52,9 +56,9 @@ class BigDataBenchmarkSuite extends HiveComparisonTest with SharedHiveContext {
         |  ROW FORMAT DELIMITED FIELDS TERMINATED BY ","
         |  STORED AS TEXTFILE LOCATION "${new File(testDataDirectory, "scratch").getCanonicalPath}"
       """.stripMargin.cmd),
-    TestTable(
-      "uservisits",
-      s"""
+      TestTable(
+        "uservisits",
+        s"""
         |CREATE EXTERNAL TABLE uservisits (
         |  sourceIP STRING,
         |  destURL STRING,
@@ -68,15 +72,15 @@ class BigDataBenchmarkSuite extends HiveComparisonTest with SharedHiveContext {
         |  ROW FORMAT DELIMITED FIELDS TERMINATED BY ","
         |  STORED AS TEXTFILE LOCATION "$userVisitPath"
       """.stripMargin.cmd),
-    TestTable(
-      "documents",
-      s"""
+      TestTable(
+        "documents",
+        s"""
         |CREATE EXTERNAL TABLE documents (line STRING)
         |STORED AS TEXTFILE
         |LOCATION "${new File(testDataDirectory, "crawl").getCanonicalPath}"
       """.stripMargin.cmd))
-
-  testTables.foreach(registerTestTable)
+    testTables.foreach(registerTestTable)
+  }
 
   if (!testDataDirectory.exists()) {
     // TODO: Auto download the files on demand.

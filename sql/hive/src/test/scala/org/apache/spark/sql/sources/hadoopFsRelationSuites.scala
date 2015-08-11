@@ -33,9 +33,7 @@ import org.apache.spark.sql.types._
 
 
 abstract class HadoopFsRelationTest extends QueryTest with HiveTestUtils {
-  private val ctx = hiveContext
-  import ctx.implicits._
-  import ctx.sql
+  import testImplicits._
 
   val dataSourceName: String
 
@@ -90,7 +88,7 @@ abstract class HadoopFsRelationTest extends QueryTest with HiveTestUtils {
     df.registerTempTable("t")
     withTempTable("t") {
       checkAnswer(
-        sql(
+        ctx.sql(
           """SELECT l.a, r.b, l.p1, r.p2
             |FROM t l JOIN t r
             |ON l.a = r.a AND l.p1 = r.p1 AND l.p2 = r.p2

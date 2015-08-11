@@ -26,8 +26,6 @@ import org.apache.spark.sql.{Row, SQLConf}
 class ParquetHiveCompatibilitySuite extends HiveParquetCompatibilityTest {
   import ParquetCompatibilityTest.makeNullable
 
-  private val ctx = hiveContext
-
   /**
    * Set the staging directory (and hence path to ignore Parquet files under)
    * to that set by [[HiveConf.ConfVars.STAGINGDIR]].
