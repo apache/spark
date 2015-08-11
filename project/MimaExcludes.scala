@@ -178,6 +178,10 @@ object MimaExcludes {
             // SPARK-4751 Dynamic allocation for standalone mode
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.SparkContext.supportDynamicAllocation")
+          ) ++ Seq(
+            // SPARK-9808 Remove shuffle file consolidation in HashShuffleManager
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.shuffle.FileShuffleBlockResolver$ShuffleFileGroup")
           )
 
         case v if v.startsWith("1.4") =>
