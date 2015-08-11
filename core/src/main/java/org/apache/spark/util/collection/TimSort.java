@@ -144,6 +144,7 @@ class TimSort<K, Buffer> {
     assert lo == hi;
     sortState.mergeForceCollapse();
     assert sortState.stackSize == 1;
+    sortState.release();
   }
 
   /**
@@ -213,6 +214,7 @@ class TimSort<K, Buffer> {
       }
       s.copyElement(pivotStore, 0, a, left);
     }
+    s.release(pivotStore);
   }
 
   /**
@@ -931,10 +933,17 @@ class TimSort<K, Buffer> {
         else
           newSize = Math.min(newSize, aLength >>> 1);
 
+        s.release(tmp);
         tmp = s.allocate(newSize);
         tmpLength = newSize;
       }
       return tmp;
+    }
+
+    public void release() {
+      if (tmp != null) {
+        s.release(tmp);
+      }
     }
   }
 }

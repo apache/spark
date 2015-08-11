@@ -131,6 +131,10 @@ public final class UnsafeInMemorySorter {
     return pointerArrayInsertPosition + 2 < pointerArray.size();
   }
 
+  public void releaseMemory() {
+    releasedPointerArray(pointerArray);
+  }
+
   private void releasedPointerArray(LongArray array) {
     if (array != null) {
       memoryManager.freePage(array.memoryBlock());
@@ -142,8 +146,8 @@ public final class UnsafeInMemorySorter {
   public void expandPointerArray() throws IOException {
     final LongArray oldArray = pointerArray;
     // Guard against overflow:
-    final int newLength = oldArray.size() * 2 > 0 ? (int)(oldArray.size() * 2) : Integer.MAX_VALUE;
-    pointerArray = allocateLongArray(newLength);
+    final int newSize = oldArray.size() * 2 > 0 ? (int)(oldArray.size() * 2) : Integer.MAX_VALUE;
+    pointerArray = allocateLongArray(newSize / 2);
     pointerArray.copyFrom(oldArray);
     releasedPointerArray(oldArray);
   }

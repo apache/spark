@@ -103,4 +103,12 @@ final class UnsafeSortDataFormat extends SortDataFormat<RecordPointerAndKeyPrefi
     assert (length < Integer.MAX_VALUE / 2) : "Length " + length + " is too large";
     return allocateLongArray(length);
   }
+
+  @Override
+  public void release(LongArray array) {
+    if (array != null) {
+      memoryManager.freePage(array.memoryBlock());
+      shuffleMemoryManager.release(array.memoryBlock().size());
+    }
+  }
 }
