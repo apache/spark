@@ -111,7 +111,7 @@ private[spark] class ApplicationMaster(
       val fs = FileSystem.get(yarnConf)
 
       // This shutdown hook should run *after* the SparkContext is shut down.
-      Utils.addShutdownHook(Utils.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1) { () =>
+      ShutdownHookManager.addShutdownHook(ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1) { () =>
         val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
         val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
 
@@ -198,7 +198,7 @@ private[spark] class ApplicationMaster(
   final def finish(status: FinalApplicationStatus, code: Int, msg: String = null): Unit = {
     synchronized {
       if (!finished) {
-        val inShutdown = Utils.inShutdown()
+        val inShutdown = ShutdownHookManager.inShutdown()
         logInfo(s"Final app status: $status, exitCode: $code" +
           Option(msg).map(msg => s", (reason: $msg)").getOrElse(""))
         exitCode = code
