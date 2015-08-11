@@ -77,6 +77,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                        " probability of that class and t is the class' threshold.")
     threshold = Param(Params._dummy(), "threshold",
                       "threshold in binary classification prediction, in range [0, 1].")
+
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
