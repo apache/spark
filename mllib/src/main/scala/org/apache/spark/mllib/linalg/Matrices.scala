@@ -520,8 +520,7 @@ class SparseMatrix(
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
 
   override def equals(o: Any): Boolean = o match {
-    case m: Matrix =>
-      m.numRows == numRows && m.numCols == numCols && Arrays.equals(toArray, m.toArray)
+    case m: Matrix => toBreeze == m.toBreeze
     case _ => false
   }
 
