@@ -375,7 +375,7 @@ private[spark] class ApplicationMaster(
             }
           }
           try {
-            val numPendingAllocate = allocator.getNumPendingAllocate
+            val numPendingAllocate = allocator.getPendingAllocate.size
             val sleepInterval =
               if (numPendingAllocate > 0) {
                 val currentAllocationInterval =
