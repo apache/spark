@@ -17,9 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import java.io.File
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConversions._
 
@@ -28,10 +26,8 @@ import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.FileShuffleBlockResolver.ShuffleFileGroup
 import org.apache.spark.storage._
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
-import org.apache.spark.util.collection.{PrimitiveKeyOpenHashMap, PrimitiveVector}
 
 /** A group of writers for a ShuffleMapTask, one writer per reducer. */
 private[spark] trait ShuffleWriterGroup {
@@ -71,26 +67,15 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
 
   private lazy val blockManager = SparkEnv.get.blockManager
 
-  // Turning off shuffle file consolidation causes all shuffle Blocks to get their own file.
-  // TODO: Remove this once the shuffle file consolidation feature is stable.
-  private val consolidateShuffleFiles =
-    conf.getBoolean("spark.shuffle.consolidateFiles", false)
-
   // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
   private val bufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
 
   /**
-   * Contains all the state related to a particular shuffle. This includes a pool of unused
-   * ShuffleFileGroups, as well as all ShuffleFileGroups that have been created for the shuffle.
+   * Contains all the state related to a particular shuffle.
    */
   private class ShuffleState(val numBuckets: Int) {
-    val nextFileId = new AtomicInteger(0)
-    val unusedFileGroups = new ConcurrentLinkedQueue[ShuffleFileGroup]()
-    val allFileGroups = new ConcurrentLinkedQueue[ShuffleFileGroup]()
-
     /**
      * The mapIds of all map tasks completed on this Executor for this shuffle.
-     * NB: This is only populated if consolidateShuffleFiles is FALSE. We don't need it otherwise.
      */
     val completedMapTasks = new ConcurrentLinkedQueue[Int]()
   }
@@ -109,18 +94,10 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
     new ShuffleWriterGroup {
       shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numBuckets))
       private val shuffleState = shuffleStates(shuffleId)
-      private var fileGroup: ShuffleFileGroup = null
 
       val openStartTime = System.nanoTime
       val serializerInstance = serializer.newInstance()
-      val writers: Array[DiskBlockObjectWriter] = if (consolidateShuffleFiles) {
-        fileGroup = getUnusedFileGroup()
-        Array.tabulate[DiskBlockObjectWriter](numBuckets) { bucketId =>
-          val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
-          blockManager.getDiskWriter(blockId, fileGroup(bucketId), serializerInstance, bufferSize,
-            writeMetrics)
-        }
-      } else {
+      val writers: Array[DiskBlockObjectWriter] = {
         Array.tabulate[DiskBlockObjectWriter](numBuckets) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
           val blockFile = blockManager.diskBlockManager.getFile(blockId)
@@ -142,58 +119,14 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
       writeMetrics.incShuffleWriteTime(System.nanoTime - openStartTime)
 
       override def releaseWriters(success: Boolean) {
-        if (consolidateShuffleFiles) {
-          if (success) {
-            val offsets = writers.map(_.fileSegment().offset)
-            val lengths = writers.map(_.fileSegment().length)
-            fileGroup.recordMapOutput(mapId, offsets, lengths)
-          }
-          recycleFileGroup(fileGroup)
-        } else {
-          shuffleState.completedMapTasks.add(mapId)
-        }
-      }
-
-      private def getUnusedFileGroup(): ShuffleFileGroup = {
-        val fileGroup = shuffleState.unusedFileGroups.poll()
-        if (fileGroup != null) fileGroup else newFileGroup()
-      }
-
-      private def newFileGroup(): ShuffleFileGroup = {
-        val fileId = shuffleState.nextFileId.getAndIncrement()
-        val files = Array.tabulate[File](numBuckets) { bucketId =>
-          val filename = physicalFileName(shuffleId, bucketId, fileId)
-          blockManager.diskBlockManager.getFile(filename)
-        }
-        val fileGroup = new ShuffleFileGroup(shuffleId, fileId, files)
-        shuffleState.allFileGroups.add(fileGroup)
-        fileGroup
-      }
-
-      private def recycleFileGroup(group: ShuffleFileGroup) {
-        shuffleState.unusedFileGroups.add(group)
+        shuffleState.completedMapTasks.add(mapId)
       }
     }
   }
 
   override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
-    if (consolidateShuffleFiles) {
-      // Search all file groups associated with this shuffle.
-      val shuffleState = shuffleStates(blockId.shuffleId)
-      val iter = shuffleState.allFileGroups.iterator
-      while (iter.hasNext) {
-        val segmentOpt = iter.next.getFileSegmentFor(blockId.mapId, blockId.reduceId)
-        if (segmentOpt.isDefined) {
-          val segment = segmentOpt.get
-          return new FileSegmentManagedBuffer(
-            transportConf, segment.file, segment.offset, segment.length)
-        }
-      }
-      throw new IllegalStateException("Failed to find shuffle block: " + blockId)
-    } else {
-      val file = blockManager.diskBlockManager.getFile(blockId)
-      new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
-    }
+    val file = blockManager.diskBlockManager.getFile(blockId)
+    new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
   }
 
   /** Remove all the blocks / files and metadata related to a particular shuffle. */
@@ -209,15 +142,9 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   private def removeShuffleBlocks(shuffleId: ShuffleId): Boolean = {
     shuffleStates.get(shuffleId) match {
       case Some(state) =>
-        if (consolidateShuffleFiles) {
-          for (fileGroup <- state.allFileGroups; file <- fileGroup.files) {
-            file.delete()
-          }
-        } else {
-          for (mapId <- state.completedMapTasks; reduceId <- 0 until state.numBuckets) {
-            val blockId = new ShuffleBlockId(shuffleId, mapId, reduceId)
-            blockManager.diskBlockManager.getFile(blockId).delete()
-          }
+        for (mapId <- state.completedMapTasks; reduceId <- 0 until state.numBuckets) {
+          val blockId = new ShuffleBlockId(shuffleId, mapId, reduceId)
+          blockManager.diskBlockManager.getFile(blockId).delete()
         }
         logInfo("Deleted all files for shuffle " + shuffleId)
         true
@@ -227,71 +154,11 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
     }
   }
 
-  private def physicalFileName(shuffleId: Int, bucketId: Int, fileId: Int) = {
-    "merged_shuffle_%d_%d_%d".format(shuffleId, bucketId, fileId)
-  }
-
   private def cleanup(cleanupTime: Long) {
     shuffleStates.clearOldValues(cleanupTime, (shuffleId, state) => removeShuffleBlocks(shuffleId))
   }
 
   override def stop() {
     metadataCleaner.cancel()
-  }
-}
-
-private[spark] object FileShuffleBlockResolver {
-  /**
-   * A group of shuffle files, one per reducer.
-   * A particular mapper will be assigned a single ShuffleFileGroup to write its output to.
-   */
-  private class ShuffleFileGroup(val shuffleId: Int, val fileId: Int, val files: Array[File]) {
-    private var numBlocks: Int = 0
-
-    /**
-     * Stores the absolute index of each mapId in the files of this group. For instance,
-     * if mapId 5 is the first block in each file, mapIdToIndex(5) = 0.
-     */
-    private val mapIdToIndex = new PrimitiveKeyOpenHashMap[Int, Int]()
-
-    /**
-     * Stores consecutive offsets and lengths of blocks into each reducer file, ordered by
-     * position in the file.
-     * Note: mapIdToIndex(mapId) returns the index of the mapper into the vector for every
-     * reducer.
-     */
-    private val blockOffsetsByReducer = Array.fill[PrimitiveVector[Long]](files.length) {
-      new PrimitiveVector[Long]()
-    }
-    private val blockLengthsByReducer = Array.fill[PrimitiveVector[Long]](files.length) {
-      new PrimitiveVector[Long]()
-    }
-
-    def apply(bucketId: Int): File = files(bucketId)
-
-    def recordMapOutput(mapId: Int, offsets: Array[Long], lengths: Array[Long]) {
-      assert(offsets.length == lengths.length)
-      mapIdToIndex(mapId) = numBlocks
-      numBlocks += 1
-      for (i <- 0 until offsets.length) {
-        blockOffsetsByReducer(i) += offsets(i)
-        blockLengthsByReducer(i) += lengths(i)
-      }
-    }
-
-    /** Returns the FileSegment associated with the given map task, or None if no entry exists. */
-    def getFileSegmentFor(mapId: Int, reducerId: Int): Option[FileSegment] = {
-      val file = files(reducerId)
-      val blockOffsets = blockOffsetsByReducer(reducerId)
-      val blockLengths = blockLengthsByReducer(reducerId)
-      val index = mapIdToIndex.getOrElse(mapId, -1)
-      if (index >= 0) {
-        val offset = blockOffsets(index)
-        val length = blockLengths(index)
-        Some(new FileSegment(file, offset, length))
-      } else {
-        None
-      }
-    }
   }
 }
