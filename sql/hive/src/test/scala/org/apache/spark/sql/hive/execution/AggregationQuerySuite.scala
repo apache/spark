@@ -388,7 +388,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
     // test. Once we remove AggregateExpression1, we will resolve them directly to
     // our native implementation. We should re-enable this test at that time.
 
-    /*
+    /* 
     checkAnswer(
       sqlContext.sql("SELECT stddev_samp(null), stddev_pop(null)"),
       Row(null, null) :: Nil
