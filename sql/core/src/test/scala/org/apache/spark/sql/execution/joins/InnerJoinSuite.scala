@@ -34,67 +34,75 @@ class InnerJoinSuite extends SparkPlanTest with SQLTestUtils {
       rightRows: DataFrame,
       condition: Expression,
       expectedAnswer: Seq[Product]): Unit = {
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-      val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
-      ExtractEquiJoinKeys.unapply(join).foreach {
-        case (joinType, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
+    val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
+    ExtractEquiJoinKeys.unapply(join).foreach {
+      case (joinType, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
 
-          def makeBroadcastHashJoin(left: SparkPlan, right: SparkPlan, side: BuildSide) = {
-            val broadcastHashJoin =
-              execution.joins.BroadcastHashJoin(leftKeys, rightKeys, side, left, right)
-            boundCondition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin)
-          }
+        def makeBroadcastHashJoin(left: SparkPlan, right: SparkPlan, side: BuildSide) = {
+          val broadcastHashJoin =
+            execution.joins.BroadcastHashJoin(leftKeys, rightKeys, side, left, right)
+          boundCondition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin)
+        }
 
-          def makeShuffledHashJoin(left: SparkPlan, right: SparkPlan, side: BuildSide) = {
-            val shuffledHashJoin =
-              execution.joins.ShuffledHashJoin(leftKeys, rightKeys, side, left, right)
-            val filteredJoin =
-              boundCondition.map(Filter(_, shuffledHashJoin)).getOrElse(shuffledHashJoin)
-            EnsureRequirements(sqlContext).apply(filteredJoin)
-          }
+        def makeShuffledHashJoin(left: SparkPlan, right: SparkPlan, side: BuildSide) = {
+          val shuffledHashJoin =
+            execution.joins.ShuffledHashJoin(leftKeys, rightKeys, side, left, right)
+          val filteredJoin =
+            boundCondition.map(Filter(_, shuffledHashJoin)).getOrElse(shuffledHashJoin)
+          EnsureRequirements(sqlContext).apply(filteredJoin)
+        }
 
-          def makeSortMergeJoin(left: SparkPlan, right: SparkPlan) = {
-            val sortMergeJoin =
-              execution.joins.SortMergeJoin(leftKeys, rightKeys, left, right)
-            val filteredJoin = boundCondition.map(Filter(_, sortMergeJoin)).getOrElse(sortMergeJoin)
-            EnsureRequirements(sqlContext).apply(filteredJoin)
-          }
+        def makeSortMergeJoin(left: SparkPlan, right: SparkPlan) = {
+          val sortMergeJoin =
+            execution.joins.SortMergeJoin(leftKeys, rightKeys, left, right)
+          val filteredJoin = boundCondition.map(Filter(_, sortMergeJoin)).getOrElse(sortMergeJoin)
+          EnsureRequirements(sqlContext).apply(filteredJoin)
+        }
 
-          test(s"$testName using BroadcastHashJoin (build=left)") {
+        test(s"$testName using BroadcastHashJoin (build=left)") {
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
             checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
               makeBroadcastHashJoin(left, right, joins.BuildLeft),
               expectedAnswer.map(Row.fromTuple),
               sortAnswers = true)
           }
+        }
 
-          test(s"$testName using BroadcastHashJoin (build=right)") {
+        test(s"$testName using BroadcastHashJoin (build=right)") {
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
             checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
               makeBroadcastHashJoin(left, right, joins.BuildRight),
               expectedAnswer.map(Row.fromTuple),
               sortAnswers = true)
           }
+        }
 
-          test(s"$testName using ShuffledHashJoin (build=left)") {
+        test(s"$testName using ShuffledHashJoin (build=left)") {
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
             checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
               makeShuffledHashJoin(left, right, joins.BuildLeft),
               expectedAnswer.map(Row.fromTuple),
               sortAnswers = true)
           }
+        }
 
-          test(s"$testName using ShuffledHashJoin (build=right)") {
+        test(s"$testName using ShuffledHashJoin (build=right)") {
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
             checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
               makeShuffledHashJoin(left, right, joins.BuildRight),
               expectedAnswer.map(Row.fromTuple),
               sortAnswers = true)
           }
+        }
 
-          test(s"$testName using SortMergeJoin") {
+        test(s"$testName using SortMergeJoin") {
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
             checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
               makeSortMergeJoin(left, right),
               expectedAnswer.map(Row.fromTuple),
               sortAnswers = true)
           }
-      }
+        }
     }
   }
 

@@ -35,43 +35,52 @@ class OuterJoinSuite extends SparkPlanTest with SQLTestUtils {
       joinType: JoinType,
       condition: Expression,
       expectedAnswer: Seq[Product]): Unit = {
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-      val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
-      ExtractEquiJoinKeys.unapply(join).foreach {
-        case (_, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
-          test(s"$testName using ShuffledHashOuterJoin") {
+    val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
+    ExtractEquiJoinKeys.unapply(join).foreach {
+      case (_, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
+        test(s"$testName using ShuffledHashOuterJoin") {
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
             checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
               EnsureRequirements(sqlContext).apply(
                 ShuffledHashOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right)),
               expectedAnswer.map(Row.fromTuple),
               sortAnswers = true)
           }
+        }
 
-          if (joinType != FullOuter) {
-            test(s"$testName using BroadcastHashOuterJoin") {
+        if (joinType != FullOuter) {
+          test(s"$testName using BroadcastHashOuterJoin") {
+            withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
               checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
                 BroadcastHashOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right),
                 expectedAnswer.map(Row.fromTuple),
                 sortAnswers = true)
             }
+          }
 
-            test(s"$testName using SortMergeOuterJoin") {
+          test(s"$testName using SortMergeOuterJoin") {
+            withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
               checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-                SortMergeOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right),
+                EnsureRequirements(sqlContext).apply(
+                  SortMergeOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right)),
                 expectedAnswer.map(Row.fromTuple),
                 sortAnswers = false)
             }
           }
-      }
+        }
+    }
 
-      test(s"$testName using BroadcastNestedLoopJoin (build=left)") {
+    test(s"$testName using BroadcastNestedLoopJoin (build=left)") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           joins.BroadcastNestedLoopJoin(left, right, joins.BuildLeft, joinType, Some(condition)),
           expectedAnswer.map(Row.fromTuple),
           sortAnswers = true)
       }
+    }
 
-      test(s"$testName using BroadcastNestedLoopJoin (build=right)") {
+    test(s"$testName using BroadcastNestedLoopJoin (build=right)") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           joins.BroadcastNestedLoopJoin(left, right, joins.BuildRight, joinType, Some(condition)),
           expectedAnswer.map(Row.fromTuple),
@@ -85,14 +94,19 @@ class OuterJoinSuite extends SparkPlanTest with SQLTestUtils {
     Row(2, 1.0), // This row is duplicated to ensure that we will have multiple buffered matches
     Row(2, 1.0),
     Row(3, 3.0),
+    Row(5, 1.0),
+    Row(6, 6.0),
     Row(null, null)
   )), new StructType().add("a", IntegerType).add("b", DoubleType))
 
   val right = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(Seq(
+    Row(0, 0.0),
     Row(2, 3.0), // This row is duplicated to ensure that we will have multiple buffered matches
     Row(2, 3.0),
     Row(3, 2.0),
     Row(4, 1.0),
+    Row(5, 3.0),
+    Row(7, 7.0),
     Row(null, null)
   )), new StructType().add("c", IntegerType).add("d", DoubleType))
 
@@ -117,7 +131,9 @@ class OuterJoinSuite extends SparkPlanTest with SQLTestUtils {
       (2, 1.0, 2, 3.0),
       (2, 1.0, 2, 3.0),
       (2, 1.0, 2, 3.0),
-      (3, 3.0, null, null)
+      (3, 3.0, null, null),
+      (5, 1.0, 5, 3.0),
+      (6, 6.0, null, null)
     )
   )
 
@@ -129,12 +145,15 @@ class OuterJoinSuite extends SparkPlanTest with SQLTestUtils {
     condition,
     Seq(
       (null, null, null, null),
+      (null, null, 0, 0.0),
       (2, 1.0, 2, 3.0),
       (2, 1.0, 2, 3.0),
       (2, 1.0, 2, 3.0),
       (2, 1.0, 2, 3.0),
       (null, null, 3, 2.0),
-      (null, null, 4, 1.0)
+      (null, null, 4, 1.0),
+      (5, 1.0, 5, 3.0),
+      (null, null, 7, 7.0)
     )
   )
 
@@ -151,8 +170,12 @@ class OuterJoinSuite extends SparkPlanTest with SQLTestUtils {
       (2, 1.0, 2, 3.0),
       (2, 1.0, 2, 3.0),
       (3, 3.0, null, null),
+      (5, 1.0, 5, 3.0),
+      (6, 6.0, null, null),
+      (null, null, 0, 0.0),
       (null, null, 3, 2.0),
       (null, null, 4, 1.0),
+      (null, null, 7, 7.0),
       (null, null, null, null),
       (null, null, null, null)
     )

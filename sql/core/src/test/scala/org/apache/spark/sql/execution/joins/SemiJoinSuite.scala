@@ -34,27 +34,31 @@ class SemiJoinSuite extends SparkPlanTest with SQLTestUtils {
       rightRows: DataFrame,
       condition: Expression,
       expectedAnswer: Seq[Product]): Unit = {
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-      val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
-      ExtractEquiJoinKeys.unapply(join).foreach {
-        case (joinType, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
-          test(s"$testName using LeftSemiJoinHash") {
+    val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
+    ExtractEquiJoinKeys.unapply(join).foreach {
+      case (joinType, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
+        test(s"$testName using LeftSemiJoinHash") {
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
             checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
               EnsureRequirements(left.sqlContext).apply(
                 LeftSemiJoinHash(leftKeys, rightKeys, left, right, boundCondition)),
               expectedAnswer.map(Row.fromTuple),
               sortAnswers = true)
           }
+        }
 
-          test(s"$testName using BroadcastLeftSemiJoinHash") {
+        test(s"$testName using BroadcastLeftSemiJoinHash") {
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
             checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
               BroadcastLeftSemiJoinHash(leftKeys, rightKeys, left, right, boundCondition),
               expectedAnswer.map(Row.fromTuple),
               sortAnswers = true)
           }
-      }
+        }
+    }
 
-      test(s"$testName using LeftSemiJoinBNL") {
+    test(s"$testName using LeftSemiJoinBNL") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           LeftSemiJoinBNL(left, right, Some(condition)),
           expectedAnswer.map(Row.fromTuple),
