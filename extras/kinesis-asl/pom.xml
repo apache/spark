@@ -31,7 +31,7 @@
   <name>Spark Kinesis Integration</name>
 
   <properties>
-    <sbt.project.name>kinesis-asl</sbt.project.name>
+    <sbt.project.name>streaming-kinesis-asl</sbt.project.name>
   </properties>
 
   <dependencies>

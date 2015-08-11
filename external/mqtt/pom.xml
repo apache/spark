@@ -78,5 +78,33 @@
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
+
+    <plugins>
+      <!-- Assemble a jar with test dependencies for Python tests -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-assembly-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>test-jar-with-dependencies</id>
+            <phase>package</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
+            <configuration>
+              <!-- Make sure the file path is same as the sbt build -->
+              <finalName>spark-streaming-mqtt-test-${project.version}</finalName>
+              <outputDirectory>${project.build.directory}/scala-${scala.binary.version}/</outputDirectory>
+              <appendAssemblyId>false</appendAssemblyId>
+              <!-- Don't publish it since it's only for Python tests -->
+              <attach>false</attach>
+              <descriptors>
+                <descriptor>src/main/assembly/assembly.xml</descriptor>
+              </descriptors>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
   </build>
 </project>
