@@ -326,9 +326,9 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
             |SELECT
             |  key,
             |  cast(std(value) as decimal(12, 10)),
-            |  cast(stddev(value) as decimal(12, 10)),
-            |  cast(stddev_samp(value) as decimal(12, 10)),
-            |  cast(stddev_pop(value) as decimal(12, 10))
+            |  cast(stDDev(value) as decimal(12, 10)),
+            |  cast(stddEV_samp(value) as decimal(12, 10)),
+            |  cast(stddev_pOP(value) as decimal(12, 10))
             |FROM agg1 GROUP BY key
           """.stripMargin),
         expectedGroup1 ::
