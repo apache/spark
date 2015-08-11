@@ -26,7 +26,8 @@ from pyspark.mllib.common import inherit_doc
 __all__ = ['LogisticRegression', 'LogisticRegressionModel', 'DecisionTreeClassifier',
            'DecisionTreeClassificationModel', 'GBTClassifier', 'GBTClassificationModel',
            'RandomForestClassifier', 'RandomForestClassificationModel', 'NaiveBayes',
-           'NaiveBayesModel']
+           'NaiveBayesModel', 'MultilayerPerceptronClassifier',
+           'MultilayerPerceptronClassifierModel']
 
 
 @inherit_doc
@@ -790,9 +791,9 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     ...     Row(label=1.0, features=Vectors.dense([0.0, 1.0])),
     ...     Row(label=1.0, features=Vectors.dense([1.0, 0.0])),
     ...     Row(label=0.0, features=Vectors.dense([1.0, 1.0]))]).toDF()
-    >>> layers = [2, 5, 2]
-    >>> lr = MultilayerPerceptronClassifier(maxIter=100, layers=layers, blockSize=1, seed=11)
-    >>> model = lr.fit(df)
+    >>> myLayers = [2, 5, 2]
+    >>> mlp = MultilayerPerceptronClassifier(maxIter=100, layers=myLayers, blockSize=1, seed=11)
+    >>> model = mlp.fit(df)
     >>> test0 = sc.parallelize([Row(features=Vectors.dense([1.0, 0.0]))]).toDF()
     >>> model.transform(test0).head().prediction
     1.0
@@ -877,13 +878,6 @@ class MultilayerPerceptronClassifierModel(JavaModel):
     """
     Model fitted by MultilayerPerceptronClassifier.
     """
-
-    @property
-    def layers(self):
-        """
-        array of layer sizes including input and output layers.
-        """
-        return self._call_java("layers")
 
     @property
     def weights(self):
