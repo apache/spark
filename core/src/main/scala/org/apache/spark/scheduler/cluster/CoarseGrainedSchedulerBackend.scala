@@ -188,7 +188,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
       addressToExecutorId.get(remoteAddress).foreach(removeExecutor(_,
-        "remote Rpc client disassociated"))
+        "remote Rpc client disassociated. Likely due to containers exceeding thresholds, or network" +
+          "issues. Check driver logs for WARNings"))
     }
 
     // Make fake resource offers on just one executor
