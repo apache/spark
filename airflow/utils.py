@@ -26,6 +26,11 @@ from sqlalchemy.pool import Pool
 from airflow import settings
 from airflow.configuration import conf
 
+try:
+    basestring
+except NameError:
+    basestring = str
+
 
 class AirflowException(Exception):
     pass
@@ -357,7 +362,7 @@ def ask_yesno(question):
 def send_email(to, subject, html_content):
     SMTP_MAIL_FROM = conf.get('smtp', 'SMTP_MAIL_FROM')
 
-    if isinstance(to, str) or isinstance(to, str):
+    if isinstance(to, basestring):
         if ',' in to:
             to = to.split(',')
         elif ';' in to:
