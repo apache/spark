@@ -38,6 +38,14 @@ case class EqualTo(attribute: String, value: Any) extends Filter
 
 /**
  * A filter that evaluates to `true` iff the attribute evaluates to a value
+ * null safe and equal to `value`.
+ *
+ * @since 1.5.0
+ */
+case class EqualNullSafe(attribute: String, value: Any) extends Filter
+
+/**
+ * A filter that evaluates to `true` iff the attribute evaluates to a value
  * greater than `value`.
  *
  * @since 1.3.0
