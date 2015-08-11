@@ -185,9 +185,12 @@ class StreamingContext(object):
             # backing the supposedly active Python context
             activePythonContextJavaId = activePythonContext._jssc.ssc().hashCode()
             activeJvmContextOption = activePythonContext._jvm.StreamingContext.getActive()
-            if activeJvmContextOption.isEmpty() or \
-                    activeJvmContextOption.get().hashCode() != activePythonContextJavaId:
+
+            if activeJvmContextOption.isEmpty():
                 cls._activeContext = None
+            elif activeJvmContextOption.get().hashCode() != activePythonContextJavaId:
+                raise Exception("JVM's active JavaStreamingContext is not the JavaStreamingContext "
+                                "backing the action Python StreamingContext. This is unexpected.")
         return cls._activeContext
 
     @classmethod
