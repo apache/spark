@@ -1059,7 +1059,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
             finalModel = stkm.latestModel()
             if finalModel is not None:
                 return (all(finalModel.centers == array(initCenters)) and
-                        finalModel.clusterWeight == [5.0, 5.0, 5.0, 5.0])
+                        finalModel.clusterWeights == [5.0, 5.0, 5.0, 5.0])
             else:
                 return False
         self._ssc_wait_checked(t, 20.0, termCheck)
