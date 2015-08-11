@@ -310,7 +310,7 @@ object functions {
    * @group agg_funcs
    * @since 1.5.0
    */
-  def stddev(columnName: String): Column = stddev(Column(columnName))
+  def stddev(columnName: String): Column = stddevSamp(Column(columnName))
 
   /**
    * Aggregate function: returns the population standard deviation of the values in a group.
@@ -318,7 +318,11 @@ object functions {
    * @group agg_funcs
    * @since 1.5.0
    */
-  def stddevPop(e: Column): Column = aggregate.Utils.standardDeviation(e.expr, false, "stddev_pomp")
+  def stddevPop(e: Column): Column = {
+    Alias(
+      UnresolvedFunction("stddev_pop", e.expr :: Nil, false),
+      s"stddev_pop(${e.expr.prettyString})")()
+  }
 
   /**
    * Aggregate function: returns the population standard deviation of the values in a group.
@@ -334,7 +338,11 @@ object functions {
    * @group agg_funcs
    * @since 1.5.0
    */
-  def stddevSamp(e: Column): Column = aggregate.Utils.sampleStandardDeviation(e.expr)
+  def stddevSamp(e: Column): Column = {
+    Alias(
+      UnresolvedFunction("stddev_samp", e.expr :: Nil, false),
+      s"stddev_samp(${e.expr.prettyString})")()
+  }
 
   /**
    * Aggregate function: returns the sample standard deviation of the values in a group.
@@ -342,7 +350,7 @@ object functions {
    * @group agg_funcs
    * @since 1.5.0
    */
-  def stddevSamp(columnName: String): Column = stddev(Column(columnName))
+  def stddevSamp(columnName: String): Column = stddevSamp(Column(columnName))
 
   /**
    * Aggregate function: returns the sum of all values in the expression.

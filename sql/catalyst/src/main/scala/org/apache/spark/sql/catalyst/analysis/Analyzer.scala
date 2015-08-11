@@ -524,7 +524,16 @@ class Analyzer(
         q transformExpressions {
           case u @ UnresolvedFunction(name, children, isDistinct) =>
             withPosition(u) {
-              registry.lookupFunction(name, children) match {
+              // TODO: This is a hack. Hive uses stddev and std as aliases of stddev_pop, which
+              // is different from other widely used systems (these systems use these two function
+              // names as aliases of stddev_samp). So, we explicitly rename it to stddev_samp.
+              // Once we remove AggregateExpression1, we can remove this hack.
+              val rewrittenName = name match {
+                case "stddev" | "std" => "stddev_samp"
+                case other => other
+              }
+
+              registry.lookupFunction(rewrittenName, children) match {
                 // We get an aggregate function built based on AggregateFunction2 interface.
                 // So, we wrap it in AggregateExpression2.
                 case agg2: AggregateFunction2 => AggregateExpression2(agg2, Complete, isDistinct)
@@ -538,7 +547,7 @@ class Analyzer(
                 // For other aggregate functions, DISTINCT keyword is not supported for now.
                 // Once we converted to the new code path, we will allow using DISTINCT keyword.
                 case other: AggregateExpression1 if isDistinct =>
-                  failAnalysis(s"$name does not support DISTINCT keyword.")
+                  failAnalysis(s"$rewrittenName does not support DISTINCT keyword.")
                 // If it does not have DISTINCT keyword, we will return it as is.
                 case other => other
               }

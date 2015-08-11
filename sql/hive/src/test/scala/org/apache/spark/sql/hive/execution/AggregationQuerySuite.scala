@@ -299,11 +299,42 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
       df.select(stddevPop("val").cast("decimal(12, 10)")),
       Row(about(2.8722813232690148)) :: Nil)
 
-    checkAnswer(
-      sqlContext.table("agg1").groupBy("key").stddev("value")
-        .select($"key", $"stddev_samp(value)".cast("decimal(12, 10)")),
-      Row(1, about(10.0)) :: Row(2, about(0.7071067811865476)) :: Row(3, null) ::
-        Row(null, about(81.8535277187245)) :: Nil)
+    // Make sure we can use stddev functions in SQL.
+    {
+      val expectedGroup1 =
+        Row(1, about(10.0), about(10.0), about(10.0), about(8.16496580927726))
+      val expectedGroup2 =
+        Row(
+          2,
+          about(0.7071067811865476),
+          about(0.7071067811865476),
+          about(0.7071067811865476),
+          about(0.5))
+      val expectedGroup3 = Row(3, null, null, null, null)
+      val expectedGroupNull =
+        Row(
+          null,
+          about(81.8535277187245),
+          about(81.8535277187245),
+          about(81.8535277187245),
+          about(66.83312551921139))
+
+      checkAnswer(
+        sqlContext.sql(
+          """
+            |SELECT
+            |  key,
+            |  cast(std(value) as decimal(12, 10)),
+            |  cast(stddev(value) as decimal(12, 10)),
+            |  cast(stddev_samp(value) as decimal(12, 10)),
+            |  cast(stddev_pop(value) as decimal(12, 10))
+            |FROM agg1 GROUP BY key
+          """.stripMargin),
+        expectedGroup1 ::
+          expectedGroup2 ::
+          expectedGroup3 ::
+          expectedGroupNull :: Nil)
+    }
 
     checkAnswer(
       sqlContext.table("agg1").groupBy("key").stddevPop("value")
@@ -343,6 +374,23 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
     checkAnswer(
       sqlContext.table("emptyTable").select(stddevPop("value")),
       Row(null) :: Nil)
+
+    // stddev_samp returns null when there is a single input.
+    // While, stddev_pop returns 0.0 when there is a single input.
+    checkAnswer(
+      sqlContext.sql("SELECT stddev_samp(1), stddev_pop(1)"),
+      Row(null, 0.0) :: Nil
+    )
+
+    // TODO: Because we will first resolve stddev to Hive's GenericUDAF and it will
+    // complain about stddev_samp(null) and stddev_pop(null). So, we comment out this
+    // test. Once we remove AggregateExpression1, we will resolve them directly to
+    // out native implementation. We should re-enable this test at that time.
+    /*
+    checkAnswer(
+      sqlContext.sql("SELECT stddev_samp(null), stddev_pop(null)"),
+      Row(null, null) :: Nil
+    )*/
   }
 
   test("udaf") {
@@ -566,7 +614,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
             |SELECT
             |  key,
             |  mydoublesum(value + 1.5 * key),
-            |  stddev_samp(value)
+            |  variance(value)
             |FROM agg1
             |GROUP BY key
           """.stripMargin).collect()
@@ -579,7 +627,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
           |SELECT
           |  key,
           |  sum(value + 1.5 * key),
-          |  stddev_samp(value)
+          |  variance(value)
           |FROM agg1
           |GROUP BY key
         """.stripMargin).queryExecution.executedPlan.collect {
