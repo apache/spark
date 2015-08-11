@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.parquet
+package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.{Row, DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 class ParquetProtobufCompatibilitySuite extends ParquetCompatibilityTest {
   override def sqlContext: SQLContext = TestSQLContext
