@@ -49,7 +49,7 @@ import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.storage.*;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
@@ -166,14 +166,14 @@ public class UnsafeExternalSorterSuite {
 
   private static void insertNumber(UnsafeExternalSorter sorter, int value) throws Exception {
     final int[] arr = new int[]{ value };
-    sorter.insertRecord(arr, PlatformDependent.INT_ARRAY_OFFSET, 4, value);
+    sorter.insertRecord(arr, Platform.INT_ARRAY_OFFSET, 4, value);
   }
 
   private static void insertRecord(
       UnsafeExternalSorter sorter,
       int[] record,
       long prefix) throws IOException {
-    sorter.insertRecord(record, PlatformDependent.INT_ARRAY_OFFSET, record.length * 4, prefix);
+    sorter.insertRecord(record, Platform.INT_ARRAY_OFFSET, record.length * 4, prefix);
   }
 
   private UnsafeExternalSorter newSorter() throws IOException {
@@ -205,7 +205,7 @@ public class UnsafeExternalSorterSuite {
       iter.loadNext();
       assertEquals(i, iter.getKeyPrefix());
       assertEquals(4, iter.getRecordLength());
-      assertEquals(i, PlatformDependent.UNSAFE.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+      assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
     }
 
     sorter.cleanupResources();
@@ -253,7 +253,7 @@ public class UnsafeExternalSorterSuite {
       iter.loadNext();
       assertEquals(i, iter.getKeyPrefix());
       assertEquals(4, iter.getRecordLength());
-      assertEquals(i, PlatformDependent.UNSAFE.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+      assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
       i++;
     }
     sorter.cleanupResources();
@@ -265,7 +265,7 @@ public class UnsafeExternalSorterSuite {
     final UnsafeExternalSorter sorter = newSorter();
     byte[] record = new byte[16];
     while (sorter.getNumberOfAllocatedPages() < 2) {
-      sorter.insertRecord(record, PlatformDependent.BYTE_ARRAY_OFFSET, record.length, 0);
+      sorter.insertRecord(record, Platform.BYTE_ARRAY_OFFSET, record.length, 0);
     }
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
@@ -292,25 +292,25 @@ public class UnsafeExternalSorterSuite {
     iter.loadNext();
     assertEquals(123, iter.getKeyPrefix());
     assertEquals(smallRecord.length * 4, iter.getRecordLength());
-    assertEquals(123, PlatformDependent.UNSAFE.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    assertEquals(123, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
     // Small record
     assertTrue(iter.hasNext());
     iter.loadNext();
     assertEquals(123, iter.getKeyPrefix());
     assertEquals(smallRecord.length * 4, iter.getRecordLength());
-    assertEquals(123, PlatformDependent.UNSAFE.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    assertEquals(123, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
     // Large record
     assertTrue(iter.hasNext());
     iter.loadNext();
     assertEquals(456, iter.getKeyPrefix());
     assertEquals(largeRecord.length * 4, iter.getRecordLength());
-    assertEquals(456, PlatformDependent.UNSAFE.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    assertEquals(456, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
     // Large record
     assertTrue(iter.hasNext());
     iter.loadNext();
     assertEquals(456, iter.getKeyPrefix());
     assertEquals(largeRecord.length * 4, iter.getRecordLength());
-    assertEquals(456, PlatformDependent.UNSAFE.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    assertEquals(456, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
 
     assertFalse(iter.hasNext());
     sorter.cleanupResources();

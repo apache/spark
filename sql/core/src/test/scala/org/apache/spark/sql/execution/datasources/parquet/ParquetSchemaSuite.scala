@@ -585,6 +585,36 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin)
 
+  testParquetToCatalyst(
+    "Backwards-compatibility: LIST with non-nullable element type 7 - " +
+      "parquet-protobuf primitive lists",
+    new StructType()
+      .add("f1", ArrayType(IntegerType, containsNull = false), nullable = false),
+    """message root {
+      |  repeated int32 f1;
+      |}
+    """.stripMargin)
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: LIST with non-nullable element type 8 - " +
+      "parquet-protobuf non-primitive lists",
+    {
+      val elementType =
+        new StructType()
+          .add("c1", StringType, nullable = true)
+          .add("c2", IntegerType, nullable = false)
+
+      new StructType()
+        .add("f1", ArrayType(elementType, containsNull = false), nullable = false)
+    },
+    """message root {
+      |  repeated group f1 {
+      |    optional binary c1 (UTF8);
+      |    required int32 c2;
+      |  }
+      |}
+    """.stripMargin)
+
   // =======================================================
   // Tests for converting Catalyst ArrayType to Parquet LIST
   // =======================================================

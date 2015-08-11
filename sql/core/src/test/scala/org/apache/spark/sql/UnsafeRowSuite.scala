@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.PlatformDependent
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.memory.MemoryAllocator
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -51,7 +51,7 @@ class UnsafeRowSuite extends SparkFunSuite {
     val bytesFromOffheapRow: Array[Byte] = {
       val offheapRowPage = MemoryAllocator.UNSAFE.allocate(arrayBackedUnsafeRow.getSizeInBytes)
       try {
-        PlatformDependent.copyMemory(
+        Platform.copyMemory(
           arrayBackedUnsafeRow.getBaseObject,
           arrayBackedUnsafeRow.getBaseOffset,
           offheapRowPage.getBaseObject,

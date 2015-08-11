@@ -23,8 +23,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{UnspecifiedDistribution, ClusteredDistribution, AllTuples, Distribution}
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{UnaryNode, SparkPlan}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 case class TungstenAggregate(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
@@ -35,6 +36,10 @@ case class TungstenAggregate(
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends UnaryNode {
+
+  override private[sql] lazy val metrics = Map(
+    "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def outputsUnsafeRows: Boolean = true
 
@@ -62,6 +67,8 @@ case class TungstenAggregate(
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+    val numInputRows = longMetric("numInputRows")
+    val numOutputRows = longMetric("numOutputRows")
 
     /**
      * Set up the underlying unsafe data structures used before computing the parent partition.
@@ -76,7 +83,9 @@ case class TungstenAggregate(
         resultExpressions,
         newMutableProjection,
         child.output,
-        testFallbackStartsAt)
+        testFallbackStartsAt,
+        numInputRows,
+        numOutputRows)
     }
 
     /** Compute a partition using the iterator already set up previously. */
@@ -90,6 +99,7 @@ case class TungstenAggregate(
         // We're not using the underlying map, so we just can free it here
         aggregationIterator.free()
         if (groupingExpressions.isEmpty) {
+          numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
         } else {
           // This is a grouped aggregate and the input iterator is empty,
