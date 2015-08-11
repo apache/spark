@@ -178,6 +178,16 @@ object MimaExcludes {
             // SPARK-4751 Dynamic allocation for standalone mode
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.SparkContext.supportDynamicAllocation")
+          ) ++ Seq(
+            // SPARK-9580: Remove SQL test singletons
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.test.LocalSQLContext$SQLSession"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.test.LocalSQLContext"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.test.TestSQLContext"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.test.TestSQLContext$")
           )
 
         case v if v.startsWith("1.4") =>
