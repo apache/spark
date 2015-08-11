@@ -60,6 +60,10 @@ class PySparkStreamingTestCase(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.sc.stop()
+        # Clean up in the JVM just in case there has been some issues in Python API
+        jSparkContextOption = SparkContext._jvm.SparkContext.get()
+        if jSparkContextOption.nonEmpty():
+            jSparkContextOption.get().stop()
 
     def setUp(self):
         self.ssc = StreamingContext(self.sc, self.duration)
@@ -67,6 +71,11 @@ class PySparkStreamingTestCase(unittest.TestCase):
     def tearDown(self):
         if self.ssc is not None:
             self.ssc.stop(False)
+        # Clean up in the JVM just in case there has been some issues in Python API
+        jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
+        if jStreamingContextOption.nonEmpty():
+            jStreamingContextOption.get().stop(false)
+
 
     def wait_for(self, result, n):
         start_time = time.time()
@@ -539,7 +548,8 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self.assertEqual(StreamingContext.getActive(), None)
 
     def test_get_active_or_create(self):
-        # Test StreamingContext.getActiveOrCreate()
+        # Test StreamingContext.getActiveOrCreate() without checkpoint data
+        # See CheckpointTests for tests with checkpoint data
         self.ssc = None
         self.assertEqual(StreamingContext.getActive(), None)
 
@@ -580,6 +590,16 @@ class StreamingContextTests(PySparkStreamingTestCase):
 class CheckpointTests(unittest.TestCase):
 
     setupCalled = False
+
+    @staticmethod
+    def tearDownClass():
+        # Clean up in the JVM just in case there has been some issues in Python API
+        jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
+        if jStreamingContextOption.nonEmpty():
+            jStreamingContextOption.get().stop()
+        jSparkContextOption = SparkContext._jvm.SparkContext.get()
+        if jSparkContextOption.nonEmpty():
+            jSparkContextOption.get().stop()
 
     def tearDown(self):
         if self.ssc is not None:
