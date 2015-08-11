@@ -53,7 +53,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Concat(inputs.map(Literal.create(_, BinaryType))), expected, EmptyRow)
     }
 
-    implicit def toBinary(s: String) = s.getBytes("UTF-8")
+    implicit def toBinary(s: String): Array[Byte] = s.getBytes("UTF-8")
 
     testConcat("ab")
     testConcat("a", "b")

@@ -64,7 +64,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
 
   // If no input, set StringType as default one.
   override def dataType: DataType =
-    if(children.isEmpty) StringType else children.head.dataType
+    if (children.isEmpty) StringType else children.head.dataType
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
