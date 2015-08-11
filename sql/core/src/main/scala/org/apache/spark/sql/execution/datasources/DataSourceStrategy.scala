@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.{TimestampType, DateType, StringType, StructType}
 import org.apache.spark.sql.{SaveMode, Strategy, execution, sources, _}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -348,26 +348,76 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         Some(sources.EqualTo(a.name, v))
       case expressions.EqualTo(Literal(v, _), a: Attribute) =>
         Some(sources.EqualTo(a.name, v))
+      case expressions.EqualTo(Cast(a: Attribute, _), Literal(v, _))
+        if a.dataType == DateType || a.dataType == TimestampType =>
+          Some(sources.EqualTo(a.name, v))
+      case expressions.EqualTo(Literal(v, _), Cast(a: Attribute, _))
+        if a.dataType == DateType || a.dataType == TimestampType =>
+          Some(sources.EqualTo(a.name, v))
+      case expressions.EqualTo(Cast(a: Attribute, _), l: Literal) =>
+        Some(sources.EqualTo(a.name, Cast(l, a.dataType).eval()))
+      case expressions.EqualTo(l: Literal, Cast(a: Attribute, _)) =>
+        Some(sources.EqualTo(a.name, Cast(l, a.dataType).eval()))
 
       case expressions.GreaterThan(a: Attribute, Literal(v, _)) =>
         Some(sources.GreaterThan(a.name, v))
       case expressions.GreaterThan(Literal(v, _), a: Attribute) =>
         Some(sources.LessThan(a.name, v))
+      case expressions.GreaterThan(Cast(a: Attribute, _), Literal(v, _))
+        if a.dataType == DateType || a.dataType == TimestampType =>
+          Some(sources.GreaterThan(a.name, v))
+      case expressions.GreaterThan(Literal(v, _), Cast(a: Attribute, _))
+        if a.dataType == DateType || a.dataType == TimestampType =>
+          Some(sources.LessThan(a.name, v))
+      case expressions.GreaterThan(Cast(a: Attribute, _), l: Literal) =>
+        Some(sources.GreaterThan(a.name, Cast(l, a.dataType).eval()))
+      case expressions.GreaterThan(l: Literal, Cast(a: Attribute, _)) =>
+        Some(sources.LessThan(a.name, Cast(l, a.dataType).eval()))
 
       case expressions.LessThan(a: Attribute, Literal(v, _)) =>
         Some(sources.LessThan(a.name, v))
       case expressions.LessThan(Literal(v, _), a: Attribute) =>
         Some(sources.GreaterThan(a.name, v))
+      case expressions.LessThan(Cast(a: Attribute, _), Literal(v, _))
+        if a.dataType == DateType || a.dataType == TimestampType =>
+          Some(sources.LessThan(a.name, v))
+      case expressions.LessThan(Literal(v, _), Cast(a: Attribute, _))
+        if a.dataType == DateType || a.dataType == TimestampType =>
+          Some(sources.GreaterThan(a.name, v))
+      case expressions.LessThan(Cast(a: Attribute, _), l: Literal) =>
+        Some(sources.LessThan(a.name, Cast(l, a.dataType).eval()))
+      case expressions.LessThan(l: Literal, Cast(a: Attribute, _)) =>
+        Some(sources.GreaterThan(a.name, Cast(l, a.dataType).eval()))
 
       case expressions.GreaterThanOrEqual(a: Attribute, Literal(v, _)) =>
         Some(sources.GreaterThanOrEqual(a.name, v))
       case expressions.GreaterThanOrEqual(Literal(v, _), a: Attribute) =>
         Some(sources.LessThanOrEqual(a.name, v))
+      case expressions.GreaterThanOrEqual(Cast(a: Attribute, _), Literal(v, _))
+        if a.dataType == DateType || a.dataType == TimestampType =>
+          Some(sources.GreaterThanOrEqual(a.name, v))
+      case expressions.GreaterThanOrEqual(Literal(v, _), Cast(a: Attribute, _))
+        if a.dataType == DateType || a.dataType == TimestampType =>
+          Some(sources.LessThanOrEqual(a.name, v))
+      case expressions.GreaterThanOrEqual(Cast(a: Attribute, _), l: Literal) =>
+        Some(sources.GreaterThanOrEqual(a.name, Cast(l, a.dataType).eval()))
+      case expressions.GreaterThanOrEqual(l: Literal, Cast(a: Attribute, _)) =>
+        Some(sources.LessThanOrEqual(a.name, Cast(l, a.dataType).eval()))
 
       case expressions.LessThanOrEqual(a: Attribute, Literal(v, _)) =>
         Some(sources.LessThanOrEqual(a.name, v))
       case expressions.LessThanOrEqual(Literal(v, _), a: Attribute) =>
         Some(sources.GreaterThanOrEqual(a.name, v))
+      case expressions.LessThanOrEqual(Cast(a: Attribute, _), Literal(v, _))
+        if a.dataType == DateType || a.dataType == TimestampType =>
+          Some(sources.LessThanOrEqual(a.name, v))
+      case expressions.LessThanOrEqual(Literal(v, _), Cast(a: Attribute, _))
+        if a.dataType == DateType || a.dataType == TimestampType =>
+          Some(sources.GreaterThanOrEqual(a.name, v))
+      case expressions.LessThanOrEqual(Cast(a: Attribute, _), l: Literal) =>
+        Some(sources.LessThanOrEqual(a.name, Cast(l, a.dataType).eval()))
+      case expressions.LessThanOrEqual(l: Literal, Cast(a: Attribute, _)) =>
+        Some(sources.GreaterThanOrEqual(a.name, Cast(l, a.dataType).eval()))
 
       case expressions.InSet(a: Attribute, set) =>
         Some(sources.In(a.name, set.toArray))
@@ -408,12 +458,6 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       case _ => None
     }
 
-    filters.map(eliminateCastOnAttribute(_)).flatMap(translate)
-  }
-
-  private def eliminateCastOnAttribute(expression: Expression): Expression = {
-    expression.transform {
-      case Cast(a: Attribute, _) => a
-    }
+    filters.flatMap(translate)
   }
 }

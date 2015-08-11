@@ -25,6 +25,7 @@ import org.h2.jdbc.JdbcSQLException
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
 import org.apache.spark.sql.execution.PhysicalRDD
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -463,7 +464,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
       val rddOpt = sql(query).queryExecution.executedPlan.collectFirst {
         case PhysicalRDD(_, rdd: JDBCRDD, _) => rdd
       }
-      assert(rddOpt.isDefined, s"Expected to push [$filterStr], actually we pushed []")
+      assert(rddOpt.isDefined)
       val pushedFilterStr = rddOpt.get.filterWhereClause
       assert(pushedFilterStr.contains(filterStr),
         s"Expected to push [$filterStr], actually we pushed [$pushedFilterStr]")
