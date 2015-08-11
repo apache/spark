@@ -39,7 +39,7 @@ private[sql] abstract class SQLImplicits {
    */
   implicit class StringToColumn(val sc: StringContext) {
     def $(args: Any*): ColumnName = {
-      new ColumnName(sc.s(args : _*))
+      new ColumnName(sc.s(args: _*))
     }
   }
 
@@ -61,7 +61,8 @@ private[sql] abstract class SQLImplicits {
    * Creates a DataFrame from a local Seq of Product.
    * @since 1.3.0
    */
-  implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder = {
+  implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder =
+  {
     DataFrameHolder(_sqlContext.createDataFrame(data))
   }
 

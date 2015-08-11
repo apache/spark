@@ -38,6 +38,8 @@ object SortPrefixUtils {
     sortOrder.dataType match {
       case StringType =>
         if (sortOrder.isAscending) PrefixComparators.STRING else PrefixComparators.STRING_DESC
+      case BinaryType =>
+        if (sortOrder.isAscending) PrefixComparators.BINARY else PrefixComparators.BINARY_DESC
       case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType =>
         if (sortOrder.isAscending) PrefixComparators.LONG else PrefixComparators.LONG_DESC
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>

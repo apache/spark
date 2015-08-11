@@ -21,6 +21,7 @@ import java.sql.Date
 import java.util.Locale
 
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.ql.{ErrorMsg, Context}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
@@ -31,6 +32,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -43,6 +45,7 @@ import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
 
 /* Implicit conversions */
@@ -260,8 +263,8 @@ private[hive] object HiveQl extends Logging {
   /**
    * Returns the HiveConf
    */
-  private[this] def hiveConf(): HiveConf = {
-    val ss = SessionState.get() // SessionState is lazy initializaion, it can be null here
+  private[this] def hiveConf: HiveConf = {
+    val ss = SessionState.get() // SessionState is lazy initialization, it can be null here
     if (ss == null) {
       new HiveConf()
     } else {
@@ -603,38 +606,18 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         serde = None,
         viewText = None)
 
-      // default storage type abbriviation (e.g. RCFile, ORC, PARQUET etc.)
+      // default storage type abbreviation (e.g. RCFile, ORC, PARQUET etc.)
       val defaultStorageType = hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT)
-      // handle the default format for the storage type abbriviation
-      tableDesc = if ("SequenceFile".equalsIgnoreCase(defaultStorageType)) {
-          tableDesc.copy(
-            inputFormat = Option("org.apache.hadoop.mapred.SequenceFileInputFormat"),
-            outputFormat = Option("org.apache.hadoop.mapred.SequenceFileOutputFormat"))
-        } else if ("RCFile".equalsIgnoreCase(defaultStorageType)) {
-          tableDesc.copy(
-            inputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"),
-            outputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"),
-            serde = Option(hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTRCFILESERDE)))
-        } else if ("ORC".equalsIgnoreCase(defaultStorageType)) {
-          tableDesc.copy(
-            inputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"),
-            outputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"),
-            serde = Option("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
-        } else if ("PARQUET".equalsIgnoreCase(defaultStorageType)) {
-          tableDesc.copy(
-            inputFormat =
-              Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
-            outputFormat =
-              Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"),
-            serde =
-              Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
-        } else {
-          tableDesc.copy(
-            inputFormat =
-              Option("org.apache.hadoop.mapred.TextInputFormat"),
-            outputFormat =
-              Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
-        }
+      // handle the default format for the storage type abbreviation
+      val hiveSerDe = HiveSerDe.sourceToSerDe(defaultStorageType, hiveConf).getOrElse {
+        HiveSerDe(
+          inputFormat = Option("org.apache.hadoop.mapred.TextInputFormat"),
+          outputFormat = Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
+      }
+
+      hiveSerDe.inputFormat.foreach(f => tableDesc = tableDesc.copy(inputFormat = Some(f)))
+      hiveSerDe.outputFormat.foreach(f => tableDesc = tableDesc.copy(outputFormat = Some(f)))
+      hiveSerDe.serde.foreach(f => tableDesc = tableDesc.copy(serde = Some(f)))
 
       children.collect {
         case list @ Token("TOK_TABCOLLIST", _) =>
@@ -907,7 +890,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 }
                 (Nil, Some(BaseSemanticAnalyzer.unescapeSQLString(serdeClass)), serdeProps)
 
-              case Nil => (Nil, None, Nil)
+              case Nil => (Nil, Option(hiveConf.getVar(ConfVars.HIVESCRIPTSERDE)), Nil)
             }
 
             val (inRowFormat, inSerdeClass, inSerdeProps) = matchSerDe(inputSerdeClause)
@@ -1536,6 +1519,30 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     case ast: ASTNode if ast.getType == HiveParser.TOK_CHARSETLITERAL =>
       Literal(BaseSemanticAnalyzer.charSetString(ast.getChild(0).getText, ast.getChild(1).getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_YEAR_MONTH_LITERAL =>
+      Literal(CalendarInterval.fromYearMonthString(ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_DAY_TIME_LITERAL =>
+      Literal(CalendarInterval.fromDayTimeString(ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_YEAR_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("year", ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_MONTH_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("month", ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_DAY_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("day", ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_HOUR_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("hour", ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_MINUTE_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("minute", ast.getText))
+
+    case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_SECOND_LITERAL =>
+      Literal(CalendarInterval.fromSingleUnitString("second", ast.getText))
 
     case a: ASTNode =>
       throw new NotImplementedError(

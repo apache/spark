@@ -19,9 +19,9 @@ package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.conf.HiveConf
 
-import org.apache.spark.sql.hive.test.HiveParquetCompatibilityTest
-import org.apache.spark.sql.parquet.ParquetCompatibilityTest
 import org.apache.spark.sql.{Row, SQLConf}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetCompatibilityTest
+import org.apache.spark.sql.hive.test.HiveParquetCompatibilityTest
 
 class ParquetHiveCompatibilitySuite extends HiveParquetCompatibilityTest {
   import ParquetCompatibilityTest.makeNullable

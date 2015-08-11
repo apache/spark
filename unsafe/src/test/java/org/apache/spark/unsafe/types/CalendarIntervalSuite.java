@@ -102,6 +102,97 @@ public class CalendarIntervalSuite {
   }
 
   @Test
+  public void fromYearMonthStringTest() {
+    String input;
+    CalendarInterval i;
+
+    input = "99-10";
+    i = new CalendarInterval(99 * 12 + 10, 0L);
+    assertEquals(CalendarInterval.fromYearMonthString(input), i);
+
+    input = "-8-10";
+    i = new CalendarInterval(-8 * 12 - 10, 0L);
+    assertEquals(CalendarInterval.fromYearMonthString(input), i);
+
+    try {
+      input = "99-15";
+      CalendarInterval.fromYearMonthString(input);
+      fail("Expected to throw an exception for the invalid input");
+    } catch (IllegalArgumentException e) {
+      assertTrue(e.getMessage().contains("month 15 outside range"));
+    }
+  }
+
+  @Test
+  public void fromDayTimeStringTest() {
+    String input;
+    CalendarInterval i;
+
+    input = "5 12:40:30.999999999";
+    i = new CalendarInterval(0, 5 * MICROS_PER_DAY + 12 * MICROS_PER_HOUR +
+      40 * MICROS_PER_MINUTE + 30 * MICROS_PER_SECOND + 999999L);
+    assertEquals(CalendarInterval.fromDayTimeString(input), i);
+
+    input = "10 0:12:0.888";
+    i = new CalendarInterval(0, 10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE);
+    assertEquals(CalendarInterval.fromDayTimeString(input), i);
+
+    input = "-3 0:0:0";
+    i = new CalendarInterval(0, -3 * MICROS_PER_DAY);
+    assertEquals(CalendarInterval.fromDayTimeString(input), i);
+
+    try {
+      input = "5 30:12:20";
+      CalendarInterval.fromDayTimeString(input);
+      fail("Expected to throw an exception for the invalid input");
+    } catch (IllegalArgumentException e) {
+      assertTrue(e.getMessage().contains("hour 30 outside range"));
+    }
+
+    try {
+      input = "5 30-12";
+      CalendarInterval.fromDayTimeString(input);
+      fail("Expected to throw an exception for the invalid input");
+    } catch (IllegalArgumentException e) {
+      assertTrue(e.getMessage().contains("not match day-time format"));
+    }
+  }
+
+  @Test
+  public void fromSingleUnitStringTest() {
+    String input;
+    CalendarInterval i;
+
+    input = "12";
+    i = new CalendarInterval(12 * 12, 0L);
+    assertEquals(CalendarInterval.fromSingleUnitString("year", input), i);
+
+    input = "100";
+    i = new CalendarInterval(0, 100 * MICROS_PER_DAY);
+    assertEquals(CalendarInterval.fromSingleUnitString("day", input), i);
+
+    input = "1999.38888";
+    i = new CalendarInterval(0, 1999 * MICROS_PER_SECOND + 38);
+    assertEquals(CalendarInterval.fromSingleUnitString("second", input), i);
+
+    try {
+      input = String.valueOf(Integer.MAX_VALUE);
+      CalendarInterval.fromSingleUnitString("year", input);
+      fail("Expected to throw an exception for the invalid input");
+    } catch (IllegalArgumentException e) {
+      assertTrue(e.getMessage().contains("outside range"));
+    }
+
+    try {
+      input = String.valueOf(Long.MAX_VALUE / MICROS_PER_HOUR + 1);
+      CalendarInterval.fromSingleUnitString("hour", input);
+      fail("Expected to throw an exception for the invalid input");
+    } catch (IllegalArgumentException e) {
+      assertTrue(e.getMessage().contains("outside range"));
+    }
+  }
+
+  @Test
   public void addTest() {
     String input = "interval 3 month 1 hour";
     String input2 = "interval 2 month 100 hour";

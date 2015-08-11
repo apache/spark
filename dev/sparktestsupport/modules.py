@@ -181,6 +181,7 @@ streaming_mqtt = Module(
     dependencies=[streaming],
     source_file_regexes=[
         "external/mqtt",
+        "external/mqtt-assembly",
     ],
     sbt_test_goals=[
         "streaming-mqtt/test",
@@ -306,6 +307,7 @@ pyspark_streaming = Module(
         streaming,
         streaming_kafka,
         streaming_flume_assembly,
+        streaming_mqtt,
         streaming_kinesis_asl
     ],
     source_file_regexes=[
@@ -331,6 +333,7 @@ pyspark_mllib = Module(
         "pyspark.mllib.feature",
         "pyspark.mllib.fpm",
         "pyspark.mllib.linalg.__init__",
+        "pyspark.mllib.linalg.distributed",
         "pyspark.mllib.random",
         "pyspark.mllib.recommendation",
         "pyspark.mllib.regression",

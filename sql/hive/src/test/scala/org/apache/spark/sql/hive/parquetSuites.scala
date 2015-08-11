@@ -23,8 +23,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
 import org.apache.spark.sql.hive.execution.HiveTableScan
-import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHiveContext}
-import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 

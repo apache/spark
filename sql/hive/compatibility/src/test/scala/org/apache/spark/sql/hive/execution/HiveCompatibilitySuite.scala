@@ -23,6 +23,7 @@ import java.util.{Locale, TimeZone}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.SQLConf
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 /**
  * Runs the test cases that are included in the hive distribution.
@@ -50,6 +51,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, 5)
     // Enable in-memory partition pruning for testing purposes
     ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
+    RuleExecutor.resetTime()
   }
 
   override def afterAll() {
@@ -58,6 +60,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     Locale.setDefault(originalLocale)
     ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
     ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
+
+    // For debugging dump some statistics about how much time was spent in various optimizer rules.
+    logWarning(RuleExecutor.dumpTimeSpent())
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
@@ -265,6 +270,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // Hive returns string from UTC formatted timestamp, spark returns timestamp type
     "date_udf",
+
+    // Can't compare the result that have newline in it
+    "udf_get_json_object",
 
     // Unlike Hive, we do support log base in (0, 1.0], therefore disable this
     "udf7",
