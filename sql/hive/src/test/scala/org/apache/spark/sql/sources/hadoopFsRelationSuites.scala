@@ -48,6 +48,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         StructField("b", StringType, nullable = false)))
 
   lazy val testDF = (1 to 3).map(i => (i, s"val_$i")).toDF("a", "b")
+  lazy val testDF2 = (5 to 8).map(i => (i, s"val_$i")).toDF("a", "b")
 
   lazy val partitionedTestDF1 = (for {
     i <- 1 to 3
@@ -266,6 +267,30 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
 
     withTable("t") {
       checkAnswer(sqlContext.table("t"), testDF.unionAll(testDF).orderBy("a").collect())
+    }
+  }
+
+  test("invalidate the cached table - non-partitioned table") {
+    withTempPath { file =>
+      withTempTable("temp_datasource") {
+        sql(
+          s"""
+            |CREATE TEMPORARY TABLE temp_datasource (a int, b string)
+            |USING $dataSourceName
+            |OPTIONS (
+            |  path '${file.toString}'
+            |)
+          """.stripMargin)
+
+        testDF.write.format(dataSourceName).mode(SaveMode.Overwrite).save(file.toString)
+        checkAnswer(sqlContext.table("temp_datasource"), testDF.orderBy("a").collect())
+
+        sqlContext.cacheTable("temp_datasource")
+        checkAnswer(sqlContext.table("temp_datasource"), testDF.orderBy("a").collect())
+
+        testDF2.write.format(dataSourceName).mode(SaveMode.Overwrite).save(file.toString)
+        checkAnswer(sqlContext.table("temp_datasource"), testDF2.orderBy("a").collect())
+      }
     }
   }
 

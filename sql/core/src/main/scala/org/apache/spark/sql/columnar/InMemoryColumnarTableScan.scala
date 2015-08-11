@@ -183,6 +183,16 @@ private[sql] case class InMemoryRelation(
       batchStats).asInstanceOf[this.type]
   }
 
+  private[sql] def withChild(newChild: SparkPlan): this.type = {
+    new InMemoryRelation(
+      output.map(_.newInstance()),
+      useCompression,
+      batchSize,
+      storageLevel,
+      newChild,
+      tableName)().asInstanceOf[this.type]
+  }
+
   def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
 
   override protected def otherCopyArgs: Seq[AnyRef] =

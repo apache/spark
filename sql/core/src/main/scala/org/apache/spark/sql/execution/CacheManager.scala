@@ -27,7 +27,16 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
 /** Holds a cached logical plan and its data */
-private[sql] case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
+private[sql] class CachedData(
+    val plan: LogicalPlan,
+    var cachedRepresentation: InMemoryRelation) {
+  private[sql] def recache(sqlContext: SQLContext): Unit = {
+    cachedRepresentation.uncache(true) // release the cache
+    // re-generate the spark plan and cache
+    cachedRepresentation =
+      cachedRepresentation.withChild(sqlContext.executePlan(plan).executedPlan)
+  }
+}
 
 /**
  * Provides support in a SQLContext for caching query results and automatically using these cached
@@ -97,13 +106,13 @@ private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
       logWarning("Asked to cache already cached data.")
     } else {
       cachedData +=
-        CachedData(
+        new CachedData(
           planToCache,
           InMemoryRelation(
             sqlContext.conf.useCompression,
             sqlContext.conf.columnBatchSize,
             storageLevel,
-            sqlContext.executePlan(query.logicalPlan).executedPlan,
+            sqlContext.executePlan(planToCache).executedPlan,
             tableName))
     }
   }
@@ -156,10 +165,27 @@ private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
    * function will over invalidate.
    */
   private[sql] def invalidateCache(plan: LogicalPlan): Unit = writeLock {
-    cachedData.foreach {
-      case data if data.plan.collect { case p if p.sameResult(plan) => p }.nonEmpty =>
-        data.cachedRepresentation.recache()
-      case _ =>
+    var i = 0
+    var locatedIdx = -1
+    // find the index of the cached data, according to the specified logical plan
+    while (i < cachedData.length && locatedIdx < 0) {
+      cachedData(i) match {
+        case data if data.plan.collect { case p if p.sameResult(plan) => p }.nonEmpty =>
+          locatedIdx = i
+        case _ =>
+      }
+      i += 1
+    }
+
+    if (locatedIdx >= 0) {
+      // if the cached data exists, remove it from the cache data list, as we need to
+      // re-generate the spark plan, and we don't want the this to be used during the
+      // re-generation
+      val entry = cachedData.remove(locatedIdx) // TODO do we have to use ArrayBuffer?
+      // rebuild the cache
+      entry.recache(sqlContext)
+      // add it back to the cache data list
+      cachedData += entry
     }
   }
 }

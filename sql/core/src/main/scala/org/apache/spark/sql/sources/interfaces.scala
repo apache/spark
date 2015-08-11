@@ -565,6 +565,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       filters: Array[Filter],
       inputPaths: Array[String],
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
+    refresh()
     val inputStatuses = inputPaths.flatMap { input =>
       val path = new Path(input)
 
