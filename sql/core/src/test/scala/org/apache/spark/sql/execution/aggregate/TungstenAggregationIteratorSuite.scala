@@ -19,15 +19,17 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.sql.catalyst.expressions.InterpretedMutableProjection
+import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.unsafe.memory.TaskMemoryManager
 
-class TungstenAggregationIteratorSuite extends SparkFunSuite with LocalSparkContext {
+class TungstenAggregationIteratorSuite extends SparkFunSuite {
 
   test("memory acquired on construction") {
-    // Needed for various things in SparkEnv
-    sc = new SparkContext("local", "testing")
-    val taskMemoryManager = new TaskMemoryManager(sc.env.executorMemoryManager)
+    // set up environment
+    TestSQLContext
+
+    val taskMemoryManager = new TaskMemoryManager(SparkEnv.get.executorMemoryManager)
     val taskContext = new TaskContextImpl(0, 0, 0, 0, taskMemoryManager, null, Seq.empty)
     TaskContext.setTaskContext(taskContext)
 
