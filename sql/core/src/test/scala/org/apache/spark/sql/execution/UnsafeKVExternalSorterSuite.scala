@@ -135,7 +135,9 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite {
         sorter.closeCurrentPage()
       }
     }
-
+    // In order to allocate memory in UnsafeInMemorySorter,
+    // we need to reset OOM in TestShuffleMemoryManager
+    shuffleMemMgr.resetOutOfMemory()
     // Collect the sorted output
     val out = new scala.collection.mutable.ArrayBuffer[(InternalRow, InternalRow)]
     val iter = sorter.sortedIterator()

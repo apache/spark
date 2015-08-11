@@ -125,6 +125,7 @@ public final class UnsafeKVExternalSorter {
         inMemSorter);
 
       sorter.spill();
+      inMemSorter.releaseMemory();
       map.free();
     }
   }

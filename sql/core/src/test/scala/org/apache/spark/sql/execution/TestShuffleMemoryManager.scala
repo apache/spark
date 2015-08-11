@@ -48,4 +48,8 @@ class TestShuffleMemoryManager extends ShuffleMemoryManager(Long.MaxValue, 4 * 1
   def markAsOutOfMemory(): Unit = {
     oom = true
   }
+
+  def resetOutOfMemory(): Unit = {
+    oom = false
+  }
 }
