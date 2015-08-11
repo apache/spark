@@ -205,11 +205,7 @@ abstract class ProbabilisticClassificationModel[
   }
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
-object ProbabilisticClassificationModel {
+private[ml] object ProbabilisticClassificationModel {
 
   /**
    * Normalize a vector of raw predictions to be a multinomial probability vector, in place.
