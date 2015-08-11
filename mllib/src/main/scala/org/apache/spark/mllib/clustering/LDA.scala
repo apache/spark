@@ -82,9 +82,11 @@ class LDA private (
   def getAsymmetricDocConcentration: Vector = this.docConcentration
 
   /**
-   * Gets the concentration parameter, assuming the document-topic Dirichlet distribution is
-   * symmetric. Included for backwards compatibility. This method should fail if
-   * [[docConcentration]] is asymmetric.
+   * Concentration parameter (commonly named "alpha") for the prior placed on documents'
+   * distributions over topics ("theta").
+   *
+   * This method assumes the Dirichlet distribution is symmetric and can be described by a single
+   * [[Double]] parameter. It should fail if docConcentration is asymmetric.
    */
   def getDocConcentration: Double = {
     val parameter = docConcentration(0)
@@ -121,6 +123,7 @@ class LDA private (
    *       [[https://github.com/Blei-Lab/onlineldavb]].
    */
   def setDocConcentration(docConcentration: Vector): this.type = {
+    require(docConcentration.size > 0, "docConcentration must have > 0 elements")
     this.docConcentration = docConcentration
     this
   }

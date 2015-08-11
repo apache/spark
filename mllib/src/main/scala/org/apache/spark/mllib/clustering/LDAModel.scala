@@ -189,8 +189,8 @@ class LocalLDAModel private[clustering] (
     val topics: Matrix,
     override val docConcentration: Vector,
     override val topicConcentration: Double,
-    override protected[clustering] val gammaShape: Double = 100
-  ) extends LDAModel with Serializable {
+    override protected[clustering] val gammaShape: Double = 100)
+  extends LDAModel with Serializable {
 
   override def k: Int = topics.numCols
 
@@ -456,8 +456,8 @@ class DistributedLDAModel private[clustering] (
     override val docConcentration: Vector,
     override val topicConcentration: Double,
     private[spark] val iterationTimes: Array[Double],
-    override protected[clustering] val gammaShape: Double = 100
-  ) extends LDAModel {
+    override protected[clustering] val gammaShape: Double = 100)
+  extends LDAModel {
 
   import LDA._
 
