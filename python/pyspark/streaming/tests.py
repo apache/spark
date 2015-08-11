@@ -76,7 +76,6 @@ class PySparkStreamingTestCase(unittest.TestCase):
         if jStreamingContextOption.nonEmpty():
             jStreamingContextOption.get().stop(false)
 
-
     def wait_for(self, result, n):
         start_time = time.time()
         while len(result) < n and time.time() - start_time < self.timeout:
