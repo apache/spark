@@ -152,7 +152,7 @@ Next, we discuss how to use this approach in your streaming application.
 	</div>
 	<div data-lang="java" markdown="1">
 		// Hold a reference to the current offset ranges, so it can be used downstream
-		final AtomicReference<OffsetRange[]> offsetRanges = new AtomicReference();
+		final AtomicReference<OffsetRange[]> offsetRanges = new AtomicReference<>();
 		
 		directKafkaStream.transformToPair(
 		  new Function<JavaPairRDD<String, String>, JavaPairRDD<String, String>>() {

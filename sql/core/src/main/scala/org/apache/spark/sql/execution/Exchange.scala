@@ -46,7 +46,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
    * Returns true iff we can support the data type, and we are not doing range partitioning.
    */
   private lazy val tungstenMode: Boolean = {
-    GenerateUnsafeProjection.canSupport(child.schema) &&
+    unsafeEnabled && codegenEnabled && GenerateUnsafeProjection.canSupport(child.schema) &&
       !newPartitioning.isInstanceOf[RangePartitioning]
   }
 
