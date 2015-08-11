@@ -19,6 +19,8 @@ package org.apache.spark.unsafe.types;
 
 import org.apache.spark.unsafe.PlatformDependent;
 
+import static org.apache.spark.unsafe.PlatformDependent.*;
+
 public class ByteArray {
 
   /**
@@ -34,5 +36,34 @@ public class ByteArray {
       targetOffset,
       src.length
     );
+  }
+
+  /**
+   * Concatenates input multiple binary together into a single binary.
+   * Returns null if any input is null.
+   */
+  public static byte[] concat(byte[]... inputs) {
+    // Compute the total length of the result.
+    int totalLength = 0;
+    for (int i = 0; i < inputs.length; i++) {
+      if (inputs[i] != null) {
+        totalLength += inputs[i].length;
+      } else {
+        return null;
+      }
+    }
+
+    // Allocate a new byte array, and copy the inputs one by one into it.
+    final byte[] result = new byte[totalLength];
+    int offset = 0;
+    for (int i = 0; i < inputs.length; i++) {
+      int len = inputs[i].length;
+      copyMemory(
+        inputs[i], BYTE_ARRAY_OFFSET,
+        result, BYTE_ARRAY_OFFSET + offset,
+        len);
+      offset += len;
+    }
+    return result;
   }
 }
