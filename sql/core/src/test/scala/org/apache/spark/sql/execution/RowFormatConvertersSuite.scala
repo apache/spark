@@ -92,7 +92,7 @@ class RowFormatConvertersSuite extends SparkPlanTest {
   }
 
   test("SPARK-9683: copy UTF8String when convert unsafe array/map to safe") {
-    SparkPlan.currentContext.set(TestSQLContext)
+    SparkPlan.currentContext.set(ctx)
     val schema = ArrayType(StringType)
     val rows = (1 to 100).map { i =>
       InternalRow(new GenericArrayData(Array[Any](UTF8String.fromString(i.toString))))

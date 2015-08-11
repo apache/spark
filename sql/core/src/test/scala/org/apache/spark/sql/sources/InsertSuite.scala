@@ -193,7 +193,7 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
 
   test("Caching")  {
     // write something to the jsonTable
-    sql(
+    caseInsensitiveContext.sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
       """.stripMargin)
@@ -230,7 +230,7 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
         |INSERT OVERWRITE TABLE jsonTable SELECT a * 2, b FROM jt
       """.stripMargin)
     // jsonTable should be recached.
-    assertCached(sql("SELECT * FROM jsonTable"))
+    assertCached(caseInsensitiveContext.sql("SELECT * FROM jsonTable"))
     // TODO we need to invalidate the cached data in InsertIntoHadoopFsRelation
 //    // The cached data is the new data.
 //    checkAnswer(

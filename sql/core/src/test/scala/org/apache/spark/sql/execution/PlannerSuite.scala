@@ -37,6 +37,8 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
   setupTestData()
 
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
+    val _ctx = ctx
+    import _ctx.planner._
     val plannedOption = HashAggregation(query).headOption.orElse(Aggregation(query).headOption)
     val planned =
       plannedOption.getOrElse(
@@ -51,6 +53,8 @@ class PlannerSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   test("unions are collapsed") {
+    val _ctx = ctx
+    import _ctx.planner._
     val query = testData.unionAll(testData).unionAll(testData).logicalPlan
     val planned = BasicOperators(query).head
     val logicalUnions = query collect { case u: logical.Union => u }

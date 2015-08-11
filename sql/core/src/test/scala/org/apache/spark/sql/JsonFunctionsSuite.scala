@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql
 
-class JsonFunctionsSuite extends QueryTest {
+import org.apache.spark.sql.test.SQLTestUtils
 
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
+class JsonFunctionsSuite extends QueryTest with SQLTestUtils {
+  import testImplicits._
 
   test("function get_json_object") {
     val df: DataFrame = Seq(("""{"name": "alice", "age": 5}""", "")).toDF("a", "b")

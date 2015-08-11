@@ -25,14 +25,14 @@ import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm._
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
 
-class SQLMetricsSuite extends SparkFunSuite {
+class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
 
   test("LongSQLMetric should not box Long") {
-    val l = SQLMetrics.createLongMetric(TestSQLContext.sparkContext, "long")
+    val l = SQLMetrics.createLongMetric(ctx.sparkContext, "long")
     val f = () => { l += 1L }
     BoxingFinder.getClassReader(f.getClass).foreach { cl =>
       val boxingFinder = new BoxingFinder()
@@ -43,7 +43,7 @@ class SQLMetricsSuite extends SparkFunSuite {
 
   test("Normal accumulator should do boxing") {
     // We need this test to make sure BoxingFinder works.
-    val l = TestSQLContext.sparkContext.accumulator(0L)
+    val l = ctx.sparkContext.accumulator(0L)
     val f = () => { l += 1L }
     BoxingFinder.getClassReader(f.getClass).foreach { cl =>
       val boxingFinder = new BoxingFinder()
