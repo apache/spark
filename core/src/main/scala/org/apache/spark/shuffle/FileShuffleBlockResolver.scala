@@ -39,24 +39,7 @@ private[spark] trait ShuffleWriterGroup {
 
 /**
  * Manages assigning disk-based block writers to shuffle tasks. Each shuffle task gets one file
- * per reducer (this set of files is called a ShuffleFileGroup).
- *
- * As an optimization to reduce the number of physical shuffle files produced, multiple shuffle
- * blocks are aggregated into the same file. There is one "combined shuffle file" per reducer
- * per concurrently executing shuffle task. As soon as a task finishes writing to its shuffle
- * files, it releases them for another task.
- * Regarding the implementation of this feature, shuffle files are identified by a 3-tuple:
- *   - shuffleId: The unique id given to the entire shuffle stage.
- *   - bucketId: The id of the output partition (i.e., reducer id)
- *   - fileId: The unique id identifying a group of "combined shuffle files." Only one task at a
- *       time owns a particular fileId, and this id is returned to a pool when the task finishes.
- * Each shuffle file is then mapped to a FileSegment, which is a 3-tuple (file, offset, length)
- * that specifies where in a given file the actual block data is located.
- *
- * Shuffle file metadata is stored in a space-efficient manner. Rather than simply mapping
- * ShuffleBlockIds directly to FileSegments, each ShuffleFileGroup maintains a list of offsets for
- * each block stored in each file. In order to find the location of a shuffle block, we search the
- * files within a ShuffleFileGroups associated with the block's reducer.
+ * per reducer.
  */
 // Note: Changes to the format in this file should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getHashBasedShuffleBlockData().
@@ -73,7 +56,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   /**
    * Contains all the state related to a particular shuffle.
    */
-  private class ShuffleState(val numBuckets: Int) {
+  private class ShuffleState(val numReducers: Int) {
     /**
      * The mapIds of all map tasks completed on this Executor for this shuffle.
      */
@@ -89,16 +72,16 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
    * Get a ShuffleWriterGroup for the given map task, which will register it as complete
    * when the writers are closed successfully
    */
-  def forMapTask(shuffleId: Int, mapId: Int, numBuckets: Int, serializer: Serializer,
+  def forMapTask(shuffleId: Int, mapId: Int, numReducers: Int, serializer: Serializer,
       writeMetrics: ShuffleWriteMetrics): ShuffleWriterGroup = {
     new ShuffleWriterGroup {
-      shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numBuckets))
+      shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numReducers))
       private val shuffleState = shuffleStates(shuffleId)
 
       val openStartTime = System.nanoTime
       val serializerInstance = serializer.newInstance()
       val writers: Array[DiskBlockObjectWriter] = {
-        Array.tabulate[DiskBlockObjectWriter](numBuckets) { bucketId =>
+        Array.tabulate[DiskBlockObjectWriter](numReducers) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
           val blockFile = blockManager.diskBlockManager.getFile(blockId)
           // Because of previous failures, the shuffle file may already exist on this machine.
@@ -142,7 +125,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   private def removeShuffleBlocks(shuffleId: ShuffleId): Boolean = {
     shuffleStates.get(shuffleId) match {
       case Some(state) =>
-        for (mapId <- state.completedMapTasks; reduceId <- 0 until state.numBuckets) {
+        for (mapId <- state.completedMapTasks; reduceId <- 0 until state.numReducers) {
           val blockId = new ShuffleBlockId(shuffleId, mapId, reduceId)
           blockManager.diskBlockManager.getFile(blockId).delete()
         }
