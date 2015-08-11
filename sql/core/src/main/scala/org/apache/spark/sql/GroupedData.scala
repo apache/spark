@@ -304,7 +304,7 @@ class GroupedData protected[sql](
    */
   @scala.annotation.varargs
   def stddevPop(colNames: String*): DataFrame = {
-    val builder = (e: Expression) => {
+    def builder(e: Expression): Expression = {
       Alias(
         UnresolvedFunction("stddev_pop", e :: Nil, false),
         s"stddev_pop(${e.prettyString})")()
@@ -321,11 +321,11 @@ class GroupedData protected[sql](
    */
   @scala.annotation.varargs
   def stddevSamp(colNames: String*): DataFrame = {
-    val builder = (e: Expression) => {
+    def builder(e: Expression): Expression = {
         Alias(
           UnresolvedFunction("stddev_samp", e :: Nil, false),
           s"stddev_samp(${e.prettyString})")()
-      }
+    }
     aggregateNumericColumns(colNames : _*)(builder)
   }
 
