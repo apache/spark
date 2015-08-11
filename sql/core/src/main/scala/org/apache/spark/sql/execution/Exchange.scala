@@ -213,12 +213,11 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     // with shuffle. Then we perform shuffle again as part of the exchange added here.
     // To avoid the extra shuffle, we should remove repartition operators if they are
     // the child of Exchange and shuffle=True.
-    val optimized = childPlan match {
+    childPlan match {
       case Repartition(n, true, plan) => plan
       case Exchange(p, plan) => plan
       case _ => childPlan
     }
-    optimized
   }
 
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
