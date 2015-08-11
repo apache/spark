@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression2, AggregateFunction2}
-import org.apache.spark.sql.execution.UnsafeFixedWidthAggregationMap
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.unsafe.KVIterator
 
 /**
@@ -39,7 +38,9 @@ class SortBasedAggregationIterator(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-    outputsUnsafeRows: Boolean)
+    outputsUnsafeRows: Boolean,
+    numInputRows: LongSQLMetric,
+    numOutputRows: LongSQLMetric)
   extends AggregationIterator(
     groupingKeyAttributes,
     valueAttributes,
@@ -57,7 +58,7 @@ class SortBasedAggregationIterator(
     val bufferRowSize: Int = bufferSchema.length
 
     val genericMutableBuffer = new GenericMutableRow(bufferRowSize)
-    val useUnsafeBuffer = bufferSchema.map(_.dataType).forall(UnsafeRow.isFixedLength)
+    val useUnsafeBuffer = bufferSchema.map(_.dataType).forall(UnsafeRow.isMutable)
 
     val buffer = if (useUnsafeBuffer) {
       val unsafeProjection =
@@ -105,6 +106,7 @@ class SortBasedAggregationIterator(
       // Get the grouping key.
       val groupingKey = inputKVIterator.getKey
       val currentRow = inputKVIterator.getValue
+      numInputRows += 1
 
       // Check if the current row belongs the current input row.
       if (currentGroupingKey == groupingKey) {
@@ -139,7 +141,7 @@ class SortBasedAggregationIterator(
       val outputRow = generateOutput(currentGroupingKey, sortBasedAggregationBuffer)
       // Initialize buffer values for the next group.
       initializeBuffer(sortBasedAggregationBuffer)
-
+      numOutputRows += 1
       outputRow
     } else {
       // no more result
@@ -153,7 +155,7 @@ class SortBasedAggregationIterator(
 
       nextGroupingKey = inputKVIterator.getKey().copy()
       firstRowInNextGroup = inputKVIterator.getValue().copy()
-
+      numInputRows += 1
       sortedInputHasNewGroup = true
     } else {
       // This inputIter is empty.
@@ -183,7 +185,9 @@ object SortBasedAggregationIterator {
       newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
       inputAttributes: Seq[Attribute],
       inputIter: Iterator[InternalRow],
-      outputsUnsafeRows: Boolean): SortBasedAggregationIterator = {
+      outputsUnsafeRows: Boolean,
+      numInputRows: LongSQLMetric,
+      numOutputRows: LongSQLMetric): SortBasedAggregationIterator = {
     val kvIterator = if (UnsafeProjection.canSupport(groupingExprs)) {
       AggregationIterator.unsafeKVIterator(
         groupingExprs,
@@ -204,33 +208,9 @@ object SortBasedAggregationIterator {
       initialInputBufferOffset,
       resultExpressions,
       newMutableProjection,
-      outputsUnsafeRows)
-  }
-
-  def createFromKVIterator(
-      groupingKeyAttributes: Seq[Attribute],
-      valueAttributes: Seq[Attribute],
-      inputKVIterator: KVIterator[InternalRow, InternalRow],
-      nonCompleteAggregateExpressions: Seq[AggregateExpression2],
-      nonCompleteAggregateAttributes: Seq[Attribute],
-      completeAggregateExpressions: Seq[AggregateExpression2],
-      completeAggregateAttributes: Seq[Attribute],
-      initialInputBufferOffset: Int,
-      resultExpressions: Seq[NamedExpression],
-      newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-      outputsUnsafeRows: Boolean): SortBasedAggregationIterator = {
-    new SortBasedAggregationIterator(
-      groupingKeyAttributes,
-      valueAttributes,
-      inputKVIterator,
-      nonCompleteAggregateExpressions,
-      nonCompleteAggregateAttributes,
-      completeAggregateExpressions,
-      completeAggregateAttributes,
-      initialInputBufferOffset,
-      resultExpressions,
-      newMutableProjection,
-      outputsUnsafeRows)
+      outputsUnsafeRows,
+      numInputRows,
+      numOutputRows)
   }
   // scalastyle:on
 }

@@ -109,7 +109,7 @@ public final class BytesToBytesMap {
    * Position {@code 2 * i} in the array is used to track a pointer to the key at index {@code i},
    * while position {@code 2 * i + 1} in the array holds key's full 32-bit hashcode.
    */
-  private LongArray longArray;
+  @Nullable private LongArray longArray;
   // TODO: we're wasting 32 bits of space here; we can probably store fewer bits of the hashcode
   // and exploit word-alignment to use fewer bits to hold the address.  This might let us store
   // only one long per map entry, increasing the chance that this array will fit in cache at the
@@ -124,7 +124,7 @@ public final class BytesToBytesMap {
    * A {@link BitSet} used to track location of the map where the key is set.
    * Size of the bitset should be half of the size of the long array.
    */
-  private BitSet bitset;
+  @Nullable private BitSet bitset;
 
   private final double loadFactor;
 
@@ -165,6 +165,8 @@ public final class BytesToBytesMap {
   private long numKeyLookups = 0;
 
   private long numHashCollisions = 0;
+
+  private long peakMemoryUsedBytes = 0L;
 
   public BytesToBytesMap(
       TaskMemoryManager taskMemoryManager,
@@ -227,22 +229,35 @@ public final class BytesToBytesMap {
     private final Iterator<MemoryBlock> dataPagesIterator;
     private final Location loc;
 
-    private MemoryBlock currentPage;
+    private MemoryBlock currentPage = null;
     private int currentRecordNumber = 0;
     private Object pageBaseObject;
     private long offsetInPage;
 
+    // If this iterator destructive or not. When it is true, it frees each page as it moves onto
+    // next one.
+    private boolean destructive = false;
+    private BytesToBytesMap bmap;
+
     private BytesToBytesMapIterator(
-        int numRecords, Iterator<MemoryBlock> dataPagesIterator, Location loc) {
+        int numRecords, Iterator<MemoryBlock> dataPagesIterator, Location loc,
+        boolean destructive, BytesToBytesMap bmap) {
       this.numRecords = numRecords;
       this.dataPagesIterator = dataPagesIterator;
       this.loc = loc;
+      this.destructive = destructive;
+      this.bmap = bmap;
       if (dataPagesIterator.hasNext()) {
         advanceToNextPage();
       }
     }
 
     private void advanceToNextPage() {
+      if (destructive && currentPage != null) {
+        dataPagesIterator.remove();
+        this.bmap.taskMemoryManager.freePage(currentPage);
+        this.bmap.shuffleMemoryManager.release(currentPage.size());
+      }
       currentPage = dataPagesIterator.next();
       pageBaseObject = currentPage.getBaseObject();
       offsetInPage = currentPage.getBaseOffset();
@@ -255,10 +270,10 @@ public final class BytesToBytesMap {
 
     @Override
     public Location next() {
-      int totalLength = PlatformDependent.UNSAFE.getInt(pageBaseObject, offsetInPage);
+      int totalLength = Platform.getInt(pageBaseObject, offsetInPage);
       if (totalLength == END_OF_PAGE_MARKER) {
         advanceToNextPage();
-        totalLength = PlatformDependent.UNSAFE.getInt(pageBaseObject, offsetInPage);
+        totalLength = Platform.getInt(pageBaseObject, offsetInPage);
       }
       loc.with(currentPage, offsetInPage);
       offsetInPage += 4 + totalLength;
@@ -281,7 +296,21 @@ public final class BytesToBytesMap {
    * `lookup()`, the behavior of the returned iterator is undefined.
    */
   public BytesToBytesMapIterator iterator() {
-    return new BytesToBytesMapIterator(numElements, dataPages.iterator(), loc);
+    return new BytesToBytesMapIterator(numElements, dataPages.iterator(), loc, false, this);
+  }
+
+  /**
+   * Returns a destructive iterator for iterating over the entries of this map. It frees each page
+   * as it moves onto next one. Notice: it is illegal to call any method on the map after
+   * `destructiveIterator()` has been called.
+   *
+   * For efficiency, all calls to `next()` will return the same {@link Location} object.
+   *
+   * If any other lookups or operations are performed on this map while iterating over it, including
+   * `lookup()`, the behavior of the returned iterator is undefined.
+   */
+  public BytesToBytesMapIterator destructiveIterator() {
+    return new BytesToBytesMapIterator(numElements, dataPages.iterator(), loc, true, this);
   }
 
   /**
@@ -294,6 +323,9 @@ public final class BytesToBytesMap {
       Object keyBaseObject,
       long keyBaseOffset,
       int keyRowLengthBytes) {
+    assert(bitset != null);
+    assert(longArray != null);
+
     if (enablePerfMetrics) {
       numKeyLookups++;
     }
@@ -370,9 +402,9 @@ public final class BytesToBytesMap {
 
     private void updateAddressesAndSizes(final Object page, final long offsetInPage) {
       long position = offsetInPage;
-      final int totalLength = PlatformDependent.UNSAFE.getInt(page, position);
+      final int totalLength = Platform.getInt(page, position);
       position += 4;
-      keyLength = PlatformDependent.UNSAFE.getInt(page, position);
+      keyLength = Platform.getInt(page, position);
       position += 4;
       valueLength = totalLength - keyLength - 4;
 
@@ -383,6 +415,7 @@ public final class BytesToBytesMap {
     }
 
     private Location with(int pos, int keyHashcode, boolean isDefined) {
+      assert(longArray != null);
       this.pos = pos;
       this.isDefined = isDefined;
       this.keyHashcode = keyHashcode;
@@ -498,6 +531,9 @@ public final class BytesToBytesMap {
       assert (!isDefined) : "Can only set value once for a key";
       assert (keyLengthBytes % 8 == 0);
       assert (valueLengthBytes % 8 == 0);
+      assert(bitset != null);
+      assert(longArray != null);
+
       if (numElements == MAX_CAPACITY) {
         throw new IllegalStateException("BytesToBytesMap has reached maximum capacity");
       }
@@ -536,7 +572,7 @@ public final class BytesToBytesMap {
           // There wasn't enough space in the current page, so write an end-of-page marker:
           final Object pageBaseObject = currentDataPage.getBaseObject();
           final long lengthOffsetInPage = currentDataPage.getBaseOffset() + pageCursor;
-          PlatformDependent.UNSAFE.putInt(pageBaseObject, lengthOffsetInPage, END_OF_PAGE_MARKER);
+          Platform.putInt(pageBaseObject, lengthOffsetInPage, END_OF_PAGE_MARKER);
         }
         final long memoryGranted = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
         if (memoryGranted != pageSizeBytes) {
@@ -572,21 +608,21 @@ public final class BytesToBytesMap {
       final long valueDataOffsetInPage = insertCursor;
       insertCursor += valueLengthBytes; // word used to store the value size
 
-      PlatformDependent.UNSAFE.putInt(dataPageBaseObject, recordOffset,
+      Platform.putInt(dataPageBaseObject, recordOffset,
         keyLengthBytes + valueLengthBytes + 4);
-      PlatformDependent.UNSAFE.putInt(dataPageBaseObject, keyLengthOffset, keyLengthBytes);
+      Platform.putInt(dataPageBaseObject, keyLengthOffset, keyLengthBytes);
       // Copy the key
-      PlatformDependent.copyMemory(
+      Platform.copyMemory(
         keyBaseObject, keyBaseOffset, dataPageBaseObject, keyDataOffsetInPage, keyLengthBytes);
       // Copy the value
-      PlatformDependent.copyMemory(valueBaseObject, valueBaseOffset, dataPageBaseObject,
+      Platform.copyMemory(valueBaseObject, valueBaseOffset, dataPageBaseObject,
         valueDataOffsetInPage, valueLengthBytes);
 
       // --- Update bookeeping data structures -----------------------------------------------------
 
       if (useOverflowPage) {
         // Store the end-of-page marker at the end of the data page
-        PlatformDependent.UNSAFE.putInt(dataPageBaseObject, insertCursor, END_OF_PAGE_MARKER);
+        Platform.putInt(dataPageBaseObject, insertCursor, END_OF_PAGE_MARKER);
       } else {
         pageCursor += requiredSize;
       }
@@ -615,7 +651,7 @@ public final class BytesToBytesMap {
   private void allocate(int capacity) {
     assert (capacity >= 0);
     // The capacity needs to be divisible by 64 so that our bit set can be sized properly
-    capacity = Math.max((int) Math.min(MAX_CAPACITY, nextPowerOf2(capacity)), 64);
+    capacity = Math.max((int) Math.min(MAX_CAPACITY, ByteArrayMethods.nextPowerOf2(capacity)), 64);
     assert (capacity <= MAX_CAPACITY);
     longArray = new LongArray(MemoryBlock.fromLongArray(new long[capacity * 2]));
     bitset = new BitSet(MemoryBlock.fromLongArray(new long[capacity / 64]));
@@ -631,6 +667,7 @@ public final class BytesToBytesMap {
    * This method is idempotent and can be called multiple times.
    */
   public void free() {
+    updatePeakMemoryUsed();
     longArray = null;
     bitset = null;
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
@@ -657,14 +694,30 @@ public final class BytesToBytesMap {
 
   /**
    * Returns the total amount of memory, in bytes, consumed by this map's managed structures.
-   * Note that this is also the peak memory used by this map, since the map is append-only.
    */
   public long getTotalMemoryConsumption() {
     long totalDataPagesSize = 0L;
     for (MemoryBlock dataPage : dataPages) {
       totalDataPagesSize += dataPage.size();
     }
-    return totalDataPagesSize + bitset.memoryBlock().size() + longArray.memoryBlock().size();
+    return totalDataPagesSize +
+      ((bitset != null) ? bitset.memoryBlock().size() : 0L) +
+      ((longArray != null) ? longArray.memoryBlock().size() : 0L);
+  }
+
+  private void updatePeakMemoryUsed() {
+    long mem = getTotalMemoryConsumption();
+    if (mem > peakMemoryUsedBytes) {
+      peakMemoryUsedBytes = mem;
+    }
+  }
+
+  /**
+   * Return the peak memory used so far, in bytes.
+   */
+  public long getPeakMemoryUsedBytes() {
+    updatePeakMemoryUsed();
+    return peakMemoryUsedBytes;
   }
 
   /**
@@ -704,6 +757,9 @@ public final class BytesToBytesMap {
    */
   @VisibleForTesting
   void growAndRehash() {
+    assert(bitset != null);
+    assert(longArray != null);
+
     long resizeStartTime = -1;
     if (enablePerfMetrics) {
       resizeStartTime = System.nanoTime();
@@ -742,11 +798,5 @@ public final class BytesToBytesMap {
     if (enablePerfMetrics) {
       timeSpentResizingNs += System.nanoTime() - resizeStartTime;
     }
-  }
-
-  /** Returns the next number greater or equal num that is power of 2. */
-  private static long nextPowerOf2(long num) {
-    final long highBit = Long.highestOneBit(num);
-    return (highBit == num) ? num : highBit << 1;
   }
 }

@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.SQLTestUtils
@@ -263,12 +262,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
     val hasGeneratedAgg = df.queryExecution.executedPlan
-      .collect { case _: GeneratedAggregate | _: aggregate.Aggregate => true }
+      .collect { case _: aggregate.TungstenAggregate => true }
       .nonEmpty
     if (!hasGeneratedAgg) {
       fail(
         s"""
-           |Codegen is enabled, but query $sqlText does not have GeneratedAggregate in the plan.
+           |Codegen is enabled, but query $sqlText does not have TungstenAggregate in the plan.
            |${df.queryExecution.simpleString}
          """.stripMargin)
     }
@@ -1625,9 +1624,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("aggregation with codegen updates peak execution memory") {
-    withSQLConf(
-        (SQLConf.CODEGEN_ENABLED.key, "true"),
-        (SQLConf.USE_SQL_AGGREGATE2.key, "false")) {
+    withSQLConf((SQLConf.CODEGEN_ENABLED.key, "true")) {
       val sc = sqlContext.sparkContext
       AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "aggregation with codegen") {
         testCodeGen(

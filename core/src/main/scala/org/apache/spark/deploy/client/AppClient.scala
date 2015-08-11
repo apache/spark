@@ -257,7 +257,7 @@ private[spark] class AppClient(
   }
 
   def start() {
-    // Just launch an actor; it will call back into the listener.
+    // Just launch an rpcEndpoint; it will call back into the listener.
     endpoint = rpcEnv.setupEndpoint("AppClient", new ClientEndpoint(rpcEnv))
   }
 

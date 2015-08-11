@@ -87,6 +87,8 @@ public class JavaLogisticRegressionSuite implements Serializable {
     LogisticRegression parent = (LogisticRegression) model.parent();
     assert(parent.getMaxIter() == 10);
     assert(parent.getRegParam() == 1.0);
+    assert(parent.getThresholds()[0] == 0.4);
+    assert(parent.getThresholds()[1] == 0.6);
     assert(parent.getThreshold() == 0.6);
     assert(model.getThreshold() == 0.6);
 
@@ -98,7 +100,9 @@ public class JavaLogisticRegressionSuite implements Serializable {
       assert(r.getDouble(0) == 0.0);
     }
     // Call transform with params, and check that the params worked.
-    model.transform(dataset, model.threshold().w(0.0), model.probabilityCol().w("myProb"))
+    double[] thresholds = {1.0, 0.0};
+    model.transform(
+      dataset, model.thresholds().w(thresholds), model.probabilityCol().w("myProb"))
       .registerTempTable("predNotAllZero");
     DataFrame predNotAllZero = jsql.sql("SELECT prediction, myProb FROM predNotAllZero");
     boolean foundNonZero = false;
@@ -108,8 +112,9 @@ public class JavaLogisticRegressionSuite implements Serializable {
     assert(foundNonZero);
 
     // Call fit() with new params, and check as many params as we can.
+    double[] thresholds2 = {0.6, 0.4};
     LogisticRegressionModel model2 = lr.fit(dataset, lr.maxIter().w(5), lr.regParam().w(0.1),
-        lr.threshold().w(0.4), lr.probabilityCol().w("theProb"));
+        lr.thresholds().w(thresholds2), lr.probabilityCol().w("theProb"));
     LogisticRegression parent2 = (LogisticRegression) model2.parent();
     assert(parent2.getMaxIter() == 5);
     assert(parent2.getRegParam() == 0.1);
@@ -146,5 +151,14 @@ public class JavaLogisticRegressionSuite implements Serializable {
         assert(probOfPred >= prob.apply(i));
       }
     }
+  }
+
+  @Test
+  public void logisticRegressionTrainingSummary() {
+    LogisticRegression lr = new LogisticRegression();
+    LogisticRegressionModel model = lr.fit(dataset);
+
+    LogisticRegressionTrainingSummary summary = model.summary();
+    assert(summary.totalIterations() == summary.objectiveHistory().length);
   }
 }
