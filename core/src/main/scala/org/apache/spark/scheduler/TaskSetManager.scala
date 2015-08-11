@@ -650,7 +650,6 @@ private[spark] class TaskSetManager(
    * DAG Scheduler.
    */
   def handleFailedTask(tid: Long, state: TaskState, reason: TaskEndReason) {
-    logDebug(s"handleFailedTask called with ${tid}, ${state}, ${reason}} ")
     val info = taskInfos(tid)
     if (info.failed) {
       return
@@ -663,7 +662,6 @@ private[spark] class TaskSetManager(
 
     val failureReason = s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid, ${info.host}): " +
       reason.asInstanceOf[TaskFailedReason].toErrorString
-    logDebug(failureReason)
     reason match {
       case fetchFailed: FetchFailed =>
         logWarning(failureReason)
