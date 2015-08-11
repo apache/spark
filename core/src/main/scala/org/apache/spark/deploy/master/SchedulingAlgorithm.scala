@@ -216,7 +216,7 @@ private[master] class PrioritySchedulingAlgorithm(
       new PriorityQueue[ApplicationSubmission](initAppNumberPerPool, applicationComparator)
   }
 
-  private final val poolQueue: PriorityQueue[Pool] =
+  final val poolQueue: PriorityQueue[Pool] =
     new PriorityQueue[Pool](initPoolNumber, poolComparator)
 
   def startExecutorsOnWorkers(
@@ -244,7 +244,7 @@ private[master] class PrioritySchedulingAlgorithm(
     }
   }
 
-  private def buildFairSchedulerPool(is: InputStream): Unit = {
+  def buildFairSchedulerPool(is: InputStream): Unit = {
     val xml = XML.load(is)
     for (poolNode <- (xml \\ POOLS_PROPERTY)) {
 

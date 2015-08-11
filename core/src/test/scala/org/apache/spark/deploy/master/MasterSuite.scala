@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.master
 
+import java.io.ByteArrayInputStream
+import java.nio.charset.StandardCharsets
 import java.util.Date
 
 import scala.concurrent.duration._
@@ -225,6 +227,35 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     val schedulingSetting = master.schedulingSetting
     assert(schedulingSetting.mode == SchedulingMode.FIFO)
     assert(schedulingSetting.configFile == None)
+  }
+
+  test("building pool and queue") {
+    val conf = new SparkConf()
+    val securityManager = new SecurityManager(conf)
+    val masterRpcEnv: RpcEnv =
+      RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityManager)
+    val setting: SchedulingSetting = SchedulingSetting(SchedulingMode.PRIORITY, None)
+
+    val master = new Master(masterRpcEnv, masterRpcEnv.address, 0, securityManager, conf, setting)
+    val schedulingSetting = master.schedulingSetting
+    val algo = new PrioritySchedulingAlgorithm(master, schedulingSetting)
+
+    val exampleXML = """<?xml version="1.0"?>
+                        <allocations>
+                          <pool name="production">
+                            <priority>10</priority>
+                            <cores>5</cores>
+                          </pool>
+                          <pool name="test">
+                            <priority>2</priority>
+                            <cores>1</cores>
+                          </pool>
+                        </allocations>"""
+
+    val stream = new ByteArrayInputStream(exampleXML.getBytes(StandardCharsets.UTF_8))
+
+    algo.buildFairSchedulerPool(stream)
+    assert(algo.poolQueue.size == 2)
   }
 
   private def basicScheduling(spreadOut: Boolean): Unit = {
