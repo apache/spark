@@ -344,7 +344,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         val finalResult = StratifiedSamplingUtils.getAcceptanceResults(self, false, w, None, seed)
         StratifiedSamplingUtils.computeThresholdByKey(finalResult, w)
       }
-    } else normedCumWeightsByKey
+    } else {
+      normedCumWeightsByKey
+    }
 
     val allSplits = weights(0).map(x => (x._1, 0.0)) +: splits :+ weights(0).map(x => (x._1, 1.0))
     allSplits.sliding(2).map { x =>

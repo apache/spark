@@ -759,7 +759,6 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     }
 
     def checkSplitSize(exact: Boolean,
-        withReplacement: Boolean,
         expected: Long,
         actual: Long,
         p: Double): Boolean = {
@@ -767,7 +766,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
         // all splits will not be exact, but must be within 1 of expected size
         return math.abs(expected - actual) <= 1
       }
-      val stdev = if (withReplacement) math.sqrt(expected) else math.sqrt(expected * p * (1 - p))
+      val stdev = math.sqrt(expected * p * (1 - p))
       // Very forgiving margin since we're dealing with very small sample sizes most of the time
       math.abs(actual - expected) <= 6 * stdev
     }
@@ -797,7 +796,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
       val totalWeightByKey = weights.foldLeft(baseFold){ case (accMap, iterMap) =>
         accMap.map { case (k, v) => (k, v + iterMap(k)) }
       }
-      val normedWeights = weights.map(m => m.map { case(k,v) => (k, v / totalWeightByKey(k))})
+      val normedWeights = weights.map(m => m.map { case(k, v) => (k, v / totalWeightByKey(k))})
 
       val splits = stratifiedData.randomSplitByKey(weights, exact, seed)
       val stratCounts = stratifiedData.countByKey()
@@ -821,13 +820,13 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
       (samples.map(_.groupBy(_._1).map(x => (x._1, x._2.length))) zip expectedSampleSizes)
         .zipWithIndex.foreach { case ((actual, expected), idx) =>
           actual.foreach { case (k, v) =>
-            checkSplitSize(exact, false, expected(k), v, normedWeights(idx)(k))
+            checkSplitSize(exact, expected(k), v, normedWeights(idx)(k))
           }
         }
       (complements.map(_.groupBy(_._1).map(x => (x._1, x._2.length))) zip expectedComplementSizes)
         .zipWithIndex.foreach { case ((actual, expected), idx) =>
           actual.foreach{ case (k, v) =>
-            checkSplitSize(exact, false, expected(k), v, normedWeights(idx)(k))
+            checkSplitSize(exact, expected(k), v, normedWeights(idx)(k))
           }
         }
 

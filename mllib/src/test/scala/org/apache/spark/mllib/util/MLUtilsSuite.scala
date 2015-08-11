@@ -210,8 +210,9 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("kFoldStratified") {
     /**
-     * Most of the functionality of [[kFoldStratified]] is tested in the PairRDD function `randomSplitByKey`. All
-     * that needs to be checked here is that the folds are even splits for each key.
+     * Most of the functionality of [[kFoldStratified]] is tested in the PairRDD function
+     * `randomSplitByKey`. All that needs to be checked here is that the folds are even
+     * splits for each key.
      */
     val defaultSeed = 1
     val n = 100
@@ -228,8 +229,12 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       for ((sample, complement) <- folds) {
         val sampleCounts = sample.countByKey()
         val complementCounts = complement.countByKey()
-        sampleCounts.foreach { case(key, count) => assert(math.abs(count - expectedSize(key)) <= 1)}
-        complementCounts.foreach { case(key, count) => assert(math.abs(count - (counts(key) - expectedSize(key))) <= 1)}
+        sampleCounts.foreach { case(key, count) =>
+          assert(math.abs(count - expectedSize(key)) <= 1)
+        }
+        complementCounts.foreach { case(key, count) =>
+          assert(math.abs(count - (counts(key) - expectedSize(key))) <= 1)
+        }
       }
     }
   }
