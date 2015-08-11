@@ -96,6 +96,28 @@ object Utils {
             aggregateFunction = aggregate.Sum(child),
             mode = aggregate.Complete,
             isDistinct = true)
+
+        case hiveUDAF: AggregateExpression1
+          if hiveUDAF.getClass.getSimpleName == "HiveGenericUDAF" &&
+             hiveUDAF.toString.contains("GenericUDAFStdSample") =>
+          // We get a STDDEV_SAMP, which is originally resolved as a HiveGenericUDAF.
+          require(hiveUDAF.children.length == 1, "stddev_samp requires exactly one argument.")
+          val child = hiveUDAF.children.head
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.StandardDeviation(child, sample = true),
+            mode = aggregate.Complete,
+            isDistinct = false)
+
+        case hiveUDAF: AggregateExpression1
+          if hiveUDAF.getClass.getSimpleName == "HiveGenericUDAF" &&
+             hiveUDAF.toString.contains("GenericUDAFStd") =>
+          // We get a STDDEV_POP, which is originally resolved as a HiveGenericUDAF.
+          require(hiveUDAF.children.length == 1, "stddev_pop requires exactly one argument.")
+          val child = hiveUDAF.children.head
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.StandardDeviation(child, sample = false),
+            mode = aggregate.Complete,
+            isDistinct = false)
       }
       // Check if there is any expressions.AggregateExpression1 left.
       // If so, we cannot convert this plan.
@@ -164,19 +186,4 @@ object Utils {
       }
     case other => None
   }
-
-  /**
-   * All Aggregate functions have previous versions as expressions in the old AggregateExpression
-   * format, but standard deviation uses the new format directly. We wrap it here in one place,
-   * and use an Alias so that the column name looks pretty as well instead of a long identifier.
-   */
-  def standardDeviation(e: Expression, sample: Boolean, name: String): Expression = {
-    val std = aggregate.AggregateExpression2(
-      aggregateFunction = aggregate.StandardDeviation(e, sample),
-      mode = aggregate.Complete,
-      isDistinct = false)
-    Alias(std, s"$name(${e.prettyString})")()
-  }
-
-  def sampleStandardDeviation(e: Expression): Expression = standardDeviation(e, true, "stddev_samp")
 }

@@ -406,4 +406,12 @@ case class StandardDeviation(child: Expression, sample: Boolean) extends Algebra
         Sqrt(Cast(currentMk, resultType) / Cast(count, resultType))
     }
   }
+
+  override def prettyName: String = {
+    if (sample) {
+      "stddev_samp"
+    } else {
+      "stddev_pop"
+    }
+  }
 }

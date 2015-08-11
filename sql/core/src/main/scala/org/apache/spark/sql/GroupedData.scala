@@ -21,7 +21,7 @@ import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, Star}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedAlias, UnresolvedAttribute, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Rollup, Cube, Aggregate}
 import org.apache.spark.sql.types.NumericType
@@ -304,8 +304,12 @@ class GroupedData protected[sql](
    */
   @scala.annotation.varargs
   def stddevPop(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(aggregate.Utils.standardDeviation(_, sample = false,
-      "stddev_pop"))
+    val builder = (e: Expression) => {
+      Alias(
+        UnresolvedFunction("stddev_pop", e :: Nil, false),
+        s"stddev_pop(${e.prettyString})")()
+    }
+    aggregateNumericColumns(colNames : _*)(builder)
   }
 
   /**
@@ -317,7 +321,12 @@ class GroupedData protected[sql](
    */
   @scala.annotation.varargs
   def stddevSamp(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(aggregate.Utils.sampleStandardDeviation)
+    val builder = (e: Expression) => {
+        Alias(
+          UnresolvedFunction("stddev_samp", e :: Nil, false),
+          s"stddev_samp(${e.prettyString})")()
+      }
+    aggregateNumericColumns(colNames : _*)(builder)
   }
 
   /**
