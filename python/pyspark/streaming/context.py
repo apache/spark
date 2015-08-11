@@ -184,16 +184,11 @@ class StreamingContext(object):
             # Verify that the current running Java StreamingContext is active and is the same one
             # backing the supposedly active Python context
             activePythonContextJavaId = activePythonContext._jssc.ssc().hashCode()
-            try:
-                activeJavaContextId = \
-                    activePythonContext._jvm.StreamingContext.getActive().get().hashCode()
-                if activePythonContextJavaId != activeJavaContextId:
+            activeJvmContextOption = activePythonContext._jvm.StreamingContext.getActive()
+            if activeJvmContextOption.isEmpty():
+                activeJvmContextId = activeJvmContextOption.get().hashCode()
+                if activeJvmContextId != activePythonContextJavaId:
                     cls._activeContext = None
-            except Exception:
-                import traceback
-                traceback.print_exc()
-                cls._activeContext = None
-        print("Updated active context", cls._activeContext)
         return cls._activeContext
 
     @classmethod
@@ -215,10 +210,8 @@ class StreamingContext(object):
             raise Exception("setupFunc cannot be None")
         activeContext = cls.getActive()
         if activeContext is not None:
-            print("return active context %s \n" % activeContext)
             return activeContext
         elif checkpointPath is not None:
-            print("calling getOrCreate")
             return cls.getOrCreate(checkpointPath, setupFunc)
         else:
             return setupFunc()
@@ -236,7 +229,6 @@ class StreamingContext(object):
         """
         self._jssc.start()
         StreamingContext._activeContext = self
-        print("Setting active " + str(StreamingContext._activeContext))
 
     def awaitTermination(self, timeout=None):
         """

@@ -545,7 +545,6 @@ class StreamingContextTests(PySparkStreamingTestCase):
         def setupFunc():
             ssc = StreamingContext(self.sc, self.duration)
             ssc.queueStream([[1]]).foreachRDD(lambda rdd: rdd.count())
-            print("Setup called")
             self.setupCalled = True
             return ssc
 
@@ -661,11 +660,12 @@ class CheckpointTests(unittest.TestCase):
         self.assertFalse(self.setupCalled)
 
         # Verify that getActiveOrCreate() calls setup() in absence of checkpoint files
-        self.ssc.stop(True)
+        self.ssc.stop(True, True)
         shutil.rmtree(cpd)  # delete checkpoint directory
         self.setupCalled = False
         self.ssc = StreamingContext.getActiveOrCreate(cpd, setup)
         self.assertTrue(self.setupCalled)
+        self.ssc.stop(True, True)
 
 
 class KafkaStreamTests(PySparkStreamingTestCase):
