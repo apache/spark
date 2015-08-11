@@ -799,6 +799,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
         """
         return self._java_obj.getStopWords()
 
+
 @inherit_doc
 @ignore_unicode_prefix
 class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
