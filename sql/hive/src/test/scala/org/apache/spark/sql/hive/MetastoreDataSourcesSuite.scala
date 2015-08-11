@@ -28,7 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.hive.client.{HiveTable, ManagedTable}
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.SharedHiveContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -37,7 +37,7 @@ import org.apache.spark.util.Utils
  */
 class MetastoreDataSourcesSuite
   extends QueryTest
-  with HiveTestUtils
+  with SharedHiveContext
   with Logging {
 
   import testImplicits._

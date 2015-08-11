@@ -20,8 +20,11 @@ package org.apache.spark.sql.sources
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
+import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 class DefaultSource extends SimpleScanSource
@@ -95,7 +98,7 @@ case class AllDataTypesScan(
   }
 }
 
-class TableScanSuite extends DataSourceTest {
+class TableScanSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
   private lazy val tableWithSchemaExpected = (1 to 10).map { i =>
     Row(
       s"str_$i",

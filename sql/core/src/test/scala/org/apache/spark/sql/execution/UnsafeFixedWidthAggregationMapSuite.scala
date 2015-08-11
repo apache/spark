@@ -26,7 +26,7 @@ import org.scalatest.Matchers
 import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
 import org.apache.spark.{TaskContextImpl, TaskContext, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
 import org.apache.spark.unsafe.types.UTF8String
@@ -39,7 +39,7 @@ import org.apache.spark.unsafe.types.UTF8String
 class UnsafeFixedWidthAggregationMapSuite
   extends SparkFunSuite
   with Matchers
-  with SQLTestUtils {
+  with SharedSQLContext {
 
   import UnsafeFixedWidthAggregationMap._
 

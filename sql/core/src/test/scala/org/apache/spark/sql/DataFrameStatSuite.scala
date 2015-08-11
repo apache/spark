@@ -20,9 +20,9 @@ package org.apache.spark.sql
 import java.util.Random
 
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 
-class DataFrameStatSuite extends QueryTest with SQLTestUtils {
+class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   private def toLetter(i: Int): String = (i + 97).toChar.toString

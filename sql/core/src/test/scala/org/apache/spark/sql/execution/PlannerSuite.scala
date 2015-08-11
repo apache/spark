@@ -27,11 +27,11 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 
-class PlannerSuite extends SparkFunSuite with SQLTestUtils {
+class PlannerSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
 
   setupTestData()

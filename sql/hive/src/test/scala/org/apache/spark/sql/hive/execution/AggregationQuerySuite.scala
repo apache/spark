@@ -19,11 +19,11 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.SharedHiveContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import _root_.test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 
-abstract class AggregationQuerySuite extends QueryTest with HiveTestUtils {
+abstract class AggregationQuerySuite extends QueryTest with SharedHiveContext {
   import testImplicits._
 
   var originalUseAggregate2: Boolean = _

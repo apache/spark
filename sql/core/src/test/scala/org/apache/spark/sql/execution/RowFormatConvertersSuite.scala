@@ -21,10 +21,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute, Literal, IsNull}
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{GenericArrayData, ArrayType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
-class RowFormatConvertersSuite extends SparkPlanTest {
+class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
 
   private def getConverters(plan: SparkPlan): Seq[SparkPlan] = plan.collect {
     case c: ConvertToUnsafe => c

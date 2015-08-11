@@ -22,12 +22,13 @@ import scala.util.Random
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row, SQLConf}
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 /**
  * A test suite that generates randomized data to test the [[TungstenSort]] operator.
  */
-class TungstenSortSuite extends SparkPlanTest {
+class TungstenSortSuite extends SparkPlanTest with SharedSQLContext {
 
   override def beforeAll(): Unit = {
     super.beforeAll()

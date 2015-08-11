@@ -18,10 +18,10 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.{Row, QueryTest}
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
 
-class HiveDataFrameJoinSuite extends QueryTest with HiveTestUtils {
+class HiveDataFrameJoinSuite extends QueryTest with SharedHiveContext {
   import testImplicits._
 
   // We should move this into SQL package if we make case sensitivity configurable in SQL.

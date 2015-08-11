@@ -32,21 +32,16 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.util.Utils
 
 /**
- * Helper trait that should be extended by all SQL test suites involving a
- * [[org.apache.spark.sql.SQLContext]].
- */
-private[sql] trait SQLTestUtils extends AbstractSQLTestUtils with SharedSQLContext {
-  protected final override def _sqlContext = sqlContext
-}
-
-/**
  * Helper trait that should be extended by all SQL test suites.
  *
- * This base trait allows subclasses to plugin a custom [[SQLContext]]. It comes with test
- * data prepared in advance as well as all implicit conversions used extensively by dataframes.
+ * This allows subclasses to plugin a custom [[SQLContext]]. It comes with test data
+ * prepared in advance as well as all implicit conversions used extensively by dataframes.
  * To use implicit methods, import `testImplicits._` instead of through the [[SQLContext]].
+ *
+ * Subclasses should *not* create [[SQLContext]]s in the test suite constructor, which is
+ * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
  */
-private[sql] trait AbstractSQLTestUtils
+private[sql] trait SQLTestUtils
   extends SparkFunSuite
   with BeforeAndAfterAll
   with SQLTestData { self =>

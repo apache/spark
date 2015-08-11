@@ -19,10 +19,10 @@ package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.{Row, QueryTest}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
-class PartitionedWriteSuite extends QueryTest with SQLTestUtils {
+class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("write many partitions") {

@@ -21,11 +21,11 @@ import java.io.File
 
 import org.apache.spark.sql.{SaveMode, AnalysisException, QueryTest}
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.SharedHiveContext
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.util.Utils
 
-class CachedTableSuite extends QueryTest with HiveTestUtils {
+class CachedTableSuite extends QueryTest with SharedHiveContext {
 
   def rddIdOf(tableName: String): Int = {
     val executedPlan = ctx.table(tableName).queryExecution.executedPlan

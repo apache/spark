@@ -17,16 +17,14 @@
 
 package org.apache.spark.sql.hive.test
 
-import org.scalatest.BeforeAndAfterAll
-
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.test.SQLTestUtils
 
 
 /**
  * Helper trait for hive test suites where all tests share a single [[TestHiveContext]].
  * This is analogous to [[org.apache.spark.sql.test.SharedSQLContext]].
  */
-private[spark] trait SharedHiveContext extends SparkFunSuite with BeforeAndAfterAll {
+private[spark] trait SharedHiveContext extends SQLTestUtils {
 
   /**
    * The [[TestHiveContext]] to use for all tests in this suite.
@@ -35,6 +33,13 @@ private[spark] trait SharedHiveContext extends SparkFunSuite with BeforeAndAfter
    * mode with the default test configurations.
    */
   private var _ctx: TestHiveContext = null
+
+  /**
+   * The [[TestHiveContext]] to use for all tests in this suite.
+   */
+  protected def ctx: TestHiveContext = _ctx
+  protected def hiveContext: TestHiveContext = _ctx
+  protected override def _sqlContext: TestHiveContext = _ctx
 
   /**
    * Initialize the [[TestHiveContext]].
@@ -55,39 +60,6 @@ private[spark] trait SharedHiveContext extends SparkFunSuite with BeforeAndAfter
       _ctx = null
     }
     super.afterAll()
-  }
-
-  /**
-   * The [[TestHiveContext]] to use for all tests in this suite.
-   */
-  protected def ctx: TestHiveContext = _ctx
-  protected def hiveContext: TestHiveContext = _ctx
-
-  /**
-   * Switch a custom [[TestHiveContext]].
-   *
-   * This stops the underlying [[org.apache.spark.SparkContext]] and expects a new one
-   * to be created. This is needed because only one [[org.apache.spark.SparkContext]]
-   * is allowed per JVM.
-   */
-  protected def switchHiveContext(newContext: () => TestHiveContext): Unit = {
-    if (_ctx != null) {
-      _ctx.sparkContext.stop()
-      _ctx = newContext()
-    }
-  }
-
-  /**
-   * Execute the given block of code with a custom [[TestHiveContext]].
-   * At the end of the method, the default [[TestHiveContext]] will be restored.
-   */
-  protected def withHiveContext[T](newContext: () => TestHiveContext)(body: => T) {
-    switchHiveContext(newContext)
-    try {
-      body
-    } finally {
-      switchHiveContext(() => new TestHiveContext)
-    }
   }
 
 }

@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, LessThan}
 import org.apache.spark.sql.execution.{EnsureRequirements, SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, DoubleType, StructType}
 
-class OuterJoinSuite extends SparkPlanTest {
+class OuterJoinSuite extends SparkPlanTest with SharedSQLContext {
 
   private lazy val left = ctx.createDataFrame(
     ctx.sparkContext.parallelize(Seq(

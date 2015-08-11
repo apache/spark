@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 
 private case class FunctionResult(f1: String, f2: String)
 
-class UDFSuite extends QueryTest with SQLTestUtils {
+class UDFSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("built-in fixed arity expressions") {

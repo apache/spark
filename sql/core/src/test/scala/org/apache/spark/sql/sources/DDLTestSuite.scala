@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.sources
 
+import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -68,7 +71,7 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
   }
 }
 
-class DDLTestSuite extends DataSourceTest {
+class DDLTestSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
 
   before {
     caseInsensitiveContext.sql(

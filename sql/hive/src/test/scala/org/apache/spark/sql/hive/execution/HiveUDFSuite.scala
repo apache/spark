@@ -32,7 +32,7 @@ import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.io.Writable
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.SharedHiveContext
 import org.apache.spark.util.Utils
 
 case class Fields(f1: Int, f2: Int, f3: Int, f4: Int, f5: Int)
@@ -46,7 +46,7 @@ case class ListStringCaseClass(l: Seq[String])
 /**
  * A test suite for Hive custom UDFs.
  */
-class HiveUDFSuite extends QueryTest with HiveTestUtils {
+class HiveUDFSuite extends QueryTest with SharedHiveContext {
   import testImplicits._
 
   test("spark sql udf test that returns a struct") {

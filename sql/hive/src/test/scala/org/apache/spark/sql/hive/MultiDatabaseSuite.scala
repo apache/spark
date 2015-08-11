@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.SharedHiveContext
 import org.apache.spark.sql.{QueryTest, SaveMode}
 
-class MultiDatabaseSuite extends QueryTest with HiveTestUtils {
+class MultiDatabaseSuite extends QueryTest with SharedHiveContext {
   private lazy val df = ctx.range(10).coalesce(1)
 
   test(s"saveAsTable() to non-default database - with USE - Overwrite") {

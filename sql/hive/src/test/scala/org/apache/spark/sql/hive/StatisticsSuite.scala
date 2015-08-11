@@ -22,9 +22,9 @@ import scala.reflect.ClassTag
 import org.apache.spark.sql.{Row, SQLConf, QueryTest}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
-class StatisticsSuite extends QueryTest with HiveTestUtils {
+class StatisticsSuite extends QueryTest with SharedHiveContext {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()

@@ -20,9 +20,9 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.{Row, QueryTest}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
-class HiveDataFrameWindowSuite extends QueryTest with HiveTestUtils {
+class HiveDataFrameWindowSuite extends QueryTest with SharedHiveContext {
   import testImplicits._
 
   test("reuse window partitionBy") {

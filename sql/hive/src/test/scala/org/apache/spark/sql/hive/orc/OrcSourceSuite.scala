@@ -20,11 +20,11 @@ package org.apache.spark.sql.hive.orc
 import java.io.File
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
 case class OrcData(intField: Int, stringField: String)
 
-abstract class OrcSuite extends QueryTest with HiveTestUtils {
+abstract class OrcSuite extends QueryTest with SharedHiveContext {
   import testImplicits._
 
   var orcTableDir: File = null

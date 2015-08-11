@@ -19,12 +19,11 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.sql.{SaveMode, AnalysisException, Row}
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
-class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
+class InsertSuite extends DataSourceTest with SharedSQLContext {
   private lazy val sparkContext = caseInsensitiveContext.sparkContext
   private var path: File = null
 

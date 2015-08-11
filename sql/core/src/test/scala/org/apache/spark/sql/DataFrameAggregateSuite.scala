@@ -18,11 +18,11 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.DecimalType
 
 
-class DataFrameAggregateSuite extends QueryTest with SQLTestUtils {
+class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("groupBy") {

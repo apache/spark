@@ -26,11 +26,11 @@ import org.apache.spark.Accumulators
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.functions._
 import org.apache.spark.storage.{StorageLevel, RDDBlockId}
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 
 private case class BigData(s: String)
 
-class CachedTableSuite extends QueryTest with SQLTestUtils {
+class CachedTableSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   def rddIdOf(tableName: String): Int = {

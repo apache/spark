@@ -26,11 +26,12 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, PartitionSpec, Partition, PartitioningUtils}
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.sql._
 import org.apache.spark.unsafe.types.UTF8String
 
 // The data where the partitioning key exists only in the directory structure.
@@ -39,7 +40,7 @@ case class ParquetData(intField: Int, stringField: String)
 // The data that also includes the partitioning key
 case class ParquetDataWithKey(intField: Int, pi: Int, stringField: String, ps: String)
 
-class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
+class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with SharedSQLContext {
   import PartitioningUtils._
   import testImplicits._
 

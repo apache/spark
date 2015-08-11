@@ -19,9 +19,9 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 
-class DataFrameJoinSuite extends QueryTest with SQLTestUtils {
+class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("join - join using") {

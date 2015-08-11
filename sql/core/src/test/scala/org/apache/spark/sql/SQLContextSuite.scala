@@ -18,9 +18,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 
-class SQLContextSuite extends SparkFunSuite with SQLTestUtils {
+class SQLContextSuite extends SparkFunSuite with SharedSQLContext {
 
   override def afterAll(): Unit = {
     SQLContext.setLastInstantiatedContext(ctx)

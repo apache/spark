@@ -25,18 +25,12 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, DataFrameHolder, Row, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.test.SQLTestUtils
 
 /**
  * Base class for writing tests for individual physical operators. For an example of how this
  * class's test helper methods can be used, see [[SortSuite]].
  */
-private[sql] abstract class SparkPlanTest extends AbstractSparkPlanTest with SQLTestUtils
-
-/**
- * Helper class for testing individual physical operators with a pluggable [[SQLContext]].
- */
-private[sql] abstract class AbstractSparkPlanTest extends SparkFunSuite {
+private[sql] abstract class SparkPlanTest extends SparkFunSuite {
   protected def _sqlContext: SQLContext
 
   /**

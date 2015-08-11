@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 
-class DataFrameImplicitsSuite extends QueryTest with SQLTestUtils {
+class DataFrameImplicitsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("RDD of tuples") {

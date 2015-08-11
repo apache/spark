@@ -18,12 +18,12 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
 /**
  * A set of tests that validates support for Hive Explain command.
  */
-class HiveExplainSuite extends QueryTest with HiveTestUtils {
+class HiveExplainSuite extends QueryTest with SharedHiveContext {
 
   test("explain extended command") {
     checkExistence(ctx.sql(" explain   select * from src where key=123 "), true,

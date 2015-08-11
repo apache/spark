@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.debug
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 
-class DebuggingSuite extends SparkFunSuite with SQLTestUtils {
+class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
 
   test("DataFrame.debug()") {
     testData.debug()

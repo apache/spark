@@ -18,11 +18,11 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
 case class FunctionResult(f1: String, f2: String)
 
-class UDFSuite extends QueryTest with HiveTestUtils {
+class UDFSuite extends QueryTest with SharedHiveContext {
 
   test("UDF case insensitive") {
     ctx.udf.register("random0", () => { Math.random() })

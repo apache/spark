@@ -19,8 +19,11 @@ package org.apache.spark.sql.sources
 
 import scala.language.existentials
 
+import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 
@@ -96,7 +99,7 @@ object FiltersPushed {
   var list: Seq[Filter] = Nil
 }
 
-class FilteredScanSuite extends DataSourceTest {
+class FilteredScanSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
 
   before {
     caseInsensitiveContext.sql(

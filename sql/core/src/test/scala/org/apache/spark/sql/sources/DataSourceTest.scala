@@ -17,15 +17,10 @@
 
 package org.apache.spark.sql.sources
 
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.sql._
-import org.apache.spark.sql.test.SQLTestUtils
 
 
-private[sql] abstract class DataSourceTest extends AbstractDataSourceTest with SQLTestUtils
-
-private[sql] abstract class AbstractDataSourceTest extends QueryTest with BeforeAndAfter {
+private[sql] abstract class DataSourceTest extends QueryTest {
   protected def _sqlContext: SQLContext
 
   // We want to test some edge cases.

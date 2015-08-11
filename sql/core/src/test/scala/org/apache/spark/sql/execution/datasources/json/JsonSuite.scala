@@ -24,15 +24,15 @@ import com.fasterxml.jackson.core.JsonFactory
 import org.apache.spark.rdd.RDD
 import org.scalactic.Tolerance._
 
-import org.apache.spark.sql.{QueryTest, Row, SQLConf, SQLContext}
+import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.{ResolvedDataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.InferSchema.compatibleType
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JsonSuite extends QueryTest with SQLTestUtils with TestJsonData {
+class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   import testImplicits._
 
   test("Type promotion") {

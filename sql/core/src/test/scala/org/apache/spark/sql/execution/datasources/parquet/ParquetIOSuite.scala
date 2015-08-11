@@ -37,6 +37,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
@@ -62,7 +63,7 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
 /**
  * A test suite that tests basic Parquet I/O.
  */
-class ParquetIOSuite extends QueryTest with ParquetTest {
+class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   import testImplicits._
 
   /**

@@ -28,11 +28,11 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
 
-class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
+class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
 
   test("LongSQLMetric should not box Long") {

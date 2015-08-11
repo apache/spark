@@ -23,12 +23,12 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.collection.CompactBuffer
 
 
-class HashedRelationSuite extends SparkFunSuite with SQLTestUtils {
+class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
 
   // Key is simply the record itself
   private val keyProjection = new Projection {

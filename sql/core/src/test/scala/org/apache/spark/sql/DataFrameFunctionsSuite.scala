@@ -18,13 +18,13 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 /**
  * Test suite for functions in [[org.apache.spark.sql.functions]].
  */
-class DataFrameFunctionsSuite extends QueryTest with SQLTestUtils {
+class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("array with column name") {

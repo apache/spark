@@ -20,9 +20,9 @@ package org.apache.spark.sql.sources
 import org.apache.hadoop.fs.Path
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
-class CommitFailureTestRelationSuite extends SparkFunSuite with HiveTestUtils {
+class CommitFailureTestRelationSuite extends SparkFunSuite with SharedHiveContext {
   // When committing a task, `CommitFailureTestSource` throws an exception for testing purpose.
   val dataSourceName: String = classOf[CommitFailureTestSource].getCanonicalName
 

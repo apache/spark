@@ -23,7 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
 import org.apache.spark.sql.hive.execution.HiveTableScan
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.SharedHiveContext
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -684,7 +684,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
 /**
  * A collection of tests for parquet data with various forms of partitioning.
  */
-abstract class ParquetPartitioningTest extends QueryTest with HiveTestUtils {
+abstract class ParquetPartitioningTest extends QueryTest with SharedHiveContext {
   import testImplicits._
 
   var partitionedTableDir: File = null

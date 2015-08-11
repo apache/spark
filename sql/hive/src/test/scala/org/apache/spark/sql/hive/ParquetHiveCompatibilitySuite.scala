@@ -21,9 +21,9 @@ import org.apache.hadoop.hive.conf.HiveConf
 
 import org.apache.spark.sql.{Row, SQLConf}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetCompatibilityTest
-import org.apache.spark.sql.hive.test.HiveParquetCompatibilityTest
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
-class ParquetHiveCompatibilitySuite extends HiveParquetCompatibilityTest {
+class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with SharedHiveContext {
   import ParquetCompatibilityTest.makeNullable
 
   /**

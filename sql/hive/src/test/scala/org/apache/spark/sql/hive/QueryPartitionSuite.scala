@@ -19,13 +19,13 @@ package org.apache.spark.sql.hive
 
 import com.google.common.io.Files
 
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.SharedHiveContext
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.util.Utils
 
 
-class QueryPartitionSuite extends QueryTest with HiveTestUtils {
+class QueryPartitionSuite extends QueryTest with SharedHiveContext {
   import testImplicits._
 
   test("SPARK-5068: query data when path doesn't exist"){

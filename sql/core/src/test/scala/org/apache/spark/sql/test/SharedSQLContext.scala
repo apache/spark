@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.test
 
-import org.scalatest.BeforeAndAfterAll
+import org.apache.spark.sql.SQLContext
 
-import org.apache.spark.SparkFunSuite
 
 /**
  * Helper trait for SQL test suites where all tests share a single [[TestSQLContext]].
  */
-private[sql] trait SharedSQLContext extends SparkFunSuite with BeforeAndAfterAll {
+private[sql] trait SharedSQLContext extends SQLTestUtils {
 
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
@@ -33,6 +32,13 @@ private[sql] trait SharedSQLContext extends SparkFunSuite with BeforeAndAfterAll
    * mode with the default test configurations.
    */
   private var _ctx: TestSQLContext = null
+
+  /**
+   * The [[TestSQLContext]] to use for all tests in this suite.
+   */
+  protected def ctx: TestSQLContext = _ctx
+  protected def sqlContext: TestSQLContext = _ctx
+  protected override def _sqlContext: SQLContext = _ctx
 
   /**
    * Initialize the [[TestSQLContext]].
@@ -54,39 +60,6 @@ private[sql] trait SharedSQLContext extends SparkFunSuite with BeforeAndAfterAll
       _ctx = null
     }
     super.afterAll()
-  }
-
-  /**
-   * The [[TestSQLContext]] to use for all tests in this suite.
-   */
-  protected def ctx: TestSQLContext = _ctx
-  protected def sqlContext: TestSQLContext = _ctx
-
-  /**
-   * Switch to a custom [[TestSQLContext]].
-   *
-   * This stops the underlying [[org.apache.spark.SparkContext]] and expects a new one
-   * to be created. This is necessary because only one [[org.apache.spark.SparkContext]]
-   * is allowed per JVM.
-   */
-  protected def switchSQLContext(newContext: () => TestSQLContext): Unit = {
-    if (_ctx != null) {
-      _ctx.sparkContext.stop()
-    }
-    _ctx = newContext()
-  }
-
-  /**
-   * Execute the given block of code with a custom [[TestSQLContext]].
-   * At the end of the method, the default [[TestSQLContext]] will be restored.
-   */
-  protected def withSQLContext[T](newContext: () => TestSQLContext)(body: => T) {
-    switchSQLContext(newContext)
-    try {
-      body
-    } finally {
-      switchSQLContext(() => new TestSQLContext)
-    }
   }
 
 }

@@ -24,9 +24,9 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.SharedHiveContext
 
-private[sql] trait OrcTest extends SparkFunSuite with HiveTestUtils {
+private[sql] trait OrcTest extends SparkFunSuite with SharedHiveContext {
   import testImplicits._
 
   /**

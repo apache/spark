@@ -22,12 +22,13 @@ import java.io.File
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.hive.client.{ExternalTable, ManagedTable}
-import org.apache.spark.sql.hive.test.{HiveDataSourceTest, HiveTestUtils}
+import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.sources.DataSourceTest
 import org.apache.spark.sql.test.ExamplePointUDT
 import org.apache.spark.sql.types.StructType
 
 
-class HiveMetastoreCatalogSuite extends SparkFunSuite with HiveTestUtils with Logging {
+class HiveMetastoreCatalogSuite extends SparkFunSuite with SharedHiveContext with Logging {
   import testImplicits._
 
   test("struct field should accept underscore in sub-column name") {
@@ -50,7 +51,7 @@ class HiveMetastoreCatalogSuite extends SparkFunSuite with HiveTestUtils with Lo
   }
 }
 
-class DataSourceWithHiveMetastoreCatalogSuite extends HiveDataSourceTest {
+class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with SharedHiveContext {
   import testImplicits._
 
   private lazy val testDF = (1 to 2).map(i => (i, s"val_$i")).toDF("d1", "d2").coalesce(1)

@@ -22,9 +22,9 @@ import org.scalatest.Matchers._
 import org.apache.spark.sql.execution.{Project, TungstenProject}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 
-class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
+class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   private lazy val booleanData = {

@@ -25,9 +25,9 @@ import org.apache.spark.sql.execution.metric.LongSQLMetricValue
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 
-class SQLListenerSuite extends SparkFunSuite with SQLTestUtils {
+class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
 
   private def createTestDataFrame: DataFrame = {

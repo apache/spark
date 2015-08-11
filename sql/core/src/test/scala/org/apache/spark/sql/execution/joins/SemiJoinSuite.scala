@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.spark.sql.{SQLConf, DataFrame, Row}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.Join
-import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
-import org.apache.spark.sql.{SQLConf, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{And, LessThan, Expression}
 import org.apache.spark.sql.execution.{EnsureRequirements, SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 
-class SemiJoinSuite extends SparkPlanTest {
+class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
 
   private lazy val left = ctx.createDataFrame(
     ctx.sparkContext.parallelize(Seq(

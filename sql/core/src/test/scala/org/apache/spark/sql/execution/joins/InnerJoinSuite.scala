@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
-class InnerJoinSuite extends SparkPlanTest {
+class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
 
   private def testInnerJoin(
       testName: String,
