@@ -440,28 +440,22 @@ private[yarn] class YarnAllocator(
           val msg = "Container preempted: " + containerId
           logInfo(msg)
           completedContainerReason = msg
-          driverRef.send(ContainerExited(completedContainer.getExitStatus, msg))
         } else if (completedContainer.getExitStatus == -103) { // vmem limit exceeded
           logWarning(memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
             VMEM_EXCEEDED_PATTERN))
           completedContainerReason = completedContainer.getDiagnostics
-          driverRef.send(ContainerExited(completedContainer.getExitStatus,
-            completedContainer.getDiagnostics))
         } else if (completedContainer.getExitStatus == -104) { // pmem limit exceeded
           logWarning(memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
             PMEM_EXCEEDED_PATTERN))
           completedContainerReason = completedContainer.getDiagnostics
-          driverRef.send(ContainerExited(completedContainer.getExitStatus,
-            completedContainer.getDiagnostics))
         } else if (completedContainer.getExitStatus != 0) {
           val msg = "Container marked as failed: " + containerId +
             ". Exit status: " + completedContainer.getExitStatus +
             ". Diagnostics: " + completedContainer.getDiagnostics
           logInfo(msg)
           completedContainerReason = msg
-          driverRef.send(ContainerExited(completedContainer.getExitStatus, msg))
           numExecutorsFailed += 1
         }
       }
