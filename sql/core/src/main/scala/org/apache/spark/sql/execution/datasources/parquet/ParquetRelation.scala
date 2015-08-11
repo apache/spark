@@ -209,6 +209,13 @@ private[sql] class ParquetRelation(
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
     val conf = ContextUtil.getConfiguration(job)
 
+    // SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible
+    val committerClassname = conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key)
+    if (committerClassname == "org.apache.spark.sql.parquet.DirectParquetOutputCommitter") {
+      conf.set(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key,
+        classOf[ParquetOutputCommitter].getCanonicalName)
+    }
+
     val committerClass =
       conf.getClass(
         SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key,
