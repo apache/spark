@@ -190,7 +190,7 @@ private class LeftOuterIterator(
 
   private def advanceRightUntilBoundConditionSatisfied(): Boolean = {
     var foundMatch: Boolean = false
-    if (!foundMatch && rightIdx < smjScanner.getBufferedMatches.length) {
+    while (!foundMatch && rightIdx < smjScanner.getBufferedMatches.length) {
       foundMatch = boundCondition(joinedRow.withRight(smjScanner.getBufferedMatches(rightIdx)))
       rightIdx += 1
     }
@@ -236,7 +236,7 @@ private class RightOuterIterator(
 
   private def advanceLeftUntilBoundConditionSatisfied(): Boolean = {
     var foundMatch: Boolean = false
-    if (!foundMatch && leftIdx < smjScanner.getBufferedMatches.length) {
+    while (!foundMatch && leftIdx < smjScanner.getBufferedMatches.length) {
       foundMatch = boundCondition(joinedRow.withLeft(smjScanner.getBufferedMatches(leftIdx)))
       leftIdx += 1
     }
