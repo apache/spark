@@ -284,6 +284,36 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
       Row(11.125) :: Nil)
   }
 
+  test("first_value and last_value") {
+    // We force to use a single partition for the sort and aggregate to make result
+    // deterministic.
+    withSQLConf(("spark.sql.shuffle.partitions", "1")) {
+      checkAnswer(
+        sqlContext.sql(
+          """
+            |SELECT
+            |  first_valUE(key),
+            |  lasT_value(key),
+            |  firSt(key),
+            |  lASt(key)
+            |FROM (SELECT key FROM agg1 ORDER BY key) tmp
+          """.stripMargin),
+        Row(null, 3, null, 3) :: Nil)
+
+      checkAnswer(
+        sqlContext.sql(
+          """
+            |SELECT
+            |  first_valUE(key),
+            |  lasT_value(key),
+            |  firSt(key),
+            |  lASt(key)
+            |FROM (SELECT key FROM agg1 ORDER BY key DESC) tmp
+          """.stripMargin),
+        Row(3, null, 3, null) :: Nil)
+    }
+  }
+
   test("udaf") {
     checkAnswer(
       sqlContext.sql(

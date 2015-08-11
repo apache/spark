@@ -113,6 +113,14 @@ case class Count(child: Expression) extends AlgebraicAggregate {
   override val evaluateExpression = Cast(currentCount, LongType)
 }
 
+/**
+ * Returns the first value of `child` for a group of rows. If the first value of `child`
+ * is `null`, it returns `null` (respecting nulls). Even if [[First]] is used on a already
+ * sorted column, if we do partial aggregation and final aggregation (when mergeExpression
+ * is used) its result will not be deterministic (unless the input table is sorted and has
+ * a single partition, and we use a single reducer to do the aggregation.).
+ * @param child
+ */
 case class First(child: Expression) extends AlgebraicAggregate {
 
   override def children: Seq[Expression] = child :: Nil
@@ -130,23 +138,36 @@ case class First(child: Expression) extends AlgebraicAggregate {
 
   private val first = AttributeReference("first", child.dataType)()
 
-  override val bufferAttributes = first :: Nil
+  private val valueSet = AttributeReference("valueSet", BooleanType)()
+
+  override val bufferAttributes = first :: valueSet :: Nil
 
   override val initialValues = Seq(
-    /* first = */ Literal.create(null, child.dataType)
+    /* first = */ Literal.create(null, child.dataType),
+    /* valueSet = */ Literal.create(false, BooleanType)
   )
 
   override val updateExpressions = Seq(
-    /* first = */ If(IsNull(first), child, first)
+    /* first = */ If(valueSet, first, child),
+    /* valueSet = */ If(valueSet, valueSet, Literal.create(true, BooleanType))
   )
 
   override val mergeExpressions = Seq(
-    /* first = */ If(IsNull(first.left), first.right, first.left)
+    /* first = */ If(valueSet, first.left, first.right),
+    /* valueSet = */ If(valueSet, valueSet, Literal.create(true, BooleanType))
   )
 
   override val evaluateExpression = first
 }
 
+/**
+ * Returns the last value of `child` for a group of rows. If the last value of `child`
+ * is `null`, it returns `null` (respecting nulls). Even if [[Last]] is used on a already
+ * sorted column, if we do partial aggregation and final aggregation (when mergeExpression
+ * is used) its result will not be deterministic (unless the input table is sorted and has
+ * a single partition, and we use a single reducer to do the aggregation.).
+ * @param child
+ */
 case class Last(child: Expression) extends AlgebraicAggregate {
 
   override def children: Seq[Expression] = child :: Nil
@@ -171,11 +192,11 @@ case class Last(child: Expression) extends AlgebraicAggregate {
   )
 
   override val updateExpressions = Seq(
-    /* last = */ If(IsNull(child), last, child)
+    /* last = */ child
   )
 
   override val mergeExpressions = Seq(
-    /* last = */ If(IsNull(last.right), last.left, last.right)
+    /* last = */ last.right
   )
 
   override val evaluateExpression = last
