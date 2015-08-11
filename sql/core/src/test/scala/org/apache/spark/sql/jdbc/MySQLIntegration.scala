@@ -22,22 +22,23 @@ import java.sql.{Date, Timestamp}
 
 import com.spotify.docker.client.DockerClient
 import com.spotify.docker.client.messages.ContainerConfig
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Ignore}
+import org.apache.spark.{SparkFunSuite, Logging}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.test._
 
-class MySQLDatabase {
+class MySQLDatabase extends Logging {
   val docker: DockerClient = DockerClientFactory.get()
   val containerId = {
-    println("Pulling mysql")
+    logInfo("Pulling mysql")
     docker.pull("mysql")
-    println("Configuring container")
+    logInfo("Configuring container")
     val config = ContainerConfig.builder().image("mysql")
       .env("MYSQL_ROOT_PASSWORD=rootpass")
       .build()
-    println("Creating container")
+    logInfo("Creating container")
     val id = docker.createContainer(config).id
-    println("Starting container " + id)
+    logInfo("Starting container " + id)
     docker.startContainer(id)
     id
   }
@@ -45,29 +46,29 @@ class MySQLDatabase {
 
   def close() {
     try {
-      println("Killing container " + containerId)
+      logInfo("Killing container " + containerId)
       docker.killContainer(containerId)
-      println("Removing container " + containerId)
+      logInfo("Removing container " + containerId)
       docker.removeContainer(containerId)
-      println("Closing docker client")
+      logInfo("Closing docker client")
       DockerClientFactory.close(docker)
     } catch {
       case e: Exception =>
-        println(e)
-        println("You may need to clean this up manually.")
+        logInfo(e.getMessage)
+        logInfo("You may need to clean this up manually.")
         throw e
     }
   }
 }
 
-class MySQLIntegration extends FunSuite with BeforeAndAfterAll {
+class MySQLIntegration extends SparkFunSuite with BeforeAndAfterAll {
   var ip: String = null
 
   def url(ip: String): String = url(ip, "mysql")
   def url(ip: String, db: String): String = s"jdbc:mysql://$ip:3306/$db?user=root&password=rootpass"
 
   def waitForDatabase(ip: String, maxMillis: Long) {
-    println("Waiting for database to start up.")
+    logInfo("Waiting for database to start up.")
     val before = System.currentTimeMillis()
     var lastException: java.sql.SQLException = null
     while (true) {
@@ -77,7 +78,7 @@ class MySQLIntegration extends FunSuite with BeforeAndAfterAll {
       try {
         val conn = java.sql.DriverManager.getConnection(url(ip))
         conn.close()
-        println("Database is up.")
+        logInfo("Database is up.")
         return;
       } catch {
         case e: java.sql.SQLException =>
@@ -111,7 +112,8 @@ class MySQLIntegration extends FunSuite with BeforeAndAfterAll {
       conn.prepareStatement("CREATE TABLE foo.strings (a CHAR(10), b VARCHAR(10), c TINYTEXT, "
         + "d TEXT, e MEDIUMTEXT, f LONGTEXT, g BINARY(4), h VARBINARY(10), i BLOB)"
       ).executeUpdate()
-      conn.prepareStatement("INSERT INTO foo.strings VALUES ('the', 'quick', 'brown', 'fox', 'jumps', 'over', 'the', 'lazy', 'dog')").executeUpdate()
+      conn.prepareStatement("INSERT INTO foo.strings VALUES ('the', 'quick', 'brown', 'fox', " +
+        "'jumps', 'over', 'the', 'lazy', 'dog')").executeUpdate()
     } finally {
       conn.close()
     }
@@ -123,7 +125,9 @@ class MySQLIntegration extends FunSuite with BeforeAndAfterAll {
     // If you load the MySQL driver here, DriverManager will deadlock.  The
     // MySQL driver gets loaded when its jar gets loaded, unlike the Postgres
     // and H2 drivers.
-    //Class.forName("com.mysql.jdbc.Driver")
+    // scalastyle:off classforname
+    // Class.forName("com.mysql.jdbc.Driver")
+    // scalastyle:on classforname
 
     db = new MySQLDatabase()
     waitForDatabase(db.ip, 60000)
@@ -151,7 +155,7 @@ class MySQLIntegration extends FunSuite with BeforeAndAfterAll {
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types.length == 9)
-    println(types(1))
+    logInfo(types(1))
     assert(types(0).equals("class java.lang.Boolean"))
     assert(types(1).equals("class java.lang.Long"))
     assert(types(2).equals("class java.lang.Integer"))

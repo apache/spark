@@ -21,22 +21,23 @@ import java.sql.DriverManager
 
 import com.spotify.docker.client.DockerClient
 import com.spotify.docker.client.messages.ContainerConfig
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Ignore}
+import org.apache.spark.{SparkFunSuite, Logging}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.test._
 
-class PostgresDatabase {
+class PostgresDatabase extends Logging {
   val docker: DockerClient = DockerClientFactory.get()
   val containerId = {
-    println("Pulling postgres")
+    logInfo("Pulling postgres")
     docker.pull("postgres")
-    println("Configuring container")
+    logInfo("Configuring container")
     val config = ContainerConfig.builder().image("postgres")
       .env("POSTGRES_PASSWORD=rootpass")
       .build()
-    println("Creating container")
+    logInfo("Creating container")
     val id = docker.createContainer(config).id
-    println("Starting container " + id)
+    logInfo("Starting container " + id)
     docker.startContainer(id)
     id
   }
@@ -44,25 +45,26 @@ class PostgresDatabase {
 
   def close() {
     try {
-      println("Killing container " + containerId)
+      logInfo("Killing container " + containerId)
       docker.killContainer(containerId)
-      println("Removing container " + containerId)
+      logInfo("Removing container " + containerId)
       docker.removeContainer(containerId)
-      println("Closing docker client")
+      logInfo("Closing docker client")
       DockerClientFactory.close(docker)
     } catch {
       case e: Exception =>
-        println(e)
-        println("You may need to clean this up manually.")
+        logInfo(e.getMessage)
+        logInfo("You may need to clean this up manually.")
         throw e
     }
   }
 }
 
-class PostgresIntegration extends FunSuite with BeforeAndAfterAll {
+class PostgresIntegration extends SparkFunSuite with BeforeAndAfterAll {
   lazy val db = new PostgresDatabase()
 
-  def url(ip: String) = s"jdbc:postgresql://$ip:5432/postgres?user=postgres&password=rootpass"
+  def url(ip: String): String =
+    s"jdbc:postgresql://$ip:5432/postgres?user=postgres&password=rootpass"
 
   def waitForDatabase(ip: String, maxMillis: Long) {
     val before = System.currentTimeMillis()
@@ -75,7 +77,7 @@ class PostgresIntegration extends FunSuite with BeforeAndAfterAll {
       try {
         val conn = java.sql.DriverManager.getConnection(url(ip))
         conn.close()
-        println("Database is up.")
+        logInfo("Database is up.")
         return;
       } catch {
         case e: java.sql.SQLException =>
@@ -100,9 +102,9 @@ class PostgresIntegration extends FunSuite with BeforeAndAfterAll {
   }
 
   override def beforeAll() {
-    println("Waiting for database to start up.")
+    logInfo("Waiting for database to start up.")
     waitForDatabase(db.ip, 60000)
-    println("Setting up database.")
+    logInfo("Setting up database.")
     setupDatabase(db.ip)
   }
 
@@ -132,8 +134,10 @@ class PostgresIntegration extends FunSuite with BeforeAndAfterAll {
     assert(rows(0).getLong(3) == 123456789012345L)
     assert(rows(0).getBoolean(4) == false)
     // BIT(10)'s come back as ASCII strings of ten ASCII 0's and 1's...
-    assert(java.util.Arrays.equals(rows(0).getAs[Array[Byte]](5), Array[Byte](49,48,48,48,49,48,48,49,48,49)))
-    assert(java.util.Arrays.equals(rows(0).getAs[Array[Byte]](6), Array[Byte](0xDE.toByte, 0xAD.toByte, 0xBE.toByte, 0xEF.toByte)))
+    assert(java.util.Arrays.equals(rows(0).getAs[Array[Byte]](5),
+      Array[Byte](49, 48, 48, 48, 49, 48, 48, 49, 48, 49)))
+    assert(java.util.Arrays.equals(rows(0).getAs[Array[Byte]](6),
+      Array[Byte](0xDE.toByte, 0xAD.toByte, 0xBE.toByte, 0xEF.toByte)))
     assert(rows(0).getBoolean(7) == true)
     assert(rows(0).getString(8) == "172.16.0.42")
     assert(rows(0).getString(9) == "192.168.0.0/16")
