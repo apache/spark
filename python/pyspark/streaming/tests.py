@@ -535,7 +535,7 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self.ssc.queueStream([[1]]).foreachRDD(lambda rdd: rdd.count())
         self.ssc.start()
         self.assertEqual(StreamingContext.getActive(), self.ssc)
-        self.ssc._jssc.stop()
+        self.ssc._jssc.stop(False)
         self.assertEqual(StreamingContext.getActive(), None)
 
     def test_get_active_or_create(self):
@@ -573,7 +573,7 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self.assertEqual(StreamingContext.getActive(), self.ssc)
         self.ssc._jssc.stop(False)
         self.setupCalled = False
-        self.ssc = StreamingContext.getActiveOrCreate(setupFunc)
+        self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
         self.assertTrue(self.setupCalled)
 
 
@@ -1210,4 +1210,4 @@ if __name__ == "__main__":
                                mqtt_assembly_jar, mqtt_test_jar)
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
-    unittest.main()
+    unittest.main(verbosity=3)

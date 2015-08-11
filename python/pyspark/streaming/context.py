@@ -185,9 +185,8 @@ class StreamingContext(object):
             # backing the supposedly active Python context
             activePythonContextJavaId = activePythonContext._jssc.ssc().hashCode()
             activeJvmContextOption = activePythonContext._jvm.StreamingContext.getActive()
-            if activeJvmContextOption.isEmpty():
-                activeJvmContextId = activeJvmContextOption.get().hashCode()
-                if activeJvmContextId != activePythonContextJavaId:
+            if activeJvmContextOption.isEmpty() or \
+                            activeJvmContextOption.get().hashCode() != activePythonContextJavaId:
                     cls._activeContext = None
         return cls._activeContext
 
