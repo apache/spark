@@ -41,11 +41,20 @@ import org.apache.spark.{HashPartitioner, SparkEnv}
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
+  override private[sql] lazy val metrics = Map(
+    "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
+
   @transient lazy val buildProjection = newMutableProjection(projectList, child.output)
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    val reusableProjection = buildProjection()
-    iter.map(reusableProjection)
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numRows = longMetric("numRows")
+    child.execute().mapPartitions { iter =>
+      val reusableProjection = buildProjection()
+      iter.map { row =>
+        numRows += 1
+        reusableProjection(row)
+      }
+    }
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -57,19 +66,28 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
  */
 case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
 
+  override private[sql] lazy val metrics = Map(
+    "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
+
   override def outputsUnsafeRows: Boolean = true
   override def canProcessUnsafeRows: Boolean = true
   override def canProcessSafeRows: Boolean = true
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    this.transformAllExpressions {
-      case CreateStruct(children) => CreateStructUnsafe(children)
-      case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numRows = longMetric("numRows")
+    child.execute().mapPartitions { iter =>
+      this.transformAllExpressions {
+        case CreateStruct(children) => CreateStructUnsafe(children)
+        case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+      }
+      val project = UnsafeProjection.create(projectList, child.output)
+      iter.map { row =>
+        numRows += 1
+        project(row)
+      }
     }
-    val project = UnsafeProjection.create(projectList, child.output)
-    iter.map(project)
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering

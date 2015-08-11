@@ -248,6 +248,21 @@ private[ml] trait HasFitIntercept extends Params {
 }
 
 /**
+ * Trait for shared param handleInvalid.
+ */
+private[ml] trait HasHandleInvalid extends Params {
+
+  /**
+   * Param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later..
+   * @group param
+   */
+  final val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.", ParamValidators.inArray(Array("skip", "error")))
+
+  /** @group getParam */
+  final def getHandleInvalid: String = $(handleInvalid)
+}
+
+/**
  * Trait for shared param standardization (default: true).
  */
 private[ml] trait HasStandardization extends Params {
