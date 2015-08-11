@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -24,6 +25,8 @@ import org.apache.spark.sql.types._
  * Java can not access Projection (in package object)
  */
 abstract class BaseProjection extends Projection {}
+
+abstract class CodeGenMutableRow extends MutableRow with BaseGenericInternalRow
 
 /**
  * Generates bytecode that produces a new [[InternalRow]] object based on a fixed set of input
@@ -171,7 +174,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         return new SpecificRow((InternalRow) r);
       }
 
-      final class SpecificRow extends ${classOf[MutableRow].getName} {
+      final class SpecificRow extends ${classOf[CodeGenMutableRow].getName} {
 
         $columns
 
@@ -184,7 +187,8 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         public void setNullAt(int i) { nullBits[i] = true; }
         public boolean isNullAt(int i) { return nullBits[i]; }
 
-        protected Object genericGet(int i) {
+        @Override
+        public Object genericGet(int i) {
           if (isNullAt(i)) return null;
           switch (i) {
           $getCases

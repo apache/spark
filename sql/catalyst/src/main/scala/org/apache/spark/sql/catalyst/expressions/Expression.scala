@@ -444,7 +444,7 @@ abstract class TernaryExpression extends Expression {
   override def nullable: Boolean = children.exists(_.nullable)
 
   /**
-   * Default behavior of evaluation according to the default nullability of BinaryExpression.
+   * Default behavior of evaluation according to the default nullability of TernaryExpression.
    * If subclass of BinaryExpression override nullable, probably should also override this.
    */
   override def eval(input: InternalRow): Any = {
@@ -463,7 +463,7 @@ abstract class TernaryExpression extends Expression {
   }
 
   /**
-   * Called by default [[eval]] implementation.  If subclass of BinaryExpression keep the default
+   * Called by default [[eval]] implementation.  If subclass of TernaryExpression keep the default
    * nullability, they can override this method to save null-check code.  If we need full control
    * of evaluation process, we should override [[eval]].
    */

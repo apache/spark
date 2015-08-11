@@ -102,7 +102,7 @@ public class UnsafeExternalSorterSuite {
     MockitoAnnotations.initMocks(this);
     sparkConf = new SparkConf();
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
-    shuffleMemoryManager = new ShuffleMemoryManager(Long.MAX_VALUE);
+    shuffleMemoryManager = ShuffleMemoryManager.create(Long.MAX_VALUE, pageSizeBytes);
     spillFilesCreated.clear();
     taskContext = mock(TaskContext.class);
     when(taskContext.taskMetrics()).thenReturn(new TaskMetrics());
@@ -237,7 +237,7 @@ public class UnsafeExternalSorterSuite {
 
   @Test
   public void spillingOccursInResponseToMemoryPressure() throws Exception {
-    shuffleMemoryManager = new ShuffleMemoryManager(pageSizeBytes * 2);
+    shuffleMemoryManager = ShuffleMemoryManager.create(pageSizeBytes * 2, pageSizeBytes);
     final UnsafeExternalSorter sorter = newSorter();
     final int numRecords = (int) pageSizeBytes / 4;
     for (int i = 0; i <= numRecords; i++) {
@@ -340,7 +340,8 @@ public class UnsafeExternalSorterSuite {
       for (int i = 0; i < numRecordsPerPage * 10; i++) {
         insertNumber(sorter, i);
         newPeakMemory = sorter.getPeakMemoryUsedBytes();
-        if (i % numRecordsPerPage == 0) {
+        // The first page is pre-allocated on instantiation
+        if (i % numRecordsPerPage == 0 && i > 0) {
           // We allocated a new page for this record, so peak memory should change
           assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
         } else {
@@ -358,6 +359,22 @@ public class UnsafeExternalSorterSuite {
       }
       newPeakMemory = sorter.getPeakMemoryUsedBytes();
       assertEquals(previousPeakMemory, newPeakMemory);
+    } finally {
+      sorter.cleanupResources();
+      assertSpillFilesWereCleanedUp();
+    }
+  }
+
+  @Test
+  public void testReservePageOnInstantiation() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    try {
+      assertEquals(1, sorter.getNumberOfAllocatedPages());
+      // Inserting a new record doesn't allocate more memory since we already have a page
+      long peakMemory = sorter.getPeakMemoryUsedBytes();
+      insertNumber(sorter, 100);
+      assertEquals(peakMemory, sorter.getPeakMemoryUsedBytes());
+      assertEquals(1, sorter.getNumberOfAllocatedPages());
     } finally {
       sorter.cleanupResources();
       assertSpillFilesWereCleanedUp();

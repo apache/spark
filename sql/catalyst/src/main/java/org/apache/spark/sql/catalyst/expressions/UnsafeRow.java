@@ -65,11 +65,11 @@ public final class UnsafeRow extends MutableRow {
   /**
    * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
    */
-  public static final Set<DataType> settableFieldTypes;
+  public static final Set<DataType> mutableFieldTypes;
 
-  // DecimalType(precision <= 18) is settable
+  // DecimalType is also mutable
   static {
-    settableFieldTypes = Collections.unmodifiableSet(
+    mutableFieldTypes = Collections.unmodifiableSet(
       new HashSet<>(
         Arrays.asList(new DataType[] {
           NullType,
@@ -87,10 +87,14 @@ public final class UnsafeRow extends MutableRow {
 
   public static boolean isFixedLength(DataType dt) {
     if (dt instanceof DecimalType) {
-      return ((DecimalType) dt).precision() < Decimal.MAX_LONG_DIGITS();
+      return ((DecimalType) dt).precision() <= Decimal.MAX_LONG_DIGITS();
     } else {
-      return settableFieldTypes.contains(dt);
+      return mutableFieldTypes.contains(dt);
     }
+  }
+
+  public static boolean isMutable(DataType dt) {
+    return mutableFieldTypes.contains(dt) || dt instanceof DecimalType;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -238,17 +242,45 @@ public final class UnsafeRow extends MutableRow {
     PlatformDependent.UNSAFE.putFloat(baseObject, getFieldOffset(ordinal), value);
   }
 
+  /**
+   * Updates the decimal column.
+   *
+   * Note: In order to support update a decimal with precision > 18, CAN NOT call
+   * setNullAt() for this column.
+   */
   @Override
   public void setDecimal(int ordinal, Decimal value, int precision) {
     assertIndexIsValid(ordinal);
-    if (value == null) {
-      setNullAt(ordinal);
-    } else {
-      if (precision <= Decimal.MAX_LONG_DIGITS()) {
-        setLong(ordinal, value.toUnscaledLong());
+    if (precision <= Decimal.MAX_LONG_DIGITS()) {
+      // compact format
+      if (value == null) {
+        setNullAt(ordinal);
       } else {
-        // TODO(davies): support update decimal (hold a bounded space even it's null)
-        throw new UnsupportedOperationException();
+        setLong(ordinal, value.toUnscaledLong());
+      }
+    } else {
+      // fixed length
+      long cursor = getLong(ordinal) >>> 32;
+      assert cursor > 0 : "invalid cursor " + cursor;
+      // zero-out the bytes
+      PlatformDependent.UNSAFE.putLong(baseObject, baseOffset + cursor, 0L);
+      PlatformDependent.UNSAFE.putLong(baseObject, baseOffset + cursor + 8, 0L);
+
+      if (value == null) {
+        setNullAt(ordinal);
+        // keep the offset for future update
+        PlatformDependent.UNSAFE.putLong(baseObject, getFieldOffset(ordinal), cursor << 32);
+      } else {
+
+        final BigInteger integer = value.toJavaBigDecimal().unscaledValue();
+        final int[] mag = (int[]) PlatformDependent.UNSAFE.getObjectVolatile(integer,
+          PlatformDependent.BIG_INTEGER_MAG_OFFSET);
+        assert(mag.length <= 4);
+
+        // Write the bytes to the variable length portion.
+        PlatformDependent.copyMemory(mag, PlatformDependent.INT_ARRAY_OFFSET,
+          baseObject, baseOffset + cursor, mag.length * 4);
+        setLong(ordinal, (cursor << 32) | ((long) (((integer.signum() + 1) << 8) + mag.length)));
       }
     }
   }
@@ -343,6 +375,8 @@ public final class UnsafeRow extends MutableRow {
     return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(ordinal));
   }
 
+  private static byte[] EMPTY = new byte[0];
+
   @Override
   public Decimal getDecimal(int ordinal, int precision, int scale) {
     if (isNullAt(ordinal)) {
@@ -351,10 +385,20 @@ public final class UnsafeRow extends MutableRow {
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
       return Decimal.apply(getLong(ordinal), precision, scale);
     } else {
-      byte[] bytes = getBinary(ordinal);
-      BigInteger bigInteger = new BigInteger(bytes);
-      BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
-      return Decimal.apply(new scala.math.BigDecimal(javaDecimal), precision, scale);
+      long offsetAndSize = getLong(ordinal);
+      long offset = offsetAndSize >>> 32;
+      int signum = ((int) (offsetAndSize & 0xfff) >> 8);
+      assert signum >=0 && signum <= 2 : "invalid signum " + signum;
+      int size = (int) (offsetAndSize & 0xff);
+      int[] mag = new int[size];
+      PlatformDependent.copyMemory(baseObject, baseOffset + offset,
+        mag, PlatformDependent.INT_ARRAY_OFFSET, size * 4);
+
+      // create a BigInteger using signum and mag
+      BigInteger v = new BigInteger(0, EMPTY);  // create the initial object
+      PlatformDependent.UNSAFE.putInt(v, PlatformDependent.BIG_INTEGER_SIGNUM_OFFSET, signum - 1);
+      PlatformDependent.UNSAFE.putObjectVolatile(v, PlatformDependent.BIG_INTEGER_MAG_OFFSET, mag);
+      return Decimal.apply(new BigDecimal(v, scale), precision, scale);
     }
   }
 

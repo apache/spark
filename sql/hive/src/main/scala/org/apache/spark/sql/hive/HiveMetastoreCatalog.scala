@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, SqlParser, TableIdentifier}
 import org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation, Partition => ParquetPartition, PartitionSpec, ResolvedDataSource}
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode}
@@ -317,19 +317,17 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
       case (Some(serde), relation: HadoopFsRelation) if relation.partitionColumns.nonEmpty =>
         logWarning {
-          val paths = relation.paths.mkString(", ")
           "Persisting partitioned data source relation into Hive metastore in " +
             s"Spark SQL specific format, which is NOT compatible with Hive.  Input path(s): " +
-            paths.mkString("\n", "\n", "")
+            relation.paths.mkString("\n", "\n", "")
         }
         newSparkSQLSpecificMetastoreTable()
 
       case (Some(serde), relation: HadoopFsRelation) =>
         logWarning {
-          val paths = relation.paths.mkString(", ")
           "Persisting data source relation with multiple input paths into Hive metastore in " +
             s"Spark SQL specific format, which is NOT compatible with Hive.  Input paths: " +
-            paths.mkString("\n", "\n", "")
+            relation.paths.mkString("\n", "\n", "")
         }
         newSparkSQLSpecificMetastoreTable()
 
