@@ -93,6 +93,9 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
    * @param numLocalityAwareTasks number of locality required tasks
    * @param hostToLocalTaskCount a map to store the preferred hostname and possible task
    *                             numbers running on it, used as hints for container allocation
+   * @param allocatedHostToContainersMap host to allocated containers map, used to calculate the
+   *                                     expected locality preference by considering the existing
+   *                                     containers
    * @param localityMatchedPendingAllocations A sequence of pending container request which
    *                                          matches the localities of current required tasks.
    * @return node localities and rack localities, each locality is an array of string,
@@ -164,6 +167,9 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
    * @param localityAwareTasks number of locality aware tasks
    * @param hostToLocalTaskCount a map to store the preferred hostname and possible task
    *                             numbers running on it, used as hints for container allocation
+   * @param allocatedHostToContainersMap host to allocated containers map, used to calculate the
+   *                                     expected locality preference by considering the existing
+   *                                     containers
    * @param localityMatchedPendingAllocations A sequence of pending container request which
    *                                          matches the localities of current required tasks.
    * @return a map with hostname as key and required number of containers on this host as value

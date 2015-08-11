@@ -265,7 +265,7 @@ private[yarn] class YarnAllocator(
       // unmatched list and non-locality list. Take the locality matched container request into
       // consideration of container placement, treat as allocated containers.
       // For locality unmatched and locality free container requests, cancel these container
-      // requests, this required locality preference has been changed, recalculating with
+      // requests, since required locality preference has been changed, recalculating using
       // container placement strategy.
       val (localityMatched, localityUnMatched, localityFree) = splitPendingAllocationsByLocality(
         hostToLocalTaskCounts, pendingAllocate)
@@ -553,9 +553,9 @@ private[yarn] class YarnAllocator(
    * @param hostToLocalTaskCount a map of preferred hostname to possible task counts to be used as
    *                             container placement hint.
    * @param pendingAllocations A sequence of pending allocation container request.
-   * @return A tuple with 3 Sequences, first is a list of locality matched container
-   *         requests, second is a list of locality unmatched container requests, and third is a
-   *         list of locality free container requests.
+   * @return A tuple of 3 sequences, first is a sequence of locality matched container
+   *         requests, second is a sequence of locality unmatched container requests, and third is a
+   *         sequence of locality free container requests.
    */
   private def splitPendingAllocationsByLocality(
       hostToLocalTaskCount: Map[String, Int],
