@@ -456,6 +456,39 @@ val testResult2 = Statistics.kolmogorovSmirnovTest(data, myCDF)
 </div>
 </div>
 
+MLlib also provides a one sample Anderson-Darling test, which allows users to test a given 
+sample of data, in the form of `RDD[Double]`, against one of various continuous distributions.
+The statistic can be used to test the null hypothesis that the data come from that given 
+distribution. Thus the Anderson-Darling test is a goodness-of-fit test for continuous
+samples, an alternative to other such tests like Kolmogorov-Smirnov.
+Currently, the test supports the Normal, Exponential, Gumbel, Logistic, and Weibull distributions.
+The user should pass parameters appropriate for each distribution. However, in the case that
+this does not happen, the distributions are initialized with default parameters and an appropriate
+message is logged.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+[`Statistics`](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) provides a method to 
+run the 1-sample Anderson-Darling test. The following example demonstrates how to run and interpret 
+such a hypothesis test.
+
+{% highlight scala %}
+import org.apache.spark.mllib.stat.Statistics
+val data: RDD[Double] = ... // the data that we wish to evaluate
+
+// compute the goodness of fit versus a standard normal distribution
+// if the statistic is larger the the critical value at a significance level we want
+// then we reject the null hypothesis, and conclude that `data` do not
+// come from the given distribution.
+val dataVsNormal = Statistics.andersonDarlingTest(data, "norm", 0, 1)
+
+// compute the goodness of fit versus a logistic distribution
+val locParam: Double = ... // estimated by the user from the data
+val scaleParam: Double = ... // estimated by the user from the data
+val dataVsLogistic = Statistics.andersonDarlingTest(data, "logistic", locParam, scaleParam)
+{% endhighlight %}
+</div>
+
 
 ## Random data generation
 
