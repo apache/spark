@@ -27,7 +27,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
 trait SQLTestUtils { this: SparkFunSuite =>
-  def sqlContext: SQLContext
+  protected def sqlContext: SQLContext
 
   protected def configuration = sqlContext.sparkContext.hadoopConfiguration
 

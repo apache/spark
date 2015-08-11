@@ -17,73 +17,205 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Expression, LessThan}
-import org.apache.spark.sql.catalyst.plans.{FullOuter, LeftOuter, RightOuter}
-import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans.logical.Join
+import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.{IntegerType, DoubleType, StructType}
+import org.apache.spark.sql.{SQLConf, DataFrame, Row}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.execution.{EnsureRequirements, joins, SparkPlan, SparkPlanTest}
 
-class OuterJoinSuite extends SparkPlanTest {
+class OuterJoinSuite extends SparkPlanTest with SQLTestUtils {
 
-  val left = Seq(
-    (1, 2.0),
-    (2, 1.0),
-    (3, 3.0)
-  ).toDF("a", "b")
+  private def testOuterJoin(
+      testName: String,
+      leftRows: DataFrame,
+      rightRows: DataFrame,
+      joinType: JoinType,
+      condition: Expression,
+      expectedAnswer: Seq[Product]): Unit = {
+    val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
+    ExtractEquiJoinKeys.unapply(join).foreach {
+      case (_, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
+        test(s"$testName using ShuffledHashOuterJoin") {
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+            checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+              EnsureRequirements(sqlContext).apply(
+                ShuffledHashOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right)),
+              expectedAnswer.map(Row.fromTuple),
+              sortAnswers = true)
+          }
+        }
 
-  val right = Seq(
-    (2, 3.0),
-    (3, 2.0),
-    (4, 1.0)
-  ).toDF("c", "d")
+        if (joinType != FullOuter) {
+          test(s"$testName using BroadcastHashOuterJoin") {
+            withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+              checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+                BroadcastHashOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right),
+                expectedAnswer.map(Row.fromTuple),
+                sortAnswers = true)
+            }
+          }
 
-  val leftKeys: List[Expression] = 'a :: Nil
-  val rightKeys: List[Expression] = 'c :: Nil
-  val condition = Some(LessThan('b, 'd))
+          test(s"$testName using SortMergeOuterJoin") {
+            withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+              checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+                EnsureRequirements(sqlContext).apply(
+                  SortMergeOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right)),
+                expectedAnswer.map(Row.fromTuple),
+                sortAnswers = false)
+            }
+          }
+        }
+    }
 
-  test("shuffled hash outer join") {
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      ShuffledHashOuterJoin(leftKeys, rightKeys, LeftOuter, condition, left, right),
-      Seq(
-        (1, 2.0, null, null),
-        (2, 1.0, 2, 3.0),
-        (3, 3.0, null, null)
-      ).map(Row.fromTuple))
+    test(s"$testName using BroadcastNestedLoopJoin (build=left)") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          joins.BroadcastNestedLoopJoin(left, right, joins.BuildLeft, joinType, Some(condition)),
+          expectedAnswer.map(Row.fromTuple),
+          sortAnswers = true)
+      }
+    }
 
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      ShuffledHashOuterJoin(leftKeys, rightKeys, RightOuter, condition, left, right),
-      Seq(
-        (2, 1.0, 2, 3.0),
-        (null, null, 3, 2.0),
-        (null, null, 4, 1.0)
-      ).map(Row.fromTuple))
-
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      ShuffledHashOuterJoin(leftKeys, rightKeys, FullOuter, condition, left, right),
-      Seq(
-        (1, 2.0, null, null),
-        (2, 1.0, 2, 3.0),
-        (3, 3.0, null, null),
-        (null, null, 3, 2.0),
-        (null, null, 4, 1.0)
-      ).map(Row.fromTuple))
+    test(s"$testName using BroadcastNestedLoopJoin (build=right)") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          joins.BroadcastNestedLoopJoin(left, right, joins.BuildRight, joinType, Some(condition)),
+          expectedAnswer.map(Row.fromTuple),
+          sortAnswers = true)
+      }
+    }
   }
 
-  test("broadcast hash outer join") {
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      BroadcastHashOuterJoin(leftKeys, rightKeys, LeftOuter, condition, left, right),
-      Seq(
-        (1, 2.0, null, null),
-        (2, 1.0, 2, 3.0),
-        (3, 3.0, null, null)
-      ).map(Row.fromTuple))
+  val left = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(Seq(
+    Row(1, 2.0),
+    Row(2, 100.0),
+    Row(2, 1.0), // This row is duplicated to ensure that we will have multiple buffered matches
+    Row(2, 1.0),
+    Row(3, 3.0),
+    Row(5, 1.0),
+    Row(6, 6.0),
+    Row(null, null)
+  )), new StructType().add("a", IntegerType).add("b", DoubleType))
 
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      BroadcastHashOuterJoin(leftKeys, rightKeys, RightOuter, condition, left, right),
-      Seq(
-        (2, 1.0, 2, 3.0),
-        (null, null, 3, 2.0),
-        (null, null, 4, 1.0)
-      ).map(Row.fromTuple))
+  val right = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(Seq(
+    Row(0, 0.0),
+    Row(2, 3.0), // This row is duplicated to ensure that we will have multiple buffered matches
+    Row(2, -1.0),
+    Row(2, -1.0),
+    Row(2, 3.0),
+    Row(3, 2.0),
+    Row(4, 1.0),
+    Row(5, 3.0),
+    Row(7, 7.0),
+    Row(null, null)
+  )), new StructType().add("c", IntegerType).add("d", DoubleType))
+
+  val condition = {
+    And(
+      (left.col("a") === right.col("c")).expr,
+      LessThan(left.col("b").expr, right.col("d").expr))
   }
+
+  // --- Basic outer joins ------------------------------------------------------------------------
+
+  testOuterJoin(
+    "basic left outer join",
+    left,
+    right,
+    LeftOuter,
+    condition,
+    Seq(
+      (null, null, null, null),
+      (1, 2.0, null, null),
+      (2, 100.0, null, null),
+      (2, 1.0, 2, 3.0),
+      (2, 1.0, 2, 3.0),
+      (2, 1.0, 2, 3.0),
+      (2, 1.0, 2, 3.0),
+      (3, 3.0, null, null),
+      (5, 1.0, 5, 3.0),
+      (6, 6.0, null, null)
+    )
+  )
+
+  testOuterJoin(
+    "basic right outer join",
+    left,
+    right,
+    RightOuter,
+    condition,
+    Seq(
+      (null, null, null, null),
+      (null, null, 0, 0.0),
+      (2, 1.0, 2, 3.0),
+      (2, 1.0, 2, 3.0),
+      (null, null, 2, -1.0),
+      (null, null, 2, -1.0),
+      (2, 1.0, 2, 3.0),
+      (2, 1.0, 2, 3.0),
+      (null, null, 3, 2.0),
+      (null, null, 4, 1.0),
+      (5, 1.0, 5, 3.0),
+      (null, null, 7, 7.0)
+    )
+  )
+
+  testOuterJoin(
+    "basic full outer join",
+    left,
+    right,
+    FullOuter,
+    condition,
+    Seq(
+      (1, 2.0, null, null),
+      (null, null, 2, -1.0),
+      (null, null, 2, -1.0),
+      (2, 100.0, null, null),
+      (2, 1.0, 2, 3.0),
+      (2, 1.0, 2, 3.0),
+      (2, 1.0, 2, 3.0),
+      (2, 1.0, 2, 3.0),
+      (3, 3.0, null, null),
+      (5, 1.0, 5, 3.0),
+      (6, 6.0, null, null),
+      (null, null, 0, 0.0),
+      (null, null, 3, 2.0),
+      (null, null, 4, 1.0),
+      (null, null, 7, 7.0),
+      (null, null, null, null),
+      (null, null, null, null)
+    )
+  )
+
+  // --- Both inputs empty ------------------------------------------------------------------------
+
+  testOuterJoin(
+    "left outer join with both inputs empty",
+    left.filter("false"),
+    right.filter("false"),
+    LeftOuter,
+    condition,
+    Seq.empty
+  )
+
+  testOuterJoin(
+    "right outer join with both inputs empty",
+    left.filter("false"),
+    right.filter("false"),
+    RightOuter,
+    condition,
+    Seq.empty
+  )
+
+  testOuterJoin(
+    "full outer join with both inputs empty",
+    left.filter("false"),
+    right.filter("false"),
+    FullOuter,
+    condition,
+    Seq.empty
+  )
 }
