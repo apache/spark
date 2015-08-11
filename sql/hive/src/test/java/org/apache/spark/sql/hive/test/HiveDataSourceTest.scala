@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.hive.test
 
-import org.apache.spark.sql.execution.datasources.parquet.AbstractParquetCompatibilityTest
+import org.apache.spark.sql.sources.AbstractDataSourceTest
+
 
 /**
- * Helper class for testing Parquet compatibility in hive.
- * This is analogous to [[org.apache.spark.sql.parquet.ParquetCompatibilityTest]].
+ * An equivalent of [[org.apache.spark.sql.sources.DataSourceTest]], but for hive tests.
  */
-private[hive] abstract class HiveParquetCompatibilityTest
-  extends AbstractParquetCompatibilityTest
-  with HiveParquetTest
+private[hive] abstract class HiveDataSourceTest
+  extends AbstractDataSourceTest
+  with HiveTestUtils

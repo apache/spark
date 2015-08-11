@@ -475,7 +475,7 @@ class MetastoreDataSourcesSuite
           // Drop table will also delete the data.
           ctx.sql("DROP TABLE savedJsonTable")
           intercept[IOException] {
-            ctx.read.json(catalog.hiveDefaultTableFilePath("savedJsonTable"))
+            ctx.read.json(ctx.catalog.hiveDefaultTableFilePath("savedJsonTable"))
           }
         }
 

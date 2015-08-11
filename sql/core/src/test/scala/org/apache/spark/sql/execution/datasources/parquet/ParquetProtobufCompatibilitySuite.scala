@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row}
 
 class ParquetProtobufCompatibilitySuite extends ParquetCompatibilityTest {
-  override def sqlContext: SQLContext = TestSQLContext
 
   private def readParquetProtobufFile(name: String): DataFrame = {
     val url = Thread.currentThread().getContextClassLoader.getResource(name)

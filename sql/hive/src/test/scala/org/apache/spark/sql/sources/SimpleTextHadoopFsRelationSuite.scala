@@ -54,8 +54,6 @@ class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
   override val dataSourceName: String =
     classOf[org.apache.spark.sql.execution.datasources.json.DefaultSource].getCanonicalName
 
-  import sqlContext._
-
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
       val basePath = new Path(file.getCanonicalPath)
@@ -64,7 +62,7 @@ class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
 
       for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
         val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
-        sparkContext
+        ctx.sparkContext
           .parallelize(for (i <- 1 to 3) yield s"""{"a":$i,"b":"val_$i"}""")
           .saveAsTextFile(partitionDir.toString)
       }
@@ -73,7 +71,7 @@ class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        read.format(dataSourceName)
+        ctx.read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
     }

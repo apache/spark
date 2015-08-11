@@ -69,8 +69,8 @@ abstract class AggregationQuerySuite extends QueryTest with HiveTestUtils {
     emptyDF.registerTempTable("emptyTable")
 
     // Register UDAFs
-    ctx.udaf.register("mydoublesum", new MyDoubleSum)
-    ctx.udaf.register("mydoubleavg", new MyDoubleAvg)
+    ctx.udf.register("mydoublesum", new MyDoubleSum)
+    ctx.udf.register("mydoubleavg", new MyDoubleAvg)
   }
 
   override def afterAll(): Unit = {
@@ -139,7 +139,7 @@ abstract class AggregationQuerySuite extends QueryTest with HiveTestUtils {
 
   test("null literal") {
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT
           |  AVG(null),
@@ -409,7 +409,7 @@ abstract class AggregationQuerySuite extends QueryTest with HiveTestUtils {
         Row(null, 110.0, 60.0, 30.0, 110.0, 110.0) :: Nil)
 
     checkAnswer(
-      sqlContext.sql(
+      ctx.sql(
         """
           |SELECT
           |  count(value1),
@@ -566,26 +566,26 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
   var originalUnsafeEnabled: Boolean = _
 
   override def beforeAll(): Unit = {
-    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "true")
+    originalUnsafeEnabled = ctx.conf.unsafeEnabled
+    ctx.setConf(SQLConf.UNSAFE_ENABLED.key, "true")
     super.beforeAll()
   }
 
   override def afterAll(): Unit = {
     super.afterAll()
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
-    sqlContext.conf.unsetConf("spark.sql.TungstenAggregate.testFallbackStartsAt")
+    ctx.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+    ctx.conf.unsetConf("spark.sql.TungstenAggregate.testFallbackStartsAt")
   }
 
   override protected def checkAnswer(actual: DataFrame, expectedAnswer: Seq[Row]): Unit = {
     (0 to 2).foreach { fallbackStartsAt =>
-      sqlContext.setConf(
+      ctx.setConf(
         "spark.sql.TungstenAggregate.testFallbackStartsAt",
         fallbackStartsAt.toString)
 
       // Create a new df to make sure its physical operator picks up
       // spark.sql.TungstenAggregate.testFallbackStartsAt.
-      val newActual = DataFrame(sqlContext, actual.logicalPlan)
+      val newActual = DataFrame(ctx, actual.logicalPlan)
 
       QueryTest.checkAnswer(newActual, expectedAnswer) match {
         case Some(errorMessage) =>

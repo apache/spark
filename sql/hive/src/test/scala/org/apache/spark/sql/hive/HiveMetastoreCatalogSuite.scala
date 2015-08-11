@@ -22,8 +22,7 @@ import java.io.File
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.hive.client.{ExternalTable, ManagedTable}
-import org.apache.spark.sql.hive.test.HiveTestUtils
-import org.apache.spark.sql.sources.DataSourceTest
+import org.apache.spark.sql.hive.test.{HiveDataSourceTest, HiveTestUtils}
 import org.apache.spark.sql.test.ExamplePointUDT
 import org.apache.spark.sql.types.StructType
 
@@ -51,8 +50,10 @@ class HiveMetastoreCatalogSuite extends SparkFunSuite with HiveTestUtils with Lo
   }
 }
 
-class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with HiveTestUtils {
-  private val testDF = (1 to 2).map(i => (i, s"val_$i")).toDF("d1", "d2").coalesce(1)
+class DataSourceWithHiveMetastoreCatalogSuite extends HiveDataSourceTest {
+  import testImplicits._
+
+  private lazy val testDF = (1 to 2).map(i => (i, s"val_$i")).toDF("d1", "d2").coalesce(1)
 
   Seq(
     "parquet" -> (
@@ -75,7 +76,7 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with HiveTe
           .format(provider)
           .saveAsTable("t")
 
-        val hiveTable = catalog.client.getTable("default", "t")
+        val hiveTable = ctx.catalog.client.getTable("default", "t")
         assert(hiveTable.inputFormat === Some(inputFormat))
         assert(hiveTable.outputFormat === Some(outputFormat))
         assert(hiveTable.serde === Some(serde))
@@ -87,8 +88,8 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with HiveTe
         assert(columns.map(_.name) === Seq("d1", "d2"))
         assert(columns.map(_.hiveType) === Seq("int", "string"))
 
-        checkAnswer(table("t"), testDF)
-        assert(runSqlHive("SELECT * FROM t") === Seq("1\tval_1", "2\tval_2"))
+        checkAnswer(ctx.table("t"), testDF)
+        assert(ctx.runSqlHive("SELECT * FROM t") === Seq("1\tval_1", "2\tval_2"))
       }
     }
 
@@ -104,7 +105,7 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with HiveTe
             .option("path", path.toString)
             .saveAsTable("t")
 
-          val hiveTable = catalog.client.getTable("default", "t")
+          val hiveTable = ctx.catalog.client.getTable("default", "t")
           assert(hiveTable.inputFormat === Some(inputFormat))
           assert(hiveTable.outputFormat === Some(outputFormat))
           assert(hiveTable.serde === Some(serde))
@@ -116,8 +117,8 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with HiveTe
           assert(columns.map(_.name) === Seq("d1", "d2"))
           assert(columns.map(_.hiveType) === Seq("int", "string"))
 
-          checkAnswer(table("t"), testDF)
-          assert(runSqlHive("SELECT * FROM t") === Seq("1\tval_1", "2\tval_2"))
+          checkAnswer(ctx.table("t"), testDF)
+          assert(ctx.runSqlHive("SELECT * FROM t") === Seq("1\tval_1", "2\tval_2"))
         }
       }
     }
@@ -127,13 +128,13 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with HiveTe
         withTable("t") {
           val path = dir.getCanonicalPath
 
-          sql(
+          ctx.sql(
             s"""CREATE TABLE t USING $provider
                |OPTIONS (path '$path')
                |AS SELECT 1 AS d1, "val_1" AS d2
              """.stripMargin)
 
-          val hiveTable = catalog.client.getTable("default", "t")
+          val hiveTable = ctx.catalog.client.getTable("default", "t")
           assert(hiveTable.inputFormat === Some(inputFormat))
           assert(hiveTable.outputFormat === Some(outputFormat))
           assert(hiveTable.serde === Some(serde))
@@ -146,8 +147,8 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with HiveTe
           assert(columns.map(_.name) === Seq("d1", "d2"))
           assert(columns.map(_.hiveType) === Seq("int", "string"))
 
-          checkAnswer(table("t"), Row(1, "val_1"))
-          assert(runSqlHive("SELECT * FROM t") === Seq("1\tval_1"))
+          checkAnswer(ctx.table("t"), Row(1, "val_1"))
+          assert(ctx.runSqlHive("SELECT * FROM t") === Seq("1\tval_1"))
         }
       }
     }

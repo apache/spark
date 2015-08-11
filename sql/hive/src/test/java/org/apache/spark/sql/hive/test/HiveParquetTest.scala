@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.test
 
-import org.apache.spark.sql.parquet.AbstractParquetTest
+import org.apache.spark.sql.execution.datasources.parquet.AbstractParquetTest
 
 /**
  * Helper trait for Parquet tests analogous to [[org.apache.spark.sql.parquet.ParquetTest]].

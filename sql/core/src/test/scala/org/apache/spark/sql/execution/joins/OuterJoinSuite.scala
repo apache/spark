@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, Row, SQLConf}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.{EnsureRequirements, joins, SparkPlan, SparkPlanTest}
 import org.apache.spark.sql.types.{IntegerType, DoubleType, StructType}
 
@@ -53,7 +53,7 @@ class OuterJoinSuite extends SparkPlanTest {
       Row(null, null)
     )), new StructType().add("c", IntegerType).add("d", DoubleType))
 
-  private val condition = {
+  private lazy val condition = {
     And((left.col("a") === right.col("c")).expr,
       LessThan(left.col("b").expr, right.col("d").expr))
   }

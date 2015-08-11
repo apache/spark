@@ -17,16 +17,15 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.spark.sql.{SQLConf, execution, Row, DataFrame}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.Join
-import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
-import org.apache.spark.sql.{SQLConf, execution, Row, DataFrame}
-import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
-class InnerJoinSuite extends SparkPlanTest with SQLTestUtils {
+class InnerJoinSuite extends SparkPlanTest {
 
   private def testInnerJoin(
       testName: String,
@@ -107,23 +106,25 @@ class InnerJoinSuite extends SparkPlanTest with SQLTestUtils {
   }
 
   {
-    val upperCaseData = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(Seq(
-      Row(1, "A"),
-      Row(2, "B"),
-      Row(3, "C"),
-      Row(4, "D"),
-      Row(5, "E"),
-      Row(6, "F"),
-      Row(null, "G")
-    )), new StructType().add("N", IntegerType).add("L", StringType))
+    lazy val upperCaseData = ctx.createDataFrame(
+      ctx.sparkContext.parallelize(Seq(
+        Row(1, "A"),
+        Row(2, "B"),
+        Row(3, "C"),
+        Row(4, "D"),
+        Row(5, "E"),
+        Row(6, "F"),
+        Row(null, "G")
+      )), new StructType().add("N", IntegerType).add("L", StringType))
 
-    val lowerCaseData = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(Seq(
-      Row(1, "a"),
-      Row(2, "b"),
-      Row(3, "c"),
-      Row(4, "d"),
-      Row(null, "e")
-    )), new StructType().add("n", IntegerType).add("l", StringType))
+    lazy val lowerCaseData = ctx.createDataFrame(
+      ctx.sparkContext.parallelize(Seq(
+        Row(1, "a"),
+        Row(2, "b"),
+        Row(3, "c"),
+        Row(4, "d"),
+        Row(null, "e")
+      )), new StructType().add("n", IntegerType).add("l", StringType))
 
     testInnerJoin(
       "inner join, one match per row",
@@ -139,42 +140,44 @@ class InnerJoinSuite extends SparkPlanTest with SQLTestUtils {
     )
   }
 
-  private val testData2 = Seq(
-    (1, 1),
-    (1, 2),
-    (2, 1),
-    (2, 2),
-    (3, 1),
-    (3, 2)
-  ).toDF("a", "b")
-
   {
-    val left = testData2.where("a = 1")
-    val right = testData2.where("a = 1")
-    testInnerJoin(
-      "inner join, multiple matches",
-      left,
-      right,
-      (left.col("a") === right.col("a")).expr,
-      Seq(
-        (1, 1, 1, 1),
-        (1, 1, 1, 2),
-        (1, 2, 1, 1),
-        (1, 2, 1, 2)
+    lazy val testData2 = Seq(
+      (1, 1),
+      (1, 2),
+      (2, 1),
+      (2, 2),
+      (3, 1),
+      (3, 2)
+    ).toDF("a", "b")
+
+    {
+      lazy val left = testData2.where("a = 1")
+      lazy val right = testData2.where("a = 1")
+      testInnerJoin(
+        "inner join, multiple matches",
+        left,
+        right,
+        (left.col("a") === right.col("a")).expr,
+        Seq(
+          (1, 1, 1, 1),
+          (1, 1, 1, 2),
+          (1, 2, 1, 1),
+          (1, 2, 1, 2)
+        )
       )
-    )
-  }
+    }
 
-  {
-    val left = testData2.where("a = 1")
-    val right = testData2.where("a = 2")
-    testInnerJoin(
-      "inner join, no matches",
-      left,
-      right,
-      (left.col("a") === right.col("a")).expr,
-      Seq.empty
-    )
+    {
+      lazy val left = testData2.where("a = 1")
+      lazy val right = testData2.where("a = 2")
+      testInnerJoin(
+        "inner join, no matches",
+        left,
+        right,
+        (left.col("a") === right.col("a")).expr,
+        Seq.empty
+      )
+    }
   }
 
 }

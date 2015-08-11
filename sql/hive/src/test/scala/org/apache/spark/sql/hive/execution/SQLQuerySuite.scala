@@ -755,7 +755,7 @@ class SQLQuerySuite extends QueryTest with HiveTestUtils {
     val data = (1 to 5).map { i => (i, i) }
     data.toDF("key", "value").registerTempTable("test")
     checkAnswer(
-      sql("""FROM
+      ctx.sql("""FROM
           |(FROM test SELECT TRANSFORM(key, value) USING 'cat' AS (thing1 int, thing2 string)) t
           |SELECT thing1 + 1
         """.stripMargin), (2 to 6).map(i => Row(i)))
@@ -1115,22 +1115,22 @@ class SQLQuerySuite extends QueryTest with HiveTestUtils {
   }
 
   test("Convert hive interval term into Literal of CalendarIntervalType") {
-    checkAnswer(sql("select interval '10-9' year to month"),
+    checkAnswer(ctx.sql("select interval '10-9' year to month"),
       Row(CalendarInterval.fromString("interval 10 years 9 months")))
-    checkAnswer(sql("select interval '20 15:40:32.99899999' day to second"),
+    checkAnswer(ctx.sql("select interval '20 15:40:32.99899999' day to second"),
       Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes " +
         "32 seconds 99 milliseconds 899 microseconds")))
-    checkAnswer(sql("select interval '30' year"),
+    checkAnswer(ctx.sql("select interval '30' year"),
       Row(CalendarInterval.fromString("interval 30 years")))
-    checkAnswer(sql("select interval '25' month"),
+    checkAnswer(ctx.sql("select interval '25' month"),
       Row(CalendarInterval.fromString("interval 25 months")))
-    checkAnswer(sql("select interval '-100' day"),
+    checkAnswer(ctx.sql("select interval '-100' day"),
       Row(CalendarInterval.fromString("interval -14 weeks -2 days")))
-    checkAnswer(sql("select interval '40' hour"),
+    checkAnswer(ctx.sql("select interval '40' hour"),
       Row(CalendarInterval.fromString("interval 1 days 16 hours")))
-    checkAnswer(sql("select interval '80' minute"),
+    checkAnswer(ctx.sql("select interval '80' minute"),
       Row(CalendarInterval.fromString("interval 1 hour 20 minutes")))
-    checkAnswer(sql("select interval '299.889987299' second"),
+    checkAnswer(ctx.sql("select interval '299.889987299' second"),
       Row(CalendarInterval.fromString(
         "interval 4 minutes 59 seconds 889 milliseconds 987 microseconds")))
   }
