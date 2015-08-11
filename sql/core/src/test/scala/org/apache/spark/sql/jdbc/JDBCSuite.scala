@@ -477,6 +477,6 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
     checkPushedFilter("select * from decimals where A > 1000 AND A < 2000",
       "A > 1000.00 AND A < 2000.00")
     checkPushedFilter("select * from decimals where A = 2000 AND B > 20", "A = 2000.00 AND B > 20")
-    checkPushedFilter("select * from timetypes where B > '1998-09-10'", "B > '1998-09-10'")
+    checkPushedFilter("select * from timetypes where B > '1998-09-10'", "B > 1998-09-10")
   }
 }
