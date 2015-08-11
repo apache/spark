@@ -250,6 +250,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   }
 
   /**
+   * Get a size parameter as bytes, falling back to a default if not set.
+   */
+  def getSizeAsBytes(key: String, defaultValue: Long): Long = {
+    Utils.byteStringAsBytes(get(key, defaultValue + "B"))
+  }
+
+  /**
    * Get a size parameter as Kibibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Kibibytes are assumed.
    * @throws NoSuchElementException
