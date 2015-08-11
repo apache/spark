@@ -1013,7 +1013,7 @@ case class Decode(bin: Expression, charset: Expression)
         try {
           ${ev.primitive} = UTF8String.fromString(new String($bytes, $charset.toString()));
         } catch (java.io.UnsupportedEncodingException e) {
-          org.apache.spark.unsafe.PlatformDependent.throwException(e);
+          org.apache.spark.unsafe.Platform.throwException(e);
         }
       """)
   }
@@ -1043,7 +1043,7 @@ case class Encode(value: Expression, charset: Expression)
         try {
           ${ev.primitive} = $string.toString().getBytes($charset.toString());
         } catch (java.io.UnsupportedEncodingException e) {
-          org.apache.spark.unsafe.PlatformDependent.throwException(e);
+          org.apache.spark.unsafe.Platform.throwException(e);
         }""")
   }
 }
