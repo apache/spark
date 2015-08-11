@@ -1015,7 +1015,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         def termCheck():
             return stkm.latestModel().clusterWeights == [25.0]
         self._ssc_wait_checked(t, 20.0, termCheck)
-        self.assertTrue(termCheck())
+        self.assertEquals(stkm.latestModel().clusterWeights, [25.0])
         realCenters = array_sum(array(centers), axis=0)
         for i in range(5):
             modelCenters = stkm.latestModel().centers[0][i]
@@ -1040,7 +1040,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         stkm.setInitialCenters(
             centers=initCenters, weights=[1.0, 1.0, 1.0, 1.0])
 
-        # Create a toy dataset by setting a tiny offest for each point.
+        # Create a toy dataset by setting a tiny offset for each point.
         offsets = [[0, 0.1], [0, -0.1], [0.1, 0], [-0.1, 0]]
         batches = []
         for offset in offsets:
@@ -1060,6 +1060,9 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
             finalModel.clusterWeight == [5.0, 5.0, 5.0, 5.0]
         self._ssc_wait_checked(t, 20.0, termCheck)
         self.assertTrue(termCheck())
+        finalModel = stkm.latestModel()
+        self.assertTrue(all(finalModel.centers == array(initCenters)))
+        self.assertEquals(finalModel.clusterWeights, [5.0, 5.0, 5.0, 5.0])
 
     def test_predictOn_model(self):
         """Test that the model predicts correctly on toy data."""
