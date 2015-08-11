@@ -599,6 +599,9 @@ private[spark] class ExecutorAllocationManager(
 
         // If this is the last pending task, mark the scheduler queue as empty
         stageIdToTaskIndices.getOrElseUpdate(stageId, new mutable.HashSet[Int]) += taskIndex
+        if (totalPendingTasks() == 0) {
+          allocationManager.onSchedulerQueueEmpty()
+        }
 
         // Mark the executor on which this task is scheduled as busy
         executorIdToTaskIds.getOrElseUpdate(executorId, new mutable.HashSet[Long]) += taskId
@@ -622,11 +625,14 @@ private[spark] class ExecutorAllocationManager(
           }
         }
 
-        // If the task is failed, we expect it to be resubmitted later.
+        // If the task failed, we expect it to be resubmitted later. To ensure we have
+        // enough resources to run the resubmitted task, we need to mark the scheduler
+        // as backlogged again if it's not already marked as such (SPARK-8366)
         if (taskEnd.reason != Success) {
-          stageIdToTaskIndices.get(stageId).foreach { taskIndices =>
-            taskIndices.remove(taskIndex)
+          if (totalPendingTasks() == 0) {
+            allocationManager.onSchedulerBacklogged()
           }
+          stageIdToTaskIndices.get(stageId).foreach { _.remove(taskIndex) }
         }
       }
     }
