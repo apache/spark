@@ -45,5 +45,11 @@ class PartitioningSuite extends SparkFunSuite {
     assert(!partitioningB.compatibleWith(partitioningA))
     assert(!partitioningA.guarantees(partitioningB))
     assert(!partitioningB.guarantees(partitioningA))
+
+    // Just to be sure that we haven't cheated by having these methods always return false,
+    // check that identical partitionings are still compatible with and guarantee each other:
+    assert(partitioningA === partitioningA)
+    assert(partitioningA.guarantees(partitioningA))
+    assert(partitioningA.compatibleWith(partitioningA))
   }
 }
