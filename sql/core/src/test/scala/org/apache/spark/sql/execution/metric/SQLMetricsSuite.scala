@@ -104,14 +104,34 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
     }
   }
 
-  test("LocalTableScan metrics") {
-    // Assume the execution plan is
-    // LocalTableScan(nodeId = 2) -> Filter(nodeId = 1) -> TungstenProject(nodeId = 0)
-    val df = Seq((1, "1"), (2, "2")).toDF("key", "value").filter('key < 2)
-    testSparkPlanMetrics(df, 1, Map(
-      2L -> ("LocalTableScan", Map(
-        "number of rows" -> 2L)))
-    )
+  test("Project metrics") {
+    withSQLConf(
+      SQLConf.UNSAFE_ENABLED.key -> "false",
+      SQLConf.CODEGEN_ENABLED.key -> "false",
+      SQLConf.TUNGSTEN_ENABLED.key -> "false") {
+      // Assume the execution plan is
+      // PhysicalRDD(nodeId = 1) -> Project(nodeId = 0)
+      val df = TestData.person.select('name)
+      testSparkPlanMetrics(df, 1, Map(
+        0L ->("Project", Map(
+          "number of rows" -> 2L)))
+      )
+    }
+  }
+
+  test("TungstenProject metrics") {
+    withSQLConf(
+      SQLConf.UNSAFE_ENABLED.key -> "true",
+      SQLConf.CODEGEN_ENABLED.key -> "true",
+      SQLConf.TUNGSTEN_ENABLED.key -> "true") {
+      // Assume the execution plan is
+      // PhysicalRDD(nodeId = 1) -> TungstenProject(nodeId = 0)
+      val df = TestData.person.select('name)
+      testSparkPlanMetrics(df, 1, Map(
+        0L ->("TungstenProject", Map(
+          "number of rows" -> 2L)))
+      )
+    }
   }
 
   test("Filter metrics") {
@@ -122,16 +142,6 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
       0L -> ("Filter", Map(
         "number of input rows" -> 2L,
         "number of output rows" -> 1L)))
-    )
-  }
-
-  test("PhysicalRDD metrics") {
-    // Assume the execution plan is
-    // PhysicalRDD(nodeId = 0)
-    val df = TestData.person
-    testSparkPlanMetrics(df, 1, Map(
-      0L ->("PhysicalRDD", Map(
-        "number of rows" -> 2L)))
     )
   }
 
@@ -437,7 +447,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
       val previousExecutionIds = TestSQLContext.listener.executionIdToData.keySet
       // Assume the execution plan is
       // PhysicalRDD(nodeId = 0)
-      TestData.person.write.format("json").save(file.getAbsolutePath)
+      TestData.person.select('name).write.format("json").save(file.getAbsolutePath)
       TestSQLContext.sparkContext.listenerBus.waitUntilEmpty(10000)
       val executionIds = TestSQLContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
       assert(executionIds.size === 1)
