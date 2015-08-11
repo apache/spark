@@ -76,7 +76,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       "spark-internal");
   }
 
-  private final List<String> sparkArgs;
+  final List<String> sparkArgs;
   private final boolean printHelp;
 
   /**
