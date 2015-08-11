@@ -56,6 +56,7 @@ case class SortMergeJoin(
   protected[this] def isUnsafeMode: Boolean = {
     (codegenEnabled && unsafeEnabled
       && UnsafeProjection.canSupport(leftKeys)
+      && UnsafeProjection.canSupport(rightKeys)
       && UnsafeProjection.canSupport(schema))
   }
 
@@ -122,15 +123,14 @@ case class SortMergeJoin(
 /**
  * Helper class that is used to implement [[SortMergeJoin]] and [[SortMergeOuterJoin]].
  *
- * The streamed input is the left side of a left outer join or the right side of a right outer join.
- *
  * To perform an inner (outer) join, users of this class call [[findNextInnerJoinRows()]]
  * ([[findNextOuterJoinRows()]]), which returns `true` if a result has been produced and `false`
  * otherwise. If a result has been produced, then the caller may call [[getStreamedRow]] to return
  * the matching row from the streamed input and may call [[getBufferedMatches]] to return the
  * sequence of matching rows from the buffered input (in the case of an outer join, this will return
- * an empty sequence). For efficiency, both of these methods return mutable objects which are
- * re-used across calls to the `findNext*JoinRows()` methods.
+ * an empty sequence if there are no matches from the buffered input). For efficiency, both of these
+ * methods return mutable objects which are re-used across calls to the `findNext*JoinRows()`
+ * methods.
  *
  * @param streamedKeyGenerator a projection that produces join keys from the streamed input.
  * @param bufferedKeyGenerator a projection that produces join keys from the buffered input.
