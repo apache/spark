@@ -1057,8 +1057,11 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         # Give enough time to train the model.
         def termCheck():
             finalModel = stkm.latestModel()
-            return (all(finalModel.centers == array(initCenters)) and
-                    finalModel.clusterWeight == [5.0, 5.0, 5.0, 5.0])
+            if finalModel is not None:
+                return (all(finalModel.centers == array(initCenters)) and
+                        finalModel.clusterWeight == [5.0, 5.0, 5.0, 5.0])
+            else:
+                return False
         self._ssc_wait_checked(t, 20.0, termCheck)
         self.assertTrue(termCheck())
         finalModel = stkm.latestModel()
