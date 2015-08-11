@@ -286,7 +286,8 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
   }
 
   /** For resilience against rounding mismatches. */
-  private def about(d: Double): BigDecimal = BigDecimal(d).setScale(10, BigDecimal.RoundingMode.HALF_UP)
+  private def about(d: Double): BigDecimal =
+    BigDecimal(d).setScale(10, BigDecimal.RoundingMode.HALF_UP)
 
   test("test standard deviation") {
     // All results generated in R. Comparisons will be performed up to 10 digits of precision.
@@ -364,7 +365,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
         .select($"key", $"value1", $"stddev_pop(value2)".cast("decimal(12, 10)")),
       Row(1, 10, about(0.0)) :: Row(1, 30, about(30.0)) :: Row(2, -1, null) ::
         Row(2, 1, about(0.0)) :: Row(2, null, about(0.0)) :: Row(3, null, about(0.0)) ::
-        Row(null, -10, about(0.0)) :: Row(null, -60, about(0.0)) :: Row(null, 100, about(0.0)) :: 
+        Row(null, -10, about(0.0)) :: Row(null, -60, about(0.0)) :: Row(null, 100, about(0.0)) ::
         Row(null, null, null) :: Nil)
 
     checkAnswer(
@@ -385,7 +386,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
     // TODO: Because we will first resolve stddev to Hive's GenericUDAF and it will
     // complain about stddev_samp(null) and stddev_pop(null). So, we comment out this
     // test. Once we remove AggregateExpression1, we will resolve them directly to
-    // out native implementation. We should re-enable this test at that time.
+    // our native implementation. We should re-enable this test at that time.
     /*
     checkAnswer(
       sqlContext.sql("SELECT stddev_samp(null), stddev_pop(null)"),
