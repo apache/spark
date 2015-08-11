@@ -17,10 +17,6 @@
 
 package org.apache.spark.scheduler.cluster
 
-import java.util.regex.Pattern
-
-import org.apache.hadoop.yarn.api.records.ContainerExitStatus
-
 import scala.concurrent.{Future, ExecutionContext}
 
 import org.apache.spark.{Logging, SparkContext}

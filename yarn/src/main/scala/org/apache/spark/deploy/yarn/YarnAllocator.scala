@@ -22,7 +22,6 @@ import java.util.concurrent._
 import java.util.regex.Pattern
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
