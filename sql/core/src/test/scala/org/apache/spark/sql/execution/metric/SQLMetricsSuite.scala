@@ -264,6 +264,38 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
     }
   }
 
+  test("SortMergeOuterJoin metrics") {
+    // Because SortMergeOuterJoin may skip different rows if the number of partitions is different,
+    // this test should use the deterministic number of partitions.
+    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true") {
+      val testDataForJoin = TestData.testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+      testDataForJoin.registerTempTable("testDataForJoin")
+      withTempTable("testDataForJoin") {
+        // Assume the execution plan is
+        // ... -> SortMergeOuterJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
+        val df = sqlContext.sql(
+          "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
+        testSparkPlanMetrics(df, 1, Map(
+          1L -> ("SortMergeOuterJoin", Map(
+            // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+            "number of left rows" -> 6L,
+            "number of right rows" -> 2L,
+            "number of output rows" -> 8L)))
+        )
+
+        val df2 = sqlContext.sql(
+          "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
+        testSparkPlanMetrics(df2, 1, Map(
+          1L -> ("SortMergeOuterJoin", Map(
+            // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+            "number of left rows" -> 2L,
+            "number of right rows" -> 6L,
+            "number of output rows" -> 8L)))
+        )
+      }
+    }
+  }
+
   test("BroadcastHashJoin metrics") {
     withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
       val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
