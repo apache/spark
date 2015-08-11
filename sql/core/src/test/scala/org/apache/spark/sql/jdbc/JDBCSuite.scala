@@ -185,11 +185,13 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SQLTestUtils {
   }
 
   test("SELECT * WHERE (quoted strings)") {
-    assert(ctx.sql("select * from foobar").where('NAME === "joe 'foo' \"bar\"").collect().size === 1)
+    assert(
+      ctx.sql("select * from foobar").where('NAME === "joe 'foo' \"bar\"").collect().size === 1)
   }
 
   test("SELECT first field") {
-    val names = ctx.sql("SELECT NAME FROM foobar").collect().map(x => x.getString(0)).sortWith(_ < _)
+    val names =
+      ctx.sql("SELECT NAME FROM foobar").collect().map(x => x.getString(0)).sortWith(_ < _)
     assert(names.size === 3)
     assert(names(0).equals("fred"))
     assert(names(1).equals("joe 'foo' \"bar\""))
@@ -197,7 +199,8 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SQLTestUtils {
   }
 
   test("SELECT first field when fetchSize is two") {
-    val names = ctx.sql("SELECT NAME FROM fetchtwo").collect().map(x => x.getString(0)).sortWith(_ < _)
+    val names =
+      ctx.sql("SELECT NAME FROM fetchtwo").collect().map(x => x.getString(0)).sortWith(_ < _)
     assert(names.size === 3)
     assert(names(0).equals("fred"))
     assert(names(1).equals("joe 'foo' \"bar\""))

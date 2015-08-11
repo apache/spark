@@ -219,9 +219,10 @@ class InsertSuite extends DataSourceTest with BeforeAndAfterAll {
       caseInsensitiveContext.sql("SELECT a * 2 FROM jsonTable"),
       (1 to 10).map(i => Row(i * 2)).toSeq)
 
-    assertCached(caseInsensitiveContext.sql("SELECT x.a, y.a FROM jsonTable x JOIN jsonTable y ON x.a = y.a + 1"), 2)
-    checkAnswer(
-      caseInsensitiveContext.sql("SELECT x.a, y.a FROM jsonTable x JOIN jsonTable y ON x.a = y.a + 1"),
+    assertCached(caseInsensitiveContext.sql(
+      "SELECT x.a, y.a FROM jsonTable x JOIN jsonTable y ON x.a = y.a + 1"), 2)
+    checkAnswer(caseInsensitiveContext.sql(
+      "SELECT x.a, y.a FROM jsonTable x JOIN jsonTable y ON x.a = y.a + 1"),
       (2 to 10).map(i => Row(i, i - 1)).toSeq)
 
     // Insert overwrite and keep the same schema.

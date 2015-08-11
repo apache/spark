@@ -312,15 +312,16 @@ class SQLQuerySuite extends QueryTest with HiveTestUtils {
       checkRelation("ctas1", true)
       ctx.sql("DROP TABLE ctas1")
 
-      ctx.sql("CREATE TABLE ctas1 stored as rcfile AS SELECT key k, value FROM src ORDER BY k, value")
+      ctx.sql(
+        "CREATE TABLE ctas1 stored as rcfile AS SELECT key k, value FROM src ORDER BY k, value")
       checkRelation("ctas1", false)
       ctx.sql("DROP TABLE ctas1")
 
       ctx.sql("CREATE TABLE ctas1 stored as orc AS SELECT key k, value FROM src ORDER BY k, value")
       checkRelation("ctas1", false)
       ctx.sql("DROP TABLE ctas1")
-
-      ctx.sql("CREATE TABLE ctas1 stored as parquet AS SELECT key k, value FROM src ORDER BY k, value")
+      ctx.sql(
+        "CREATE TABLE ctas1 stored as parquet AS SELECT key k, value FROM src ORDER BY k, value")
       checkRelation("ctas1", false)
       ctx.sql("DROP TABLE ctas1")
     } finally {
@@ -636,7 +637,8 @@ class SQLQuerySuite extends QueryTest with HiveTestUtils {
   }
 
   test("SPARK-4296 Grouping field with Hive UDF as sub expression") {
-    val rdd = ctx.sparkContext.makeRDD( """{"a": "str", "b":"1", "c":"1970-01-01 00:00:00"}""" :: Nil)
+    val rdd = ctx.sparkContext.makeRDD(
+      """{"a": "str", "b":"1", "c":"1970-01-01 00:00:00"}""" :: Nil)
     ctx.read.json(rdd).registerTempTable("data")
     checkAnswer(
       ctx.sql("SELECT concat(a, '-', b), year(c) FROM data GROUP BY concat(a, '-', b), year(c)"),

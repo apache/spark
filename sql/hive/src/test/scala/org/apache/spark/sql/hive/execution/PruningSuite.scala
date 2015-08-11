@@ -28,9 +28,9 @@ class PruningSuite extends HiveComparisonTest {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     ctx.cacheTables = false
-    // Column/partition pruning is not implemented for `InMemoryColumnarTableScan` yet, need to reset
-    // the environment to ensure all referenced tables in this suites are not cached in-memory.
-    // Refer to https://issues.apache.org/jira/browse/SPARK-2283 for details.
+    // Column/partition pruning is not implemented for `InMemoryColumnarTableScan` yet, need
+    // to reset the environment to ensure all referenced tables in this suites are not cached
+    // in-memory. Refer to https://issues.apache.org/jira/browse/SPARK-2283 for details.
     ctx.reset()
   }
 

@@ -726,7 +726,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         .size == 5)
 
     assert(
-      ctx.sql("select a, b from (select stack(2, key, value, key, value) as (a, b) from src) t limit 5")
+      ctx.sql(
+        "select a, b from (select stack(2, key, value, key, value) as (a, b) from src) t limit 5")
         .collect()
         .size == 5)
   }
@@ -773,7 +774,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   test("DESCRIBE commands") {
-    ctx.sql(s"CREATE TABLE test_describe_commands1 (key INT, value STRING) PARTITIONED BY (dt STRING)")
+    ctx.sql(
+      s"CREATE TABLE test_describe_commands1 (key INT, value STRING) PARTITIONED BY (dt STRING)")
 
     ctx.sql(
       """FROM src INSERT OVERWRITE TABLE test_describe_commands1 PARTITION (dt='2008-06-08')
@@ -935,7 +937,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   ignore("Dynamic partition folder layout") {
     ctx.sql("DROP TABLE IF EXISTS dynamic_part_table")
-    ctx.sql("CREATE TABLE dynamic_part_table(intcol INT) PARTITIONED BY (partcol1 INT, partcol2 INT)")
+    ctx.sql(
+      "CREATE TABLE dynamic_part_table(intcol INT) PARTITIONED BY (partcol1 INT, partcol2 INT)")
     ctx.sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
     val data = Map(

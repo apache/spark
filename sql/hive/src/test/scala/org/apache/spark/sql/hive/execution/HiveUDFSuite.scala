@@ -176,7 +176,8 @@ class HiveUDFSuite extends QueryTest with HiveTestUtils {
     val testData = ctx.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
     testData.registerTempTable("inputTable")
 
-    ctx.sql(s"CREATE TEMPORARY FUNCTION testUDFToListString AS '${classOf[UDFToListString].getName}'")
+    ctx.sql(
+      s"CREATE TEMPORARY FUNCTION testUDFToListString AS '${classOf[UDFToListString].getName}'")
     val errMsg = intercept[AnalysisException] {
       ctx.sql("SELECT testUDFToListString(s) FROM inputTable")
     }
@@ -270,7 +271,8 @@ class HiveUDFSuite extends QueryTest with HiveTestUtils {
       StringCaseClass("world") :: StringCaseClass("goodbye") :: Nil).toDF()
     testData.registerTempTable("stringTable")
 
-    ctx.sql(s"CREATE TEMPORARY FUNCTION testStringStringUDF AS '${classOf[UDFStringString].getName}'")
+    ctx.sql(
+      s"CREATE TEMPORARY FUNCTION testStringStringUDF AS '${classOf[UDFStringString].getName}'")
     checkAnswer(
       ctx.sql("SELECT testStringStringUDF(\"hello\", s) FROM stringTable"),
       Seq(Row("hello world"), Row("hello goodbye")))

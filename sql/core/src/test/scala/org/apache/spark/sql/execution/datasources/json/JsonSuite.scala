@@ -304,7 +304,8 @@ class JsonSuite extends QueryTest with SQLTestUtils with TestJsonData {
 
     // Access elements of a BigInteger array (we use DecimalType internally).
     checkAnswer(
-      ctx.sql("select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] from jsonTable"),
+      ctx.sql(
+        "select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] from jsonTable"),
       Row(new java.math.BigDecimal("922337203685477580700"),
         new java.math.BigDecimal("-922337203685477580800"), null)
     )
@@ -355,7 +356,8 @@ class JsonSuite extends QueryTest with SQLTestUtils with TestJsonData {
 
     // Access elements of an array field of a struct.
     checkAnswer(
-      ctx.sql("select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from jsonTable"),
+      ctx.sql(
+        "select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from jsonTable"),
       Row(5, null)
     )
   }
@@ -590,7 +592,8 @@ class JsonSuite extends QueryTest with SQLTestUtils with TestJsonData {
 
     val schema = StructType(StructField("a", LongType, true) :: Nil)
     val logicalRelation =
-      _sqlContext.read.schema(schema).json(path).queryExecution.analyzed.asInstanceOf[LogicalRelation]
+      _sqlContext.read.schema(schema).json(path)
+        .queryExecution.analyzed.asInstanceOf[LogicalRelation]
     val relationWithSchema = logicalRelation.relation.asInstanceOf[JSONRelation]
     assert(relationWithSchema.paths === Array(path))
     assert(relationWithSchema.schema === schema)
@@ -1021,7 +1024,8 @@ class JsonSuite extends QueryTest with SQLTestUtils with TestJsonData {
 
     // Access an array field of a struct.
     checkAnswer(
-      ctx.sql("select structWithArrayFields.field1, structWithArrayFields.field2 from complexTable"),
+      ctx.sql(
+        "select structWithArrayFields.field1, structWithArrayFields.field2 from complexTable"),
       Row(Seq(4, 5, 6), Seq("str1", "str2"))
     )
 

@@ -47,7 +47,9 @@ class HiveExplainSuite extends QueryTest with HiveTestUtils {
                    "Limit",
                    "src")
 
-    checkExistence(ctx.sql("explain extended create table temp__b as select * from src limit 2"), true,
+    checkExistence(ctx.sql(
+        "explain extended create table temp__b as select * from src limit 2"),
+      true,
       "== Parsed Logical Plan ==",
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
