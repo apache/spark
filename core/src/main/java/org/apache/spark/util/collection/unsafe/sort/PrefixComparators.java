@@ -20,10 +20,9 @@ package org.apache.spark.util.collection.unsafe.sort;
 import com.google.common.primitives.UnsignedLongs;
 
 import org.apache.spark.annotation.Private;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.util.Utils;
-import static org.apache.spark.unsafe.PlatformDependent.BYTE_ARRAY_OFFSET;
 
 @Private
 public class PrefixComparators {
@@ -73,7 +72,7 @@ public class PrefixComparators {
         final int minLen = Math.min(bytes.length, 8);
         long p = 0;
         for (int i = 0; i < minLen; ++i) {
-          p |= (128L + PlatformDependent.UNSAFE.getByte(bytes, BYTE_ARRAY_OFFSET + i))
+          p |= (128L + Platform.getByte(bytes, Platform.BYTE_ARRAY_OFFSET + i))
               << (56 - 8 * i);
         }
         return p;
