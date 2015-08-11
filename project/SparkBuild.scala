@@ -315,11 +315,12 @@ object OldDeps {
   )
 }
 
-// TODO: check if this is OK
 object SQL {
   lazy val settings = Seq(
     initialCommands in console :=
       """
+        |import org.apache.spark.SparkContext
+        |import org.apache.spark.sql.SQLContext
         |import org.apache.spark.sql.catalyst.analysis._
         |import org.apache.spark.sql.catalyst.dsl._
         |import org.apache.spark.sql.catalyst.errors._
@@ -329,14 +330,19 @@ object SQL {
         |import org.apache.spark.sql.catalyst.util._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.functions._
-        |import org.apache.spark.sql.types._""".stripMargin,
-    cleanupCommands in console := "sparkContext.stop()"
+        |import org.apache.spark.sql.types._
+        |
+        |val sc = new SparkContext("local[*]", "dev-shell")
+        |val sqlContext = new SQLContext(sc)
+        |import sqlContext.implicits._
+        |import sqlContext._
+      """.stripMargin,
+    cleanupCommands in console := "sc.stop()"
   )
 }
 
 object Hive {
 
-  // TODO: check me, will this work?
   lazy val settings = Seq(
     javaOptions += "-XX:MaxPermSize=256m",
     // Specially disable assertions since some Hive tests fail them
@@ -348,6 +354,7 @@ object Hive {
     },
     initialCommands in console :=
       """
+        |import org.apache.spark.SparkContext
         |import org.apache.spark.sql.catalyst.analysis._
         |import org.apache.spark.sql.catalyst.dsl._
         |import org.apache.spark.sql.catalyst.errors._
@@ -358,8 +365,14 @@ object Hive {
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.functions._
         |import org.apache.spark.sql.hive._
-        |import org.apache.spark.sql.types._""".stripMargin,
-    cleanupCommands in console := "sparkContext.stop()",
+        |import org.apache.spark.sql.types._
+        |
+        |val sc = new SparkContext("local[*]", "dev-shell")
+        |val hc = new HiveContext(sc)
+        |import hc.implicits._
+        |import hc._
+      """.stripMargin,
+    cleanupCommands in console := "sc.stop()",
     // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce
     // in order to generate golden files.  This is only required for developers who are adding new
     // new query tests.
