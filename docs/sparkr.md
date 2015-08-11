@@ -11,7 +11,8 @@ title: SparkR (R on Spark)
 SparkR is an R package that provides a light-weight frontend to use Apache Spark from R.
 In Spark {{site.SPARK_VERSION}}, SparkR provides a distributed data frame implementation that
 supports operations like selection, filtering, aggregation etc. (similar to R data frames,
-[dplyr](https://github.com/hadley/dplyr)) but on large datasets.
+[dplyr](https://github.com/hadley/dplyr)) but on large datasets. SparkR also supports distributed
+machine learning using MLlib.
 
 # SparkR DataFrames
 
@@ -210,9 +211,30 @@ head(df)
 {% endhighlight %}
 </div>
 
-### Model Formulae
+## Running SQL Queries from SparkR
+A SparkR DataFrame can also be registered as a temporary table in Spark SQL and registering a DataFrame as a table allows you to run SQL queries over its data.
+The `sql` function enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
 
-SparkR allows the fitting of generalized linear models over DataFrames using the glm() function. Under the hood, SparkR uses MLlib to train a model of the specified family. In Spark 1.5, we support a subset of the available R formula operators for model fitting, including '~', '.', '+', and '-'. The example below shows the use of R formulae with SparkR.
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+# Load a JSON file
+people <- read.df(sqlContext, "./examples/src/main/resources/people.json", "json")
+
+# Register this DataFrame as a table.
+registerTempTable(people, "people")
+
+# SQL statements can be run by using the sql method
+teenagers <- sql(sqlContext, "SELECT name FROM people WHERE age >= 13 AND age <= 19")
+head(teenagers)
+##    name
+##1 Justin
+
+{% endhighlight %}
+</div>
+
+# Machine Learning
+
+SparkR allows the fitting of generalized linear models over DataFrames using the [glm()](api/R/glm.html) function. Under the hood, SparkR uses MLlib to train a model of the specified family. Currently the gaussian and binomial families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', '+', and '-'. The example below shows the use of building a gaussian GLM model using SparkR.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -233,9 +255,6 @@ summary(model)
 
 # Make predictions based on the model.
 predictions <- predict(model, newData = df)
-predictions
-##DataFrame[Sepal_Length:double, Sepal_Width:double, Petal_Length:double, Petal_Width:double, Species:string, features:vector, label:double, prediction:double]
-
 head(select(predictions, "Sepal_Length", "prediction"))
 ##  Sepal_Length prediction
 ##1          5.1   5.063856
@@ -244,26 +263,5 @@ head(select(predictions, "Sepal_Length", "prediction"))
 ##4          4.6   4.742432
 ##5          5.0   5.144212
 ##6          5.4   5.385281
-{% endhighlight %}
-</div>
-
-## Running SQL Queries from SparkR
-A SparkR DataFrame can also be registered as a temporary table in Spark SQL and registering a DataFrame as a table allows you to run SQL queries over its data.
-The `sql` function enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
-
-<div data-lang="r"  markdown="1">
-{% highlight r %}
-# Load a JSON file
-people <- read.df(sqlContext, "./examples/src/main/resources/people.json", "json")
-
-# Register this DataFrame as a table.
-registerTempTable(people, "people")
-
-# SQL statements can be run by using the sql method
-teenagers <- sql(sqlContext, "SELECT name FROM people WHERE age >= 13 AND age <= 19")
-head(teenagers)
-##    name
-##1 Justin
-
 {% endhighlight %}
 </div>
