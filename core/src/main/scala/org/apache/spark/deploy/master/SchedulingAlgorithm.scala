@@ -17,6 +17,14 @@
 
 package org.apache.spark.deploy.master
 
+import java.io.{FileInputStream, InputStream}
+import java.time.LocalDateTime
+import java.util.{Comparator, PriorityQueue}
+
+import scala.xml.XML
+
+import org.apache.spark.{Logging, SparkException}
+
 /**
  * An interface for sort algorithm
  */
@@ -174,12 +182,90 @@ private[master] class FIFOSchedulingAlgorithm(val master: Master) extends Schedu
   }
 }
 
-private[spark] class PrioritySchedulingAlgorithm(val master: Master) extends SchedulingAlgorithm {
+private[master] class PrioritySchedulingAlgorithm(
+    val master: Master,
+    val schedulingSetting: SchedulingSetting) extends SchedulingAlgorithm with Logging {
+
+  val DEFAULT_PRIORITY = 1
+  val DEFAULT_CORES = 1
+  val POOLS_PROPERTY = "pool"
+  val POOL_NAME_PROPERTY = "@name"
+  val PRIORITY_PROPERTY = "priority"
+  val CORES_PROPERTY = "cores"
+
+  val initAppNumberPerPool = 100
+  val initPoolNumber = 5
+
+  case class ApplicationSubmission(val appInfo: ApplicationInfo, val submittedTime: LocalDateTime)
+
+  private final val applicationComparator: Comparator[ApplicationSubmission] =
+    new Comparator[ApplicationSubmission]() {
+      override def compare(left: ApplicationSubmission, right: ApplicationSubmission): Int = {
+        left.submittedTime.compareTo(right.submittedTime)
+      }
+    }
+
+  private final val poolComparator: Comparator[Pool] = new Comparator[Pool]() {
+    override def compare(left: Pool, right: Pool): Int = {
+      Ordering[Int].compare(left.priority, right.priority)
+    }
+  }
+
+  class Pool(val poolName: String, val priority: Int, val cores: Int) {
+    val app_queue: PriorityQueue[ApplicationSubmission] =
+      new PriorityQueue[ApplicationSubmission](initAppNumberPerPool, applicationComparator)
+  }
+
+  private final val poolQueue: PriorityQueue[Pool] =
+    new PriorityQueue[Pool](initPoolNumber, poolComparator)
+
   def startExecutorsOnWorkers(
       waitingApps: Array[ApplicationInfo],
       workers: Array[WorkerInfo]): Unit = { }
+
   def scheduleExecutorsOnWorkers(
       app: ApplicationInfo,
       usableWorkers: Array[WorkerInfo],
       spreadOutApps: Boolean): Array[Int] = { Array[Int]() }
+
+  def buildPools() {
+    var is: Option[InputStream] = None
+    try {
+      is = Option {
+        schedulingSetting.configFile.map { f =>
+          new FileInputStream(f)
+        }.getOrElse {
+          throw new SparkException("Must specify configuration file for priority scheduling")
+        }
+      }
+      is.foreach { i => buildFairSchedulerPool(i) }
+    } finally {
+      is.foreach(_.close())
+    }
+  }
+
+  private def buildFairSchedulerPool(is: InputStream): Unit = {
+    val xml = XML.load(is)
+    for (poolNode <- (xml \\ POOLS_PROPERTY)) {
+
+      val poolName = (poolNode \ POOL_NAME_PROPERTY).text
+      var priority = DEFAULT_PRIORITY
+      var cores = DEFAULT_CORES
+
+      val xmlPriority = (poolNode \ PRIORITY_PROPERTY).text
+      if (xmlPriority != "") {
+        priority = xmlPriority.toInt
+      }
+
+      val xmlCores = (poolNode \ CORES_PROPERTY).text
+      if (xmlCores != "") {
+        cores = xmlCores.toInt
+      }
+
+      val pool = new Pool(poolName, priority, cores)
+      poolQueue.add(pool)
+      logInfo("Created pool %s, priority: %d, cores: %d".format(
+        poolName, priority, cores))
+    }
+  }
 }
