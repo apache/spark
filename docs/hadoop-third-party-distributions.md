@@ -40,6 +40,15 @@ the _exact_ Hadoop version you are running to avoid any compatibility errors.
         <tr><td>HDP 1.1</td><td>1.0.3</td></tr>
         <tr><td>HDP 1.0</td><td>1.0.3</td></tr>
         <tr><td>HDP 2.0</td><td>2.2.0</td></tr>
+        <tr><td>HDP 2.2</td><td>2.6.0</td></tr>
+      </table>
+    </td>
+    <td>
+      <h3>Mapr Releases</h3>
+      <table class="table" style="width:350px;">
+        <tr><th>Release</th><th>Version codes</th></tr>
+        <tr><td>Mapr 4.0.1</td><td>hadoop.version=2.4.1-mapr-1408 <br />hbase.version=0.98.7-mapr-1501-r1 <br />zookeeper.version=3.4.5-mapr-1406</td></tr>
+        <tr><td>Mapr 4.0.2</td><td>hadoop.version=2.5.1-mapr-1501 <br />hbase.version=0.98.7-mapr-1501-r1 <br />zookeeper.version=3.4.5-mapr-1406 <br />protobuf.version=2.5.0</td></tr>
       </table>
     </td>
   </tr>

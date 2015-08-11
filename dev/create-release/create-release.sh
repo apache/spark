@@ -233,8 +233,8 @@ if [[ ! "$@" =~ --skip-package ]]; then
   make_binary_release "cdh4" "-Psparkr -Phadoop-1 -Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" "3032" &
   make_binary_release "hadoop2.3" "-Psparkr -Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn" "3033" &
   make_binary_release "hadoop2.4" "-Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn" "3034" &
-  make_binary_release "mapr3" "-Pmapr3 -Psparkr -Phive -Phive-thriftserver" "3035" &
-  make_binary_release "mapr4" "-Pmapr4 -Psparkr -Pyarn -Phive -Phive-thriftserver" "3036" &
+  make_binary_release "mapr4" "-Psparkr -Pyarn -Phive -Phive-thriftserver -Dhadoop.version=2.4.1-mapr-1408 -Dhbase.version=0.98.4-mapr-1408 -Dzookeeper.version=3.4.5-mapr-1406" "3035" &
+  make_binary_release "mapr4.0.2" "-Psparkr -Pyarn -Phive -Phive-thriftserver -Dhadoop.version=2.5.1-mapr-1501 -Dhbase.version=0.98.7-mapr-1501-r1 -Dzookeeper.version=3.4.5-mapr-1406 -Dprotobuf.version=2.5.0" "3036" &
   make_binary_release "hadoop2.4-without-hive" "-Psparkr -Phadoop-2.4 -Pyarn" "3037" &
   wait
   rm -rf spark-$RELEASE_VERSION-bin-*/
