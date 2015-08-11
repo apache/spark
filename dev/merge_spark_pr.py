@@ -161,9 +161,8 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
     # The string "Closes #%s" string is required for GitHub to correctly close the PR
     merge_message_flags += [
         "-m",
-        "Closes #%s from %s and squashes the following commits:" % (pr_num, pr_repo_desc)]
-    for c in commits:
-        merge_message_flags += ["-m", c]
+        "Closes #%s from %s and squashes %d commits." % (
+            pr_num, pr_repo_desc, len(commits))]
 
     run_cmd(['git', 'commit', '--author="%s"' % primary_author] + merge_message_flags)
 
