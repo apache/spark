@@ -562,7 +562,8 @@ class Analyzer(
                   registry.lookupFunction(name, children) match {
                     // We get an aggregate function built based on AggregateFunction2 interface.
                     // So, we wrap it in AggregateExpression2.
-                    case agg2: AggregateFunction2 => AggregateExpression2(agg2, Complete, isDistinct)
+                    case agg2: AggregateFunction2 =>
+                      AggregateExpression2(agg2, Complete, isDistinct)
                     // Currently, our old aggregate function interface supports SUM(DISTINCT ...)
                     // and COUTN(DISTINCT ...).
                     case sumDistinct: SumDistinct => sumDistinct
