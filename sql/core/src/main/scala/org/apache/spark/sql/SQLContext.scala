@@ -784,7 +784,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       HashAggregation ::
       Aggregation ::
       LeftSemiJoin ::
-      HashJoin ::
+      EquiJoinSelection ::
       InMemoryScans ::
       BasicOperators ::
       CartesianProduct ::

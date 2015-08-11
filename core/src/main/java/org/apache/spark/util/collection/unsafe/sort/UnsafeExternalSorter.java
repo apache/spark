@@ -35,7 +35,7 @@ import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 import org.apache.spark.util.Utils;
@@ -427,14 +427,10 @@ public final class UnsafeExternalSorter {
 
     final long recordAddress =
       taskMemoryManager.encodePageNumberAndOffset(dataPage, dataPagePosition);
-    PlatformDependent.UNSAFE.putInt(dataPageBaseObject, dataPagePosition, lengthInBytes);
+    Platform.putInt(dataPageBaseObject, dataPagePosition, lengthInBytes);
     dataPagePosition += 4;
-    PlatformDependent.copyMemory(
-      recordBaseObject,
-      recordBaseOffset,
-      dataPageBaseObject,
-      dataPagePosition,
-      lengthInBytes);
+    Platform.copyMemory(
+      recordBaseObject, recordBaseOffset, dataPageBaseObject, dataPagePosition, lengthInBytes);
     assert(inMemSorter != null);
     inMemSorter.insertRecord(recordAddress, prefix);
   }
@@ -493,18 +489,16 @@ public final class UnsafeExternalSorter {
 
     final long recordAddress =
       taskMemoryManager.encodePageNumberAndOffset(dataPage, dataPagePosition);
-    PlatformDependent.UNSAFE.putInt(dataPageBaseObject, dataPagePosition, keyLen + valueLen + 4);
+    Platform.putInt(dataPageBaseObject, dataPagePosition, keyLen + valueLen + 4);
     dataPagePosition += 4;
 
-    PlatformDependent.UNSAFE.putInt(dataPageBaseObject, dataPagePosition, keyLen);
+    Platform.putInt(dataPageBaseObject, dataPagePosition, keyLen);
     dataPagePosition += 4;
 
-    PlatformDependent.copyMemory(
-      keyBaseObj, keyOffset, dataPageBaseObject, dataPagePosition, keyLen);
+    Platform.copyMemory(keyBaseObj, keyOffset, dataPageBaseObject, dataPagePosition, keyLen);
     dataPagePosition += keyLen;
 
-    PlatformDependent.copyMemory(
-      valueBaseObj, valueOffset, dataPageBaseObject, dataPagePosition, valueLen);
+    Platform.copyMemory(valueBaseObj, valueOffset, dataPageBaseObject, dataPagePosition, valueLen);
 
     assert(inMemSorter != null);
     inMemSorter.insertRecord(recordAddress, prefix);
