@@ -320,11 +320,11 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.application.tags</code></td>
+  <td><code>spark.yarn.tags</code></td>
   <td>(none)</td>
   <td>
   Comma-separated list of strings to pass through as YARN application tags appearing
-  in YARN ApplicationReports, which can be used for filtering when querying YARN.
+  in YARN ApplicationReports, which can be used for filtering when querying YARN apps.
   </td>
 </tr>
 <tr>

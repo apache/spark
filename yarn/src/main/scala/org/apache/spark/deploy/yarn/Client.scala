@@ -168,15 +168,15 @@ private[spark] class Client(
       .filter(!_.isEmpty())
       .foreach { tagCollection =>
         try {
+          // The setApplicationTags method was only introduced in Hadoop 2.4+, so we need to use
+          // reflection to set it, printing a warning if a tag was specified but the YARN version
+          // doesn't support it.
           val method = appContext.getClass().getMethod(
             "setApplicationTags", classOf[java.util.Set[String]])
           method.invoke(appContext, new java.util.HashSet[String](tagCollection))
-          logInfo("Applied setApplicationTags based on %s='%s'"
-            .format(CONF_SPARK_YARN_APPLICATION_TAGS, tagCollection))
-
         } catch {
           case e: NoSuchMethodException =>
-            logWarning("Ignoring conf %s='%s'; setApplicationTags missing in this version of YARN."
+            logWarning("Ignoring %s='%s' because this version of YARN does not support it"
               .format(CONF_SPARK_YARN_APPLICATION_TAGS, tagCollection))
         }
       }
@@ -1001,7 +1001,7 @@ object Client extends Logging {
 
   // Comma-separated list of strings to pass through as YARN application tags appearing
   // in YARN ApplicationReports, which can be used for filtering when querying YARN.
-  val CONF_SPARK_YARN_APPLICATION_TAGS = "spark.yarn.application.tags"
+  val CONF_SPARK_YARN_APPLICATION_TAGS = "spark.yarn.tags"
 
   // Staging directory is private! -> rwx--------
   val STAGING_DIR_PERMISSION: FsPermission =
