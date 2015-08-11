@@ -114,7 +114,7 @@ object MLUtils {
   }
 
   // Convenient methods for `loadLibSVMFile`.
-  
+
   /**
    * @since 1.0.0
    */
