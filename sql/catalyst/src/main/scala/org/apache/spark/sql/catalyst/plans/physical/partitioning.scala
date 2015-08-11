@@ -216,26 +216,23 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
 
-  lazy val clusteringSet = expressions.toSet
-
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
     case ClusteredDistribution(requiredClustering) =>
-      clusteringSet.subsetOf(requiredClustering.toSet)
+      expressions.toSet.subsetOf(requiredClustering.toSet)
     case _ => false
   }
 
   override def compatibleWith(other: Partitioning): Boolean = other match {
-    case o: HashPartitioning =>
-      this.clusteringSet == o.clusteringSet && this.numPartitions == o.numPartitions
+    case o: HashPartitioning => this == o
     case _ => false
   }
 
   override def guarantees(other: Partitioning): Boolean = other match {
-    case o: HashPartitioning =>
-      this.clusteringSet == o.clusteringSet && this.numPartitions == o.numPartitions
+    case o: HashPartitioning => this == o
     case _ => false
   }
+
 }
 
 /**
@@ -257,15 +254,13 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
 
-  private[this] lazy val clusteringSet = ordering.map(_.child).toSet
-
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
     case OrderedDistribution(requiredOrdering) =>
       val minSize = Seq(requiredOrdering.size, ordering.size).min
       requiredOrdering.take(minSize) == ordering.take(minSize)
     case ClusteredDistribution(requiredClustering) =>
-      clusteringSet.subsetOf(requiredClustering.toSet)
+      ordering.map(_.child).toSet.subsetOf(requiredClustering.toSet)
     case _ => false
   }
 
