@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -24,7 +27,7 @@ import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
-import org.apache.hive.service.server.{HiveServer2, ServerOptionsProcessor}
+import org.apache.hive.service.server.{HiveServerServerOptionsProcessor, HiveServer2}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
@@ -65,7 +68,7 @@ object HiveThriftServer2 extends Logging {
   }
 
   def main(args: Array[String]) {
-    val optionsProcessor = new ServerOptionsProcessor("HiveThriftServer2")
+    val optionsProcessor = new HiveServerServerOptionsProcessor("HiveThriftServer2")
     if (!optionsProcessor.process(args)) {
       System.exit(-1)
     }
@@ -179,6 +182,7 @@ object HiveThriftServer2 extends Logging {
     def onSessionClosed(sessionId: String): Unit = {
       sessionList(sessionId).finishTimestamp = System.currentTimeMillis
       onlineSessionNum -= 1
+      trimSessionIfNecessary()
     }
 
     def onStatementStart(
@@ -206,18 +210,20 @@ object HiveThriftServer2 extends Logging {
       executionList(id).detail = errorMessage
       executionList(id).state = ExecutionState.FAILED
       totalRunning -= 1
+      trimExecutionIfNecessary()
     }
 
     def onStatementFinish(id: String): Unit = {
       executionList(id).finishTimestamp = System.currentTimeMillis
       executionList(id).state = ExecutionState.FINISHED
       totalRunning -= 1
+      trimExecutionIfNecessary()
     }
 
     private def trimExecutionIfNecessary() = synchronized {
       if (executionList.size > retainedStatements) {
         val toRemove = math.max(retainedStatements / 10, 1)
-        executionList.take(toRemove).foreach { s =>
+        executionList.filter(_._2.finishTimestamp != 0).take(toRemove).foreach { s =>
           executionList.remove(s._1)
         }
       }
@@ -226,7 +232,7 @@ object HiveThriftServer2 extends Logging {
     private def trimSessionIfNecessary() = synchronized {
       if (sessionList.size > retainedSessions) {
         val toRemove = math.max(retainedSessions / 10, 1)
-        sessionList.take(toRemove).foreach { s =>
+        sessionList.filter(_._2.finishTimestamp != 0).take(toRemove).foreach { s =>
           sessionList.remove(s._1)
         }
       }
@@ -238,9 +244,12 @@ object HiveThriftServer2 extends Logging {
 private[hive] class HiveThriftServer2(hiveContext: HiveContext)
   extends HiveServer2
   with ReflectedCompositeService {
+  // state is tracked internally so that the server only attempts to shut down if it successfully
+  // started, and then once only.
+  private val started = new AtomicBoolean(false)
 
   override def init(hiveConf: HiveConf) {
-    val sparkSqlCliService = new SparkSQLCLIService(hiveContext)
+    val sparkSqlCliService = new SparkSQLCLIService(this, hiveContext)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
 
@@ -256,8 +265,19 @@ private[hive] class HiveThriftServer2(hiveContext: HiveContext)
   }
 
   private def isHTTPTransportMode(hiveConf: HiveConf): Boolean = {
-    val transportMode: String = hiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE)
-    transportMode.equalsIgnoreCase("http")
+    val transportMode = hiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE)
+    transportMode.toLowerCase(Locale.ENGLISH).equals("http")
   }
 
+
+  override def start(): Unit = {
+    super.start()
+    started.set(true)
+  }
+
+  override def stop(): Unit = {
+    if (started.getAndSet(false)) {
+       super.stop()
+    }
+  }
 }

@@ -20,10 +20,9 @@ package org.apache.spark.scheduler.cluster
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
-import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 
 import org.apache.spark.{SparkException, Logging, SparkContext}
-import org.apache.spark.deploy.yarn.{Client, ClientArguments}
+import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnSparkHadoopUtil}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 private[spark] class YarnClientSchedulerBackend(
@@ -34,7 +33,7 @@ private[spark] class YarnClientSchedulerBackend(
 
   private var client: Client = null
   private var appId: ApplicationId = null
-  private var monitorThread: Thread = null
+  private var monitorThread: MonitorThread = null
 
   /**
    * Create a Yarn client to submit an application to the ResourceManager.
@@ -62,6 +61,13 @@ private[spark] class YarnClientSchedulerBackend(
     super.start()
 
     waitForApplication()
+
+    // SPARK-8851: In yarn-client mode, the AM still does the credentials refresh. The driver
+    // reads the credentials from HDFS, just like the executors and updates its own credentials
+    // cache.
+    if (conf.contains("spark.yarn.credentials.file")) {
+      YarnSparkHadoopUtil.get.startExecutorDelegationTokenRenewer(conf)
+    }
     monitorThread = asyncMonitorApplication()
     monitorThread.start()
   }
@@ -126,23 +132,41 @@ private[spark] class YarnClientSchedulerBackend(
   }
 
   /**
+   * We create this class for SPARK-9519. Basically when we interrupt the monitor thread it's
+   * because the SparkContext is being shut down(sc.stop() called by user code), but if
+   * monitorApplication return, it means the Yarn application finished before sc.stop() was called,
+   * which means we should call sc.stop() here, and we don't allow the monitor to be interrupted
+   * before SparkContext stops successfully.
+   */
+  private class MonitorThread extends Thread {
+    private var allowInterrupt = true
+
+    override def run() {
+      try {
+        val (state, _) = client.monitorApplication(appId, logApplicationReport = false)
+        logError(s"Yarn application has already exited with state $state!")
+        allowInterrupt = false
+        sc.stop()
+      } catch {
+        case e: InterruptedException => logInfo("Interrupting monitor thread")
+      }
+    }
+
+    def stopMonitor(): Unit = {
+      if (allowInterrupt) {
+        this.interrupt()
+      }
+    }
+  }
+
+  /**
    * Monitor the application state in a separate thread.
    * If the application has exited for any reason, stop the SparkContext.
    * This assumes both `client` and `appId` have already been set.
    */
-  private def asyncMonitorApplication(): Thread = {
+  private def asyncMonitorApplication(): MonitorThread = {
     assert(client != null && appId != null, "Application has not been submitted yet!")
-    val t = new Thread {
-      override def run() {
-        try {
-          val (state, _) = client.monitorApplication(appId, logApplicationReport = false)
-          logError(s"Yarn application has already exited with state $state!")
-          sc.stop()
-        } catch {
-          case e: InterruptedException => logInfo("Interrupting monitor thread")
-        }
-      }
-    }
+    val t = new MonitorThread
     t.setName("Yarn application state monitor")
     t.setDaemon(true)
     t
@@ -154,10 +178,11 @@ private[spark] class YarnClientSchedulerBackend(
   override def stop() {
     assert(client != null, "Attempted to stop this scheduler before starting it!")
     if (monitorThread != null) {
-      monitorThread.interrupt()
+      monitorThread.stopMonitor()
     }
     super.stop()
     client.stop()
+    YarnSparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
     logInfo("Stopped")
   }
 
@@ -167,5 +192,4 @@ private[spark] class YarnClientSchedulerBackend(
       super.applicationId
     }
   }
-
 }

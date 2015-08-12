@@ -17,74 +17,118 @@
 
 package org.apache.spark.streaming.scheduler
 
+import scala.collection.mutable.ArrayBuffer
+
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
+
+import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming._
-import org.apache.spark.SparkConf
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.receiver._
-import org.apache.spark.util.Utils
 
 /** Testsuite for receiver scheduling */
 class ReceiverTrackerSuite extends TestSuiteBase {
-  val sparkConf = new SparkConf().setMaster("local[8]").setAppName("test")
-  val ssc = new StreamingContext(sparkConf, Milliseconds(100))
-  val tracker = new ReceiverTracker(ssc)
-  val launcher = new tracker.ReceiverLauncher()
-  val executors: List[String] = List("0", "1", "2", "3")
 
-  test("receiver scheduling - all or none have preferred location") {
+  test("send rate update to receivers") {
+    withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
+      ssc.scheduler.listenerBus.start(ssc.sc)
 
-    def parse(s: String): Array[Array[String]] = {
-      val outerSplit = s.split("\\|")
-      val loc = new Array[Array[String]](outerSplit.length)
-      var i = 0
-      for (i <- 0 until outerSplit.length) {
-        loc(i) = outerSplit(i).split("\\,")
-      }
-      loc
-    }
-
-    def testScheduler(numReceivers: Int, preferredLocation: Boolean, allocation: String) {
-      val receivers =
-        if (preferredLocation) {
-          Array.tabulate(numReceivers)(i => new DummyReceiver(host =
-            Some(((i + 1) % executors.length).toString)))
-        } else {
-          Array.tabulate(numReceivers)(_ => new DummyReceiver)
+      val newRateLimit = 100L
+      val inputDStream = new RateTestInputDStream(ssc)
+      val tracker = new ReceiverTracker(ssc)
+      tracker.start()
+      try {
+        // we wait until the Receiver has registered with the tracker,
+        // otherwise our rate update is lost
+        eventually(timeout(5 seconds)) {
+          assert(RateTestReceiver.getActive().nonEmpty)
         }
-      val locations = launcher.scheduleReceivers(receivers, executors)
-      val expectedLocations = parse(allocation)
-      assert(locations.deep === expectedLocations.deep)
-    }
 
-    testScheduler(numReceivers = 5, preferredLocation = false, allocation = "0|1|2|3|0")
-    testScheduler(numReceivers = 3, preferredLocation = false, allocation = "0,3|1|2")
-    testScheduler(numReceivers = 4, preferredLocation = true, allocation = "1|2|3|0")
+
+        // Verify that the rate of the block generator in the receiver get updated
+        val activeReceiver = RateTestReceiver.getActive().get
+        tracker.sendRateUpdate(inputDStream.id, newRateLimit)
+        eventually(timeout(5 seconds)) {
+          assert(activeReceiver.getDefaultBlockGeneratorRateLimit() === newRateLimit,
+            "default block generator did not receive rate update")
+          assert(activeReceiver.getCustomBlockGeneratorRateLimit() === newRateLimit,
+            "other block generator did not receive rate update")
+        }
+      } finally {
+        tracker.stop(false)
+      }
+    }
+  }
+}
+
+/** An input DStream with for testing rate controlling */
+private[streaming] class RateTestInputDStream(@transient ssc_ : StreamingContext)
+  extends ReceiverInputDStream[Int](ssc_) {
+
+  override def getReceiver(): Receiver[Int] = new RateTestReceiver(id)
+
+  @volatile
+  var publishedRates = 0
+
+  override val rateController: Option[RateController] = {
+    Some(new RateController(id, new ConstantEstimator(100)) {
+      override def publish(rate: Long): Unit = {
+        publishedRates += 1
+      }
+    })
+  }
+}
+
+/** A receiver implementation for testing rate controlling */
+private[streaming] class RateTestReceiver(receiverId: Int, host: Option[String] = None)
+  extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
+
+  private lazy val customBlockGenerator = supervisor.createBlockGenerator(
+    new BlockGeneratorListener {
+      override def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]): Unit = {}
+      override def onError(message: String, throwable: Throwable): Unit = {}
+      override def onGenerateBlock(blockId: StreamBlockId): Unit = {}
+      override def onAddData(data: Any, metadata: Any): Unit = {}
+    }
+  )
+
+  setReceiverId(receiverId)
+
+  override def onStart(): Unit = {
+    customBlockGenerator
+    RateTestReceiver.registerReceiver(this)
   }
 
-  test("receiver scheduling - some have preferred location") {
-    val numReceivers = 4;
-    val receivers: Seq[Receiver[_]] = Seq(new DummyReceiver(host = Some("1")),
-      new DummyReceiver, new DummyReceiver, new DummyReceiver)
-    val locations = launcher.scheduleReceivers(receivers, executors)
-    assert(locations(0)(0) === "1")
-    assert(locations(1)(0) === "0")
-    assert(locations(2)(0) === "1")
-    assert(locations(0).length === 1)
-    assert(locations(3).length === 1)
+  override def onStop(): Unit = {
+    RateTestReceiver.deregisterReceiver()
+  }
+
+  override def preferredLocation: Option[String] = host
+
+  def getDefaultBlockGeneratorRateLimit(): Long = {
+    supervisor.getCurrentRateLimit
+  }
+
+  def getCustomBlockGeneratorRateLimit(): Long = {
+    customBlockGenerator.getCurrentLimit
   }
 }
 
 /**
- * Dummy receiver implementation
+ * A helper object to RateTestReceiver that give access to the currently active RateTestReceiver
+ * instance.
  */
-private class DummyReceiver(host: Option[String] = None)
-  extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
+private[streaming] object RateTestReceiver {
+  @volatile private var activeReceiver: RateTestReceiver = null
 
-  def onStart() {
+  def registerReceiver(receiver: RateTestReceiver): Unit = {
+    activeReceiver = receiver
   }
 
-  def onStop() {
+  def deregisterReceiver(): Unit = {
+    activeReceiver = null
   }
 
-  override def preferredLocation: Option[String] = host
+  def getActive(): Option[RateTestReceiver] = Option(activeReceiver)
 }

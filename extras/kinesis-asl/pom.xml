@@ -31,7 +31,7 @@
   <name>Spark Kinesis Integration</name>
 
   <properties>
-    <sbt.project.name>kinesis-asl</sbt.project.name>
+    <sbt.project.name>streaming-kinesis-asl</sbt.project.name>
   </properties>
 
   <dependencies>
@@ -39,6 +39,13 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-streaming_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>

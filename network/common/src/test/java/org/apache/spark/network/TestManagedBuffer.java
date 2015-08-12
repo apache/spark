@@ -81,6 +81,11 @@ public class TestManagedBuffer extends ManagedBuffer {
   }
 
   @Override
+  public int hashCode() {
+    return underlying.hashCode();
+  }
+
+  @Override
   public boolean equals(Object other) {
     if (other instanceof ManagedBuffer) {
       try {

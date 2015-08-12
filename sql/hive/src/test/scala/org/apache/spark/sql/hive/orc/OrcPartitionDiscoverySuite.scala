@@ -21,7 +21,7 @@ import java.io.File
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.InternalRow
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -31,7 +31,6 @@ import org.scalatest.BeforeAndAfterAll
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-
 // The data where the partitioning key exists only in the directory structure.
 case class OrcParData(intField: Int, stringField: String)
 
@@ -40,7 +39,7 @@ case class OrcParDataWithKey(intField: Int, pi: Int, stringField: String, ps: St
 
 // TODO This test suite duplicates ParquetPartitionDiscoverySuite a lot
 class OrcPartitionDiscoverySuite extends QueryTest with BeforeAndAfterAll {
-  val defaultPartitionName = ConfVars.DEFAULTPARTITIONNAME.defaultVal
+  val defaultPartitionName = ConfVars.DEFAULTPARTITIONNAME.defaultStrVal
 
   def withTempDir(f: File => Unit): Unit = {
     val dir = Utils.createTempDir().getCanonicalFile
@@ -49,13 +48,13 @@ class OrcPartitionDiscoverySuite extends QueryTest with BeforeAndAfterAll {
 
   def makeOrcFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = {
-    data.toDF().write.format("orc").mode("overwrite").save(path.getCanonicalPath)
+    data.toDF().write.mode("overwrite").orc(path.getCanonicalPath)
   }
 
 
   def makeOrcFile[T <: Product: ClassTag: TypeTag](
       df: DataFrame, path: File): Unit = {
-    df.write.format("orc").mode("overwrite").save(path.getCanonicalPath)
+    df.write.mode("overwrite").orc(path.getCanonicalPath)
   }
 
   protected def withTempTable(tableName: String)(f: => Unit): Unit = {
@@ -90,7 +89,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with BeforeAndAfterAll {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      read.format("orc").load(base.getCanonicalPath).registerTempTable("t")
+      read.orc(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -137,7 +136,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with BeforeAndAfterAll {
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      read.format("orc").load(base.getCanonicalPath).registerTempTable("t")
+      read.orc(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -187,9 +186,8 @@ class OrcPartitionDiscoverySuite extends QueryTest with BeforeAndAfterAll {
       }
 
       read
-        .format("orc")
         .option(ConfVars.DEFAULTPARTITIONNAME.varname, defaultPartitionName)
-        .load(base.getCanonicalPath)
+        .orc(base.getCanonicalPath)
         .registerTempTable("t")
 
       withTempTable("t") {
@@ -230,9 +228,8 @@ class OrcPartitionDiscoverySuite extends QueryTest with BeforeAndAfterAll {
       }
 
       read
-        .format("orc")
         .option(ConfVars.DEFAULTPARTITIONNAME.varname, defaultPartitionName)
-        .load(base.getCanonicalPath)
+        .orc(base.getCanonicalPath)
         .registerTempTable("t")
 
       withTempTable("t") {

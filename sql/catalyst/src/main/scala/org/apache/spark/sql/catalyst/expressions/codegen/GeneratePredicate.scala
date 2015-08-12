@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
@@ -46,8 +47,12 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
 
       class SpecificPredicate extends ${classOf[Predicate].getName} {
         private final $exprType[] expressions;
+        ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
+
         public SpecificPredicate($exprType[] expr) {
           expressions = expr;
+          ${initMutableStates(ctx)}
         }
 
         @Override
@@ -57,7 +62,7 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
         }
       }"""
 
-    logDebug(s"Generated predicate '$predicate':\n$code")
+    logDebug(s"Generated predicate '$predicate':\n${CodeFormatter.format(code)}")
 
     val p = compile(code).generate(ctx.references.toArray).asInstanceOf[Predicate]
     (r: InternalRow) => p.eval(r)

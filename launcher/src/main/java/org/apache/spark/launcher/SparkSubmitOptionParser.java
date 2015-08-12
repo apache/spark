@@ -51,6 +51,7 @@ class SparkSubmitOptionParser {
   protected final String MASTER = "--master";
   protected final String NAME = "--name";
   protected final String PACKAGES = "--packages";
+  protected final String PACKAGES_EXCLUDE = "--exclude-packages";
   protected final String PROPERTIES_FILE = "--properties-file";
   protected final String PROXY_USER = "--proxy-user";
   protected final String PY_FILES = "--py-files";
@@ -105,6 +106,7 @@ class SparkSubmitOptionParser {
     { NAME },
     { NUM_EXECUTORS },
     { PACKAGES },
+    { PACKAGES_EXCLUDE },
     { PRINCIPAL },
     { PROPERTIES_FILE },
     { PROXY_USER },

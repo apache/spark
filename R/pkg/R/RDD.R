@@ -85,7 +85,9 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
 
   isPipelinable <- function(rdd) {
     e <- rdd@env
+    # nolint start
     !(e$isCached || e$isCheckpointed)
+    # nolint end
   }
 
   if (!inherits(prev, "PipelinedRDD") || !isPipelinable(prev)) {
@@ -97,7 +99,8 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
     # prev_serializedMode is used during the delayed computation of JRDD in getJRDD
   } else {
     pipelinedFunc <- function(partIndex, part) {
-      func(partIndex, prev@func(partIndex, part))
+      f <- prev@func
+      func(partIndex, f(partIndex, part))
     }
     .Object@func <- cleanClosure(pipelinedFunc)
     .Object@prev_jrdd <- prev@prev_jrdd # maintain the pipeline
@@ -165,7 +168,6 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
                                    serializedFuncArr,
                                    rdd@env$prev_serializedMode,
                                    packageNamesArr,
-                                   as.character(.sparkREnv[["libname"]]),
                                    broadcastArr,
                                    callJMethod(prev_jrdd, "classTag"))
             } else {
@@ -175,7 +177,6 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
                                    rdd@env$prev_serializedMode,
                                    serializedMode,
                                    packageNamesArr,
-                                   as.character(.sparkREnv[["libname"]]),
                                    broadcastArr,
                                    callJMethod(prev_jrdd, "classTag"))
             }
@@ -843,7 +844,7 @@ setMethod("sampleRDD",
                 if (withReplacement) {
                   count <- rpois(1, fraction)
                   if (count > 0) {
-                    res[(len + 1):(len + count)] <- rep(list(elem), count)
+                    res[ (len + 1) : (len + count) ] <- rep(list(elem), count)
                     len <- len + count
                   }
                 } else {
@@ -1263,12 +1264,12 @@ setMethod("pipeRDD",
           signature(x = "RDD", command = "character"),
           function(x, command, env = list()) {
             func <- function(part) {
-              trim.trailing.func <- function(x) {
+              trim_trailing_func <- function(x) {
                 sub("[\r\n]*$", "", toString(x))
               }
-              input <- unlist(lapply(part, trim.trailing.func))
+              input <- unlist(lapply(part, trim_trailing_func))
               res <- system2(command, stdout = TRUE, input = input, env = env)
-              lapply(res, trim.trailing.func)
+              lapply(res, trim_trailing_func)
             }
             lapplyPartition(x, func)
           })

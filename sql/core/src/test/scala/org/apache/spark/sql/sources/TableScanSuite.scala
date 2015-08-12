@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.sources
 
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 class DefaultSource extends SimpleScanSource
 
@@ -67,13 +65,13 @@ case class AllDataTypesScan(
 
   override def schema: StructType = userSpecifiedSchema
 
-  override def needConversion: Boolean = false
+  override def needConversion: Boolean = true
 
   override def buildScan(): RDD[Row] = {
     sqlContext.sparkContext.parallelize(from to to).map { i =>
-      InternalRow(
-        UTF8String.fromString(s"str_$i"),
-        s"str_$i".getBytes(),
+      Row(
+        s"str_$i",
+        s"str_$i".getBytes(StandardCharsets.UTF_8),
         i % 2 == 0,
         i.toByte,
         i.toShort,
@@ -81,18 +79,18 @@ case class AllDataTypesScan(
         i.toLong,
         i.toFloat,
         i.toDouble,
-        Decimal(new java.math.BigDecimal(i)),
-        Decimal(new java.math.BigDecimal(i)),
-        DateTimeUtils.fromJavaDate(new Date(1970, 1, 1)),
-        DateTimeUtils.fromJavaTimestamp(new Timestamp(20000 + i)),
-        UTF8String.fromString(s"varchar_$i"),
+        new java.math.BigDecimal(i),
+        new java.math.BigDecimal(i),
+        Date.valueOf("1970-01-01"),
+        new Timestamp(20000 + i),
+        s"varchar_$i",
         Seq(i, i + 1),
-        Seq(Map(UTF8String.fromString(s"str_$i") -> InternalRow(i.toLong))),
-        Map(i -> UTF8String.fromString(i.toString)),
-        Map(Map(UTF8String.fromString(s"str_$i") -> i.toFloat) -> InternalRow(i.toLong)),
-        InternalRow(i, UTF8String.fromString(i.toString)),
-        InternalRow(Seq(UTF8String.fromString(s"str_$i"), UTF8String.fromString(s"str_${i + 1}")),
-          InternalRow(Seq(DateTimeUtils.fromJavaDate(new Date(1970, 1, i + 1))))))
+        Seq(Map(s"str_$i" -> Row(i.toLong))),
+        Map(i -> i.toString),
+        Map(Map(s"str_$i" -> i.toFloat) -> Row(i.toLong)),
+        Row(i, i.toString),
+          Row(Seq(s"str_$i", s"str_${i + 1}"),
+            Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))))
     }
   }
 }
@@ -113,7 +111,7 @@ class TableScanSuite extends DataSourceTest {
       i.toDouble,
       new java.math.BigDecimal(i),
       new java.math.BigDecimal(i),
-      new Date(1970, 1, 1),
+      Date.valueOf("1970-01-01"),
       new Timestamp(20000 + i),
       s"varchar_$i",
       Seq(i, i + 1),
@@ -121,7 +119,7 @@ class TableScanSuite extends DataSourceTest {
       Map(i -> i.toString),
       Map(Map(s"str_$i" -> i.toFloat) -> Row(i.toLong)),
       Row(i, i.toString),
-      Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(new Date(1970, 1, i + 1)))))
+      Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))))
   }.toSeq
 
   before {
@@ -202,7 +200,7 @@ class TableScanSuite extends DataSourceTest {
       StructField("longField_:,<>=+/~^", LongType, true) ::
       StructField("floatField", FloatType, true) ::
       StructField("doubleField", DoubleType, true) ::
-      StructField("decimalField1", DecimalType.Unlimited, true) ::
+      StructField("decimalField1", DecimalType.USER_DEFAULT, true) ::
       StructField("decimalField2", DecimalType(9, 2), true) ::
       StructField("dateField", DateType, true) ::
       StructField("timestampField", TimestampType, true) ::
@@ -280,7 +278,7 @@ class TableScanSuite extends DataSourceTest {
 
   sqlTest(
     "SELECT structFieldComplex.Value.`value_(2)` FROM tableWithSchema",
-    (1 to 10).map(i => Row(Seq(new Date(1970, 1, i + 1)))).toSeq)
+    (1 to 10).map(i => Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))).toSeq)
 
   test("Caching")  {
     // Cached Query Execution

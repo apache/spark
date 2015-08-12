@@ -91,3 +91,7 @@ help/*
 html/*
 INDEX
 .lintr
+gen-java.*
+.*avpr
+org.apache.spark.sql.sources.DataSourceRegister
+.*parquet

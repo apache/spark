@@ -31,7 +31,7 @@ from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deseria
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql import since
-from pyspark.sql.types import _create_cls, _parse_datatype_json_string
+from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.types import *
@@ -83,15 +83,7 @@ class DataFrame(object):
         """
         if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
-            rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
-            schema = self.schema
-
-            def applySchema(it):
-                cls = _create_cls(schema)
-                return map(cls, it)
-
-            self._lazy_rdd = rdd.mapPartitions(applySchema)
-
+            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
         return self._lazy_rdd
 
     @property
@@ -220,8 +212,7 @@ class DataFrame(object):
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
         >>> df.explain()
-        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at applySchemaToPythonRDD at\
-          NativeMethodAccessorImpl.java:...
+        Scan PhysicalRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -232,7 +223,6 @@ class DataFrame(object):
         ...
         == Physical Plan ==
         ...
-        == RDD ==
         """
         if extended:
             print(self._jdf.queryExecution().toString())
@@ -287,9 +277,7 @@ class DataFrame(object):
         """
         with SCCallSiteSync(self._sc) as css:
             port = self._sc._jvm.PythonRDD.collectAndServe(self._jdf.javaToPython().rdd())
-        rs = list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
-        cls = _create_cls(self.schema)
-        return [cls(r) for r in rs]
+        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -450,6 +438,42 @@ class DataFrame(object):
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         rdd = self._jdf.sample(withReplacement, fraction, long(seed))
         return DataFrame(rdd, self.sql_ctx)
+
+    @since(1.5)
+    def sampleBy(self, col, fractions, seed=None):
+        """
+        Returns a stratified sample without replacement based on the
+        fraction given on each stratum.
+
+        :param col: column that defines strata
+        :param fractions:
+            sampling fraction for each stratum. If a stratum is not
+            specified, we treat its fraction as zero.
+        :param seed: random seed
+        :return: a new DataFrame that represents the stratified sample
+
+        >>> from pyspark.sql.functions import col
+        >>> dataset = sqlContext.range(0, 100).select((col("id") % 3).alias("key"))
+        >>> sampled = dataset.sampleBy("key", fractions={0: 0.1, 1: 0.2}, seed=0)
+        >>> sampled.groupBy("key").count().orderBy("key").show()
+        +---+-----+
+        |key|count|
+        +---+-----+
+        |  0|    3|
+        |  1|    8|
+        +---+-----+
+
+        """
+        if not isinstance(col, str):
+            raise ValueError("col must be a string, but got %r" % type(col))
+        if not isinstance(fractions, dict):
+            raise ValueError("fractions must be a dict but got %r" % type(fractions))
+        for k, v in fractions.items():
+            if not isinstance(k, (float, int, long, basestring)):
+                raise ValueError("key must be float, int, long, or string, but got %r" % type(k))
+            fractions[k] = float(v)
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
+        return DataFrame(self._jdf.stat().sampleBy(col, self._jmap(fractions), seed), self.sql_ctx)
 
     @since(1.4)
     def randomSplit(self, weights, seed=None):
@@ -1140,7 +1164,7 @@ class DataFrame(object):
         non-zero pair frequencies will be returned.
         The first column of each row will be the distinct values of `col1` and the column names
         will be the distinct values of `col2`. The name of the first column will be `$col1_$col2`.
-        Pairs that have no occurrences will have `null` as their counts.
+        Pairs that have no occurrences will have zero as their counts.
         :func:`DataFrame.crosstab` and :func:`DataFrameStatFunctions.crosstab` are aliases.
 
         :param col1: The name of the first column. Distinct items will make the first item of
@@ -1323,6 +1347,11 @@ class DataFrameStatFunctions(object):
         return self.df.freqItems(cols, support)
 
     freqItems.__doc__ = DataFrame.freqItems.__doc__
+
+    def sampleBy(self, col, fractions, seed=None):
+        return self.df.sampleBy(col, fractions, seed)
+
+    sampleBy.__doc__ = DataFrame.sampleBy.__doc__
 
 
 def _test():

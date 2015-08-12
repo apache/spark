@@ -33,7 +33,7 @@ import org.apache.spark.graphx.Edge
 import org.apache.spark.graphx.impl.GraphImpl
 
 /** A collection of graph generating functions. */
-object GraphGenerators {
+object GraphGenerators extends Logging {
 
   val RMATa = 0.45
   val RMATb = 0.15
@@ -142,7 +142,7 @@ object GraphGenerators {
     var edges: Set[Edge[Int]] = Set()
     while (edges.size < numEdges) {
       if (edges.size % 100 == 0) {
-        println(edges.size + " edges")
+        logDebug(edges.size + " edges")
       }
       edges += addEdge(numVertices)
     }
