@@ -318,7 +318,8 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         }
 
         if (isParquetSerDe && !hiveParquetSupportsDecimal && hasDecimalFields) {
-          //
+          // If Hive version is below 1.2.0, we cannot save Hive compatible schema to
+          // metasotre when the file format is Parquet and the schema has DecimalType.
           logWarning {
             "Persisting Parquet relation with decimal field(s) into Hive metastore in Spark SQL " +
               "specific format, which is NOT compatible with Hive. Because ParquetHiveSerDe in " +
