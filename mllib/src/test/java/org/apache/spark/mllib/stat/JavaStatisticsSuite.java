@@ -28,6 +28,7 @@ import static org.junit.Assert.assertEquals;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult;
 
 public class JavaStatisticsSuite implements Serializable {
   private transient JavaSparkContext sc;
@@ -52,5 +53,13 @@ public class JavaStatisticsSuite implements Serializable {
     Double corr2 = Statistics.corr(x, y, "pearson");
     // Check default method
     assertEquals(corr1, corr2);
+  }
+
+  @Test
+  public void kolmogorovSmirnovTest() {
+    JavaRDD<Double> data = sc.parallelize(Lists.newArrayList(0.2, 1.0, -1.0, 2.0));
+    KolmogorovSmirnovTestResult testResult1 = Statistics.kolmogorovSmirnovTest(data, "norm");
+    KolmogorovSmirnovTestResult testResult2 = Statistics.kolmogorovSmirnovTest(
+      data, "norm", 0.0, 1.0);
   }
 }

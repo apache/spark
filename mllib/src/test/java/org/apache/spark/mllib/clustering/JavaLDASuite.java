@@ -160,11 +160,42 @@ public class JavaLDASuite implements Serializable {
     assertEquals(roundedLocalTopicSummary.length, k);
   }
 
+  @Test
+  public void logPerplexity(){
+    // Blindly copied from LDASuite.
+    JavaRDD<Tuple2<Long, Vector>> docs = sc.parallelize(toyData, 2);
+    assertEquals(toyModel.logPerplexity(JavaPairRDD.fromJavaRDD(docs)), 3.690, 1e-3);
+  }
+
+  @Test
+  public void logLikelihood() {
+    // Blindly copied from LDASuite.
+    ArrayList<Tuple2<Long, Vector>> docsSingleWord = new ArrayList<Tuple2<Long, Vector>>();
+    ArrayList<Tuple2<Long, Vector>> docsRepeatWord = new ArrayList<Tuple2<Long, Vector>>();
+    docsSingleWord.add(new Tuple2<Long, Vector>(
+      Long.valueOf(0), Vectors.dense(1.0, 0.0, 0.0, 0.0, 0.0, 0.0)));
+    docsRepeatWord.add(new Tuple2<Long, Vector>(
+      Long.valueOf(0), Vectors.dense(5.0, 0.0, 0.0, 0.0, 0.0, 0.0)));
+    JavaPairRDD<Long, Vector> single = JavaPairRDD.fromJavaRDD(sc.parallelize(docsSingleWord));
+    JavaPairRDD<Long, Vector> repeat = JavaPairRDD.fromJavaRDD(sc.parallelize(docsRepeatWord));
+    assertEquals(toyModel.logLikelihood(single), -25.971, 1e-3);
+    assertEquals(toyModel.logLikelihood(repeat), -31.441, 1e-3);
+  }
+
+  @Test
+  public void topicDistributions(){
+    JavaRDD<Tuple2<Long, Vector>> docs = sc.parallelize(toyData, 2);
+    JavaPairRDD<Long, Vector> pairedDocs = JavaPairRDD.fromJavaRDD(docs);
+    assertEquals(toyModel.topicDistributions(pairedDocs).count(), pairedDocs.count());
+  }
+
   private static int tinyK = LDASuite$.MODULE$.tinyK();
   private static int tinyVocabSize = LDASuite$.MODULE$.tinyVocabSize();
   private static Matrix tinyTopics = LDASuite$.MODULE$.tinyTopics();
   private static Tuple2<int[], double[]>[] tinyTopicDescription =
       LDASuite$.MODULE$.tinyTopicDescription();
   private JavaPairRDD<Long, Vector> corpus;
+  private LocalLDAModel toyModel = LDASuite$.MODULE$.toyModel();
+  private ArrayList<Tuple2<Long, Vector>> toyData = LDASuite$.MODULE$.javaToyData();
 
 }

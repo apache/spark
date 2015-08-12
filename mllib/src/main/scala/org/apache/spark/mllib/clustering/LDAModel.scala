@@ -229,7 +229,7 @@ class LocalLDAModel private[clustering] (
     vocabSize)
 
   /** Java-friendly version of [[logLikelihood]] */
-  def logLikelihood(documents: JavaRDD[(java.lang.Long, Vector)]): Double = {
+  def logLikelihood(documents: JavaPairRDD[java.lang.Long, Vector]): Double = {
     logLikelihood(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
   }
 
@@ -248,7 +248,7 @@ class LocalLDAModel private[clustering] (
   }
 
   /** Java-friendly version of [[logPerplexity]] */
-  def logPerplexity(documents: JavaRDD[(java.lang.Long, Vector)]): Double = {
+  def logPerplexity(documents: JavaPairRDD[java.lang.Long, Vector]): Double = {
     logPerplexity(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
   }
 
@@ -353,9 +353,9 @@ class LocalLDAModel private[clustering] (
 
   /** Java-friendly version of [[topicDistributions]] */
   def topicDistributions(
-      documents: JavaRDD[(java.lang.Long, Vector)]): JavaRDD[(java.lang.Long, Vector)] = {
+      documents: JavaPairRDD[java.lang.Long, Vector]): JavaPairRDD[java.lang.Long, Vector] = {
     val distributions = topicDistributions(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
-    distributions.asInstanceOf[JavaRDD[(java.lang.Long, Vector)]]
+    JavaPairRDD.fromRDD(distributions.asInstanceOf[RDD[(java.lang.Long, Vector)]])
   }
 
 }
