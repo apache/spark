@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.optimizer.Optimizer
 
 /**
  * :: Experimental ::
@@ -41,5 +42,8 @@ class ExperimentalMethods protected[sql](sqlContext: SQLContext) {
    */
   @Experimental
   var extraStrategies: Seq[Strategy] = Nil
+
+  @Experimental
+  var extraOptimizers: Seq[Optimizer] = Nil
 
 }

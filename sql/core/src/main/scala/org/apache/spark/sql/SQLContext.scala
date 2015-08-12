@@ -982,7 +982,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
       assertAnalyzed()
       cacheManager.useCachedData(analyzed)
     }
-    lazy val optimizedPlan: LogicalPlan = optimizer.execute(withCachedData)
+
+    lazy val optimizedPlan: LogicalPlan = (experimental.extraOptimizers :+ optimizer)
+      .foldLeft(withCachedData)((plan, opt) => opt.execute(plan))
 
     // TODO: Don't just pick the first one...
     lazy val sparkPlan: SparkPlan = {
