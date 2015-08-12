@@ -311,7 +311,7 @@ private[master] class PrioritySchedulingAlgorithm(
     }
   }
 
-  override def removeApplication(app: ApplicationInfo): Unit =  {
+  override def removeApplication(app: ApplicationInfo): Unit = {
     if (app.desc.assignedPool == None) {
       throw new SparkException(s"Application ${app.desc.name} hasn't been assigned to any pool")
     } else {
