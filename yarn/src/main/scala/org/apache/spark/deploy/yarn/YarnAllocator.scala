@@ -458,7 +458,7 @@ private[yarn] class YarnAllocator(
           logInfo(msg)
           numExecutorsFailed += 1
           Some(msg)
-        }  else {
+        } else {
           None
         }
       } else {
