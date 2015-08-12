@@ -62,30 +62,6 @@ For submitting application to YARN, the preferred options are:
 
 * `--master`: The --master parameter is either `yarn-client` or `yarn-cluster`. Defaults to `yarn-client`
 
-# Master URLs
-
-The master URL passed to Spark can be in one of the following formats:
-
-<table class="table">
-<tr><th>Master URL</th><th>Meaning</th></tr>
-<tr><td> local </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
-<tr><td> local[K] </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine). </td></tr>
-<tr><td> local[*] </td><td> Run Spark locally with as many worker threads as logical cores on your machine.</td></tr>
-<tr><td> spark://HOST:PORT </td><td> Connect to the given <a href="spark-standalone.html">Spark standalone
-        cluster</a> master. The port must be whichever one your master is configured to use, which is 7077 by default.
-</td></tr>
-<tr><td> mesos://HOST:PORT </td><td> Connect to the given <a href="running-on-mesos.html">Mesos</a> cluster.
-        The port must be whichever one your is configured to use, which is 5050 by default.
-        Or, for a Mesos cluster using ZooKeeper, use <code>mesos://zk://...</code>.
-</td></tr>
-<tr><td> yarn-client </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
-client mode. The cluster location will be found based on the HADOOP_CONF_DIR or YARN_CONF_DIR variable.
-</td></tr>
-<tr><td> yarn-cluster </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
-cluster mode. The cluster location will be found based on the HADOOP_CONF_DIR or YARN_CONF_DIR variable.
-</td></tr>
-</table>
-
 <b>&#8224;</b> A common deployment strategy is to submit your application from a gateway machine
 that is
 physically co-located with your worker machines (e.g. Master node in a standalone EC2 cluster).
@@ -153,6 +129,30 @@ export HADOOP_CONF_DIR=XXX
   /path/to/examples.jar \
   1000
 {% endhighlight %}
+
+# Master URLs
+
+The master URL passed to Spark can be in one of the following formats:
+
+<table class="table">
+<tr><th>Master URL</th><th>Meaning</th></tr>
+<tr><td> local </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
+<tr><td> local[K] </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine). </td></tr>
+<tr><td> local[*] </td><td> Run Spark locally with as many worker threads as logical cores on your machine.</td></tr>
+<tr><td> spark://HOST:PORT </td><td> Connect to the given <a href="spark-standalone.html">Spark standalone
+        cluster</a> master. The port must be whichever one your master is configured to use, which is 7077 by default.
+</td></tr>
+<tr><td> mesos://HOST:PORT </td><td> Connect to the given <a href="running-on-mesos.html">Mesos</a> cluster.
+        The port must be whichever one your is configured to use, which is 5050 by default.
+        Or, for a Mesos cluster using ZooKeeper, use <code>mesos://zk://...</code>.
+</td></tr>
+<tr><td> yarn-client </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
+client mode. The cluster location will be found based on the HADOOP_CONF_DIR or YARN_CONF_DIR variable.
+</td></tr>
+<tr><td> yarn-cluster </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
+cluster mode. The cluster location will be found based on the HADOOP_CONF_DIR or YARN_CONF_DIR variable.
+</td></tr>
+</table>
 
 # Loading Configuration from a File
 
