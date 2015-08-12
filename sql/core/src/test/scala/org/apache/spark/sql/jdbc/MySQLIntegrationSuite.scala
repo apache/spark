@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Date, Timestamp}
+import java.util.Properties
 
 import org.scalatest.BeforeAndAfterAll
 
@@ -50,7 +51,7 @@ class MySQLDatabase {
   }
 }
 
-class MySQLIntegration extends SparkFunSuite with BeforeAndAfterAll {
+class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
   var ip: String = null
 
   def url(ip: String): String = url(ip, "mysql")
@@ -127,7 +128,7 @@ class MySQLIntegration extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Basic test") {
-    val df = TestSQLContext.jdbc(url(ip, "foo"), "tbl")
+    val df = TestSQLContext.read.jdbc(url(ip, "foo"), "tbl", new Properties)
     val rows = df.collect()
     assert(rows.length == 2)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -137,7 +138,7 @@ class MySQLIntegration extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Numeric types") {
-    val df = TestSQLContext.jdbc(url(ip, "foo"), "numbers")
+    val df = TestSQLContext.read.jdbc(url(ip, "foo"), "numbers", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -164,7 +165,7 @@ class MySQLIntegration extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Date types") {
-    val df = TestSQLContext.jdbc(url(ip, "foo"), "dates")
+    val df = TestSQLContext.read.jdbc(url(ip, "foo"), "dates", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -182,7 +183,7 @@ class MySQLIntegration extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("String types") {
-    val df = TestSQLContext.jdbc(url(ip, "foo"), "strings")
+    val df = TestSQLContext.read.jdbc(url(ip, "foo"), "strings", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -208,9 +209,9 @@ class MySQLIntegration extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Basic write test") {
-    val df1 = TestSQLContext.jdbc(url(ip, "foo"), "numbers")
-    val df2 = TestSQLContext.jdbc(url(ip, "foo"), "dates")
-    val df3 = TestSQLContext.jdbc(url(ip, "foo"), "strings")
+    val df1 = TestSQLContext.read.jdbc(url(ip, "foo"), "numbers", new Properties)
+    val df2 = TestSQLContext.read.jdbc(url(ip, "foo"), "dates", new Properties)
+    val df3 = TestSQLContext.read.jdbc(url(ip, "foo"), "strings", new Properties)
     df1.createJDBCTable(url(ip, "foo"), "numberscopy", false)
     df2.createJDBCTable(url(ip, "foo"), "datescopy", false)
     df3.createJDBCTable(url(ip, "foo"), "stringscopy", false)

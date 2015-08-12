@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.DriverManager
+import java.util.Properties
 
 import org.scalatest.BeforeAndAfterAll
 
@@ -49,7 +50,7 @@ class PostgresDatabase {
   }
 }
 
-class PostgresIntegration extends SparkFunSuite with BeforeAndAfterAll {
+class PostgresIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
   lazy val db = new PostgresDatabase()
 
   def url(ip: String): String =
@@ -99,7 +100,7 @@ class PostgresIntegration extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Type mapping for various types") {
-    val df = TestSQLContext.jdbc(url(db.ip), "public.bar")
+    val df = TestSQLContext.read.jdbc(url(db.ip), "public.bar", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -130,7 +131,7 @@ class PostgresIntegration extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Basic write test") {
-    val df = TestSQLContext.jdbc(url(db.ip), "public.bar")
+    val df = TestSQLContext.read.jdbc(url(db.ip), "public.bar", new Properties)
     df.createJDBCTable(url(db.ip), "public.barcopy", false)
     // Test only that it doesn't bomb out.
   }
