@@ -44,8 +44,24 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
       <h4>
         {listener.onlineSessionNum} session(s) are online,
         running {listener.totalRunning} SQL statement(s)
-      </h4> ++
-      generateSessionStatsTable() ++
+      </h4>
+      <div>
+        {generateSessionStatsTable(true)}
+      </div>
+      <br/>
+      <div>
+        <span class="expand-additional-metrics">
+          <span class="expand-additional-metrics-arrow arrow-closed"></span>
+          <a>offline session(s)</a>
+        </span>
+        <div class="additional-metrics collapsed">
+          <h4>
+            {listener.sessionList.size - listener.onlineSessionNum} session(s) are offline
+          </h4>
+          {generateSessionStatsTable(false)}
+        </div>
+      </div>
+      <br/> ++
       generateSQLStatsTable()
     UIUtils.headerSparkPage("JDBC/ODBC Server", content, parent, Some(5000))
   }
@@ -69,7 +85,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     val table = if (numStatement > 0) {
       val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Duration",
         "Statement", "State", "Detail")
-      val dataRows = listener.executionList.values
+      val dataRows = listener.executionList.values.toSeq.reverse
 
       def generateDataRow(info: ExecutionInfo): Seq[Node] = {
         val jobLink = info.jobId.map { id: String =>
@@ -135,11 +151,17 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
   }
 
   /** Generate stats of batch sessions of the thrift server program */
-  private def generateSessionStatsTable(): Seq[Node] = {
-    val numBatches = listener.sessionList.size
+  private def generateSessionStatsTable(online: Boolean): Seq[Node] = {
+    val numBatches = if(online) listener.onlineSessionNum 
+      else (listener.sessionList.size - listener.onlineSessionNum)
+
     val table = if (numBatches > 0) {
-      val dataRows =
-        listener.sessionList.values
+      val dataRowsTmp = listener.sessionList.values.toSeq
+      val dataRows = if(online) {
+        dataRowsTmp.filter(_.finishTimestamp == 0).reverse
+      } else {
+        dataRowsTmp.filter(_.finishTimestamp != 0).reverse
+      }
       val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",
         "Total Execute")
       def generateDataRow(session: SessionInfo): Seq[Node] = {
