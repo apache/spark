@@ -64,7 +64,8 @@ private[spark] class ApplicationMaster(
 
   // Default to numExecutors * 2, with minimum of 3
   private val maxNumExecutorFailures = sparkConf.getInt("spark.yarn.max.executor.failures",
-    sparkConf.getInt("spark.yarn.max.worker.failures", math.max(args.numExecutors * 2, 3)))
+    sparkConf.getInt("spark.yarn.max.worker.failures",
+      math.max(sparkConf.getInt("spark.executor.instances", 0) *  2, 3)))
 
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
@@ -493,7 +494,6 @@ private[spark] class ApplicationMaster(
    */
   private def startUserApplication(): Thread = {
     logInfo("Starting the user application in a separate Thread")
-    System.setProperty("spark.executor.instances", args.numExecutors.toString)
 
     val classpath = Client.getUserClasspath(sparkConf)
     val urls = classpath.map { entry =>
