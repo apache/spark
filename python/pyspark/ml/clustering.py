@@ -43,7 +43,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
     >>> data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
     ...         (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
     >>> df = sqlContext.createDataFrame(data, ["features"])
-    >>> kmeans = KMeans().setK(2).setSeed(1).setFeaturesCol("features")
+    >>> kmeans = KMeans(k=2, seed=1)
     >>> model = kmeans.fit(df)
     >>> centers = model.clusterCenters()
     >>> len(centers)
@@ -61,7 +61,6 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
     epsilon = Param(Params._dummy(), "epsilon",
                     "distance threshold within which " +
                     "we've consider centers to have converged")
-    runs = Param(Params._dummy(), "runs", "number of runs of the algorithm to execute in parallel")
     initMode = Param(Params._dummy(), "initMode",
                      "the initialization algorithm. This can be either \"random\" to " +
                      "choose random points as initial cluster centers, or \"k-means||\" " +
@@ -69,21 +68,23 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
     initSteps = Param(Params._dummy(), "initSteps", "steps for k-means initialization mode")
 
     @keyword_only
-    def __init__(self, k=2, maxIter=20, runs=1, epsilon=1e-4, initMode="k-means||", initStep=5):
+    def __init__(self, k=2, maxIter=20, epsilon=1e-4, initMode="k-means||", initStep=5):
+        """
+        __init__(self, k=2, maxIter=20, epsilon=1e-4, initMode="k-means||", initStep=5)
+        """
         super(KMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
         self.k = Param(self, "k", "number of clusters to create")
         self.epsilon = Param(self, "epsilon",
                              "distance threshold within which " +
                              "we've consider centers to have converged")
-        self.runs = Param(self, "runs", "number of runs of the algorithm to execute in parallel")
         self.seed = Param(self, "seed", "random seed")
         self.initMode = Param(self, "initMode",
                               "the initialization algorithm. This can be either \"random\" to " +
                               "choose random points as initial cluster centers, or \"k-means||\" " +
                               "to use a parallel variant of k-means++")
         self.initSteps = Param(self, "initSteps", "steps for k-means initialization mode")
-        self._setDefault(k=2, maxIter=20, runs=1, epsilon=1e-4, initMode="k-means||", initSteps=5)
+        self._setDefault(k=2, maxIter=20, epsilon=1e-4, initMode="k-means||", initSteps=5)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -91,9 +92,9 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
         return KMeansModel(java_model)
 
     @keyword_only
-    def setParams(self, k=2, maxIter=20, runs=1, epsilon=1e-4, initMode="k-means||", initSteps=5):
+    def setParams(self, k=2, maxIter=20, epsilon=1e-4, initMode="k-means||", initSteps=5):
         """
-        setParams(self, k=2, maxIter=20, runs=1, epsilon=1e-4, initMode="k-means||", initSteps=5):
+        setParams(self, k=2, maxIter=20, epsilon=1e-4, initMode="k-means||", initSteps=5)
 
         Sets params for KMeans.
         """
@@ -133,23 +134,6 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
         Gets the value of `epsilon`
         """
         return self.getOrDefault(self.epsilon)
-
-    def setRuns(self, value):
-        """
-        Sets the value of :py:attr:`runs`.
-
-        >>> algo = KMeans().setRuns(10)
-        >>> algo.getRuns()
-        10
-        """
-        self._paramMap[self.runs] = value
-        return self
-
-    def getRuns(self):
-        """
-        Gets the value of `runs`
-        """
-        return self.getOrDefault(self.runs)
 
     def setInitMode(self, value):
         """
