@@ -732,9 +732,7 @@ case class LastFunction(
 
   override def update(input: InternalRow): Unit = {
     val value = expr.eval(input)
-    if (ignoreNulls && value != null) {
-      result = value
-    } else {
+    if (!ignoreNulls || (ignoreNulls && value != null)) {
       result = value
     }
   }
