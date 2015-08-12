@@ -18,14 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.DecimalFormat
-import java.util.Arrays
-import java.util.{Map => JMap, HashMap}
-import java.util.Locale
+import java.util.{HashMap, Locale, Map => JMap}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for string operations.
@@ -628,34 +626,6 @@ case class StringSpace(child: Expression)
   override def prettyName: String = "space"
 }
 
-object Substring {
-  def subStringBinarySQL(bytes: Array[Byte], pos: Int, len: Int): Array[Byte] = {
-    if (pos > bytes.length) {
-      return Array[Byte]()
-    }
-
-    var start = if (pos > 0) {
-      pos - 1
-    } else if (pos < 0) {
-      bytes.length + pos
-    } else {
-      0
-    }
-
-    val end = if ((bytes.length - start) < len) {
-      bytes.length
-    } else {
-      start + len
-    }
-
-    start = Math.max(start, 0)  // underflow
-    if (start < end) {
-      Arrays.copyOfRange(bytes, start, end)
-    } else {
-      Array[Byte]()
-    }
-  }
-}
 /**
  * A function that takes a substring of its first argument starting at a given position.
  * Defined for String and Binary types.
@@ -678,18 +648,17 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     str.dataType match {
       case StringType => string.asInstanceOf[UTF8String]
         .substringSQL(pos.asInstanceOf[Int], len.asInstanceOf[Int])
-      case BinaryType => Substring.subStringBinarySQL(string.asInstanceOf[Array[Byte]],
+      case BinaryType => ByteArray.subStringSQL(string.asInstanceOf[Array[Byte]],
         pos.asInstanceOf[Int], len.asInstanceOf[Int])
     }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
 
-    val cls = classOf[Substring].getName
     defineCodeGen(ctx, ev, (string, pos, len) => {
       str.dataType match {
         case StringType => s"$string.substringSQL($pos, $len)"
-        case BinaryType => s"$cls.subStringBinarySQL($string, $pos, $len)"
+        case BinaryType => s"${classOf[ByteArray].getName}.subStringSQL($string, $pos, $len)"
       }
     })
   }
