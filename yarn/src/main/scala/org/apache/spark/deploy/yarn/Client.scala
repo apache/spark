@@ -176,8 +176,8 @@ private[spark] class Client(
           method.invoke(appContext, new java.util.HashSet[String](tagCollection))
         } catch {
           case e: NoSuchMethodException =>
-            logWarning("Ignoring %s='%s' because this version of YARN does not support it"
-              .format(CONF_SPARK_YARN_APPLICATION_TAGS, tagCollection))
+            logWarning(s"Ignoring $CONF_SPARK_YARN_APPLICATION_TAGS because this version of " +
+              "YARN does not support it")
         }
       }
     sparkConf.getOption("spark.yarn.maxAppAttempts").map(_.toInt) match {
