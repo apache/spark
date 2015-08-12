@@ -15,12 +15,14 @@ import re
 import signal
 import socket
 import sys
+from urlparse import urlparse
 
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType,
     Index, BigInteger)
 from sqlalchemy import case, func, or_
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import relationship
 
@@ -296,17 +298,18 @@ class Connection(Base):
     id = Column(Integer(), primary_key=True)
     conn_id = Column(String(ID_LEN))
     conn_type = Column(String(500))
-    host = Column(String(500))
-    schema = Column(String(500))
-    login = Column(String(500))
-    password = Column(String(500))
-    port = Column(Integer())
+    env_variable = Column(String(500))
+    _host = Column('host', String(500))
+    _schema = Column('schema', String(500))
+    _login = Column('login', String(500))
+    _password = Column('password', String(500))
+    _port = Column('port', Integer())
     extra = Column(String(5000))
 
     def __init__(
             self, conn_id=None, conn_type=None,
             host=None, login=None, password=None,
-            schema=None, port=None):
+            schema=None, port=None, env_variable=None):
         self.conn_id = conn_id
         self.conn_type = conn_type
         self.host = host
@@ -314,6 +317,8 @@ class Connection(Base):
         self.password = password
         self.schema = schema
         self.port = port
+        self.env_variable = env_variable
+        self._uri = None
 
     def get_hook(self):
         from airflow import hooks
@@ -336,6 +341,70 @@ class Connection(Base):
                 return hooks.MsSqlHook(mssql_conn_id=self.conn_id)
         except:
             return None
+
+    @property
+    def uri(self):
+        if self._uri is None:
+            self._uri = urlparse(os.environ.get(self.env_variable))
+        return self._uri
+
+    @hybrid_property
+    def host(self):
+        if self.env_variable:
+            hostname = self.uri.hostname or ''
+            if '%2f' in hostname:
+                hostname = hostname.replace('%2f', '/').replace('%2F', '/')
+            return hostname
+        else:
+            return self._host
+
+    @host.setter
+    def host(self, val):
+        self._host = val
+
+    @hybrid_property
+    def schema(self):
+        if self.env_variable:
+            return self.uri.path[1:]
+        else:
+            return self._schema
+
+    @schema.setter
+    def schema(self, val):
+        self._schema = val
+
+    @hybrid_property
+    def login(self):
+        if self.env_variable:
+            return self.uri.username
+        else:
+            return self._login
+
+    @login.setter
+    def login(self, val):
+        self._login = val
+
+    @hybrid_property
+    def password(self):
+        if self.env_variable:
+            return self.uri.password
+        else:
+            return self._password
+
+    @password.setter
+    def password(self, val):
+        self._password = val
+
+    @hybrid_property
+    def port(self):
+        if self.env_variable:
+            return self.uri.port
+        else:
+            return self._port
+
+    @port.setter
+    def port(self, val):
+        self._port = val
 
     def __repr__(self):
         return self.conn_id

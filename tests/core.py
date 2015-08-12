@@ -1,4 +1,5 @@
 from datetime import datetime, time, timedelta
+import os
 from time import sleep
 import unittest
 from airflow import configuration
@@ -448,6 +449,70 @@ class HttpOpSensorTest(unittest.TestCase):
         with self.assertRaises(utils.AirflowSensorTimeout):
             sensor.run(
                 start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+
+class ConnectionTest(unittest.TestCase):
+
+    def setUp(self):
+        configuration.test_mode()
+        utils.initdb()
+
+    def test_using_env_var(self):
+        os.environ['AIRFLOW_TEST_CONN_URL'] = \
+            'postgres://username:password@ec2.compute.com:5432/the_database'
+        c = models.Connection(env_variable='AIRFLOW_TEST_CONN_URL',
+                              conn_id='test_env_config')
+        assert c.host == 'ec2.compute.com'
+        assert c.schema == 'the_database'
+        assert c.login == 'username'
+        assert c.password == 'password'
+        assert c.port == 5432
+
+    def test_using_unix_socket_env_var(self):
+        os.environ['AIRFLOW_TEST_CONN_URL'] = \
+            'postgres://%2Fvar%2Fpostgresql/the_database'
+        c = models.Connection(env_variable='AIRFLOW_TEST_CONN_URL',
+                              conn_id='test_env_config')
+        print c.host
+        assert c.host == '/var/postgresql'
+        assert c.schema == 'the_database'
+        assert c.login is None
+        assert c.password is None
+        assert c.port is None
+
+    def test_param_setup(self):
+        c = models.Connection(conn_id='local_mysql', conn_type='mysql',
+                              host='localhost', login='airflow',
+                              password='airflow', schema='airflow')
+        assert c.host == 'localhost'
+        assert c.schema == 'airflow'
+        assert c.login == 'airflow'
+        assert c.password == 'airflow'
+        assert c.port is None
+
+    def test_env_var_priority(self):
+        os.environ['AIRFLOW_TEST_CONN_URL'] = \
+            'postgres://username:password@ec2.compute.com:5432/the_database'
+        c = models.Connection(env_variable='AIRFLOW_TEST_CONN_URL',
+                              conn_id='test_env_config')
+        c.host = 'localhost'
+        c.schema = 'airflow'
+        c.login = 'airflow'
+        c.password = 'airflow'
+        c.port is None
+        assert c.host == 'ec2.compute.com'
+        assert c.schema == 'the_database'
+        assert c.login == 'username'
+        assert c.password == 'password'
+        assert c.port == 5432
+
+        c.env_variable = None
+        assert c.host == 'localhost'
+        assert c.schema == 'airflow'
+        assert c.login == 'airflow'
+        assert c.password == 'airflow'
+        assert c.port is None
+
 
 if __name__ == '__main__':
     unittest.main()
