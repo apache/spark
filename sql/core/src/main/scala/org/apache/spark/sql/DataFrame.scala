@@ -666,6 +666,12 @@ class DataFrame private[sql](
    */
   def as(alias: Symbol): DataFrame = as(alias.name)
 
+  @scala.annotation.varargs
+  def key(cols: Column*): DataFrame = KeyHint(cols.map(_.expr), logicalPlan)
+
+  @scala.annotation.varargs
+  def key(col: String, cols: String*): DataFrame = key((col +: cols).map(Column(_)) : _*)
+
   /**
    * Selects a set of column based expressions.
    * {{{

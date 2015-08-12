@@ -98,6 +98,10 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
       testData.collect().toSeq)
   }
 
+  test("key hint") {
+    checkAnswer(testData.key("key"), testData.collect().toSeq)
+  }
+
   test("empty data frame") {
     assert(sqlContext.emptyDataFrame.columns.toSeq === Seq.empty[String])
     assert(sqlContext.emptyDataFrame.count() === 0)

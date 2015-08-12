@@ -21,6 +21,7 @@ import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.FullOuter
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.RightOuter
@@ -49,7 +50,7 @@ object DefaultOptimizer extends Optimizer {
       ColumnPruning,
       // Operator combine
       ProjectCollapsing,
-      EliminateOuterJoinBeforeProject,
+      JoinElimination,
       CombineFilters,
       CombineLimits,
       // Constant folding
@@ -268,27 +269,24 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
 }
 
 /**
- * Eliminates [[LeftOuter]] and [[RightOuter]] joins when followed by a [[Project]] that keeps only
- * the left or right columns, respectively.
+ * Eliminates keyed equi-joins when followed by a [[Project]] that keeps only columns from one side.
  */
-object EliminateOuterJoinBeforeProject extends Rule[LogicalPlan] {
+object JoinElimination extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case p @ Project(projectList,
-      j @ Join(left, right, joinType @ (LeftOuter | RightOuter), condition)) =>
-      val projectReferences = AttributeSet(projectList)
+    // Left outer join where only the left columns are kept, and a key from the right is involved in
+    // the join so no duplicates are generated
+    case Project(projectList, ExtractEquiJoinKeys(LeftOuter, _, rightKeys, _, left, right))
+        if AttributeSet(projectList).subsetOf(left.outputSet)
+        && AttributeSet(right.keys).intersect(AttributeSet(rightKeys)).nonEmpty =>
+      Project(projectList, left)
 
-      val child = joinType match {
-        case LeftOuter => left
-        case RightOuter => right
-      }
-      val joinList = child.outputSet
-
-      if (projectReferences.subsetOf(joinList)) {
-        Project(projectList, child)
-      } else {
-        p
-      }
-  }
+    // Right outer join where only the right columns are kept, and a key from the left is involved in
+    // the join so no duplicates are generated
+    case Project(projectList, ExtractEquiJoinKeys(RightOuter, leftKeys, _, _, left, right))
+        if AttributeSet(projectList).subsetOf(right.outputSet)
+        && AttributeSet(left.keys).intersect(AttributeSet(leftKeys)).nonEmpty =>
+      Project(projectList, right)
+}
 }
 
 /**
