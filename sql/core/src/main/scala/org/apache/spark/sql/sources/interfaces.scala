@@ -31,7 +31,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.execution.RDDConversions
+import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, PartitionSpec, Partition}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql._
@@ -381,18 +381,6 @@ abstract class OutputWriter {
   }
 }
 
-
-/**
- * An interface for relations that are backed by files.  When a class implements this interface,
- * the list of paths that it returns will be returned to a user who calls `inputPaths` on any
- * DataFrame that queries this relation.
- */
-@Experimental
-trait FileRelation {
-  /** Returns the list of files that will be read when scanning this relation. */
-  def inputFiles: Array[String]
-}
-
 /**
  * ::Experimental::
  * A [[BaseRelation]] that provides much of the common code required for formats that store their
@@ -528,7 +516,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    */
   def paths: Array[String]
 
-  def inputFiles: Array[String] = cachedLeafStatuses().map(_.getPath.toString).toArray
+  override def inputFiles: Array[String] = cachedLeafStatuses().map(_.getPath.toString).toArray
 
   /**
    * Partition columns.  Can be either defined by [[userDefinedPartitionColumns]] or automatically

@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.{InternalRow, SqlParser, TableIdentifier}
-import org.apache.spark.sql.execution.datasources
+import org.apache.spark.sql.execution.{FileRelation, datasources}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation, Partition => ParquetPartition, PartitionSpec, ResolvedDataSource}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
@@ -888,7 +888,7 @@ private[hive] case class MetastoreRelation
   /** An attribute map for determining the ordinal for non-partition columns. */
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
 
-  def inputFiles: Array[String] = {
+  override def inputFiles: Array[String] = {
     val partLocations = table.getPartitions(Nil).map(_.storage.location).toArray
     if (partLocations.nonEmpty) {
       partLocations
