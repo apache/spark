@@ -35,17 +35,6 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
   import ParquetCompatibilityTest._
   import testImplicits._
 
-  override protected def beforeAll(): Unit = {
-    super.beforeAll()
-    val writer =
-      new AvroParquetWriter[ParquetAvroCompat](
-        new Path(parquetStore.getCanonicalPath),
-        ParquetAvroCompat.getClassSchema)
-
-    (0 until 10).foreach(i => writer.write(makeParquetAvroCompat(i)))
-    writer.close()
-  }
-
   private def withWriter[T <: IndexedRecord]
       (path: String, schema: Schema)
       (f: AvroParquetWriter[T] => Unit): Unit = {

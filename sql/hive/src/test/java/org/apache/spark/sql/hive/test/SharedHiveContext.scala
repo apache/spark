@@ -43,7 +43,6 @@ private[spark] trait SharedHiveContext extends SQLTestUtils {
 
   /**
    * Initialize the [[TestHiveContext]].
-   * This is a no-op if the user explicitly switched to a custom context before this is called.
    */
   protected override def beforeAll(): Unit = {
     if (_ctx == null) {

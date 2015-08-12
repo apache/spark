@@ -25,9 +25,9 @@ import org.h2.jdbc.JdbcSQLException
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.execution.PhysicalRDD
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 

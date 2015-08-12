@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.File
-
 import scala.collection.JavaConversions._
 
 import org.apache.hadoop.fs.{Path, PathFilter}
@@ -26,37 +24,11 @@ import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.util.Utils
 
 /**
  * Helper class for testing Parquet compatibility.
  */
 private[sql] abstract class ParquetCompatibilityTest extends QueryTest with ParquetTest {
-
-  protected var parquetStore: File = _
-
-  /**
-   * Optional path to a staging subdirectory which may be created during query processing
-   * (Hive does this).
-   * Parquet files under this directory will be ignored in [[readParquetSchema()]]
-   * @return an optional staging directory to ignore when scanning for parquet files.
-   */
-  protected def stagingDir: Option[String] = None
-
-  override protected def beforeAll(): Unit = {
-    super.beforeAll()
-    parquetStore = Utils.createTempDir(namePrefix = "parquet-compat_")
-    parquetStore.delete()
-  }
-
-  override protected def afterAll(): Unit = {
-    try {
-      Utils.deleteRecursively(parquetStore)
-    } finally {
-      super.afterAll()
-    }
-  }
-
   protected def readParquetSchema(path: String): MessageType = {
     readParquetSchema(path, { path => !path.getName.startsWith("_") })
   }

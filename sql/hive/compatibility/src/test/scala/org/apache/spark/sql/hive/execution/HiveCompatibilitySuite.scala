@@ -36,12 +36,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
-  private val originalColumnBatchSize = ctx.conf.columnBatchSize
-  private val originalInMemoryPartitionPruning = ctx.conf.inMemoryPartitionPruning
+  private lazy val originalColumnBatchSize = ctx.conf.columnBatchSize
+  private lazy val originalInMemoryPartitionPruning = ctx.conf.inMemoryPartitionPruning
 
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
   override def beforeAll() {
+    super.beforeAll()
     ctx.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
@@ -55,14 +56,18 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   }
 
   override def afterAll() {
-    ctx.cacheTables = false
-    TimeZone.setDefault(originalTimeZone)
-    Locale.setDefault(originalLocale)
-    ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
-    ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
+    try {
+      ctx.cacheTables = false
+      TimeZone.setDefault(originalTimeZone)
+      Locale.setDefault(originalLocale)
+      ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
+      ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
 
-    // For debugging dump some statistics about how much time was spent in various optimizer rules.
-    logWarning(RuleExecutor.dumpTimeSpent())
+      // For debugging dump some statistics about how much time was spent in various optimizer rules.
+      logWarning(RuleExecutor.dumpTimeSpent())
+    } finally {
+      super.afterAll()
+    }
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
