@@ -299,7 +299,7 @@ private[joins] final class UnsafeHashedRelation(
     binaryMap = new BytesToBytesMap(
       taskMemoryManager,
       shuffleMemoryManager,
-      nKeys * 2, // reduce hash collision
+      (nKeys * 1.5 + 1).toInt, // reduce hash collision
       pageSizeBytes)
 
     var i = 0
