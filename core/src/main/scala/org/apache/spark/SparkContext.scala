@@ -530,7 +530,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Optionally scale number of executors dynamically based on workload. Exposed for testing.
     val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(_conf)
     if (!dynamicAllocationEnabled && _conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
-      logInfo(s"Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
+      logInfo("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
     }
 
     _executorAllocationManager =
