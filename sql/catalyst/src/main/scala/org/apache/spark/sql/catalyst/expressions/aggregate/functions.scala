@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
@@ -121,7 +122,15 @@ case class Count(child: Expression) extends AlgebraicAggregate {
  * a single partition, and we use a single reducer to do the aggregation.).
  * @param child
  */
-case class First(child: Expression) extends AlgebraicAggregate {
+case class First(child: Expression, ignoreNulls: Boolean) extends AlgebraicAggregate {
+
+  def this(child: Expression) = this(child, false)
+
+  def this(child: Expression, ignoreNulls: Expression) = this(child, ignoreNulls match {
+    case Literal(b: Boolean, BooleanType) => b
+    case _ =>
+      throw new AnalysisException("The second argument of First should be a boolean literal.")
+  })
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -147,17 +156,39 @@ case class First(child: Expression) extends AlgebraicAggregate {
     /* valueSet = */ Literal.create(false, BooleanType)
   )
 
-  override val updateExpressions = Seq(
-    /* first = */ If(valueSet, first, child),
-    /* valueSet = */ If(valueSet, valueSet, Literal.create(true, BooleanType))
-  )
+  override val updateExpressions = {
+    val litTrue = Literal.create(true, BooleanType)
+    if (ignoreNulls) {
+      Seq(
+        /* first = */ If(Or(valueSet, IsNull(child)), first, child),
+        /* valueSet = */ If(Or(valueSet, IsNull(child)), valueSet, litTrue)
+      )
+    } else {
+      Seq(
+        /* first = */ If(valueSet, first, child),
+        /* valueSet = */ litTrue
+      )
+    }
+  }
 
-  override val mergeExpressions = Seq(
-    /* first = */ If(valueSet, first.left, first.right),
-    /* valueSet = */ If(valueSet, valueSet, Literal.create(true, BooleanType))
-  )
+  override val mergeExpressions = {
+    val litTrue = Literal.create(true, BooleanType)
+    if (ignoreNulls) {
+      Seq(
+        /* first = */ If(Or(valueSet.left, IsNull(first.right)), first.left, first.right),
+        /* valueSet = */ If(Or(valueSet.left, IsNull(first.right)), valueSet.left, litTrue)
+      )
+    } else {
+      Seq(
+        /* first = */ If(valueSet.left, first.left, first.right),
+        /* valueSet = */ litTrue
+      )
+    }
+  }
 
   override val evaluateExpression = first
+
+  override def toString: String = s"FIRST($child)${if (ignoreNulls) " IGNORE NULLS"}"
 }
 
 /**
@@ -168,7 +199,15 @@ case class First(child: Expression) extends AlgebraicAggregate {
  * a single partition, and we use a single reducer to do the aggregation.).
  * @param child
  */
-case class Last(child: Expression) extends AlgebraicAggregate {
+case class Last(child: Expression, ignoreNulls: Boolean) extends AlgebraicAggregate {
+
+  def this(child: Expression) = this(child, false)
+
+  def this(child: Expression, ignoreNulls: Expression) = this(child, ignoreNulls match {
+    case Literal(b: Boolean, BooleanType) => b
+    case _ =>
+      throw new AnalysisException("The second argument of Last should be a boolean literal.")
+  })
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -191,15 +230,33 @@ case class Last(child: Expression) extends AlgebraicAggregate {
     /* last = */ Literal.create(null, child.dataType)
   )
 
-  override val updateExpressions = Seq(
-    /* last = */ child
-  )
+  override val updateExpressions = {
+    if (ignoreNulls) {
+      Seq(
+        /* last = */ If(IsNull(child), last, child)
+      )
+    } else {
+      Seq(
+        /* last = */ child
+      )
+    }
+  }
 
-  override val mergeExpressions = Seq(
-    /* last = */ last.right
-  )
+  override val mergeExpressions = {
+    if (ignoreNulls) {
+      Seq(
+        /* last = */ If(IsNull(last.right), last.left, last.right)
+      )
+    } else {
+      Seq(
+        /* last = */ last.right
+      )
+    }
+  }
 
   override val evaluateExpression = last
+
+  override def toString: String = s"LAST($child)${if (ignoreNulls) " IGNORE NULLS"}"
 }
 
 case class Max(child: Expression) extends AlgebraicAggregate {

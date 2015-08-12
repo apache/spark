@@ -19,12 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
+import org.codehaus.janino.Java.BooleanLiteral
 
 
 trait AggregateExpression extends Expression with Unevaluable
@@ -630,59 +632,114 @@ case class CombineSetsAndSumFunction(
   }
 }
 
-case class First(child: Expression) extends UnaryExpression with PartialAggregate1 {
+case class First(
+    child: Expression,
+    ignoreNulls: Boolean)
+  extends UnaryExpression with PartialAggregate1 {
+
+  def this(child: Expression) = this(child, false)
+
+  def this(child: Expression, ignoreNulls: Expression) = this(child, ignoreNulls match {
+    case Literal(b: Boolean, BooleanType) => b
+    case _ =>
+      throw new AnalysisException("The second argument of First should be a boolean literal.")
+  })
+
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
-  override def toString: String = s"FIRST($child)"
+  override def toString: String = s"FIRST(${child}${if (ignoreNulls) " IGNORE NULLS"})"
 
   override def asPartial: SplitEvaluation = {
-    val partialFirst = Alias(First(child), "PartialFirst")()
+    val partialFirst = Alias(First(child, ignoreNulls), "PartialFirst")()
     SplitEvaluation(
-      First(partialFirst.toAttribute),
+      First(partialFirst.toAttribute, ignoreNulls),
       partialFirst :: Nil)
   }
-  override def newInstance(): FirstFunction = new FirstFunction(child, this)
+  override def newInstance(): FirstFunction = new FirstFunction(child, ignoreNulls, this)
 }
 
-case class FirstFunction(expr: Expression, base: AggregateExpression1) extends AggregateFunction1 {
-  def this() = this(null, null) // Required for serialization.
+object First {
+  def apply(child: Expression): First = First(child, ignoreNulls = false)
+}
 
-  var result: Any = null
+case class FirstFunction(
+    expr: Expression,
+    ignoreNulls: Boolean,
+    base: AggregateExpression1)
+  extends AggregateFunction1 {
+
+  def this() = this(null, null.asInstanceOf[Boolean], null) // Required for serialization.
+
+  private[this] var result: Any = null
+
+  private[this] var valueSet: Boolean = false
 
   override def update(input: InternalRow): Unit = {
-    if (result == null) {
-      result = expr.eval(input)
+    if (!valueSet) {
+      val value = expr.eval(input)
+      // When we have not set the result, we will set the result if we respect nulls
+      // (i.e. ignoreNulls is false), or we ignore nulls and the evaluated value is not null.
+      if (!ignoreNulls || (ignoreNulls && value != null)) {
+        result = value
+        valueSet = true
+      }
     }
   }
 
   override def eval(input: InternalRow): Any = result
 }
 
-case class Last(child: Expression) extends UnaryExpression with PartialAggregate1 {
+case class Last(
+    child: Expression,
+    ignoreNulls: Boolean)
+  extends UnaryExpression with PartialAggregate1 {
+
+  def this(child: Expression) = this(child, false)
+
+  def this(child: Expression, ignoreNulls: Expression) = this(child, ignoreNulls match {
+    case Literal(b: Boolean, BooleanType) => b
+    case _ =>
+      throw new AnalysisException("The second argument of Last should be a boolean literal.")
+  })
+
   override def references: AttributeSet = child.references
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
-  override def toString: String = s"LAST($child)"
+  override def toString: String = s"LAST($child)${if (ignoreNulls) " IGNORE NULLS"}"
 
   override def asPartial: SplitEvaluation = {
-    val partialLast = Alias(Last(child), "PartialLast")()
+    val partialLast = Alias(Last(child, ignoreNulls), "PartialLast")()
     SplitEvaluation(
-      Last(partialLast.toAttribute),
+      Last(partialLast.toAttribute, ignoreNulls),
       partialLast :: Nil)
   }
-  override def newInstance(): LastFunction = new LastFunction(child, this)
+  override def newInstance(): LastFunction = new LastFunction(child, ignoreNulls, this)
 }
 
-case class LastFunction(expr: Expression, base: AggregateExpression1) extends AggregateFunction1 {
-  def this() = this(null, null) // Required for serialization.
+object Last {
+  def apply(child: Expression): Last = Last(child, ignoreNulls = false)
+}
+
+case class LastFunction(
+    expr: Expression,
+    ignoreNulls: Boolean,
+    base: AggregateExpression1)
+  extends AggregateFunction1 {
+
+  def this() = this(null, null.asInstanceOf[Boolean], null) // Required for serialization.
 
   var result: Any = null
 
   override def update(input: InternalRow): Unit = {
-    result = input
+    val value = expr.eval(input)
+    if (ignoreNulls && value != null) {
+      result = value
+    } else {
+      result = value
+    }
   }
 
   override def eval(input: InternalRow): Any = {
-    if (result != null) expr.eval(result.asInstanceOf[InternalRow]) else null
+    result
   }
 }

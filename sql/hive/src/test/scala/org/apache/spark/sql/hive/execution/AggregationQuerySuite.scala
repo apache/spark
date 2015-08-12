@@ -295,10 +295,14 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
             |  first_valUE(key),
             |  lasT_value(key),
             |  firSt(key),
-            |  lASt(key)
+            |  lASt(key),
+            |  first_valUE(key, true),
+            |  lasT_value(key, true),
+            |  firSt(key, true),
+            |  lASt(key, true)
             |FROM (SELECT key FROM agg1 ORDER BY key) tmp
           """.stripMargin),
-        Row(null, 3, null, 3) :: Nil)
+        Row(null, 3, null, 3, 1, 3, 1, 3) :: Nil)
 
       checkAnswer(
         sqlContext.sql(
@@ -307,10 +311,14 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
             |  first_valUE(key),
             |  lasT_value(key),
             |  firSt(key),
-            |  lASt(key)
+            |  lASt(key),
+            |  first_valUE(key, true),
+            |  lasT_value(key, true),
+            |  firSt(key, true),
+            |  lASt(key, true)
             |FROM (SELECT key FROM agg1 ORDER BY key DESC) tmp
           """.stripMargin),
-        Row(3, null, 3, null) :: Nil)
+        Row(3, null, 3, null, 3, 1, 3, 1) :: Nil)
     }
   }
 

@@ -61,15 +61,15 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = true)
 
-        case expressions.First(child) =>
+        case expressions.First(child, ignoreNulls) =>
           aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.First(child),
+            aggregateFunction = aggregate.First(child, ignoreNulls),
             mode = aggregate.Complete,
             isDistinct = false)
 
-        case expressions.Last(child) =>
+        case expressions.Last(child, ignoreNulls) =>
           aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Last(child),
+            aggregateFunction = aggregate.Last(child, ignoreNulls),
             mode = aggregate.Complete,
             isDistinct = false)
 
