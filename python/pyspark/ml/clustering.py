@@ -37,7 +37,9 @@ class KMeansModel(JavaModel):
 @inherit_doc
 class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
     """
-    K-means Clustering
+    K-means clustering with support for multiple parallel runs and a k-means++ like initialization
+    mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
+    they are executed together with joint passes over the data for efficiency.
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
