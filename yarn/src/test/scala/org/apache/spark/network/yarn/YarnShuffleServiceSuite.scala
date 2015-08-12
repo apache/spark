@@ -16,14 +16,14 @@
  */
 package org.apache.spark.network.yarn
 
-import java.io.{DataOutputStream, FileOutputStream, PrintWriter, File}
+import java.io.{DataOutputStream, File, FileOutputStream}
 
 import scala.annotation.tailrec
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.server.api.{ApplicationTerminationContext, ApplicationInitializationContext}
+import org.apache.hadoop.yarn.server.api.{ApplicationInitializationContext, ApplicationTerminationContext}
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.SparkFunSuite
@@ -33,11 +33,10 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
   private[yarn] var yarnConfig: YarnConfiguration = new YarnConfiguration
 
-
   override def beforeEach(): Unit = {
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
-      classOf[YarnShuffleService].getCanonicalName);
+      classOf[YarnShuffleService].getCanonicalName)
 
     yarnConfig.get("yarn.nodemanager.local-dirs").split(",").foreach { dir =>
       val d = new File(dir)

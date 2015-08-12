@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.CharStreams;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.SystemPropertyConfigProvider;
@@ -131,27 +132,25 @@ public class ExternalShuffleBlockResolverSuite {
 
   @Test
   public void jsonSerializationOfExecutorRegistration() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
     AppExecId appId = new AppExecId("foo", "bar");
-    String appIdJson = ExternalShuffleBlockResolver.mapper.writeValueAsString(appId);
-    AppExecId parsedAppId =
-      ExternalShuffleBlockResolver.mapper.readValue(appIdJson, AppExecId.class);
+    String appIdJson = mapper.writeValueAsString(appId);
+    AppExecId parsedAppId = mapper.readValue(appIdJson, AppExecId.class);
     assertEquals(parsedAppId, appId);
 
     ExecutorShuffleInfo shuffleInfo =
       new ExecutorShuffleInfo(new String[]{"/bippy", "/flippy"}, 7, "hash");
-    String shuffleJson = ExternalShuffleBlockResolver.mapper.writeValueAsString(shuffleInfo);
+    String shuffleJson = mapper.writeValueAsString(shuffleInfo);
     ExecutorShuffleInfo parsedShuffleInfo =
-      ExternalShuffleBlockResolver.mapper.readValue(shuffleJson, ExecutorShuffleInfo.class);
+      mapper.readValue(shuffleJson, ExecutorShuffleInfo.class);
     assertEquals(parsedShuffleInfo, shuffleInfo);
 
     // Intentionally keep these hard-coded strings in here, to check backwards-compatability.
     // its not legacy yet, but keeping this here in case anybody changes it
     String legacyAppIdJson = "{\"appId\":\"foo\", \"execId\":\"bar\"}";
-    assertEquals(appId,
-      ExternalShuffleBlockResolver.mapper.readValue(legacyAppIdJson, AppExecId.class));
+    assertEquals(appId, mapper.readValue(legacyAppIdJson, AppExecId.class));
     String legacyShuffleJson = "{\"localDirs\": [\"/bippy\", \"/flippy\"], " +
       "\"subDirsPerLocalDir\": 7, \"shuffleManager\": \"hash\"}";
-    assertEquals(shuffleInfo,
-      ExternalShuffleBlockResolver.mapper.readValue(legacyShuffleJson, ExecutorShuffleInfo.class));
+    assertEquals(shuffleInfo, mapper.readValue(legacyShuffleJson, ExecutorShuffleInfo.class));
   }
 }

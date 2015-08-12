@@ -57,6 +57,10 @@ import org.apache.spark.network.util.TransportConf;
 public class ExternalShuffleBlockResolver {
   private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockResolver.class);
 
+  private static final ObjectMapper mapper = new ObjectMapper();
+  private static final String APP_KEY_PREFIX = "AppExecShuffleInfo";
+  private static final StoreVersion CURRENT_VERSION = new StoreVersion(1, 0);
+
   // Map containing all registered executors' metadata.
   @VisibleForTesting
   final ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors;
@@ -339,8 +343,6 @@ public class ExternalShuffleBlockResolver {
     }
   }
 
-  static ObjectMapper mapper = new ObjectMapper();
-
   private static byte[] dbAppExecKey(AppExecId appExecId) throws IOException {
     // we stick a common prefix on all the keys so we can find them in the DB
     String appExecJson = mapper.writeValueAsString(appExecId);
@@ -355,8 +357,6 @@ public class ExternalShuffleBlockResolver {
     return parsed;
   }
 
-  private static final String APP_KEY_PREFIX = "AppExecShuffleInfo";
-
   @VisibleForTesting
   static ConcurrentMap<AppExecId, ExecutorShuffleInfo> reloadRegisteredExecutors(DB db)
       throws IOException {
@@ -367,11 +367,11 @@ public class ExternalShuffleBlockResolver {
       while (itr.hasNext()) {
         Map.Entry<byte[], byte[]> e = itr.next();
         String key = new String(e.getKey(), Charsets.UTF_8);
-        if (!key.startsWith(APP_KEY_PREFIX))
+        if (!key.startsWith(APP_KEY_PREFIX)) {
           break;
+        }
         AppExecId id = parseDbAppExecKey(key);
-        ExecutorShuffleInfo shuffleInfo =
-          mapper.readValue(new String(e.getValue(), Charsets.UTF_8), ExecutorShuffleInfo.class);
+        ExecutorShuffleInfo shuffleInfo = mapper.readValue(e.getValue(), ExecutorShuffleInfo.class);
         registeredExecutors.put(id, shuffleInfo);
       }
     }
@@ -387,18 +387,17 @@ public class ExternalShuffleBlockResolver {
     }
   }
 
-  private static final StoreVersion CURRENT_VERSION = new StoreVersion(1,0);
+  /**
+   * Simple major.minor versioning scheme.  Any incompatible changes should be across major
+   * versions.  Minor version differences are allowed -- meaning we should be able to read
+   * dbs that are either earlier *or* later on the minor version.
+   */
   private static void checkVersion(DB db) throws IOException {
     byte[] bytes = db.get(StoreVersion.KEY);
     if (bytes == null) {
       storeVersion(db);
-    } else if (bytes.length != 8) {
-      throw new IOException("unexpected version format");
     } else {
-      DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes));
-      int major = in.readInt();
-      int minor = in.readInt();
-      StoreVersion version = new StoreVersion(major, minor);
+      StoreVersion version = mapper.readValue(bytes, StoreVersion.class);
       if (version.major != CURRENT_VERSION.major) {
         throw new IOException("cannot read state DB with version " + version + ", incompatible " +
           "with current version " + CURRENT_VERSION);
@@ -408,23 +407,18 @@ public class ExternalShuffleBlockResolver {
   }
 
   private static void storeVersion(DB db) throws IOException {
-    ByteArrayOutputStream bytesOut = new ByteArrayOutputStream();
-    DataOutputStream out = new DataOutputStream(bytesOut);
-    out.writeInt(CURRENT_VERSION.major);
-    out.writeInt(CURRENT_VERSION.minor);
-    out.close();
-    db.put(StoreVersion.KEY, bytesOut.toByteArray());
+    db.put(StoreVersion.KEY, mapper.writeValueAsBytes(CURRENT_VERSION));
   }
 
 
-  private static class StoreVersion {
+  public static class StoreVersion {
 
     final static byte[] KEY = "StoreVersion".getBytes(Charsets.UTF_8);
 
-    final int major;
-    final int minor;
+    public final int major;
+    public final int minor;
 
-    StoreVersion(int major, int minor) {
+    @JsonCreator public StoreVersion(@JsonProperty("major") int major, @JsonProperty("minor") int minor) {
       this.major = major;
       this.minor = minor;
     }
@@ -436,10 +430,7 @@ public class ExternalShuffleBlockResolver {
 
       StoreVersion that = (StoreVersion) o;
 
-      if (major != that.major) return false;
-      if (minor != that.minor) return false;
-
-      return true;
+      return major == that.major && minor == that.minor;
     }
 
     @Override
@@ -449,7 +440,5 @@ public class ExternalShuffleBlockResolver {
       return result;
     }
   }
-
-
 
 }
