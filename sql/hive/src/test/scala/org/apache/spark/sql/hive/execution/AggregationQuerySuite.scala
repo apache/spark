@@ -29,6 +29,7 @@ abstract class AggregationQuerySuite extends QueryTest with SharedHiveContext {
   var originalUseAggregate2: Boolean = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     originalUseAggregate2 = ctx.conf.useSqlAggregate2
     ctx.setConf(SQLConf.USE_SQL_AGGREGATE2.key, "true")
     val data1 = Seq[(Integer, Integer)](
@@ -74,10 +75,14 @@ abstract class AggregationQuerySuite extends QueryTest with SharedHiveContext {
   }
 
   override def afterAll(): Unit = {
-    ctx.sql("DROP TABLE IF EXISTS agg1")
-    ctx.sql("DROP TABLE IF EXISTS agg2")
-    ctx.dropTempTable("emptyTable")
-    ctx.setConf(SQLConf.USE_SQL_AGGREGATE2.key, originalUseAggregate2.toString)
+    try {
+      ctx.sql("DROP TABLE IF EXISTS agg1")
+      ctx.sql("DROP TABLE IF EXISTS agg2")
+      ctx.dropTempTable("emptyTable")
+      ctx.setConf(SQLConf.USE_SQL_AGGREGATE2.key, originalUseAggregate2.toString)
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("empty table") {
@@ -540,8 +545,11 @@ class SortBasedAggregationQuerySuite extends AggregationQuerySuite {
   }
 
   override def afterAll(): Unit = {
-    ctx.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
-    super.afterAll()
+    try {
+      ctx.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+    } finally {
+      super.afterAll()
+    }
   }
 }
 
@@ -556,8 +564,11 @@ class TungstenAggregationQuerySuite extends AggregationQuerySuite {
   }
 
   override def afterAll(): Unit = {
-    ctx.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
-    super.afterAll()
+    try {
+      ctx.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+    } finally {
+      super.afterAll()
+    }
   }
 }
 
@@ -566,15 +577,18 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
   var originalUnsafeEnabled: Boolean = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     originalUnsafeEnabled = ctx.conf.unsafeEnabled
     ctx.setConf(SQLConf.UNSAFE_ENABLED.key, "true")
-    super.beforeAll()
   }
 
   override def afterAll(): Unit = {
-    super.afterAll()
-    ctx.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
-    ctx.conf.unsetConf("spark.sql.TungstenAggregate.testFallbackStartsAt")
+    try {
+      ctx.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+      ctx.conf.unsetConf("spark.sql.TungstenAggregate.testFallbackStartsAt")
+    } finally {
+      super.afterAll()
+    }
   }
 
   override protected def checkAnswer(actual: DataFrame, expectedAnswer: Seq[Row]): Unit = {

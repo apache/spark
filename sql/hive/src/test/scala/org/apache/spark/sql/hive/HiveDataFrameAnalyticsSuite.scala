@@ -36,8 +36,11 @@ class HiveDataFrameAnalyticsSuite extends QueryTest with SharedHiveContext {
   }
 
   override def afterAll(): Unit = {
-    ctx.dropTempTable("mytable")
-    super.afterAll()
+    try {
+      ctx.dropTempTable("mytable")
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("rollup") {

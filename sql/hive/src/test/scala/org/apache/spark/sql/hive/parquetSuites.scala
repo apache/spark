@@ -175,15 +175,19 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   }
 
   override def afterAll(): Unit = {
-    dropTables("partitioned_parquet",
-      "partitioned_parquet_with_key",
-      "partitioned_parquet_with_complextypes",
-      "partitioned_parquet_with_key_and_complextypes",
-      "normal_parquet",
-      "jt",
-      "jt_array",
-       "test_parquet")
-    ctx.setConf(HiveContext.CONVERT_METASTORE_PARQUET, false)
+    try {
+      dropTables("partitioned_parquet",
+        "partitioned_parquet_with_key",
+        "partitioned_parquet_with_complextypes",
+        "partitioned_parquet_with_key_and_complextypes",
+        "normal_parquet",
+        "jt",
+        "jt_array",
+        "test_parquet")
+      ctx.setConf(HiveContext.CONVERT_METASTORE_PARQUET, false)
+    } finally {
+      super.afterAll()
+    }
   }
 
   test(s"conversion is working") {
@@ -694,6 +698,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SharedHiveContext 
   var partitionedTableDirWithKeyAndComplexTypes: File = null
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     partitionedTableDir = Utils.createTempDir()
     normalTableDir = Utils.createTempDir()
 
@@ -742,11 +747,15 @@ abstract class ParquetPartitioningTest extends QueryTest with SharedHiveContext 
   }
 
   override protected def afterAll(): Unit = {
-    partitionedTableDir.delete()
-    normalTableDir.delete()
-    partitionedTableDirWithKey.delete()
-    partitionedTableDirWithComplexTypes.delete()
-    partitionedTableDirWithKeyAndComplexTypes.delete()
+    try {
+      partitionedTableDir.delete()
+      normalTableDir.delete()
+      partitionedTableDirWithKey.delete()
+      partitionedTableDirWithComplexTypes.delete()
+      partitionedTableDirWithKeyAndComplexTypes.delete()
+    } finally {
+      super.afterAll()
+    }
   }
 
   /**

@@ -64,8 +64,12 @@ abstract class OrcSuite extends QueryTest with SharedHiveContext {
   }
 
   override def afterAll(): Unit = {
-    orcTableDir.delete()
-    orcTableAsDir.delete()
+    try {
+      orcTableDir.delete()
+      orcTableAsDir.delete()
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("create temporary orc table") {

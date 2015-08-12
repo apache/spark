@@ -45,6 +45,7 @@ class MetastoreDataSourcesSuite
   var jsonFilePath: String = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
   }
 

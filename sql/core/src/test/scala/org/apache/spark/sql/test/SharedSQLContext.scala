@@ -56,11 +56,14 @@ private[sql] trait SharedSQLContext extends SQLTestUtils {
    * Stop the underlying [[org.apache.spark.SparkContext]], if any.
    */
   protected override def afterAll(): Unit = {
-    if (_ctx != null) {
-      _ctx.sparkContext.stop()
-      _ctx = null
+    try {
+      if (_ctx != null) {
+        _ctx.sparkContext.stop()
+        _ctx = null
+      }
+    } finally {
+      super.afterAll()
     }
-    super.afterAll()
   }
 
 }
