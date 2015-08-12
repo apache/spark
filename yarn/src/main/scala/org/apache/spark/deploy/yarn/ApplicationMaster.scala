@@ -66,6 +66,9 @@ private[spark] class ApplicationMaster(
   private val maxNumExecutorFailures = sparkConf.getInt("spark.yarn.max.executor.failures",
     sparkConf.getInt("spark.yarn.max.worker.failures", math.max(args.numExecutors * 2, 3)))
 
+  // Disable the maximum executor failure check
+  private val disableMaxExecutorFailureCheck =  if (maxNumExecutorFailures == -1) true else false
+
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
   @volatile private var finished = false
@@ -340,7 +343,8 @@ private[spark] class ApplicationMaster(
         var failureCount = 0
         while (!finished) {
           try {
-            if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
+            if (!disableMaxExecutorFailureCheck && 
+                 allocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
               finish(FinalApplicationStatus.FAILED,
                 ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
                 "Max number of executor failures reached")

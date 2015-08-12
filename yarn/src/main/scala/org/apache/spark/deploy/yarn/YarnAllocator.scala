@@ -20,6 +20,7 @@ package org.apache.spark.deploy.yarn
 import java.util.Collections
 import java.util.concurrent._
 import java.util.regex.Pattern
+import java.util.Stack
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
@@ -86,6 +87,9 @@ private[yarn] class YarnAllocator(
   private var executorIdCounter = 0
   @volatile private var numExecutorsFailed = 0
 
+  @volatile private var executorFailureTimeStamps = new Stack[Long]()
+  @volatile private var oldestRelativeExecutorFailure = -1L
+
   @volatile private var targetNumExecutors = args.numExecutors
 
   // Keep track of which container is running which executor to remove the executors later
@@ -100,6 +104,13 @@ private[yarn] class YarnAllocator(
   // Additional memory overhead.
   protected val memoryOverhead: Int = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
+
+  // Maximum number of executor failures per minute 
+  private val relativeMaxExecutorFailurePerMinute = 
+               sparkConf.getInt("spark.yarn.max.executor.failuresPerMinute", -1)
+  private val relativeMaxExecutorFailureEnabled = 
+              if (relativeMaxExecutorFailurePerMinute == -1) true else false
+
   // Number of cores per executor.
   protected val executorCores = args.executorCores
   // Resource capability requested for each executors
@@ -146,7 +157,27 @@ private[yarn] class YarnAllocator(
 
   def getNumExecutorsRunning: Int = numExecutorsRunning
 
-  def getNumExecutorsFailed: Int = numExecutorsFailed
+  def getNumExecutorsFailed: Int = {
+    if (relativeMaxExecutorFailureEnabled) {
+      getRelevantNumExecutorsFailed
+    } else {
+      numExecutorsFailed.intValue
+    }  
+  }
+
+  /**
+   *  Returns the the relative number of executor failures within the specified window duration.
+   */
+
+  def getRelevantNumExecutorsFailed : Int = {
+    val currentTime = System.currentTimeMillis / 1000 
+    val relevantWindowStartTime = currentTime - 60
+    while(relevantWindowStartTime > oldestRelativeExecutorFailure && 
+          executorFailureTimeStamps.size > 0){
+      oldestRelativeExecutorFailure = executorFailureTimeStamps.pop
+    }
+    executorFailureTimeStamps.size + 1
+  }
 
   /**
    * Number of container requests that have not yet been fulfilled.
@@ -449,6 +480,9 @@ private[yarn] class YarnAllocator(
             ". Exit status: " + completedContainer.getExitStatus +
             ". Diagnostics: " + completedContainer.getDiagnostics)
           numExecutorsFailed += 1
+          if (relativeMaxExecutorFailureEnabled) {
+             executorFailureTimeStamps.push(System.currentTimeMillis / 1000)
+          }
         }
       }
 
