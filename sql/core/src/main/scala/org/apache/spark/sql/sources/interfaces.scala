@@ -381,6 +381,18 @@ abstract class OutputWriter {
   }
 }
 
+
+/**
+ * An interface for relations that are backed by files.  When a class implements this interface,
+ * the list of paths that it returns will be returned to a user who calls `inputPaths` on any
+ * DataFrame that queries this relation.
+ */
+@Experimental
+trait FileRelation {
+  /** Returns the list of files that will be read when scanning this relation. */
+  def inputFiles: Array[String]
+}
+
 /**
  * ::Experimental::
  * A [[BaseRelation]] that provides much of the common code required for formats that store their
@@ -406,7 +418,7 @@ abstract class OutputWriter {
  */
 @Experimental
 abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec])
-  extends BaseRelation with Logging {
+  extends BaseRelation with FileRelation with Logging {
 
   override def toString: String = getClass.getSimpleName + paths.mkString("[", ",", "]")
 
@@ -515,6 +527,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    * @since 1.4.0
    */
   def paths: Array[String]
+
+  def inputFiles: Array[String] = cachedLeafStatuses().map(_.getPath.toString).toArray
 
   /**
    * Partition columns.  Can be either defined by [[userDefinedPartitionColumns]] or automatically
