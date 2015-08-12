@@ -255,14 +255,29 @@ object SPARK_9757 extends QueryTest with Logging {
 
     val hiveContext = new HiveContext(sparkContext)
     import hiveContext.implicits._
+    import org.apache.spark.sql.functions._
 
     val dir = Utils.createTempDir()
     dir.delete()
 
     try {
-      val df = hiveContext.range(10).select(('id + 0.1) cast DecimalType(10, 3) as 'dec)
-      df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
-      checkAnswer(hiveContext.table("t"), df)
+      {
+        val df =
+          hiveContext
+            .range(10)
+            .select(('id + 0.1) cast DecimalType(10, 3) as 'dec)
+        df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
+        checkAnswer(hiveContext.table("t"), df)
+      }
+
+      {
+        val df =
+          hiveContext
+            .range(10)
+            .select(callUDF("struct", ('id + 0.2) cast DecimalType(10, 3)) as 'dec_struct)
+        df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
+        checkAnswer(hiveContext.table("t"), df)
+      }
     } finally {
       dir.delete()
       hiveContext.sql("DROP TABLE t")

@@ -310,21 +310,19 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           if relation.paths.length == 1 && relation.partitionColumns.isEmpty =>
         // Hive ParquetSerDe doesn't support decimal type until 1.2.0.
         val isParquetSerDe = serde.inputFormat.exists(_.toLowerCase.contains("parquet"))
-        val hasDecimalFields = relation.schema.exists(_.dataType.isInstanceOf[DecimalType])
-        val hiveVersion = hive.hiveMetastoreVersion
-        val (hiveMajorVersion, hiveMinorVersion) = {
-          val Version = """(\d+)\.(\d+)\..*""".r
-          hiveVersion match {
-            case Version(major, minor) => (major.toInt, minor.toInt)
-            case _ => sys.error(s"Invalid Hive version $hiveVersion.")
-          }
+        val hasDecimalFields = relation.schema.existsRecursively(_.isInstanceOf[DecimalType])
+
+        val hiveParquetSupportsDecimal = client.version match {
+          case org.apache.spark.sql.hive.client.hive.v1_2 => true
+          case _ => false
         }
 
-        if (isParquetSerDe && (hiveMajorVersion < 1 || hiveMinorVersion < 2) && hasDecimalFields) {
+        if (isParquetSerDe && !hiveParquetSupportsDecimal && hasDecimalFields) {
+          //
           logWarning {
             "Persisting Parquet relation with decimal field(s) into Hive metastore in Spark SQL " +
               "specific format, which is NOT compatible with Hive. Because ParquetHiveSerDe in " +
-              s"Hive $hiveVersion doesn't support decimal type. See HIVE-6384."
+              s"Hive ${client.version.fullVersion} doesn't support decimal type. See HIVE-6384."
           }
           newSparkSQLSpecificMetastoreTable()
         } else {
