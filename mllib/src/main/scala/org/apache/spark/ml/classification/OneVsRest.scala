@@ -128,7 +128,7 @@ final class OneVsRestModel private[ml] (
       predictions.maxBy(_._2)._1.toDouble
     }
 
-    // output the index of the classifier with highest confidence as prediction
+    // output the highest confidence as rawPredictionCol
     val probabilityUDF = udf { (predictions: Map[Int, Double]) =>
       predictions.maxBy(_._2)._2.toDouble
     }
