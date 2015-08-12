@@ -47,11 +47,11 @@ private[spark] object ShutdownHookManager extends Logging {
    */
   val TEMP_DIR_SHUTDOWN_PRIORITY = 25
 
-  private lazy val shutdownHooks = { 
-    val manager = new SparkShutdownHookManager() 
-    manager.install() 
-    manager 
-  } 
+  private lazy val shutdownHooks = {
+    val manager = new SparkShutdownHookManager()
+    manager.install()
+    manager
+  }
 
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
   private val shutdownDeleteTachyonPaths = new scala.collection.mutable.HashSet[String]()
@@ -100,7 +100,7 @@ private[spark] object ShutdownHookManager extends Logging {
       shutdownDeleteTachyonPaths.remove(absolutePath)
     }
   }
-  
+
   // Is the path already registered to be deleted via a shutdown hook ?
   def hasShutdownDeleteDir(file: File): Boolean = {
     val absolutePath = file.getAbsolutePath()
