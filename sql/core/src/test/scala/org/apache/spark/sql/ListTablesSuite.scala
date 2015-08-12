@@ -36,7 +36,7 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContex
     try {
       ctx.catalog.unregisterTable(Seq("ListTablesSuiteTable"))
     } finally {
-      afterAll()
+      super.afterAll()
     }
   }
 
