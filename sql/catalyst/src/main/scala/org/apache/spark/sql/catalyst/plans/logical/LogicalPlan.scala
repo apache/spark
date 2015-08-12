@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
-  def keys: Seq[Expression] = Seq.empty
+  def keys: Seq[Key] = Seq.empty
 
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output

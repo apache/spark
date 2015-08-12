@@ -275,18 +275,42 @@ object JoinElimination extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Left outer join where only the left columns are kept, and a key from the right is involved in
     // the join so no duplicates are generated
-    case Project(projectList, ExtractEquiJoinKeys(LeftOuter, _, rightKeys, _, left, right))
-        if AttributeSet(projectList).subsetOf(left.outputSet)
-        && AttributeSet(right.keys).intersect(AttributeSet(rightKeys)).nonEmpty =>
-      Project(projectList, left)
+    case p @ Project(projectList, ExtractEquiJoinKeys(LeftOuter, leftKeys, rightKeys, _, left, right)) =>
+      // A unique key from the right must be involved in the join so no duplicates are generated
+      val rightUniqueKeys = AttributeSet(right.keys.collect { case UniqueKey(attr) => attr })
+      val noDups = rightUniqueKeys.intersect(AttributeSet(rightKeys)).nonEmpty
 
-    // Right outer join where only the right columns are kept, and a key from the left is involved in
-    // the join so no duplicates are generated
-    case Project(projectList, ExtractEquiJoinKeys(RightOuter, leftKeys, _, _, left, right))
-        if AttributeSet(projectList).subsetOf(right.outputSet)
-        && AttributeSet(left.keys).intersect(AttributeSet(leftKeys)).nonEmpty =>
-      Project(projectList, right)
-}
+      // Only the left columns (or right columns that are equal to left columns via an equijoin
+      // predicate) may be kept
+      val onlyLeftCols = AttributeSet(projectList).subsetOf(left.outputSet)
+      val onlyLeftOrEquiCols =
+        AttributeSet(projectList).subsetOf(left.outputSet ++ AttributeSet(rightKeys))
+
+      // If right columns were kept, they must be referenced by a foreign key constraint on the
+      // corresponding left column so no nonexistent values are generated
+      val aliasMap = AttributeMap(rightKeys.zip(leftKeys).collect {
+        case (a: NamedExpression, b: NamedExpression) => (a.toAttribute, b.toAttribute)
+      })
+      val foreignKeyConstraintsSatisfied = projectList.flatMap(_.collect {
+        case a: Attribute if aliasMap.contains(a) && left.keys.collect {
+          case ForeignKey(leftAttr, referencedAttr)
+              if leftAttr == aliasMap(a) && referencedAttr == a => true
+        }.nonEmpty => true
+      }).nonEmpty
+
+      if (onlyLeftCols) {
+        Project(projectList, left)
+      } else if (onlyLeftOrEquiCols && foreignKeyConstraintsSatisfied) {
+        val substitutedProjection = projectList.map(_.transform {
+          case a: Attribute =>
+            if (aliasMap.contains(a)) Alias(aliasMap(a), a.name)()
+            else a
+        }).asInstanceOf[Seq[NamedExpression]]
+        Project(substitutedProjection, left)
+      } else {
+        p
+      }
+  }
 }
 
 /**

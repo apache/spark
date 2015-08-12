@@ -666,11 +666,14 @@ class DataFrame private[sql](
    */
   def as(alias: Symbol): DataFrame = as(alias.name)
 
-  @scala.annotation.varargs
-  def key(cols: Column*): DataFrame = KeyHint(cols.map(_.expr), logicalPlan)
+  def uniqueKey(col: String): DataFrame =
+    KeyHint(List(UniqueKey(logicalPlan.output.find(_.name == col).get)), logicalPlan)
 
-  @scala.annotation.varargs
-  def key(col: String, cols: String*): DataFrame = key((col +: cols).map(Column(_)) : _*)
+  def foreignKey(col: String, referencedTable: DataFrame, referencedCol: String): DataFrame = {
+    val colAttr = logicalPlan.output.find(_.name == col).get
+    val referencedAttr = referencedTable.logicalPlan.output.find(_.name == referencedCol).get
+    KeyHint(List(ForeignKey(colAttr, referencedAttr)), logicalPlan)
+  }
 
   /**
    * Selects a set of column based expressions.

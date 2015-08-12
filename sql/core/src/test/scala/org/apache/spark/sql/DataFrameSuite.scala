@@ -99,7 +99,16 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   }
 
   test("key hint") {
-    checkAnswer(testData.key("key"), testData.collect().toSeq)
+    import org.apache.spark.sql.catalyst.plans.logical.Join
+
+    val personK = person.uniqueKey("id")
+    val salaryK = salary.foreignKey("personId", personK, "id")
+    val salaries = salaryK.join(personK, salaryK("personId") === person("id"), "left_outer")
+      .select(person("id"), salary("salary"))
+    checkAnswer(salaries, salary.collect().toSeq)
+    assert(salaries.queryExecution.optimizedPlan.collect {
+      case j: Join => j
+    }.isEmpty)
   }
 
   test("empty data frame") {

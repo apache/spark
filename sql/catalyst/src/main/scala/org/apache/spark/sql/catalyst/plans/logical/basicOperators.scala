@@ -24,7 +24,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
 case class KeyHint(
-    override val keys: Seq[Expression],
+    override val keys: Seq[Key],
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
@@ -32,8 +32,18 @@ case class KeyHint(
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  override def keys: Seq[Expression] =
-    child.keys.filter(k => projectList.exists(_.semanticEquals(k)))
+  override def keys: Seq[Key] = {
+    val aliasMap = AttributeMap(projectList.collect {
+      case a @ Alias(old: AttributeReference, _) => (old, a.toAttribute)
+      case r: AttributeReference => (r, r)
+    })
+    child.keys.collect {
+      case UniqueKey(attr) if aliasMap.contains(attr) =>
+        UniqueKey(aliasMap(attr))
+      case ForeignKey(attr, referencedAttr) if aliasMap.contains(attr) =>
+        ForeignKey(aliasMap(attr), referencedAttr)
+    }
+  }
 
   override lazy val resolved: Boolean = {
     val hasSpecialExpressions = projectList.exists ( _.collect {
@@ -96,7 +106,6 @@ case class Generate(
 
 case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def keys: Seq[Expression] = child.keys
 }
 
 case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -150,15 +159,11 @@ case class Join(
  */
 case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-
-  override def keys: Seq[Expression] = child.keys
 }
 
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   override def output: Seq[Attribute] = left.output
-
-  override def keys: Seq[Expression] = left.keys
 
   override lazy val resolved: Boolean =
     childrenResolved &&
@@ -212,8 +217,6 @@ case class Sort(
     global: Boolean,
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-
-  override def keys: Seq[Expression] = child.keys
 
   def hasNoEvaluation: Boolean = order.forall(_.child.isInstanceOf[AttributeReference])
 
@@ -432,7 +435,6 @@ case class Sample(
  */
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def keys: Seq[Expression] = child.keys
 }
 
 /**
@@ -444,7 +446,6 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
   extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def keys: Seq[Expression] = child.keys
 }
 
 /**
