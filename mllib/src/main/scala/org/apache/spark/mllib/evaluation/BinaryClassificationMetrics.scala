@@ -41,6 +41,7 @@ import org.apache.spark.sql.DataFrame
  *                of bins may not exactly equal numBins. The last bin in each partition may
  *                be smaller as a result, meaning there may be an extra sample at
  *                partition boundaries.
+ * @since 1.3.0
  */
 @Experimental
 class BinaryClassificationMetrics(
@@ -51,7 +52,7 @@ class BinaryClassificationMetrics(
 
   /**
    * Defaults `numBins` to 0.
-   * @since 1.3.0
+   * @since 1.0.0
    */
   def this(scoreAndLabels: RDD[(Double, Double)]) = this(scoreAndLabels, 0)
 

@@ -29,6 +29,7 @@ import org.apache.spark.sql.DataFrame
  * Evaluator for regression.
  *
  * @param predictionAndObservations an RDD of (prediction, observation) pairs.
+ * @since 1.2.0
  */
 @Experimental
 class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extends Logging {

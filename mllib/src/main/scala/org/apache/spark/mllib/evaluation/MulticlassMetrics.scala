@@ -30,6 +30,7 @@ import org.apache.spark.sql.DataFrame
  * Evaluator for multiclass classification.
  *
  * @param predictionAndLabels an RDD of (prediction, label) pairs.
+ * @since 1.1.0
  */
 @Experimental
 class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {

@@ -34,6 +34,7 @@ import org.apache.spark.rdd.RDD
  * Java users should use [[RankingMetrics$.of]] to create a [[RankingMetrics]] instance.
  *
  * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pairs.
+ * @since 1.2.0
  */
 @Experimental
 class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])])

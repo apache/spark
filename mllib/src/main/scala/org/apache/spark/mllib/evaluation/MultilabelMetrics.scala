@@ -25,6 +25,7 @@ import org.apache.spark.sql.DataFrame
  * Evaluator for multilabel classification.
  * @param predictionAndLabels an RDD of (predictions, labels) pairs,
  * both are non-null Arrays, each with unique elements.
+ * @since 1.2.0
  */
 class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]) {
 
