@@ -33,15 +33,14 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.{InternalRow, SqlParser, TableIdentifier}
 import org.apache.spark.sql.execution.{FileRelation, datasources}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation, Partition => ParquetPartition, PartitionSpec, ResolvedDataSource}
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode}
@@ -309,11 +308,32 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     val hiveTable = (maybeSerDe, dataSource.relation) match {
       case (Some(serde), relation: HadoopFsRelation)
           if relation.paths.length == 1 && relation.partitionColumns.isEmpty =>
-        logInfo {
-          "Persisting data source relation with a single input path into Hive metastore in Hive " +
-            s"compatible format.  Input path: ${relation.paths.head}"
+        // Hive ParquetSerDe doesn't support decimal type until 1.2.0.
+        val isParquetSerDe = serde.inputFormat.exists(_.toLowerCase.contains("parquet"))
+        val hasDecimalFields = relation.schema.exists(_.dataType.isInstanceOf[DecimalType])
+        val hiveVersion = hive.hiveMetastoreVersion
+        val (hiveMajorVersion, hiveMinorVersion) = {
+          val Version = """(\d+)\.(\d+)\..*""".r
+          hiveVersion match {
+            case Version(major, minor) => (major.toInt, minor.toInt)
+            case _ => sys.error(s"Invalid Hive version $hiveVersion.")
+          }
         }
-        newHiveCompatibleMetastoreTable(relation, serde)
+
+        if (isParquetSerDe && (hiveMajorVersion < 1 || hiveMinorVersion < 2) && hasDecimalFields) {
+          logWarning {
+            "Persisting Parquet relation with decimal field(s) into Hive metastore in Spark SQL " +
+              "specific format, which is NOT compatible with Hive. Because ParquetHiveSerDe in " +
+              s"Hive $hiveVersion doesn't support decimal type. See HIVE-6384."
+          }
+          newSparkSQLSpecificMetastoreTable()
+        } else {
+          logInfo {
+            "Persisting data source relation with a single input path into Hive metastore in Hive " +
+              s"compatible format.  Input path: ${relation.paths.head}"
+          }
+          newHiveCompatibleMetastoreTable(relation, serde)
+        }
 
       case (Some(serde), relation: HadoopFsRelation) if relation.partitionColumns.nonEmpty =>
         logWarning {
