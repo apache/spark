@@ -77,7 +77,7 @@ import org.apache.spark.util._
  */
 class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationClient {
 
-  // The call site where this SparkContext was constructed.
+  // Thee call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
   // If true, log warnings instead of throwing exceptions when multiple SparkContexts are active
