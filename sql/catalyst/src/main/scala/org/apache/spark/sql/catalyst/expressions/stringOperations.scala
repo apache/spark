@@ -26,10 +26,12 @@ import java.util.regex.{MatchResult, Pattern}
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.ByteArray
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for string operations.
@@ -42,15 +44,40 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 case class Concat(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
-  override def dataType: DataType = StringType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq.fill(children.size)(TypeCollection(StringType, BinaryType))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes match {
+      // Check if all the types are same
+      case TypeCheckResult.TypeCheckSuccess =>
+        if (children.forall(e => dataType == e.dataType)) {
+          TypeCheckResult.TypeCheckSuccess
+        } else {
+          TypeCheckResult.TypeCheckFailure(
+            s"all arguments need to have a same type " +
+              s"(${StringType.simpleString} or ${BinaryType.simpleString}).")
+        }
+      case r => r
+    }
+  }
+
+  // If no input, set StringType as default one.
+  override def dataType: DataType =
+    if (children.isEmpty) StringType else children.head.dataType
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def eval(input: InternalRow): Any = {
-    val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
-    UTF8String.concat(inputs : _*)
+    dataType match {
+      case StringType =>
+        val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
+        UTF8String.concat(inputs : _*)
+      case BinaryType =>
+        val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
+        ByteArray.concat(inputs : _*)
+    }
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -58,9 +85,16 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
     val inputs = evals.map { eval =>
       s"${eval.isNull} ? null : ${eval.primitive}"
     }.mkString(", ")
+    val concatEval = dataType match {
+       case StringType =>
+        s"UTF8String ${ev.primitive} = UTF8String.concat($inputs);"
+      case BinaryType =>
+        val classNameBinary = classOf[ByteArray].getCanonicalName
+        s"byte[] ${ev.primitive} = ${classNameBinary}.concat($inputs);"
+    }
     evals.map(_.code).mkString("\n") + s"""
       boolean ${ev.isNull} = false;
-      UTF8String ${ev.primitive} = UTF8String.concat($inputs);
+      ${concatEval}
       if (${ev.primitive} == null) {
         ${ev.isNull} = true;
       }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
 
@@ -44,6 +45,33 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     testConcat("数据", null, "砖头")
     // scalastyle:on
+  }
+
+  test("concat for binary") {
+    def testConcat(inputs: Array[Byte]*): Unit = {
+      val expected = if (inputs.contains(null)) null else Array.concat[Byte](inputs: _*)
+      checkEvaluation(Concat(inputs.map(Literal.create(_, BinaryType))), expected, EmptyRow)
+    }
+
+    implicit def toBinary(s: String): Array[Byte] = s.getBytes("UTF-8")
+
+    testConcat("ab")
+    testConcat("a", "b")
+    testConcat("a", "b", "C")
+    testConcat("a", null, "C")
+    testConcat("a", null, null)
+    testConcat(null, null, null)
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    testConcat("数据", null, "砖头")
+    // scalastyle:on
+  }
+
+  test("Concat#checkInputDataTypes") {
+    assert(Concat(Seq(StringType, BinaryType).map(Literal.create(null, _))).checkInputDataTypes
+      === TypeCheckResult.TypeCheckFailure(
+        "all arguments need to have a same type (string or binary)."))
   }
 
   test("concat_ws") {
