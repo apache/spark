@@ -116,14 +116,14 @@ class MLLibStreamingTestCase(unittest.TestCase):
                     lastValue = e
             else:
                 lastValue = condition()
-            if lastValue == True: # Note: This is NOT the same as "if lastValue:"
+            if lastValue is True:
                 return
             sleep(0.01)
         if isinstance(lastValue, AssertionError):
             raise lastValue
         else:
             raise AssertionError(
-                "Test failed due to timeout after %g sec, with last condition returning: %s"\
+                "Test failed due to timeout after %g sec, with last condition returning: %s"
                 % (timeout, lastValue))
 
 
