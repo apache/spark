@@ -96,6 +96,9 @@ class MLLibStreamingTestCase(unittest.TestCase):
                           AssertionError if the conditions are not met.
                           This is used for both checking termination conditions and
                           printing an error message upon timeout.
+                          Note that this method must work correctly, regardless of when it is
+                          called during the streaming execution (e.g., even before any results
+                          have been created).
         :param timeout: Number of seconds to wait.  Default 20 seconds.
         """
         start_time = time()
