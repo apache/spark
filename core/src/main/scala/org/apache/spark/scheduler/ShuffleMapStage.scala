@@ -17,15 +17,21 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.ShuffleDependency
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.CallSite
 
 /**
- * The ShuffleMapStage represents the intermediate stages in a job.
+ * ShuffleMapStages are intermediate stages in the execution DAG that produce data for a shuffle.
+ * They occur right before each shuffle operation, and might contain multiple pipelined operations
+ * before that (e.g. map and filter). When executed, they save map output files that can later be
+ * fetched by reduce tasks. The `shuffleDep` field describes the shuffle each stage is part of,
+ * and variables like `outputLocs` and `numAvailableOutputs` track how many map outputs are ready.
+ *
+ * ShuffleMapStages can also be submitted independently as jobs with DAGScheduler.submitMapStage.
+ * For such stages, the ActiveJobs that submitted them are tracked in `mapStageJobs`. Note that
+ * there can be multiple ActiveJobs trying to compute the same shuffle map stage.
  */
 private[spark] class ShuffleMapStage(
     id: Int,
@@ -39,12 +45,12 @@ private[spark] class ShuffleMapStage(
 
   override def toString: String = "ShuffleMapStage " + id
 
+  /** Map-stage jobs that were submitted to execute this stage independently (if any) */
+  var mapStageJobs: List[ActiveJob] = Nil
+
   var numAvailableOutputs: Int = 0
 
   def isAvailable: Boolean = numAvailableOutputs == numPartitions
-
-  /** Map-stage jobs that are waiting on this particular stage to finish, if any */
-  var waitingJobs: List[ActiveJob] = Nil
 
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
 

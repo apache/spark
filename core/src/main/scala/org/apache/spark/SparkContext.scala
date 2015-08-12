@@ -1985,13 +1985,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * :: DeveloperApi ::
-   * Submit a map stage for execution.
+   * Submit a map stage for execution. This is currently an internal API only, but might be
+   * promoted to DeveloperApi in the future.
    */
-  @DeveloperApi
-  def submitMapStage[K, V, C](dependency: ShuffleDependency[K, V, C]):
-    SimpleFutureAction[MapOutputStatistics] =
-  {
+  private[spark] def submitMapStage[K, V, C](dependency: ShuffleDependency[K, V, C])
+      : SimpleFutureAction[MapOutputStatistics] = {
     assertNotStopped()
     val callSite = getCallSite()
     val waiter = dagScheduler.submitMapStage(
@@ -1999,7 +1997,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       callSite,
       localProperties.get)
     // TODO: It's not nice that we use JobWaiter here, but that's what SimpleFutureAction takes
-    new SimpleFutureAction(waiter, env.mapOutputTracker.getStatistics(dependency.shuffleId))
+    new SimpleFutureAction(waiter, env.mapOutputTracker.getStatistics(
+      dependency.shuffleId, dependency.partitioner.numPartitions))
   }
 
 

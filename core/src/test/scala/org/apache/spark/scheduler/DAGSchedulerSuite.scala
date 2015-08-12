@@ -229,7 +229,7 @@ class DAGSchedulerSuite
     }
   }
 
-  /** Sends the rdd to the scheduler for scheduling and returns the job id. */
+  /** Submits a job to the scheduler and returns the job id. */
   private def submit(
       rdd: RDD[_],
       partitions: Array[Int],
@@ -237,6 +237,15 @@ class DAGSchedulerSuite
       listener: JobListener = jobListener): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
     runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener))
+    jobId
+  }
+
+  /** Submits a map stage to the scheduler and returns the job id. */
+  private def submitMapStage(
+      shuffleDep: ShuffleDependency[_, _, _],
+      listener: JobListener = jobListener): Int = {
+    val jobId = scheduler.nextJobId.getAndIncrement()
+    runEvent(MapStageSubmitted(jobId, shuffleDep, CallSite("", ""), listener))
     jobId
   }
 
@@ -1311,6 +1320,110 @@ class DAGSchedulerSuite
 
     // should include the FunSuite setup:
     assert(stackTraceString.contains("org.scalatest.FunSuite"))
+  }
+
+  test("simple map stage submission") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+
+    // Submit a map stage by itself
+    submitMapStage(shuffleDep)
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 1)),
+      (Success, makeMapStatus("hostB", 1))))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
+      HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+    assert(results === Map(0 -> null, 1 -> null))
+    results.clear()
+    assertDataStructuresEmpty()
+
+    // Submit a reduce job that depends on this map stage; it should directly do the reduce
+    submit(reduceRdd, Array(0))
+    complete(taskSets(1), Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    results.clear()
+    assertDataStructuresEmpty()
+
+    // Check that if we submit the map stage again, no tasks run
+    submitMapStage(shuffleDep)
+    assert(results === Map(0 -> null, 1 -> null))
+    assertDataStructuresEmpty()
+  }
+
+  test("map stage submission with reduce stage also depending on the data") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+
+    // Submit the map stage by itself
+    submitMapStage(shuffleDep)
+
+    // Submit a reduce job that depends on this map stage
+    submit(reduceRdd, Array(0))
+
+    // Complete tasks for the map stage
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 1)),
+      (Success, makeMapStatus("hostB", 1))))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
+      HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+    assert(results === Map(0 -> null, 1 -> null))
+    results.clear()
+
+    // Complete tasks for the reduce stage
+    complete(taskSets(1), Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    results.clear()
+    assertDataStructuresEmpty()
+
+    // Check that if we submit the map stage again, no tasks run
+    submitMapStage(shuffleDep)
+    assert(results === Map(0 -> null, 1 -> null))
+    assertDataStructuresEmpty()
+  }
+
+  test("map stage submission with fetch failure") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+
+    // Submit a map stage by itself
+    submitMapStage(shuffleDep)
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", reduceRdd.partitions.size)),
+      (Success, makeMapStatus("hostB", reduceRdd.partitions.size))))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
+      HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+    assert(results === Map(0 -> null, 1 -> null))
+    results.clear()
+    assertDataStructuresEmpty()
+
+    // Submit a reduce job that depends on this map stage, but where one reduce will fail a fetch
+    submit(reduceRdd, Array(0, 1))
+    complete(taskSets(1), Seq(
+      (Success, 42),
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null)))
+    // Ask the scheduler to try it again; TaskSet 2 will rerun the map task that we couldn't fetch
+    // from, then TaskSet 3 will run the reduce stage
+    scheduler.resubmitFailedStages()
+    complete(taskSets(2), Seq((Success, makeMapStatus("hostA", reduceRdd.partitions.size))))
+    complete(taskSets(3), Seq((Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    results.clear()
+    assertDataStructuresEmpty()
+
+    // Run another reduce job without a failure; this should just work
+    submit(reduceRdd, Array(0, 1))
+    complete(taskSets(4), Seq(
+      (Success, 44),
+      (Success, 45)))
+    assert(results === Map(0 -> 44, 1 -> 45))
+    results.clear()
+    assertDataStructuresEmpty()
   }
 
   /**

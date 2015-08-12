@@ -35,6 +35,7 @@ import org.apache.spark.util.CallSite
  */
 private[scheduler] sealed trait DAGSchedulerEvent
 
+/** A result-yielding job was submitted on a target RDD */
 private[scheduler] case class JobSubmitted(
     jobId: Int,
     finalRDD: RDD[_],
@@ -45,11 +46,12 @@ private[scheduler] case class JobSubmitted(
     properties: Properties = null)
   extends DAGSchedulerEvent
 
+/** A map stage as submitted to run as a separate job */
 private[scheduler] case class MapStageSubmitted(
   jobId: Int,
   dependency: ShuffleDependency[_, _, _],
   callSite: CallSite,
-  listener: JobListener,            // TODO: replace this with another class
+  listener: JobListener,
   properties: Properties = null)
   extends DAGSchedulerEvent
 
