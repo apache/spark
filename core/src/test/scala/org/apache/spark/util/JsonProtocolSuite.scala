@@ -297,7 +297,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorLostFailure = ExecutorLostFailure("100", Some("Induced failure"))
     val oldEvent = JsonProtocol.taskEndReasonToJson(executorLostFailure)
       .removeField({ _._1 == "Executor ID" })
-    val expectedExecutorLostFailure = ExecutorLostFailure("Unknown", Some("Unknown"))
+    val expectedExecutorLostFailure = ExecutorLostFailure("Unknown", Some("Induced failure"))
     assert(expectedExecutorLostFailure === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
