@@ -25,8 +25,8 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.Accumulators
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.functions._
-import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
 private case class BigData(s: String)
 

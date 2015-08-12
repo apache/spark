@@ -24,7 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 
-class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
+class PartitionBatchPruningSuite extends SparkFunSuite with SharedSQLContext with BeforeAndAfter {
   import testImplicits._
 
   private lazy val originalColumnBatchSize = ctx.conf.columnBatchSize

@@ -310,7 +310,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("udf") {
-    val foo = org.apache.spark.sql.functions.udf((a: Int, b: String) => a.toString + b)
+    val foo = udf((a: Int, b: String) => a.toString + b)
 
     checkAnswer(
       // SELECT *, foo(key, value) FROM testData
