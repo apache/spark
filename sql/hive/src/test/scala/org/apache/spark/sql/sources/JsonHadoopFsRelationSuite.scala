@@ -20,10 +20,11 @@ package org.apache.spark.sql.sources
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.types._
 
-class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
-  override val dataSourceName: String = classOf[SimpleTextSource].getCanonicalName
+class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
+  override val dataSourceName: String = "json"
 
   import sqlContext._
 
@@ -36,7 +37,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
       for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
         val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
         sparkContext
-          .parallelize(for (i <- 1 to 3) yield s"$i,val_$i,$p1")
+          .parallelize(for (i <- 1 to 3) yield s"""{"a":$i,"b":"val_$i"}""")
           .saveAsTextFile(partitionDir.toString)
       }
 
@@ -47,6 +48,31 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
         read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
+    }
+  }
+
+  test("SPARK-9894: save complex types to JSON") {
+    withTempDir { file =>
+      file.delete()
+
+      val schema =
+        new StructType()
+          .add("array", ArrayType(LongType))
+          .add("map", MapType(StringType, new StructType().add("innerField", LongType)))
+
+      val data =
+        Row(Seq(1L, 2L, 3L), Map("m1" -> Row(4L))) ::
+          Row(Seq(5L, 6L, 7L), Map("m2" -> Row(10L))) :: Nil
+      val df = createDataFrame(sparkContext.parallelize(data), schema)
+
+      // Write the data out.
+      df.write.format(dataSourceName).save(file.getCanonicalPath)
+
+      // Read it back and check the result.
+      checkAnswer(
+        read.format(dataSourceName).schema(schema).load(file.getCanonicalPath),
+        df
+      )
     }
   }
 }
