@@ -1226,19 +1226,16 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       query
 
     case Token(destinationToken(),
-            Token("TOK_LOCAL_DIR", path :: formats) :: Nil) =>
-      WriteToDirectory(
-        BaseSemanticAnalyzer.unescapeSQLString(path.getText),
-        query,
-        true,
-        parseTableDesc(formats))
-
-    case Token(destinationToken(),
             Token("TOK_DIR", path :: formats) :: Nil) =>
+      var isLocal = false
+      formats.collect {
+        case Token("LOCAL", others) =>
+          isLocal = true
+      }
       WriteToDirectory(
         BaseSemanticAnalyzer.unescapeSQLString(path.getText),
         query,
-        false,
+        isLocal,
         parseTableDesc(formats))
 
     case Token(destinationToken(),
@@ -1691,21 +1688,32 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     val createTableDesc = new CreateTableDesc()
 
     nodeList.collect {
-      case Token("TOK_TBLRCFILE", Nil) =>
-        createTableDesc.setOutputFormat("org.apache.hadoop.hive.ql.io.RCFileOutputFormat")
-        createTableDesc.setSerName(hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTRCFILESERDE))
+      case Token("TOK_FILEFORMAT_GENERIC", child :: Nil) =>
+        child.getText().toLowerCase(Locale.ENGLISH) match {
+          case "orc" =>
+            createTableDesc.setOutputFormat("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat")
+            createTableDesc.setSerName("org.apache.hadoop.hive.ql.io.orc.OrcSerde")
 
-      case Token("TOK_TBLORCFILE", Nil) =>
-        createTableDesc.setOutputFormat("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat")
-        createTableDesc.setSerName("org.apache.hadoop.hive.ql.io.orc.OrcSerde")
+          case "parquet" =>
+            createTableDesc
+              .setOutputFormat("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat")
+            createTableDesc.setSerName("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")
 
-      case Token("TOK_TBLPARQUETFILE", Nil) =>
-        createTableDesc
-          .setOutputFormat("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat")
-        createTableDesc.setSerName("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")
+          case "rcfile" =>
+            createTableDesc.setOutputFormat("org.apache.hadoop.hive.ql.io.RCFileOutputFormat")
+            createTableDesc.setSerName(hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTRCFILESERDE))
 
-      case Token("TOK_TBLSEQUENCEFILE", Nil) =>
-        createTableDesc.setOutputFormat("org.apache.hadoop.mapred.SequenceFileOutputFormat")
+          case "textfile" =>
+            createTableDesc
+              .setOutputFormat("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat")
+
+          case "sequencefile" =>
+            createTableDesc.setOutputFormat("org.apache.hadoop.mapred.SequenceFileOutputFormat")
+
+          case _ =>
+            throw new SemanticException(
+              s"Unrecognized file format in STORED AS clause: ${child.getText}")
+        }
 
       case Token("TOK_TABLEROWFORMAT", Token("TOK_SERDEPROPS", child :: Nil) :: Nil) =>
         val serdeParams = new java.util.HashMap[String, String]()
