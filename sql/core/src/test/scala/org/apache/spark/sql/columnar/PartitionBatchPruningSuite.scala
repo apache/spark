@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.columnar
 
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.test.SharedSQLContext
