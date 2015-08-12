@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
@@ -67,6 +67,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("params") {
     ParamsSuite.checkParams(new LogisticRegression)
     val model = new LogisticRegressionModel("logReg", Vectors.dense(0.0), 0.0)
+    ParamsSuite.checkParams(model)
   }
 
   test("logistic regression: default params") {

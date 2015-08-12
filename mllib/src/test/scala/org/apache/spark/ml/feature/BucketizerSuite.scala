@@ -46,9 +46,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("result")
       .setSplits(splits)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(bucketizer)
-
     bucketizer.transform(dataFrame).select("result", "expected").collect().foreach {
       case Row(x: Double, y: Double) =>
         assert(x === y,

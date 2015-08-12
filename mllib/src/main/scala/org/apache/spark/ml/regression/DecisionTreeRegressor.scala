@@ -114,8 +114,7 @@ final class DecisionTreeRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): DecisionTreeRegressionModel = {
-    copyValues(new DecisionTreeRegressionModel(uid, rootNode), extra)
-      .setParent(parent)
+    copyValues(new DecisionTreeRegressionModel(uid, rootNode), extra).setParent(parent)
   }
 
   override def toString: String = {

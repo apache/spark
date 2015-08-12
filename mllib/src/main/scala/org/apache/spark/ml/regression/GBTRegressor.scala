@@ -185,8 +185,7 @@ final class GBTRegressionModel(
   }
 
   override def copy(extra: ParamMap): GBTRegressionModel = {
-    copyValues(new GBTRegressionModel(uid, _trees, _treeWeights), extra)
-      .setParent(parent)
+    copyValues(new GBTRegressionModel(uid, _trees, _treeWeights), extra).setParent(parent)
   }
 
   override def toString: String = {

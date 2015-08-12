@@ -20,7 +20,6 @@ package org.apache.spark.ml.recommendation
 import java.io.File
 import java.util.Random
 
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials

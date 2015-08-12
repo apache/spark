@@ -24,6 +24,6 @@ object MLTestingUtils {
   def checkCopy(model: Model[_]): Unit = {
     val copied = model.copy(ParamMap.empty)
       .asInstanceOf[Model[_]]
-    assert(copied.parent == model.parent)
+    assert(copied.parent.uid == model.parent.uid)
   }
 }

@@ -68,7 +68,7 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     val model = new DecisionTreeRegressor()
       .setImpurity("variance")
       .setMaxDepth(2)
-      .setMaxBins(100).fit(df)
+      .setMaxBins(8).fit(df)
     MLTestingUtils.checkCopy(model)
   }
 

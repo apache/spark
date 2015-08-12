@@ -54,6 +54,10 @@ class CrossValidatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setEvaluator(eval)
       .setNumFolds(3)
     val cvModel = cv.fit(dataset)
+
+    // copied model must have the same paren.
+    MLTestingUtils.checkCopy(cvModel)
+
     val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
@@ -111,22 +115,6 @@ class CrossValidatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     intercept[IllegalArgumentException] {
       cv.validateParams()
     }
-  }
-
-  test("copied model must have the same parent") {
-    val lr = new LogisticRegression
-    val lrParamMaps = new ParamGridBuilder()
-      .addGrid(lr.regParam, Array(0.001, 1000.0))
-      .addGrid(lr.maxIter, Array(0, 10))
-      .build()
-    val eval = new BinaryClassificationEvaluator
-    val cv = new CrossValidator()
-      .setEstimator(lr)
-      .setEstimatorParamMaps(lrParamMaps)
-      .setEvaluator(eval)
-      .setNumFolds(3)
-    val model = cv.fit(dataset)
-    MLTestingUtils.checkCopy(model)
   }
 }
 

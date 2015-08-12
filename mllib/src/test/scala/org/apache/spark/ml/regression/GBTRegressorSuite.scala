@@ -83,27 +83,14 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setMaxDepth(2)
       .setMaxIter(2)
     val model = gbt.fit(df)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
     val preds = model.transform(df)
     val predictions = preds.select("prediction").map(_.getDouble(0))
     // Checks based on SPARK-8736 (to ensure it is not doing classification)
     assert(predictions.max() > 2)
     assert(predictions.min() < -1)
-  }
-
-  test("copied model must have the same parent") {
-    val df = sqlContext.createDataFrame(Seq(
-      LabeledPoint(10, Vectors.dense(1, 2, 3, 4)),
-      LabeledPoint(-5, Vectors.dense(6, 3, 2, 1)),
-      LabeledPoint(11, Vectors.dense(2, 2, 3, 4)),
-      LabeledPoint(-6, Vectors.dense(6, 4, 2, 1)),
-      LabeledPoint(9, Vectors.dense(1, 2, 6, 4)),
-      LabeledPoint(-4, Vectors.dense(6, 3, 2, 2))
-    ))
-    val gbt = new GBTRegressor()
-      .setMaxDepth(2)
-      .setMaxIter(2)
-    val model = gbt.fit(df)
-    MLTestingUtils.checkCopy(model)
   }
 
   test("Checkpointing") {

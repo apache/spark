@@ -196,8 +196,7 @@ final class GBTClassificationModel(
   }
 
   override def copy(extra: ParamMap): GBTClassificationModel = {
-    copyValues(new GBTClassificationModel(uid, _trees, _treeWeights), extra)
-      .setParent(parent)
+    copyValues(new GBTClassificationModel(uid, _trees, _treeWeights), extra).setParent(parent)
   }
 
   override def toString: String = {

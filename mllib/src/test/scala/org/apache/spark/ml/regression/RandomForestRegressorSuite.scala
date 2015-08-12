@@ -72,14 +72,6 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     regressionTestWithContinuousFeatures(rf)
   }
 
-  test("copied model must have the same parent") {
-    val rf = new RandomForestRegressor()
-    val df = TreeTests.setMetadata(orderedLabeledPoints50_1000,
-      Map.empty[Int, Int], numClasses = 0)
-    val model = rf.fit(df)
-    MLTestingUtils.checkCopy(model)
-  }
-
   test("Feature importance with toy data") {
     val rf = new RandomForestRegressor()
       .setImpurity("variance")
@@ -100,7 +92,11 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     val categoricalFeatures = Map.empty[Int, Int]
     val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0)
 
-    val importances = rf.fit(df).featureImportances
+    val model = rf.fit(df)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
+    val importances = model.featureImportances
     val mostImportantFeature = importances.argmax
     assert(mostImportantFeature === 1)
   }
