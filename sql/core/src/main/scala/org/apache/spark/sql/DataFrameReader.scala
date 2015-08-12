@@ -25,10 +25,10 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.json.JSONRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
-import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.json.JSONRelation
-import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.{Logging, Partition}
 
@@ -237,7 +237,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   def json(jsonRDD: RDD[String]): DataFrame = {
     val samplingRatio = extraOptions.getOrElse("samplingRatio", "1.0").toDouble
     sqlContext.baseRelationToDataFrame(
-      new JSONRelation(() => jsonRDD, None, samplingRatio, userSpecifiedSchema)(sqlContext))
+      new JSONRelation(Some(jsonRDD), samplingRatio, userSpecifiedSchema, None, None)(sqlContext))
   }
 
   /**
@@ -260,7 +260,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
 
       sqlContext.baseRelationToDataFrame(
         new ParquetRelation(
-          globbedPaths.map(_.toString), None, None, extraOptions.toMap)(sqlContext))
+          globbedPaths.map(_.toString), userSpecifiedSchema, None, extraOptions.toMap)(sqlContext))
     }
   }
 

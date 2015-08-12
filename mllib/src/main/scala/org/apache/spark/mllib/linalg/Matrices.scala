@@ -179,12 +179,12 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
         val tpe = row.getByte(0)
         val numRows = row.getInt(1)
         val numCols = row.getInt(2)
-        val values = row.getArray(5).toArray.map(_.asInstanceOf[Double])
+        val values = row.getArray(5).toDoubleArray()
         val isTransposed = row.getBoolean(6)
         tpe match {
           case 0 =>
-            val colPtrs = row.getArray(3).toArray.map(_.asInstanceOf[Int])
-            val rowIndices = row.getArray(4).toArray.map(_.asInstanceOf[Int])
+            val colPtrs = row.getArray(3).toIntArray()
+            val rowIndices = row.getArray(4).toIntArray()
             new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
           case 1 =>
             new DenseMatrix(numRows, numCols, values, isTransposed)
@@ -257,8 +257,7 @@ class DenseMatrix(
     this(numRows, numCols, values, false)
 
   override def equals(o: Any): Boolean = o match {
-    case m: DenseMatrix =>
-      m.numRows == numRows && m.numCols == numCols && Arrays.equals(toArray, m.toArray)
+    case m: Matrix => toBreeze == m.toBreeze
     case _ => false
   }
 
@@ -518,6 +517,11 @@ class SparseMatrix(
       colPtrs: Array[Int],
       rowIndices: Array[Int],
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
+
+  override def equals(o: Any): Boolean = o match {
+    case m: Matrix => toBreeze == m.toBreeze
+    case _ => false
+  }
 
   private[mllib] def toBreeze: BM[Double] = {
      if (!isTransposed) {

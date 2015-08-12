@@ -55,7 +55,7 @@ private[hive] object IsolatedClientLoader {
     case "14" | "0.14" | "0.14.0" => hive.v14
     case "1.0" | "1.0.0" => hive.v1_0
     case "1.1" | "1.1.0" => hive.v1_1
-    case "1.2" | "1.2.0" => hive.v1_2
+    case "1.2" | "1.2.0" | "1.2.1" => hive.v1_2
   }
 
   private def downloadVersion(version: HiveVersion, ivyPath: Option[String]): Seq[URL] = {
@@ -77,7 +77,7 @@ private[hive] object IsolatedClientLoader {
     // TODO: Remove copy logic.
     val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
     allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
-    tempDir.listFiles().map(_.toURL)
+    tempDir.listFiles().map(_.toURI.toURL)
   }
 
   private def resolvedVersions = new scala.collection.mutable.HashMap[HiveVersion, Seq[URL]]

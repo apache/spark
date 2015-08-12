@@ -19,6 +19,9 @@ package org.apache.spark.shuffle
 
 import scala.collection.mutable
 
+import com.google.common.annotations.VisibleForTesting
+
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.{Logging, SparkException, SparkConf, TaskContext}
 
 /**
@@ -34,11 +37,19 @@ import org.apache.spark.{Logging, SparkException, SparkConf, TaskContext}
  * set of active tasks and redo the calculations of 1 / 2N and 1 / N in waiting tasks whenever
  * this set changes. This is all done by synchronizing access on "this" to mutate state and using
  * wait() and notifyAll() to signal changes.
+ *
+ * Use `ShuffleMemoryManager.create()` factory method to create a new instance.
+ *
+ * @param maxMemory total amount of memory available for execution, in bytes.
+ * @param pageSizeBytes number of bytes for each page, by default.
  */
-private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
-  private val taskMemory = new mutable.HashMap[Long, Long]()  // taskAttemptId -> memory bytes
+private[spark]
+class ShuffleMemoryManager protected (
+    val maxMemory: Long,
+    val pageSizeBytes: Long)
+  extends Logging {
 
-  def this(conf: SparkConf) = this(ShuffleMemoryManager.getMaxMemory(conf))
+  private val taskMemory = new mutable.HashMap[Long, Long]()  // taskAttemptId -> memory bytes
 
   private def currentTaskAttemptId(): Long = {
     // In case this is called on the driver, return an invalid task attempt id.
@@ -85,7 +96,7 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
           return toGrant
         } else {
           logInfo(
-            s"Thread $taskAttemptId waiting for at least 1/2N of shuffle memory pool to be free")
+            s"TID $taskAttemptId waiting for at least 1/2N of shuffle memory pool to be free")
           wait()
         }
       } else {
@@ -116,17 +127,57 @@ private[spark] class ShuffleMemoryManager(maxMemory: Long) extends Logging {
     taskMemory.remove(taskAttemptId)
     notifyAll()  // Notify waiters who locked "this" in tryToAcquire that memory has been freed
   }
+
+  /** Returns the memory consumption, in bytes, for the current task */
+  def getMemoryConsumptionForThisTask(): Long = synchronized {
+    val taskAttemptId = currentTaskAttemptId()
+    taskMemory.getOrElse(taskAttemptId, 0L)
+  }
 }
 
-private object ShuffleMemoryManager {
+
+private[spark] object ShuffleMemoryManager {
+
+  def create(conf: SparkConf, numCores: Int): ShuffleMemoryManager = {
+    val maxMemory = ShuffleMemoryManager.getMaxMemory(conf)
+    val pageSize = ShuffleMemoryManager.getPageSize(conf, maxMemory, numCores)
+    new ShuffleMemoryManager(maxMemory, pageSize)
+  }
+
+  def create(maxMemory: Long, pageSizeBytes: Long): ShuffleMemoryManager = {
+    new ShuffleMemoryManager(maxMemory, pageSizeBytes)
+  }
+
+  @VisibleForTesting
+  def createForTesting(maxMemory: Long): ShuffleMemoryManager = {
+    new ShuffleMemoryManager(maxMemory, 4 * 1024 * 1024)
+  }
+
   /**
    * Figure out the shuffle memory limit from a SparkConf. We currently have both a fraction
    * of the memory pool and a safety factor since collections can sometimes grow bigger than
    * the size we target before we estimate their sizes again.
    */
-  def getMaxMemory(conf: SparkConf): Long = {
+  private def getMaxMemory(conf: SparkConf): Long = {
     val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
     val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
+  }
+
+  /**
+   * Sets the page size, in bytes.
+   *
+   * If user didn't explicitly set "spark.buffer.pageSize", we figure out the default value
+   * by looking at the number of cores available to the process, and the total amount of memory,
+   * and then divide it by a factor of safety.
+   */
+  private def getPageSize(conf: SparkConf, maxMemory: Long, numCores: Int): Long = {
+    val minPageSize = 1L * 1024 * 1024   // 1MB
+    val maxPageSize = 64L * minPageSize  // 64MB
+    val cores = if (numCores > 0) numCores else Runtime.getRuntime.availableProcessors()
+    val safetyFactor = 8
+    val size = ByteArrayMethods.nextPowerOf2(maxMemory / cores / safetyFactor)
+    val default = math.min(maxPageSize, math.max(minPageSize, size))
+    conf.getSizeAsBytes("spark.buffer.pageSize", default)
   }
 }

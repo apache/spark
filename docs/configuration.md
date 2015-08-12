@@ -474,6 +474,25 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.service.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enables the external shuffle service. This service preserves the shuffle files written by 
+    executors so the executors can be safely removed. This must be enabled if 
+    <code>spark.dynamicAllocation.enabled</code> is "true". The external shuffle service
+    must be set up in order to enable it. See
+    <a href="job-scheduling.html#configuration-and-setup">dynamic allocation 
+    configuration and setup documentation</a> for more information.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.port</code></td>
+  <td>7337</td>
+  <td>
+    Port on which the external shuffle service will run.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.sort.bypassMergeThreshold</code></td>
   <td>200</td>
   <td>
@@ -555,6 +574,20 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How many stages the Spark UI and status APIs remember before garbage
     collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.ui.retainedExecutors</code></td>
+  <td>1000</td>
+  <td>
+    How many finished executors the Spark UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.ui.retainedDrivers</code></td>
+  <td>1000</td>
+  <td>
+    How many finished drivers the Spark UI and status APIs remember before garbage collecting.
   </td>
 </tr>
 </table>

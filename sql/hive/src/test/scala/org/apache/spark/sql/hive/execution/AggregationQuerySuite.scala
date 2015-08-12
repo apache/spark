@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.execution.aggregate.Aggregate2Sort
+import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql._
 import org.scalatest.BeforeAndAfterAll
-import test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
+import _root_.test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 
-class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
+abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
 
   override val sqlContext = TestHive
   import sqlContext.implicits._
@@ -34,7 +34,7 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
 
   override def beforeAll(): Unit = {
     originalUseAggregate2 = sqlContext.conf.useSqlAggregate2
-    sqlContext.sql("set spark.sql.useAggregate2=true")
+    sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2.key, "true")
     val data1 = Seq[(Integer, Integer)](
       (1, 10),
       (null, -60),
@@ -73,15 +73,15 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
     emptyDF.registerTempTable("emptyTable")
 
     // Register UDAFs
-    sqlContext.udaf.register("mydoublesum", new MyDoubleSum)
-    sqlContext.udaf.register("mydoubleavg", new MyDoubleAvg)
+    sqlContext.udf.register("mydoublesum", new MyDoubleSum)
+    sqlContext.udf.register("mydoubleavg", new MyDoubleAvg)
   }
 
   override def afterAll(): Unit = {
     sqlContext.sql("DROP TABLE IF EXISTS agg1")
     sqlContext.sql("DROP TABLE IF EXISTS agg2")
     sqlContext.dropTempTable("emptyTable")
-    sqlContext.sql(s"set spark.sql.useAggregate2=$originalUseAggregate2")
+    sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2.key, originalUseAggregate2.toString)
   }
 
   test("empty table") {
@@ -139,6 +139,22 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
           |GROUP BY key
         """.stripMargin),
       Nil)
+  }
+
+  test("null literal") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  AVG(null),
+          |  COUNT(null),
+          |  FIRST(null),
+          |  LAST(null),
+          |  MAX(null),
+          |  MIN(null),
+          |  SUM(null)
+        """.stripMargin),
+      Row(null, 0, null, null, null, null, null) :: Nil)
   }
 
   test("only do grouping") {
@@ -266,13 +282,6 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
           |SELECT avg(value) FROM agg1
         """.stripMargin),
       Row(11.125) :: Nil)
-
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT avg(null)
-        """.stripMargin),
-      Row(null) :: Nil)
   }
 
   test("udaf") {
@@ -364,7 +373,7 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
           |  max(distinct value1)
           |FROM agg2
         """.stripMargin),
-      Row(-60, 70.0, 101.0/9.0, 5.6, 100.0))
+      Row(-60, 70.0, 101.0/9.0, 5.6, 100))
 
     checkAnswer(
       sqlContext.sql(
@@ -402,6 +411,23 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
         Row(2, 100.0, 3.0, 0.0, 100.0, 1.0/3.0 + 100.0) ::
         Row(3, null, 3.0, null, null, null) ::
         Row(null, 110.0, 60.0, 30.0, 110.0, 110.0) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  count(value1),
+          |  count(*),
+          |  count(1),
+          |  count(DISTINCT value1),
+          |  key
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(3, 3, 3, 2, 1) ::
+        Row(3, 4, 4, 2, 2) ::
+        Row(0, 2, 2, 0, 3) ::
+        Row(3, 4, 4, 3, null) :: Nil)
   }
 
   test("test count") {
@@ -454,54 +480,142 @@ class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAf
   }
 
   test("error handling") {
-    sqlContext.sql(s"set spark.sql.useAggregate2=false")
-    var errorMessage = intercept[AnalysisException] {
-      sqlContext.sql(
+    withSQLConf("spark.sql.useAggregate2" -> "false") {
+      val errorMessage = intercept[AnalysisException] {
+        sqlContext.sql(
+          """
+            |SELECT
+            |  key,
+            |  sum(value + 1.5 * key),
+            |  mydoublesum(value),
+            |  mydoubleavg(value)
+            |FROM agg1
+            |GROUP BY key
+          """.stripMargin).collect()
+      }.getMessage
+      assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
+    }
+
+    // TODO: once we support Hive UDAF in the new interface,
+    // we can remove the following two tests.
+    withSQLConf("spark.sql.useAggregate2" -> "true") {
+      val errorMessage = intercept[AnalysisException] {
+        sqlContext.sql(
+          """
+            |SELECT
+            |  key,
+            |  mydoublesum(value + 1.5 * key),
+            |  stddev_samp(value)
+            |FROM agg1
+            |GROUP BY key
+          """.stripMargin).collect()
+      }.getMessage
+      assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
+
+      // This will fall back to the old aggregate
+      val newAggregateOperators = sqlContext.sql(
         """
           |SELECT
           |  key,
           |  sum(value + 1.5 * key),
-          |  mydoublesum(value),
-          |  mydoubleavg(value)
-          |FROM agg1
-          |GROUP BY key
-        """.stripMargin).collect()
-    }.getMessage
-    assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
-
-    // TODO: once we support Hive UDAF in the new interface,
-    // we can remove the following two tests.
-    sqlContext.sql(s"set spark.sql.useAggregate2=true")
-    errorMessage = intercept[AnalysisException] {
-      sqlContext.sql(
-        """
-          |SELECT
-          |  key,
-          |  mydoublesum(value + 1.5 * key),
           |  stddev_samp(value)
           |FROM agg1
           |GROUP BY key
-        """.stripMargin).collect()
-    }.getMessage
-    assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
-
-    // This will fall back to the old aggregate
-    val newAggregateOperators = sqlContext.sql(
-      """
-        |SELECT
-        |  key,
-        |  sum(value + 1.5 * key),
-        |  stddev_samp(value)
-        |FROM agg1
-        |GROUP BY key
-      """.stripMargin).queryExecution.executedPlan.collect {
-      case agg: Aggregate2Sort => agg
+        """.stripMargin).queryExecution.executedPlan.collect {
+        case agg: aggregate.SortBasedAggregate => agg
+        case agg: aggregate.TungstenAggregate => agg
+      }
+      val message =
+        "We should fallback to the old aggregation code path if " +
+          "there is any aggregate function that cannot be converted to the new interface."
+      assert(newAggregateOperators.isEmpty, message)
     }
-    val message =
-      "We should fallback to the old aggregation code path if there is any aggregate function " +
-        "that cannot be converted to the new interface."
-    assert(newAggregateOperators.isEmpty, message)
+  }
+}
 
-    sqlContext.sql(s"set spark.sql.useAggregate2=true")
+class SortBasedAggregationQuerySuite extends AggregationQuerySuite {
+
+  var originalUnsafeEnabled: Boolean = _
+
+  override def beforeAll(): Unit = {
+    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "false")
+    super.beforeAll()
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+  }
+}
+
+class TungstenAggregationQuerySuite extends AggregationQuerySuite {
+
+  var originalUnsafeEnabled: Boolean = _
+
+  override def beforeAll(): Unit = {
+    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "true")
+    super.beforeAll()
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+  }
+}
+
+class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
+
+  var originalUnsafeEnabled: Boolean = _
+
+  override def beforeAll(): Unit = {
+    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "true")
+    super.beforeAll()
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+    sqlContext.conf.unsetConf("spark.sql.TungstenAggregate.testFallbackStartsAt")
+  }
+
+  override protected def checkAnswer(actual: DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    (0 to 2).foreach { fallbackStartsAt =>
+      sqlContext.setConf(
+        "spark.sql.TungstenAggregate.testFallbackStartsAt",
+        fallbackStartsAt.toString)
+
+      // Create a new df to make sure its physical operator picks up
+      // spark.sql.TungstenAggregate.testFallbackStartsAt.
+      val newActual = DataFrame(sqlContext, actual.logicalPlan)
+
+      QueryTest.checkAnswer(newActual, expectedAnswer) match {
+        case Some(errorMessage) =>
+          val newErrorMessage =
+            s"""
+              |The following aggregation query failed when using TungstenAggregate with
+              |controlled fallback (it falls back to sort-based aggregation once it has processed
+              |$fallbackStartsAt input rows). The query is
+              |${actual.queryExecution}
+              |
+              |$errorMessage
+            """.stripMargin
+
+          fail(newErrorMessage)
+        case None =>
+      }
+    }
+  }
+
+  // Override it to make sure we call the actually overridden checkAnswer.
+  override protected def checkAnswer(df: DataFrame, expectedAnswer: Row): Unit = {
+    checkAnswer(df, Seq(expectedAnswer))
+  }
+
+  // Override it to make sure we call the actually overridden checkAnswer.
+  override protected def checkAnswer(df: DataFrame, expectedAnswer: DataFrame): Unit = {
+    checkAnswer(df, expectedAnswer.collect())
   }
 }

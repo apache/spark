@@ -25,8 +25,8 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.json.JSONRelation
-import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.execution.datasources.json.JSONRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SQLTestUtils}
 
@@ -132,6 +132,21 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
         .agg(countDistinct('number)),
       Row("a", 3) :: Row("b", 2) :: Row("c", 1) :: Nil
     )
+  }
+
+  test("SPARK-8930: explode should fail with a meaningful message if it takes a star") {
+    val df = Seq(("1", "1,2"), ("2", "4"), ("3", "7,8,9")).toDF("prefix", "csv")
+    val e = intercept[AnalysisException] {
+      df.explode($"*") { case Row(prefix: String, csv: String) =>
+        csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
+      }.queryExecution.assertAnalyzed()
+    }
+    assert(e.getMessage.contains(
+      "Cannot explode *, explode can only be applied on a specific column."))
+
+    df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
+      csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
+    }.queryExecution.assertAnalyzed()
   }
 
   test("explode alias and star") {
@@ -415,23 +430,6 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newCol"))
   }
 
-  test("randomSplit") {
-    val n = 600
-    val data = sqlContext.sparkContext.parallelize(1 to n, 2).toDF("id")
-    for (seed <- 1 to 5) {
-      val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
-      assert(splits.length == 3, "wrong number of splits")
-
-      assert(splits.reduce((a, b) => a.unionAll(b)).sort("id").collect().toList ==
-        data.collect().toList, "incomplete or wrong split")
-
-      val s = splits.map(_.count())
-      assert(math.abs(s(0) - 100) < 50) // std =  9.13
-      assert(math.abs(s(1) - 200) < 50) // std = 11.55
-      assert(math.abs(s(2) - 300) < 50) // std = 12.25
-    }
-  }
-
   test("describe") {
     val describeTestData = Seq(
       ("Bob", 16, 176),
@@ -492,15 +490,16 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     val df1 = DataFrame(sqlContext, LogicalRelation(fakeRelation1))
     assert(df1.inputFiles.toSet == fakeRelation1.paths.toSet)
 
-    val fakeRelation2 = new JSONRelation("/json/path", 1, Some(testData.schema), sqlContext)
+    val fakeRelation2 = new JSONRelation(
+      None, 1, Some(testData.schema), None, None, Array("/json/path"))(sqlContext)
     val df2 = DataFrame(sqlContext, LogicalRelation(fakeRelation2))
-    assert(df2.inputFiles.toSet == fakeRelation2.path.toSet)
+    assert(df2.inputFiles.toSet == fakeRelation2.paths.toSet)
 
     val unionDF = df1.unionAll(df2)
-    assert(unionDF.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.path)
+    assert(unionDF.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.paths)
 
     val filtered = df1.filter("false").unionAll(df2.intersect(df2))
-    assert(filtered.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.path)
+    assert(filtered.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.paths)
   }
 
   ignore("show") {
@@ -620,6 +619,7 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     assert(complexData.filter(complexData("m")("1") === 1).count() == 1)
     assert(complexData.filter(complexData("s")("key") === 1).count() == 1)
     assert(complexData.filter(complexData("m")(complexData("s")("value")) === 1).count() == 1)
+    assert(complexData.filter(complexData("a")(complexData("s")("key")) === 1).count() == 1)
   }
 
   test("SPARK-7551: support backticks for DataFrame attribute resolution") {
@@ -682,18 +682,6 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     checkAnswer(
       testData.dropDuplicates(Seq("value2")),
       Seq(Row(2, 1, 2), Row(1, 1, 1)))
-  }
-
-  test("SPARK-7276: Project collapse for continuous select") {
-    var df = testData
-    for (i <- 1 to 5) {
-      df = df.select($"*")
-    }
-
-    import org.apache.spark.sql.catalyst.plans.logical.Project
-    // make sure df have at most two Projects
-    val p = df.logicalPlan.asInstanceOf[Project].child.asInstanceOf[Project]
-    assert(!p.child.isInstanceOf[Project])
   }
 
   test("SPARK-7150 range api") {

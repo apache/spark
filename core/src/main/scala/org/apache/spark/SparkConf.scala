@@ -250,6 +250,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   }
 
   /**
+   * Get a size parameter as bytes, falling back to a default if not set.
+   */
+  def getSizeAsBytes(key: String, defaultValue: Long): Long = {
+    Utils.byteStringAsBytes(get(key, defaultValue + "B"))
+  }
+
+  /**
    * Get a size parameter as Kibibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Kibibytes are assumed.
    * @throws NoSuchElementException
@@ -548,7 +555,9 @@ private[spark] object SparkConf extends Logging {
     "spark.rpc.askTimeout" -> Seq(
       AlternateConfig("spark.akka.askTimeout", "1.4")),
     "spark.rpc.lookupTimeout" -> Seq(
-      AlternateConfig("spark.akka.lookupTimeout", "1.4"))
+      AlternateConfig("spark.akka.lookupTimeout", "1.4")),
+    "spark.streaming.fileStream.minRememberDuration" -> Seq(
+      AlternateConfig("spark.streaming.minRememberDuration", "1.5"))
     )
 
   /**

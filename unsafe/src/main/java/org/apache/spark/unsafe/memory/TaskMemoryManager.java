@@ -164,6 +164,7 @@ public class TaskMemoryManager {
    * top-level Javadoc for more details).
    */
   public MemoryBlock allocate(long size) throws OutOfMemoryError {
+    assert(size > 0) : "Size must be positive, but got " + size;
     final MemoryBlock memory = executorMemoryManager.allocate(size);
     allocatedNonPageMemory.add(memory);
     return memory;

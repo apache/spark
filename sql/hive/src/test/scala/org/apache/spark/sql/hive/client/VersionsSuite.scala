@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.client
 
 import java.io.File
 
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.catalyst.expressions.{NamedExpression, Literal, AttributeReference, EqualTo}
 import org.apache.spark.sql.catalyst.util.quietly
@@ -48,7 +49,9 @@ class VersionsSuite extends SparkFunSuite with Logging {
   }
 
   test("success sanity check") {
-    val badClient = IsolatedClientLoader.forVersion("13", buildConf(), ivyPath).client
+    val badClient = IsolatedClientLoader.forVersion(HiveContext.hiveExecutionVersion,
+      buildConf(),
+      ivyPath).client
     val db = new HiveDatabase("default", "")
     badClient.createDatabase(db)
   }
@@ -91,6 +94,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
   versions.foreach { version =>
     test(s"$version: create client") {
       client = null
+      System.gc() // Hack to avoid SEGV on some JVM versions.
       client = IsolatedClientLoader.forVersion(version, buildConf(), ivyPath).client
     }
 

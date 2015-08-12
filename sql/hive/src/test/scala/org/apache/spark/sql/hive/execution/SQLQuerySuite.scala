@@ -30,9 +30,10 @@ import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
-import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -66,6 +67,25 @@ class MyDialect extends DefaultParserDialect
  */
 class SQLQuerySuite extends QueryTest with SQLTestUtils {
   override def sqlContext: SQLContext = TestHive
+
+  test("UDTF") {
+    sql(s"ADD JAR ${TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
+    // The function source code can be found at:
+    // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
+    sql(
+      """
+        |CREATE TEMPORARY FUNCTION udtf_count2
+        |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT key, cc FROM src LATERAL VIEW udtf_count2(value) dd AS cc"),
+      Row(97, 500) :: Row(97, 500) :: Nil)
+
+    checkAnswer(
+      sql("SELECT udtf_count2(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
+      Row(3) :: Row(3) :: Nil)
+  }
 
   test("SPARK-6835: udtf in lateral view") {
     val df = Seq((1, 1)).toDF("c1", "c2")
@@ -264,47 +284,51 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
     setConf(HiveContext.CONVERT_CTAS, true)
 
-    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-    sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-    var message = intercept[AnalysisException] {
+    try {
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-    }.getMessage
-    assert(message.contains("ctas1 already exists"))
-    checkRelation("ctas1", true)
-    sql("DROP TABLE ctas1")
+      sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+      var message = intercept[AnalysisException] {
+        sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+      }.getMessage
+      assert(message.contains("ctas1 already exists"))
+      checkRelation("ctas1", true)
+      sql("DROP TABLE ctas1")
 
-    // Specifying database name for query can be converted to data source write path
-    // is not allowed right now.
-    message = intercept[AnalysisException] {
-      sql("CREATE TABLE default.ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-    }.getMessage
-    assert(
-      message.contains("Cannot specify database name in a CTAS statement"),
-      "When spark.sql.hive.convertCTAS is true, we should not allow " +
-      "database name specified.")
+      // Specifying database name for query can be converted to data source write path
+      // is not allowed right now.
+      message = intercept[AnalysisException] {
+        sql("CREATE TABLE default.ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+      }.getMessage
+      assert(
+        message.contains("Cannot specify database name in a CTAS statement"),
+        "When spark.sql.hive.convertCTAS is true, we should not allow " +
+            "database name specified.")
 
-    sql("CREATE TABLE ctas1 stored as textfile AS SELECT key k, value FROM src ORDER BY k, value")
-    checkRelation("ctas1", true)
-    sql("DROP TABLE ctas1")
+      sql("CREATE TABLE ctas1 stored as textfile" +
+          " AS SELECT key k, value FROM src ORDER BY k, value")
+      checkRelation("ctas1", true)
+      sql("DROP TABLE ctas1")
 
-    sql(
-      "CREATE TABLE ctas1 stored as sequencefile AS SELECT key k, value FROM src ORDER BY k, value")
-    checkRelation("ctas1", true)
-    sql("DROP TABLE ctas1")
+      sql("CREATE TABLE ctas1 stored as sequencefile" +
+            " AS SELECT key k, value FROM src ORDER BY k, value")
+      checkRelation("ctas1", true)
+      sql("DROP TABLE ctas1")
 
-    sql("CREATE TABLE ctas1 stored as rcfile AS SELECT key k, value FROM src ORDER BY k, value")
-    checkRelation("ctas1", false)
-    sql("DROP TABLE ctas1")
+      sql("CREATE TABLE ctas1 stored as rcfile AS SELECT key k, value FROM src ORDER BY k, value")
+      checkRelation("ctas1", false)
+      sql("DROP TABLE ctas1")
 
-    sql("CREATE TABLE ctas1 stored as orc AS SELECT key k, value FROM src ORDER BY k, value")
-    checkRelation("ctas1", false)
-    sql("DROP TABLE ctas1")
+      sql("CREATE TABLE ctas1 stored as orc AS SELECT key k, value FROM src ORDER BY k, value")
+      checkRelation("ctas1", false)
+      sql("DROP TABLE ctas1")
 
-    sql("CREATE TABLE ctas1 stored as parquet AS SELECT key k, value FROM src ORDER BY k, value")
-    checkRelation("ctas1", false)
-    sql("DROP TABLE ctas1")
-
-    setConf(HiveContext.CONVERT_CTAS, originalConf)
+      sql("CREATE TABLE ctas1 stored as parquet AS SELECT key k, value FROM src ORDER BY k, value")
+      checkRelation("ctas1", false)
+      sql("DROP TABLE ctas1")
+    } finally {
+      setConf(HiveContext.CONVERT_CTAS, originalConf)
+      sql("DROP TABLE IF EXISTS ctas1")
+    }
   }
 
   test("SQL Dialect Switching") {
@@ -637,7 +661,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("resolve udtf in projection #2") {
     val rdd = sparkContext.makeRDD((1 to 2).map(i => s"""{"a":[$i, ${i + 1}]}"""))
-    jsonRDD(rdd).registerTempTable("data")
+    read.json(rdd).registerTempTable("data")
     checkAnswer(sql("SELECT explode(map(1, 1)) FROM data LIMIT 1"), Row(1, 1) :: Nil)
     checkAnswer(sql("SELECT explode(map(1, 1)) as (k1, k2) FROM data LIMIT 1"), Row(1, 1) :: Nil)
     intercept[AnalysisException] {
@@ -652,7 +676,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   // TGF with non-TGF in project is allowed in Spark SQL, but not in Hive
   test("TGF with non-TGF in projection") {
     val rdd = sparkContext.makeRDD( """{"a": "1", "b":"1"}""" :: Nil)
-    jsonRDD(rdd).registerTempTable("data")
+    read.json(rdd).registerTempTable("data")
     checkAnswer(
       sql("SELECT explode(map(a, b)) as (k1, k2), a, b FROM data"),
       Row("1", "1", "1", "1") :: Nil)
@@ -670,22 +694,25 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     val originalConf = convertCTAS
     setConf(HiveContext.CONVERT_CTAS, false)
 
-    sql("CREATE TABLE explodeTest (key bigInt)")
-    table("explodeTest").queryExecution.analyzed match {
-      case metastoreRelation: MetastoreRelation => // OK
-      case _ =>
-        fail("To correctly test the fix of SPARK-5875, explodeTest should be a MetastoreRelation")
+    try {
+      sql("CREATE TABLE explodeTest (key bigInt)")
+      table("explodeTest").queryExecution.analyzed match {
+        case metastoreRelation: MetastoreRelation => // OK
+        case _ =>
+          fail("To correctly test the fix of SPARK-5875, explodeTest should be a MetastoreRelation")
+      }
+
+      sql(s"INSERT OVERWRITE TABLE explodeTest SELECT explode(a) AS val FROM data")
+      checkAnswer(
+        sql("SELECT key from explodeTest"),
+        (1 to 5).flatMap(i => Row(i) :: Row(i + 1) :: Nil)
+      )
+
+      sql("DROP TABLE explodeTest")
+      dropTempTable("data")
+    } finally {
+      setConf(HiveContext.CONVERT_CTAS, originalConf)
     }
-
-    sql(s"INSERT OVERWRITE TABLE explodeTest SELECT explode(a) AS val FROM data")
-    checkAnswer(
-      sql("SELECT key from explodeTest"),
-      (1 to 5).flatMap(i => Row(i) :: Row(i + 1) :: Nil)
-    )
-
-    sql("DROP TABLE explodeTest")
-    dropTempTable("data")
-    setConf(HiveContext.CONVERT_CTAS, originalConf)
   }
 
   test("sanity test for SPARK-6618") {
@@ -723,6 +750,16 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     assert(0 ===
       sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat 1>&2' AS (a,b,c) FROM script_trans")
         .queryExecution.toRdd.count())
+  }
+
+  test("test script transform data type") {
+    val data = (1 to 5).map { i => (i, i) }
+    data.toDF("key", "value").registerTempTable("test")
+    checkAnswer(
+      sql("""FROM
+          |(FROM test SELECT TRANSFORM(key, value) USING 'cat' AS (thing1 int, thing2 string)) t
+          |SELECT thing1 + 1
+        """.stripMargin), (2 to 6).map(i => Row(i)))
   }
 
   test("window function: udaf with aggregate expressin") {
@@ -912,6 +949,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-7595: Window will cause resolve failed with self join") {
+    sql("SELECT * FROM src") // Force loading of src table.
+
     checkAnswer(sql(
       """
         |with
@@ -1058,12 +1097,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   test("SPARK-8588 HiveTypeCoercion.inConversion fires too early") {
     val df =
       TestHive.createDataFrame(Seq((1, "2014-01-01"), (2, "2015-01-01"), (3, "2016-01-01")))
-    df.toDF("id", "date").registerTempTable("test_SPARK8588")
+    df.toDF("id", "datef").registerTempTable("test_SPARK8588")
     checkAnswer(
       TestHive.sql(
         """
-          |select id, concat(year(date))
-          |from test_SPARK8588 where concat(year(date), ' year') in ('2015 year', '2014 year')
+          |select id, concat(year(datef))
+          |from test_SPARK8588 where concat(year(datef), ' year') in ('2015 year', '2014 year')
         """.stripMargin),
       Row(1, "2014") :: Row(2, "2015") :: Nil
     )
@@ -1076,5 +1115,26 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
       .registerTempTable("t")
 
     checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
+  }
+
+  test("Convert hive interval term into Literal of CalendarIntervalType") {
+    checkAnswer(sql("select interval '10-9' year to month"),
+      Row(CalendarInterval.fromString("interval 10 years 9 months")))
+    checkAnswer(sql("select interval '20 15:40:32.99899999' day to second"),
+      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes " +
+        "32 seconds 99 milliseconds 899 microseconds")))
+    checkAnswer(sql("select interval '30' year"),
+      Row(CalendarInterval.fromString("interval 30 years")))
+    checkAnswer(sql("select interval '25' month"),
+      Row(CalendarInterval.fromString("interval 25 months")))
+    checkAnswer(sql("select interval '-100' day"),
+      Row(CalendarInterval.fromString("interval -14 weeks -2 days")))
+    checkAnswer(sql("select interval '40' hour"),
+      Row(CalendarInterval.fromString("interval 1 days 16 hours")))
+    checkAnswer(sql("select interval '80' minute"),
+      Row(CalendarInterval.fromString("interval 1 hour 20 minutes")))
+    checkAnswer(sql("select interval '299.889987299' second"),
+      Row(CalendarInterval.fromString(
+        "interval 4 minutes 59 seconds 889 milliseconds 987 microseconds")))
   }
 }

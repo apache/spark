@@ -58,7 +58,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("params") {
     ParamsSuite.checkParams(new GBTClassifier)
     val model = new GBTClassificationModel("gbtc",
-      Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0))),
+      Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0, null))),
       Array(1.0))
     ParamsSuite.checkParams(model)
   }

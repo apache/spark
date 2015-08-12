@@ -80,25 +80,28 @@ import scala.collection.mutable
 case class Window(
     projectList: Seq[Attribute],
     windowExpression: Seq[NamedExpression],
-    windowSpec: WindowSpecDefinition,
+    partitionSpec: Seq[Expression],
+    orderSpec: Seq[SortOrder],
     child: SparkPlan)
   extends UnaryNode {
 
   override def output: Seq[Attribute] = projectList ++ windowExpression.map(_.toAttribute)
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    if (windowSpec.partitionSpec.isEmpty) {
+    if (partitionSpec.isEmpty) {
       // Only show warning when the number of bytes is larger than 100 MB?
       logWarning("No Partition Defined for Window operation! Moving all data to a single "
         + "partition, this can cause serious performance degradation.")
       AllTuples :: Nil
-    } else ClusteredDistribution(windowSpec.partitionSpec) :: Nil
+    } else ClusteredDistribution(partitionSpec) :: Nil
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(windowSpec.partitionSpec.map(SortOrder(_, Ascending)) ++ windowSpec.orderSpec)
+    Seq(partitionSpec.map(SortOrder(_, Ascending)) ++ orderSpec)
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def canProcessUnsafeRows: Boolean = true
 
   /**
    * Create a bound ordering object for a given frame type and offset. A bound ordering object is
@@ -115,12 +118,12 @@ case class Window(
       case RangeFrame =>
         val (exprs, current, bound) = if (offset == 0) {
           // Use the entire order expression when the offset is 0.
-          val exprs = windowSpec.orderSpec.map(_.child)
+          val exprs = orderSpec.map(_.child)
           val projection = newMutableProjection(exprs, child.output)
-          (windowSpec.orderSpec, projection(), projection())
-        } else if (windowSpec.orderSpec.size == 1) {
+          (orderSpec, projection(), projection())
+        } else if (orderSpec.size == 1) {
           // Use only the first order expression when the offset is non-null.
-          val sortExpr = windowSpec.orderSpec.head
+          val sortExpr = orderSpec.head
           val expr = sortExpr.child
           // Create the projection which returns the current 'value'.
           val current = newMutableProjection(expr :: Nil, child.output)()
@@ -250,7 +253,7 @@ case class Window(
 
         // Get all relevant projections.
         val result = createResultProjection(unboundExpressions)
-        val grouping = newProjection(windowSpec.partitionSpec, child.output)
+        val grouping = newProjection(partitionSpec, child.output)
 
         // Manage the stream and the grouping.
         var nextRow: InternalRow = EmptyRow

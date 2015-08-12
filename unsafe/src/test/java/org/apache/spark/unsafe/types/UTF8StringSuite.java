@@ -19,7 +19,9 @@ package org.apache.spark.unsafe.types;
 
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
+import java.util.HashMap;
 
+import com.google.common.collect.ImmutableMap;
 import org.junit.Test;
 
 import static junit.framework.Assert.*;
@@ -112,6 +114,14 @@ public class UTF8StringSuite {
     testUpperandLower("ABCXYZ", "abcxyz");
     testUpperandLower("ЀЁЂѺΏỀ", "ѐёђѻώề");
     testUpperandLower("大千世界 数据砖头", "大千世界 数据砖头");
+  }
+
+  @Test
+  public void titleCase() {
+    assertEquals(fromString(""), fromString("").toTitleCase());
+    assertEquals(fromString("Ab Bc Cd"), fromString("ab bc cd").toTitleCase());
+    assertEquals(fromString("Ѐ Ё Ђ Ѻ Ώ Ề"), fromString("ѐ ё ђ ѻ ώ ề").toTitleCase());
+    assertEquals(fromString("大千世界 数据砖头"), fromString("大千世界 数据砖头").toTitleCase());
   }
 
   @Test
@@ -241,6 +251,44 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void substring_index() {
+    assertEquals(fromString("www.apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), 3));
+    assertEquals(fromString("www.apache"),
+      fromString("www.apache.org").subStringIndex(fromString("."), 2));
+    assertEquals(fromString("www"),
+      fromString("www.apache.org").subStringIndex(fromString("."), 1));
+    assertEquals(fromString(""),
+      fromString("www.apache.org").subStringIndex(fromString("."), 0));
+    assertEquals(fromString("org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), -1));
+    assertEquals(fromString("apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), -2));
+    assertEquals(fromString("www.apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), -3));
+    // str is empty string
+    assertEquals(fromString(""),
+      fromString("").subStringIndex(fromString("."), 1));
+    // empty string delim
+    assertEquals(fromString(""),
+      fromString("www.apache.org").subStringIndex(fromString(""), 1));
+    // delim does not exist in str
+    assertEquals(fromString("www.apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("#"), 2));
+    // delim is 2 chars
+    assertEquals(fromString("www||apache"),
+      fromString("www||apache||org").subStringIndex(fromString("||"), 2));
+    assertEquals(fromString("apache||org"),
+      fromString("www||apache||org").subStringIndex(fromString("||"), -2));
+    // non ascii chars
+    assertEquals(fromString("大千世界大"),
+      fromString("大千世界大千世界").subStringIndex(fromString("千"), 2));
+    // overlapped delim
+    assertEquals(fromString("||"), fromString("||||||").subStringIndex(fromString("|||"), 3));
+    assertEquals(fromString("|||"), fromString("||||||").subStringIndex(fromString("|||"), -4));
+  }
+
+  @Test
   public void reverse() {
     assertEquals(fromString("olleh"), fromString("hello").reverse());
     assertEquals(EMPTY_UTF8, EMPTY_UTF8.reverse());
@@ -271,7 +319,6 @@ public class UTF8StringSuite {
     assertEquals(fromString("hello?????"), fromString("hello").rpad(10, fromString("?????")));
     assertEquals(fromString("???????"), EMPTY_UTF8.rpad(7, fromString("?????")));
 
-
     assertEquals(fromString("数据砖"), fromString("数据砖头").lpad(3, fromString("????")));
     assertEquals(fromString("?数据砖头"), fromString("数据砖头").lpad(5, fromString("????")));
     assertEquals(fromString("??数据砖头"), fromString("数据砖头").lpad(6, fromString("????")));
@@ -289,6 +336,18 @@ public class UTF8StringSuite {
     assertEquals(
       fromString("数据砖头孙行者孙行者孙行"),
       fromString("数据砖头").rpad(12, fromString("孙行者")));
+
+    assertEquals(EMPTY_UTF8, fromString("数据砖头").lpad(-10, fromString("孙行者")));
+    assertEquals(EMPTY_UTF8, fromString("数据砖头").lpad(-10, EMPTY_UTF8));
+    assertEquals(fromString("数据砖头"), fromString("数据砖头").lpad(5, EMPTY_UTF8));
+    assertEquals(fromString("数据砖"), fromString("数据砖头").lpad(3, EMPTY_UTF8));
+    assertEquals(EMPTY_UTF8, EMPTY_UTF8.lpad(3, EMPTY_UTF8));
+
+    assertEquals(EMPTY_UTF8, fromString("数据砖头").rpad(-10, fromString("孙行者")));
+    assertEquals(EMPTY_UTF8, fromString("数据砖头").rpad(-10, EMPTY_UTF8));
+    assertEquals(fromString("数据砖头"), fromString("数据砖头").rpad(5, EMPTY_UTF8));
+    assertEquals(fromString("数据砖"), fromString("数据砖头").rpad(3, EMPTY_UTF8));
+    assertEquals(EMPTY_UTF8, EMPTY_UTF8.rpad(3, EMPTY_UTF8));
   }
 
   @Test
@@ -335,10 +394,99 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void translate() {
+    assertEquals(
+      fromString("1a2s3ae"),
+      fromString("translate").translate(ImmutableMap.of(
+        'r', '1',
+        'n', '2',
+        'l', '3',
+        't', '\0'
+      )));
+    assertEquals(
+      fromString("translate"),
+      fromString("translate").translate(new HashMap<Character, Character>()));
+    assertEquals(
+      fromString("asae"),
+      fromString("translate").translate(ImmutableMap.of(
+        'r', '\0',
+        'n', '\0',
+        'l', '\0',
+        't', '\0'
+      )));
+    assertEquals(
+      fromString("aa世b"),
+      fromString("花花世界").translate(ImmutableMap.of(
+        '花', 'a',
+        '界', 'b'
+      )));
+  }
+
+  @Test
   public void createBlankString() {
     assertEquals(fromString(" "), blankString(1));
     assertEquals(fromString("  "), blankString(2));
     assertEquals(fromString("   "), blankString(3));
     assertEquals(fromString(""), blankString(0));
+  }
+
+  @Test
+  public void findInSet() {
+    assertEquals(fromString("ab").findInSet(fromString("ab")), 1);
+    assertEquals(fromString("a,b").findInSet(fromString("b")), 2);
+    assertEquals(fromString("abc,b,ab,c,def").findInSet(fromString("ab")), 3);
+    assertEquals(fromString("ab,abc,b,ab,c,def").findInSet(fromString("ab")), 1);
+    assertEquals(fromString(",,,ab,abc,b,ab,c,def").findInSet(fromString("ab")), 4);
+    assertEquals(fromString(",ab,abc,b,ab,c,def").findInSet(fromString("")), 1);
+    assertEquals(fromString("数据砖头,abc,b,ab,c,def").findInSet(fromString("ab")), 4);
+    assertEquals(fromString("数据砖头,abc,b,ab,c,def").findInSet(fromString("def")), 6);
+  }
+
+  @Test
+  public void soundex() {
+    assertEquals(fromString("Robert").soundex(), fromString("R163"));
+    assertEquals(fromString("Rupert").soundex(), fromString("R163"));
+    assertEquals(fromString("Rubin").soundex(), fromString("R150"));
+    assertEquals(fromString("Ashcraft").soundex(), fromString("A261"));
+    assertEquals(fromString("Ashcroft").soundex(), fromString("A261"));
+    assertEquals(fromString("Burroughs").soundex(), fromString("B620"));
+    assertEquals(fromString("Burrows").soundex(), fromString("B620"));
+    assertEquals(fromString("Ekzampul").soundex(), fromString("E251"));
+    assertEquals(fromString("Example").soundex(), fromString("E251"));
+    assertEquals(fromString("Ellery").soundex(), fromString("E460"));
+    assertEquals(fromString("Euler").soundex(), fromString("E460"));
+    assertEquals(fromString("Ghosh").soundex(), fromString("G200"));
+    assertEquals(fromString("Gauss").soundex(), fromString("G200"));
+    assertEquals(fromString("Gutierrez").soundex(), fromString("G362"));
+    assertEquals(fromString("Heilbronn").soundex(), fromString("H416"));
+    assertEquals(fromString("Hilbert").soundex(), fromString("H416"));
+    assertEquals(fromString("Jackson").soundex(), fromString("J250"));
+    assertEquals(fromString("Kant").soundex(), fromString("K530"));
+    assertEquals(fromString("Knuth").soundex(), fromString("K530"));
+    assertEquals(fromString("Lee").soundex(), fromString("L000"));
+    assertEquals(fromString("Lukasiewicz").soundex(), fromString("L222"));
+    assertEquals(fromString("Lissajous").soundex(), fromString("L222"));
+    assertEquals(fromString("Ladd").soundex(), fromString("L300"));
+    assertEquals(fromString("Lloyd").soundex(), fromString("L300"));
+    assertEquals(fromString("Moses").soundex(), fromString("M220"));
+    assertEquals(fromString("O'Hara").soundex(), fromString("O600"));
+    assertEquals(fromString("Pfister").soundex(), fromString("P236"));
+    assertEquals(fromString("Rubin").soundex(), fromString("R150"));
+    assertEquals(fromString("Robert").soundex(), fromString("R163"));
+    assertEquals(fromString("Rupert").soundex(), fromString("R163"));
+    assertEquals(fromString("Soundex").soundex(), fromString("S532"));
+    assertEquals(fromString("Sownteks").soundex(), fromString("S532"));
+    assertEquals(fromString("Tymczak").soundex(), fromString("T522"));
+    assertEquals(fromString("VanDeusen").soundex(), fromString("V532"));
+    assertEquals(fromString("Washington").soundex(), fromString("W252"));
+    assertEquals(fromString("Wheaton").soundex(), fromString("W350"));
+
+    assertEquals(fromString("a").soundex(), fromString("A000"));
+    assertEquals(fromString("ab").soundex(), fromString("A100"));
+    assertEquals(fromString("abc").soundex(), fromString("A120"));
+    assertEquals(fromString("abcd").soundex(), fromString("A123"));
+    assertEquals(fromString("").soundex(), fromString(""));
+    assertEquals(fromString("123").soundex(), fromString("123"));
+    assertEquals(fromString("世界千世").soundex(), fromString("世界千世"));
   }
 }

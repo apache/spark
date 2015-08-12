@@ -120,13 +120,30 @@ case class Explode(child: Expression) extends UnaryExpression with Generator wit
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
     child.dataType match {
-      case ArrayType(_, _) =>
+      case ArrayType(et, _) =>
         val inputArray = child.eval(input).asInstanceOf[ArrayData]
-        if (inputArray == null) Nil else inputArray.toArray().map(v => InternalRow(v))
-      case MapType(_, _, _) =>
-        val inputMap = child.eval(input).asInstanceOf[Map[Any, Any]]
-        if (inputMap == null) Nil
-        else inputMap.map { case (k, v) => InternalRow(k, v) }
+        if (inputArray == null) {
+          Nil
+        } else {
+          val rows = new Array[InternalRow](inputArray.numElements())
+          inputArray.foreach(et, (i, e) => {
+            rows(i) = InternalRow(e)
+          })
+          rows
+        }
+      case MapType(kt, vt, _) =>
+        val inputMap = child.eval(input).asInstanceOf[MapData]
+        if (inputMap == null) {
+          Nil
+        } else {
+          val rows = new Array[InternalRow](inputMap.numElements())
+          var i = 0
+          inputMap.foreach(kt, vt, (k, v) => {
+            rows(i) = InternalRow(k, v)
+            i += 1
+          })
+          rows
+        }
     }
   }
 }

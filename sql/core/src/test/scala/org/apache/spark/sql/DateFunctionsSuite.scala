@@ -89,7 +89,7 @@ class DateFunctionsSuite extends QueryTest {
     val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(date_format("a", "y"), date_format("b", "y"), date_format("c", "y")),
+      df.select(date_format($"a", "y"), date_format($"b", "y"), date_format($"c", "y")),
       Row("2015", "2015", "2013"))
 
     checkAnswer(
@@ -101,7 +101,7 @@ class DateFunctionsSuite extends QueryTest {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(year("a"), year("b"), year("c")),
+      df.select(year($"a"), year($"b"), year($"c")),
       Row(2015, 2015, 2013))
 
     checkAnswer(
@@ -115,7 +115,7 @@ class DateFunctionsSuite extends QueryTest {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(quarter("a"), quarter("b"), quarter("c")),
+      df.select(quarter($"a"), quarter($"b"), quarter($"c")),
       Row(2, 2, 4))
 
     checkAnswer(
@@ -127,7 +127,7 @@ class DateFunctionsSuite extends QueryTest {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(month("a"), month("b"), month("c")),
+      df.select(month($"a"), month($"b"), month($"c")),
       Row(4, 4, 4))
 
     checkAnswer(
@@ -139,7 +139,7 @@ class DateFunctionsSuite extends QueryTest {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(dayofmonth("a"), dayofmonth("b"), dayofmonth("c")),
+      df.select(dayofmonth($"a"), dayofmonth($"b"), dayofmonth($"c")),
       Row(8, 8, 8))
 
     checkAnswer(
@@ -151,7 +151,7 @@ class DateFunctionsSuite extends QueryTest {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(dayofyear("a"), dayofyear("b"), dayofyear("c")),
+      df.select(dayofyear($"a"), dayofyear($"b"), dayofyear($"c")),
       Row(98, 98, 98))
 
     checkAnswer(
@@ -163,7 +163,7 @@ class DateFunctionsSuite extends QueryTest {
     val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(hour("a"), hour("b"), hour("c")),
+      df.select(hour($"a"), hour($"b"), hour($"c")),
       Row(0, 13, 13))
 
     checkAnswer(
@@ -175,7 +175,7 @@ class DateFunctionsSuite extends QueryTest {
     val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(minute("a"), minute("b"), minute("c")),
+      df.select(minute($"a"), minute($"b"), minute($"c")),
       Row(0, 10, 10))
 
     checkAnswer(
@@ -187,7 +187,7 @@ class DateFunctionsSuite extends QueryTest {
     val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(second("a"), second("b"), second("c")),
+      df.select(second($"a"), second($"b"), second($"c")),
       Row(0, 15, 15))
 
     checkAnswer(
@@ -199,7 +199,7 @@ class DateFunctionsSuite extends QueryTest {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
-      df.select(weekofyear("a"), weekofyear("b"), weekofyear("c")),
+      df.select(weekofyear($"a"), weekofyear($"b"), weekofyear($"c")),
       Row(15, 15, 15))
 
     checkAnswer(
@@ -345,6 +345,50 @@ class DateFunctionsSuite extends QueryTest {
       Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-07-30"))))
   }
 
+  test("function to_date") {
+    val d1 = Date.valueOf("2015-07-22")
+    val d2 = Date.valueOf("2015-07-01")
+    val t1 = Timestamp.valueOf("2015-07-22 10:00:00")
+    val t2 = Timestamp.valueOf("2014-12-31 23:59:59")
+    val s1 = "2015-07-22 10:00:00"
+    val s2 = "2014-12-31"
+    val df = Seq((d1, t1, s1), (d2, t2, s2)).toDF("d", "t", "s")
+
+    checkAnswer(
+      df.select(to_date(col("t"))),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"))))
+    checkAnswer(
+      df.select(to_date(col("d"))),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01"))))
+    checkAnswer(
+      df.select(to_date(col("s"))),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"))))
+
+    checkAnswer(
+      df.selectExpr("to_date(t)"),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"))))
+    checkAnswer(
+      df.selectExpr("to_date(d)"),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01"))))
+    checkAnswer(
+      df.selectExpr("to_date(s)"),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"))))
+  }
+
+  test("function trunc") {
+    val df = Seq(
+      (1, Timestamp.valueOf("2015-07-22 10:00:00")),
+      (2, Timestamp.valueOf("2014-12-31 00:00:00"))).toDF("i", "t")
+
+    checkAnswer(
+      df.select(trunc(col("t"), "YY")),
+      Seq(Row(Date.valueOf("2015-01-01")), Row(Date.valueOf("2014-01-01"))))
+
+    checkAnswer(
+      df.selectExpr("trunc(t, 'Month')"),
+      Seq(Row(Date.valueOf("2015-07-01")), Row(Date.valueOf("2014-12-01"))))
+  }
+
   test("from_unixtime") {
     val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
     val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
@@ -399,6 +443,53 @@ class DateFunctionsSuite extends QueryTest {
       Row(date1.getTime / 1000L), Row(date2.getTime / 1000L)))
     checkAnswer(df.selectExpr(s"unix_timestamp(s, '$fmt')"), Seq(
       Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+  }
+
+  test("datediff") {
+    val df = Seq(
+      (Date.valueOf("2015-07-24"), Timestamp.valueOf("2015-07-24 01:00:00"),
+        "2015-07-23", "2015-07-23 03:00:00"),
+      (Date.valueOf("2015-07-25"), Timestamp.valueOf("2015-07-25 02:00:00"),
+        "2015-07-24", "2015-07-24 04:00:00")
+    ).toDF("a", "b", "c", "d")
+    checkAnswer(df.select(datediff(col("a"), col("b"))), Seq(Row(0), Row(0)))
+    checkAnswer(df.select(datediff(col("a"), col("c"))), Seq(Row(1), Row(1)))
+    checkAnswer(df.select(datediff(col("d"), col("b"))), Seq(Row(-1), Row(-1)))
+    checkAnswer(df.selectExpr("datediff(a, d)"), Seq(Row(1), Row(1)))
+  }
+
+  test("from_utc_timestamp") {
+    val df = Seq(
+      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
+      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(from_utc_timestamp(col("a"), "PST")),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-23 17:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+    checkAnswer(
+      df.select(from_utc_timestamp(col("b"), "PST")),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-23 17:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+  }
+
+  test("to_utc_timestamp") {
+    val df = Seq(
+      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
+      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(to_utc_timestamp(col("a"), "PST")),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+        Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
+    checkAnswer(
+      df.select(to_utc_timestamp(col("b"), "PST")),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+        Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
   }
 
 }

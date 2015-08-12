@@ -62,8 +62,6 @@ object MimaExcludes {
               "org.apache.spark.ml.classification.LogisticCostFun.this"),
             // SQL execution is considered private.
             excludePackage("org.apache.spark.sql.execution"),
-            // Parquet support is considered private.
-            excludePackage("org.apache.spark.sql.parquet"),
             // The old JSON RDD is removed in favor of streaming Jackson
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD$"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD"),
@@ -80,8 +78,13 @@ object MimaExcludes {
               "org.apache.spark.mllib.linalg.Matrix.numActives")
           ) ++ Seq(
             // SPARK-8914 Remove RDDApi
-            ProblemFilters.exclude[MissingClassProblem](
-            "org.apache.spark.sql.RDDApi")
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RDDApi")
+          ) ++ Seq(
+            // SPARK-7292 Provide operator to truncate lineage cheaply
+            ProblemFilters.exclude[AbstractClassProblem](
+              "org.apache.spark.rdd.RDDCheckpointData"),
+            ProblemFilters.exclude[AbstractClassProblem](
+              "org.apache.spark.rdd.CheckpointRDD")
           ) ++ Seq(
             // SPARK-8701 Add input metadata in the batch page.
             ProblemFilters.exclude[MissingClassProblem](
@@ -150,7 +153,31 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.SqlNewHadoopRDD$NewHadoopMapPartitionsWithSplitRDD$"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.PartitionSpec$"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DescribeCommand"),
-            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DDLException")
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.DDLException"),
+            // SPARK-9763 Minimize exposure of internal SQL classes
+            excludePackage("org.apache.spark.sql.parquet"),
+            excludePackage("org.apache.spark.sql.json"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCRDD$DecimalConversion$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCPartition"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JdbcUtils$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCRDD$DecimalConversion"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCPartitioningInfo$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCPartition$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.package"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCRDD$JDBCConversion"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCRDD$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.package$DriverWrapper"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCRDD"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCPartitioningInfo"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JdbcUtils"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.DefaultSource"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCRelation$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.package$"),
+            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.JDBCRelation")
+          ) ++ Seq(
+            // SPARK-4751 Dynamic allocation for standalone mode
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.SparkContext.supportDynamicAllocation")
           )
 
         case v if v.startsWith("1.4") =>
@@ -173,7 +200,7 @@ object MimaExcludes {
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.broadcast.TorrentBroadcastFactory.newBroadcast"),
             ProblemFilters.exclude[MissingClassProblem](
-              "org.apache.spark.scheduler.OutputCommitCoordinator$OutputCommitCoordinatorActor")
+              "org.apache.spark.scheduler.OutputCommitCoordinator$OutputCommitCoordinatorEndpoint")
           ) ++ Seq(
             // SPARK-4655 - Making Stage an Abstract class broke binary compatility even though
             // the stage class is defined as private[spark]

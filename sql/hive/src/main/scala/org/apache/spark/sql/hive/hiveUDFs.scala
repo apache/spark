@@ -133,8 +133,7 @@ private[hive] case class HiveSimpleUDF(funcWrapper: HiveFunctionWrapper, childre
   @transient
   private lazy val conversionHelper = new ConversionHelper(method, arguments)
 
-  @transient
-  lazy val dataType = javaClassToDataType(method.getReturnType)
+  val dataType = javaClassToDataType(method.getReturnType)
 
   @transient
   lazy val returnInspector = ObjectInspectorFactory.getReflectionObjectInspector(
@@ -249,7 +248,7 @@ private[spark] object ResolveHiveWindowFunction extends Rule[LogicalPlan] {
           // Get the class of this function.
           // In Hive 0.12, there is no windowFunctionInfo.getFunctionClass. So, we use
           // windowFunctionInfo.getfInfo().getFunctionClass for both Hive 0.13 and Hive 0.13.1.
-          val functionClass = windowFunctionInfo.getfInfo().getFunctionClass
+          val functionClass = windowFunctionInfo.getFunctionClass()
           val newChildren =
             // Rank(), DENSE_RANK(), CUME_DIST(), and PERCENT_RANK() do not take explicit
             // input parameters and requires implicit parameters, which
@@ -428,10 +427,10 @@ private[hive] case class HiveWindowFunction(
       // if pivotResult is false, we will get a single value for all rows in the frame.
       outputBuffer
     } else {
-      // if pivotResult is true, we will get a Seq having the same size with the size
+      // if pivotResult is true, we will get a ArrayData having the same size with the size
       // of the window frame. At here, we will return the result at the position of
       // index in the output buffer.
-      outputBuffer.asInstanceOf[ArrayData].get(index)
+      outputBuffer.asInstanceOf[ArrayData].get(index, dataType)
     }
   }
 

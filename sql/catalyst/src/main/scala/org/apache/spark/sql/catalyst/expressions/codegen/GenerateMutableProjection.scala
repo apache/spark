@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
+import org.apache.spark.sql.types.DecimalType
 
 // MutableProjection is not accessible in Java
 abstract class BaseMutableProjection extends MutableProjection
@@ -39,61 +40,46 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
   protected def create(expressions: Seq[Expression]): (() => MutableProjection) = {
     val ctx = newCodeGenContext()
-    val projectionCode = expressions.zipWithIndex.map {
+    val projectionCodes = expressions.zipWithIndex.map {
       case (NoOp, _) => ""
       case (e, i) =>
         val evaluationCode = e.gen(ctx)
-        evaluationCode.code +
+        if (e.dataType.isInstanceOf[DecimalType]) {
+          // Can't call setNullAt on DecimalType, because we need to keep the offset
           s"""
+            ${evaluationCode.code}
+            if (${evaluationCode.isNull}) {
+              ${ctx.setColumn("mutableRow", e.dataType, i, null)};
+            } else {
+              ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
+            }
+          """
+        } else {
+          s"""
+            ${evaluationCode.code}
             if (${evaluationCode.isNull}) {
               mutableRow.setNullAt($i);
             } else {
               ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
             }
           """
+        }
     }
-    // collect projections into blocks as function has 64kb codesize limit in JVM
-    val projectionBlocks = new ArrayBuffer[String]()
-    val blockBuilder = new StringBuilder()
-    for (projection <- projectionCode) {
-      if (blockBuilder.length > 16 * 1000) {
-        projectionBlocks.append(blockBuilder.toString())
-        blockBuilder.clear()
-      }
-      blockBuilder.append(projection)
-    }
-    projectionBlocks.append(blockBuilder.toString())
-
-    val (projectionFuns, projectionCalls) = {
-      // inline execution if codesize limit was not broken
-      if (projectionBlocks.length == 1) {
-        ("", projectionBlocks.head)
-      } else {
-        (
-          projectionBlocks.zipWithIndex.map { case (body, i) =>
-            s"""
-               |private void apply$i(InternalRow i) {
-               |  $body
-               |}
-             """.stripMargin
-          }.mkString,
-          projectionBlocks.indices.map(i => s"apply$i(i);").mkString("\n")
-        )
-      }
-    }
+    val allProjections = ctx.splitExpressions("i", projectionCodes)
 
     val code = s"""
       public Object generate($exprType[] expr) {
-        return new SpecificProjection(expr);
+        return new SpecificMutableProjection(expr);
       }
 
-      class SpecificProjection extends ${classOf[BaseMutableProjection].getName} {
+      class SpecificMutableProjection extends ${classOf[BaseMutableProjection].getName} {
 
         private $exprType[] expressions;
         private $mutableRowType mutableRow;
         ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
 
-        public SpecificProjection($exprType[] expr) {
+        public SpecificMutableProjection($exprType[] expr) {
           expressions = expr;
           mutableRow = new $genericMutableRowType(${expressions.size});
           ${initMutableStates(ctx)}
@@ -109,12 +95,9 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           return (InternalRow) mutableRow;
         }
 
-        $projectionFuns
-
         public Object apply(Object _i) {
           InternalRow i = (InternalRow) _i;
-          $projectionCalls
-
+          $allProjections
           return mutableRow;
         }
       }

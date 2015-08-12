@@ -21,7 +21,6 @@ import java.io.OutputStream
 import java.util.{List => JList, Map => JMap}
 
 import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
 
 import net.razorvine.pickle._
 
@@ -66,7 +65,7 @@ private[spark] case class PythonUDF(
  * multiple child operators.
  */
 private[spark] object ExtractPythonUDFs extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // Skip EvaluatePython nodes.
     case plan: EvaluatePython => plan
 
@@ -135,22 +134,18 @@ object EvaluatePython {
       new GenericInternalRowWithSchema(values, struct)
 
     case (a: ArrayData, array: ArrayType) =>
-      val length = a.numElements()
-      val values = new java.util.ArrayList[Any](length)
-      var i = 0
-      while (i < length) {
-        if (a.isNullAt(i)) {
-          values.add(null)
-        } else {
-          values.add(toJava(a.get(i), array.elementType))
-        }
-        i += 1
-      }
+      val values = new java.util.ArrayList[Any](a.numElements())
+      a.foreach(array.elementType, (_, e) => {
+        values.add(toJava(e, array.elementType))
+      })
       values
 
-    case (obj: Map[_, _], mt: MapType) => obj.map {
-      case (k, v) => (toJava(k, mt.keyType), toJava(v, mt.valueType))
-    }.asJava
+    case (map: MapData, mt: MapType) =>
+      val jmap = new java.util.HashMap[Any, Any](map.numElements())
+      map.foreach(mt.keyType, mt.valueType, (k, v) => {
+        jmap.put(toJava(k, mt.keyType), toJava(v, mt.valueType))
+      })
+      jmap
 
     case (ud, udt: UserDefinedType[_]) => toJava(ud, udt.sqlType)
 
@@ -186,7 +181,7 @@ object EvaluatePython {
 
     case (c: Double, DoubleType) => c
 
-    case (c: java.math.BigDecimal, dt: DecimalType) => Decimal(c)
+    case (c: java.math.BigDecimal, dt: DecimalType) => Decimal(c, dt.precision, dt.scale)
 
     case (c: Int, DateType) => c
 
@@ -206,9 +201,10 @@ object EvaluatePython {
     case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
       new GenericArrayData(c.asInstanceOf[Array[_]].map(e => fromJava(e, elementType)))
 
-    case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) => c.map {
-      case (key, value) => (fromJava(key, keyType), fromJava(value, valueType))
-    }.toMap
+    case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) =>
+      val keys = c.keysIterator.map(fromJava(_, keyType)).toArray
+      val values = c.valuesIterator.map(fromJava(_, valueType)).toArray
+      ArrayBasedMapData(keys, values)
 
     case (c, StructType(fields)) if c.getClass.isArray =>
       new GenericInternalRow(c.asInstanceOf[Array[_]].zip(fields).map {

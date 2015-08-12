@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.{RDD, ShuffledRDD}
+import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -26,9 +26,11 @@ import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
+import org.apache.spark.util.random.PoissonSampler
 import org.apache.spark.util.{CompletionIterator, MutablePair}
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
@@ -39,11 +41,20 @@ import org.apache.spark.{HashPartitioner, SparkEnv}
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
+  override private[sql] lazy val metrics = Map(
+    "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
+
   @transient lazy val buildProjection = newMutableProjection(projectList, child.output)
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    val reusableProjection = buildProjection()
-    iter.map(reusableProjection)
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numRows = longMetric("numRows")
+    child.execute().mapPartitions { iter =>
+      val reusableProjection = buildProjection()
+      iter.map { row =>
+        numRows += 1
+        reusableProjection(row)
+      }
+    }
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -55,19 +66,28 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
  */
 case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
 
+  override private[sql] lazy val metrics = Map(
+    "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
+
   override def outputsUnsafeRows: Boolean = true
   override def canProcessUnsafeRows: Boolean = true
   override def canProcessSafeRows: Boolean = true
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    this.transformAllExpressions {
-      case CreateStruct(children) => CreateStructUnsafe(children)
-      case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numRows = longMetric("numRows")
+    child.execute().mapPartitions { iter =>
+      this.transformAllExpressions {
+        case CreateStruct(children) => CreateStructUnsafe(children)
+        case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+      }
+      val project = UnsafeProjection.create(projectList, child.output)
+      iter.map { row =>
+        numRows += 1
+        project(row)
+      }
     }
-    val project = UnsafeProjection.create(projectList, child.output)
-    iter.map(project)
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -81,8 +101,22 @@ case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) 
 case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    iter.filter(newPredicate(condition, child.output))
+  private[sql] override lazy val metrics = Map(
+    "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numInputRows = longMetric("numInputRows")
+    val numOutputRows = longMetric("numOutputRows")
+    child.execute().mapPartitions { iter =>
+      val predicate = newPredicate(condition, child.output)
+      iter.filter { row =>
+        numInputRows += 1
+        val r = predicate(row)
+        if (r) numOutputRows += 1
+        r
+      }
+    }
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -115,12 +149,21 @@ case class Sample(
 {
   override def output: Seq[Attribute] = child.output
 
-  // TODO: How to pick seed?
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
+
   protected override def doExecute(): RDD[InternalRow] = {
     if (withReplacement) {
-      child.execute().map(_.copy()).sample(withReplacement, upperBound - lowerBound, seed)
+      // Disable gap sampling since the gap sampling method buffers two rows internally,
+      // requiring us to copy the row, which is more expensive than the random number generator.
+      new PartitionwiseSampledRDD[InternalRow, InternalRow](
+        child.execute(),
+        new PoissonSampler[InternalRow](upperBound - lowerBound, useGapSamplingIfPossible = false),
+        preservesPartitioning = true,
+        seed)
     } else {
-      child.execute().map(_.copy()).randomSampleWithRange(lowerBound, upperBound, seed)
+      child.execute().randomSampleWithRange(lowerBound, upperBound, seed)
     }
   }
 }
@@ -198,7 +241,9 @@ case class TakeOrderedAndProject(
 
   override def outputPartitioning: Partitioning = SinglePartition
 
-  private val ord: RowOrdering = new RowOrdering(sortOrder, child.output)
+  // We need to use an interpreted ordering here because generated orderings cannot be serialized
+  // and this ordering needs to be created on the driver in order to be passed into Spark core code.
+  private val ord: InterpretedOrdering = new InterpretedOrdering(sortOrder, child.output)
 
   // TODO: remove @transient after figure out how to clean closure at InsertIntoHiveTable.
   @transient private val projection = projectList.map(new InterpretedProjection(_, child.output))
@@ -220,7 +265,6 @@ case class TakeOrderedAndProject(
   override def outputOrdering: Seq[SortOrder] = sortOrder
 }
 
-
 /**
  * :: DeveloperApi ::
  * Return a new RDD that has exactly `numPartitions` partitions.
@@ -229,6 +273,11 @@ case class TakeOrderedAndProject(
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: SparkPlan)
   extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = {
+    if (numPartitions == 1) SinglePartition
+    else UnknownPartitioning(numPartitions)
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     child.execute().map(_.copy()).coalesce(numPartitions, shuffle)

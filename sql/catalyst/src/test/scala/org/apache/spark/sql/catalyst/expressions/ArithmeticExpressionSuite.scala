@@ -19,9 +19,11 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types._
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
+
+  import IntegralLiteralTestUtils._
 
   /**
    * Runs through the testFunc for all numeric data types.
@@ -47,6 +49,9 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Add(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Add(left, Literal.create(null, right.dataType)), null)
     }
+    checkEvaluation(Add(positiveShortLit, negativeShortLit), -1.toShort)
+    checkEvaluation(Add(positiveIntLit, negativeIntLit), -1)
+    checkEvaluation(Add(positiveLongLit, negativeLongLit), -1L)
   }
 
   test("- (UnaryMinus)") {
@@ -56,6 +61,16 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(UnaryMinus(input), convert(-1))
       checkEvaluation(UnaryMinus(Literal.create(null, dataType)), null)
     }
+    checkEvaluation(UnaryMinus(Literal(Long.MinValue)), Long.MinValue)
+    checkEvaluation(UnaryMinus(Literal(Int.MinValue)), Int.MinValue)
+    checkEvaluation(UnaryMinus(Literal(Short.MinValue)), Short.MinValue)
+    checkEvaluation(UnaryMinus(Literal(Byte.MinValue)), Byte.MinValue)
+    checkEvaluation(UnaryMinus(positiveShortLit), (- positiveShort).toShort)
+    checkEvaluation(UnaryMinus(negativeShortLit), (- negativeShort).toShort)
+    checkEvaluation(UnaryMinus(positiveIntLit), - positiveInt)
+    checkEvaluation(UnaryMinus(negativeIntLit), - negativeInt)
+    checkEvaluation(UnaryMinus(positiveLongLit), - positiveLong)
+    checkEvaluation(UnaryMinus(negativeLongLit), - negativeLong)
   }
 
   test("- (Minus)") {
@@ -66,6 +81,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Subtract(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Subtract(left, Literal.create(null, right.dataType)), null)
     }
+    checkEvaluation(Subtract(positiveShortLit, negativeShortLit),
+      (positiveShort - negativeShort).toShort)
+    checkEvaluation(Subtract(positiveIntLit, negativeIntLit), positiveInt - negativeInt)
+    checkEvaluation(Subtract(positiveLongLit, negativeLongLit), positiveLong - negativeLong)
   }
 
   test("* (Multiply)") {
@@ -76,6 +95,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Multiply(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Multiply(left, Literal.create(null, right.dataType)), null)
     }
+    checkEvaluation(Multiply(positiveShortLit, negativeShortLit),
+      (positiveShort * negativeShort).toShort)
+    checkEvaluation(Multiply(positiveIntLit, negativeIntLit), positiveInt * negativeInt)
+    checkEvaluation(Multiply(positiveLongLit, negativeLongLit), positiveLong * negativeLong)
   }
 
   test("/ (Divide) basic") {
@@ -95,6 +118,9 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Divide(Literal(1.toShort), Literal(2.toShort)), 0.toShort)
     checkEvaluation(Divide(Literal(1), Literal(2)), 0)
     checkEvaluation(Divide(Literal(1.toLong), Literal(2.toLong)), 0.toLong)
+    checkEvaluation(Divide(positiveShortLit, negativeShortLit), 0.toShort)
+    checkEvaluation(Divide(positiveIntLit, negativeIntLit), 0)
+    checkEvaluation(Divide(positiveLongLit, negativeLongLit), 0L)
   }
 
   test("/ (Divide) for floating point") {
@@ -112,6 +138,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Remainder(left, Literal.create(null, right.dataType)), null)
       checkEvaluation(Remainder(left, Literal(convert(0))), null)  // mod by 0
     }
+    checkEvaluation(Remainder(positiveShortLit, positiveShortLit), 0.toShort)
+    checkEvaluation(Remainder(negativeShortLit, negativeShortLit), 0.toShort)
+    checkEvaluation(Remainder(positiveIntLit, positiveIntLit), 0)
+    checkEvaluation(Remainder(negativeIntLit, negativeIntLit), 0)
+    checkEvaluation(Remainder(positiveLongLit, positiveLongLit), 0L)
+    checkEvaluation(Remainder(negativeLongLit, negativeLongLit), 0L)
   }
 
   test("Abs") {
@@ -123,6 +155,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Abs(Literal(convert(-1))), convert(1))
       checkEvaluation(Abs(Literal.create(null, dataType)), null)
     }
+    checkEvaluation(Abs(positiveShortLit), positiveShort)
+    checkEvaluation(Abs(negativeShortLit), (- negativeShort).toShort)
+    checkEvaluation(Abs(positiveIntLit), positiveInt)
+    checkEvaluation(Abs(negativeIntLit), - negativeInt)
+    checkEvaluation(Abs(positiveLongLit), positiveLong)
+    checkEvaluation(Abs(negativeLongLit), - negativeLong)
   }
 
   test("MaxOf basic") {
@@ -134,6 +172,9 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(MaxOf(Literal.create(null, small.dataType), large), convert(2))
       checkEvaluation(MaxOf(large, Literal.create(null, small.dataType)), convert(2))
     }
+    checkEvaluation(MaxOf(positiveShortLit, negativeShortLit), (positiveShort).toShort)
+    checkEvaluation(MaxOf(positiveIntLit, negativeIntLit), positiveInt)
+    checkEvaluation(MaxOf(positiveLongLit, negativeLongLit), positiveLong)
   }
 
   test("MaxOf for atomic type") {
@@ -152,6 +193,9 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(MinOf(Literal.create(null, small.dataType), large), convert(2))
       checkEvaluation(MinOf(small, Literal.create(null, small.dataType)), convert(1))
     }
+    checkEvaluation(MinOf(positiveShortLit, negativeShortLit), (negativeShort).toShort)
+    checkEvaluation(MinOf(positiveIntLit, negativeIntLit), negativeInt)
+    checkEvaluation(MinOf(positiveLongLit, negativeLongLit), negativeLong)
   }
 
   test("MinOf for atomic type") {
@@ -170,9 +214,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Pmod(left, Literal.create(null, right.dataType)), null)
       checkEvaluation(Remainder(left, Literal(convert(0))), null)  // mod by 0
     }
-    checkEvaluation(Pmod(-7, 3), 2)
-    checkEvaluation(Pmod(7.2D, 4.1D), 3.1000000000000005)
-    checkEvaluation(Pmod(Decimal(0.7), Decimal(0.2)), Decimal(0.1))
-    checkEvaluation(Pmod(2L, Long.MaxValue), 2L)
+    checkEvaluation(Pmod(Literal(-7), Literal(3)), 2)
+    checkEvaluation(Pmod(Literal(7.2D), Literal(4.1D)), 3.1000000000000005)
+    checkEvaluation(Pmod(Literal(Decimal(0.7)), Literal(Decimal(0.2))), Decimal(0.1))
+    checkEvaluation(Pmod(Literal(2L), Literal(Long.MaxValue)), 2L)
+    checkEvaluation(Pmod(positiveShort, negativeShort), positiveShort.toShort)
+    checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
+    checkEvaluation(Pmod(positiveLong, negativeLong), positiveLong)
   }
 }
