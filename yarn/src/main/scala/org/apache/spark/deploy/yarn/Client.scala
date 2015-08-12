@@ -203,12 +203,14 @@ private[spark] class Client(
     val executorMem = args.executorMemory + executorMemoryOverhead
     if (executorMem > maxMem) {
       throw new IllegalArgumentException(s"Required executor memory (${args.executorMemory}" +
-        s"+$executorMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster!")
+        s"+$executorMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster! " +
+        "Please increase the value of 'yarn.scheduler.maximum-allocation-mb'.")
     }
     val amMem = args.amMemory + amMemoryOverhead
     if (amMem > maxMem) {
       throw new IllegalArgumentException(s"Required AM memory (${args.amMemory}" +
-        s"+$amMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster!")
+        s"+$amMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster! " +
+        "Please increase the value of 'yarn.scheduler.maximum-allocation-mb'.")
     }
     logInfo("Will allocate AM container, with %d MB memory including %d MB overhead".format(
       amMem,
@@ -767,7 +769,7 @@ private[spark] class Client(
     amContainer.setCommands(printableCommands)
 
     logDebug("===============================================================================")
-    logDebug("Yarn AM launch context:")
+    logDebug("YARN AM launch context:")
     logDebug(s"    user class: ${Option(args.userClass).getOrElse("N/A")}")
     logDebug("    env:")
     launchEnv.foreach { case (k, v) => logDebug(s"        $k -> $v") }
@@ -1295,11 +1297,12 @@ object Client extends Logging {
 
         logDebug("Attempting to fetch HBase security token.")
 
-        val hbaseConf = confCreate.invoke(null, conf)
-        val token = obtainToken.invoke(null, hbaseConf).asInstanceOf[Token[TokenIdentifier]]
-        credentials.addToken(token.getService, token)
-
-        logInfo("Added HBase security token to credentials.")
+        val hbaseConf = confCreate.invoke(null, conf).asInstanceOf[Configuration]
+        if ("kerberos" == hbaseConf.get("hbase.security.authentication")) {
+          val token = obtainToken.invoke(null, hbaseConf).asInstanceOf[Token[TokenIdentifier]]
+          credentials.addToken(token.getService, token)
+          logInfo("Added HBase security token to credentials.")
+        }
       } catch {
         case e: java.lang.NoSuchMethodException =>
           logInfo("HBase Method not found: " + e)

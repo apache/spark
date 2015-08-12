@@ -24,6 +24,7 @@ import java.math.MathContext
 import scala.util.Random
 
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Random data generators for Spark SQL DataTypes. These generators do not generate uniformly random
@@ -66,6 +67,19 @@ object RandomDataGenerator {
   }
 
   /**
+   * Returns a randomly generated schema, based on the given accepted types.
+   *
+   * @param numFields the number of fields in this schema
+   * @param acceptedTypes types to draw from.
+   */
+  def randomSchema(numFields: Int, acceptedTypes: Seq[DataType]): StructType = {
+    StructType(Seq.tabulate(numFields) { i =>
+      val dt = acceptedTypes(Random.nextInt(acceptedTypes.size))
+      StructField("col_" + i, dt, nullable = true)
+    })
+  }
+
+  /**
    * Returns a function which generates random values for the given [[DataType]], or `None` if no
    * random data generator is defined for that data type. The generated values will use an external
    * representation of the data type; for example, the random generator for [[DateType]] will return
@@ -93,8 +107,16 @@ object RandomDataGenerator {
       case BooleanType => Some(() => rand.nextBoolean())
       case DateType => Some(() => new java.sql.Date(rand.nextInt()))
       case TimestampType => Some(() => new java.sql.Timestamp(rand.nextLong()))
+      case CalendarIntervalType => Some(() => {
+        val months = rand.nextInt(1000)
+        val ns = rand.nextLong()
+        new CalendarInterval(months, ns)
+      })
       case DecimalType.Fixed(precision, scale) => Some(
-        () => BigDecimal.apply(rand.nextLong, rand.nextInt, new MathContext(precision)))
+        () => BigDecimal.apply(
+          rand.nextLong() % math.pow(10, precision).toLong,
+          scale,
+          new MathContext(precision)))
       case DoubleType => randomNumeric[Double](
         rand, r => longBitsToDouble(r.nextLong()), Seq(Double.MinValue, Double.MinPositiveValue,
           Double.MaxValue, Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN, 0.0))

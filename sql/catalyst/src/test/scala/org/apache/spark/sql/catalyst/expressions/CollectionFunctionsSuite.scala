@@ -43,4 +43,41 @@ class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, MapType(StringType, StringType)), null)
     checkEvaluation(Literal.create(null, ArrayType(StringType)), null)
   }
+
+  test("Sort Array") {
+    val a0 = Literal.create(Seq(2, 1, 3), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq[Integer](), ArrayType(IntegerType))
+    val a2 = Literal.create(Seq("b", "a"), ArrayType(StringType))
+    val a3 = Literal.create(Seq("b", null, "a"), ArrayType(StringType))
+
+    checkEvaluation(new SortArray(a0), Seq(1, 2, 3))
+    checkEvaluation(new SortArray(a1), Seq[Integer]())
+    checkEvaluation(new SortArray(a2), Seq("a", "b"))
+    checkEvaluation(new SortArray(a3), Seq(null, "a", "b"))
+    checkEvaluation(SortArray(a0, Literal(true)), Seq(1, 2, 3))
+    checkEvaluation(SortArray(a1, Literal(true)), Seq[Integer]())
+    checkEvaluation(SortArray(a2, Literal(true)), Seq("a", "b"))
+    checkEvaluation(new SortArray(a3, Literal(true)), Seq(null, "a", "b"))
+    checkEvaluation(SortArray(a0, Literal(false)), Seq(3, 2, 1))
+    checkEvaluation(SortArray(a1, Literal(false)), Seq[Integer]())
+    checkEvaluation(SortArray(a2, Literal(false)), Seq("b", "a"))
+    checkEvaluation(new SortArray(a3, Literal(false)), Seq("b", "a", null))
+
+    checkEvaluation(Literal.create(null, ArrayType(StringType)), null)
+  }
+
+  test("Array contains") {
+    val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq[String](null, ""), ArrayType(StringType))
+    val a2 = Literal.create(Seq(null), ArrayType(LongType))
+
+    checkEvaluation(ArrayContains(a0, Literal(1)), true)
+    checkEvaluation(ArrayContains(a0, Literal(0)), false)
+    checkEvaluation(ArrayContains(a0, Literal(null)), false)
+
+    checkEvaluation(ArrayContains(a1, Literal("")), true)
+    checkEvaluation(ArrayContains(a1, Literal(null)), false)
+
+    checkEvaluation(ArrayContains(a2, Literal(null)), false)
+  }
 }

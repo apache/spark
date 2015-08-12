@@ -133,6 +133,11 @@ private[spark] class MesosSchedulerBackend(
 
     builder.addAllResources(usedCpuResources)
     builder.addAllResources(usedMemResources)
+
+    sc.conf.getOption("spark.mesos.uris").map { uris =>
+      setupUris(uris, command)
+    }
+
     val executorInfo = builder
       .setExecutorId(ExecutorID.newBuilder().setValue(execId).build())
       .setCommand(command)

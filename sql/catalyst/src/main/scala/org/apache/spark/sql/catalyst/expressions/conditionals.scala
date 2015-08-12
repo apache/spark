@@ -315,15 +315,16 @@ case class CaseKeyWhen(key: Expression, branches: Seq[Expression]) extends CaseW
  * It takes at least 2 parameters, and returns null iff all parameters are null.
  */
 case class Least(children: Seq[Expression]) extends Expression {
-  require(children.length > 1, "LEAST requires at least 2 arguments, got " + children.length)
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
-  private lazy val ordering = TypeUtils.getOrdering(dataType)
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
+    if (children.length <= 1) {
+      TypeCheckResult.TypeCheckFailure(s"LEAST requires at least 2 arguments")
+    } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
           s" got LEAST (${children.map(_.dataType)}).")
@@ -369,15 +370,16 @@ case class Least(children: Seq[Expression]) extends Expression {
  * It takes at least 2 parameters, and returns null iff all parameters are null.
  */
 case class Greatest(children: Seq[Expression]) extends Expression {
-  require(children.length > 1, "GREATEST requires at least 2 arguments, got " + children.length)
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
-  private lazy val ordering = TypeUtils.getOrdering(dataType)
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
+    if (children.length <= 1) {
+      TypeCheckResult.TypeCheckFailure(s"GREATEST requires at least 2 arguments")
+    } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
           s" got GREATEST (${children.map(_.dataType)}).")

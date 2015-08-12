@@ -52,14 +52,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
-    sql(s"ADD JAR ${TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
-    // The function source code can be found at:
-    // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
-    sql(
-      """
-        |CREATE TEMPORARY FUNCTION udtf_count2
-        |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-      """.stripMargin)
   }
 
   override def afterAll() {
@@ -68,15 +60,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     Locale.setDefault(originalLocale)
     sql("DROP TEMPORARY FUNCTION udtf_count2")
   }
-
-  createQueryTest("Test UDTF.close in Lateral Views",
-     """
-       |SELECT key, cc
-       |FROM src LATERAL VIEW udtf_count2(value) dd AS cc
-     """.stripMargin, false) // false mean we have to keep the temp function in registry
-
-  createQueryTest("Test UDTF.close in SELECT",
-     "SELECT udtf_count2(a) FROM (SELECT 1 AS a FROM src LIMIT 3) table", false)
 
   test("SPARK-4908: concurrent hive native commands") {
     (1 to 100).par.map { _ =>
@@ -176,8 +159,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("! operator",
     """
       |SELECT a FROM (
-      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
-      |  SELECT 2 AS a FROM src LIMIT 1) table
+      |  SELECT 1 AS a UNION ALL SELECT 2 AS a) t
       |WHERE !(a>1)
     """.stripMargin)
 
@@ -228,71 +210,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     |          "enterprise databases", "hadoop map-reduce")))
     |FROM src LIMIT 1;
   """.stripMargin)
-
-  createQueryTest("count distinct 0 values",
-    """
-      |SELECT COUNT(DISTINCT a) FROM (
-      |  SELECT 'a' AS a FROM src LIMIT 0) table
-    """.stripMargin)
-
-  createQueryTest("count distinct 1 value strings",
-    """
-      |SELECT COUNT(DISTINCT a) FROM (
-      |  SELECT 'a' AS a FROM src LIMIT 1 UNION ALL
-      |  SELECT 'b' AS a FROM src LIMIT 1) table
-    """.stripMargin)
-
-  createQueryTest("count distinct 1 value",
-    """
-      |SELECT COUNT(DISTINCT a) FROM (
-      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
-      |  SELECT 1 AS a FROM src LIMIT 1) table
-    """.stripMargin)
-
-  createQueryTest("count distinct 2 values",
-    """
-      |SELECT COUNT(DISTINCT a) FROM (
-      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
-      |  SELECT 2 AS a FROM src LIMIT 1) table
-    """.stripMargin)
-
-  createQueryTest("count distinct 2 values including null",
-    """
-      |SELECT COUNT(DISTINCT a, 1) FROM (
-      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
-      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
-      |  SELECT null AS a FROM src LIMIT 1) table
-    """.stripMargin)
-
-  createQueryTest("count distinct 1 value + null",
-  """
-    |SELECT COUNT(DISTINCT a) FROM (
-    |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
-    |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
-    |  SELECT null AS a FROM src LIMIT 1) table
-  """.stripMargin)
-
-  createQueryTest("count distinct 1 value long",
-    """
-      |SELECT COUNT(DISTINCT a) FROM (
-      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
-      |  SELECT 1L AS a FROM src LIMIT 1) table
-    """.stripMargin)
-
-  createQueryTest("count distinct 2 values long",
-    """
-      |SELECT COUNT(DISTINCT a) FROM (
-      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
-      |  SELECT 2L AS a FROM src LIMIT 1) table
-    """.stripMargin)
-
-  createQueryTest("count distinct 1 value + null long",
-    """
-      |SELECT COUNT(DISTINCT a) FROM (
-      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
-      |  SELECT 1L AS a FROM src LIMIT 1 UNION ALL
-      |  SELECT null AS a FROM src LIMIT 1) table
-    """.stripMargin)
 
   createQueryTest("null case",
     "SELECT case when(true) then 1 else null end FROM src LIMIT 1")
@@ -510,7 +427,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
       |USING 'cat' AS (tKey, tValue) ROW FORMAT SERDE
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll(System.lineSeparator(), " "))
 
   test("transform with SerDe2") {
 
@@ -529,7 +446,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         |('avro.schema.literal'='{"namespace": "testing.hive.avro.serde","name":
         |"src","type": "record","fields": [{"name":"key","type":"int"}]}')
         |FROM small_src
-      """.stripMargin.replaceAll("\n", " ")).collect().head
+      """.stripMargin.replaceAll(System.lineSeparator(), " ")).collect().head
 
     assert(expected(0) === res(0))
   }
@@ -541,7 +458,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |('serialization.last.column.takes.rest'='true') USING 'cat' AS (tKey, tValue)
       |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
       |WITH SERDEPROPERTIES ('serialization.last.column.takes.rest'='true') FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll(System.lineSeparator(), " "))
 
   createQueryTest("transform with SerDe4",
     """
@@ -550,7 +467,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |('serialization.last.column.takes.rest'='true') USING 'cat' ROW FORMAT SERDE
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES
       |('serialization.last.column.takes.rest'='true') FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll(System.lineSeparator(), " "))
 
   createQueryTest("LIKE",
     "SELECT * FROM src WHERE value LIKE '%1%'")
@@ -670,11 +587,62 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |select * where key = 4
     """.stripMargin)
 
+  // test get_json_object again Hive, because the HiveCompatabilitySuite cannot handle result
+  // with newline in it.
+  createQueryTest("get_json_object #1",
+    "SELECT get_json_object(src_json.json, '$') FROM src_json")
+
+  createQueryTest("get_json_object #2",
+    "SELECT get_json_object(src_json.json, '$.owner'), get_json_object(src_json.json, '$.store')" +
+      " FROM src_json")
+
+  createQueryTest("get_json_object #3",
+    "SELECT get_json_object(src_json.json, '$.store.bicycle'), " +
+      "get_json_object(src_json.json, '$.store.book') FROM src_json")
+
+  createQueryTest("get_json_object #4",
+    "SELECT get_json_object(src_json.json, '$.store.book[0]'), " +
+      "get_json_object(src_json.json, '$.store.book[*]') FROM src_json")
+
+  createQueryTest("get_json_object #5",
+    "SELECT get_json_object(src_json.json, '$.store.book[0].category'), " +
+      "get_json_object(src_json.json, '$.store.book[*].category'), " +
+      "get_json_object(src_json.json, '$.store.book[*].isbn'), " +
+      "get_json_object(src_json.json, '$.store.book[*].reader') FROM src_json")
+
+  createQueryTest("get_json_object #6",
+    "SELECT get_json_object(src_json.json, '$.store.book[*].reader[0].age'), " +
+      "get_json_object(src_json.json, '$.store.book[*].reader[*].age') FROM src_json")
+
+  createQueryTest("get_json_object #7",
+    "SELECT get_json_object(src_json.json, '$.store.basket[0][1]'), " +
+      "get_json_object(src_json.json, '$.store.basket[*]'), " +
+      // Hive returns wrong result with [*][0], so this expression is change to make test pass
+      "get_json_object(src_json.json, '$.store.basket[0][0]'), " +
+      "get_json_object(src_json.json, '$.store.basket[0][*]'), " +
+      "get_json_object(src_json.json, '$.store.basket[*][*]'), " +
+      "get_json_object(src_json.json, '$.store.basket[0][2].b'), " +
+      "get_json_object(src_json.json, '$.store.basket[0][*].b') FROM src_json")
+
+  createQueryTest("get_json_object #8",
+    "SELECT get_json_object(src_json.json, '$.non_exist_key'), " +
+      "get_json_object(src_json.json, '$..no_recursive'), " +
+      "get_json_object(src_json.json, '$.store.book[10]'), " +
+      "get_json_object(src_json.json, '$.store.book[0].non_exist_key'), " +
+      "get_json_object(src_json.json, '$.store.basket[*].non_exist_key'), " +
+      "get_json_object(src_json.json, '$.store.basket[0][*].non_exist_key') FROM src_json")
+
+  createQueryTest("get_json_object #9",
+    "SELECT get_json_object(src_json.json, '$.zip code') FROM src_json")
+
+  createQueryTest("get_json_object #10",
+    "SELECT get_json_object(src_json.json, '$.fb:testid') FROM src_json")
+
   test("predicates contains an empty AttributeSet() references") {
     sql(
       """
         |SELECT a FROM (
-        |  SELECT 1 AS a FROM src LIMIT 1 ) table
+        |  SELECT 1 AS a FROM src LIMIT 1 ) t
         |WHERE abs(20141202) is not null
       """.stripMargin).collect()
   }
@@ -987,7 +955,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         .zip(parts)
         .map { case (k, v) =>
           if (v == "NULL") {
-            s"$k=${ConfVars.DEFAULTPARTITIONNAME.defaultVal}"
+            s"$k=${ConfVars.DEFAULTPARTITIONNAME.defaultStrVal}"
           } else {
             s"$k=$v"
           }

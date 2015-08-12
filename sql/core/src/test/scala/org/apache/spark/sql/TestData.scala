@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.sql.Timestamp
-
 import org.apache.spark.sql.test.TestSQLContext.implicits._
 import org.apache.spark.sql.test._
 
@@ -192,8 +190,8 @@ object TestData {
   case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
   val complexData =
     TestSQLContext.sparkContext.parallelize(
-      ComplexData(Map("1" -> 1), TestData(1, "1"), Seq(1), true)
-        :: ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2), false)
+      ComplexData(Map("1" -> 1), TestData(1, "1"), Seq(1, 1, 1), true)
+        :: ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2, 2, 2), false)
         :: Nil).toDF()
   complexData.registerTempTable("complexData")
 }

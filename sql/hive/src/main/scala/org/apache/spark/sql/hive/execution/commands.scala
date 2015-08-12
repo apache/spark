@@ -88,7 +88,7 @@ case class AddJar(path: String) extends RunnableCommand {
     val currentClassLoader = Utils.getContextOrSparkClassLoader
 
     // Add jar to current context
-    val jarURL = new java.io.File(path).toURL
+    val jarURL = new java.io.File(path).toURI.toURL
     val newClassLoader = new java.net.URLClassLoader(Array(jarURL), currentClassLoader)
     Thread.currentThread.setContextClassLoader(newClassLoader)
     // We need to explicitly set the class loader associated with the conf in executionHive's

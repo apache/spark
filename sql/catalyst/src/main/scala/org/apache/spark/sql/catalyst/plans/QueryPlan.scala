@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, VirtualColumn}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -92,7 +93,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
     val newArgs = productIterator.map(recursiveTransform).toArray
 
-    if (changed) makeCopy(newArgs) else this
+    if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
   }
 
   /**
@@ -124,7 +125,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
     val newArgs = productIterator.map(recursiveTransform).toArray
 
-    if (changed) makeCopy(newArgs) else this
+    if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
   }
 
   /** Returns the result of running [[transformExpressions]] on this node

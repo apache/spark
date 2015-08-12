@@ -17,58 +17,91 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{LessThan, Expression}
-import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.logical.Join
+import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
+import org.apache.spark.sql.{SQLConf, DataFrame, Row}
+import org.apache.spark.sql.catalyst.expressions.{And, LessThan, Expression}
+import org.apache.spark.sql.execution.{EnsureRequirements, SparkPlan, SparkPlanTest}
 
+class SemiJoinSuite extends SparkPlanTest with SQLTestUtils {
 
-class SemiJoinSuite extends SparkPlanTest{
-  val left = Seq(
-    (1, 2.0),
-    (1, 2.0),
-    (2, 1.0),
-    (2, 1.0),
-    (3, 3.0)
-  ).toDF("a", "b")
+  private def testLeftSemiJoin(
+      testName: String,
+      leftRows: DataFrame,
+      rightRows: DataFrame,
+      condition: Expression,
+      expectedAnswer: Seq[Product]): Unit = {
+    val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
+    ExtractEquiJoinKeys.unapply(join).foreach {
+      case (joinType, leftKeys, rightKeys, boundCondition, leftChild, rightChild) =>
+        test(s"$testName using LeftSemiJoinHash") {
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+            checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+              EnsureRequirements(left.sqlContext).apply(
+                LeftSemiJoinHash(leftKeys, rightKeys, left, right, boundCondition)),
+              expectedAnswer.map(Row.fromTuple),
+              sortAnswers = true)
+          }
+        }
 
-  val right = Seq(
-    (2, 3.0),
-    (2, 3.0),
-    (3, 2.0),
-    (4, 1.0)
-  ).toDF("c", "d")
+        test(s"$testName using BroadcastLeftSemiJoinHash") {
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+            checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+              BroadcastLeftSemiJoinHash(leftKeys, rightKeys, left, right, boundCondition),
+              expectedAnswer.map(Row.fromTuple),
+              sortAnswers = true)
+          }
+        }
+    }
 
-  val leftKeys: List[Expression] = 'a :: Nil
-  val rightKeys: List[Expression] = 'c :: Nil
-  val condition = Some(LessThan('b, 'd))
-
-  test("left semi join hash") {
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      LeftSemiJoinHash(leftKeys, rightKeys, left, right, condition),
-      Seq(
-        (2, 1.0),
-        (2, 1.0)
-      ).map(Row.fromTuple))
+    test(s"$testName using LeftSemiJoinBNL") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          LeftSemiJoinBNL(left, right, Some(condition)),
+          expectedAnswer.map(Row.fromTuple),
+          sortAnswers = true)
+      }
+    }
   }
 
-  test("left semi join BNL") {
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      LeftSemiJoinBNL(left, right, condition),
-      Seq(
-        (1, 2.0),
-        (1, 2.0),
-        (2, 1.0),
-        (2, 1.0)
-      ).map(Row.fromTuple))
+  val left = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(Seq(
+    Row(1, 2.0),
+    Row(1, 2.0),
+    Row(2, 1.0),
+    Row(2, 1.0),
+    Row(3, 3.0),
+    Row(null, null),
+    Row(null, 5.0),
+    Row(6, null)
+  )), new StructType().add("a", IntegerType).add("b", DoubleType))
+
+  val right = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(Seq(
+    Row(2, 3.0),
+    Row(2, 3.0),
+    Row(3, 2.0),
+    Row(4, 1.0),
+    Row(null, null),
+    Row(null, 5.0),
+    Row(6, null)
+  )), new StructType().add("c", IntegerType).add("d", DoubleType))
+
+  val condition = {
+    And(
+      (left.col("a") === right.col("c")).expr,
+      LessThan(left.col("b").expr, right.col("d").expr))
   }
 
-  test("broadcast left semi join hash") {
-    checkAnswer2(left, right, (left: SparkPlan, right: SparkPlan) =>
-      BroadcastLeftSemiJoinHash(leftKeys, rightKeys, left, right, condition),
-      Seq(
-        (2, 1.0),
-        (2, 1.0)
-      ).map(Row.fromTuple))
-  }
+  testLeftSemiJoin(
+    "basic test",
+    left,
+    right,
+    condition,
+    Seq(
+      (2, 1.0),
+      (2, 1.0)
+    )
+  )
 }

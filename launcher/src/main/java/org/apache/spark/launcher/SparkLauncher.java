@@ -20,12 +20,13 @@ package org.apache.spark.launcher;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
-/** 
+/**
  * Launcher for Spark applications.
  * <p>
  * Use this class to start Spark applications programmatically. The class uses a builder pattern
@@ -57,7 +58,8 @@ public class SparkLauncher {
   /** Configuration key for the number of executor CPU cores. */
   public static final String EXECUTOR_CORES = "spark.executor.cores";
 
-  private final SparkSubmitCommandBuilder builder;
+  // Visible for testing.
+  final SparkSubmitCommandBuilder builder;
 
   public SparkLauncher() {
     this(null);
@@ -188,6 +190,73 @@ public class SparkLauncher {
   }
 
   /**
+   * Adds a no-value argument to the Spark invocation. If the argument is known, this method
+   * validates whether the argument is indeed a no-value argument, and throws an exception
+   * otherwise.
+   * <p/>
+   * Use this method with caution. It is possible to create an invalid Spark command by passing
+   * unknown arguments to this method, since those are allowed for forward compatibility.
+   *
+   * @param arg Argument to add.
+   * @return This launcher.
+   */
+  public SparkLauncher addSparkArg(String arg) {
+    SparkSubmitOptionParser validator = new ArgumentValidator(false);
+    validator.parse(Arrays.asList(arg));
+    builder.sparkArgs.add(arg);
+    return this;
+  }
+
+  /**
+   * Adds an argument with a value to the Spark invocation. If the argument name corresponds to
+   * a known argument, the code validates that the argument actually expects a value, and throws
+   * an exception otherwise.
+   * <p/>
+   * It is safe to add arguments modified by other methods in this class (such as
+   * {@link #setMaster(String)} - the last invocation will be the one to take effect.
+   * <p/>
+   * Use this method with caution. It is possible to create an invalid Spark command by passing
+   * unknown arguments to this method, since those are allowed for forward compatibility.
+   *
+   * @param name Name of argument to add.
+   * @param value Value of the argument.
+   * @return This launcher.
+   */
+  public SparkLauncher addSparkArg(String name, String value) {
+    SparkSubmitOptionParser validator = new ArgumentValidator(true);
+    if (validator.MASTER.equals(name)) {
+      setMaster(value);
+    } else if (validator.PROPERTIES_FILE.equals(name)) {
+      setPropertiesFile(value);
+    } else if (validator.CONF.equals(name)) {
+      String[] vals = value.split("=", 2);
+      setConf(vals[0], vals[1]);
+    } else if (validator.CLASS.equals(name)) {
+      setMainClass(value);
+    } else if (validator.JARS.equals(name)) {
+      builder.jars.clear();
+      for (String jar : value.split(",")) {
+        addJar(jar);
+      }
+    } else if (validator.FILES.equals(name)) {
+      builder.files.clear();
+      for (String file : value.split(",")) {
+        addFile(file);
+      }
+    } else if (validator.PY_FILES.equals(name)) {
+      builder.pyFiles.clear();
+      for (String file : value.split(",")) {
+        addPyFile(file);
+      }
+    } else {
+      validator.parse(Arrays.asList(name, value));
+      builder.sparkArgs.add(name);
+      builder.sparkArgs.add(value);
+    }
+    return this;
+  }
+
+  /**
    * Adds command line arguments for the application.
    *
    * @param args Arguments to pass to the application's main class.
@@ -276,5 +345,33 @@ public class SparkLauncher {
     }
     return pb.start();
   }
+
+  private static class ArgumentValidator extends SparkSubmitOptionParser {
+
+    private final boolean hasValue;
+
+    ArgumentValidator(boolean hasValue) {
+      this.hasValue = hasValue;
+    }
+
+    @Override
+    protected boolean handle(String opt, String value) {
+      if (value == null && hasValue) {
+        throw new IllegalArgumentException(String.format("'%s' does not expect a value.", opt));
+      }
+      return true;
+    }
+
+    @Override
+    protected boolean handleUnknown(String opt) {
+      // Do not fail on unknown arguments, to support future arguments added to SparkSubmit.
+      return true;
+    }
+
+    protected void handleExtraArgs(List<String> extra) {
+      // No op.
+    }
+
+  };
 
 }

@@ -217,21 +217,32 @@ for feature in result.select("result").take(3):
 
 [Tokenization](http://en.wikipedia.org/wiki/Lexical_analysis#Tokenization) is the process of taking text (such as a sentence) and breaking it into individual terms (usually words).  A simple [Tokenizer](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer) class provides this functionality.  The example below shows how to split sentences into sequences of words.
 
-Note: A more advanced tokenizer is provided via [RegexTokenizer](api/scala/index.html#org.apache.spark.ml.feature.RegexTokenizer).
+[RegexTokenizer](api/scala/index.html#org.apache.spark.ml.feature.RegexTokenizer) allows more
+ advanced tokenization based on regular expression (regex) matching.
+ By default, the parameter "pattern" (regex, default: \\s+) is used as delimiters to split the input text.
+ Alternatively, users can set parameter "gaps" to false indicating the regex "pattern" denotes
+ "tokens" rather than splitting gaps, and find all matching occurrences as the tokenization result.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
-import org.apache.spark.ml.feature.Tokenizer
+import org.apache.spark.ml.feature.{Tokenizer, RegexTokenizer}
 
 val sentenceDataFrame = sqlContext.createDataFrame(Seq(
   (0, "Hi I heard about Spark"),
-  (0, "I wish Java could use case classes"),
-  (1, "Logistic regression models are neat")
+  (1, "I wish Java could use case classes"),
+  (2, "Logistic,regression,models,are,neat")
 )).toDF("label", "sentence")
 val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
-val wordsDataFrame = tokenizer.transform(sentenceDataFrame)
-wordsDataFrame.select("words", "label").take(3).foreach(println)
+val regexTokenizer = new RegexTokenizer()
+  .setInputCol("sentence")
+  .setOutputCol("words")
+  .setPattern("\\W")  // alternatively .setPattern("\\w+").setGaps(false)
+
+val tokenized = tokenizer.transform(sentenceDataFrame)
+tokenized.select("words", "label").take(3).foreach(println)
+val regexTokenized = regexTokenizer.transform(sentenceDataFrame)
+regexTokenized.select("words", "label").take(3).foreach(println)
 {% endhighlight %}
 </div>
 
@@ -240,6 +251,7 @@ wordsDataFrame.select("words", "label").take(3).foreach(println)
 import com.google.common.collect.Lists;
 
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.RegexTokenizer;
 import org.apache.spark.ml.feature.Tokenizer;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.sql.DataFrame;
@@ -252,8 +264,8 @@ import org.apache.spark.sql.types.StructType;
 
 JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
   RowFactory.create(0, "Hi I heard about Spark"),
-  RowFactory.create(0, "I wish Java could use case classes"),
-  RowFactory.create(1, "Logistic regression models are neat")
+  RowFactory.create(1, "I wish Java could use case classes"),
+  RowFactory.create(2, "Logistic,regression,models,are,neat")
 ));
 StructType schema = new StructType(new StructField[]{
   new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
@@ -267,22 +279,29 @@ for (Row r : wordsDataFrame.select("words", "label").take(3)) {
   for (String word : words) System.out.print(word + " ");
   System.out.println();
 }
+
+RegexTokenizer regexTokenizer = new RegexTokenizer()
+  .setInputCol("sentence")
+  .setOutputCol("words")
+  .setPattern("\\W");  // alternatively .setPattern("\\w+").setGaps(false);
 {% endhighlight %}
 </div>
 
 <div data-lang="python" markdown="1">
 {% highlight python %}
-from pyspark.ml.feature import Tokenizer
+from pyspark.ml.feature import Tokenizer, RegexTokenizer
 
 sentenceDataFrame = sqlContext.createDataFrame([
   (0, "Hi I heard about Spark"),
-  (0, "I wish Java could use case classes"),
-  (1, "Logistic regression models are neat")
+  (1, "I wish Java could use case classes"),
+  (2, "Logistic,regression,models,are,neat")
 ], ["label", "sentence"])
 tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
 wordsDataFrame = tokenizer.transform(sentenceDataFrame)
 for words_label in wordsDataFrame.select("words", "label").take(3):
   print(words_label)
+regexTokenizer = RegexTokenizer(inputCol="sentence", outputCol="words", pattern="\\W")
+# alternatively, pattern="\\w+", gaps(False)
 {% endhighlight %}
 </div>
 </div>
@@ -457,6 +476,92 @@ binarizedDataFrame = binarizer.transform(continuousDataFrame)
 binarizedFeatures = binarizedDataFrame.select("binarized_feature")
 for binarized_feature, in binarizedFeatures.collect():
   print(binarized_feature)
+{% endhighlight %}
+</div>
+</div>
+
+## PCA
+
+[PCA](http://en.wikipedia.org/wiki/Principal_component_analysis) is a statistical procedure that uses an orthogonal transformation to convert a set of observations of possibly correlated variables into a set of values of linearly uncorrelated variables called principal components. A [PCA](api/scala/index.html#org.apache.spark.ml.feature.PCA) class trains a model to project vectors to a low-dimensional space using PCA. The example below shows how to project 5-dimensional feature vectors into 3-dimensional principal components.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+See the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.feature.PCA) for API details.
+{% highlight scala %}
+import org.apache.spark.ml.feature.PCA
+import org.apache.spark.mllib.linalg.Vectors
+
+val data = Array(
+  Vectors.sparse(5, Seq((1, 1.0), (3, 7.0))),
+  Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
+  Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
+)
+val df = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
+val pca = new PCA()
+  .setInputCol("features")
+  .setOutputCol("pcaFeatures")
+  .setK(3)
+  .fit(df)
+val pcaDF = pca.transform(df)
+val result = pcaDF.select("pcaFeatures")
+result.show()
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+See the [Java API documentation](api/java/org/apache/spark/ml/feature/PCA.html) for API details.
+{% highlight java %}
+import com.google.common.collect.Lists;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.ml.feature.PCA
+import org.apache.spark.ml.feature.PCAModel
+import org.apache.spark.mllib.linalg.VectorUDT;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+JavaSparkContext jsc = ...
+SQLContext jsql = ...
+JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
+  RowFactory.create(Vectors.sparse(5, new int[]{1, 3}, new double[]{1.0, 7.0})),
+  RowFactory.create(Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0)),
+  RowFactory.create(Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0))
+));
+StructType schema = new StructType(new StructField[] {
+  new StructField("features", new VectorUDT(), false, Metadata.empty()),
+});
+DataFrame df = jsql.createDataFrame(data, schema);
+PCAModel pca = new PCA()
+  .setInputCol("features")
+  .setOutputCol("pcaFeatures")
+  .setK(3)
+  .fit(df);
+DataFrame result = pca.transform(df).select("pcaFeatures");
+result.show();
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+See the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.feature.PCA) for API details.
+{% highlight python %}
+from pyspark.ml.feature import PCA
+from pyspark.mllib.linalg import Vectors
+
+data = [(Vectors.sparse(5, [(1, 1.0), (3, 7.0)]),),
+  (Vectors.dense([2.0, 0.0, 3.0, 4.0, 5.0]),),
+  (Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0]),)]
+df = sqlContext.createDataFrame(data,["features"])
+pca = PCA(k=3, inputCol="features", outputCol="pcaFeatures")
+model = pca.fit(df)
+result = model.transform(df).select("pcaFeatures")
+result.show(truncate=False)
 {% endhighlight %}
 </div>
 </div>

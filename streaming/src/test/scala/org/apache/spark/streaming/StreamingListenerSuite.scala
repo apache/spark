@@ -36,13 +36,22 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
   val input = (1 to 4).map(Seq(_)).toSeq
   val operation = (d: DStream[Int]) => d.map(x => x)
 
+  var ssc: StreamingContext = _
+
+  override def afterFunction() {
+    super.afterFunction()
+    if (ssc != null) {
+      ssc.stop()
+    }
+  }
+
   // To make sure that the processing start and end times in collected
   // information are different for successive batches
   override def batchDuration: Duration = Milliseconds(100)
   override def actuallyWait: Boolean = true
 
   test("batch info reporting") {
-    val ssc = setupStreams(input, operation)
+    ssc = setupStreams(input, operation)
     val collector = new BatchInfoCollector
     ssc.addStreamingListener(collector)
     runStreams(ssc, input.size, input.size)
@@ -107,7 +116,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
   }
 
   test("receiver info reporting") {
-    val ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
     inputStream.foreachRDD(_.count)
 
