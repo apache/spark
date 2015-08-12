@@ -696,6 +696,7 @@ private[deploy] class Master(
       }
       completedApps += app // Remember it in our history
       waitingApps -= app
+      appScheduler.removeApplication(app)
 
       // If application events are logged, use them to rebuild the UI
       rebuildSparkUI(app)

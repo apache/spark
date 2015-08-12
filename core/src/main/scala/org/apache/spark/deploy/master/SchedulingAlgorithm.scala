@@ -45,6 +45,8 @@ private[master] trait SchedulingAlgorithm {
 
   def registerApplication(app: ApplicationInfo): Unit = {}
 
+  def removeApplication(app: ApplicationInfo): Unit = {}
+
   /**
    * Allocate a worker's resources to one or more executors.
    * @param app the info of the application which the executors belong to
@@ -238,8 +240,18 @@ private[master] class PrioritySchedulingAlgorithm(
       }
     }
 
+    def removeApplication(app: ApplicationInfo): Boolean = {
+      val submitted = appQueue.toArray().find(_.asInstanceOf[ApplicationSubmission].appInfo == app)
+      if (submitted != None) {
+        appQueue.remove(submitted)
+      } else {
+        false
+      }
+    }
+
     def getApplications(): Seq[ApplicationInfo] = {
-      appQueue.toArray().asInstanceOf[Seq[ApplicationInfo]]
+      appQueue.toArray().map(_.asInstanceOf[ApplicationSubmission].appInfo)
+        .asInstanceOf[Seq[ApplicationInfo]]
     }
 
     def size: Int = appQueue.size()
@@ -293,6 +305,22 @@ private[master] class PrioritySchedulingAlgorithm(
           throw new SparkException(s"Application ${app.desc.name} has been assigned to unknown pool")
       }.asInstanceOf[Pool]
       pool.addApplication(app)
+    }
+  }
+
+  override def removeApplication(app: ApplicationInfo): Unit =  {
+    if (app.desc.assignedPool == None) {
+      throw new SparkException(s"Application ${app.desc.name} hasn't been assigned to any pool")
+    } else {
+      val pool = poolQueue.toArray().find { p =>
+        p.asInstanceOf[Pool].poolName == app.desc.assignedPool
+      }.getOrElse {
+          throw new SparkException(s"Application ${app.desc.name} has been assigned to unknown pool")
+      }.asInstanceOf[Pool]
+      if (!pool.removeApplication(app)) {
+        throw new SparkException(s"Can't remove application ${app.desc.name} " +
+          s"from pool ${app.desc.assignedPool}")
+      }
     }
   }
 
