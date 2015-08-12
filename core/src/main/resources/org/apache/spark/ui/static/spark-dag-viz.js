@@ -109,13 +109,13 @@ function toggleDagViz(forJob) {
 }
 
 $(function (){
-  if (window.localStorage.getItem(expandDagVizArrowKey(false)) == "true") {
+  if ($("#stage-dag-viz").length &&
+      window.localStorage.getItem(expandDagVizArrowKey(false)) == "true") {
     // Set it to false so that the click function can revert it
     window.localStorage.setItem(expandDagVizArrowKey(false), "false");
     toggleDagViz(false);
-  }
-
-  if (window.localStorage.getItem(expandDagVizArrowKey(true)) == "true") {
+  } else if ($("#job-dag-viz").length &&
+      window.localStorage.getItem(expandDagVizArrowKey(true)) == "true") {
     // Set it to false so that the click function can revert it
     window.localStorage.setItem(expandDagVizArrowKey(true), "false");
     toggleDagViz(true);
