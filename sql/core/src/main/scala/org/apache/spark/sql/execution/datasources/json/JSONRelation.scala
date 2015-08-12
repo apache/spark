@@ -88,11 +88,13 @@ private[sql] class JSONRelation(
       FileInputFormat.setInputPaths(job, paths: _*)
     }
 
-    sqlContext.sparkContext.hadoopRDD(
+    val rdd = sqlContext.sparkContext.hadoopRDD(
       conf.asInstanceOf[JobConf],
       classOf[TextInputFormat],
       classOf[LongWritable],
       classOf[Text]).map(_._2.toString) // get the text line
+
+    CombineSmallFile.combineWithFiles(rdd, sqlContext, inputPaths)
   }
 
   override lazy val dataSchema = {

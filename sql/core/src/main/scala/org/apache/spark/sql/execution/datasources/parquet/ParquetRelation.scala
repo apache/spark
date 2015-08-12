@@ -26,7 +26,7 @@ import scala.collection.mutable
 import scala.util.{Failure, Try}
 
 import com.google.common.base.Objects
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileSystem, FileStatus, Path}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
@@ -289,7 +289,7 @@ private[sql] class ParquetRelation(
     // Create the function to set input paths at the driver side.
     val setInputPaths = ParquetRelation.initializeDriverSideJobFunc(inputFiles) _
 
-    Utils.withDummyCallSite(sqlContext.sparkContext) {
+    val rdd = Utils.withDummyCallSite(sqlContext.sparkContext) {
       new SqlNewHadoopRDD(
         sc = sqlContext.sparkContext,
         broadcastedConf = broadcastedConf,
@@ -334,6 +334,8 @@ private[sql] class ParquetRelation(
         }
       }.asInstanceOf[RDD[Row]]  // type erasure hack to pass RDD[InternalRow] as RDD[Row]
     }
+
+    CombineSmallFile.combineWithFiles(rdd, sqlContext, inputFiles)
   }
 
   private class MetadataCache {

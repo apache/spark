@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.hadoop.fs.{Path, PathFilter}
+import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
@@ -35,6 +35,7 @@ import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.sources.CombineSmallFile
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -283,7 +284,7 @@ class HadoopTableReader(
       _minSplitsPerRDD)
 
     // Only take the value (skip the key) because Hive works only with values.
-    rdd.map(_._2)
+    CombineSmallFile.combineWithPath(rdd, sc, path).map(_._2)
   }
 }
 

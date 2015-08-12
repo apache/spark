@@ -420,6 +420,18 @@ private[spark] object SQLConf {
   val USE_SQL_AGGREGATE2 = booleanConf("spark.sql.useAggregate2",
     defaultValue = Some(true), doc = "<TODO>")
 
+  val COMBINE_SMALL_FILE = booleanConf(
+    "spark.sql.small.file.combine",
+    defaultValue = Some(true),
+    isPublic = false
+  )
+
+  val SPLIT_SIZE = intConf(
+    "spark.sql.small.file.split.size",
+    defaultValue = Some(256000000),
+    isPublic = false
+  )
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -487,6 +499,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, getConf(TUNGSTEN_ENABLED))
 
   private[spark] def useSqlAggregate2: Boolean = getConf(USE_SQL_AGGREGATE2)
+
+  private[spark] def combineSmallFile: Boolean = getConf(COMBINE_SMALL_FILE)
+
+  private[spark] def splitSize: Long = getConf(SPLIT_SIZE)
 
   private[spark] def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
