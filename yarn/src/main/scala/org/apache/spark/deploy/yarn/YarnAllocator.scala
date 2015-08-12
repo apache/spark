@@ -423,7 +423,7 @@ private[yarn] class YarnAllocator(
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
       val alreadyReleased = releasedContainers.remove(containerId)
-      var completedContainerReason : String = ""
+      val completedContainerReason : Option[String] =
       if (!alreadyReleased) {
         // Decrement the number of executors running. The next iteration of
         // the ApplicationMaster's reporting thread will take care of allocating.
@@ -436,26 +436,33 @@ private[yarn] class YarnAllocator(
         // there are some exit status' we shouldn't necessarily count against us, but for
         // now I think its ok as none of the containers are expected to exit
         if (completedContainer.getExitStatus == ContainerExitStatus.PREEMPTED) {
-          val msg = "Container preempted: " + containerId
+          val msg = s"Container preempted: $containerId"
           logInfo(msg)
-          completedContainerReason = msg
+          Some(msg)
         } else if (completedContainer.getExitStatus == -103) { // vmem limit exceeded
-          completedContainerReason = memLimitExceededLogMessage(
+          val msg = memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
             VMEM_EXCEEDED_PATTERN)
-          logWarning(completedContainerReason)
+          logWarning(msg)
+          Some(msg)
         } else if (completedContainer.getExitStatus == -104) { // pmem limit exceeded
-          completedContainerReason = memLimitExceededLogMessage(
+          val msg = memLimitExceededLogMessage(
             completedContainer.getDiagnostics,
             PMEM_EXCEEDED_PATTERN)
-          logWarning(completedContainerReason)
+          logWarning(msg)
+          Some(msg)
         } else if (completedContainer.getExitStatus != 0) {
-          completedContainerReason = "Container marked as failed: " + containerId +
+          val msg = "Container marked as failed: " + containerId +
             ". Exit status: " + completedContainer.getExitStatus +
             ". Diagnostics: " + completedContainer.getDiagnostics
-          logInfo(completedContainerReason)
+          logInfo(msg)
           numExecutorsFailed += 1
+          Some(msg)
+        }  else {
+          None
         }
+      } else {
+        None
       }
 
       if (allocatedContainerToHostMap.containsKey(containerId)) {
@@ -479,9 +486,13 @@ private[yarn] class YarnAllocator(
           // The executor could have gone away (like no route to host, node failure, etc)
           // Notify backend about the failure of the executor
           numUnexpectedContainerRelease += 1
-          driverRef.send(RemoveExecutor(eid,
-            s"Yarn deallocated the executor $eid (container $containerId). " +
-              s"Reason: $completedContainerReason"))
+          // If a reason exists, add it to the message. Otherwise, the message will just contain
+          // the executor and container ID but no reason.
+          val messageToSend = s"Yarn deallocated the executor $eid (container $containerId)." +
+            completedContainerReason.fold("") {
+              reasonString => s" Reason: $reasonString"
+            }
+          driverRef.send(RemoveExecutor(eid, messageToSend))
         }
       }
     }

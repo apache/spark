@@ -162,9 +162,11 @@ case class TaskCommitDenied(jobID: Int, partitionID: Int, attemptID: Int) extend
  * the task crashed the JVM.
  */
 @DeveloperApi
-case class ExecutorLostFailure(execId: String, reason: String) extends TaskFailedReason {
+case class ExecutorLostFailure(execId: String, reason: Option[String]) extends TaskFailedReason {
   override def toErrorString: String = s"ExecutorLostFailure (executor ${execId} lost) " +
-    s"Reason: ${reason}"
+    reason.fold(""){
+      r => s"Reason: ${r}"
+    }
 }
 
 /**

@@ -363,8 +363,12 @@ private[spark] object JsonProtocol {
         ("Full Stack Trace" -> exceptionFailure.fullStackTrace) ~
         ("Metrics" -> metrics)
       case ExecutorLostFailure(executorId, reason) =>
-        ("Executor ID" -> executorId) ~
-        ("Loss Reason" -> reason.toString)
+        if (reason.isDefined) {
+          ("Executor ID" -> executorId) ~
+          ("Loss Reason" -> reason.get.toString)
+        } else {
+          ("Executor ID" -> executorId)
+        }
       case _ => Utils.emptyJson
     }
     ("Reason" -> reason) ~ json
@@ -797,7 +801,7 @@ private[spark] object JsonProtocol {
       case `executorLostFailure` =>
         val executorId = Utils.jsonOption(json \ "Executor ID").map(_.extract[String])
         val reason = Utils.jsonOption(json \ "Loss Reason").map(_.extract[String])
-        ExecutorLostFailure(executorId.getOrElse("Unknown"), reason.getOrElse("Unknown"))
+        ExecutorLostFailure(executorId.getOrElse("Unknown"), reason)
       case `unknownReason` => UnknownReason
     }
   }

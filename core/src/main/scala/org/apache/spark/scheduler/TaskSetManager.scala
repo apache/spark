@@ -807,7 +807,7 @@ private[spark] class TaskSetManager(
     }
     // Also re-enqueue any tasks that were running on the node
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
-      handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(execId, reason.toString))
+      handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(execId, Some(reason.toString)))
     }
     // recalculate valid locality levels and waits when executor is lost
     recomputeLocality()
