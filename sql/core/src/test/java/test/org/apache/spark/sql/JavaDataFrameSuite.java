@@ -231,7 +231,7 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testSampleBy() {
-    DataFrame df = context.range(0, 100).select(col("id").mod(3).as("key"));
+    DataFrame df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
     DataFrame sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
     Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
     Row[] expected = new Row[] {RowFactory.create(0, 5), RowFactory.create(1, 8)};
