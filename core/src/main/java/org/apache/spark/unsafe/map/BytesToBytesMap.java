@@ -193,6 +193,11 @@ public final class BytesToBytesMap {
         TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES);
     }
     allocate(initialCapacity);
+
+    // Acquire a new page as soon as we construct the map to ensure that we have at least
+    // one page to work with. Otherwise, other operators in the same task may starve this
+    // map (SPARK-9747).
+    acquireNewPage();
   }
 
   public BytesToBytesMap(
@@ -574,16 +579,9 @@ public final class BytesToBytesMap {
           final long lengthOffsetInPage = currentDataPage.getBaseOffset() + pageCursor;
           Platform.putInt(pageBaseObject, lengthOffsetInPage, END_OF_PAGE_MARKER);
         }
-        final long memoryGranted = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
-        if (memoryGranted != pageSizeBytes) {
-          shuffleMemoryManager.release(memoryGranted);
-          logger.debug("Failed to acquire {} bytes of memory", pageSizeBytes);
+        if (!acquireNewPage()) {
           return false;
         }
-        MemoryBlock newPage = taskMemoryManager.allocatePage(pageSizeBytes);
-        dataPages.add(newPage);
-        pageCursor = 0;
-        currentDataPage = newPage;
         dataPage = currentDataPage;
         dataPageBaseObject = currentDataPage.getBaseObject();
         dataPageInsertOffset = currentDataPage.getBaseOffset();
@@ -640,6 +638,24 @@ public final class BytesToBytesMap {
       }
       return true;
     }
+  }
+
+  /**
+   * Acquire a new page from the {@link ShuffleMemoryManager}.
+   * @return whether there is enough space to allocate the new page.
+   */
+  private boolean acquireNewPage() {
+    final long memoryGranted = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
+    if (memoryGranted != pageSizeBytes) {
+      shuffleMemoryManager.release(memoryGranted);
+      logger.debug("Failed to acquire {} bytes of memory", pageSizeBytes);
+      return false;
+    }
+    MemoryBlock newPage = taskMemoryManager.allocatePage(pageSizeBytes);
+    dataPages.add(newPage);
+    pageCursor = 0;
+    currentDataPage = newPage;
+    return true;
   }
 
   /**
@@ -748,7 +764,7 @@ public final class BytesToBytesMap {
   }
 
   @VisibleForTesting
-  int getNumDataPages() {
+  public int getNumDataPages() {
     return dataPages.size();
   }
 
