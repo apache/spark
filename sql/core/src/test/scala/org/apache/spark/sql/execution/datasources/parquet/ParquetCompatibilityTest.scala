@@ -16,45 +16,28 @@
  */
 
 package org.apache.spark.sql.execution.datasources.parquet
-import java.io.File
 
 import scala.collection.JavaConversions._
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.schema.MessageType
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.util.Utils
 
 abstract class ParquetCompatibilityTest extends QueryTest with ParquetTest with BeforeAndAfterAll {
-  protected var parquetStore: File = _
-
-  /**
-   * Optional path to a staging subdirectory which may be created during query processing
-   * (Hive does this).
-   * Parquet files under this directory will be ignored in [[readParquetSchema()]]
-   * @return an optional staging directory to ignore when scanning for parquet files.
-   */
-  protected def stagingDir: Option[String] = None
-
-  override protected def beforeAll(): Unit = {
-    parquetStore = Utils.createTempDir(namePrefix = "parquet-compat_")
-    parquetStore.delete()
-  }
-
-  override protected def afterAll(): Unit = {
-    Utils.deleteRecursively(parquetStore)
-  }
-
   def readParquetSchema(path: String): MessageType = {
+    readParquetSchema(path, { path => !path.getName.startsWith("_") })
+  }
+
+  def readParquetSchema(path: String, pathFilter: Path => Boolean): MessageType = {
     val fsPath = new Path(path)
     val fs = fsPath.getFileSystem(configuration)
-    val parquetFiles = fs.listStatus(fsPath).toSeq.filterNot { status =>
-      status.getPath.getName.startsWith("_") ||
-        stagingDir.map(status.getPath.getName.startsWith).getOrElse(false)
-    }
+    val parquetFiles = fs.listStatus(fsPath, new PathFilter {
+      override def accept(path: Path): Boolean = pathFilter(path)
+    }).toSeq
+
     val footers = ParquetFileReader.readAllFootersInParallel(configuration, parquetFiles, true)
     footers.head.getParquetMetadata.getFileMetaData.getSchema
   }
