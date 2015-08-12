@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.{SparkConf, SparkContext}
 
 /* Implicit conversions */
@@ -154,7 +154,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
-  Utils.registerShutdownDeleteDir(hiveFilesTemp)
+  ShutdownHookManager.registerShutdownDeleteDir(hiveFilesTemp)
 
   val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
     new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
