@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, Genera
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
-import org.codehaus.janino.Java.BooleanLiteral
 
 
 trait AggregateExpression extends Expression with Unevaluable
