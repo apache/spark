@@ -61,6 +61,10 @@ import org.apache.spark.sql.execution
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.types._
+sc: org.apache.spark.SparkContext = org.apache.spark.SparkContext@27fc0441
+hc: org.apache.spark.sql.hive.HiveContext = org.apache.spark.sql.hive.HiveContext@127b5be9
+import hc.implicits._
+import hc._
 Type in expressions to have them evaluated.
 Type :help for more information.
 

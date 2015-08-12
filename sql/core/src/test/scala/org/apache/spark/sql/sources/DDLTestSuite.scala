@@ -71,9 +71,10 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
   }
 }
 
-class DDLTestSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+class DDLTestSuite extends DataSourceTest with SharedSQLContext {
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     caseInsensitiveContext.sql(
       """
       |CREATE TEMPORARY TABLE ddlPeople

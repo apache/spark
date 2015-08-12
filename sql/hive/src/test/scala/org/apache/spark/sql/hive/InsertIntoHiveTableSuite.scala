@@ -29,12 +29,12 @@ import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-case class ThreeCloumntable(key: Int, value: String, key1: String)
+case class ThreeColumnTable(key: Int, value: String, key1: String)
 
 class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter with SharedHiveContext {
   import testImplicits._
 
-  private val _testData = ctx.sparkContext.parallelize(
+  private lazy val _testData = ctx.sparkContext.parallelize(
     (1 to 100).map(i => TestData(i, i.toString))).toDF()
 
   before {
@@ -217,7 +217,7 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter with Shared
     testData.registerTempTable("testData")
 
     val testDatawithNull = ctx.sparkContext.parallelize(
-      (1 to 10).map(i => ThreeCloumntable(i, i.toString, null))).toDF()
+      (1 to 10).map(i => ThreeColumnTable(i, i.toString, null))).toDF()
 
     val tmpDir = Utils.createTempDir()
     ctx.sql(

@@ -22,8 +22,6 @@ import java.util.{Locale, TimeZone}
 
 import scala.util.Try
 
-import org.scalatest.BeforeAndAfter
-
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkFiles, SparkException}
@@ -37,7 +35,7 @@ import org.apache.spark.sql.test.SQLTestData.TestData
  * A set of test cases expressed in Hive QL that are not covered by the tests
  * included in the hive distribution.
  */
-class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
+class HiveQuerySuite extends HiveComparisonTest {
   import testImplicits._
 
   private val originalTimeZone = TimeZone.getDefault
@@ -53,11 +51,14 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   override def afterAll(): Unit = {
-    ctx.cacheTables = false
-    TimeZone.setDefault(originalTimeZone)
-    Locale.setDefault(originalLocale)
-    ctx.sql("DROP TEMPORARY FUNCTION udtf_count2")
-    super.afterAll()
+    try {
+      ctx.cacheTables = false
+      TimeZone.setDefault(originalTimeZone)
+      Locale.setDefault(originalLocale)
+      ctx.sql("DROP TEMPORARY FUNCTION udtf_count2")
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("SPARK-4908: concurrent hive native commands") {
@@ -1141,4 +1142,4 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 }
 
 // for SPARK-2180 test
-case class HavingRow(key: Int, value: String, attr: Int)
+private case class HavingRow(key: Int, value: String, attr: Int)

@@ -19,8 +19,6 @@ package org.apache.spark.sql.sources
 
 import scala.language.existentials
 
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -54,9 +52,10 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLCo
   }
 }
 
-class PrunedScanSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     caseInsensitiveContext.sql(
       """
         |CREATE TEMPORARY TABLE oneToTenPruned

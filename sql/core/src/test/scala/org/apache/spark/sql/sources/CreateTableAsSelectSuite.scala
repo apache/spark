@@ -19,15 +19,13 @@ package org.apache.spark.sql.sources
 
 import java.io.{File, IOException}
 
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.DDLException
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
 
-class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext {
   private lazy val sparkContext = caseInsensitiveContext.sparkContext
   private var path: File = null
 
@@ -39,12 +37,12 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
   }
 
   override def afterAll(): Unit = {
-    caseInsensitiveContext.dropTempTable("jt")
-    super.afterAll()
-  }
-
-  after {
-    Utils.deleteRecursively(path)
+    try {
+      caseInsensitiveContext.dropTempTable("jt")
+      Utils.deleteRecursively(path)
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT") {

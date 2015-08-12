@@ -49,6 +49,8 @@ private[spark] trait SharedHiveContext extends SQLTestUtils {
     if (_ctx == null) {
       _ctx = new TestHiveContext
     }
+    // Ensure we have initialized the context before calling parent code
+    super.beforeAll()
   }
 
   /**

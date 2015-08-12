@@ -19,14 +19,12 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.sql.{AnalysisException, SaveMode, SQLConf, DataFrame}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+class SaveLoadSuite extends DataSourceTest with SharedSQLContext {
   private lazy val sparkContext = caseInsensitiveContext.sparkContext
   private var originalDefaultSource: String = null
   private var path: File = null
@@ -45,13 +43,12 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
   }
 
   override def afterAll(): Unit = {
-    caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
-    super.afterAll()
-  }
-
-  after {
-    caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
-    Utils.deleteRecursively(path)
+    try {
+      caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
+      Utils.deleteRecursively(path)
+    } finally {
+      super.afterAll()
+    }
   }
 
   def checkLoad(expectedDF: DataFrame = df, tbl: String = "jsonTable"): Unit = {

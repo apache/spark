@@ -36,8 +36,11 @@ class TungstenSortSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   override def afterAll(): Unit = {
-    ctx.conf.setConf(SQLConf.CODEGEN_ENABLED, SQLConf.CODEGEN_ENABLED.defaultValue.get)
-    super.afterAll()
+    try {
+      ctx.conf.setConf(SQLConf.CODEGEN_ENABLED, SQLConf.CODEGEN_ENABLED.defaultValue.get)
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("sort followed by limit") {

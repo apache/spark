@@ -34,9 +34,9 @@ import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
+import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.types.*;
-import static org.apache.spark.sql.functions.*;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext jsc;

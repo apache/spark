@@ -23,8 +23,11 @@ import org.apache.spark.sql.test.SharedSQLContext
 class SQLContextSuite extends SparkFunSuite with SharedSQLContext {
 
   override def afterAll(): Unit = {
-    SQLContext.setLastInstantiatedContext(ctx)
-    super.afterAll()
+    try {
+      SQLContext.setLastInstantiatedContext(ctx)
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("getOrCreate instantiates SQLContext") {

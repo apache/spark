@@ -48,6 +48,7 @@ private[sql] trait SharedSQLContext extends SQLTestUtils {
     if (_ctx == null) {
       _ctx = new TestSQLContext
     }
+    // Ensure we have initialized the context before calling parent code
     super.beforeAll()
   }
 

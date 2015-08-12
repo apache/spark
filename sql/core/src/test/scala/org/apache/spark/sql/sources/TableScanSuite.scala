@@ -20,8 +20,6 @@ package org.apache.spark.sql.sources
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -98,7 +96,7 @@ case class AllDataTypesScan(
   }
 }
 
-class TableScanSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+class TableScanSuite extends DataSourceTest with SharedSQLContext {
   private lazy val tableWithSchemaExpected = (1 to 10).map { i =>
     Row(
       s"str_$i",
@@ -123,7 +121,8 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext with BeforeAnd
       Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))))
   }.toSeq
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     caseInsensitiveContext.sql(
       """
         |CREATE TEMPORARY TABLE oneToTen

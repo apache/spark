@@ -29,7 +29,8 @@ import org.apache.spark.sql.{AnalysisException, QueryTest}
 class ErrorPositionSuite extends QueryTest with BeforeAndAfter with SharedHiveContext {
   import testImplicits._
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     Seq((1, 1, 1)).toDF("a", "a", "b").registerTempTable("dupAttributes")
   }
 

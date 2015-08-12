@@ -27,12 +27,17 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContex
 
   private lazy val df = (1 to 10).map(i => (i, s"str$i")).toDF("key", "value")
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     df.registerTempTable("ListTablesSuiteTable")
   }
 
-  after {
-    ctx.catalog.unregisterTable(Seq("ListTablesSuiteTable"))
+  override def afterAll(): Unit = {
+    try {
+      ctx.catalog.unregisterTable(Seq("ListTablesSuiteTable"))
+    } finally {
+      afterAll()
+    }
   }
 
   test("get all tables") {

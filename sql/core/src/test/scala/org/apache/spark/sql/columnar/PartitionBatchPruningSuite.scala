@@ -24,7 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 
-class PartitionBatchPruningSuite extends SparkFunSuite with SharedSQLContext with BeforeAndAfter {
+class PartitionBatchPruningSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
 
   private lazy val originalColumnBatchSize = ctx.conf.columnBatchSize
@@ -45,20 +45,17 @@ class PartitionBatchPruningSuite extends SparkFunSuite with SharedSQLContext wit
     ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
     // Enable in-memory table scan accumulators
     ctx.setConf("spark.sql.inMemoryTableScanStatistics.enable", "true")
-  }
-
-  override protected def afterAll(): Unit = {
-    ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
-    ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
-    super.afterAll()
-  }
-
-  before {
     ctx.cacheTable("pruningData")
   }
 
-  after {
-    ctx.uncacheTable("pruningData")
+  override protected def afterAll(): Unit = {
+    try {
+      ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
+      ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
+      ctx.uncacheTable("pruningData")
+    } finally {
+      super.afterAll()
+    }
   }
 
   // Comparisons

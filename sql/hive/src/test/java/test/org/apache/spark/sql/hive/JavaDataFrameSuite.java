@@ -30,10 +30,10 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.expressions.Window;
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction;
+import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.hive.HiveContext;
 import org.apache.spark.sql.hive.test.TestHiveContext;
 import test.org.apache.spark.sql.hive.aggregate.MyDoubleSum;
-import static org.apache.spark.sql.functions.*;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext sc;
