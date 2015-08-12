@@ -1722,7 +1722,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           case "parquet" =>
             createTableDesc
               .setOutputFormat("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat")
-            createTableDesc.setSerName("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")
+            createTableDesc
+              .setSerName("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")
 
           case "rcfile" =>
             createTableDesc.setOutputFormat("org.apache.hadoop.hive.ql.io.RCFileOutputFormat")

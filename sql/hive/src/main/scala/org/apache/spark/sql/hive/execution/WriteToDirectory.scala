@@ -55,14 +55,14 @@ case class WriteToDirectory(
     val jobConfSer = new SerializableJobConf(jobConf)
     val targetPath = new Path(path)
 
-    val (tmpPath, destPath) = if (isLocal) {
+    val writeToPath = if (isLocal) {
       val localFileSystem = FileSystem.getLocal(jobConf)
       val localPath = localFileSystem.makeQualified(targetPath)
       // remove old dir
       if (localFileSystem.exists(localPath)) {
         localFileSystem.delete(localPath, true)
       }
-      (context.getExternalTmpPath(localPath), localPath)
+      localPath
     } else {
       val qualifiedPath = FileUtils.makeQualified(targetPath, hiveContext.hiveconf)
       val dfs = qualifiedPath.getFileSystem(jobConf)
@@ -71,10 +71,10 @@ case class WriteToDirectory(
       } else {
         dfs.mkdirs(qualifiedPath.getParent)
       }
-      (context.getExternalTmpPath(qualifiedPath), qualifiedPath)
+      qualifiedPath
     }
 
-    val fileSinkConf = new FileSinkDesc(tmpPath.toString, desc, false)
+    val fileSinkConf = new FileSinkDesc(writeToPath.toString, desc, false)
     val isCompressed = hiveContext.hiveconf.getBoolean(
       ConfVars.COMPRESSRESULT.varname, ConfVars.COMPRESSRESULT.defaultBoolVal)
 
@@ -99,15 +99,6 @@ case class WriteToDirectory(
       fileSinkConf,
       jobConfSer,
       writerContainer)
-
-    val fs = tmpPath.getFileSystem(jobConf)
-
-    // move tmp file to dest dir
-    if (isLocal) {
-      fs.moveToLocalFile(tmpPath, destPath)
-    } else if (!fs.rename(tmpPath, destPath)) {
-      throw new IOException("Unable to write data to " + destPath)
-    }
 
     Seq.empty[Row]
   }
