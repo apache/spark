@@ -486,7 +486,7 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
 
   test("inputFiles") {
     withTempDir { dir =>
-      val df = Seq((1,22)).toDF("a", "b")
+      val df = Seq((1, 22)).toDF("a", "b")
 
       val parquetDir = new File(dir, "parquet").getCanonicalPath
       df.write.parquet(parquetDir)
