@@ -19,6 +19,8 @@ package org.apache.spark.ml.classification
 
 import java.util.UUID
 
+import scala.language.existentials
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
@@ -30,8 +32,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.storage.StorageLevel
-
-import scala.language.existentials
 
 /**
  * Params for [[OneVsRest]].
