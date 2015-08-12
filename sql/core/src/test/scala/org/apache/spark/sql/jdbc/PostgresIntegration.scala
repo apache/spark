@@ -19,44 +19,33 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.DriverManager
 
-import com.spotify.docker.client.DockerClient
-import com.spotify.docker.client.messages.ContainerConfig
-import org.apache.spark.{SparkFunSuite, Logging}
 import org.scalatest.BeforeAndAfterAll
 
+import com.spotify.docker.client.DockerClient
+import com.spotify.docker.client.messages.ContainerConfig
+
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test._
 
-class PostgresDatabase extends Logging {
+class PostgresDatabase {
   val docker: DockerClient = DockerClientFactory.get()
+
   val containerId = {
-    logInfo("Pulling postgres")
     docker.pull("postgres")
-    logInfo("Configuring container")
     val config = ContainerConfig.builder().image("postgres")
       .env("POSTGRES_PASSWORD=rootpass")
       .build()
-    logInfo("Creating container")
     val id = docker.createContainer(config).id
-    logInfo("Starting container " + id)
     docker.startContainer(id)
     id
   }
+
   val ip = docker.inspectContainer(containerId).networkSettings.ipAddress
 
   def close() {
-    try {
-      logInfo("Killing container " + containerId)
-      docker.killContainer(containerId)
-      logInfo("Removing container " + containerId)
-      docker.removeContainer(containerId)
-      logInfo("Closing docker client")
-      DockerClientFactory.close(docker)
-    } catch {
-      case e: Exception =>
-        logInfo(e.getMessage)
-        logInfo("You may need to clean this up manually.")
-        throw e
-    }
+    docker.killContainer(containerId)
+    docker.removeContainer(containerId)
+    DockerClientFactory.close(docker)
   }
 }
 
@@ -77,8 +66,7 @@ class PostgresIntegration extends SparkFunSuite with BeforeAndAfterAll {
       try {
         val conn = java.sql.DriverManager.getConnection(url(ip))
         conn.close()
-        logInfo("Database is up.")
-        return;
+        return
       } catch {
         case e: java.sql.SQLException =>
           lastException = e
@@ -102,9 +90,7 @@ class PostgresIntegration extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   override def beforeAll() {
-    logInfo("Waiting for database to start up.")
     waitForDatabase(db.ip, 60000)
-    logInfo("Setting up database.")
     setupDatabase(db.ip)
   }
 

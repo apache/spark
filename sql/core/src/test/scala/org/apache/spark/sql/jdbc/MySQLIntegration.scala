@@ -20,44 +20,33 @@ package org.apache.spark.sql.jdbc
 import java.math.BigDecimal
 import java.sql.{Date, Timestamp}
 
-import com.spotify.docker.client.DockerClient
-import com.spotify.docker.client.messages.ContainerConfig
-import org.apache.spark.{SparkFunSuite, Logging}
 import org.scalatest.BeforeAndAfterAll
 
+import com.spotify.docker.client.DockerClient
+import com.spotify.docker.client.messages.ContainerConfig
+
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test._
 
-class MySQLDatabase extends Logging {
+class MySQLDatabase {
   val docker: DockerClient = DockerClientFactory.get()
+
   val containerId = {
-    logInfo("Pulling mysql")
     docker.pull("mysql")
-    logInfo("Configuring container")
     val config = ContainerConfig.builder().image("mysql")
       .env("MYSQL_ROOT_PASSWORD=rootpass")
       .build()
-    logInfo("Creating container")
     val id = docker.createContainer(config).id
-    logInfo("Starting container " + id)
     docker.startContainer(id)
     id
   }
+
   val ip = docker.inspectContainer(containerId).networkSettings.ipAddress
 
   def close() {
-    try {
-      logInfo("Killing container " + containerId)
-      docker.killContainer(containerId)
-      logInfo("Removing container " + containerId)
-      docker.removeContainer(containerId)
-      logInfo("Closing docker client")
-      DockerClientFactory.close(docker)
-    } catch {
-      case e: Exception =>
-        logInfo(e.getMessage)
-        logInfo("You may need to clean this up manually.")
-        throw e
-    }
+    docker.killContainer(containerId)
+    docker.removeContainer(containerId)
+    DockerClientFactory.close(docker)
   }
 }
 
@@ -68,7 +57,6 @@ class MySQLIntegration extends SparkFunSuite with BeforeAndAfterAll {
   def url(ip: String, db: String): String = s"jdbc:mysql://$ip:3306/$db?user=root&password=rootpass"
 
   def waitForDatabase(ip: String, maxMillis: Long) {
-    logInfo("Waiting for database to start up.")
     val before = System.currentTimeMillis()
     var lastException: java.sql.SQLException = null
     while (true) {
@@ -78,8 +66,7 @@ class MySQLIntegration extends SparkFunSuite with BeforeAndAfterAll {
       try {
         val conn = java.sql.DriverManager.getConnection(url(ip))
         conn.close()
-        logInfo("Database is up.")
-        return;
+        return
       } catch {
         case e: java.sql.SQLException =>
           lastException = e
@@ -155,7 +142,6 @@ class MySQLIntegration extends SparkFunSuite with BeforeAndAfterAll {
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types.length == 9)
-    logInfo(types(1))
     assert(types(0).equals("class java.lang.Boolean"))
     assert(types(1).equals("class java.lang.Long"))
     assert(types(2).equals("class java.lang.Integer"))
