@@ -35,6 +35,7 @@ import org.apache.hadoop.mapred.Reporter
 import org.apache.hadoop.mapred.JobID
 import org.apache.hadoop.mapred.TaskAttemptID
 import org.apache.hadoop.mapred.TaskID
+import org.apache.hadoop.mapred.FileInputFormat
 import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.util.ReflectionUtils
 
@@ -198,13 +199,20 @@ class HadoopRDD[K, V](
 
   override def getPartitions: Array[Partition] = {
     val jobConf = getJobConf()
-    // add the credentials here as this can be called before SparkContext initialized
-    SparkHadoopUtil.get.addCredentials(jobConf)
-    val inputFormat = getInputFormat(jobConf)
-    if (inputFormat.isInstanceOf[Configurable]) {
-      inputFormat.asInstanceOf[Configurable].setConf(jobConf)
-    }
-    val inputSplits = inputFormat.getSplits(jobConf, minPartitions)
+    val inputPaths = FileInputFormat.getInputPaths(jobConf).map(_.toString)
+    val inputSplits: Array[InputSplit] =
+      // first check whether input splits are already computed
+      if (SparkHadoopUtil.get.hasCache(inputPaths)) {
+        SparkHadoopUtil.get.getCache(inputPaths)
+      } else {
+        // add the credentials here as this can be called before SparkContext initialized
+        SparkHadoopUtil.get.addCredentials(jobConf)
+        val inputFormat = getInputFormat(jobConf)
+        if (inputFormat.isInstanceOf[Configurable]) {
+          inputFormat.asInstanceOf[Configurable].setConf(jobConf)
+        }
+        inputFormat.getSplits(jobConf, minPartitions)
+      }
     val array = new Array[Partition](inputSplits.size)
     for (i <- 0 until inputSplits.size) {
       array(i) = new HadoopPartition(id, i, inputSplits(i))

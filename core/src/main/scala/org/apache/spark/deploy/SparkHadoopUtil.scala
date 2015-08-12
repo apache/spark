@@ -20,19 +20,21 @@ package org.apache.spark.deploy
 import java.io.{ByteArrayInputStream, DataInputStream}
 import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
-import java.util.{Arrays, Comparator}
+import java.util.{Arrays, Comparator, Map}
 
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
 
+import com.google.common.collect.MapMaker
 import com.google.common.primitives.Longs
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
-import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.{FileInputFormat, FileSplit, InputSplit, JobConf}
 import org.apache.hadoop.mapreduce.JobContext
 import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
 import org.apache.hadoop.mapreduce.{TaskAttemptID => MapReduceTaskAttemptID}
@@ -375,6 +377,49 @@ class SparkHadoopUtil extends Logging {
     val confKey = s"fs.${scheme}.impl.disable.cache"
     newConf.setBoolean(confKey, true)
     newConf
+  }
+
+  // This map holds input splits per Hive partition path.
+  private val inputSplitsCache: Map[String, Array[InputSplit]] = new MapMaker().makeMap()
+
+  /**
+   * Populate inputSplitsCache. Listing multiple partition paths is done in parallel, and
+   * input splits are grouped by their partition paths and stored in the map.
+   */
+  def computeInputSplits(
+      inputPaths: Seq[String],
+      jobConf: JobConf,
+      inputFormat: FileInputFormat[_, _],
+      minSplits: Int): Unit = {
+    val inputSplits = inputFormat.getSplits(jobConf, minSplits)
+    val groupedInputSplits = inputSplits.groupBy(_.asInstanceOf[FileSplit].getPath.getParent.toString)
+    inputPaths.foreach { partitionPath =>
+      var files: Array[InputSplit] = Array()
+      groupedInputSplits.foreach { case (commonParentPath, array) =>
+        if (commonParentPath.contains(partitionPath)) {
+          files = Array.concat(files, array)
+        }
+      }
+      inputSplitsCache.put(partitionPath, files)
+    }
+  }
+
+  /**
+   * Return true if input splits for all the partition paths exist.
+   */
+  def hasCache(paths: Seq[String]): Boolean = {
+    paths.forall(inputSplitsCache.containsKey(_))
+  }
+
+  /**
+   * Return cached input splits for all the partition paths.
+   */
+  def getCache(paths: Seq[String]): Array[InputSplit] = {
+    var cache: Array[InputSplit] = Array()
+    for (path <- paths) {
+      cache = Array.concat(cache, inputSplitsCache.get(path))
+    }
+    cache
   }
 }
 
