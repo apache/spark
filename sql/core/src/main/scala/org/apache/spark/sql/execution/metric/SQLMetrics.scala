@@ -112,4 +112,10 @@ private[sql] object SQLMetrics {
     sc.cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
   }
+
+  /**
+   * A metric that its value will be ignored. Use this one when we need a metric parameter but don't
+   * care about the value.
+   */
+  val nullLongMetric = new LongSQLMetric("null")
 }

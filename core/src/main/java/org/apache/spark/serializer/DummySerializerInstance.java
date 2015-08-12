@@ -25,7 +25,7 @@ import java.nio.ByteBuffer;
 import scala.reflect.ClassTag;
 
 import org.apache.spark.annotation.Private;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 
 /**
  * Unfortunately, we need a serializer instance in order to construct a DiskBlockObjectWriter.
@@ -49,7 +49,7 @@ public final class DummySerializerInstance extends SerializerInstance {
         try {
           s.flush();
         } catch (IOException e) {
-          PlatformDependent.throwException(e);
+          Platform.throwException(e);
         }
       }
 
@@ -64,7 +64,7 @@ public final class DummySerializerInstance extends SerializerInstance {
         try {
           s.close();
         } catch (IOException e) {
-          PlatformDependent.throwException(e);
+          Platform.throwException(e);
         }
       }
     };

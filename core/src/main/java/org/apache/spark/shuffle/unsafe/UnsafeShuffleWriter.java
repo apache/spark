@@ -53,7 +53,7 @@ import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
 @Private
@@ -244,7 +244,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     assert (serializedRecordSize > 0);
 
     sorter.insertRecord(
-      serBuffer.getBuf(), PlatformDependent.BYTE_ARRAY_OFFSET, serializedRecordSize, partitionId);
+      serBuffer.getBuf(), Platform.BYTE_ARRAY_OFFSET, serializedRecordSize, partitionId);
   }
 
   @VisibleForTesting

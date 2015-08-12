@@ -17,7 +17,7 @@
 
 package org.apache.spark.unsafe.array;
 
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
@@ -64,7 +64,7 @@ public final class LongArray {
    */
   public void copyFrom(LongArray that) {
     assert that.length <= this.length: "Can't copy from a larger array";
-    PlatformDependent.copyMemory(
+    Platform.copyMemory(
       that.baseObj, that.baseOffset, this.baseObj, this.baseOffset, that.memory.size());
   }
 
@@ -72,7 +72,7 @@ public final class LongArray {
    * Copy the elements in a range from another LongArray to this array.
    */
   public void copyFrom(LongArray that, int srcPos, int dstPos, int length) {
-    PlatformDependent.copyMemory(
+    Platform.copyMemory(
       that.baseObj, that.baseOffset + srcPos * WIDTH,
       this.baseObj, this.baseOffset + dstPos * WIDTH, length * WIDTH);
   }
@@ -83,7 +83,7 @@ public final class LongArray {
   public void set(int index, long value) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     assert index < length : "index (" + index + ") should < length (" + length + ")";
-    PlatformDependent.UNSAFE.putLong(baseObj, baseOffset + index * WIDTH, value);
+    Platform.putLong(baseObj, baseOffset + index * WIDTH, value);
   }
 
   /**
@@ -92,6 +92,6 @@ public final class LongArray {
   public long get(int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     assert index < length : "index (" + index + ") should < length (" + length + ")";
-    return PlatformDependent.UNSAFE.getLong(baseObj, baseOffset + index * WIDTH);
+    return Platform.getLong(baseObj, baseOffset + index * WIDTH);
   }
 }

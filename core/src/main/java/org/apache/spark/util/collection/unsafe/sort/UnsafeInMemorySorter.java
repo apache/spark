@@ -22,7 +22,7 @@ import java.io.IOException;
 
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.unsafe.array.LongArray;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.collection.Sorter;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
@@ -200,7 +200,7 @@ public final class UnsafeInMemorySorter {
       final long recordPointer = sortBuffer.get(position);
       baseObject = memoryManager.getPage(recordPointer);
       baseOffset = memoryManager.getOffsetInPage(recordPointer) + 4;  // Skip over record length
-      recordLength = PlatformDependent.UNSAFE.getInt(baseObject, baseOffset - 4);
+      recordLength = Platform.getInt(baseObject, baseOffset - 4);
       keyPrefix = sortBuffer.get(position + 1);
       position += 2;
     }
