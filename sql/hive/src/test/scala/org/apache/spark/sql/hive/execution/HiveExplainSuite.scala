@@ -17,13 +17,18 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{SQLContext, QueryTest}
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.test.SQLTestUtils
 
 /**
  * A set of tests that validates support for Hive Explain command.
  */
-class HiveExplainSuite extends QueryTest {
+class HiveExplainSuite extends QueryTest with SQLTestUtils {
+
+  def sqlContext: SQLContext = TestHive
+
   test("explain extended command") {
     checkExistence(sql(" explain   select * from src where key=123 "), true,
                    "== Physical Plan ==")
@@ -36,7 +41,7 @@ class HiveExplainSuite extends QueryTest {
                    "== Analyzed Logical Plan ==",
                    "== Optimized Logical Plan ==",
                    "== Physical Plan ==",
-                   "Code Generation", "== RDD ==")
+                   "Code Generation")
   }
 
   test("explain create table command") {
@@ -73,5 +78,31 @@ class HiveExplainSuite extends QueryTest {
       "InsertIntoHiveTable",
       "Limit",
       "src")
+  }
+
+  test("SPARK-6212: The EXPLAIN output of CTAS only shows the analyzed plan") {
+    withTempTable("jt") {
+      val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
+      read.json(rdd).registerTempTable("jt")
+      val outputs = sql(
+        s"""
+           |EXPLAIN EXTENDED
+           |CREATE TABLE t1
+           |AS
+           |SELECT * FROM jt
+      """.stripMargin).collect().map(_.mkString).mkString
+
+      val shouldContain =
+        "== Parsed Logical Plan ==" :: "== Analyzed Logical Plan ==" :: "Subquery" ::
+        "== Optimized Logical Plan ==" :: "== Physical Plan ==" ::
+        "CreateTableAsSelect" :: "InsertIntoHiveTable" :: "jt" :: Nil
+      for (key <- shouldContain) {
+        assert(outputs.contains(key), s"$key doesn't exist in result")
+      }
+
+      val physicalIndex = outputs.indexOf("== Physical Plan ==")
+      assert(!outputs.substring(physicalIndex).contains("Subquery"),
+        "Physical Plan should not contain Subquery since it's eliminated by optimizer")
+    }
   }
 }

@@ -17,20 +17,21 @@
 
 package org.apache.spark.sql.execution.joins
 
-import java.io.{IOException, Externalizable, ObjectInput, ObjectOutput}
+import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.nio.ByteOrder
 import java.util.{HashMap => JavaHashMap}
 
 import org.apache.spark.shuffle.ShuffleMemoryManager
-import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkSqlSerializer
-import org.apache.spark.unsafe.PlatformDependent
+import org.apache.spark.sql.execution.metric.LongSQLMetric
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.{SparkConf, SparkEnv}
 
 
 /**
@@ -112,11 +113,13 @@ private[joins] object HashedRelation {
 
   def apply(
       input: Iterator[InternalRow],
+      numInputRows: LongSQLMetric,
       keyGenerator: Projection,
       sizeEstimate: Int = 64): HashedRelation = {
 
     if (keyGenerator.isInstanceOf[UnsafeProjection]) {
-      return UnsafeHashedRelation(input, keyGenerator.asInstanceOf[UnsafeProjection], sizeEstimate)
+      return UnsafeHashedRelation(
+        input, numInputRows, keyGenerator.asInstanceOf[UnsafeProjection], sizeEstimate)
     }
 
     // TODO: Use Spark's HashMap implementation.
@@ -130,6 +133,7 @@ private[joins] object HashedRelation {
     // Create a mapping of buildKeys -> rows
     while (input.hasNext) {
       currentRow = input.next()
+      numInputRows += 1
       val rowKey = keyGenerator(currentRow)
       if (!rowKey.anyNull) {
         val existingMatchList = hashTable.get(rowKey)
@@ -218,8 +222,8 @@ private[joins] final class UnsafeHashedRelation(
         var offset = loc.getValueAddress.getBaseOffset
         val last = loc.getValueAddress.getBaseOffset + loc.getValueLength
         while (offset < last) {
-          val numFields = PlatformDependent.UNSAFE.getInt(base, offset)
-          val sizeInBytes = PlatformDependent.UNSAFE.getInt(base, offset + 4)
+          val numFields = Platform.getInt(base, offset)
+          val sizeInBytes = Platform.getInt(base, offset + 4)
           offset += 8
 
           val row = new UnsafeRow
@@ -282,22 +286,20 @@ private[joins] final class UnsafeHashedRelation(
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
     val taskMemoryManager = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
 
+    val pageSizeBytes = Option(SparkEnv.get).map(_.shuffleMemoryManager.pageSizeBytes)
+      .getOrElse(new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "16m"))
+
     // Dummy shuffle memory manager which always grants all memory allocation requests.
     // We use this because it doesn't make sense count shared broadcast variables' memory usage
     // towards individual tasks' quotas. In the future, we should devise a better way of handling
     // this.
-    val shuffleMemoryManager = new ShuffleMemoryManager(new SparkConf()) {
-      override def tryToAcquire(numBytes: Long): Long = numBytes
-      override def release(numBytes: Long): Unit = {}
-    }
-
-    val pageSizeBytes = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
-      .getSizeAsBytes("spark.buffer.pageSize", "64m")
+    val shuffleMemoryManager =
+      ShuffleMemoryManager.create(maxMemory = Long.MaxValue, pageSizeBytes = pageSizeBytes)
 
     binaryMap = new BytesToBytesMap(
       taskMemoryManager,
       shuffleMemoryManager,
-      nKeys * 2, // reduce hash collision
+      (nKeys * 1.5 + 1).toInt, // reduce hash collision
       pageSizeBytes)
 
     var i = 0
@@ -306,20 +308,21 @@ private[joins] final class UnsafeHashedRelation(
     while (i < nKeys) {
       val keySize = in.readInt()
       val valuesSize = in.readInt()
-      if (keySize > keyBuffer.size) {
+      if (keySize > keyBuffer.length) {
         keyBuffer = new Array[Byte](keySize)
       }
       in.readFully(keyBuffer, 0, keySize)
-      if (valuesSize > valuesBuffer.size) {
+      if (valuesSize > valuesBuffer.length) {
         valuesBuffer = new Array[Byte](valuesSize)
       }
       in.readFully(valuesBuffer, 0, valuesSize)
 
       // put it into binary map
-      val loc = binaryMap.lookup(keyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, keySize)
+      val loc = binaryMap.lookup(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize)
       assert(!loc.isDefined, "Duplicated key found!")
-      val putSuceeded = loc.putNewKey(keyBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, keySize,
-        valuesBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, valuesSize)
+      val putSuceeded = loc.putNewKey(
+        keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize,
+        valuesBuffer, Platform.BYTE_ARRAY_OFFSET, valuesSize)
       if (!putSuceeded) {
         throw new IOException("Could not allocate memory to grow BytesToBytesMap")
       }
@@ -332,6 +335,7 @@ private[joins] object UnsafeHashedRelation {
 
   def apply(
       input: Iterator[InternalRow],
+      numInputRows: LongSQLMetric,
       keyGenerator: UnsafeProjection,
       sizeEstimate: Int): HashedRelation = {
 
@@ -341,6 +345,7 @@ private[joins] object UnsafeHashedRelation {
     // Create a mapping of buildKeys -> rows
     while (input.hasNext) {
       val unsafeRow = input.next().asInstanceOf[UnsafeRow]
+      numInputRows += 1
       val rowKey = keyGenerator(unsafeRow)
       if (!rowKey.anyNull) {
         val existingMatchList = hashTable.get(rowKey)

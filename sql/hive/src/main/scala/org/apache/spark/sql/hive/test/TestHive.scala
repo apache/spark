@@ -52,7 +52,6 @@ object TestHive
         .set("spark.sql.test", "")
         .set("spark.sql.hive.metastore.barrierPrefixes",
           "org.apache.spark.sql.hive.execution.PairSerDe")
-        .set("spark.buffer.pageSize", "4m")
         // SPARK-8910
         .set("spark.ui.enabled", "false")))
 
@@ -374,7 +373,11 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         INSERT OVERWRITE TABLE episodes_part PARTITION (doctor_pt=1)
         SELECT title, air_date, doctor FROM episodes
       """.cmd
-      )
+      ),
+    TestTable("src_json",
+      s"""CREATE TABLE src_json (json STRING) STORED AS TEXTFILE
+       """.stripMargin.cmd,
+      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/json.txt")}' INTO TABLE src_json".cmd)
   )
 
   hiveQTestUtilTables.foreach(registerTestTable)

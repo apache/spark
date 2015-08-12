@@ -860,7 +860,7 @@ private[ui] class TaskDataSource(
     }
     val peakExecutionMemoryUsed = taskInternalAccumulables
       .find { acc => acc.name == InternalAccumulator.PEAK_EXECUTION_MEMORY }
-      .map { acc => acc.value.toLong }
+      .map { acc => acc.update.getOrElse("0").toLong }
       .getOrElse(0L)
 
     val maybeInput = metrics.flatMap(_.inputMetrics)
@@ -988,8 +988,7 @@ private[ui] class TaskDataSource(
       shuffleRead,
       shuffleWrite,
       bytesSpilled,
-      errorMessage.getOrElse("")
-    )
+      errorMessage.getOrElse(""))
   }
 
   /**
@@ -1197,7 +1196,7 @@ private[ui] class TaskPagedTable(
   private val displayPeakExecutionMemory =
     conf.getOption("spark.sql.unsafe.enabled").exists(_.toBoolean)
 
-  override def tableId: String = ""
+  override def tableId: String = "task-table"
 
   override def tableCssClass: String = "table table-bordered table-condensed table-striped"
 
@@ -1212,8 +1211,7 @@ private[ui] class TaskPagedTable(
     currentTime,
     pageSize,
     sortColumn,
-    desc
-  )
+    desc)
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
@@ -1277,7 +1275,7 @@ private[ui] class TaskPagedTable(
         Seq(("Errors", ""))
 
     if (!taskHeadersAndCssClasses.map(_._1).contains(sortColumn)) {
-      new IllegalArgumentException(s"Unknown column: $sortColumn")
+      throw new IllegalArgumentException(s"Unknown column: $sortColumn")
     }
 
     val headerRow: Seq[Node] = {

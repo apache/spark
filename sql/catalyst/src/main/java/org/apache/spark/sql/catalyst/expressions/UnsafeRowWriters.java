@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.math.BigInteger;
+
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.Decimal;
-import org.apache.spark.sql.types.MapData;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.ByteArray;
 import org.apache.spark.unsafe.types.CalendarInterval;
@@ -47,29 +48,41 @@ public class UnsafeRowWriters {
 
   /** Writer for Decimal with precision larger than 18. */
   public static class DecimalWriter {
-
+    private static final int SIZE = 16;
     public static int getSize(Decimal input) {
       // bounded size
-      return 16;
+      return SIZE;
     }
 
     public static int write(UnsafeRow target, int ordinal, int cursor, Decimal input) {
+      final Object base = target.getBaseObject();
       final long offset = target.getBaseOffset() + cursor;
-      final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
-      final int numBytes = bytes.length;
-      assert(numBytes <= 16);
-
       // zero-out the bytes
-      PlatformDependent.UNSAFE.putLong(target.getBaseObject(), offset, 0L);
-      PlatformDependent.UNSAFE.putLong(target.getBaseObject(), offset + 8, 0L);
+      Platform.putLong(base, offset, 0L);
+      Platform.putLong(base, offset + 8, 0L);
+
+      if (input == null) {
+        target.setNullAt(ordinal);
+        // keep the offset and length for update
+        int fieldOffset = UnsafeRow.calculateBitSetWidthInBytes(target.numFields()) + ordinal * 8;
+        Platform.putLong(base, target.getBaseOffset() + fieldOffset,
+          ((long) cursor) << 32);
+        return SIZE;
+      }
+
+      final BigInteger integer = input.toJavaBigDecimal().unscaledValue();
+      int signum = integer.signum() + 1;
+      final int[] mag = (int[]) Platform.getObjectVolatile(
+        integer, Platform.BIG_INTEGER_MAG_OFFSET);
+      assert(mag.length <= 4);
 
       // Write the bytes to the variable length portion.
-      PlatformDependent.copyMemory(bytes, PlatformDependent.BYTE_ARRAY_OFFSET,
-        target.getBaseObject(), offset, numBytes);
-
+      Platform.copyMemory(
+        mag, Platform.INT_ARRAY_OFFSET, base, target.getBaseOffset() + cursor, mag.length * 4);
       // Set the fixed length portion.
-      target.setLong(ordinal, (((long) cursor) << 32) | ((long) numBytes));
-      return 16;
+      target.setLong(ordinal, (((long) cursor) << 32) | ((long) ((signum << 8) + mag.length)));
+
+      return SIZE;
     }
   }
 
@@ -86,8 +99,7 @@ public class UnsafeRowWriters {
 
       // zero-out the padding bytes
       if ((numBytes & 0x07) > 0) {
-        PlatformDependent.UNSAFE.putLong(
-          target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
+        Platform.putLong(target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
       }
 
       // Write the bytes to the variable length portion.
@@ -112,8 +124,7 @@ public class UnsafeRowWriters {
 
       // zero-out the padding bytes
       if ((numBytes & 0x07) > 0) {
-        PlatformDependent.UNSAFE.putLong(
-          target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
+        Platform.putLong(target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
       }
 
       // Write the bytes to the variable length portion.
@@ -154,8 +165,7 @@ public class UnsafeRowWriters {
 
         // zero-out the padding bytes
         if ((numBytes & 0x07) > 0) {
-          PlatformDependent.UNSAFE.putLong(
-            target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
+          Platform.putLong(target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
         }
 
         // Write the bytes to the variable length portion.
@@ -178,8 +188,8 @@ public class UnsafeRowWriters {
       final long offset = target.getBaseOffset() + cursor;
 
       // Write the months and microseconds fields of Interval to the variable length portion.
-      PlatformDependent.UNSAFE.putLong(target.getBaseObject(), offset, input.months);
-      PlatformDependent.UNSAFE.putLong(target.getBaseObject(), offset + 8, input.microseconds);
+      Platform.putLong(target.getBaseObject(), offset, input.months);
+      Platform.putLong(target.getBaseObject(), offset + 8, input.microseconds);
 
       // Set the fixed length portion.
       target.setLong(ordinal, ((long) cursor) << 32);
@@ -199,12 +209,11 @@ public class UnsafeRowWriters {
       final long offset = target.getBaseOffset() + cursor;
 
       // write the number of elements into first 4 bytes.
-      PlatformDependent.UNSAFE.putInt(target.getBaseObject(), offset, input.numElements());
+      Platform.putInt(target.getBaseObject(), offset, input.numElements());
 
       // zero-out the padding bytes
       if ((numBytes & 0x07) > 0) {
-        PlatformDependent.UNSAFE.putLong(
-          target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
+        Platform.putLong(target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
       }
 
       // Write the bytes to the variable length portion.
@@ -234,14 +243,13 @@ public class UnsafeRowWriters {
       final int numBytes = 4 + 4 + keysNumBytes + valuesNumBytes;
 
       // write the number of elements into first 4 bytes.
-      PlatformDependent.UNSAFE.putInt(target.getBaseObject(), offset, input.numElements());
+      Platform.putInt(target.getBaseObject(), offset, input.numElements());
       // write the numBytes of key array into second 4 bytes.
-      PlatformDependent.UNSAFE.putInt(target.getBaseObject(), offset + 4, keysNumBytes);
+      Platform.putInt(target.getBaseObject(), offset + 4, keysNumBytes);
 
       // zero-out the padding bytes
       if ((numBytes & 0x07) > 0) {
-        PlatformDependent.UNSAFE.putLong(
-          target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
+        Platform.putLong(target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
       }
 
       // Write the bytes of key array to the variable length portion.

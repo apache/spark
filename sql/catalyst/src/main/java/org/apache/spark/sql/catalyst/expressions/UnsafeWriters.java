@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.sql.types.Decimal;
-import org.apache.spark.unsafe.PlatformDependent;
-import org.apache.spark.unsafe.array.ByteArrayMethods;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -36,17 +35,11 @@ public class UnsafeWriters {
 
     // zero-out the padding bytes
 //    if ((numBytes & 0x07) > 0) {
-//      PlatformDependent.UNSAFE.putLong(targetObject, targetOffset + ((numBytes >> 3) << 3), 0L);
+//      Platform.putLong(targetObject, targetOffset + ((numBytes >> 3) << 3), 0L);
 //    }
 
     // Write the UnsafeData to the target memory.
-    PlatformDependent.copyMemory(
-      inputObject,
-      inputOffset,
-      targetObject,
-      targetOffset,
-      numBytes
-    );
+    Platform.copyMemory(inputObject, inputOffset, targetObject, targetOffset, numBytes);
   }
 
   public static int getRoundedSize(int size) {
@@ -68,16 +61,11 @@ public class UnsafeWriters {
       assert(numBytes <= 16);
 
       // zero-out the bytes
-      PlatformDependent.UNSAFE.putLong(targetObject, targetOffset, 0L);
-      PlatformDependent.UNSAFE.putLong(targetObject, targetOffset + 8, 0L);
+      Platform.putLong(targetObject, targetOffset, 0L);
+      Platform.putLong(targetObject, targetOffset + 8, 0L);
 
       // Write the bytes to the variable length portion.
-      PlatformDependent.copyMemory(bytes,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
-        targetObject,
-        targetOffset,
-        numBytes);
-
+      Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, targetObject, targetOffset, numBytes);
       return 16;
     }
   }
@@ -111,8 +99,7 @@ public class UnsafeWriters {
       final int numBytes = input.length;
 
       // Write the bytes to the variable length portion.
-      writeToMemory(input, PlatformDependent.BYTE_ARRAY_OFFSET,
-        targetObject, targetOffset, numBytes);
+      writeToMemory(input, Platform.BYTE_ARRAY_OFFSET, targetObject, targetOffset, numBytes);
 
       return getRoundedSize(numBytes);
     }
@@ -144,11 +131,9 @@ public class UnsafeWriters {
     }
 
     public static int write(Object targetObject, long targetOffset, CalendarInterval input) {
-
       // Write the months and microseconds fields of Interval to the variable length portion.
-      PlatformDependent.UNSAFE.putLong(targetObject, targetOffset, input.months);
-      PlatformDependent.UNSAFE.putLong(targetObject, targetOffset + 8, input.microseconds);
-
+      Platform.putLong(targetObject, targetOffset, input.months);
+      Platform.putLong(targetObject, targetOffset + 8, input.microseconds);
       return 16;
     }
   }
@@ -165,11 +150,11 @@ public class UnsafeWriters {
       final int numBytes = input.getSizeInBytes();
 
       // write the number of elements into first 4 bytes.
-      PlatformDependent.UNSAFE.putInt(targetObject, targetOffset, input.numElements());
+      Platform.putInt(targetObject, targetOffset, input.numElements());
 
       // Write the bytes to the variable length portion.
-      writeToMemory(input.getBaseObject(), input.getBaseOffset(),
-        targetObject, targetOffset + 4, numBytes);
+      writeToMemory(
+        input.getBaseObject(), input.getBaseOffset(), targetObject, targetOffset + 4, numBytes);
 
       return getRoundedSize(numBytes + 4);
     }
@@ -190,9 +175,9 @@ public class UnsafeWriters {
       final int numBytes = 4 + 4 + keysNumBytes + valuesNumBytes;
 
       // write the number of elements into first 4 bytes.
-      PlatformDependent.UNSAFE.putInt(targetObject, targetOffset, input.numElements());
+      Platform.putInt(targetObject, targetOffset, input.numElements());
       // write the numBytes of key array into second 4 bytes.
-      PlatformDependent.UNSAFE.putInt(targetObject, targetOffset + 4, keysNumBytes);
+      Platform.putInt(targetObject, targetOffset + 4, keysNumBytes);
 
       // Write the bytes of key array to the variable length portion.
       writeToMemory(keyArray.getBaseObject(), keyArray.getBaseOffset(),

@@ -56,10 +56,10 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
 #'
 #' Makes predictions from a model produced by glm(), similarly to R's predict().
 #'
-#' @param model A fitted MLlib model
+#' @param object A fitted MLlib model
 #' @param newData DataFrame for testing
 #' @return DataFrame containing predicted values
-#' @rdname glm
+#' @rdname predict
 #' @export
 #' @examples
 #'\dontrun{
@@ -76,10 +76,10 @@ setMethod("predict", signature(object = "PipelineModel"),
 #'
 #' Returns the summary of a model produced by glm(), similarly to R's summary().
 #'
-#' @param model A fitted MLlib model
+#' @param x A fitted MLlib model
 #' @return a list with a 'coefficient' component, which is the matrix of coefficients. See
 #'         summary.glm for more information.
-#' @rdname glm
+#' @rdname summary
 #' @export
 #' @examples
 #'\dontrun{
