@@ -213,8 +213,9 @@ private[joins] final class UnsafeHashedRelation(
 
     if (binaryMap != null) {
       // Used in Broadcast join
-      val loc = binaryMap.lookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-        unsafeKey.getSizeInBytes)
+      val loc = binaryMap.Location  // this could be allocated in stack
+      binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
+        unsafeKey.getSizeInBytes, loc)
       if (loc.isDefined) {
         val buffer = CompactBuffer[UnsafeRow]()
 
