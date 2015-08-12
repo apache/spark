@@ -657,9 +657,9 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
                  HasRawPredictionCol):
     """
     Naive Bayes Classifiers.
-    It supports both Multinomial NB
+    It supports both Multinomial and Bernoulli NB. Multinomial NB
     (`http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html`)
-    which can handle finitely supported discrete data. For example, by converting documents into
+    can handle finitely supported discrete data. For example, by converting documents into
     TF-IDF vectors, it can be used for document classification. By making every vector a
     binary (0/1) data, it can also be used as Bernoulli NB
     (`http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html`).
