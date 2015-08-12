@@ -143,7 +143,7 @@ object ResolvedDataSource extends Logging {
     new ResolvedDataSource(clazz, relation)
   }
 
-  private def partitionColumnsSchema(
+  def partitionColumnsSchema(
       schema: StructType,
       partitionColumns: Array[String]): StructType = {
     StructType(partitionColumns.map { col =>
@@ -179,6 +179,13 @@ object ResolvedDataSource extends Logging {
           val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
           path.makeQualified(fs.getUri, fs.getWorkingDirectory)
         }
+
+        partitionColumnsSchema(data.schema, partitionColumns).foreach { field =>
+          if (!PartitioningUtils.validPartitionColumnTypes.contains(field.dataType)) {
+            throw new AnalysisException(s"Cannot use ${field.dataType} for partition column")
+          }
+        }
+
         val dataSchema = StructType(data.schema.filterNot(f => partitionColumns.contains(f.name)))
         val r = dataSource.createRelation(
           sqlContext,

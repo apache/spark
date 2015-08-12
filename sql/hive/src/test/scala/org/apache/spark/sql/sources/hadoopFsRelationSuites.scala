@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import java.sql.Date
+
 import scala.collection.JavaConversions._
 
 import org.apache.hadoop.conf.Configuration
@@ -552,6 +554,21 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       // Hadoop 1 doesn't have `Configuration.unset`
       configuration.clear()
       clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+    }
+  }
+
+  test("SPARK-8887: Explicitly define which data types can be used as dynamic partition columns") {
+    val df = Seq(
+      (1, "v1", Date.valueOf("2015-08-10")),
+      (2, "v2", Date.valueOf("2015-08-11")),
+      (3, "v3", Date.valueOf("2015-08-12"))).toDF("a", "b", "c")
+    withTempDir { file =>
+      intercept[AnalysisException] {
+        df.write.format(dataSourceName).partitionBy("c").save(file.getCanonicalPath)
+      }
+    }
+    intercept[AnalysisException] {
+      df.write.format(dataSourceName).partitionBy("c").saveAsTable("t")
     }
   }
 }

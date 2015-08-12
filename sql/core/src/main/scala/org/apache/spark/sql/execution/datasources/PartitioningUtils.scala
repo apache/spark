@@ -270,6 +270,8 @@ private[sql] object PartitioningUtils {
   private val upCastingOrder: Seq[DataType] =
     Seq(NullType, IntegerType, LongType, FloatType, DoubleType, StringType)
 
+  val validPartitionColumnTypes: Set[DataType] = upCastingOrder.toSet
+
   /**
    * Given a collection of [[Literal]]s, resolves possible type conflicts by up-casting "lower"
    * types.

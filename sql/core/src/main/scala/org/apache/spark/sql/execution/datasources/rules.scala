@@ -116,6 +116,12 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           // OK
         }
 
+        r.partitionColumns.fields.foreach { field =>
+          if (!PartitioningUtils.validPartitionColumnTypes.contains(field.dataType)) {
+            failAnalysis(s"Cannot use ${field.dataType} for partition column")
+          }
+        }
+
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
           case LogicalRelation(src: BaseRelation) => src
@@ -138,10 +144,10 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           // OK
         }
 
-      case CreateTableUsingAsSelect(tableName, _, _, _, SaveMode.Overwrite, _, query) =>
+      case CreateTableUsingAsSelect(tableName, _, _, partitionColumns, mode, _, query) =>
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
-        if (catalog.tableExists(Seq(tableName))) {
+        if (mode == SaveMode.Overwrite && catalog.tableExists(Seq(tableName))) {
           // Need to remove SubQuery operator.
           EliminateSubQueries(catalog.lookupRelation(Seq(tableName))) match {
             // Only do the check if the table is a data source table
@@ -162,6 +168,12 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           }
         } else {
           // OK
+        }
+
+        ResolvedDataSource.partitionColumnsSchema(query.schema, partitionColumns).foreach { field =>
+          if (!PartitioningUtils.validPartitionColumnTypes.contains(field.dataType)) {
+            throw new AnalysisException(s"Cannot use ${field.dataType} for partition column")
+          }
         }
 
       case _ => // OK
