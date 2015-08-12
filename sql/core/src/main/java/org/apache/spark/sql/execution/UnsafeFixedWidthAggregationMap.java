@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.KVIterator;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryLocation;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
@@ -138,7 +138,7 @@ public final class UnsafeFixedWidthAggregationMap {
         unsafeGroupingKeyRow.getBaseOffset(),
         unsafeGroupingKeyRow.getSizeInBytes(),
         emptyAggregationBuffer,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
+        Platform.BYTE_ARRAY_OFFSET,
         emptyAggregationBuffer.length
       );
       if (!putSucceeded) {

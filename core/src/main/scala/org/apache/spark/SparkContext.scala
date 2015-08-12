@@ -866,7 +866,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * }}}
    *
    * Do
-   * `val rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")`,
+   * `val rdd = sparkContext.binaryFiles("hdfs://a-hdfs-path")`,
    *
    * then `rdd` contains
    * {{{
