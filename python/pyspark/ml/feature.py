@@ -769,12 +769,18 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
     A feature transformer that filters out stop words from input.
     Note: null values from input array are preserved unless adding null to stopWords explicitly.
     """
+    # a placeholder to make the stopwords show up in generated doc
+    stopWords = Param(Params._dummy(), "stopWords", "The words to be filtered out")
+
+    @keyword_only
     def __init__(self, inputCol=None, outputCol=None, stopWords=[]):
         """
         Initialize this instace of the StopWordsRemover.
         """
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover")
-        self.uid = self._java_obj.uid
+        super(StopWordsRemover, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
+                                            self.uid)
+        self.stopWords = Param(self, "stopWords", "The words to be filtered out")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -791,13 +797,14 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
         """
         Specify the stopwords to be filtered.
         """
-        return self.setStopWords(value)
+        self._paramMap[self.stopWords] = value
+        return self
 
     def getStopWords(self):
         """
         Get the stopwords.
         """
-        return self._java_obj.getStopWords()
+        return self.getOrDefault(self.stopWords)
 
 
 @inherit_doc

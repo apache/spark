@@ -265,14 +265,16 @@ class FeatureTests(PySparkTestCase):
 
     def test_stopwordsremover(self):
         sqlContext = SQLContext(self.sc)
+        data = ["a", "b", "c", "d", "e"]
         dataset = sqlContext.createDataFrame([
-            ([["a", "b", "c", "d", "e"]])], ["input"])
-        stopwordremover = StopWordsRemover()
+            ([data])], ["input"])
+        stopwordremover = StopWordsRemover(inputCol="input", outputCol="output")
         stopwords = ["a", "b", "c", "d"]
         stopwordremover.setStopWords(stopwords)
+        self.assertEquals(stopwordremover.getInputCol(), "input")
         self.assertEquals(stopwordremover.getStopWords(), stopwords)
         transformedDF = stopwordremover.transform(dataset)
-        self.assertEquals(transformedDF.head().output, ["e", "e"])
+        self.assertEquals(transformedDF.head().output, ["e"])
 
 if __name__ == "__main__":
     unittest.main()
