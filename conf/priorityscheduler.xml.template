@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<allocations>
+  <pool name="production">
+    <priority>10</priority>
+    <cores>5</cores>
+  </pool>
+  <pool name="test">
+    <priority>2</priority>
+    <cores>1</cores>
+  </pool>
+</allocations>
