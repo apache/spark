@@ -390,7 +390,32 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-8121: spark.sql.parquet.output.committer.class shouldn't be overriden") {
+  test("SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible") {
+    val clonedConf = new Configuration(configuration)
+
+    // Write to a parquet file and let it fail.
+    // _temporary should be missing if direct output committer works.
+    try {
+      configuration.set("spark.sql.parquet.output.committer.class",
+        "org.apache.spark.sql.parquet.DirectParquetOutputCommitter")
+      sqlContext.udf.register("div0", (x: Int) => x / 0)
+      withTempPath { dir =>
+        intercept[org.apache.spark.SparkException] {
+          sqlContext.sql("select div0(1)").write.parquet(dir.getCanonicalPath)
+        }
+        val path = new Path(dir.getCanonicalPath, "_temporary")
+        val fs = path.getFileSystem(configuration)
+        assert(!fs.exists(path))
+      }
+    } finally {
+      // Hadoop 1 doesn't have `Configuration.unset`
+      configuration.clear()
+      clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+    }
+  }
+
+
+  test("SPARK-8121: spark.sql.parquet.output.committer.class shouldn't be overridden") {
     withTempPath { dir =>
       val clonedConf = new Configuration(configuration)
 
