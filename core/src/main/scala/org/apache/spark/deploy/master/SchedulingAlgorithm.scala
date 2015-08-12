@@ -251,7 +251,7 @@ private[master] class PrioritySchedulingAlgorithm(
 
     def getApplications(): Seq[ApplicationInfo] = {
       appQueue.toArray().map(_.asInstanceOf[ApplicationSubmission].appInfo)
-        .asInstanceOf[Seq[ApplicationInfo]]
+        .map(_.asInstanceOf[ApplicationInfo])
     }
 
     def size: Int = appQueue.size()
@@ -284,14 +284,14 @@ private[master] class PrioritySchedulingAlgorithm(
   }
 
   def nonEmptyPools(): Seq[Pool] = {
-    poolQueue.toArray().filter(_.asInstanceOf[Pool].size > 0).asInstanceOf[Seq[Pool]]
+    poolQueue.toArray().filter(_.asInstanceOf[Pool].size > 0).map(_.asInstanceOf[Pool])
   }
 
   def nextNonEmptyPool(): Option[Pool] = {
     if (queueSize() == 0) {
       None
     } else {
-      poolQueue.toArray().find(_.asInstanceOf[Pool].size > 0).asInstanceOf[Option[Pool]]
+      poolQueue.toArray().find(_.asInstanceOf[Pool].size > 0).map(_.asInstanceOf[Pool])
     }
   }
 
