@@ -678,7 +678,7 @@ private[sql] object ParquetRelation extends Logging {
     val followParquetFormatSpec = sqlContext.conf.followParquetFormatSpec
     val serializedConf = new SerializableConfiguration(sqlContext.sparkContext.hadoopConfiguration)
 
-    // HACK ALERT:
+    // !! HACK ALERT !!
     //
     // Parquet requires `FileStatus`es to read footers.  Here we try to send cached `FileStatus`es
     // to executor side to avoid fetching them again.  However, `FileStatus` is not `Serializable`

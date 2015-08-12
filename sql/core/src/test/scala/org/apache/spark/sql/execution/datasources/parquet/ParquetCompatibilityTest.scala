@@ -21,7 +21,7 @@ import java.io.File
 
 import scala.collection.JavaConversions._
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.schema.MessageType
 
@@ -50,17 +50,24 @@ private[sql] abstract class ParquetCompatibilityTest extends QueryTest with Parq
   }
 
   override protected def afterAll(): Unit = {
-    Utils.deleteRecursively(parquetStore)
-    super.afterAll()
+    try {
+      Utils.deleteRecursively(parquetStore)
+    } finally {
+      super.afterAll()
+    }
   }
 
-  def readParquetSchema(path: String): MessageType = {
+  protected def readParquetSchema(path: String): MessageType = {
+    readParquetSchema(path, { path => !path.getName.startsWith("_") })
+  }
+
+  protected def readParquetSchema(path: String, pathFilter: Path => Boolean): MessageType = {
     val fsPath = new Path(path)
     val fs = fsPath.getFileSystem(configuration)
-    val parquetFiles = fs.listStatus(fsPath).toSeq.filterNot { status =>
-      status.getPath.getName.startsWith("_") ||
-        stagingDir.map(status.getPath.getName.startsWith).getOrElse(false)
-    }
+    val parquetFiles = fs.listStatus(fsPath, new PathFilter {
+      override def accept(path: Path): Boolean = pathFilter(path)
+    }).toSeq
+
     val footers = ParquetFileReader.readAllFootersInParallel(configuration, parquetFiles, true)
     footers.head.getParquetMetadata.getFileMetaData.getSchema
   }

@@ -284,7 +284,7 @@ private[sql] class JDBCRDD(
   /**
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
    */
-  private val filterWhereClause: String = {
+  val filterWhereClause: String = {
     val filterStrings = filters map compileFilter filter (_ != null)
     if (filterStrings.size > 0) {
       val sb = new StringBuilder("WHERE ")

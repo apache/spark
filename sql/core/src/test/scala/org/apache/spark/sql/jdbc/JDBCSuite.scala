@@ -26,6 +26,8 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.execution.PhysicalRDD
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -145,6 +147,18 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
         |CREATE TEMPORARY TABLE flttypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.FLTTYPES', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
+    conn.prepareStatement("create table test.decimals (a DECIMAL(7, 2), b DECIMAL(4, 0))").
+      executeUpdate()
+    conn.prepareStatement("insert into test.decimals values (12345.67, 1234)").executeUpdate()
+    conn.prepareStatement("insert into test.decimals values (34567.89, 1428)").executeUpdate()
+    conn.commit()
+    ctx.sql(
+      s"""
+         |CREATE TEMPORARY TABLE decimals
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', dbtable 'TEST.DECIMALS', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement(
@@ -447,4 +461,24 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
   }
 
+  test("SPARK-9182: filters are not passed through to jdbc source") {
+    def checkPushedFilter(query: String, filterStr: String): Unit = {
+      val rddOpt = ctx.sql(query).queryExecution.executedPlan.collectFirst {
+        case PhysicalRDD(_, rdd: JDBCRDD, _) => rdd
+      }
+      assert(rddOpt.isDefined)
+      val pushedFilterStr = rddOpt.get.filterWhereClause
+      assert(pushedFilterStr.contains(filterStr),
+        s"Expected to push [$filterStr], actually we pushed [$pushedFilterStr]")
+    }
+
+    checkPushedFilter("select * from foobar where NAME = 'fred'", "NAME = 'fred'")
+    checkPushedFilter("select * from inttypes where A > '15'", "A > 15")
+    checkPushedFilter("select * from inttypes where C <= 20", "C <= 20")
+    checkPushedFilter("select * from decimals where A > 1000", "A > 1000.00")
+    checkPushedFilter("select * from decimals where A > 1000 AND A < 2000",
+      "A > 1000.00 AND A < 2000.00")
+    checkPushedFilter("select * from decimals where A = 2000 AND B > 20", "A = 2000.00 AND B > 20")
+    checkPushedFilter("select * from timetypes where B > '1998-09-10'", "B > 1998-09-10")
+  }
 }
