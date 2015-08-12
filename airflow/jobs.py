@@ -296,6 +296,14 @@ class SchedulerJob(BaseJob):
         session.commit()
         session.close()
 
+    def import_errors(self, dagbag):
+        session = settings.Session()
+        session.query(models.ImportError).delete()
+        for filename, stacktrace in list(dagbag.import_errors.items()):
+            session.add(models.ImportError(
+                filename=filename, stacktrace=stacktrace))
+        session.commit()
+
     def process_dag(self, dag, executor):
         """
         This method schedules a single DAG by looking at the latest
@@ -504,14 +512,9 @@ class SchedulerJob(BaseJob):
             duration_sec = (datetime.now() - loop_start_dttm).total_seconds()
             logging.info("Loop took: {} seconds".format(duration_sec))
             try:
-                dag_sizes = sorted(
-                    [(sys.getsizeof(dag), dag.dag_id) for dag in dags],
-                    key=lambda x: x[0],
-                    reverse=True,
-                )
-                logging.debug("DAG sizes: " + str(dag_sizes))
-            except:
-                logging.error("Failed at getting DAG sizes")
+                self.import_errors(dagbag)
+            except Exception as e:
+                logging.exception(e)
             try:
                 # We really just want the scheduler to never ever stop.
                 executor.heartbeat()
