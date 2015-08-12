@@ -32,6 +32,9 @@ from numpy import sum as array_sum
 
 from py4j.protocol import Py4JJavaError
 
+if sys.version > '3':
+    basestring = str
+
 if sys.version_info[:2] <= (2, 6):
     try:
         import unittest2 as unittest
@@ -86,20 +89,25 @@ class MLLibStreamingTestCase(unittest.TestCase):
         self.ssc.stop(False)
 
     @staticmethod
-    def _ssc_wait(start_time, end_time, sleep_time):
-        while time() - start_time < end_time:
-            sleep(0.01)
-
-    @staticmethod
-    def _ssc_wait_checked(start_time, end_time, term_check):
+    def _eventually(condition, timeout=20.0):
         """
-        :param term_check: Function which checks a termination condition.
-                           If true, this method returns early.
+        Wait a given amount of time for a condition to be met, else fail with an error.
+        :param condition: Function that checks for termination conditions and throws an
+                          AssertionError if the conditions are not met.
+                          This is used for both checking termination conditions and
+                          printing an error message upon timeout.
+        :param timeout: Number of seconds to wait.  Default 20 seconds.
         """
-        while time() - start_time < end_time:
-            if term_check():
+        start_time = time()
+        lastErrorMsg = None
+        while time() - start_time < timeout:
+            try:
+                condition()
                 return
+            except AssertionError as e:
+                lastErrorMsg = e
             sleep(0.01)
+        raise lastErrorMsg
 
 
 def _squared_distance(a, b):
@@ -1010,13 +1018,12 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
             [self.sc.parallelize(batch, 1) for batch in batches])
         stkm.trainOn(input_stream)
 
-        t = time()
         self.ssc.start()
 
-        def termCheck():
-            return stkm.latestModel().clusterWeights == [25.0]
-        self._ssc_wait_checked(t, 20.0, termCheck)
-        self.assertEquals(stkm.latestModel().clusterWeights, [25.0])
+        def condition():
+            self.assertEquals(stkm.latestModel().clusterWeights, [25.0])
+        self._eventually(condition)
+
         realCenters = array_sum(array(centers), axis=0)
         for i in range(5):
             modelCenters = stkm.latestModel().centers[0][i]
@@ -1051,22 +1058,14 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         batches = [self.sc.parallelize(batch, 1) for batch in batches]
         input_stream = self.ssc.queueStream(batches)
         stkm.trainOn(input_stream)
-        t = time()
         self.ssc.start()
 
         # Give enough time to train the model.
-        def termCheck():
+        def condition():
             finalModel = stkm.latestModel()
-            if finalModel is not None:
-                return (all(finalModel.centers == array(initCenters)) and
-                        finalModel.clusterWeights == [5.0, 5.0, 5.0, 5.0])
-            else:
-                return False
-        self._ssc_wait_checked(t, 20.0, termCheck)
-        self.assertTrue(termCheck())
-        finalModel = stkm.latestModel()
-        self.assertTrue(all(finalModel.centers == array(initCenters)))
-        self.assertEquals(finalModel.clusterWeights, [5.0, 5.0, 5.0, 5.0])
+            self.assertTrue(all(finalModel.centers == array(initCenters)))
+            self.assertEquals(finalModel.clusterWeights, [5.0, 5.0, 5.0, 5.0])
+        self._eventually(condition)
 
     def test_predictOn_model(self):
         """Test that the model predicts correctly on toy data."""
@@ -1088,10 +1087,10 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
                 result.append(rdd_collect)
 
         predict_val.foreachRDD(update)
-        t = time()
         self.ssc.start()
-        self._ssc_wait(t, 6.0, 0.01)
-        self.assertEquals(result, [[0], [1], [2], [3]])
+        def condition():
+            self.assertEquals(result, [[0], [1], [2], [3]])
+        self._eventually(condition)
 
     def test_trainOn_predictOn(self):
         """Test that prediction happens on the updated model."""
@@ -1117,10 +1116,11 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         predict_stream = stkm.predictOn(input_stream)
         predict_stream.foreachRDD(collect)
 
-        t = time()
         self.ssc.start()
-        self._ssc_wait(t, 6.0, 0.01)
-        self.assertEqual(predict_results, [[0, 1, 1], [1, 0, 1]])
+        def condition():
+            self.assertEqual(predict_results, [[0, 1, 1], [1, 0, 1]])
+
+        self._eventually(condition)
 
 
 class LinearDataGeneratorTests(MLlibTestCase):
@@ -1178,11 +1178,12 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         slr.setInitialWeights([0.0])
         slr.trainOn(input_stream)
 
-        t = time()
         self.ssc.start()
-        self._ssc_wait(t, 20.0, 0.01)
-        rel = (1.5 - slr.latestModel().weights.array[0]) / 1.5
-        self.assertAlmostEqual(rel, 0.1, 1)
+        def condition():
+            rel = (1.5 - slr.latestModel().weights.array[0]) / 1.5
+            self.assertAlmostEqual(rel, 0.1, 1)
+
+        self._eventually(condition)
 
     def test_convergence(self):
         """
@@ -1201,13 +1202,16 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         input_stream.foreachRDD(
             lambda x: models.append(slr.latestModel().weights[0]))
 
-        t = time()
         self.ssc.start()
-        self._ssc_wait(t, 15.0, 0.01)
+
+        def condition():
+            self.assertEquals(len(models), len(input_batches))
+
+        self._eventually(condition, 60.0)
+
         t_models = array(models)
         diff = t_models[1:] - t_models[:-1]
-
-        # Test that weights improve with a small tolerance,
+        # Test that weights improve with a small tolerance
         self.assertTrue(all(diff >= -0.1))
         self.assertTrue(array_sum(diff > 0) > 1)
 
@@ -1230,9 +1234,12 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         predict_stream = slr.predictOnValues(input_stream)
         true_predicted = []
         predict_stream.foreachRDD(lambda x: true_predicted.append(x.collect()))
-        t = time()
         self.ssc.start()
-        self._ssc_wait(t, 5.0, 0.01)
+
+        def condition():
+            self.assertEquals(len(true_predicted), len(input_batches))
+
+        self._eventually(condition)
 
         # Test that the accuracy error is no more than 0.4 on each batch.
         for batch in true_predicted:
@@ -1264,11 +1271,13 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         ps = slr.predictOnValues(predict_stream)
         ps.foreachRDD(lambda x: collect_errors(x))
 
-        t = time()
         self.ssc.start()
-        self._ssc_wait(t, 20.0, 0.01)
 
-        # Test that the improvement in error is atleast 0.3
+        def condition():
+            self.assertEquals(len(errors), len(predict_batches))
+
+        self._eventually(condition)
+        # Test that the improvement in error is > 0.3
         self.assertTrue(errors[1] - errors[-1] > 0.3)
 
 
@@ -1296,13 +1305,15 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
             batches.append(sc.parallelize(batch))
 
         input_stream = self.ssc.queueStream(batches)
-        t = time()
         slr.trainOn(input_stream)
         self.ssc.start()
-        self._ssc_wait(t, 10, 0.01)
-        self.assertArrayAlmostEqual(
-            slr.latestModel().weights.array, [10., 10.], 1)
-        self.assertAlmostEqual(slr.latestModel().intercept, 0.0, 1)
+
+        def condition():
+            self.assertArrayAlmostEqual(
+                slr.latestModel().weights.array, [10., 10.], 1)
+            self.assertAlmostEqual(slr.latestModel().intercept, 0.0, 1)
+
+        self._eventually(condition)
 
     def test_parameter_convergence(self):
         """Test that the model parameters improve with streaming data."""
@@ -1320,13 +1331,16 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         input_stream = self.ssc.queueStream(batches)
         input_stream.foreachRDD(
             lambda x: model_weights.append(slr.latestModel().weights[0]))
-        t = time()
         slr.trainOn(input_stream)
         self.ssc.start()
-        self._ssc_wait(t, 10, 0.01)
 
-        model_weights = array(model_weights)
-        diff = model_weights[1:] - model_weights[:-1]
+        def condition():
+            self.assertEquals(len(model_weights), len(batches))
+
+        self._eventually(condition)
+
+        w = array(model_weights)
+        diff = w[1:] - w[:-1]
         self.assertTrue(all(diff >= -0.1))
 
     def test_prediction(self):
@@ -1345,13 +1359,16 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
                 sc.parallelize(batch).map(lambda lp: (lp.label, lp.features)))
 
         input_stream = self.ssc.queueStream(batches)
-        t = time()
         output_stream = slr.predictOnValues(input_stream)
         samples = []
         output_stream.foreachRDD(lambda x: samples.append(x.collect()))
 
         self.ssc.start()
-        self._ssc_wait(t, 5, 0.01)
+
+        def condition():
+            self.assertEquals(len(samples), len(batches))
+
+        self._eventually(condition)
 
         # Test that mean absolute error on each batch is less than 0.1
         for batch in samples:
@@ -1378,15 +1395,17 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
             true, predicted = zip(*rdd.collect())
             mean_absolute_errors.append(mean(abs(true) - abs(predicted)))
 
-        model_weights = []
         input_stream = self.ssc.queueStream(batches)
         output_stream = self.ssc.queueStream(predict_batches)
-        t = time()
         slr.trainOn(input_stream)
         output_stream = slr.predictOnValues(output_stream)
         output_stream.foreachRDD(func)
         self.ssc.start()
-        self._ssc_wait(t, 10, 0.01)
+
+        def condition():
+            self.assertEquals(len(mean_absolute_errors), len(predict_batches))
+
+        self._eventually(condition)
         self.assertTrue(mean_absolute_errors[1] - mean_absolute_errors[-1] > 2)
 
 
