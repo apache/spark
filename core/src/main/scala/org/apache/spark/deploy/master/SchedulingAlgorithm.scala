@@ -19,8 +19,7 @@ package org.apache.spark.deploy.master
 
 import java.io.{ByteArrayInputStream, FileInputStream, InputStream}
 import java.nio.charset.StandardCharsets
-import java.time.LocalDateTime
-import java.util.{Comparator, PriorityQueue}
+import java.util.{Comparator, Date, PriorityQueue}
 
 import scala.xml.XML
 
@@ -189,7 +188,7 @@ private[master] class FIFOSchedulingAlgorithm(val master: Master) extends Schedu
   }
 }
 
-case class ApplicationSubmission(val appInfo: ApplicationInfo, val submittedTime: LocalDateTime)
+case class ApplicationSubmission(val appInfo: ApplicationInfo, val submittedTime: Date)
 
 private[master] class PrioritySchedulingAlgorithm(
     val master: Master,
@@ -228,7 +227,7 @@ private[master] class PrioritySchedulingAlgorithm(
     }
 
     def addApplication(app: ApplicationInfo): Unit = {
-      val submission = ApplicationSubmission(app, LocalDateTime.now())
+      val submission = ApplicationSubmission(app, new Date())
       addApplication(submission)
     }
 
