@@ -1002,9 +1002,10 @@ class Airflow(BaseView):
             base_date = datetime.now()
         else:
             base_date = dateutil.parser.parse(base_date)
+        base_date = utils.round_time(base_date, dag.schedule_interval)
 
         start_date = dag.start_date
-        if not start_date:
+        if not start_date and 'start_date' in dag.default_args:
             start_date = dag.default_args['start_date']
 
         if start_date:
@@ -1012,10 +1013,10 @@ class Airflow(BaseView):
             offset = timedelta(seconds=int(difference.total_seconds() % dag.schedule_interval.total_seconds()))
             base_date -= offset
             base_date -= timedelta(microseconds=base_date.microsecond)
-    
+
         num_runs = request.args.get('num_runs')
         num_runs = int(num_runs) if num_runs else 25
-        from_date = (base_date-(num_runs * dag.schedule_interval))
+        from_date = (base_date - (num_runs * dag.schedule_interval))
 
         dates = utils.date_range(
             from_date, base_date, dag.schedule_interval)
