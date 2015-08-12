@@ -671,6 +671,8 @@ private[deploy] class Master(
     endpointToApp(app.driver) = app
     addressToApp(appAddress) = app
     waitingApps += app
+    // Add application into scheduler
+    appScheduler.registerApplication(app)
   }
 
   private def finishApplication(app: ApplicationInfo) {

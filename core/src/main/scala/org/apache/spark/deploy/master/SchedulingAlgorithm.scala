@@ -43,6 +43,8 @@ private[master] trait SchedulingAlgorithm {
       usableWorkers: Array[WorkerInfo],
       spreadOutApps: Boolean): Array[Int]
 
+  def registerApplication(app: ApplicationInfo): Unit = {}
+
   /**
    * Allocate a worker's resources to one or more executors.
    * @param app the info of the application which the executors belong to
@@ -79,10 +81,12 @@ private[master] class FIFOSchedulingAlgorithm(val master: Master) extends Schedu
   def startExecutorsOnWorkers(
       waitingApps: Array[ApplicationInfo],
       workers: Array[WorkerInfo]): Unit = {
-    waitingApps.filter(app => app.coresLeft > 0).foreach { app =>
+    // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
+    // in the queue, then the second app, etc.
+    for (app <- waitingApps if app.coresLeft > 0) {
       val coresPerExecutor: Option[Int] = app.desc.coresPerExecutor
       // Filter out workers that don't have enough resources to launch an executor
-      val usableWorkers = workers.filter(_.state == WorkerState.ALIVE)
+      val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
         .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
           worker.coresFree >= coresPerExecutor.getOrElse(1))
         .sortBy(_.coresFree).reverse
@@ -182,6 +186,8 @@ private[master] class FIFOSchedulingAlgorithm(val master: Master) extends Schedu
   }
 }
 
+case class ApplicationSubmission(val appInfo: ApplicationInfo, val submittedTime: LocalDateTime)
+
 private[master] class PrioritySchedulingAlgorithm(
     val master: Master,
     val schedulingSetting: SchedulingSetting) extends SchedulingAlgorithm with Logging {
@@ -195,8 +201,6 @@ private[master] class PrioritySchedulingAlgorithm(
 
   val initAppNumberPerPool = 100
   val initPoolNumber = 5
-
-  case class ApplicationSubmission(val appInfo: ApplicationInfo, val submittedTime: LocalDateTime)
 
   private final val applicationComparator: Comparator[ApplicationSubmission] =
     new Comparator[ApplicationSubmission]() {
@@ -212,16 +216,108 @@ private[master] class PrioritySchedulingAlgorithm(
   }
 
   class Pool(val poolName: String, val priority: Int, val cores: Int) {
-    val app_queue: PriorityQueue[ApplicationSubmission] =
+    private val appQueue: PriorityQueue[ApplicationSubmission] =
       new PriorityQueue[ApplicationSubmission](initAppNumberPerPool, applicationComparator)
+
+
+    def addApplication(app: ApplicationSubmission): Unit = {
+      appQueue.add(app)
+    }
+
+    def addApplication(app: ApplicationInfo): Unit = {
+      val submission = ApplicationSubmission(app, LocalDateTime.now())
+      addApplication(submission)
+    }
+
+    def nextApplication(): Option[ApplicationInfo] = {
+      val nextOne = appQueue.poll()
+      if (nextOne == null) {
+        None
+      } else {
+        Some(nextOne.appInfo)
+      }
+    }
+
+    def getApplications(): Seq[ApplicationInfo] = {
+      appQueue.toArray().asInstanceOf[Seq[ApplicationInfo]]
+    }
+
+    def size: Int = appQueue.size()
   }
 
-  final val poolQueue: PriorityQueue[Pool] =
+  private final val poolQueue: PriorityQueue[Pool] =
     new PriorityQueue[Pool](initPoolNumber, poolComparator)
+
+  private var queueIndex: Int = 0
+
+  def queueSize(): Int = poolQueue.size()
+
+  def firstPool(): Option[Pool] = {
+    if (queueSize() == 0) {
+      None
+    } else {
+      Some(poolQueue.peek())
+    }
+  }
+
+  def nextPool(): Option[Pool] = {
+    if (queueSize() == 0) {
+      None
+    } else {
+      queueIndex %= queueSize()
+      val nextOne = poolQueue.toArray()(queueIndex)
+      queueIndex += 1
+      Some(nextOne.asInstanceOf[Pool])
+    }
+  }
+
+  def nonEmptyPools(): Seq[Pool] = {
+    poolQueue.toArray().filter(_.asInstanceOf[Pool].size > 0).asInstanceOf[Seq[Pool]]
+  }
+
+  def nextNonEmptyPool(): Option[Pool] = {
+    if (queueSize() == 0) {
+      None
+    } else {
+      poolQueue.toArray().find(_.asInstanceOf[Pool].size > 0).asInstanceOf[Option[Pool]]
+    }
+  }
+
+  override def registerApplication(app: ApplicationInfo): Unit = {
+    if (app.desc.assignedPool == None) {
+      throw new SparkException(s"Application ${app.desc.name} hasn't been assigned to any pool")
+    } else {
+      val pool = poolQueue.toArray().find { p =>
+        p.asInstanceOf[Pool].poolName == app.desc.assignedPool
+      }.getOrElse {
+          throw new SparkException(s"Application ${app.desc.name} has been assigned to unknown pool")
+      }.asInstanceOf[Pool]
+      pool.addApplication(app)
+    }
+  }
 
   def startExecutorsOnWorkers(
       waitingApps: Array[ApplicationInfo],
-      workers: Array[WorkerInfo]): Unit = { }
+      workers: Array[WorkerInfo]): Unit = {
+    nonEmptyPools().map { pool => pool.getApplications().map { app =>
+      // The allowed cores setting overwrites app.requestedCores, so we check it here
+      if (pool.cores - app.coresGranted > 0) {
+        val coresPerExecutor: Option[Int] = app.desc.coresPerExecutor
+        // Filter out workers that don't have enough resources to launch an executor
+        val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
+          .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
+            worker.coresFree >= coresPerExecutor.getOrElse(1))
+          .sortBy(_.coresFree).reverse
+        val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, master.spreadOutApps)
+
+        // Now that we've decided how many cores to allocate on each worker, let's allocate them
+        for (pos <- 0 until usableWorkers.length if assignedCores(pos) > 0) {
+          allocateWorkerResourceToExecutors(
+            app, assignedCores(pos), coresPerExecutor, usableWorkers(pos))
+        }
+      }
+    }}
+  }
 
   def scheduleExecutorsOnWorkers(
       app: ApplicationInfo,

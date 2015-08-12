@@ -255,16 +255,26 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     val stream = new ByteArrayInputStream(exampleXML.getBytes(StandardCharsets.UTF_8))
 
     algo.buildFairSchedulerPool(stream)
-    assert(algo.poolQueue.size == 2)
+    assert(algo.queueSize() == 2)
 
-    val firstPool = algo.poolQueue.remove()
-    val secondPool = algo.poolQueue.remove()
+    val firstPool = algo.nextPool().get
+    val secondPool = algo.nextPool().get
+    val firstPoolAgain = algo.nextPool().get
     assert(firstPool.poolName == "production")
     assert(firstPool.priority == 10)
     assert(firstPool.cores == 5)
+    assert(firstPool.size == 0)
     assert(secondPool.poolName == "test")
     assert(secondPool.priority == 2)
     assert(secondPool.cores == 1)
+    assert(secondPool.size == 0)
+    assert(firstPoolAgain.poolName == "production")
+    assert(firstPoolAgain.priority == 10)
+    assert(firstPoolAgain.cores == 5)
+    assert(firstPoolAgain.size == 0)
+
+    assert(firstPool.nextApplication() == None)
+    assert(secondPool.nextApplication() == None)
   }
 
   private def basicScheduling(spreadOut: Boolean): Unit = {
