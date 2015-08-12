@@ -132,7 +132,7 @@ class PostgresIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("Basic write test") {
     val df = TestSQLContext.read.jdbc(url(db.ip), "public.bar", new Properties)
-    df.createJDBCTable(url(db.ip), "public.barcopy", false)
+    df.write.jdbc(url(db.ip), "public.barcopy", new Properties)
     // Test only that it doesn't bomb out.
   }
 }

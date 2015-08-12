@@ -212,8 +212,8 @@ class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
     val df1 = TestSQLContext.read.jdbc(url(ip, "foo"), "numbers", new Properties)
     val df2 = TestSQLContext.read.jdbc(url(ip, "foo"), "dates", new Properties)
     val df3 = TestSQLContext.read.jdbc(url(ip, "foo"), "strings", new Properties)
-    df1.createJDBCTable(url(ip, "foo"), "numberscopy", false)
-    df2.createJDBCTable(url(ip, "foo"), "datescopy", false)
-    df3.createJDBCTable(url(ip, "foo"), "stringscopy", false)
+    df1.write.jdbc(url(ip, "foo"), "numberscopy", new Properties)
+    df2.write.jdbc(url(ip, "foo"), "datescopy", new Properties)
+    df3.write.jdbc(url(ip, "foo"), "stringscopy", new Properties)
   }
 }
