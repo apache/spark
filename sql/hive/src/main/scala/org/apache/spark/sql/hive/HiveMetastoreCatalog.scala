@@ -85,9 +85,9 @@ private[hive] object HiveSerDe {
           serde = Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")))
 
     val key = source.toLowerCase match {
-      case _ if source.startsWith("org.apache.spark.sql.parquet") => "parquet"
-      case _ if source.startsWith("org.apache.spark.sql.orc") => "orc"
-      case _ => source.toLowerCase
+      case s if s.startsWith("org.apache.spark.sql.parquet") => "parquet"
+      case s if s.startsWith("org.apache.spark.sql.orc") => "orc"
+      case s => s
     }
 
     serdeMap.get(key)
@@ -329,8 +329,8 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           newSparkSQLSpecificMetastoreTable()
         } else {
           logInfo {
-            "Persisting data source relation with a single input path into Hive metastore in Hive " +
-              s"compatible format.  Input path: ${relation.paths.head}"
+            "Persisting data source relation with a single input path into Hive metastore in " +
+              s"Hive compatible format. Input path: ${relation.paths.head}"
           }
           newHiveCompatibleMetastoreTable(relation, serde)
         }
