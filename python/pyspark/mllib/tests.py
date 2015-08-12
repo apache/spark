@@ -1088,8 +1088,10 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
 
         predict_val.foreachRDD(update)
         self.ssc.start()
+
         def condition():
             self.assertEquals(result, [[0], [1], [2], [3]])
+
         self._eventually(condition)
 
     def test_trainOn_predictOn(self):
@@ -1117,6 +1119,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         predict_stream.foreachRDD(collect)
 
         self.ssc.start()
+
         def condition():
             self.assertEqual(predict_results, [[0, 1, 1], [1, 0, 1]])
 
@@ -1179,6 +1182,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         slr.trainOn(input_stream)
 
         self.ssc.start()
+
         def condition():
             rel = (1.5 - slr.latestModel().weights.array[0]) / 1.5
             self.assertAlmostEqual(rel, 0.1, 1)
