@@ -37,9 +37,9 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.{InternalRow, SqlParser, TableIdentifier}
-import org.apache.spark.sql.execution.{FileRelation, datasources}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation, Partition => ParquetPartition, PartitionSpec, ResolvedDataSource}
+import org.apache.spark.sql.execution.{FileRelation, datasources}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -319,7 +319,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
         if (isParquetSerDe && !hiveParquetSupportsDecimal && hasDecimalFields) {
           // If Hive version is below 1.2.0, we cannot save Hive compatible schema to
-          // metasotre when the file format is Parquet and the schema has DecimalType.
+          // metastore when the file format is Parquet and the schema has DecimalType.
           logWarning {
             "Persisting Parquet relation with decimal field(s) into Hive metastore in Spark SQL " +
               "specific format, which is NOT compatible with Hive. Because ParquetHiveSerDe in " +

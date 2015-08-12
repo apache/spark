@@ -253,7 +253,7 @@ object SPARK_9757 extends QueryTest with Logging {
         .set("spark.sql.hive.metastore.version", "0.13.1")
         .set("spark.sql.hive.metastore.jars", "maven"))
 
-    val hiveContext = new HiveContext(sparkContext)
+    val hiveContext = new TestHiveContext(sparkContext)
     import hiveContext.implicits._
     import org.apache.spark.sql.functions._
 
