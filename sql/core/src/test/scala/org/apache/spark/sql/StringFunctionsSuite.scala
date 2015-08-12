@@ -103,6 +103,16 @@ class StringFunctionsSuite extends QueryTest {
       Row("AQIDBA==", bytes))
   }
 
+  test("string / binary substring function") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("1世3", Array[Byte](1, 2, 3, 4))).toDF("a", "b")
+    checkAnswer(df.select(substring($"a", 1, 2)), Row("1世"))
+    checkAnswer(df.select(substring($"b", 2, 2)), Row(Array[Byte](2,3)))
+    checkAnswer(df.selectExpr("substring(a, 1, 2)"), Row("1世"))
+    // scalastyle:on
+  }
+
   test("string encode/decode function") {
     val bytes = Array[Byte](-27, -92, -89, -27, -115, -125, -28, -72, -106, -25, -107, -116)
     // scalastyle:off
@@ -116,6 +126,12 @@ class StringFunctionsSuite extends QueryTest {
       df.selectExpr("encode(a, 'utf-8')", "decode(c, 'utf-8')"),
       Row(bytes, "大千世界"))
     // scalastyle:on
+  }
+
+  test("string translate") {
+    val df = Seq(("translate", "")).toDF("a", "b")
+    checkAnswer(df.select(translate($"a", "rnlt", "123")), Row("1a2s3ae"))
+    checkAnswer(df.selectExpr("""translate(a, "rnlt", "")"""), Row("asae"))
   }
 
   test("string trim functions") {
@@ -142,6 +158,15 @@ class StringFunctionsSuite extends QueryTest {
       Row("aa123cc"))
   }
 
+  test("soundex function") {
+    val df = Seq(("MARY", "SU")).toDF("l", "r")
+    checkAnswer(
+      df.select(soundex($"l"), soundex($"r")), Row("M600", "S000"))
+
+    checkAnswer(
+      df.selectExpr("SoundEx(l)", "SoundEx(r)"), Row("M600", "S000"))
+  }
+
   test("string instr function") {
     val df = Seq(("aaads", "aa", "zz")).toDF("a", "b", "c")
 
@@ -152,6 +177,17 @@ class StringFunctionsSuite extends QueryTest {
     checkAnswer(
       df.selectExpr("instr(a, b)"),
       Row(1))
+  }
+
+  test("string substring_index function") {
+    val df = Seq(("www.apache.org", ".", "zz")).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(substring_index($"a", ".", 2)),
+      Row("www.apache"))
+    checkAnswer(
+      df.selectExpr("substring_index(a, '.', 2)"),
+      Row("www.apache")
+    )
   }
 
   test("string locate function") {
@@ -237,6 +273,15 @@ class StringFunctionsSuite extends QueryTest {
         df.selectExpr("length(c)"), // int type of the argument is unacceptable
         Row("5.0000"))
     }
+  }
+
+  test("initcap function") {
+    val df = Seq(("ab", "a B")).toDF("l", "r")
+    checkAnswer(
+      df.select(initcap($"l"), initcap($"r")), Row("Ab", "A B"))
+
+    checkAnswer(
+      df.selectExpr("InitCap(l)", "InitCap(r)"), Row("Ab", "A B"))
   }
 
   test("number format function") {

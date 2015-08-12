@@ -30,10 +30,12 @@ import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -41,7 +43,39 @@ import org.apache.spark.storage.StorageLevel
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
-  with HasThreshold with HasStandardization
+  with HasStandardization {
+
+  /**
+   * Version of setThresholds() for binary classification, available for backwards
+   * compatibility.
+   *
+   * Calling this with threshold p will effectively call `setThresholds(Array(1-p, p))`.
+   *
+   * Default is effectively 0.5.
+   * @group setParam
+   */
+  def setThreshold(value: Double): this.type = set(thresholds, Array(1.0 - value, value))
+
+  /**
+   * Version of [[getThresholds()]] for binary classification, available for backwards
+   * compatibility.
+   *
+   * Param thresholds must have length 2 (or not be specified).
+   * This returns {{{1 / (1 + thresholds(0) / thresholds(1))}}}.
+   * @group getParam
+   */
+  def getThreshold: Double = {
+    if (isDefined(thresholds)) {
+      val thresholdValues = $(thresholds)
+      assert(thresholdValues.length == 2, "Logistic Regression getThreshold only applies to" +
+        " binary classification, but thresholds has length != 2." +
+        s"  thresholds: ${thresholdValues.mkString(",")}")
+      1.0 / (1.0 + thresholdValues(0) / thresholdValues(1))
+    } else {
+      0.5
+    }
+  }
+}
 
 /**
  * :: Experimental ::
@@ -101,18 +135,18 @@ class LogisticRegression(override val uid: String)
   /**
    * Whether to standardize the training features before fitting the model.
    * The coefficients of models will be always returned on the original scale,
-   * so it will be transparent for users. Note that when no regularization,
-   * with or without standardization, the models should be always converged to
-   * the same solution.
+   * so it will be transparent for users. Note that with/without standardization,
+   * the models should be always converged to the same solution when no regularization
+   * is applied. In R's GLMNET package, the default behavior is true as well.
    * Default is true.
    * @group setParam
    * */
   def setStandardization(value: Boolean): this.type = set(standardization, value)
   setDefault(standardization -> true)
 
-  /** @group setParam */
-  def setThreshold(value: Double): this.type = set(threshold, value)
-  setDefault(threshold -> 0.5)
+  override def setThreshold(value: Double): this.type = super.setThreshold(value)
+
+  override def getThreshold: Double = super.getThreshold
 
   override protected def train(dataset: DataFrame): LogisticRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
@@ -252,7 +286,13 @@ class LogisticRegression(override val uid: String)
 
     if (handlePersistence) instances.unpersist()
 
-    copyValues(new LogisticRegressionModel(uid, weights, intercept))
+    val model = copyValues(new LogisticRegressionModel(uid, weights, intercept))
+    val logRegSummary = new BinaryLogisticRegressionTrainingSummary(
+      model.transform(dataset),
+      $(probabilityCol),
+      $(labelCol),
+      objectiveHistory)
+    model.setSummary(logRegSummary)
   }
 
   override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
@@ -270,8 +310,9 @@ class LogisticRegressionModel private[ml] (
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams {
 
-  /** @group setParam */
-  def setThreshold(value: Double): this.type = set(threshold, value)
+  override def setThreshold(value: Double): this.type = super.setThreshold(value)
+
+  override def getThreshold: Double = super.getThreshold
 
   /** Margin (rawPrediction) for class label 1.  For binary classification only. */
   private val margin: Vector => Double = (features) => {
@@ -286,9 +327,41 @@ class LogisticRegressionModel private[ml] (
 
   override val numClasses: Int = 2
 
+  private var trainingSummary: Option[LogisticRegressionTrainingSummary] = None
+
+  /**
+   * Gets summary of model on training set. An exception is
+   * thrown if `trainingSummary == None`.
+   */
+  def summary: LogisticRegressionTrainingSummary = trainingSummary match {
+    case Some(summ) => summ
+    case None =>
+      throw new SparkException(
+        "No training summary available for this LogisticRegressionModel",
+        new NullPointerException())
+  }
+
+  private[classification] def setSummary(
+      summary: LogisticRegressionTrainingSummary): this.type = {
+    this.trainingSummary = Some(summary)
+    this
+  }
+
+  /** Indicates whether a training summary exists for this model instance. */
+  def hasSummary: Boolean = trainingSummary.isDefined
+
+  /**
+   * Evaluates the model on a testset.
+   * @param dataset Test dataset to evaluate model on.
+   */
+  // TODO: decide on a good name before exposing to public API
+  private[classification] def evaluate(dataset: DataFrame): LogisticRegressionSummary = {
+    new BinaryLogisticRegressionSummary(this.transform(dataset), $(probabilityCol), $(labelCol))
+  }
+
   /**
    * Predict label for the given feature vector.
-   * The behavior of this can be adjusted using [[threshold]].
+   * The behavior of this can be adjusted using [[thresholds]].
    */
   override protected def predict(features: Vector): Double = {
     if (score(features) > getThreshold) 1 else 0
@@ -404,6 +477,128 @@ private[classification] class MultiClassSummarizer extends Serializable {
       i += 1
     }
     result
+  }
+}
+
+/**
+ * Abstraction for multinomial Logistic Regression Training results.
+ */
+sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary {
+
+  /** objective function (scaled loss + regularization) at each iteration. */
+  def objectiveHistory: Array[Double]
+
+  /** Number of training iterations until termination */
+  def totalIterations: Int = objectiveHistory.length
+
+}
+
+/**
+ * Abstraction for Logistic Regression Results for a given model.
+ */
+sealed trait LogisticRegressionSummary extends Serializable {
+
+  /** Dataframe outputted by the model's `transform` method. */
+  def predictions: DataFrame
+
+  /** Field in "predictions" which gives the calibrated probability of each sample as a vector. */
+  def probabilityCol: String
+
+  /** Field in "predictions" which gives the the true label of each sample. */
+  def labelCol: String
+
+}
+
+/**
+ * :: Experimental ::
+ * Logistic regression training results.
+ * @param predictions dataframe outputted by the model's `transform` method.
+ * @param probabilityCol field in "predictions" which gives the calibrated probability of
+ *                       each sample as a vector.
+ * @param labelCol field in "predictions" which gives the true label of each sample.
+ * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
+ */
+@Experimental
+class BinaryLogisticRegressionTrainingSummary private[classification] (
+    predictions: DataFrame,
+    probabilityCol: String,
+    labelCol: String,
+    val objectiveHistory: Array[Double])
+  extends BinaryLogisticRegressionSummary(predictions, probabilityCol, labelCol)
+  with LogisticRegressionTrainingSummary {
+
+}
+
+/**
+ * :: Experimental ::
+ * Binary Logistic regression results for a given model.
+ * @param predictions dataframe outputted by the model's `transform` method.
+ * @param probabilityCol field in "predictions" which gives the calibrated probability of
+ *                       each sample.
+ * @param labelCol field in "predictions" which gives the true label of each sample.
+ */
+@Experimental
+class BinaryLogisticRegressionSummary private[classification] (
+    @transient override val predictions: DataFrame,
+    override val probabilityCol: String,
+    override val labelCol: String) extends LogisticRegressionSummary {
+
+  private val sqlContext = predictions.sqlContext
+  import sqlContext.implicits._
+
+  /**
+   * Returns a BinaryClassificationMetrics object.
+   */
+  // TODO: Allow the user to vary the number of bins using a setBins method in
+  // BinaryClassificationMetrics. For now the default is set to 100.
+  @transient private val binaryMetrics = new BinaryClassificationMetrics(
+    predictions.select(probabilityCol, labelCol).map {
+      case Row(score: Vector, label: Double) => (score(1), label)
+    }, 100
+  )
+
+  /**
+   * Returns the receiver operating characteristic (ROC) curve,
+   * which is an Dataframe having two fields (FPR, TPR)
+   * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
+   * @see http://en.wikipedia.org/wiki/Receiver_operating_characteristic
+   */
+  @transient lazy val roc: DataFrame = binaryMetrics.roc().toDF("FPR", "TPR")
+
+  /**
+   * Computes the area under the receiver operating characteristic (ROC) curve.
+   */
+  lazy val areaUnderROC: Double = binaryMetrics.areaUnderROC()
+
+  /**
+   * Returns the precision-recall curve, which is an Dataframe containing
+   * two fields recall, precision with (0.0, 1.0) prepended to it.
+   */
+  @transient lazy val pr: DataFrame = binaryMetrics.pr().toDF("recall", "precision")
+
+  /**
+   * Returns a dataframe with two fields (threshold, F-Measure) curve with beta = 1.0.
+   */
+  @transient lazy val fMeasureByThreshold: DataFrame = {
+    binaryMetrics.fMeasureByThreshold().toDF("threshold", "F-Measure")
+  }
+
+  /**
+   * Returns a dataframe with two fields (threshold, precision) curve.
+   * Every possible probability obtained in transforming the dataset are used
+   * as thresholds used in calculating the precision.
+   */
+  @transient lazy val precisionByThreshold: DataFrame = {
+    binaryMetrics.precisionByThreshold().toDF("threshold", "precision")
+  }
+
+  /**
+   * Returns a dataframe with two fields (threshold, recall) curve.
+   * Every possible probability obtained in transforming the dataset are used
+   * as thresholds used in calculating the recall.
+   */
+  @transient lazy val recallByThreshold: DataFrame = {
+    binaryMetrics.recallByThreshold().toDF("threshold", "recall")
   }
 }
 

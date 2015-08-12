@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.IsNull
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute, Literal, IsNull}
 import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.types.{GenericArrayData, ArrayType, StructType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class RowFormatConvertersSuite extends SparkPlanTest {
 
@@ -29,9 +32,9 @@ class RowFormatConvertersSuite extends SparkPlanTest {
     case c: ConvertToSafe => c
   }
 
-  private val outputsSafe = ExternalSort(Nil, false, PhysicalRDD(Seq.empty, null))
+  private val outputsSafe = ExternalSort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
   assert(!outputsSafe.outputsUnsafeRows)
-  private val outputsUnsafe = UnsafeExternalSort(Nil, false, PhysicalRDD(Seq.empty, null))
+  private val outputsUnsafe = TungstenSort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
   assert(outputsUnsafe.outputsUnsafeRows)
 
   test("planner should insert unsafe->safe conversions when required") {
@@ -41,14 +44,14 @@ class RowFormatConvertersSuite extends SparkPlanTest {
   }
 
   test("filter can process unsafe rows") {
-    val plan = Filter(IsNull(null), outputsUnsafe)
+    val plan = Filter(IsNull(IsNull(Literal(1))), outputsUnsafe)
     val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
-    assert(getConverters(preparedPlan).isEmpty)
+    assert(getConverters(preparedPlan).size === 1)
     assert(preparedPlan.outputsUnsafeRows)
   }
 
   test("filter can process safe rows") {
-    val plan = Filter(IsNull(null), outputsSafe)
+    val plan = Filter(IsNull(IsNull(Literal(1))), outputsSafe)
     val preparedPlan = TestSQLContext.prepareForExecution.execute(plan)
     assert(getConverters(preparedPlan).isEmpty)
     assert(!preparedPlan.outputsUnsafeRows)
@@ -88,4 +91,38 @@ class RowFormatConvertersSuite extends SparkPlanTest {
       input.map(Row.fromTuple)
     )
   }
+
+  test("SPARK-9683: copy UTF8String when convert unsafe array/map to safe") {
+    SparkPlan.currentContext.set(TestSQLContext)
+    val schema = ArrayType(StringType)
+    val rows = (1 to 100).map { i =>
+      InternalRow(new GenericArrayData(Array[Any](UTF8String.fromString(i.toString))))
+    }
+    val relation = LocalTableScan(Seq(AttributeReference("t", schema)()), rows)
+
+    val plan =
+      DummyPlan(
+        ConvertToSafe(
+          ConvertToUnsafe(relation)))
+    assert(plan.execute().collect().map(_.getUTF8String(0).toString) === (1 to 100).map(_.toString))
+  }
+}
+
+case class DummyPlan(child: SparkPlan) extends UnaryNode {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitions { iter =>
+      // This `DummyPlan` is in safe mode, so we don't need to do copy even we hold some
+      // values gotten from the incoming rows.
+      // we cache all strings here to make sure we have deep copied UTF8String inside incoming
+      // safe InternalRow.
+      val strings = new scala.collection.mutable.ArrayBuffer[UTF8String]
+      iter.foreach { row =>
+        strings += row.getArray(0).getUTF8String(0)
+      }
+      strings.map(InternalRow(_)).iterator
+    }
+  }
+
+  override def output: Seq[Attribute] = Seq(AttributeReference("a", StringType)())
 }

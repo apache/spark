@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive
 import java.io.{InputStream, OutputStream}
 import java.rmi.server.UID
 
+import org.apache.avro.Schema
+
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
@@ -33,7 +35,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
 import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
-import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable
+import org.apache.hadoop.hive.serde2.avro.{AvroGenericRecordWritable, AvroSerdeUtils}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector
 import org.apache.hadoop.io.Writable
 
@@ -82,10 +84,19 @@ private[hive] object HiveShim {
    * Bug introduced in hive-0.13. AvroGenericRecordWritable has a member recordReaderID that
    * is needed to initialize before serialization.
    */
-  def prepareWritable(w: Writable): Writable = {
+  def prepareWritable(w: Writable, serDeProps: Seq[(String, String)]): Writable = {
     w match {
       case w: AvroGenericRecordWritable =>
         w.setRecordReaderID(new UID())
+        // In Hive 1.1, the record's schema may need to be initialized manually or a NPE will
+        // be thrown.
+        if (w.getFileSchema() == null) {
+          serDeProps
+            .find(_._1 == AvroSerdeUtils.AvroTableProperties.SCHEMA_LITERAL.getPropName())
+            .foreach { kv =>
+              w.setFileSchema(new Schema.Parser().parse(kv._2))
+            }
+        }
       case _ =>
     }
     w

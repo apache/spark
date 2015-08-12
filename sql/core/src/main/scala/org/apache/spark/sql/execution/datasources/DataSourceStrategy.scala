@@ -20,13 +20,13 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
-import org.apache.spark.sql.catalyst.{InternalRow, expressions}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, expressions}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.{TimestampType, DateType, StringType, StructType}
 import org.apache.spark.sql.{SaveMode, Strategy, execution, sources, _}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -99,8 +99,9 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         (a, f) =>
           toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray, f, t.paths, confBroadcast))) :: Nil
 
-    case l @ LogicalRelation(t: TableScan) =>
-      execution.PhysicalRDD(l.output, toCatalystRDD(l, t.buildScan())) :: Nil
+    case l @ LogicalRelation(baseRelation: TableScan) =>
+      execution.PhysicalRDD.createFromDataSource(
+        l.output, toCatalystRDD(l, baseRelation.buildScan()), baseRelation) :: Nil
 
     case i @ logical.InsertIntoTable(
       l @ LogicalRelation(t: InsertableRelation), part, query, overwrite, false) if part.isEmpty =>
@@ -167,7 +168,10 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         new UnionRDD(relation.sqlContext.sparkContext, perPartitionRows)
       }
 
-    execution.PhysicalRDD(projections.map(_.toAttribute), unionedRows)
+    execution.PhysicalRDD.createFromDataSource(
+      projections.map(_.toAttribute),
+      unionedRows,
+      logicalRelation.relation)
   }
 
   // TODO: refactor this thing. It is very complicated because it does projection internally.
@@ -187,15 +191,17 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         // To see whether the `index`-th column is a partition column...
         val i = partitionColumns.indexOf(name)
         if (i != -1) {
+          val dt = schema(partitionColumns(i)).dataType
           // If yes, gets column value from partition values.
           (mutableRow: MutableRow, dataRow: InternalRow, ordinal: Int) => {
-            mutableRow(ordinal) = partitionValues.genericGet(i)
+            mutableRow(ordinal) = partitionValues.get(i, dt)
           }
         } else {
           // Otherwise, inherits the value from scanned data.
           val i = nonPartitionColumns.indexOf(name)
+          val dt = schema(nonPartitionColumns(i)).dataType
           (mutableRow: MutableRow, dataRow: InternalRow, ordinal: Int) => {
-            mutableRow(ordinal) = dataRow.genericGet(i)
+            mutableRow(ordinal) = dataRow.get(i, dt)
           }
         }
       }
@@ -295,14 +301,18 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         projects.asInstanceOf[Seq[Attribute]] // Safe due to if above.
           .map(relation.attributeMap)            // Match original case of attributes.
 
-      val scan = execution.PhysicalRDD(projects.map(_.toAttribute),
-        scanBuilder(requestedColumns, pushedFilters))
+      val scan = execution.PhysicalRDD.createFromDataSource(
+        projects.map(_.toAttribute),
+        scanBuilder(requestedColumns, pushedFilters),
+        relation.relation)
       filterCondition.map(execution.Filter(_, scan)).getOrElse(scan)
     } else {
       val requestedColumns = (projectSet ++ filterSet).map(relation.attributeMap).toSeq
 
-      val scan = execution.PhysicalRDD(requestedColumns,
-        scanBuilder(requestedColumns, pushedFilters))
+      val scan = execution.PhysicalRDD.createFromDataSource(
+        requestedColumns,
+        scanBuilder(requestedColumns, pushedFilters),
+        relation.relation)
       execution.Project(projects, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
     }
   }
@@ -333,34 +343,72 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
    * and convert them.
    */
   protected[sql] def selectFilters(filters: Seq[Expression]) = {
+    import CatalystTypeConverters._
+
     def translate(predicate: Expression): Option[Filter] = predicate match {
       case expressions.EqualTo(a: Attribute, Literal(v, _)) =>
         Some(sources.EqualTo(a.name, v))
       case expressions.EqualTo(Literal(v, _), a: Attribute) =>
         Some(sources.EqualTo(a.name, v))
+      case expressions.EqualTo(Cast(a: Attribute, _), l: Literal) =>
+        Some(sources.EqualTo(a.name, convertToScala(Cast(l, a.dataType).eval(), a.dataType)))
+      case expressions.EqualTo(l: Literal, Cast(a: Attribute, _)) =>
+        Some(sources.EqualTo(a.name, convertToScala(Cast(l, a.dataType).eval(), a.dataType)))
+
+      case expressions.EqualNullSafe(a: Attribute, Literal(v, _)) =>
+        Some(sources.EqualNullSafe(a.name, v))
+      case expressions.EqualNullSafe(Literal(v, _), a: Attribute) =>
+        Some(sources.EqualNullSafe(a.name, v))
 
       case expressions.GreaterThan(a: Attribute, Literal(v, _)) =>
         Some(sources.GreaterThan(a.name, v))
       case expressions.GreaterThan(Literal(v, _), a: Attribute) =>
         Some(sources.LessThan(a.name, v))
+      case expressions.GreaterThan(Cast(a: Attribute, _), l: Literal) =>
+        Some(sources.GreaterThan(a.name, convertToScala(Cast(l, a.dataType).eval(), a.dataType)))
+      case expressions.GreaterThan(l: Literal, Cast(a: Attribute, _)) =>
+        Some(sources.LessThan(a.name, convertToScala(Cast(l, a.dataType).eval(), a.dataType)))
 
       case expressions.LessThan(a: Attribute, Literal(v, _)) =>
         Some(sources.LessThan(a.name, v))
       case expressions.LessThan(Literal(v, _), a: Attribute) =>
         Some(sources.GreaterThan(a.name, v))
+      case expressions.LessThan(Cast(a: Attribute, _), l: Literal) =>
+        Some(sources.LessThan(a.name, convertToScala(Cast(l, a.dataType).eval(), a.dataType)))
+      case expressions.LessThan(l: Literal, Cast(a: Attribute, _)) =>
+        Some(sources.GreaterThan(a.name, convertToScala(Cast(l, a.dataType).eval(), a.dataType)))
 
       case expressions.GreaterThanOrEqual(a: Attribute, Literal(v, _)) =>
         Some(sources.GreaterThanOrEqual(a.name, v))
       case expressions.GreaterThanOrEqual(Literal(v, _), a: Attribute) =>
         Some(sources.LessThanOrEqual(a.name, v))
+      case expressions.GreaterThanOrEqual(Cast(a: Attribute, _), l: Literal) =>
+        Some(sources.GreaterThanOrEqual(a.name,
+          convertToScala(Cast(l, a.dataType).eval(), a.dataType)))
+      case expressions.GreaterThanOrEqual(l: Literal, Cast(a: Attribute, _)) =>
+        Some(sources.LessThanOrEqual(a.name,
+          convertToScala(Cast(l, a.dataType).eval(), a.dataType)))
 
       case expressions.LessThanOrEqual(a: Attribute, Literal(v, _)) =>
         Some(sources.LessThanOrEqual(a.name, v))
       case expressions.LessThanOrEqual(Literal(v, _), a: Attribute) =>
         Some(sources.GreaterThanOrEqual(a.name, v))
+      case expressions.LessThanOrEqual(Cast(a: Attribute, _), l: Literal) =>
+        Some(sources.LessThanOrEqual(a.name,
+          convertToScala(Cast(l, a.dataType).eval(), a.dataType)))
+      case expressions.LessThanOrEqual(l: Literal, Cast(a: Attribute, _)) =>
+        Some(sources.GreaterThanOrEqual(a.name,
+          convertToScala(Cast(l, a.dataType).eval(), a.dataType)))
 
       case expressions.InSet(a: Attribute, set) =>
         Some(sources.In(a.name, set.toArray))
+
+      // Because we only convert In to InSet in Optimizer when there are more than certain
+      // items. So it is possible we still get an In expression here that needs to be pushed
+      // down.
+      case expressions.In(a: Attribute, list) if !list.exists(!_.isInstanceOf[Literal]) =>
+        val hSet = list.map(e => e.eval(EmptyRow))
+        Some(sources.In(a.name, hSet.toArray))
 
       case expressions.IsNull(a: Attribute) =>
         Some(sources.IsNull(a.name))
