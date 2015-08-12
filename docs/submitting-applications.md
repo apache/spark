@@ -48,7 +48,7 @@ Some of the commonly used options are:
 * `application-jar`: Path to a bundled jar including your application and all dependencies. The URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes.
 * `application-arguments`: Arguments passed to the main method of your main class, if any
 
-Alternatively, for submitting on yarn, 
+For submitting application to YARN, the preferred options are:
 
 {% highlight bash %}
 ./bin/spark-submit \
