@@ -17,7 +17,8 @@
 
 package org.apache.spark.deploy.master
 
-import java.io.{FileInputStream, InputStream}
+import java.io.{ByteArrayInputStream, FileInputStream, InputStream}
+import java.nio.charset.StandardCharsets
 import java.time.LocalDateTime
 import java.util.{Comparator, PriorityQueue}
 
@@ -262,6 +263,8 @@ private[master] class PrioritySchedulingAlgorithm(
 
   private var queueIndex: Int = 0
 
+  private var currentPool: Pool = _
+
   def queueSize(): Int = poolQueue.size()
 
   def firstPool(): Option[Pool] = {
@@ -300,9 +303,10 @@ private[master] class PrioritySchedulingAlgorithm(
       throw new SparkException(s"Application ${app.desc.name} hasn't been assigned to any pool")
     } else {
       val pool = poolQueue.toArray().find { p =>
-        p.asInstanceOf[Pool].poolName == app.desc.assignedPool
+        p.asInstanceOf[Pool].poolName == app.desc.assignedPool.get
       }.getOrElse {
-          throw new SparkException(s"Application ${app.desc.name} has been assigned to unknown pool")
+          throw new SparkException(s"Application ${app.desc.name} has been assigned to " +
+            s"unknown pool ${app.desc.assignedPool.get}")
       }.asInstanceOf[Pool]
       pool.addApplication(app)
     }
@@ -313,13 +317,14 @@ private[master] class PrioritySchedulingAlgorithm(
       throw new SparkException(s"Application ${app.desc.name} hasn't been assigned to any pool")
     } else {
       val pool = poolQueue.toArray().find { p =>
-        p.asInstanceOf[Pool].poolName == app.desc.assignedPool
+        p.asInstanceOf[Pool].poolName == app.desc.assignedPool.get
       }.getOrElse {
-          throw new SparkException(s"Application ${app.desc.name} has been assigned to unknown pool")
+          throw new SparkException(s"Application ${app.desc.name} has been assigned to " +
+            s"unknown pool ${app.desc.assignedPool.get}")
       }.asInstanceOf[Pool]
       if (!pool.removeApplication(app)) {
         throw new SparkException(s"Can't remove application ${app.desc.name} " +
-          s"from pool ${app.desc.assignedPool}")
+          s"from pool ${app.desc.assignedPool.get}")
       }
     }
   }
@@ -336,6 +341,7 @@ private[master] class PrioritySchedulingAlgorithm(
           .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
             worker.coresFree >= coresPerExecutor.getOrElse(1))
           .sortBy(_.coresFree).reverse
+        currentPool = pool
         val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, master.spreadOutApps)
 
         // Now that we've decided how many cores to allocate on each worker, let's allocate them
@@ -350,22 +356,100 @@ private[master] class PrioritySchedulingAlgorithm(
   def scheduleExecutorsOnWorkers(
       app: ApplicationInfo,
       usableWorkers: Array[WorkerInfo],
-      spreadOutApps: Boolean): Array[Int] = { Array[Int]() }
+      spreadOutApps: Boolean): Array[Int] = {
+    val coresPerExecutor = app.desc.coresPerExecutor
+    val minCoresPerExecutor = coresPerExecutor.getOrElse(1)
+    val oneExecutorPerWorker = coresPerExecutor.isEmpty
+    val memoryPerExecutor = app.desc.memoryPerExecutorMB
+    val numUsable = usableWorkers.length
+    val assignedCores = new Array[Int](numUsable) // Number of cores to give to each worker
+    val assignedExecutors = new Array[Int](numUsable) // Number of new executors on each worker
+    var coresToAssign = math.min(currentPool.cores - app.coresGranted,
+      usableWorkers.map(_.coresFree).sum)
 
-  def buildPools() {
+    /** Return whether the specified worker can launch an executor for this app. */
+    def canLaunchExecutor(pos: Int): Boolean = {
+      val keepScheduling = coresToAssign >= minCoresPerExecutor
+      val enoughCores = usableWorkers(pos).coresFree - assignedCores(pos) >= minCoresPerExecutor
+
+      // If we allow multiple executors per worker, then we can always launch new executors.
+      // Otherwise, if there is already an executor on this worker, just give it more cores.
+      val launchingNewExecutor = !oneExecutorPerWorker || assignedExecutors(pos) == 0
+      if (launchingNewExecutor) {
+        val assignedMemory = assignedExecutors(pos) * memoryPerExecutor
+        val enoughMemory = usableWorkers(pos).memoryFree - assignedMemory >= memoryPerExecutor
+        val underLimit = assignedExecutors.sum + app.executors.size < app.executorLimit
+        keepScheduling && enoughCores && enoughMemory && underLimit
+      } else {
+        // We're adding cores to an existing executor, so no need
+        // to check memory and executor limits
+        keepScheduling && enoughCores
+      }
+    }
+
+    // Keep launching executors until no more workers can accommodate any
+    // more executors, or if we have reached this application's limits
+    var freeWorkers = (0 until numUsable).filter(canLaunchExecutor)
+    while (freeWorkers.nonEmpty) {
+      freeWorkers.foreach { pos =>
+        var keepScheduling = true
+        while (keepScheduling && canLaunchExecutor(pos)) {
+          coresToAssign -= minCoresPerExecutor
+          assignedCores(pos) += minCoresPerExecutor
+
+          // If we are launching one executor per worker, then every iteration assigns 1 core
+          // to the executor. Otherwise, every iteration assigns cores to a new executor.
+          if (oneExecutorPerWorker) {
+            assignedExecutors(pos) = 1
+          } else {
+            assignedExecutors(pos) += 1
+          }
+
+          // Spreading out an application means spreading out its executors across as
+          // many workers as possible. If we are not spreading out, then we should keep
+          // scheduling executors on this worker until we use all of its resources.
+          // Otherwise, just move on to the next worker.
+          if (spreadOutApps) {
+            keepScheduling = false
+          }
+        }
+      }
+      freeWorkers = freeWorkers.filter(canLaunchExecutor)
+    }
+    assignedCores
+  }
+
+  def loadDefault(): InputStream = {
+    val exampleXML = """<?xml version="1.0"?>
+                        <allocations>
+                          <pool name="production">
+                            <priority>10</priority>
+                            <cores>5</cores>
+                          </pool>
+                          <pool name="test">
+                            <priority>2</priority>
+                            <cores>1</cores>
+                          </pool>
+                        </allocations>"""
+    new ByteArrayInputStream(exampleXML.getBytes(StandardCharsets.UTF_8))
+  }
+
+  def buildPools(): PrioritySchedulingAlgorithm = {
     var is: Option[InputStream] = None
     try {
       is = Option {
         schedulingSetting.configFile.map { f =>
           new FileInputStream(f)
         }.getOrElse {
-          throw new SparkException("Must specify configuration file for priority scheduling")
+          logError("Must specify configuration file for priority scheduling")
+          loadDefault()
         }
       }
       is.foreach { i => buildFairSchedulerPool(i) }
     } finally {
       is.foreach(_.close())
     }
+    this
   }
 
   def buildFairSchedulerPool(is: InputStream): Unit = {

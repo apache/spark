@@ -120,7 +120,7 @@ private[deploy] class Master(
     case SchedulingMode.FIFO =>
       new FIFOSchedulingAlgorithm(this)
     case SchedulingMode.PRIORITY =>
-      new PrioritySchedulingAlgorithm(this, schedulingSetting)
+      new PrioritySchedulingAlgorithm(this, schedulingSetting).buildPools()
     case _ =>
       // Just a placeholder, we shouldn't reach here
       throw new SparkException("Unknown Scheduling Algorithm")
