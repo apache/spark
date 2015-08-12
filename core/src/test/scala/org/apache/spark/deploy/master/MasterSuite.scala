@@ -238,7 +238,8 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
   private def basicSchedulingWithMoreMemory(spreadOut: Boolean): Unit = {
     val master = makeMaster()
     val appInfo = makeAppInfo(3072)
-    val scheduledCores = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    val algo = new FIFOSchedulingAlgorithm(master)
+    val scheduledCores = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     assert(scheduledCores === Array(10, 10, 10))
   }
 
