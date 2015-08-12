@@ -172,14 +172,11 @@ class StringIndexerModel private[ml] (
   }
 
   /**
-   * Return a model to perform the inverse transformation.
-   * Note: By default we keep the original columns during this transformation, so the inverse
-   * should only be used on new columns such as predicted labels.
+   * Return a [[IndexToString]] instance to perform the inverse transformation, mapping indices back
+   * to their string values.
    */
-  def invert(inputCol: String, outputCol: String): StringIndexerInverse = {
-    new StringIndexerInverse()
-      .setInputCol(inputCol)
-      .setOutputCol(outputCol)
+  def inverse: IndexToString = {
+    new IndexToString()
       .setLabels(labels)
   }
 }
@@ -192,12 +189,12 @@ class StringIndexerModel private[ml] (
  * so the inverse should only be used on new columns such as predicted labels.
  */
 @Experimental
-class StringIndexerInverse private[ml] (
+class IndexToString private[ml] (
   override val uid: String) extends Transformer
     with HasInputCol with HasOutputCol {
 
   def this() =
-    this(Identifiable.randomUID("strIdxInv"))
+    this(Identifiable.randomUID("idxToStr"))
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -268,7 +265,7 @@ class StringIndexerInverse private[ml] (
       indexer(dataset($(inputCol)).cast(DoubleType)).as(outputColName))
   }
 
-  override def copy(extra: ParamMap): StringIndexerInverse = {
+  override def copy(extra: ParamMap): IndexToString = {
     defaultCopy(extra)
   }
 }
