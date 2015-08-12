@@ -22,8 +22,9 @@ from pyspark.mllib.common import inherit_doc
 
 
 __all__ = ['DecisionTreeRegressor', 'DecisionTreeRegressionModel', 'GBTRegressor',
-           'GBTRegressionModel', 'LinearRegression', 'LinearRegressionModel',
-           'RandomForestRegressor', 'RandomForestRegressionModel']
+           'GBTRegressionModel', 'IsotonicRegression', 'IsotonicRegressionModel',
+           'LinearRegression', 'LinearRegressionModel', 'RandomForestRegressor',
+           'RandomForestRegressionModel']
 
 
 @inherit_doc
@@ -136,7 +137,15 @@ class LinearRegressionModel(JavaModel):
         """
         return self._call_java("intercept")
 
+@inherit_doc
+class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
+    """
+    Currently implemented using parallelized pool adjacent violators algorithm.
+    Only univariate (single feature) algorithm supported.
+    """
 
+    # TODO: When weightCol is moved to shared params in Scala code follow suit
+    weightCol = Param(Params._dummy(), "weightCol"
 class TreeRegressorParams(object):
     """
     Private class to track supported impurity measures.
