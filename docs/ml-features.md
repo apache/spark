@@ -217,7 +217,11 @@ for feature in result.select("result").take(3):
 
 [Tokenization](http://en.wikipedia.org/wiki/Lexical_analysis#Tokenization) is the process of taking text (such as a sentence) and breaking it into individual terms (usually words).  A simple [Tokenizer](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer) class provides this functionality.  The example below shows how to split sentences into sequences of words.
 
-[RegexTokenizer](api/scala/index.html#org.apache.spark.ml.feature.RegexTokenizer) allows more advanced tokenization based on regular expression (regex) matching. By default, the parameter pattern (regex, default: \\s+) is used as delimiters to split the input text. Alternatively, users can set parameter gaps to false indicating the regex pattern denotes "tokens" rather than splitting "gaps", and find all matching occurrences as the tokenization result.
+[RegexTokenizer](api/scala/index.html#org.apache.spark.ml.feature.RegexTokenizer) allows more
+ advanced tokenization based on regular expression (regex) matching.
+ By default, the parameter "pattern" (regex, default: \\s+) is used as delimiters to split the input text.
+ Alternatively, users can set parameter "gaps" to false indicating the regex "pattern" denotes
+ "tokens" rather than splitting gaps, and find all matching occurrences as the tokenization result.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -230,9 +234,10 @@ val sentenceDataFrame = sqlContext.createDataFrame(Seq(
   (2, "Logistic,regression,models,are,neat")
 )).toDF("label", "sentence")
 val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
-val regexTokenizer = new RegexTokenizer().setInputCol("sentence").setOutputCol("words")
-  .setPattern("\\W")
-  // alternatively .setPattern("\\w+").setGaps(false)
+val regexTokenizer = new RegexTokenizer()
+  .setInputCol("sentence")
+  .setOutputCol("words")
+  .setPattern("\\W")  // alternatively .setPattern("\\w+").setGaps(false)
 
 val tokenized = tokenizer.transform(sentenceDataFrame)
 tokenized.select("words", "label").take(3).foreach(println)
@@ -260,7 +265,7 @@ import org.apache.spark.sql.types.StructType;
 JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
   RowFactory.create(0, "Hi I heard about Spark"),
   RowFactory.create(1, "I wish Java could use case classes"),
-  RowFactory.create(2, "Logistic regression models are neat")
+  RowFactory.create(2, "Logistic,regression,models,are,neat")
 ));
 StructType schema = new StructType(new StructField[]{
   new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
@@ -275,9 +280,10 @@ for (Row r : wordsDataFrame.select("words", "label").take(3)) {
   System.out.println();
 }
 
-RegexTokenizer regexTokenizer = new RegexTokenizer().setInputCol("sentence").setOutputCol("words")
-  .setPattern("\\W");
-  // alternatively .setPattern("\\w+").setGaps(false);
+RegexTokenizer regexTokenizer = new RegexTokenizer()
+  .setInputCol("sentence")
+  .setOutputCol("words")
+  .setPattern("\\W");  // alternatively .setPattern("\\w+").setGaps(false);
 {% endhighlight %}
 </div>
 
@@ -288,14 +294,14 @@ from pyspark.ml.feature import Tokenizer, RegexTokenizer
 sentenceDataFrame = sqlContext.createDataFrame([
   (0, "Hi I heard about Spark"),
   (1, "I wish Java could use case classes"),
-  (2, "Logistic regression models are neat")
+  (2, "Logistic,regression,models,are,neat")
 ], ["label", "sentence"])
 tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
 wordsDataFrame = tokenizer.transform(sentenceDataFrame)
 for words_label in wordsDataFrame.select("words", "label").take(3):
   print(words_label)
 regexTokenizer = RegexTokenizer(inputCol="sentence", outputCol="words", pattern="\\W")
-# alternatively, pattern="\\w+", gaps(false)
+# alternatively, pattern="\\w+", gaps(False)
 {% endhighlight %}
 </div>
 </div>
