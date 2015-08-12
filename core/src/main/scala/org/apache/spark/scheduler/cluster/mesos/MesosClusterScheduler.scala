@@ -403,6 +403,9 @@ private[spark] class MesosClusterScheduler(
     }
     builder.setValue(s"$executable $cmdOptions $jar $appArguments")
     builder.setEnvironment(envBuilder.build())
+    conf.getOption("spark.mesos.uris").map { uris =>
+      setupUris(uris, builder)
+    }
     builder.build()
   }
 
