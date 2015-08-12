@@ -1210,7 +1210,7 @@ val transformer = new ElementwiseProduct()
   .setOutputCol("transformedVector")
 
 // Batch transform the vectors to create new column:
-val transformedData = transformer.transform(dataFrame)
+transformer.transform(dataFrame).show()
 
 {% endhighlight %}
 </div>
@@ -1248,7 +1248,7 @@ ElementwiseProduct transformer = new ElementwiseProduct()
   .setInputCol("vector")
   .setOutputCol("transformedVector");
 // Batch transform the vectors to create new column:
-DataFrame transformedData = transformer.transform(dataFrame);
+transformer.transform(dataFrame).show();
 
 {% endhighlight %}
 </div>
@@ -1261,7 +1261,7 @@ from pyspark.mllib.linalg import Vectors
 data = [(Vectors.dense([1.0, 2.0, 3.0]),), (Vectors.dense([4.0, 5.0, 6.0]),)]
 df = sqlContext.createDataFrame(data, ["vector"])
 transformer = ElementwiseProduct(scalingVec=Vectors.dense([0.0, 1.0, 2.0]), 
-              inputCol="vector", outputCol="transformedVector")
+                                 inputCol="vector", outputCol="transformedVector")
 transformer.transform(df).show()
 
 {% endhighlight %}
