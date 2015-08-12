@@ -731,7 +731,8 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)]
-    >>> itd = model.invert("indexed", "label2").transform(td)
+    >>> inverter = model.invert("indexed", "label2")
+    >>> itd = inverter.transform(td)
     >>> sorted(set([(i[0], str(i[1])) for i in itd.select(itd.id, itd.label2).collect()]),
     ...     key=lambda x: x[0])
     [(0, 'a'), (1, 'b'), (2, 'c'), (3, 'a'), (4, 'a'), (5, 'c')]
@@ -771,22 +772,60 @@ class StringIndexerModel(JavaModel):
         Note: By default we keep the original columns during this transformation, so the inverse
         should only be used on new columns such as predicted labels.
         """
-        return StringIndexerInverse(self._java_obj.invert(inputCol, outputCol))
+        labels = self._java_obj.getLabels()
+        return StringIndexerInverse(inputCol=inputCol, outputCol=outputCol,
+                                    labels=labels)
 
 
-class StringIndexerInverse(JavaTransformer):
+class StringIndexerInverse(JavaTransformer, HasInputCol, HasOutputCol):
     """
     Transform a provided column back to the original input types using the metadata on
     the input column.
     Note: By default we keep the original columns during StringIndexerModel's transformation,
     so the inverse should only be used on new columns such as predicted labels.
     """
+    # a placeholder to make the labels show up in generated doc
+    labels = Param(Params._dummy(), "lables",
+                   "Optional labels to be provided by the user, if not supplied column " +
+                   "metadata is read for labels. The default value is an empty array, " +
+                   "but the empty array is ignored and column metadata used instead.")
 
-    def __init__(self, java_obj):
+    @keyword_only
+    def __init__(self, inputCol=None, outputCol=None, labels=[]):
         """
         Initialize this instace of the StringIndexerInverse using the provided java_obj.
         """
-        self._java_obj = java_obj
+        super(StringIndexerInverse, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexerInverse",
+                                            self.uid)
+        self.labels = Param(self, "labels",
+                            "Optional labels to be provided by the user, if not supplied column " +
+                            "metadata is read for labels. The default value is an empty array, " +
+                            "but the empty array is ignored and column metadata used instead.")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, inputCol=None, outputCol=None, labels=[]):
+        """
+        setParams(self, inputCol="input", outputCol="output", labels=[])
+        Sets params for this StringIndexerInverse
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setLabels(self, value):
+        """
+        Specify the labels to be used.
+        """
+        self._paramMap[self.labels] = value
+        return self
+
+    def getLabels(self):
+        """
+        Get the labels.
+        """
+        return self.getOrDefault(self.labels)
 
 
 @inherit_doc

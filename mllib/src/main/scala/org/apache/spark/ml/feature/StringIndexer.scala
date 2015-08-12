@@ -122,6 +122,11 @@ class StringIndexerModel (
     map
   }
 
+  /**
+   * The labels used for applying this transformation
+   */
+  private[spark] def getLabels() = labels
+
   /** @group setParam */
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
   setDefault(handleInvalid, "error")
