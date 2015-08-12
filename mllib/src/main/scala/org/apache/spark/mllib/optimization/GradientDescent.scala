@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.optimization
 
-import collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseVector => BDV, norm}

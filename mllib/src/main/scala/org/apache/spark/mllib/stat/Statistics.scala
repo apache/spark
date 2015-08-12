@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.stat
 
 import scala.annotation.varargs
-import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
@@ -220,7 +219,7 @@ object Statistics {
       data: JavaRDD[java.lang.Double],
       distName: String,
       params: java.lang.Double*): KolmogorovSmirnovTestResult = {
-    val javaParams = params.toSeq.asInstanceOf[Seq[Double]]
+    val javaParams = params.asInstanceOf[Seq[Double]]
     KolmogorovSmirnovTest.testOneSample(data.rdd.asInstanceOf[RDD[Double]],
       distName, javaParams: _*)
   }
