@@ -256,6 +256,15 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
 
     algo.buildFairSchedulerPool(stream)
     assert(algo.poolQueue.size == 2)
+
+    val firstPool = algo.poolQueue.remove()
+    val secondPool = algo.poolQueue.remove()
+    assert(firstPool.poolName == "production")
+    assert(firstPool.priority == 10)
+    assert(firstPool.cores == 5)
+    assert(secondPool.poolName == "test")
+    assert(secondPool.priority == 2)
+    assert(secondPool.cores == 1)
   }
 
   private def basicScheduling(spreadOut: Boolean): Unit = {

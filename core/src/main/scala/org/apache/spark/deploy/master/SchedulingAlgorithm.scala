@@ -207,7 +207,7 @@ private[master] class PrioritySchedulingAlgorithm(
 
   private final val poolComparator: Comparator[Pool] = new Comparator[Pool]() {
     override def compare(left: Pool, right: Pool): Int = {
-      Ordering[Int].compare(left.priority, right.priority)
+      -Ordering[Int].compare(left.priority, right.priority)
     }
   }
 
