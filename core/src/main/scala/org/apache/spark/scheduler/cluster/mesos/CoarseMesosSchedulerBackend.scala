@@ -194,6 +194,11 @@ private[spark] class CoarseMesosSchedulerBackend(
         s" --app-id $appId")
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get))
     }
+
+    conf.getOption("spark.mesos.uris").map { uris =>
+      setupUris(uris, command)
+    }
+
     command.build()
   }
 

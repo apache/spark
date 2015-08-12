@@ -103,4 +103,21 @@ class HashedRelationSuite extends SparkFunSuite {
     assert(hashed2.get(unsafeData(2)) === data2)
     assert(numDataRows.value.value === data.length)
   }
+
+  test("test serialization empty hash map") {
+    val os = new ByteArrayOutputStream()
+    val out = new ObjectOutputStream(os)
+    val hashed = new UnsafeHashedRelation(
+      new java.util.HashMap[UnsafeRow, CompactBuffer[UnsafeRow]])
+    hashed.writeExternal(out)
+    out.flush()
+    val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
+    val hashed2 = new UnsafeHashedRelation()
+    hashed2.readExternal(in)
+
+    val schema = StructType(StructField("a", IntegerType, true) :: Nil)
+    val toUnsafe = UnsafeProjection.create(schema)
+    val row = toUnsafe(InternalRow(0))
+    assert(hashed2.get(row) === null)
+  }
 }
