@@ -122,15 +122,15 @@ case class Count(child: Expression) extends AlgebraicAggregate {
  * a single partition, and we use a single reducer to do the aggregation.).
  * @param child
  */
-case class First(child: Expression, ignoreNulls: Boolean) extends AlgebraicAggregate {
+case class First(child: Expression, ignoreNullsExpr: Expression) extends AlgebraicAggregate {
 
-  def this(child: Expression) = this(child, false)
+  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
 
-  def this(child: Expression, ignoreNulls: Expression) = this(child, ignoreNulls match {
+  private val ignoreNulls: Boolean = ignoreNullsExpr match {
     case Literal(b: Boolean, BooleanType) => b
     case _ =>
       throw new AnalysisException("The second argument of First should be a boolean literal.")
-  })
+  }
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -157,33 +157,27 @@ case class First(child: Expression, ignoreNulls: Boolean) extends AlgebraicAggre
   )
 
   override val updateExpressions = {
-    val litTrue = Literal.create(true, BooleanType)
     if (ignoreNulls) {
       Seq(
         /* first = */ If(Or(valueSet, IsNull(child)), first, child),
-        /* valueSet = */ If(Or(valueSet, IsNull(child)), valueSet, litTrue)
+        /* valueSet = */ Or(valueSet, IsNotNull(child))
       )
     } else {
       Seq(
         /* first = */ If(valueSet, first, child),
-        /* valueSet = */ litTrue
+        /* valueSet = */ Literal.create(true, BooleanType)
       )
     }
   }
 
   override val mergeExpressions = {
-    val litTrue = Literal.create(true, BooleanType)
-    if (ignoreNulls) {
-      Seq(
-        /* first = */ If(Or(valueSet.left, IsNull(first.right)), first.left, first.right),
-        /* valueSet = */ If(Or(valueSet.left, IsNull(first.right)), valueSet.left, litTrue)
-      )
-    } else {
-      Seq(
-        /* first = */ If(valueSet.left, first.left, first.right),
-        /* valueSet = */ litTrue
-      )
-    }
+    // For first, we can just check if valueSet.left is set to true. If it is set
+    // to true, we use first.right. If not, we use first.right (even if valueSet.right is
+    // false, we are safe to do so because first.right will be null in this case).
+    Seq(
+      /* first = */ If(valueSet.left, first.left, first.right),
+      /* valueSet = */ Or(valueSet.left, valueSet.right)
+    )
   }
 
   override val evaluateExpression = first
@@ -199,15 +193,15 @@ case class First(child: Expression, ignoreNulls: Boolean) extends AlgebraicAggre
  * a single partition, and we use a single reducer to do the aggregation.).
  * @param child
  */
-case class Last(child: Expression, ignoreNulls: Boolean) extends AlgebraicAggregate {
+case class Last(child: Expression, ignoreNullsExpr: Expression) extends AlgebraicAggregate {
 
-  def this(child: Expression) = this(child, false)
+  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
 
-  def this(child: Expression, ignoreNulls: Expression) = this(child, ignoreNulls match {
+  private val ignoreNulls: Boolean = ignoreNullsExpr match {
     case Literal(b: Boolean, BooleanType) => b
     case _ =>
-      throw new AnalysisException("The second argument of Last should be a boolean literal.")
-  })
+      throw new AnalysisException("The second argument of First should be a boolean literal.")
+  }
 
   override def children: Seq[Expression] = child :: Nil
 

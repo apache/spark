@@ -633,16 +633,16 @@ case class CombineSetsAndSumFunction(
 
 case class First(
     child: Expression,
-    ignoreNulls: Boolean)
+    ignoreNullsExpr: Expression)
   extends UnaryExpression with PartialAggregate1 {
 
-  def this(child: Expression) = this(child, false)
+  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
 
-  def this(child: Expression, ignoreNulls: Expression) = this(child, ignoreNulls match {
+  private val ignoreNulls: Boolean = ignoreNullsExpr match {
     case Literal(b: Boolean, BooleanType) => b
     case _ =>
       throw new AnalysisException("The second argument of First should be a boolean literal.")
-  })
+  }
 
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
@@ -659,6 +659,9 @@ case class First(
 
 object First {
   def apply(child: Expression): First = First(child, ignoreNulls = false)
+
+  def apply(child: Expression, ignoreNulls: Boolean): First =
+    First(child, Literal.create(ignoreNulls, BooleanType))
 }
 
 case class FirstFunction(
@@ -690,16 +693,16 @@ case class FirstFunction(
 
 case class Last(
     child: Expression,
-    ignoreNulls: Boolean)
+    ignoreNullsExpr: Expression)
   extends UnaryExpression with PartialAggregate1 {
 
-  def this(child: Expression) = this(child, false)
+  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
 
-  def this(child: Expression, ignoreNulls: Expression) = this(child, ignoreNulls match {
+  private val ignoreNulls: Boolean = ignoreNullsExpr match {
     case Literal(b: Boolean, BooleanType) => b
     case _ =>
-      throw new AnalysisException("The second argument of Last should be a boolean literal.")
-  })
+      throw new AnalysisException("The second argument of First should be a boolean literal.")
+  }
 
   override def references: AttributeSet = child.references
   override def nullable: Boolean = true
@@ -717,6 +720,9 @@ case class Last(
 
 object Last {
   def apply(child: Expression): Last = Last(child, ignoreNulls = false)
+
+  def apply(child: Expression, ignoreNulls: Boolean): Last =
+    Last(child, Literal.create(ignoreNulls, BooleanType))
 }
 
 case class LastFunction(
