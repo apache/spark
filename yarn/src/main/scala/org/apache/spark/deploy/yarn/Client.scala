@@ -268,8 +268,8 @@ private[spark] class Client(
     // multiple times, YARN will fail to launch containers for the app with an internal
     // error.
     val distributedUris = new HashSet[String]
-    obtainTokenForHiveMetastore(hadoopConf, credentials)
-    obtainTokenForHBase(hadoopConf, credentials)
+    obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
+    obtainTokenForHBase(sparkConf, hadoopConf, credentials)
 
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
       fs.getDefaultReplication(dst)).toShort
@@ -1225,8 +1225,11 @@ object Client extends Logging {
   /**
    * Obtains token for the Hive metastore and adds them to the credentials.
    */
-  private def obtainTokenForHiveMetastore(conf: Configuration, credentials: Credentials) {
-    if (UserGroupInformation.isSecurityEnabled) {
+  private def obtainTokenForHiveMetastore(
+      sparkConf: SparkConf,
+      conf: Configuration,
+      credentials: Credentials) {
+    if (shouldGetTokens(sparkConf, "hive") && UserGroupInformation.isSecurityEnabled) {
       val mirror = universe.runtimeMirror(getClass.getClassLoader)
 
       try {
@@ -1283,8 +1286,11 @@ object Client extends Logging {
   /**
    * Obtain security token for HBase.
    */
-  def obtainTokenForHBase(conf: Configuration, credentials: Credentials): Unit = {
-    if (UserGroupInformation.isSecurityEnabled) {
+  def obtainTokenForHBase(
+      sparkConf: SparkConf,
+      conf: Configuration,
+      credentials: Credentials): Unit = {
+    if (shouldGetTokens(sparkConf, "hbase") && UserGroupInformation.isSecurityEnabled) {
       val mirror = universe.runtimeMirror(getClass.getClassLoader)
 
       try {
@@ -1378,6 +1384,15 @@ object Client extends Logging {
    */
   def buildPath(components: String*): String = {
     components.mkString(Path.SEPARATOR)
+  }
+
+  /**
+   * Return whether delegation tokens should be retrieved for the given service when security is
+   * enabled. By default, tokens are retrieved, but that behavior can be changed by setting
+   * a service-specific configuration.
+   */
+  def shouldGetTokens(conf: SparkConf, service: String): Boolean = {
+    conf.getBoolean(s"spark.yarn.tokens.${service}.enabled", true)
   }
 
 }

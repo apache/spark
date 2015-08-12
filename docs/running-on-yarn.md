@@ -361,6 +361,18 @@ If you need a reference to the proper location to put log files in the YARN so t
   See <code>spark.yarn.config.gatewayPath</code>.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.tokens.${service}.enabled</code></td>
+  <td>true</td>
+  <td>
+  Controls whether to retrieve delegation tokens for non-HDFS services when security is enabled.
+  By default, delegation tokens for all supported services are retrieved when those services are
+  configured, but it's possible to disable that behavior if it somehow conflicts with the
+  application being run.
+  <p/>
+  Currently supported services are: hive, hbase
+  </td>
+</tr>
 </table>
 
 # Important notes
