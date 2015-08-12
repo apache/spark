@@ -32,7 +32,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.metric.{IntSQLMetric, LongSQLMetric, SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.DataType
 
 object SparkPlan {
@@ -81,28 +81,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Whether track the number of rows output by this SparkPlan
-   */
-  protected[sql] def trackNumOfRowsEnabled: Boolean = false
-
-  private lazy val defaultMetrics: Map[String, SQLMetric[_, _]] =
-    if (trackNumOfRowsEnabled) {
-      Map("numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
-    }
-    else {
-      Map.empty
-    }
-
-  /**
    * Return all metrics containing metrics of this SparkPlan.
    */
-  private[sql] def metrics: Map[String, SQLMetric[_, _]] = defaultMetrics
-
-  /**
-   * Return a IntSQLMetric according to the name.
-   */
-  private[sql] def intMetric(name: String): IntSQLMetric =
-    metrics(name).asInstanceOf[IntSQLMetric]
+  private[sql] def metrics: Map[String, SQLMetric[_, _]] = Map.empty
 
   /**
    * Return a LongSQLMetric according to the name.
@@ -156,15 +137,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
-      if (trackNumOfRowsEnabled) {
-        val numRows = longMetric("numRows")
-        doExecute().map { row =>
-          numRows += 1
-          row
-        }
-      } else {
-        doExecute()
-      }
+      doExecute()
     }
   }
 

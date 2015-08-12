@@ -192,7 +192,9 @@ class CheckpointWriter(
             + "'")
 
           // Write checkpoint to temp file
-          fs.delete(tempFile, true)   // just in case it exists
+          if (fs.exists(tempFile)) {
+            fs.delete(tempFile, true)   // just in case it exists
+          }
           val fos = fs.create(tempFile)
           Utils.tryWithSafeFinally {
             fos.write(bytes)
@@ -203,7 +205,9 @@ class CheckpointWriter(
           // If the checkpoint file exists, back it up
           // If the backup exists as well, just delete it, otherwise rename will fail
           if (fs.exists(checkpointFile)) {
-            fs.delete(backupFile, true) // just in case it exists
+            if (fs.exists(backupFile)){
+              fs.delete(backupFile, true) // just in case it exists
+            }
             if (!fs.rename(checkpointFile, backupFile)) {
               logWarning("Could not rename " + checkpointFile + " to " + backupFile)
             }

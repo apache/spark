@@ -160,8 +160,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("setter alias") {
     val lda = new LDA().setAlpha(2.0).setBeta(3.0)
-    assert(lda.getAlpha.toArray.forall(_ === 2.0))
-    assert(lda.getDocConcentration.toArray.forall(_ === 2.0))
+    assert(lda.getAsymmetricAlpha.toArray.forall(_ === 2.0))
+    assert(lda.getAsymmetricDocConcentration.toArray.forall(_ === 2.0))
     assert(lda.getBeta === 3.0)
     assert(lda.getTopicConcentration === 3.0)
   }

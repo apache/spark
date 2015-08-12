@@ -53,7 +53,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
 
 class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
   override val dataSourceName: String =
-    classOf[org.apache.spark.sql.json.DefaultSource].getCanonicalName
+    classOf[org.apache.spark.sql.execution.datasources.json.DefaultSource].getCanonicalName
 
   import sqlContext._
 

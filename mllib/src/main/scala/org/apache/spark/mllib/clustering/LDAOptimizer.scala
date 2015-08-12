@@ -95,10 +95,8 @@ final class EMLDAOptimizer extends LDAOptimizer {
    * Compute bipartite term/doc graph.
    */
   override private[clustering] def initialize(docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer = {
-    val docConcentration = lda.getDocConcentration(0)
-    require({
-      lda.getDocConcentration.toArray.forall(_ == docConcentration)
-    }, "EMLDAOptimizer currently only supports symmetric document-topic priors")
+    // EMLDAOptimizer currently only supports symmetric document-topic priors
+    val docConcentration = lda.getDocConcentration
 
     val topicConcentration = lda.getTopicConcentration
     val k = lda.getK
@@ -209,11 +207,11 @@ final class EMLDAOptimizer extends LDAOptimizer {
   override private[clustering] def getLDAModel(iterationTimes: Array[Double]): LDAModel = {
     require(graph != null, "graph is null, EMLDAOptimizer not initialized.")
     this.graphCheckpointer.deleteAllCheckpoints()
-    // This assumes gammaShape = 100 in OnlineLDAOptimizer to ensure equivalence in LDAModel.toLocal
-    // conversion
+    // The constructor's default arguments assume gammaShape = 100 to ensure equivalence in
+    // LDAModel.toLocal conversion
     new DistributedLDAModel(this.graph, this.globalTopicTotals, this.k, this.vocabSize,
       Vectors.dense(Array.fill(this.k)(this.docConcentration)), this.topicConcentration,
-      100, iterationTimes)
+      iterationTimes)
   }
 }
 
@@ -378,18 +376,20 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     this.k = lda.getK
     this.corpusSize = docs.count()
     this.vocabSize = docs.first()._2.size
-    this.alpha = if (lda.getDocConcentration.size == 1) {
-      if (lda.getDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
+    this.alpha = if (lda.getAsymmetricDocConcentration.size == 1) {
+      if (lda.getAsymmetricDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
       else {
-        require(lda.getDocConcentration(0) >= 0, s"all entries in alpha must be >=0, got: $alpha")
-        Vectors.dense(Array.fill(k)(lda.getDocConcentration(0)))
+        require(lda.getAsymmetricDocConcentration(0) >= 0,
+          s"all entries in alpha must be >=0, got: $alpha")
+        Vectors.dense(Array.fill(k)(lda.getAsymmetricDocConcentration(0)))
       }
     } else {
-      require(lda.getDocConcentration.size == k, s"alpha must have length k, got: $alpha")
-      lda.getDocConcentration.foreachActive { case (_, x) =>
+      require(lda.getAsymmetricDocConcentration.size == k,
+        s"alpha must have length k, got: $alpha")
+      lda.getAsymmetricDocConcentration.foreachActive { case (_, x) =>
         require(x >= 0, s"all entries in alpha must be >= 0, got: $alpha")
       }
-      lda.getDocConcentration
+      lda.getAsymmetricDocConcentration
     }
     this.eta = if (lda.getTopicConcentration == -1) 1.0 / k else lda.getTopicConcentration
     this.randomGenerator = new Random(lda.getSeed)
