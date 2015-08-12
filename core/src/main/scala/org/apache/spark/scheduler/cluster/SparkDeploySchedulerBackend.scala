@@ -83,8 +83,10 @@ private[spark] class SparkDeploySchedulerBackend(
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
     val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
+    // Set the assigned pool name
+    val assignedPool = sc.conf.getOption("spark.app.pool")
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory,
-      command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
+      command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, assignedPool)
     client = new AppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
     waitForRegistration()

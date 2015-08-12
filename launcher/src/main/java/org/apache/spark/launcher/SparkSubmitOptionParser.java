@@ -67,6 +67,7 @@ class SparkSubmitOptionParser {
   protected final String VERSION = "--version";
 
   // Standalone-only options.
+  protected final String POOL = "--pool";
 
   // YARN-only options.
   protected final String ARCHIVES = "--archives";
@@ -115,6 +116,7 @@ class SparkSubmitOptionParser {
     { REPOSITORIES },
     { STATUS },
     { TOTAL_EXECUTOR_CORES },
+    { POOL },
   };
 
   /**
