@@ -17,16 +17,15 @@
 
 package org.apache.spark.util
 
-import java.io._
+import java.io.File
 import java.util.PriorityQueue
 
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.FileSystem
+import org.apache.spark.Logging
 
 import tachyon.client.TachyonFile
-
-import org.apache.spark.Logging
 
 
 /**
