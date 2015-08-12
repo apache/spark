@@ -306,7 +306,7 @@ object PrefixSpan extends Logging {
       freqPatterns = freqPatterns ++ distributedFreqPattern
     }
 
-    freqPatterns.persist(StorageLevel.MEMORY_AND_DISK)
+    freqPatterns
   }
 
   /**
