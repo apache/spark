@@ -1117,6 +1117,21 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
   }
 
+  test("SPARK-9879 OOM for order by limit a large number") {
+    withTempTable("order_by_limit", "limit_result") {
+      (1 to 3000).map(i => (s"key_$i", i % 192)).toDF("k", "v").registerTempTable("order_by_limit")
+      val df1 = sql("select k from order_by_limit order by v asc, k desc limit 2015")
+
+      val expected1 = df1.collect()
+
+      withSQLConf(SQLConf.LIMIT_ROWS.key -> "1000") {
+        sql("create table limit_result as select k " +
+          "from order_by_limit order by v asc, k desc limit 2015")
+        checkAnswer(sql("select * from limit_result"), expected1)
+      }
+    }
+  }
+
   test("Convert hive interval term into Literal of CalendarIntervalType") {
     checkAnswer(sql("select interval '10-9' year to month"),
       Row(CalendarInterval.fromString("interval 10 years 9 months")))

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.ExternalSorter
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
 import org.apache.spark.util.random.PoissonSampler
@@ -219,6 +220,56 @@ case class Limit(limit: Int, child: SparkPlan)
     val shuffled = new ShuffledRDD[Boolean, InternalRow, InternalRow](rdd, part)
     shuffled.setSerializer(new SparkSqlSerializer(child.sqlContext.sparkContext.getConf))
     shuffled.mapPartitions(_.take(limit).map(_._2))
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Take the first limit elements. and the limit can be any number less than Integer.MAX_VALUE.
+ * If it is terminal and is invoked using executeCollect, it probably cause OOM if the
+ * records number is large enough. Not like the Limit clause, this operator will not change
+ * any partitions of its child operator.
+ */
+@DeveloperApi
+case class LargeLimit(limit: Int, child: SparkPlan)
+  extends UnaryNode {
+  /** We must copy rows when sort based shuffle is on */
+  private def sortBasedShuffleOn = SparkEnv.get.shuffleManager.isInstanceOf[SortShuffleManager]
+
+  override def output: Seq[Attribute] = child.output
+
+  override def executeCollect(): Array[Row] = child.executeTake(limit)
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val rdd = if (sortBasedShuffleOn) {
+      child.execute().map(_.copy()).persist(StorageLevel.MEMORY_AND_DISK)
+    } else {
+      child.execute().persist(StorageLevel.MEMORY_AND_DISK)
+    }
+
+    // We assume the maximize record number in a partition is less than Integer.MAX_VALUE
+    val partitionRecordCounts = rdd.mapPartitions({ iterator =>
+      Iterator(iterator.count(_ => true))
+    }, true).collect()
+
+    var totalSize = 0
+    // how many records we have to take from each partition
+    val requiredRecordCounts = partitionRecordCounts.map { count =>
+      if (totalSize + count < limit) {
+        totalSize += count
+        count
+      } else {
+        val partialCount = limit - totalSize
+        totalSize = limit
+        partialCount
+      }
+    }
+
+    // take the records from the partition.
+    // TODO remove those unused partitions?
+    rdd.mapPartitionsWithIndex ({ (idx, iterator) =>
+      iterator.take(requiredRecordCounts(idx))
+    }, true)
   }
 }
 

@@ -192,6 +192,12 @@ private[spark] object SQLConf {
       "column based on statistics of the data.",
     isPublic = false)
 
+  val LIMIT_ROWS = longConf("spark.sql.limit.rows",
+    defaultValue = Some(100000L),
+    doc = "For the LIMIT clause, put all of the output rows in a single partition " +
+      "iif the required row number less than the threshold, otherwise fetch the rows in a " +
+      "distributed way to avoid the OOM.")
+
   val COLUMN_BATCH_SIZE = intConf("spark.sql.inMemoryColumnarStorage.batchSize",
     defaultValue = Some(10000),
     doc = "Controls the size of batches for columnar caching.  Larger batch sizes can improve " +
@@ -506,6 +512,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def broadcastTimeout: Int = getConf(BROADCAST_TIMEOUT)
 
   private[spark] def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
+
+  private[spark] def thresholdOfLimitClause: Long = getConf(LIMIT_ROWS)
 
   private[spark] def partitionDiscoveryEnabled(): Boolean =
     getConf(SQLConf.PARTITION_DISCOVERY_ENABLED)

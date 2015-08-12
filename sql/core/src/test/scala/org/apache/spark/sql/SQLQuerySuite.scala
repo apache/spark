@@ -25,7 +25,7 @@ import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.errors.DialectException
-import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.execution.{LargeLimit, aggregate}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.SQLTestUtils
@@ -254,6 +254,43 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
           sql("select sum(a), avg(a) from allNulls"),
           Seq(Row(null, null))
         )
+      }
+    }
+  }
+
+  test("SPARK-9879 OOM for order by limit a large number") {
+    withTempTable("order_by_limit") {
+      (1 to 3000).map(i => (s"key_$i", i % 192)).toDF("k", "v").registerTempTable("order_by_limit")
+
+      val s1 = "select k from order_by_limit order by v asc, k desc limit 2015"
+      val s2 = "select v from order_by_limit order by v desc limit 2015"
+      val df1 = sql(s1)
+      val df2 = sql(s2)
+
+      assert(df1.queryExecution.sparkPlan.collect {
+        case n: LargeLimit => n
+      }.length === 0)
+
+      assert(df2.queryExecution.sparkPlan.collect {
+        case n: LargeLimit => n
+      }.length === 0)
+
+      val expected1 = df1.collect()
+      val expected2 = df2.collect()
+
+      withSQLConf(SQLConf.LIMIT_ROWS.key -> "1000") {
+        val globalLimitDF1 = sql(s1)
+        val globalLimitDF2 = sql(s2)
+        assert(globalLimitDF1.queryExecution.sparkPlan.collect {
+          case n: LargeLimit => n
+        }.length === 1)
+
+        assert(globalLimitDF2.queryExecution.sparkPlan.collect {
+          case n: LargeLimit => n
+        }.length === 1)
+
+        checkAnswer(globalLimitDF1, expected1)
+        checkAnswer(globalLimitDF2, expected2)
       }
     }
   }

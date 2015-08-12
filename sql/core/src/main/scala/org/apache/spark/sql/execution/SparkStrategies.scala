@@ -281,12 +281,15 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object TakeOrderedAndProject extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
-        execution.TakeOrderedAndProject(limit, order, None, planLater(child)) :: Nil
+      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child))
+        if (limit < sqlContext.conf.thresholdOfLimitClause) =>
+        execution.TakeOrderedAndProject(limit, order, None, planLater(child)):: Nil
       case logical.Limit(
              IntegerLiteral(limit),
-             logical.Project(projectList, logical.Sort(order, true, child))) =>
-        execution.TakeOrderedAndProject(limit, order, Some(projectList), planLater(child)) :: Nil
+             logical.Project(projectList, logical.Sort(order, true, child)))
+        if (limit < sqlContext.conf.thresholdOfLimitClause) =>
+        execution.TakeOrderedAndProject(
+          limit, order, Some(projectList), planLater(child)) :: Nil
       case _ => Nil
     }
   }
@@ -371,7 +374,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.LocalRelation(output, data) =>
         LocalTableScan(output, data) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
-        execution.Limit(limit, planLater(child)) :: Nil
+        if (limit < sqlContext.conf.thresholdOfLimitClause) {
+          execution.Limit(limit, planLater(child)) :: Nil
+        } else {
+          execution.LargeLimit(limit, planLater(child)) :: Nil
+        }
       case Unions(unionChildren) =>
         execution.Union(unionChildren.map(planLater)) :: Nil
       case logical.Except(left, right) =>
