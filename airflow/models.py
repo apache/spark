@@ -96,12 +96,13 @@ class DagBag(object):
         self.sync_to_db = sync_to_db
         self.file_last_changed = {}
         self.executor = executor
-        self.collect_dags(dag_folder)
+        self.import_errors = {}
         if include_examples:
             example_dag_folder = os.path.join(
                 os.path.dirname(__file__),
                 'example_dags')
             self.collect_dags(example_dag_folder)
+        self.collect_dags(dag_folder)
         if sync_to_db:
             self.deactivate_inactive_dags()
 
@@ -161,9 +162,10 @@ class DagBag(object):
                     del sys.modules[mod_name]
                 with utils.timeout(30):
                     m = imp.load_source(mod_name, filepath)
-            except:
+            except Exception as e:
                 logging.error("Failed to import: " + filepath)
-                logging.exception("")
+                self.import_errors[filepath] = e
+                logging.exception(e)
                 self.file_last_changed[filepath] = dttm
                 return
 
@@ -242,7 +244,8 @@ class DagBag(object):
                             os.path.split(filepath)[-1])
                         if file_ext != '.py':
                             continue
-                        if not any([re.findall(p, filepath) for p in patterns]):
+                        if not any(
+                                [re.findall(p, filepath) for p in patterns]):
                             self.process_file(
                                 filepath, only_if_updated=only_if_updated)
                     except:
@@ -2068,3 +2071,11 @@ class SlaMiss(Base):
     def __repr__(self):
         return str((
             self.dag_id, self.task_id, self.execution_date.isoformat()))
+
+
+class ImportError(Base):
+    __tablename__ = "import_error"
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime)
+    filename = Column(String(1024))
+    stacktrace = Column(Text)
