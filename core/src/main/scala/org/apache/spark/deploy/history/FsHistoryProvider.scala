@@ -204,9 +204,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           mod1 >= mod2
       }
 
-      val tasks = mutable.ListBuffer.empty[Future[_]]
-      logInfos.sliding(20, 20).foreach { batch =>
-        tasks += replayExecutor.submit(new Runnable {
+      val tasks: Iterator[Future[_]] = logInfos.grouped(20).map { batch =>
+        replayExecutor.submit(new Runnable {
           override def run(): Unit = mergeApplicationListing(batch)
         })
       }
