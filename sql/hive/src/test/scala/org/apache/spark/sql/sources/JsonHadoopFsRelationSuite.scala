@@ -26,8 +26,6 @@ import org.apache.spark.sql.types._
 class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
   override val dataSourceName: String = "json"
 
-  import sqlContext._
-
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
       val basePath = new Path(file.getCanonicalPath)
@@ -36,7 +34,7 @@ class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
 
       for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
         val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
-        sparkContext
+        ctx.sparkContext
           .parallelize(for (i <- 1 to 3) yield s"""{"a":$i,"b":"val_$i"}""")
           .saveAsTextFile(partitionDir.toString)
       }
@@ -45,7 +43,7 @@ class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        read.format(dataSourceName)
+        ctx.read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
     }
@@ -63,14 +61,14 @@ class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
       val data =
         Row(Seq(1L, 2L, 3L), Map("m1" -> Row(4L))) ::
           Row(Seq(5L, 6L, 7L), Map("m2" -> Row(10L))) :: Nil
-      val df = createDataFrame(sparkContext.parallelize(data), schema)
+      val df = ctx.createDataFrame(ctx.sparkContext.parallelize(data), schema)
 
       // Write the data out.
       df.write.format(dataSourceName).save(file.getCanonicalPath)
 
       // Read it back and check the result.
       checkAnswer(
-        read.format(dataSourceName).schema(schema).load(file.getCanonicalPath),
+        ctx.read.format(dataSourceName).schema(schema).load(file.getCanonicalPath),
         df
       )
     }
