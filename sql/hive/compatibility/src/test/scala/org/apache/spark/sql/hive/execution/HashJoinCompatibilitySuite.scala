@@ -31,8 +31,11 @@ class HashJoinCompatibilitySuite extends HiveCompatibilitySuite {
   }
 
   override def afterAll() {
-    ctx.setConf(SQLConf.SORTMERGE_JOIN, true)
-    super.afterAll()
+    try {
+      ctx.setConf(SQLConf.SORTMERGE_JOIN, true)
+    } finally {
+      super.afterAll()
+    }
   }
 
   override def whiteList = Seq(

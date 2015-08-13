@@ -89,9 +89,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
 
-  /** The location of the hive source code. */
-  private lazy val hiveDevHome = envVarToFile("HIVE_DEV_HOME")
-
   // Override so we can intercept relative paths and rewrite them to point at hive.
   override def runSqlHive(sql: String): Seq[String] =
     super.runSqlHive(rewritePaths(substitutor.substitute(this.hiveconf, sql)))
@@ -115,14 +112,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
   }
 
   /**
-   * Returns the value of specified environmental variable as a [[java.io.File]] after checking
-   * to ensure it exists
-   */
-  private def envVarToFile(envVar: String): Option[File] = {
-    Option(System.getenv(envVar)).map(new File(_))
-  }
-
-  /**
    * Replaces relative paths to the parent directory "../" with hiveDevHome since this is how the
    * hive test cases assume the system is set up.
    */
@@ -139,22 +128,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
   ShutdownHookManager.registerShutdownDeleteDir(hiveFilesTemp)
-
-  private val inRepoTests =
-    if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
-      new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
-    } else {
-      new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
-        File.separator + "resources")
-    }
-
-  def getHiveFile(path: String): File = {
-    val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
-    hiveDevHome
-      .map(new File(_, stripped))
-      .filter(_.exists)
-      .getOrElse(new File(inRepoTests, stripped))
-  }
 
   private val describedTable = "DESCRIBE (\\w+)".r
 
@@ -459,4 +432,31 @@ private[hive] object TestHiveContext {
         // SPARK-8910
         .set("spark.ui.enabled", "false"))
   }
+
+  def getHiveFile(path: String): File = {
+    val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
+    hiveDevHome
+      .map(new File(_, stripped))
+      .filter(_.exists)
+      .getOrElse(new File(inRepoTests, stripped))
+  }
+
+  /**
+   * Returns the value of specified environmental variable as a [[java.io.File]] after checking
+   * to ensure it exists
+   */
+  private def envVarToFile(envVar: String): Option[File] = {
+    Option(System.getenv(envVar)).map(new File(_))
+  }
+
+  /** The location of the hive source code. */
+  private lazy val hiveDevHome: Option[File] = envVarToFile("HIVE_DEV_HOME")
+
+  private lazy val inRepoTests: File =
+    if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
+      new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
+    } else {
+      new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
+        File.separator + "resources")
+    }
 }

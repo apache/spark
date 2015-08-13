@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.hive.test.TestHiveContext
 
 /**
  * Runs the test cases that are included in the hive distribution.
@@ -31,7 +32,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
   // TODO: bundle in jar files... get from classpath
-  private lazy val hiveQueryDir = ctx.getHiveFile(
+  private lazy val hiveQueryDir = TestHiveContext.getHiveFile(
     "ql/src/test/queries/clientpositive".split("/").mkString(File.separator))
 
   private val originalTimeZone = TimeZone.getDefault
@@ -39,7 +40,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   private lazy val originalColumnBatchSize = ctx.conf.columnBatchSize
   private lazy val originalInMemoryPartitionPruning = ctx.conf.inMemoryPartitionPruning
 
-  def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
+  override def testCases: Seq[(String, File)] = {
+    hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
+  }
 
   override def beforeAll() {
     super.beforeAll()

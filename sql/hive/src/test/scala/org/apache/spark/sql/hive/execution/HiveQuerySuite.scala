@@ -28,6 +28,7 @@ import org.apache.spark.{SparkFiles, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.sql.test.SQLTestData.TestData
 
 
@@ -876,7 +877,7 @@ class HiveQuerySuite extends HiveComparisonTest {
   }
 
   test("ADD JAR command") {
-    val testJar = ctx.getHiveFile("data/files/TestSerDe.jar").getCanonicalPath
+    val testJar = TestHiveContext.getHiveFile("data/files/TestSerDe.jar").getCanonicalPath
     ctx.sql("CREATE TABLE alter1(a INT, b INT)")
     intercept[Exception] {
       ctx.sql(
@@ -889,8 +890,8 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   test("ADD JAR command 2") {
     // this is a test case from mapjoin_addjar.q
-    val testJar = ctx.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
-    val testData = ctx.getHiveFile("data/files/sample.json").getCanonicalPath
+    val testJar = TestHiveContext.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
+    val testData = TestHiveContext.getHiveFile("data/files/sample.json").getCanonicalPath
     ctx.sql(s"ADD JAR $testJar")
     ctx.sql(
       """CREATE TABLE t1(a string, b string)
@@ -901,7 +902,7 @@ class HiveQuerySuite extends HiveComparisonTest {
   }
 
   test("ADD FILE command") {
-    val testFile = ctx.getHiveFile("data/files/v1.txt").getCanonicalFile
+    val testFile = TestHiveContext.getHiveFile("data/files/v1.txt").getCanonicalFile
     ctx.sql(s"ADD FILE $testFile")
 
     val checkAddFileRDD = ctx.sparkContext.parallelize(1 to 2, 1).mapPartitions { _ =>

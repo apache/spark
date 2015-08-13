@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.{SharedHiveContext, TestHiveContext}
 import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.test.SQLTestData.TestData
@@ -67,7 +67,7 @@ class SQLQuerySuite extends QueryTest with SharedHiveContext {
   import testImplicits._
 
   test("UDTF") {
-    ctx.sql(s"ADD JAR ${ctx.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
+    ctx.sql(s"ADD JAR ${TestHiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
     // The function source code can be found at:
     // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
     ctx.sql(
@@ -1044,7 +1044,8 @@ class SQLQuerySuite extends QueryTest with SharedHiveContext {
     val thread = new Thread {
       override def run() {
         // To make sure this test works, this jar should not be loaded in another place.
-        ctx.sql(s"ADD JAR ${ctx.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
+        val jar = TestHiveContext.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()
+        ctx.sql(s"ADD JAR $jar")
         try {
           ctx.sql(
             """

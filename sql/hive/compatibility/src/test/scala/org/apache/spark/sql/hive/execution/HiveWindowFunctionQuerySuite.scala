@@ -22,6 +22,7 @@ import java.util.{Locale, TimeZone}
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.util.Utils
 
 /**
@@ -58,7 +59,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
         |  p_retailprice DOUBLE,
         |  p_comment STRING)
       """.stripMargin)
-    val testData1 = ctx.getHiveFile("data/files/part_tiny.txt").getCanonicalPath
+    val testData1 = TestHiveContext.getHiveFile("data/files/part_tiny.txt").getCanonicalPath
     ctx.sql(
       s"""
         |LOAD DATA LOCAL INPATH '$testData1' overwrite into table part
@@ -82,7 +83,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
         |row format delimited
         |fields terminated by '|'
       """.stripMargin)
-    val testData2 = ctx.getHiveFile("data/files/over1k").getCanonicalPath
+    val testData2 = TestHiveContext.getHiveFile("data/files/over1k").getCanonicalPath
     ctx.sql(
       s"""
         |LOAD DATA LOCAL INPATH '$testData2' overwrite into table over1k

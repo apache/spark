@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.hive.test.TestHiveContext
+
 /**
  * A set of tests that validates support for Hive SerDe.
  */
@@ -30,8 +32,8 @@ class HiveSerDeSuite extends HiveComparisonTest {
        |ROW FORMAT SERDE '${classOf[RegexSerDe].getCanonicalName}'
        |WITH SERDEPROPERTIES ("input.regex" = "([^ ]*)\t([^ ]*)")
        """.stripMargin)
-    ctx.sql(
-      s"LOAD DATA LOCAL INPATH '${ctx.getHiveFile("data/files/sales.txt")}' INTO TABLE sales")
+    val dataFile = TestHiveContext.getHiveFile("data/files/sales.txt")
+    ctx.sql(s"LOAD DATA LOCAL INPATH '$dataFile' INTO TABLE sales")
   }
 
   // table sales is not a cache table, and will be clear after reset
