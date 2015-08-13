@@ -179,8 +179,7 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
     ...     inputCol="values", outputCol="eprod")
     >>> ep.transform(df).head().eprod
     DenseVector([2.0, 2.0, 9.0])
-    >>> ep.setParams(scalingVec=Vectors.dense([2.0, 3.0, 5.0]),
-    ...     outputCol="newEprod").transform(df).head().newEprod
+    >>> ep.setParams(scalingVec=Vectors.dense([2.0, 3.0, 5.0])).transform(df).head().eprod
     DenseVector([4.0, 3.0, 15.0])
     """
 
