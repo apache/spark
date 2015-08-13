@@ -89,7 +89,7 @@ class MLLibStreamingTestCase(unittest.TestCase):
         self.ssc.stop(False)
 
     @staticmethod
-    def _eventually(condition, timeout=20.0, catch_assertions=False):
+    def _eventually(condition, timeout=30.0, catch_assertions=False):
         """
         Wait a given amount of time for a condition to pass, else fail with an error.
         This is a helper utility for streaming ML tests.
@@ -101,7 +101,7 @@ class MLLibStreamingTestCase(unittest.TestCase):
                           Note that this method may be called at any time during
                           streaming execution (e.g., even before any results
                           have been created).
-        :param timeout: Number of seconds to wait.  Default 20 seconds.
+        :param timeout: Number of seconds to wait.  Default 30 seconds.
         :param catch_assertions: If False (default), do not catch AssertionErrors.
                                  If True, catch AssertionErrors; continue, but save
                                  error to throw upon timeout.
