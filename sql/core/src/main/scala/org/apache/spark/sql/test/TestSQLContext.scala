@@ -27,19 +27,14 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 class LocalSQLContext
   extends SQLContext(
     new SparkContext("local[2]", "TestSQLContext", new SparkConf()
+      // Fewer partitions to speed up testing
+      .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
       .set("spark.sql.testkey", "true")
       // SPARK-8910
       .set("spark.ui.enabled", "false"))) {
 
   override protected[sql] def createSession(): SQLSession = {
     new this.SQLSession()
-  }
-
-  protected[sql] class SQLSession extends super.SQLSession {
-    protected[sql] override lazy val conf: SQLConf = new SQLConf {
-      /** Fewer partitions to speed up testing. */
-      override def numShufflePartitions: Int = this.getConf(SQLConf.SHUFFLE_PARTITIONS, 5)
-    }
   }
 
   /**
