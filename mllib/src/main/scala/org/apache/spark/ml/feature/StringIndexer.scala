@@ -24,7 +24,7 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, NumericType, StringType, StructType}
@@ -59,6 +59,8 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
  * If the input column is numeric, we cast it to string and index the string values.
  * The indices are in [0, numLabels), ordered by label frequencies.
  * So the most frequent label gets index 0.
+ *
+ * @see [[IndexToString]] for the inverse transformation
  */
 @Experimental
 class StringIndexer(override val uid: String) extends Estimator[StringIndexerModel]
@@ -170,16 +172,6 @@ class StringIndexerModel private[ml] (
     val copied = new StringIndexerModel(uid, labels)
     copyValues(copied, extra)
   }
-
-  /**
-   * Returns an [[IndexToString]] transformer that can perform the inverse transformation, mapping
-   * indices back to their string values.
-   * Users need to set input/output column names on the transformer returned.
-   */
-  def inverse: IndexToString = {
-    new IndexToString()
-      .setLabels(labels)
-  }
 }
 
 /**
@@ -189,7 +181,7 @@ class StringIndexerModel private[ml] (
  * supplied by the user.
  * All original columns are kept during transformation.
  *
- * @see [[StringIndexer]]
+ * @see [[StringIndexer]] for converting strings into indices
  */
 @Experimental
 class IndexToString private[ml] (
