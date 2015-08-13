@@ -145,12 +145,6 @@ class RFormulaModel private[feature](
     pipelineModel: PipelineModel)
   extends Model[RFormulaModel] with RFormulaBase {
 
-  /** @group setParam */
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
-
-  /** @group setParam */
-  def setLabelCol(value: String): this.type = set(labelCol, value)
-
   override def transform(dataset: DataFrame): DataFrame = {
     checkCanTransform(dataset.schema)
     transformLabel(pipelineModel.transform(dataset))
