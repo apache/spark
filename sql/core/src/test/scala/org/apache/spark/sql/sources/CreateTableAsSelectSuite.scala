@@ -22,6 +22,7 @@ import java.io.{File, IOException}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.execution.datasources.DDLException
 import org.apache.spark.util.Utils
 
 class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
@@ -50,7 +51,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
@@ -74,7 +75,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql(
         s"""
            |CREATE TEMPORARY TABLE jsonTable
-           |USING org.apache.spark.sql.json.DefaultSource
+           |USING json
            |OPTIONS (
            |  path '${path.toString}'
            |) AS
@@ -91,7 +92,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
@@ -106,7 +107,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql(
         s"""
         |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
@@ -121,7 +122,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
@@ -138,7 +139,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
@@ -157,7 +158,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql(
         s"""
         |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
@@ -174,7 +175,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql(
         s"""
         |CREATE TEMPORARY TABLE jsonTable (a int, b string)
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
@@ -187,7 +188,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
@@ -198,7 +199,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql(
         s"""
         |CREATE TEMPORARY TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS

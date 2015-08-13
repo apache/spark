@@ -195,7 +195,7 @@ object Strategy {
    * @since 1.2.0
    */
   def defaultStrategy(algo: String): Strategy = {
-    defaultStategy(Algo.fromString(algo))
+    defaultStrategy(Algo.fromString(algo))
   }
 
   /**
@@ -203,7 +203,7 @@ object Strategy {
    * @param algo Algo.Classification or Algo.Regression
    * @since 1.3.0
    */
-  def defaultStategy(algo: Algo): Strategy = algo match {
+  def defaultStrategy(algo: Algo): Strategy = algo match {
     case Algo.Classification =>
       new Strategy(algo = Classification, impurity = Gini, maxDepth = 10,
         numClasses = 2)
@@ -211,4 +211,8 @@ object Strategy {
       new Strategy(algo = Regression, impurity = Variance, maxDepth = 10,
         numClasses = 0)
   }
+
+  @deprecated("Use Strategy.defaultStrategy instead.", "1.5.0")
+  def defaultStategy(algo: Algo): Strategy = defaultStrategy(algo)
+
 }

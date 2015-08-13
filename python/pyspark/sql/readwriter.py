@@ -24,6 +24,16 @@ from pyspark.sql.types import *
 __all__ = ["DataFrameReader", "DataFrameWriter"]
 
 
+def to_str(value):
+    """
+    A wrapper over str(), but convert bool values to lower case string
+    """
+    if isinstance(value, bool):
+        return str(value).lower()
+    else:
+        return str(value)
+
+
 class DataFrameReader(object):
     """
     Interface used to load a :class:`DataFrame` from external storage systems
@@ -77,7 +87,7 @@ class DataFrameReader(object):
     def option(self, key, value):
         """Adds an input option for the underlying data source.
         """
-        self._jreader = self._jreader.option(key, value)
+        self._jreader = self._jreader.option(key, to_str(value))
         return self
 
     @since(1.4)
@@ -85,7 +95,7 @@ class DataFrameReader(object):
         """Adds input options for the underlying data source.
         """
         for k in options:
-            self._jreader = self._jreader.option(k, options[k])
+            self._jreader = self._jreader.option(k, to_str(options[k]))
         return self
 
     @since(1.4)
@@ -97,7 +107,8 @@ class DataFrameReader(object):
         :param schema: optional :class:`StructType` for the input schema.
         :param options: all other string options
 
-        >>> df = sqlContext.read.load('python/test_support/sql/parquet_partitioned')
+        >>> df = sqlContext.read.load('python/test_support/sql/parquet_partitioned', opt1=True,
+        ...     opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
@@ -146,14 +157,28 @@ class DataFrameReader(object):
         return self._df(self._jreader.table(tableName))
 
     @since(1.4)
-    def parquet(self, *path):
+    def parquet(self, *paths):
         """Loads a Parquet file, returning the result as a :class:`DataFrame`.
 
         >>> df = sqlContext.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
-        return self._df(self._jreader.parquet(_to_seq(self._sqlContext._sc, path)))
+        return self._df(self._jreader.parquet(_to_seq(self._sqlContext._sc, paths)))
+
+    @since(1.5)
+    def orc(self, path):
+        """
+        Loads an ORC file, returning the result as a :class:`DataFrame`.
+
+        ::Note: Currently ORC support is only available together with
+        :class:`HiveContext`.
+
+        >>> df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
+        >>> df.dtypes
+        [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
+        """
+        return self._df(self._jreader.orc(path))
 
     @since(1.4)
     def jdbc(self, url, table, column=None, lowerBound=None, upperBound=None, numPartitions=None,
@@ -378,6 +403,29 @@ class DataFrameWriter(object):
             self.partitionBy(partitionBy)
         self._jwrite.parquet(path)
 
+    def orc(self, path, mode=None, partitionBy=None):
+        """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
+
+        ::Note: Currently ORC support is only available together with
+        :class:`HiveContext`.
+
+        :param path: the path in any Hadoop supported file system
+        :param mode: specifies the behavior of the save operation when data already exists.
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` (default case): Throw an exception if data already exists.
+        :param partitionBy: names of partitioning columns
+
+        >>> orc_df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
+        >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
+        """
+        self.mode(mode)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
+        self._jwrite.orc(path)
+
     @since(1.4)
     def jdbc(self, url, table, mode=None, properties={}):
         """Saves the content of the :class:`DataFrame` to a external database table via JDBC.
@@ -408,7 +456,7 @@ def _test():
     import os
     import tempfile
     from pyspark.context import SparkContext
-    from pyspark.sql import Row, SQLContext
+    from pyspark.sql import Row, SQLContext, HiveContext
     import pyspark.sql.readwriter
 
     os.chdir(os.environ["SPARK_HOME"])
@@ -420,6 +468,7 @@ def _test():
     globs['os'] = os
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
+    globs['hiveContext'] = HiveContext(sc)
     globs['df'] = globs['sqlContext'].read.parquet('python/test_support/sql/parquet_partitioned')
 
     (failure_count, test_count) = doctest.testmod(

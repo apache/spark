@@ -24,16 +24,44 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
+import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.RDDConversions
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
+import org.apache.spark.sql.execution.RDDConversions
+import org.apache.spark.sql.execution.datasources.{PartitioningUtils, PartitionSpec, Partition}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql._
 import org.apache.spark.util.SerializableConfiguration
+
+/**
+ * ::DeveloperApi::
+ * Data sources should implement this trait so that they can register an alias to their data source.
+ * This allows users to give the data source alias as the format type over the fully qualified
+ * class name.
+ *
+ * A new instance of this class with be instantiated each time a DDL call is made.
+ *
+ * @since 1.5.0
+ */
+@DeveloperApi
+trait DataSourceRegister {
+
+  /**
+   * The string that represents the format that this data source provider uses. This is
+   * overridden by children to provide a nice alias for the data source. For example:
+   *
+   * {{{
+   *   override def format(): String = "parquet"
+   * }}}
+   *
+   * @since 1.5.0
+   */
+  def shortName(): String
+}
 
 /**
  * ::DeveloperApi::
@@ -75,7 +103,7 @@ trait RelationProvider {
  * A new instance of this class with be instantiated each time a DDL call is made.
  *
  * The difference between a [[RelationProvider]] and a [[SchemaRelationProvider]] is that
- * users need to provide a schema when using a SchemaRelationProvider.
+ * users need to provide a schema when using a [[SchemaRelationProvider]].
  * A relation provider can inherits both [[RelationProvider]] and [[SchemaRelationProvider]]
  * if it can support both schema inference and user-specified schemas.
  *
@@ -111,7 +139,7 @@ trait SchemaRelationProvider {
  *
  * The difference between a [[RelationProvider]] and a [[HadoopFsRelationProvider]] is
  * that users need to provide a schema and a (possibly empty) list of partition columns when
- * using a SchemaRelationProvider. A relation provider can inherits both [[RelationProvider]],
+ * using a [[HadoopFsRelationProvider]]. A relation provider can inherits both [[RelationProvider]],
  * and [[HadoopFsRelationProvider]] if it can support schema inference, user-specified
  * schemas, and accessing partitioned relations.
  *
@@ -340,6 +368,17 @@ abstract class OutputWriter {
    * @since 1.4.0
    */
   def close(): Unit
+
+  private var converter: InternalRow => Row = _
+
+  protected[sql] def initConverter(dataSchema: StructType) = {
+    converter =
+      CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
+  }
+
+  protected[sql] def writeInternal(row: InternalRow): Unit = {
+    write(converter(row))
+  }
 }
 
 /**
@@ -367,7 +406,9 @@ abstract class OutputWriter {
  */
 @Experimental
 abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec])
-  extends BaseRelation {
+  extends BaseRelation with Logging {
+
+  override def toString: String = getClass.getSimpleName + paths.mkString("[", ",", "]")
 
   def this() = this(None)
 
@@ -382,36 +423,40 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
 
-    def refresh(): Unit = {
-      // We don't filter files/directories whose name start with "_" except "_temporary" here, as
-      // specific data sources may take advantages over them (e.g. Parquet _metadata and
-      // _common_metadata files). "_temporary" directories are explicitly ignored since failed
-      // tasks/jobs may leave partial/corrupted data files there.
-      def listLeafFilesAndDirs(fs: FileSystem, status: FileStatus): Set[FileStatus] = {
-        if (status.getPath.getName.toLowerCase == "_temporary") {
-          Set.empty
+    private def listLeafFiles(paths: Array[String]): Set[FileStatus] = {
+      if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
+        HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
+      } else {
+        val statuses = paths.flatMap { path =>
+          val hdfsPath = new Path(path)
+          val fs = hdfsPath.getFileSystem(hadoopConf)
+          val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+
+          logInfo(s"Listing $qualified on driver")
+          Try(fs.listStatus(qualified)).getOrElse(Array.empty)
+        }.filterNot { status =>
+          val name = status.getPath.getName
+          name.toLowerCase == "_temporary" || name.startsWith(".")
+        }
+
+        val (dirs, files) = statuses.partition(_.isDir)
+
+        if (dirs.isEmpty) {
+          files.toSet
         } else {
-          val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
-          val leafDirs = if (dirs.isEmpty) Set(status) else Set.empty[FileStatus]
-          files.toSet ++ leafDirs ++ dirs.flatMap(dir => listLeafFilesAndDirs(fs, dir))
+          files.toSet ++ listLeafFiles(dirs.map(_.getPath.toString))
         }
       }
+    }
+
+    def refresh(): Unit = {
+      val files = listLeafFiles(paths)
 
       leafFiles.clear()
+      leafDirToChildrenFiles.clear()
 
-      val statuses = paths.flatMap { path =>
-        val hdfsPath = new Path(path)
-        val fs = hdfsPath.getFileSystem(hadoopConf)
-        val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        Try(fs.getFileStatus(qualified)).toOption.toArray.flatMap(listLeafFilesAndDirs(fs, _))
-      }.filterNot { status =>
-        // SPARK-8037: Ignores files like ".DS_Store" and other hidden files/directories
-        status.getPath.getName.startsWith(".")
-      }
-
-      val files = statuses.filterNot(_.isDir)
       leafFiles ++= files.map(f => f.getPath -> f).toMap
-      leafDirToChildrenFiles ++= files.groupBy(_.getPath.getParent)
+      leafDirToChildrenFiles ++= files.toArray.groupBy(_.getPath.getParent)
     }
   }
 
@@ -441,8 +486,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
             val spec = discoverPartitions()
             val partitionColumnTypes = spec.partitionColumns.map(_.dataType)
             val castedPartitions = spec.partitions.map { case p @ Partition(values, path) =>
-              val literals = values.toSeq.zip(partitionColumnTypes).map {
-                case (value, dataType) => Literal.create(value, dataType)
+              val literals = partitionColumnTypes.zipWithIndex.map { case (dt, i) =>
+                Literal.create(values.get(i, dt), dt)
               }
               val castedValues = partitionSchema.zip(literals).map { case (field, literal) =>
                 Cast(literal, field.dataType).eval()
@@ -515,7 +560,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     })
   }
 
-  private[sources] final def buildScan(
+  private[sql] def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String],
@@ -573,6 +618,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    *
    * @since 1.4.0
    */
+  // TODO Tries to eliminate the extra Catalyst-to-Scala conversion when `needConversion` is true
+  //
+  // PR #7626 separated `Row` and `InternalRow` completely.  One of the consequences is that we can
+  // no longer treat an `InternalRow` containing Catalyst values as a `Row`.  Thus we have to
+  // introduce another row value conversion for data sources whose `needConversion` is true.
   def buildScan(requiredColumns: Array[String], inputFiles: Array[FileStatus]): RDD[Row] = {
     // Yeah, to workaround serialization...
     val dataSchema = this.dataSchema
@@ -584,22 +634,34 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       BoundReference(dataSchema.fieldIndex(col), field.dataType, field.nullable)
     }.toSeq
 
-    val rdd = buildScan(inputFiles)
-    val converted =
+    val rdd: RDD[Row] = buildScan(inputFiles)
+    val converted: RDD[InternalRow] =
       if (needConversion) {
         RDDConversions.rowToRowRdd(rdd, dataSchema.fields.map(_.dataType))
       } else {
-        rdd.map(_.asInstanceOf[InternalRow])
+        rdd.asInstanceOf[RDD[InternalRow]]
       }
+
     converted.mapPartitions { rows =>
       val buildProjection = if (codegenEnabled) {
         GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
       } else {
         () => new InterpretedMutableProjection(requiredOutput, dataSchema.toAttributes)
       }
-      val mutableProjection = buildProjection()
-      rows.map(r => mutableProjection(r).asInstanceOf[Row])
-    }
+
+      val projectedRows = {
+        val mutableProjection = buildProjection()
+        rows.map(r => mutableProjection(r))
+      }
+
+      if (needConversion) {
+        val requiredSchema = StructType(requiredColumns.map(dataSchema(_)))
+        val toScala = CatalystTypeConverters.createToScalaConverter(requiredSchema)
+        projectedRows.map(toScala(_).asInstanceOf[Row])
+      } else {
+        projectedRows
+      }
+    }.asInstanceOf[RDD[Row]]
   }
 
   /**
@@ -665,4 +727,64 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    * @since 1.4.0
    */
   def prepareJobForWrite(job: Job): OutputWriterFactory
+}
+
+private[sql] object HadoopFsRelation extends Logging {
+  // We don't filter files/directories whose name start with "_" except "_temporary" here, as
+  // specific data sources may take advantages over them (e.g. Parquet _metadata and
+  // _common_metadata files). "_temporary" directories are explicitly ignored since failed
+  // tasks/jobs may leave partial/corrupted data files there.  Files and directories whose name
+  // start with "." are also ignored.
+  def listLeafFiles(fs: FileSystem, status: FileStatus): Array[FileStatus] = {
+    logInfo(s"Listing ${status.getPath}")
+    val name = status.getPath.getName.toLowerCase
+    if (name == "_temporary" || name.startsWith(".")) {
+      Array.empty
+    } else {
+      val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
+      files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
+    }
+  }
+
+  // `FileStatus` is Writable but not serializable.  What make it worse, somehow it doesn't play
+  // well with `SerializableWritable`.  So there seems to be no way to serialize a `FileStatus`.
+  // Here we use `FakeFileStatus` to extract key components of a `FileStatus` to serialize it from
+  // executor side and reconstruct it on driver side.
+  case class FakeFileStatus(
+      path: String,
+      length: Long,
+      isDir: Boolean,
+      blockReplication: Short,
+      blockSize: Long,
+      modificationTime: Long,
+      accessTime: Long)
+
+  def listLeafFilesInParallel(
+      paths: Array[String],
+      hadoopConf: Configuration,
+      sparkContext: SparkContext): Set[FileStatus] = {
+    logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
+
+    val serializableConfiguration = new SerializableConfiguration(hadoopConf)
+    val fakeStatuses = sparkContext.parallelize(paths).flatMap { path =>
+      val hdfsPath = new Path(path)
+      val fs = hdfsPath.getFileSystem(serializableConfiguration.value)
+      val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+      Try(listLeafFiles(fs, fs.getFileStatus(qualified))).getOrElse(Array.empty)
+    }.map { status =>
+      FakeFileStatus(
+        status.getPath.toString,
+        status.getLen,
+        status.isDir,
+        status.getReplication,
+        status.getBlockSize,
+        status.getModificationTime,
+        status.getAccessTime)
+    }.collect()
+
+    fakeStatuses.map { f =>
+      new FileStatus(
+        f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime, new Path(f.path))
+    }.toSet
+  }
 }

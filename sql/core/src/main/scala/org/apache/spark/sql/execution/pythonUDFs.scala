@@ -21,7 +21,6 @@ import java.io.OutputStream
 import java.util.{List => JList, Map => JMap}
 
 import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
 
 import net.razorvine.pickle._
 
@@ -51,15 +50,11 @@ private[spark] case class PythonUDF(
     broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]],
     dataType: DataType,
-    children: Seq[Expression]) extends Expression with SparkLogging {
+    children: Seq[Expression]) extends Expression with Unevaluable with SparkLogging {
 
   override def toString: String = s"PythonUDF#$name(${children.mkString(",")})"
 
   override def nullable: Boolean = true
-
-  override def eval(input: InternalRow): Any = {
-    throw new UnsupportedOperationException("PythonUDFs can not be directly evaluated.")
-  }
 }
 
 /**
@@ -70,7 +65,7 @@ private[spark] case class PythonUDF(
  * multiple child operators.
  */
 private[spark] object ExtractPythonUDFs extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // Skip EvaluatePython nodes.
     case plan: EvaluatePython => plan
 
@@ -130,20 +125,27 @@ object EvaluatePython {
     case (null, _) => null
 
     case (row: InternalRow, struct: StructType) =>
-      val values = new Array[Any](row.size)
+      val values = new Array[Any](row.numFields)
       var i = 0
-      while (i < row.size) {
-        values(i) = toJava(row(i), struct.fields(i).dataType)
+      while (i < row.numFields) {
+        values(i) = toJava(row.get(i, struct.fields(i).dataType), struct.fields(i).dataType)
         i += 1
       }
       new GenericInternalRowWithSchema(values, struct)
 
-    case (seq: Seq[Any], array: ArrayType) =>
-      seq.map(x => toJava(x, array.elementType)).asJava
+    case (a: ArrayData, array: ArrayType) =>
+      val values = new java.util.ArrayList[Any](a.numElements())
+      a.foreach(array.elementType, (_, e) => {
+        values.add(toJava(e, array.elementType))
+      })
+      values
 
-    case (obj: Map[_, _], mt: MapType) => obj.map {
-      case (k, v) => (toJava(k, mt.keyType), toJava(v, mt.valueType))
-    }.asJava
+    case (map: MapData, mt: MapType) =>
+      val jmap = new java.util.HashMap[Any, Any](map.numElements())
+      map.foreach(mt.keyType, mt.valueType, (k, v) => {
+        jmap.put(toJava(k, mt.keyType), toJava(v, mt.valueType))
+      })
+      jmap
 
     case (ud, udt: UserDefinedType[_]) => toJava(ud, udt.sqlType)
 
@@ -179,7 +181,7 @@ object EvaluatePython {
 
     case (c: Double, DoubleType) => c
 
-    case (c: java.math.BigDecimal, dt: DecimalType) => Decimal(c)
+    case (c: java.math.BigDecimal, dt: DecimalType) => Decimal(c, dt.precision, dt.scale)
 
     case (c: Int, DateType) => c
 
@@ -194,14 +196,15 @@ object EvaluatePython {
     case (c, BinaryType) if c.getClass.isArray && c.getClass.getComponentType.getName == "byte" => c
 
     case (c: java.util.List[_], ArrayType(elementType, _)) =>
-      c.map { e => fromJava(e, elementType)}.toSeq
+      new GenericArrayData(c.map { e => fromJava(e, elementType)}.toArray)
 
     case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
-      c.asInstanceOf[Array[_]].map(e => fromJava(e, elementType)).toSeq
+      new GenericArrayData(c.asInstanceOf[Array[_]].map(e => fromJava(e, elementType)))
 
-    case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) => c.map {
-      case (key, value) => (fromJava(key, keyType), fromJava(value, valueType))
-    }.toMap
+    case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) =>
+      val keys = c.keysIterator.map(fromJava(_, keyType)).toArray
+      val values = c.valuesIterator.map(fromJava(_, valueType)).toArray
+      ArrayBasedMapData(keys, values)
 
     case (c, StructType(fields)) if c.getClass.isArray =>
       new GenericInternalRow(c.asInstanceOf[Array[_]].zip(fields).map {
@@ -271,7 +274,6 @@ object EvaluatePython {
           pickler.save(row.values(i))
           i += 1
         }
-        row.values.foreach(pickler.save)
         out.write(Opcodes.TUPLE)
         out.write(Opcodes.REDUCE)
       }

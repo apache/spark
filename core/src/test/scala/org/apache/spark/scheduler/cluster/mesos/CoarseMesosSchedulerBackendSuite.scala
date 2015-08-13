@@ -22,7 +22,7 @@ import java.util.Collections
 
 import org.apache.mesos.Protos.Value.Scalar
 import org.apache.mesos.Protos._
-import org.apache.mesos.SchedulerDriver
+import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
 import org.mockito.Matchers._
 import org.mockito.Mockito._
 import org.mockito.Matchers
@@ -30,7 +30,7 @@ import org.scalatest.mock.MockitoSugar
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.scheduler.TaskSchedulerImpl
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SecurityManager, SparkFunSuite}
 
 class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     with LocalSparkContext
@@ -59,8 +59,18 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
   private def createSchedulerBackend(
       taskScheduler: TaskSchedulerImpl,
       driver: SchedulerDriver): CoarseMesosSchedulerBackend = {
-    val backend = new CoarseMesosSchedulerBackend(taskScheduler, sc, "master") {
-      mesosDriver = driver
+    val securityManager = mock[SecurityManager]
+    val backend = new CoarseMesosSchedulerBackend(taskScheduler, sc, "master", securityManager) {
+      override protected def createSchedulerDriver(
+        masterUrl: String,
+        scheduler: Scheduler,
+        sparkUser: String,
+        appName: String,
+        conf: SparkConf,
+        webuiUrl: Option[String] = None,
+        checkpoint: Option[Boolean] = None,
+        failoverTimeout: Option[Double] = None,
+        frameworkId: Option[String] = None): SchedulerDriver = driver
       markRegistered()
     }
     backend.start()
@@ -80,6 +90,7 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
 
   test("mesos supports killing and limiting executors") {
     val driver = mock[SchedulerDriver]
+    when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
     val taskScheduler = mock[TaskSchedulerImpl]
     when(taskScheduler.sc).thenReturn(sc)
 
@@ -87,7 +98,7 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     sparkConf.set("spark.driver.port", "1234")
 
     val backend = createSchedulerBackend(taskScheduler, driver)
-    val minMem = backend.calculateTotalMemory(sc).toInt
+    val minMem = backend.calculateTotalMemory(sc)
     val minCpu = 4
 
     val mesosOffers = new java.util.ArrayList[Offer]
@@ -130,11 +141,12 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
 
   test("mesos supports killing and relaunching tasks with executors") {
     val driver = mock[SchedulerDriver]
+    when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
     val taskScheduler = mock[TaskSchedulerImpl]
     when(taskScheduler.sc).thenReturn(sc)
 
     val backend = createSchedulerBackend(taskScheduler, driver)
-    val minMem = backend.calculateTotalMemory(sc).toInt + 1024
+    val minMem = backend.calculateTotalMemory(sc) + 1024
     val minCpu = 4
 
     val mesosOffers = new java.util.ArrayList[Offer]

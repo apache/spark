@@ -24,7 +24,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, AttributeReference, Attribute, InterpretedOrdering$}
 
 
 /**
@@ -300,14 +300,15 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
     StructType(newFields)
   }
-}
 
+  private[sql] val interpretedOrdering = InterpretedOrdering.forSchema(this.fields.map(_.dataType))
+}
 
 object StructType extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType = new StructType
 
-  override private[sql] def isSameType(other: DataType): Boolean = {
+  override private[sql] def acceptsType(other: DataType): Boolean = {
     other.isInstanceOf[StructType]
   }
 

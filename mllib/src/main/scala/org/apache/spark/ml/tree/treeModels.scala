@@ -53,6 +53,12 @@ private[ml] trait DecisionTreeModel {
     val header = toString + "\n"
     header + rootNode.subtreeToString(2)
   }
+
+  /**
+   * Trace down the tree, and return the largest feature index used in any split.
+   * @return  Max feature index used in a split, or -1 if there are no splits (single leaf node).
+   */
+  private[ml] def maxSplitFeatureIndex(): Int = rootNode.maxSplitFeatureIndex()
 }
 
 /**
