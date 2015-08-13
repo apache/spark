@@ -23,6 +23,8 @@ import java.util.Arrays;
 
 public final class ByteArray {
 
+  public static final byte[] EMPTY_BYTE = new byte[0];
+
   /**
    * Writes the content of a byte array into a memory address, identified by an object and an
    * offset. The target memory address must already been allocated, and have enough space to
@@ -52,7 +54,7 @@ public final class ByteArray {
   public static byte[] subStringSQL(byte[] bytes, int pos, int len) {
     // This pos calculation is according to UTF8String#subStringSQL
     if (pos > bytes.length) {
-      return new byte[0];
+      return EMPTY_BYTE;
     }
     int start = 0;
     int end;
@@ -68,7 +70,7 @@ public final class ByteArray {
     }
     start = Math.max(start, 0); // underflow
     if (start >= end) {
-      return new byte[0];
+      return EMPTY_BYTE;
     }
     return Arrays.copyOfRange(bytes, start, end);
   }
