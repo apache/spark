@@ -467,9 +467,11 @@ class StructType(DataType):
         """
         Construct a StructType by adding new elements to it to define the schema. The method accepts
         either:
+
             a) A single parameter which is a StructField object.
             b) Between 2 and 4 parameters as (name, data_type, nullable (optional),
-             metadata(optional). The data_type parameter may be either a String or a DataType object
+               metadata(optional). The data_type parameter may be either a String or a
+               DataType object.
 
         >>> struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         >>> struct2 = StructType([StructField("f1", StringType(), True),\
