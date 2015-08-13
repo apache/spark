@@ -119,6 +119,9 @@ case class SortMergeJoin(
           }
           if (currentLeftRow != null) {
             joinRow(currentLeftRow, currentRightMatches(currentMatchIdx))
+            // scalastyle:off println
+            println(s"find match $joinRow")
+            // scalastyle:on println
             currentMatchIdx += 1
             numOutputRows += 1
             true
