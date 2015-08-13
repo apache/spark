@@ -243,7 +243,7 @@ private[master] class PrioritySchedulingAlgorithm(
     def removeApplication(app: ApplicationInfo): Boolean = {
       val submitted = appQueue.toArray().find(_.asInstanceOf[ApplicationSubmission].appInfo == app)
       if (submitted != None) {
-        appQueue.remove(submitted)
+        appQueue.remove(submitted.get)
       } else {
         false
       }
