@@ -964,7 +964,8 @@ object EliminateSubQueries extends Rule[LogicalPlan] {
 
 /**
  * Cleans up unnecessary Aliases inside the plan. Basically we only need Alias as a top level
- * expression in Project(project list) or Aggregate(aggregate expressions).
+ * expression in Project(project list) or Aggregate(aggregate expressions) or
+ * Window(window expressions).
  */
 object CleanupAliases extends Rule[LogicalPlan] {
   private def trimAliases(e: Expression): Expression = {
@@ -992,12 +993,18 @@ object CleanupAliases extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case Project(projectList, child) =>
       val cleanedProjectList =
-        projectList.map(p => trimNonTopLevelAliases(p).asInstanceOf[NamedExpression])
+        projectList.map(trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
       Project(cleanedProjectList, child)
 
     case Aggregate(grouping, aggs, child) =>
-      val cleanedAggs = aggs.map(a => trimNonTopLevelAliases(a).asInstanceOf[NamedExpression])
+      val cleanedAggs = aggs.map(trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
       Aggregate(grouping.map(trimAliases), cleanedAggs, child)
+
+    case w @ Window(projectList, windowExprs, partitionSpec, orderSpec, child) =>
+      val cleanedWindowExprs =
+        windowExprs.map(e => trimNonTopLevelAliases(e).asInstanceOf[NamedExpression])
+      Window(projectList, cleanedWindowExprs, partitionSpec.map(trimAliases),
+        orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
 
     case other =>
       var stop = false
