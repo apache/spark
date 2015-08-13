@@ -74,8 +74,10 @@ class SQLConfSuite extends QueryTest {
 
   test("deprecated property") {
     ctx.conf.clear()
+    val original = ctx.conf.numShufflePartitions
     ctx.sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
     assert(ctx.conf.numShufflePartitions === 10)
+    ctx.sql(s"set ${SQLConf.SHUFFLE_PARTITIONS}=$original")
   }
 
   test("invalid conf value") {
