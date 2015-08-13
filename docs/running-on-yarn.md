@@ -40,6 +40,22 @@ The above starts a YARN client program which starts the default Application Mast
 To launch a Spark application in `yarn-client` mode, do the same, but replace `yarn-cluster` with `yarn-client`.  To run spark-shell:
 
     $ ./bin/spark-shell --master yarn-client
+    
+The alternative to launching a Spark application on YARN is to explicitly set the deployment mode for the YARN master
+
+For example:
+
+    $ ./bin/spark-submit --class org.apache.spark.examples.SparkPi \
+        --master yarn \
+        --deploy-mode client or cluster 
+        --num-executors 3 \
+        --driver-memory 4g \
+        --executor-memory 2g \
+        --executor-cores 1 \
+        --queue thequeue \
+        lib/spark-examples*.jar \
+        
+`--deploy-mode` can be either client or cluster.
 
 ## Adding Other JARs
 
