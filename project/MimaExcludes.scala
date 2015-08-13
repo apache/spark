@@ -178,6 +178,10 @@ object MimaExcludes {
             // SPARK-4751 Dynamic allocation for standalone mode
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.SparkContext.supportDynamicAllocation")
+          ) ++ Seq(
+            // SPARK-9704 Made ProbabilisticClassifier, Identifiable, VectorUDT public APIs
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.mllib.linalg.VectorUDT.serialize")
           )
 
         case v if v.startsWith("1.4") =>
