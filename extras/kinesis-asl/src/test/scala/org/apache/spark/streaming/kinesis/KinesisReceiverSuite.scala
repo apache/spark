@@ -22,33 +22,29 @@ import scala.collection.JavaConversions.seqAsJavaList
 
 import com.amazonaws.services.kinesis.clientlibrary.exceptions.{InvalidStateException, KinesisClientLibDependencyException, ShutdownException, ThrottlingException}
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
+import org.mockito.Matchers._
 import org.mockito.Mockito._
-// scalastyle:off
-// To avoid introducing a dependency on Spark core tests, simply use scalatest's FunSuite
-// here instead of our own SparkFunSuite. Introducing the dependency has caused problems
-// in the past (SPARK-8781) that are complicated by bugs in the maven shade plugin (MSHADE-148).
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 import org.scalatest.mock.MockitoSugar
+import org.scalatest.{BeforeAndAfter, Matchers}
 
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{Milliseconds, Seconds, StreamingContext}
+import org.apache.spark.streaming.{Milliseconds, TestSuiteBase}
 import org.apache.spark.util.{Clock, ManualClock, Utils}
 
 /**
  * Suite of Kinesis streaming receiver tests focusing mostly on the KinesisRecordProcessor
  */
-class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter
-  with MockitoSugar {
-// scalastyle:on
+class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAfter
+    with MockitoSugar {
 
   val app = "TestKinesisReceiver"
   val stream = "mySparkStream"
   val endpoint = "endpoint-url"
   val workerId = "dummyWorkerId"
   val shardId = "dummyShardId"
+  val seqNum = "dummySeqNum"
+  val someSeqNum = Some(seqNum)
 
   val record1 = new Record()
   record1.setData(ByteBuffer.wrap("Spark In Action".getBytes()))
@@ -62,7 +58,7 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter
   var checkpointStateMock: KinesisCheckpointState = _
   var currentClockMock: Clock = _
 
-  before {
+  override def beforeFunction(): Unit = {
     receiverMock = mock[KinesisReceiver]
     checkpointerMock = mock[IRecordProcessorCheckpointer]
     checkpointClockMock = mock[ManualClock]
@@ -70,28 +66,12 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter
     currentClockMock = mock[Clock]
   }
 
-  after {
+  override def afterFunction(): Unit = {
+    super.afterFunction()
     // Since this suite was originally written using EasyMock, add this to preserve the old
     // mocking semantics (see SPARK-5735 for more details)
     verifyNoMoreInteractions(receiverMock, checkpointerMock, checkpointClockMock,
       checkpointStateMock, currentClockMock)
-  }
-
-  test("KinesisUtils API") {
-    val ssc = new StreamingContext("local[2]", getClass.getSimpleName, Seconds(1))
-    // Tests the API, does not actually test data receiving
-    val kinesisStream1 = KinesisUtils.createStream(ssc, "mySparkStream",
-      "https://kinesis.us-west-2.amazonaws.com", Seconds(2),
-      InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2)
-    val kinesisStream2 = KinesisUtils.createStream(ssc, "myAppNam", "mySparkStream",
-      "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
-      InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2)
-    val kinesisStream3 = KinesisUtils.createStream(ssc, "myAppNam", "mySparkStream",
-      "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
-      InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2,
-      "awsAccessKey", "awsSecretKey")
-
-    ssc.stop()
   }
 
   test("check serializability of SerializableAWSCredentials") {
@@ -101,16 +81,18 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("process records including store and checkpoint") {
     when(receiverMock.isStopped()).thenReturn(false)
+    when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
     when(checkpointStateMock.shouldCheckpoint()).thenReturn(true)
 
     val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId, checkpointStateMock)
+    recordProcessor.initialize(shardId)
     recordProcessor.processRecords(batch, checkpointerMock)
 
     verify(receiverMock, times(1)).isStopped()
-    verify(receiverMock, times(1)).store(record1.getData().array())
-    verify(receiverMock, times(1)).store(record2.getData().array())
+    verify(receiverMock, times(1)).addRecords(shardId, batch)
+    verify(receiverMock, times(1)).getLatestSeqNumToCheckpoint(shardId)
     verify(checkpointStateMock, times(1)).shouldCheckpoint()
-    verify(checkpointerMock, times(1)).checkpoint()
+    verify(checkpointerMock, times(1)).checkpoint(anyString)
     verify(checkpointStateMock, times(1)).advanceCheckpoint()
   }
 
@@ -121,19 +103,25 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter
     recordProcessor.processRecords(batch, checkpointerMock)
 
     verify(receiverMock, times(1)).isStopped()
+    verify(receiverMock, never).addRecords(anyString, anyListOf(classOf[Record]))
+    verify(checkpointerMock, never).checkpoint(anyString)
   }
 
   test("shouldn't checkpoint when exception occurs during store") {
     when(receiverMock.isStopped()).thenReturn(false)
-    when(receiverMock.store(record1.getData().array())).thenThrow(new RuntimeException())
+    when(
+      receiverMock.addRecords(anyString, anyListOf(classOf[Record]))
+    ).thenThrow(new RuntimeException())
 
     intercept[RuntimeException] {
       val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId, checkpointStateMock)
+      recordProcessor.initialize(shardId)
       recordProcessor.processRecords(batch, checkpointerMock)
     }
 
     verify(receiverMock, times(1)).isStopped()
-    verify(receiverMock, times(1)).store(record1.getData().array())
+    verify(receiverMock, times(1)).addRecords(shardId, batch)
+    verify(checkpointerMock, never).checkpoint(anyString)
   }
 
   test("should set checkpoint time to currentTime + checkpoint interval upon instantiation") {
@@ -179,19 +167,25 @@ class KinesisReceiverSuite extends FunSuite with Matchers with BeforeAndAfter
   }
 
   test("shutdown should checkpoint if the reason is TERMINATE") {
-    val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId, checkpointStateMock)
-    val reason = ShutdownReason.TERMINATE
-    recordProcessor.shutdown(checkpointerMock, reason)
+    when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
 
-    verify(checkpointerMock, times(1)).checkpoint()
+    val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId, checkpointStateMock)
+    recordProcessor.initialize(shardId)
+    recordProcessor.shutdown(checkpointerMock, ShutdownReason.TERMINATE)
+
+    verify(receiverMock, times(1)).getLatestSeqNumToCheckpoint(shardId)
+    verify(checkpointerMock, times(1)).checkpoint(anyString)
   }
 
   test("shutdown should not checkpoint if the reason is something other than TERMINATE") {
+    when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
+
     val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId, checkpointStateMock)
+    recordProcessor.initialize(shardId)
     recordProcessor.shutdown(checkpointerMock, ShutdownReason.ZOMBIE)
     recordProcessor.shutdown(checkpointerMock, null)
 
-    verify(checkpointerMock, never()).checkpoint()
+    verify(checkpointerMock, never).checkpoint(anyString)
   }
 
   test("retry success on first attempt") {

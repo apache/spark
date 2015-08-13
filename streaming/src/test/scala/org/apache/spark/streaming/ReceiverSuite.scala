@@ -129,32 +129,6 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     }
   }
 
-  test("block generator") {
-    val blockGeneratorListener = new FakeBlockGeneratorListener
-    val blockIntervalMs = 200
-    val conf = new SparkConf().set("spark.streaming.blockInterval", s"${blockIntervalMs}ms")
-    val blockGenerator = new BlockGenerator(blockGeneratorListener, 1, conf)
-    val expectedBlocks = 5
-    val waitTime = expectedBlocks * blockIntervalMs + (blockIntervalMs / 2)
-    val generatedData = new ArrayBuffer[Int]
-
-    // Generate blocks
-    val startTime = System.currentTimeMillis()
-    blockGenerator.start()
-    var count = 0
-    while(System.currentTimeMillis - startTime < waitTime) {
-      blockGenerator.addData(count)
-      generatedData += count
-      count += 1
-      Thread.sleep(10)
-    }
-    blockGenerator.stop()
-
-    val recordedData = blockGeneratorListener.arrayBuffers.flatten
-    assert(blockGeneratorListener.arrayBuffers.size > 0)
-    assert(recordedData.toSet === generatedData.toSet)
-  }
-
   ignore("block generator throttling") {
     val blockGeneratorListener = new FakeBlockGeneratorListener
     val blockIntervalMs = 100
@@ -345,6 +319,13 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
 
     def reportError(message: String, throwable: Throwable) {
       errors += throwable
+    }
+
+    override protected def onReceiverStart(): Boolean = true
+
+    override def createBlockGenerator(
+        blockGeneratorListener: BlockGeneratorListener): BlockGenerator = {
+      null
     }
   }
 

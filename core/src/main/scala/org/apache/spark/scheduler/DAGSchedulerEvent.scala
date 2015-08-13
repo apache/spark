@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import scala.collection.mutable.Map
+import scala.collection.Map
 import scala.language.existentials
 
 import org.apache.spark._
@@ -40,7 +40,6 @@ private[scheduler] case class JobSubmitted(
     finalRDD: RDD[_],
     func: (TaskContext, Iterator[_]) => _,
     partitions: Array[Int],
-    allowLocal: Boolean,
     callSite: CallSite,
     listener: JobListener,
     properties: Properties = null)
@@ -74,6 +73,7 @@ private[scheduler] case class ExecutorAdded(execId: String, host: String) extend
 private[scheduler] case class ExecutorLost(execId: String) extends DAGSchedulerEvent
 
 private[scheduler]
-case class TaskSetFailed(taskSet: TaskSet, reason: String) extends DAGSchedulerEvent
+case class TaskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable])
+  extends DAGSchedulerEvent
 
 private[scheduler] case object ResubmitFailedStages extends DAGSchedulerEvent

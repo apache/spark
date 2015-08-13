@@ -65,7 +65,7 @@ functions <- c("min", "max", "sum", "avg", "mean", "count", "abs", "sqrt",
                "acos", "asin", "atan", "cbrt", "ceiling", "cos", "cosh", "exp",
                "expm1", "floor", "log", "log10", "log1p", "rint", "sign",
                "sin", "sinh", "tan", "tanh", "toDegrees", "toRadians")
-binary_mathfunctions<- c("atan2", "hypot")
+binary_mathfunctions <- c("atan2", "hypot")
 
 createOperator <- function(op) {
   setMethod(op,
@@ -185,6 +185,23 @@ setMethod("substr", signature(x = "Column"),
           function(x, start, stop) {
             jc <- callJMethod(x@jc, "substr", as.integer(start - 1), as.integer(stop - start + 1))
             column(jc)
+          })
+
+#' between
+#'
+#' Test if the column is between the lower bound and upper bound, inclusive.
+#'
+#' @rdname column
+#'
+#' @param bounds lower and upper bounds
+setMethod("between", signature(x = "Column"),
+          function(x, bounds) {
+            if (is.vector(bounds) && length(bounds) == 2) {
+              jc <- callJMethod(x@jc, "between", bounds[1], bounds[2])
+              column(jc)
+            } else {
+              stop("bounds should be a vector of lower and upper bounds")
+            }
           })
 
 #' Casts the column to a different data type.

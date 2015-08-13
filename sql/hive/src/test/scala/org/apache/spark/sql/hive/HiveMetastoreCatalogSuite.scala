@@ -17,31 +17,142 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.SparkFunSuite
+import java.io.File
+
+import org.apache.spark.sql.hive.client.{ExternalTable, HiveColumn, ManagedTable}
 import org.apache.spark.sql.hive.test.TestHive
-
-import org.apache.spark.sql.test.ExamplePointUDT
+import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.sources.DataSourceTest
+import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.{Logging, SparkFunSuite}
 
-class HiveMetastoreCatalogSuite extends SparkFunSuite {
+
+class HiveMetastoreCatalogSuite extends SparkFunSuite with Logging {
 
   test("struct field should accept underscore in sub-column name") {
-    val metastr = "struct<a: int, b_1: string, c: string>"
-
-    val datatype = HiveMetastoreTypes.toDataType(metastr)
-    assert(datatype.isInstanceOf[StructType])
+    val hiveTypeStr = "struct<a: int, b_1: string, c: string>"
+    val dateType = HiveMetastoreTypes.toDataType(hiveTypeStr)
+    assert(dateType.isInstanceOf[StructType])
   }
 
   test("udt to metastore type conversion") {
     val udt = new ExamplePointUDT
-    assert(HiveMetastoreTypes.toMetastoreType(udt) ===
-      HiveMetastoreTypes.toMetastoreType(udt.sqlType))
+    assertResult(HiveMetastoreTypes.toMetastoreType(udt.sqlType)) {
+      HiveMetastoreTypes.toMetastoreType(udt)
+    }
   }
 
   test("duplicated metastore relations") {
-    import TestHive.implicits._
-    val df = TestHive.sql("SELECT * FROM src")
-    println(df.queryExecution)
+    val df = sql("SELECT * FROM src")
+    logInfo(df.queryExecution.toString)
     df.as('a).join(df.as('b), $"a.key" === $"b.key")
+  }
+}
+
+class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with SQLTestUtils {
+  override val sqlContext = TestHive
+
+  private val testDF = (1 to 2).map(i => (i, s"val_$i")).toDF("d1", "d2").coalesce(1)
+
+  Seq(
+    "parquet" -> (
+      "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+      "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+      "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+    ),
+
+    "orc" -> (
+      "org.apache.hadoop.hive.ql.io.orc.OrcInputFormat",
+      "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat",
+      "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
+    )
+  ).foreach { case (provider, (inputFormat, outputFormat, serde)) =>
+    test(s"Persist non-partitioned $provider relation into metastore as managed table") {
+      withTable("t") {
+        testDF
+          .write
+          .mode(SaveMode.Overwrite)
+          .format(provider)
+          .saveAsTable("t")
+
+        val hiveTable = catalog.client.getTable("default", "t")
+        assert(hiveTable.inputFormat === Some(inputFormat))
+        assert(hiveTable.outputFormat === Some(outputFormat))
+        assert(hiveTable.serde === Some(serde))
+
+        assert(!hiveTable.isPartitioned)
+        assert(hiveTable.tableType === ManagedTable)
+
+        val columns = hiveTable.schema
+        assert(columns.map(_.name) === Seq("d1", "d2"))
+        assert(columns.map(_.hiveType) === Seq("int", "string"))
+
+        checkAnswer(table("t"), testDF)
+        assert(runSqlHive("SELECT * FROM t") === Seq("1\tval_1", "2\tval_2"))
+      }
+    }
+
+    test(s"Persist non-partitioned $provider relation into metastore as external table") {
+      withTempPath { dir =>
+        withTable("t") {
+          val path = dir.getCanonicalFile
+
+          testDF
+            .write
+            .mode(SaveMode.Overwrite)
+            .format(provider)
+            .option("path", path.toString)
+            .saveAsTable("t")
+
+          val hiveTable = catalog.client.getTable("default", "t")
+          assert(hiveTable.inputFormat === Some(inputFormat))
+          assert(hiveTable.outputFormat === Some(outputFormat))
+          assert(hiveTable.serde === Some(serde))
+
+          assert(hiveTable.tableType === ExternalTable)
+          assert(hiveTable.location.get === path.toURI.toString.stripSuffix(File.separator))
+
+          val columns = hiveTable.schema
+          assert(columns.map(_.name) === Seq("d1", "d2"))
+          assert(columns.map(_.hiveType) === Seq("int", "string"))
+
+          checkAnswer(table("t"), testDF)
+          assert(runSqlHive("SELECT * FROM t") === Seq("1\tval_1", "2\tval_2"))
+        }
+      }
+    }
+
+    test(s"Persist non-partitioned $provider relation into metastore as managed table using CTAS") {
+      withTempPath { dir =>
+        withTable("t") {
+          val path = dir.getCanonicalPath
+
+          sql(
+            s"""CREATE TABLE t USING $provider
+               |OPTIONS (path '$path')
+               |AS SELECT 1 AS d1, "val_1" AS d2
+             """.stripMargin)
+
+          val hiveTable = catalog.client.getTable("default", "t")
+          assert(hiveTable.inputFormat === Some(inputFormat))
+          assert(hiveTable.outputFormat === Some(outputFormat))
+          assert(hiveTable.serde === Some(serde))
+
+          assert(hiveTable.isPartitioned === false)
+          assert(hiveTable.tableType === ExternalTable)
+          assert(hiveTable.partitionColumns.length === 0)
+
+          val columns = hiveTable.schema
+          assert(columns.map(_.name) === Seq("d1", "d2"))
+          assert(columns.map(_.hiveType) === Seq("int", "string"))
+
+          checkAnswer(table("t"), Row(1, "val_1"))
+          assert(runSqlHive("SELECT * FROM t") === Seq("1\tval_1"))
+        }
+      }
+    }
   }
 }

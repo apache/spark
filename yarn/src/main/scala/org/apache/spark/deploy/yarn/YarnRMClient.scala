@@ -33,6 +33,7 @@ import org.apache.hadoop.yarn.util.ConverterUtils
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.util.Utils
 
@@ -56,6 +57,7 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
    */
   def register(
       driverUrl: String,
+      driverRef: RpcEndpointRef,
       conf: YarnConfiguration,
       sparkConf: SparkConf,
       preferredNodeLocations: Map[String, Set[SplitInfo]],
@@ -73,7 +75,8 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
       amClient.registerApplicationMaster(Utils.localHostName(), 0, uiAddress)
       registered = true
     }
-    new YarnAllocator(driverUrl, conf, sparkConf, amClient, getAttemptId(), args, securityMgr)
+    new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, getAttemptId(), args,
+      securityMgr)
   }
 
   /**

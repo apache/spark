@@ -21,46 +21,55 @@ import org.apache.spark.mllib.linalg.Vector
 
 /**
  * Trait for multivariate statistical summary of a data matrix.
+ * @since 1.0.0
  */
 trait MultivariateStatisticalSummary {
 
   /**
    * Sample mean vector.
+   * @since 1.0.0
    */
   def mean: Vector
 
   /**
    * Sample variance vector. Should return a zero vector if the sample size is 1.
+   * @since 1.0.0
    */
   def variance: Vector
 
   /**
    * Sample size.
+   * @since 1.0.0
    */
   def count: Long
 
   /**
    * Number of nonzero elements (including explicitly presented zero values) in each column.
+   * @since 1.0.0
    */
   def numNonzeros: Vector
 
   /**
    * Maximum value of each column.
+   * @since 1.0.0
    */
   def max: Vector
 
   /**
    * Minimum value of each column.
+   * @since 1.0.0
    */
   def min: Vector
 
   /**
    * Euclidean magnitude of each column
+   * @since 1.2.0
    */
   def normL2: Vector
 
   /**
    * L1 norm of each column
+   * @since 1.2.0
    */
   def normL1: Vector
 }

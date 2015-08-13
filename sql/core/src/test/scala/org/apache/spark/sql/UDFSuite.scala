@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.test.SQLTestUtils
 
 case class FunctionResult(f1: String, f2: String)
 
-class UDFSuite extends QueryTest {
+class UDFSuite extends QueryTest with SQLTestUtils {
 
   private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
   import ctx.implicits._
+
+  override def sqlContext(): SQLContext = ctx
 
   test("built-in fixed arity expressions") {
     val df = ctx.emptyDataFrame
@@ -49,6 +52,25 @@ class UDFSuite extends QueryTest {
   test("count distinct") {
     val df = Seq(("abcd", 2)).toDF("a", "b")
     df.selectExpr("count(distinct a)")
+  }
+
+  test("SPARK-8003 spark_partition_id") {
+    val df = Seq((1, "Tearing down the walls that divide us")).toDF("id", "saying")
+    df.registerTempTable("tmp_table")
+    checkAnswer(ctx.sql("select spark_partition_id() from tmp_table").toDF(), Row(0))
+    ctx.dropTempTable("tmp_table")
+  }
+
+  test("SPARK-8005 input_file_name") {
+    withTempPath { dir =>
+      val data = ctx.sparkContext.parallelize(0 to 10, 2).toDF("id")
+      data.write.parquet(dir.getCanonicalPath)
+      ctx.read.parquet(dir.getCanonicalPath).registerTempTable("test_table")
+      val answer = ctx.sql("select input_file_name() from test_table").head().getString(0)
+      assert(answer.contains(dir.getCanonicalPath))
+      assert(ctx.sql("select input_file_name() from test_table").distinct().collect().length >= 2)
+      ctx.dropTempTable("test_table")
+    }
   }
 
   test("error reporting for incorrect number of arguments") {
@@ -82,6 +104,76 @@ class UDFSuite extends QueryTest {
     assert(ctx.sql("SELECT strLenScala('test', 1)").head().getInt(0) === 5)
   }
 
+  test("UDF in a WHERE") {
+    ctx.udf.register("oneArgFilter", (n: Int) => { n > 80 })
+
+    val df = ctx.sparkContext.parallelize(
+      (1 to 100).map(i => TestData(i, i.toString))).toDF()
+    df.registerTempTable("integerData")
+
+    val result =
+      ctx.sql("SELECT * FROM integerData WHERE oneArgFilter(key)")
+    assert(result.count() === 20)
+  }
+
+  test("UDF in a HAVING") {
+    ctx.udf.register("havingFilter", (n: Long) => { n > 5 })
+
+    val df = Seq(("red", 1), ("red", 2), ("blue", 10),
+      ("green", 100), ("green", 200)).toDF("g", "v")
+    df.registerTempTable("groupData")
+
+    val result =
+      ctx.sql(
+        """
+         | SELECT g, SUM(v) as s
+         | FROM groupData
+         | GROUP BY g
+         | HAVING havingFilter(s)
+        """.stripMargin)
+
+    assert(result.count() === 2)
+  }
+
+  test("UDF in a GROUP BY") {
+    ctx.udf.register("groupFunction", (n: Int) => { n > 10 })
+
+    val df = Seq(("red", 1), ("red", 2), ("blue", 10),
+      ("green", 100), ("green", 200)).toDF("g", "v")
+    df.registerTempTable("groupData")
+
+    val result =
+      ctx.sql(
+        """
+         | SELECT SUM(v)
+         | FROM groupData
+         | GROUP BY groupFunction(v)
+        """.stripMargin)
+    assert(result.count() === 2)
+  }
+
+  test("UDFs everywhere") {
+    ctx.udf.register("groupFunction", (n: Int) => { n > 10 })
+    ctx.udf.register("havingFilter", (n: Long) => { n > 2000 })
+    ctx.udf.register("whereFilter", (n: Int) => { n < 150 })
+    ctx.udf.register("timesHundred", (n: Long) => { n * 100 })
+
+    val df = Seq(("red", 1), ("red", 2), ("blue", 10),
+      ("green", 100), ("green", 200)).toDF("g", "v")
+    df.registerTempTable("groupData")
+
+    val result =
+      ctx.sql(
+        """
+         | SELECT timesHundred(SUM(v)) as v100
+         | FROM groupData
+         | WHERE whereFilter(v)
+         | GROUP BY groupFunction(v)
+         | HAVING havingFilter(v100)
+        """.stripMargin)
+    assert(result.count() === 1)
+  }
+
   test("struct UDF") {
     ctx.udf.register("returnStruct", (f1: String, f2: String) => FunctionResult(f1, f2))
 
@@ -95,5 +187,11 @@ class UDFSuite extends QueryTest {
     ctx.udf.register("makeStruct", (x: Int, y: Int) => (x, y))
     // 1 + 1 is constant folded causing a transformation.
     assert(ctx.sql("SELECT makeStruct(1 + 1, 2)").first().getAs[Row](0) === Row(2, 2))
+  }
+
+  test("type coercion for udf inputs") {
+    ctx.udf.register("intExpected", (x: Int) => x)
+    // pass a decimal to intExpected.
+    assert(ctx.sql("SELECT intExpected(1.0)").head().getInt(0) === 1)
   }
 }

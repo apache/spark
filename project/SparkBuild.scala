@@ -42,11 +42,11 @@ object BuildCommons {
       "streaming-zeromq", "launcher", "unsafe").map(ProjectRef(buildLocation, _))
 
   val optionallyEnabledProjects@Seq(yarn, yarnStable, java8Tests, sparkGangliaLgpl,
-    sparkKinesisAsl) = Seq("yarn", "yarn-stable", "java8-tests", "ganglia-lgpl",
-    "kinesis-asl").map(ProjectRef(buildLocation, _))
+    streamingKinesisAsl) = Seq("yarn", "yarn-stable", "java8-tests", "ganglia-lgpl",
+    "streaming-kinesis-asl").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingFlumeAssembly, streamingKafkaAssembly) =
-    Seq("assembly", "examples", "network-yarn", "streaming-flume-assembly", "streaming-kafka-assembly")
+  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingMqttAssembly, streamingKinesisAslAssembly) =
+    Seq("assembly", "examples", "network-yarn", "streaming-flume-assembly", "streaming-kafka-assembly", "streaming-mqtt-assembly", "streaming-kinesis-asl-assembly")
       .map(ProjectRef(buildLocation, _))
 
   val tools = ProjectRef(buildLocation, "tools")
@@ -69,6 +69,7 @@ object SparkBuild extends PomBuild {
     import scala.collection.mutable
     var isAlphaYarn = false
     var profiles: mutable.Seq[String] = mutable.Seq("sbt")
+    // scalastyle:off println
     if (Properties.envOrNone("SPARK_GANGLIA_LGPL").isDefined) {
       println("NOTE: SPARK_GANGLIA_LGPL is deprecated, please use -Pspark-ganglia-lgpl flag.")
       profiles ++= Seq("spark-ganglia-lgpl")
@@ -88,6 +89,7 @@ object SparkBuild extends PomBuild {
       println("NOTE: SPARK_YARN is deprecated, please use -Pyarn flag.")
       profiles ++= Seq("yarn")
     }
+    // scalastyle:on println
     profiles
   }
 
@@ -96,8 +98,10 @@ object SparkBuild extends PomBuild {
     case None => backwardCompatibility
     case Some(v) =>
       if (backwardCompatibility.nonEmpty)
+        // scalastyle:off println
         println("Note: We ignore environment variables, when use of profile is detected in " +
           "conjunction with environment variable.")
+        // scalastyle:on println
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
 
@@ -150,7 +154,38 @@ object SparkBuild extends PomBuild {
       if (major.toInt >= 1 && minor.toInt >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
     },
 
-    javacOptions in Compile ++= Seq("-encoding", "UTF-8")
+    javacOptions in Compile ++= Seq("-encoding", "UTF-8"),
+
+    // Implements -Xfatal-warnings, ignoring deprecation warnings.
+    // Code snippet taken from https://issues.scala-lang.org/browse/SI-8410.
+    compile in Compile := {
+      val analysis = (compile in Compile).value
+      val s = streams.value
+
+      def logProblem(l: (=> String) => Unit, f: File, p: xsbti.Problem) = {
+        l(f.toString + ":" + p.position.line.fold("")(_ + ":") + " " + p.message)
+        l(p.position.lineContent)
+        l("")
+      }
+
+      var failed = 0
+      analysis.infos.allInfos.foreach { case (k, i) =>
+        i.reportedProblems foreach { p =>
+          val deprecation = p.message.contains("is deprecated")
+
+          if (!deprecation) {
+            failed = failed + 1
+          }
+
+          logProblem(if (deprecation) s.log.warn else s.log.error, k, p)
+        }
+      }
+
+      if (failed > 0) {
+        sys.error(s"$failed fatal warnings")
+      }
+      analysis
+    }
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
@@ -176,6 +211,9 @@ object SparkBuild extends PomBuild {
 
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
+
+  /* Enable Assembly for streamingMqtt test */
+  enable(inConfig(Test)(Assembly.settings))(streamingMqtt)
 
   /* Package pyspark artifacts in a separate zip file for YARN. */
   enable(PySparkAssembly.settings)(assembly)
@@ -347,12 +385,15 @@ object Assembly {
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
     jarName in assembly <<= (version, moduleName, hadoopVersion) map { (v, mName, hv) =>
-      if (mName.contains("streaming-flume-assembly") || mName.contains("streaming-kafka-assembly")) {
+      if (mName.contains("streaming-flume-assembly") || mName.contains("streaming-kafka-assembly") || mName.contains("streaming-mqtt-assembly") || mName.contains("streaming-kinesis-asl-assembly")) {
         // This must match the same name used in maven (see external/kafka-assembly/pom.xml)
         s"${mName}-${v}.jar"
       } else {
         s"${mName}-${v}-hadoop${hv}.jar"
       }
+    },
+    jarName in (Test, assembly) <<= (version, moduleName, hadoopVersion) map { (v, mName, hv) =>
+      s"${mName}-test-${v}.jar"
     },
     mergeStrategy in assembly := {
       case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
@@ -477,8 +518,8 @@ object Unidoc {
         "mllib.tree.impurity", "mllib.tree.model", "mllib.util",
         "mllib.evaluation", "mllib.feature", "mllib.random", "mllib.stat.correlation",
         "mllib.stat.test", "mllib.tree.impl", "mllib.tree.loss",
-        "ml", "ml.attribute", "ml.classification", "ml.evaluation", "ml.feature", "ml.param",
-        "ml.recommendation", "ml.regression", "ml.tuning"
+        "ml", "ml.attribute", "ml.classification", "ml.clustering", "ml.evaluation", "ml.feature",
+        "ml.param", "ml.recommendation", "ml.regression", "ml.tuning"
       ),
       "-group", "Spark SQL", packageList("sql.api.java", "sql.api.java.types", "sql.hive.api.java"),
       "-noqualifier", "java.lang"
@@ -505,6 +546,7 @@ object TestSettings {
     javaOptions in Test += "-Dspark.test.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dspark.port.maxRetries=100",
+    javaOptions in Test += "-Dspark.master.rest.enabled=false",
     javaOptions in Test += "-Dspark.ui.enabled=false",
     javaOptions in Test += "-Dspark.ui.showConsoleProgress=false",
     javaOptions in Test += "-Dspark.driver.allowMultipleContexts=true",

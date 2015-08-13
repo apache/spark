@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.apache.spark.sql.catalyst.expressions.{VirtualColumn, Attribute, AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, VirtualColumn}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.types.{ArrayType, DataType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
-  self: PlanType with Product =>
+  self: PlanType =>
 
   def output: Seq[Attribute]
 
@@ -92,7 +93,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
     val newArgs = productIterator.map(recursiveTransform).toArray
 
-    if (changed) makeCopy(newArgs) else this
+    if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
   }
 
   /**
@@ -124,7 +125,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
     val newArgs = productIterator.map(recursiveTransform).toArray
 
-    if (changed) makeCopy(newArgs) else this
+    if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
   }
 
   /** Returns the result of running [[transformExpressions]] on this node
@@ -154,7 +155,9 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def schemaString: String = schema.treeString
 
   /** Prints out the schema in the tree format */
+  // scalastyle:off println
   def printSchema(): Unit = println(schemaString)
+  // scalastyle:on println
 
   /**
    * A prefix string used when printing the plan.

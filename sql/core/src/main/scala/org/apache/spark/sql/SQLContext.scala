@@ -39,9 +39,11 @@ import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
-import org.apache.spark.sql.execution.{Filter, _}
-import org.apache.spark.sql.sources._
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -72,6 +74,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @return Spark SQL configuration
    */
   protected[sql] def conf = currentSession().conf
+
+  // `listener` should be only used in the driver
+  @transient private[sql] val listener = new SQLListener(this)
+  sparkContext.addSparkListener(listener)
+  sparkContext.ui.foreach(new SQLTab(this, _))
 
   /**
    * Set Spark SQL configuration properties.
@@ -139,19 +146,18 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   // TODO how to handle the temp function per user session?
   @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry =
-    new OverrideFunctionRegistry(FunctionRegistry.builtin)
+  protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         ExtractPythonUDFs ::
-        sources.PreInsertCastAndRename ::
+        PreInsertCastAndRename ::
         Nil
 
       override val extendedCheckRules = Seq(
-        sources.PreWriteCheck(catalog)
+        datasources.PreWriteCheck(catalog)
       )
     }
 
@@ -337,7 +343,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
      */
     implicit class StringToColumn(val sc: StringContext) {
       def $(args: Any*): ColumnName = {
-        new ColumnName(sc.s(args : _*))
+        new ColumnName(sc.s(args: _*))
       }
     }
 
@@ -555,8 +561,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val className = beanClass.getName
     val rowRdd = rdd.mapPartitions { iter =>
       // BeanInfo is not serializable so we must rediscover it remotely for each partition.
-      val localBeanInfo = Introspector.getBeanInfo(
-        Class.forName(className, true, Utils.getContextOrSparkClassLoader))
+      val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
       val extractors =
         localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
       val methodsToConverts = extractors.zip(attributeSeq).map { case (e, attr) =>
@@ -796,8 +801,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group ddl_ops
    * @since 1.3.0
    */
-  def table(tableName: String): DataFrame =
-    DataFrame(this, catalog.lookupRelation(Seq(tableName)))
+  def table(tableName: String): DataFrame = {
+    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    DataFrame(this, catalog.lookupRelation(tableIdent.toSeq))
+  }
 
   /**
    * Returns a [[DataFrame]] containing names of existing tables in the current database.
@@ -864,10 +871,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       DDLStrategy ::
       TakeOrderedAndProject ::
       HashAggregation ::
+      Aggregation ::
       LeftSemiJoin ::
-      HashJoin ::
+      EquiJoinSelection ::
       InMemoryScans ::
-      ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
       BroadcastNestedLoopJoin :: Nil)
@@ -923,12 +930,15 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[InternalRow], 1)
 
   /**
-   * Prepares a planned SparkPlan for execution by inserting shuffle operations as needed.
+   * Prepares a planned SparkPlan for execution by inserting shuffle operations and internal
+   * row format conversions as needed.
    */
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
-    val batches =
-      Batch("Add exchange", Once, EnsureRequirements(self)) :: Nil
+    val batches = Seq(
+      Batch("Add exchange", Once, EnsureRequirements(self)),
+      Batch("Add row converters", Once, EnsureRowFormats)
+    )
   }
 
   protected[sql] def openSession(): SQLSession = {
@@ -1001,9 +1011,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       def output =
         analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}").mkString(", ")
 
-      // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})
-      // however, the `toRdd` will cause the real execution, which is not what we want.
-      // We need to think about how to avoid the side effect.
       s"""== Parsed Logical Plan ==
          |${stringOrError(logical)}
          |== Analyzed Logical Plan ==
@@ -1014,7 +1021,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |== Physical Plan ==
          |${stringOrError(executedPlan)}
          |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
-         |== RDD ==
       """.stripMargin.trim
     }
   }
@@ -1045,33 +1051,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       rdd: RDD[Array[Any]],
       schema: StructType): DataFrame = {
 
-    def needsConversion(dataType: DataType): Boolean = dataType match {
-      case ByteType => true
-      case ShortType => true
-      case LongType => true
-      case FloatType => true
-      case DateType => true
-      case TimestampType => true
-      case StringType => true
-      case ArrayType(_, _) => true
-      case MapType(_, _, _) => true
-      case StructType(_) => true
-      case udt: UserDefinedType[_] => needsConversion(udt.sqlType)
-      case other => false
-    }
-
-    val convertedRdd = if (schema.fields.exists(f => needsConversion(f.dataType))) {
-      rdd.map(m => m.zip(schema.fields).map {
-        case (value, field) => EvaluatePython.fromJava(value, field.dataType)
-      })
-    } else {
-      rdd
-    }
-
-    val rowRdd = convertedRdd.mapPartitions { iter =>
-      iter.map { m => new GenericInternalRow(m): InternalRow}
-    }
-
+    val rowRdd = rdd.map(r => EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
     DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
@@ -1135,11 +1115,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def parquetFile(paths: String*): DataFrame = {
     if (paths.isEmpty) {
       emptyDataFrame
-    } else if (conf.parquetUseDataSourceApi) {
-      read.parquet(paths : _*)
     } else {
-      DataFrame(this, parquet.ParquetRelation(
-        paths.mkString(","), Some(sparkContext.hadoopConfiguration), this))
+      read.parquet(paths : _*)
     }
   }
 

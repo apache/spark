@@ -53,8 +53,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   private val amMemOverheadKey = "spark.yarn.am.memoryOverhead"
   private val driverCoresKey = "spark.driver.cores"
   private val amCoresKey = "spark.yarn.am.cores"
-  private val isDynamicAllocationEnabled =
-    sparkConf.getBoolean("spark.dynamicAllocation.enabled", false)
+  private val isDynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(sparkConf)
 
   parseArgs(args.toList)
   loadEnvironmentArgs()
@@ -123,6 +122,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       throw new SparkException("Executor cores must not be less than " +
         "spark.task.cpus.")
     }
+    // scalastyle:off println
     if (isClusterMode) {
       for (key <- Seq(amMemKey, amMemOverheadKey, amCoresKey)) {
         if (sparkConf.contains(key)) {
@@ -144,11 +144,13 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
         .map(_.toInt)
         .foreach { cores => amCores = cores }
     }
+    // scalastyle:on println
   }
 
   private def parseArgs(inputArgs: List[String]): Unit = {
     var args = inputArgs
 
+    // scalastyle:off println
     while (!args.isEmpty) {
       args match {
         case ("--jar") :: value :: tail =>
@@ -192,11 +194,6 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
         case ("--num-workers" | "--num-executors") :: IntParam(value) :: tail =>
           if (args(0) == "--num-workers") {
             println("--num-workers is deprecated. Use --num-executors instead.")
-          }
-          // Dynamic allocation is not compatible with this option
-          if (isDynamicAllocationEnabled) {
-            throw new IllegalArgumentException("Explicitly setting the number " +
-              "of executors is not compatible with spark.dynamicAllocation.enabled!")
           }
           numExecutors = value
           args = tail
@@ -253,6 +250,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           throw new IllegalArgumentException(getUsageMessage(args))
       }
     }
+    // scalastyle:on println
 
     if (primaryPyFile != null && primaryRFile != null) {
       throw new IllegalArgumentException("Cannot have primary-py-file and primary-r-file" +

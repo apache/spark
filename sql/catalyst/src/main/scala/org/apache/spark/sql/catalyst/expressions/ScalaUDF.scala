@@ -17,15 +17,21 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.types.DataType
 
 /**
  * User-defined function.
  * @param dataType  Return type of function.
  */
-case class ScalaUDF(function: AnyRef, dataType: DataType, children: Seq[Expression])
-  extends Expression {
+case class ScalaUDF(
+    function: AnyRef,
+    dataType: DataType,
+    children: Seq[Expression],
+    inputTypes: Seq[DataType] = Nil)
+  extends Expression with ImplicitCastInputTypes with CodegenFallback {
 
   override def nullable: Boolean = true
 

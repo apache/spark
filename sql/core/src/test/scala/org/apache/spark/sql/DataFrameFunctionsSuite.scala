@@ -160,7 +160,7 @@ class DataFrameFunctionsSuite extends QueryTest {
   test("misc md5 function") {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(
-      df.select(md5($"a"), md5("b")),
+      df.select(md5($"a"), md5($"b")),
       Row("902fbdd2b1df0c4f70b4a5d23525e932", "6ac1e56bc78f031059be7be854522c4c"))
 
     checkAnswer(
@@ -171,7 +171,7 @@ class DataFrameFunctionsSuite extends QueryTest {
   test("misc sha1 function") {
     val df = Seq(("ABC", "ABC".getBytes)).toDF("a", "b")
     checkAnswer(
-      df.select(sha1($"a"), sha1("b")),
+      df.select(sha1($"a"), sha1($"b")),
       Row("3c01bdbb26f358bab27f267924aa2c9a03fcfdb8", "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8"))
 
     val dfEmpty = Seq(("", "".getBytes)).toDF("a", "b")
@@ -183,7 +183,7 @@ class DataFrameFunctionsSuite extends QueryTest {
   test("misc sha2 function") {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(
-      df.select(sha2($"a", 256), sha2("b", 256)),
+      df.select(sha2($"a", 256), sha2($"b", 256)),
       Row("b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78",
         "7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89"))
 
@@ -200,7 +200,7 @@ class DataFrameFunctionsSuite extends QueryTest {
   test("misc crc32 function") {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(
-      df.select(crc32($"a"), crc32("b")),
+      df.select(crc32($"a"), crc32($"b")),
       Row(2743272264L, 2180413220L))
 
     checkAnswer(
@@ -208,21 +208,191 @@ class DataFrameFunctionsSuite extends QueryTest {
       Row(2743272264L, 2180413220L))
   }
 
-  test("string length function") {
-    checkAnswer(
-      nullStrings.select(strlen($"s"), strlen("s")),
-      nullStrings.collect().toSeq.map { r =>
-        val v = r.getString(1)
-        val l = if (v == null) null else v.length
-        Row(l, l)
-      })
+  test("string function find_in_set") {
+    val df = Seq(("abc,b,ab,c,def", "abc,b,ab,c,def")).toDF("a", "b")
 
     checkAnswer(
-      nullStrings.selectExpr("length(s)"),
-      nullStrings.collect().toSeq.map { r =>
-        val v = r.getString(1)
-        val l = if (v == null) null else v.length
-        Row(l)
-      })
+      df.selectExpr("find_in_set('ab', a)", "find_in_set('x', b)"),
+      Row(3, 0))
+  }
+
+  test("conditional function: least") {
+    checkAnswer(
+      testData2.select(least(lit(-1), lit(0), col("a"), col("b"))).limit(1),
+      Row(-1)
+    )
+    checkAnswer(
+      ctx.sql("SELECT least(a, 2) as l from testData2 order by l"),
+      Seq(Row(1), Row(1), Row(2), Row(2), Row(2), Row(2))
+    )
+  }
+
+  test("conditional function: greatest") {
+    checkAnswer(
+      testData2.select(greatest(lit(2), lit(3), col("a"), col("b"))).limit(1),
+      Row(3)
+    )
+    checkAnswer(
+      ctx.sql("SELECT greatest(a, 2) as g from testData2 order by g"),
+      Seq(Row(2), Row(2), Row(2), Row(2), Row(3), Row(3))
+    )
+  }
+
+  test("pmod") {
+    val intData = Seq((7, 3), (-7, 3)).toDF("a", "b")
+    checkAnswer(
+      intData.select(pmod('a, 'b)),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.select(pmod('a, lit(3))),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.select(pmod(lit(-7), 'b)),
+      Seq(Row(2), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(a, b)"),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(a, 3)"),
+      Seq(Row(1), Row(2))
+    )
+    checkAnswer(
+      intData.selectExpr("pmod(-7, b)"),
+      Seq(Row(2), Row(2))
+    )
+    val doubleData = Seq((7.2, 4.1)).toDF("a", "b")
+    checkAnswer(
+      doubleData.select(pmod('a, 'b)),
+      Seq(Row(3.1000000000000005)) // same as hive
+    )
+    checkAnswer(
+      doubleData.select(pmod(lit(2), lit(Int.MaxValue))),
+      Seq(Row(2))
+    )
+  }
+
+  test("sort_array function") {
+    val df = Seq(
+      (Array[Int](2, 1, 3), Array("b", "c", "a")),
+      (Array[Int](), Array[String]()),
+      (null, null)
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(sort_array($"a"), sort_array($"b")),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq[Int](), Seq[String]()),
+        Row(null, null))
+    )
+    checkAnswer(
+      df.select(sort_array($"a", false), sort_array($"b", false)),
+      Seq(
+        Row(Seq(3, 2, 1), Seq("c", "b", "a")),
+        Row(Seq[Int](), Seq[String]()),
+        Row(null, null))
+    )
+    checkAnswer(
+      df.selectExpr("sort_array(a)", "sort_array(b)"),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq[Int](), Seq[String]()),
+        Row(null, null))
+    )
+    checkAnswer(
+      df.selectExpr("sort_array(a, true)", "sort_array(b, false)"),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("c", "b", "a")),
+        Row(Seq[Int](), Seq[String]()),
+        Row(null, null))
+    )
+
+    val df2 = Seq((Array[Array[Int]](Array(2)), "x")).toDF("a", "b")
+    assert(intercept[AnalysisException] {
+      df2.selectExpr("sort_array(a)").collect()
+    }.getMessage().contains("does not support sorting array of type array<int>"))
+
+    val df3 = Seq(("xxx", "x")).toDF("a", "b")
+    assert(intercept[AnalysisException] {
+      df3.selectExpr("sort_array(a)").collect()
+    }.getMessage().contains("only supports array input"))
+  }
+
+  test("array size function") {
+    val df = Seq(
+      (Seq[Int](1, 2), "x"),
+      (Seq[Int](), "y"),
+      (Seq[Int](1, 2, 3), "z")
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(size($"a")),
+      Seq(Row(2), Row(0), Row(3))
+    )
+    checkAnswer(
+      df.selectExpr("size(a)"),
+      Seq(Row(2), Row(0), Row(3))
+    )
+  }
+
+  test("map size function") {
+    val df = Seq(
+      (Map[Int, Int](1 -> 1, 2 -> 2), "x"),
+      (Map[Int, Int](), "y"),
+      (Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3), "z")
+    ).toDF("a", "b")
+    checkAnswer(
+      df.select(size($"a")),
+      Seq(Row(2), Row(0), Row(3))
+    )
+    checkAnswer(
+      df.selectExpr("size(a)"),
+      Seq(Row(2), Row(0), Row(3))
+    )
+  }
+
+  test("array contains function") {
+    val df = Seq(
+      (Seq[Int](1, 2), "x"),
+      (Seq[Int](), "x")
+    ).toDF("a", "b")
+
+    // Simple test cases
+    checkAnswer(
+      df.select(array_contains(df("a"), 1)),
+      Seq(Row(true), Row(false))
+    )
+    checkAnswer(
+      df.selectExpr("array_contains(a, 1)"),
+      Seq(Row(true), Row(false))
+    )
+    checkAnswer(
+      df.select(array_contains(array(lit(2), lit(null)), 1)),
+      Seq(Row(false), Row(false))
+    )
+
+    // In hive, this errors because null has no type information
+    intercept[AnalysisException] {
+      df.select(array_contains(df("a"), null))
+    }
+    intercept[AnalysisException] {
+      df.selectExpr("array_contains(a, null)")
+    }
+    intercept[AnalysisException] {
+      df.selectExpr("array_contains(null, 1)")
+    }
+
+    // In hive, if either argument has a matching type has a null value, return false, even if
+    // the first argument array contains a null and the second argument is null
+    checkAnswer(
+      df.selectExpr("array_contains(array(array(1), null)[1], 1)"),
+      Seq(Row(false), Row(false))
+    )
+    checkAnswer(
+      df.selectExpr("array_contains(array(0, null), array(1, null)[1])"),
+      Seq(Row(false), Row(false))
+    )
   }
 }

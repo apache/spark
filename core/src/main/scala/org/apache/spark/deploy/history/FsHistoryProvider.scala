@@ -272,9 +272,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Replay the log files in the list and merge the list of old applications with new ones
    */
   private def mergeApplicationListing(logs: Seq[FileStatus]): Unit = {
-    val bus = new ReplayListenerBus()
     val newAttempts = logs.flatMap { fileStatus =>
       try {
+        val bus = new ReplayListenerBus()
         val res = replay(fileStatus, bus)
         res match {
           case Some(r) => logDebug(s"Application log ${r.logPath} loaded successfully.")
@@ -407,8 +407,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   /**
    * Comparison function that defines the sort order for application attempts within the same
-   * application. Order is: running attempts before complete attempts, running attempts sorted
-   * by start time, completed attempts sorted by end time.
+   * application. Order is: attempts are sorted by descending start time.
+   * Most recent attempt state matches with current state of the app.
    *
    * Normally applications should have a single running attempt; but failure to call sc.stop()
    * may cause multiple running attempts to show up.
@@ -418,11 +418,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private def compareAttemptInfo(
       a1: FsApplicationAttemptInfo,
       a2: FsApplicationAttemptInfo): Boolean = {
-    if (a1.completed == a2.completed) {
-      if (a1.completed) a1.endTime >= a2.endTime else a1.startTime >= a2.startTime
-    } else {
-      !a1.completed
-    }
+    a1.startTime >= a2.startTime
   }
 
   /**

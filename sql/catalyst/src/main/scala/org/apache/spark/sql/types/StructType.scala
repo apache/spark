@@ -24,7 +24,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, AttributeReference, Attribute, InterpretedOrdering$}
 
 
 /**
@@ -250,7 +250,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     builder.toString()
   }
 
+  // scalastyle:off println
   def printTreeString(): Unit = println(treeString)
+  // scalastyle:on println
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     fields.foreach(field => field.buildFormattedString(prefix, builder))
@@ -298,15 +300,23 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
     StructType(newFields)
   }
-}
 
+  private[sql] val interpretedOrdering = InterpretedOrdering.forSchema(this.fields.map(_.dataType))
+}
 
 object StructType extends AbstractDataType {
 
-  private[sql] override def defaultConcreteType: DataType = new StructType
+  override private[sql] def defaultConcreteType: DataType = new StructType
 
-  private[sql] override def isParentOf(childCandidate: DataType): Boolean = {
-    childCandidate.isInstanceOf[StructType]
+  override private[sql] def acceptsType(other: DataType): Boolean = {
+    other.isInstanceOf[StructType]
+  }
+
+  override private[sql] def simpleString: String = "struct"
+
+  private[sql] def fromString(raw: String): StructType = DataType.fromString(raw) match {
+    case t: StructType => t
+    case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
   }
 
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)

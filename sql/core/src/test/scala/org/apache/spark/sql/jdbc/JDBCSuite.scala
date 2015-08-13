@@ -25,7 +25,10 @@ import org.h2.jdbc.JdbcSQLException
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
+import org.apache.spark.sql.execution.PhysicalRDD
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
   val url = "jdbc:h2:mem:testdb0"
@@ -46,7 +49,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
   import ctx.sql
 
   before {
-    Class.forName("org.h2.Driver")
+    Utils.classForName("org.h2.Driver")
     // Extra properties that will be specified for our database. We need these to test
     // usage of parameters from OPTIONS clause in queries.
     val properties = new Properties()
@@ -133,7 +136,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
       """.stripMargin.replaceAll("\n", " "))
 
 
-    conn.prepareStatement("create table test.flttypes (a DOUBLE, b REAL, c DECIMAL(40, 20))"
+    conn.prepareStatement("create table test.flttypes (a DOUBLE, b REAL, c DECIMAL(38, 18))"
         ).executeUpdate()
     conn.prepareStatement("insert into test.flttypes values ("
       + "1.0000000000000002220446049250313080847263336181640625, "
@@ -147,11 +150,23 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
         |OPTIONS (url '$url', dbtable 'TEST.FLTTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
+    conn.prepareStatement("create table test.decimals (a DECIMAL(7, 2), b DECIMAL(4, 0))").
+      executeUpdate()
+    conn.prepareStatement("insert into test.decimals values (12345.67, 1234)").executeUpdate()
+    conn.prepareStatement("insert into test.decimals values (34567.89, 1428)").executeUpdate()
+    conn.commit()
+    sql(
+      s"""
+         |CREATE TEMPORARY TABLE decimals
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', dbtable 'TEST.DECIMALS', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
     conn.prepareStatement(
       s"""
         |create table test.nulltypes (a INT, b BOOLEAN, c TINYINT, d BINARY(20), e VARCHAR(20),
         |f VARCHAR_IGNORECASE(20), g CHAR(20), h BLOB, i CLOB, j TIME, k DATE, l TIMESTAMP,
-        |m DOUBLE, n REAL, o DECIMAL(40, 20))
+        |m DOUBLE, n REAL, o DECIMAL(38, 18))
       """.stripMargin.replaceAll("\n", " ")).executeUpdate()
     conn.prepareStatement("insert into test.nulltypes values ("
       + "null, null, null, null, null, null, null, null, null, "
@@ -326,7 +341,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
     assert(cal.get(Calendar.HOUR) === 11)
     assert(cal.get(Calendar.MINUTE) === 22)
     assert(cal.get(Calendar.SECOND) === 33)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543500)
+    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543000)
   }
 
   test("test DATE types") {
@@ -356,14 +371,14 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("H2 floating-point types") {
     val rows = sql("SELECT * FROM flttypes").collect()
-    assert(rows(0).getDouble(0) === 1.00000000000000022) // Yes, I meant ==.
-    assert(rows(0).getDouble(1) === 1.00000011920928955) // Yes, I meant ==.
-    assert(rows(0).getAs[BigDecimal](2)
-      .equals(new BigDecimal("123456789012345.54321543215432100000")))
-    assert(rows(0).schema.fields(2).dataType === DecimalType(40, 20))
-    val compareDecimal = sql("SELECT C FROM flttypes where C > C - 1").collect()
-    assert(compareDecimal(0).getAs[BigDecimal](0)
-      .equals(new BigDecimal("123456789012345.54321543215432100000")))
+    assert(rows(0).getDouble(0) === 1.00000000000000022)
+    assert(rows(0).getDouble(1) === 1.00000011920928955)
+    assert(rows(0).getAs[BigDecimal](2) ===
+      new BigDecimal("123456789012345.543215432154321000"))
+    assert(rows(0).schema.fields(2).dataType === DecimalType(38, 18))
+    val result = sql("SELECT C FROM flttypes where C > C - 1").collect()
+    assert(result(0).getAs[BigDecimal](0) ===
+      new BigDecimal("123456789012345.543215432154321000"))
   }
 
   test("SQL query as table name") {
@@ -444,4 +459,24 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
     assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
   }
 
+  test("SPARK-9182: filters are not passed through to jdbc source") {
+    def checkPushedFilter(query: String, filterStr: String): Unit = {
+      val rddOpt = sql(query).queryExecution.executedPlan.collectFirst {
+        case PhysicalRDD(_, rdd: JDBCRDD, _) => rdd
+      }
+      assert(rddOpt.isDefined)
+      val pushedFilterStr = rddOpt.get.filterWhereClause
+      assert(pushedFilterStr.contains(filterStr),
+        s"Expected to push [$filterStr], actually we pushed [$pushedFilterStr]")
+    }
+
+    checkPushedFilter("select * from foobar where NAME = 'fred'", "NAME = 'fred'")
+    checkPushedFilter("select * from inttypes where A > '15'", "A > 15")
+    checkPushedFilter("select * from inttypes where C <= 20", "C <= 20")
+    checkPushedFilter("select * from decimals where A > 1000", "A > 1000.00")
+    checkPushedFilter("select * from decimals where A > 1000 AND A < 2000",
+      "A > 1000.00 AND A < 2000.00")
+    checkPushedFilter("select * from decimals where A = 2000 AND B > 20", "A = 2000.00 AND B > 20")
+    checkPushedFilter("select * from timetypes where B > '1998-09-10'", "B > 1998-09-10")
+  }
 }
