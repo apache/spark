@@ -404,7 +404,26 @@ class DenseVector(Vector):
         return "DenseVector([%s])" % (', '.join(_format_float(i) for i in self.array))
 
     def __eq__(self, other):
-        return isinstance(other, DenseVector) and np.array_equal(self.array, other.array)
+        """
+        Test DenseVector for equality.
+
+        >>> v1 = DenseVector([0.0, 1.0, 0.0, 5.5])
+        >>> v2 = SparseVector(4, [(1, 1.0), (3, 5.5)])
+        >>> v1 == v2
+        True
+        >>> v1 != v2
+        False
+        >>> v3 = DenseVector([0.0, 1.0, 0.0, 5.5])
+        >>> v1 == v3
+        True
+        """
+        if isinstance(other, DenseVector):
+            return np.array_equal(self.array, other.array)
+        elif isinstance(other, SparseVector):
+            if len(self) != other.size:
+                return false
+            return Vectors.equals(list(xrange(len(self))), self.array, other.indices, other.values)
+        return NotImplemented
 
     def __ne__(self, other):
         return not self == other
@@ -713,11 +732,18 @@ class SparseVector(Vector):
         True
         >>> v1 != v2
         False
+        >>> v3 = DenseVector([0.0, 1.0, 0.0, 5.5])
+        >>> v1 == v3
+        True
         """
-        return (isinstance(other, self.__class__)
-                and other.size == self.size
-                and np.array_equal(other.indices, self.indices)
-                and np.array_equal(other.values, self.values))
+        if isinstance(other, SparseVector):
+            return other.size == self.size and np.array_equal(other.indices, self.indices) \
+                and np.array_equal(other.values, self.values)
+        elif isinstance(other, DenseVector):
+            if self.size != len(other):
+                return false
+            return Vectors.equals(self.indices, self.values, list(xrange(len(other))), other.array)
+        return NotImplemented
 
     def __getitem__(self, index):
         inds = self.indices
@@ -840,6 +866,41 @@ class Vectors(object):
     @staticmethod
     def zeros(size):
         return DenseVector(np.zeros(size))
+
+    @staticmethod
+    def equals(v1_indices, v1_values, v2_indices, v2_values):
+        """
+        Check equality between sparse/dense vectors
+
+        >>> indices = [1, 2, 4]
+        >>> values = [1., 3., 2.]
+        >>> Vectors.equals(indices, values, list(range(5)), [0., 1., 3., 0., 2.])
+        True
+        >>> Vectors.equals(indices, values, list(range(5)), [0., 3., 1., 0., 2.])
+        False
+        >>> Vectors.equals(indices, values, list(range(5)), [0., 3., 0., 2.])
+        False
+        >>> Vectors.equals(indices, values, list(range(5)), [0., 1., 3., 2., 2.])
+        False
+        """
+        v1_size = len(v1_values)
+        v2_size = len(v2_values)
+        k1 = 0
+        k2 = 0
+        all_equal = True
+        while all_equal:
+            while k1 < v1_size and v1_values[k1] == 0:
+                k1 += 1
+            while k2 < v2_size and v2_values[k2] == 0:
+                k2 += 1
+
+            if k1 >= v1_size or k2 >= v2_size:
+                return k1 >= v1_size and k2 >= v2_size
+
+            all_equal = v1_indices[k1] == v2_indices[k2] and v1_values[k1] == v2_values[k2]
+            k1 += 1
+            k2 += 1
+        return all_equal
 
 
 class Matrix(object):
