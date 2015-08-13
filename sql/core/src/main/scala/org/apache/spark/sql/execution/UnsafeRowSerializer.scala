@@ -108,6 +108,7 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
       override def asKeyValueIterator: Iterator[(Int, UnsafeRow)] = {
         new Iterator[(Int, UnsafeRow)] {
           private[this] var rowSize: Int = dIn.readInt()
+          if (rowSize == EOF) dIn.close()
 
           override def hasNext: Boolean = rowSize != EOF
 
@@ -119,6 +120,7 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
             row.pointTo(rowBuffer, Platform.BYTE_ARRAY_OFFSET, numFields, rowSize)
             rowSize = dIn.readInt() // read the next row's size
             if (rowSize == EOF) { // We are returning the last row in this stream
+              dIn.close()
               val _rowTuple = rowTuple
               // Null these out so that the byte array can be garbage collected once the entire
               // iterator has been consumed
