@@ -287,7 +287,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
   test("first_value and last_value") {
     // We force to use a single partition for the sort and aggregate to make result
     // deterministic.
-    withSQLConf(("spark.sql.shuffle.partitions", "1")) {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
       checkAnswer(
         sqlContext.sql(
           """
