@@ -392,7 +392,8 @@ class SparkHadoopUtil extends Logging {
       inputFormat: FileInputFormat[_, _],
       minSplits: Int): Unit = {
     val inputSplits = inputFormat.getSplits(jobConf, minSplits)
-    val groupedInputSplits = inputSplits.groupBy(_.asInstanceOf[FileSplit].getPath.getParent.toString)
+    val groupedInputSplits =
+      inputSplits.groupBy(_.asInstanceOf[FileSplit].getPath.getParent.toString)
     inputPaths.foreach { partitionPath =>
       var files: Array[InputSplit] = Array()
       groupedInputSplits.foreach { case (commonParentPath, array) =>
