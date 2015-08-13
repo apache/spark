@@ -707,7 +707,7 @@ private[spark] class TaskSetManager(
             s"${ef.className} (${ef.description}) [duplicate $dupCount]")
         }
 
-      case e: ExecutorForTaskExited =>
+      case e: ExecutorNormalExit =>
         logWarning(s"Task $tid failed because while it was being computed, its executor" +
           s" exited normally. Not marking the task as failed.")
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
@@ -722,9 +722,6 @@ private[spark] class TaskSetManager(
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
     addPendingTask(index)
     if (!isZombie && state != TaskState.KILLED && shouldTaskFailureEventuallyFailJob(reason)) {
-      // If a task failed because its attempt to commit was denied, do not count this failure
-      // towards failing the stage. This is intended to prevent spurious stage failures in cases
-      // where many speculative tasks are launched and denied to commit.
       assert (null != failureReason)
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
@@ -738,8 +735,18 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
+  /**
+   * Determine if this task failure reason should count towards failing the job. All tasks which
+   * end prematurely should be counted as failures that should kill a job except:
+   *
+   * 1. The task fails because its attempt to commit was denied, preventing spurious stage failures
+   *    in cases where many speculative tasks are launched and denied to commit, and
+   *
+   * 2. A task failed because its executor exited normally before completing the task. For example,
+   *    the cluster manager may have asked the executor to release its resources and shut down.
+   */
   private def shouldTaskFailureEventuallyFailJob(reason: TaskEndReason): Boolean = {
-    !reason.isInstanceOf[TaskCommitDenied] && !reason.isInstanceOf[ExecutorForTaskExited]
+    !reason.isInstanceOf[TaskCommitDenied] && !reason.isInstanceOf[ExecutorNormalExit]
   }
 
   def abort(message: String): Unit = sched.synchronized {
@@ -816,7 +823,7 @@ private[spark] class TaskSetManager(
       // Also re-enqueue any tasks that were running on the node
       val executorFailureReason = reason match {
         case exited: ExecutorExitedNormally =>
-          ExecutorForTaskExited(tid, execId, exited.reason, exited.exitCode)
+          ExecutorNormalExit(execId, exited.reason, exited.exitCode)
         case default => ExecutorLostFailure(execId)
       }
       handleFailedTask(tid, TaskState.FAILED, executorFailureReason)

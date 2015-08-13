@@ -103,14 +103,29 @@ private[spark] abstract class YarnSchedulerBackend(
     private val handleDisconnectedExecutorThreadPool =
       ThreadUtils.newDaemonCachedThreadPool("yarn-driver-handle-lost-executor-thread-pool")
 
+    /**
+     * When onDisconnected is received at the driver endpoint, the superclass DriverEndpoint
+     * handles it by assuming the Executor was lost for a bad reason and removes the executor
+     * immediately.
+     *
+     * In YARN's case however it is crucial to talk to the application master and ask why the
+     * executor had exited. In particular, the executor may have exited due to the executor
+     * having been preempted. If the executor "exited normally" according to the application
+     * master then we pass that information down to the TaskSetManager to inform the
+     * TaskSetManager that tasks on that lost executor should not count towards a job failure.
+     */
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       addressToExecutorId.get(rpcAddress).foreach({ executorId =>
         pendingDisconnectedExecutors.synchronized {
+          // onDisconnected could be fired multiple times from the same executor while we're
+          // asynchronously contacting the AM. So keep track of the executors we're trying to
+          // find loss reasons for and don't duplicate the work
           if (!pendingDisconnectedExecutors.contains(executorId)) {
             pendingDisconnectedExecutors.add(executorId)
             handleDisconnectedExecutorThreadPool.submit(new Runnable() {
               override def run(): Unit = {
                 val executorLossReason =
+                // Check for the loss reason and pass the loss reason to driverEndpoint
                   yarnSchedulerEndpoint.askWithRetry[Option[ExecutorLossReason]](
                       GetExecutorLossReason(executorId))
                 executorLossReason match {

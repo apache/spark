@@ -173,14 +173,13 @@ case class ExecutorLostFailure(execId: String) extends TaskFailedReason {
  * behavior.
  */
 @DeveloperApi
-case class ExecutorForTaskExited(
-    taskId: Long,
+case class ExecutorNormalExit(
     execId: String,
     exitReason: String,
     exitCode: Int)
-    extends TaskFailedReason {
-  override def toErrorString: String = s"Task with ID $taskId had its executor ${execId}" +
-    s" exit normally with exit code $exitCode, due to the following reason: $exitReason."
+  extends TaskFailedReason {
+  override def toErrorString: String = s"Task had its executor ${execId}" +
+    s" exit normally with exit code $exitCode:\n$exitReason"
 }
 
 /**
