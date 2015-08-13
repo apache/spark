@@ -68,9 +68,9 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed):
     initSteps = Param(Params._dummy(), "initSteps", "steps for k-means initialization mode")
 
     @keyword_only
-    def __init__(self, k=2, maxIter=20, epsilon=1e-4, initMode="k-means||", initStep=5):
+    def __init__(self, k=2, maxIter=20, epsilon=1e-4, initMode="k-means||", initSteps=5):
         """
-        __init__(self, k=2, maxIter=20, epsilon=1e-4, initMode="k-means||", initStep=5)
+        __init__(self, k=2, maxIter=20, epsilon=1e-4, initMode="k-means||", initSteps=5)
         """
         super(KMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)

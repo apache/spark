@@ -27,7 +27,6 @@ import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.util.Utils
 
 
 /**
@@ -124,9 +123,9 @@ class KMeansModel private[ml] (
 
 /**
  * :: Experimental ::
- * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
- * mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
- * they are executed together with joint passes over the data for efficiency.
+ * K-means clustering with support for k-means|| initialization proposed by Bahmani et al.
+ *
+ * @see [[http://dx.doi.org/10.14778/2180912.2180915 Bahmani et al., Scalable k-means++]]
  */
 @Experimental
 class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMeansParams {
