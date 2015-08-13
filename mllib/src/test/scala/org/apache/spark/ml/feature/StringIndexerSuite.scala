@@ -20,6 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -37,6 +38,10 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("label")
       .setOutputCol("labelIndex")
       .fit(df)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(indexer)
+
     val transformed = indexer.transform(df)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
