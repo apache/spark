@@ -98,10 +98,11 @@ object FiltersPushed {
 }
 
 class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
+  protected override lazy val sql = caseInsensitiveContext.sql _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    caseInsensitiveContext.sql(
+    sql(
       """
         |CREATE TEMPORARY TABLE oneToTenFiltered
         |USING org.apache.spark.sql.sources.FilteredScanSource
@@ -238,7 +239,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
 
   def testPushDown(sqlString: String, expectedCount: Int): Unit = {
     test(s"PushDown Returns $expectedCount: $sqlString") {
-      val queryExecution = caseInsensitiveContext.sql(sqlString).queryExecution
+      val queryExecution = sql(sqlString).queryExecution
       val rawPlan = queryExecution.executedPlan.collect {
         case p: execution.PhysicalRDD => p
       } match {

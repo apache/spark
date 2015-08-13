@@ -41,7 +41,7 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContex
       Row("ListTablesSuiteTable", true))
 
     checkAnswer(
-      ctx.sql("SHOW tables").filter("tableName = 'ListTablesSuiteTable'"),
+      sql("SHOW tables").filter("tableName = 'ListTablesSuiteTable'"),
       Row("ListTablesSuiteTable", true))
 
     ctx.catalog.unregisterTable(Seq("ListTablesSuiteTable"))
@@ -54,7 +54,7 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContex
       Row("ListTablesSuiteTable", true))
 
     checkAnswer(
-      ctx.sql("show TABLES in DB").filter("tableName = 'ListTablesSuiteTable'"),
+      sql("show TABLES in DB").filter("tableName = 'ListTablesSuiteTable'"),
       Row("ListTablesSuiteTable", true))
 
     ctx.catalog.unregisterTable(Seq("ListTablesSuiteTable"))
@@ -66,13 +66,13 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContex
       StructField("tableName", StringType, false) ::
       StructField("isTemporary", BooleanType, false) :: Nil)
 
-    Seq(ctx.tables(), ctx.sql("SHOW TABLes")).foreach {
+    Seq(ctx.tables(), sql("SHOW TABLes")).foreach {
       case tableDF =>
         assert(expectedSchema === tableDF.schema)
 
         tableDF.registerTempTable("tables")
         checkAnswer(
-          ctx.sql(
+          sql(
             "SELECT isTemporary, tableName from tables WHERE tableName = 'ListTablesSuiteTable'"),
           Row(true, "ListTablesSuiteTable")
         )

@@ -66,25 +66,25 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-1678 regression: compression must not lose repeated values") {
     checkAnswer(
-      ctx.sql("SELECT * FROM repeatedData"),
+      sql("SELECT * FROM repeatedData"),
       repeatedData.collect().toSeq.map(Row.fromTuple))
 
     ctx.cacheTable("repeatedData")
 
     checkAnswer(
-      ctx.sql("SELECT * FROM repeatedData"),
+      sql("SELECT * FROM repeatedData"),
       repeatedData.collect().toSeq.map(Row.fromTuple))
   }
 
   test("with null values") {
     checkAnswer(
-      ctx.sql("SELECT * FROM nullableRepeatedData"),
+      sql("SELECT * FROM nullableRepeatedData"),
       nullableRepeatedData.collect().toSeq.map(Row.fromTuple))
 
     ctx.cacheTable("nullableRepeatedData")
 
     checkAnswer(
-      ctx.sql("SELECT * FROM nullableRepeatedData"),
+      sql("SELECT * FROM nullableRepeatedData"),
       nullableRepeatedData.collect().toSeq.map(Row.fromTuple))
   }
 
@@ -93,25 +93,25 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     timestamps.registerTempTable("timestamps")
 
     checkAnswer(
-      ctx.sql("SELECT time FROM timestamps"),
+      sql("SELECT time FROM timestamps"),
       timestamps.collect().toSeq)
 
     ctx.cacheTable("timestamps")
 
     checkAnswer(
-      ctx.sql("SELECT time FROM timestamps"),
+      sql("SELECT time FROM timestamps"),
       timestamps.collect().toSeq)
   }
 
   test("SPARK-3320 regression: batched column buffer building should work with empty partitions") {
     checkAnswer(
-      ctx.sql("SELECT * FROM withEmptyParts"),
+      sql("SELECT * FROM withEmptyParts"),
       withEmptyParts.collect().toSeq.map(Row.fromTuple))
 
     ctx.cacheTable("withEmptyParts")
 
     checkAnswer(
-      ctx.sql("SELECT * FROM withEmptyParts"),
+      sql("SELECT * FROM withEmptyParts"),
       withEmptyParts.collect().toSeq.map(Row.fromTuple))
   }
 
@@ -133,7 +133,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
     df.cache().registerTempTable("test_fixed_decimal")
     checkAnswer(
-      ctx.sql("SELECT * FROM test_fixed_decimal"),
+      sql("SELECT * FROM test_fixed_decimal"),
       (1 to 10).map(i => Row(Decimal(i, 15, 10).toJavaBigDecimal)))
   }
 
@@ -179,7 +179,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       }
     ctx.createDataFrame(rdd, schema).registerTempTable("InMemoryCache_different_data_types")
     // Cache the table.
-    ctx.sql("cache table InMemoryCache_different_data_types")
+    sql("cache table InMemoryCache_different_data_types")
     // Make sure the table is indeed cached.
     val tableScan = ctx.table("InMemoryCache_different_data_types").queryExecution.executedPlan
     assert(
@@ -187,7 +187,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       "InMemoryCache_different_data_types should be cached.")
     // Issue a query and check the results.
     checkAnswer(
-      ctx.sql(s"SELECT DISTINCT ${allColumns} FROM InMemoryCache_different_data_types"),
+      sql(s"SELECT DISTINCT ${allColumns} FROM InMemoryCache_different_data_types"),
       ctx.table("InMemoryCache_different_data_types").collect())
     ctx.dropTempTable("InMemoryCache_different_data_types")
   }

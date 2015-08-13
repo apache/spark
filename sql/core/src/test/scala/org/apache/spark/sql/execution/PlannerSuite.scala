@@ -91,7 +91,7 @@ class PlannerSuite extends SparkFunSuite with SharedSQLContext {
       val rowRDD = ctx.sparkContext.parallelize(row :: Nil)
       ctx.createDataFrame(rowRDD, schema).registerTempTable("testLimit")
 
-      val planned = ctx.sql(
+      val planned = sql(
         """
           |SELECT l.a, l.b
           |FROM testData2 l JOIN (SELECT * FROM testLimit LIMIT 1) r ON (l.a = r.key)
@@ -146,7 +146,7 @@ class PlannerSuite extends SparkFunSuite with SharedSQLContext {
     ctx.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 81920)
 
     testData.limit(3).registerTempTable("tiny")
-    ctx.sql("CACHE TABLE tiny")
+    sql("CACHE TABLE tiny")
 
     val a = testData.as("a")
     val b = ctx.table("tiny").as("b")
@@ -176,7 +176,7 @@ class PlannerSuite extends SparkFunSuite with SharedSQLContext {
       // Disable broadcast join
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         {
-          val numExchanges = ctx.sql(
+          val numExchanges = sql(
             """
               |SELECT *
               |FROM
@@ -191,7 +191,7 @@ class PlannerSuite extends SparkFunSuite with SharedSQLContext {
 
         {
           // This second query joins on different keys:
-          val numExchanges = ctx.sql(
+          val numExchanges = sql(
             """
               |SELECT *
               |FROM

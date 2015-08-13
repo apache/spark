@@ -68,9 +68,9 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
 
   test("cache temp table") {
     testData.select('key).registerTempTable("tempTable")
-    assertCached(ctx.sql("SELECT COUNT(*) FROM tempTable"), 0)
+    assertCached(sql("SELECT COUNT(*) FROM tempTable"), 0)
     ctx.cacheTable("tempTable")
-    assertCached(ctx.sql("SELECT COUNT(*) FROM tempTable"))
+    assertCached(sql("SELECT COUNT(*) FROM tempTable"))
     ctx.uncacheTable("tempTable")
   }
 
@@ -89,8 +89,8 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
   }
 
   test("cache table as select") {
-    ctx.sql("CACHE TABLE tempTable AS SELECT key FROM testData")
-    assertCached(ctx.sql("SELECT COUNT(*) FROM tempTable"))
+    sql("CACHE TABLE tempTable AS SELECT key FROM testData")
+    assertCached(sql("SELECT COUNT(*) FROM tempTable"))
     ctx.uncacheTable("tempTable")
   }
 
@@ -99,14 +99,14 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
     testData.select('key).registerTempTable("tempTable2")
     ctx.cacheTable("tempTable1")
 
-    assertCached(ctx.sql("SELECT COUNT(*) FROM tempTable1"))
-    assertCached(ctx.sql("SELECT COUNT(*) FROM tempTable2"))
+    assertCached(sql("SELECT COUNT(*) FROM tempTable1"))
+    assertCached(sql("SELECT COUNT(*) FROM tempTable2"))
 
     // Is this valid?
     ctx.uncacheTable("tempTable2")
 
     // Should this be cached?
-    assertCached(ctx.sql("SELECT COUNT(*) FROM tempTable1"), 0)
+    assertCached(sql("SELECT COUNT(*) FROM tempTable1"), 0)
   }
 
   test("too big for memory") {
@@ -187,26 +187,26 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SELECT star from cached table") {
-    ctx.sql("SELECT * FROM testData").registerTempTable("selectStar")
+    sql("SELECT * FROM testData").registerTempTable("selectStar")
     ctx.cacheTable("selectStar")
     checkAnswer(
-      ctx.sql("SELECT * FROM selectStar WHERE key = 1"),
+      sql("SELECT * FROM selectStar WHERE key = 1"),
       Seq(Row(1, "1")))
     ctx.uncacheTable("selectStar")
   }
 
   test("Self-join cached") {
     val unCachedAnswer =
-      ctx.sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key").collect()
+      sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key").collect()
     ctx.cacheTable("testData")
     checkAnswer(
-      ctx.sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key"),
+      sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key"),
       unCachedAnswer.toSeq)
     ctx.uncacheTable("testData")
   }
 
   test("'CACHE TABLE' and 'UNCACHE TABLE' SQL statement") {
-    ctx.sql("CACHE TABLE testData")
+    sql("CACHE TABLE testData")
     assertCached(ctx.table("testData"))
 
     val rddId = rddIdOf("testData")
@@ -214,7 +214,7 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
       isMaterialized(rddId),
       "Eagerly cached in-memory table should have already been materialized")
 
-    ctx.sql("UNCACHE TABLE testData")
+    sql("UNCACHE TABLE testData")
     assert(!ctx.isCached("testData"), "Table 'testData' should not be cached")
 
     eventually(timeout(10 seconds)) {
@@ -223,7 +223,7 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
   }
 
   test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {
-    ctx.sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")
+    sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")
     assertCached(ctx.table("testCacheTable"))
 
     val rddId = rddIdOf("testCacheTable")
@@ -238,7 +238,7 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
   }
 
   test("CACHE TABLE tableName AS SELECT ...") {
-    ctx.sql("CACHE TABLE testCacheTable AS SELECT key FROM testData LIMIT 10")
+    sql("CACHE TABLE testCacheTable AS SELECT key FROM testData LIMIT 10")
     assertCached(ctx.table("testCacheTable"))
 
     val rddId = rddIdOf("testCacheTable")
@@ -253,7 +253,7 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
   }
 
   test("CACHE LAZY TABLE tableName") {
-    ctx.sql("CACHE LAZY TABLE testData")
+    sql("CACHE LAZY TABLE testData")
     assertCached(ctx.table("testData"))
 
     val rddId = rddIdOf("testData")
@@ -261,7 +261,7 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
       !isMaterialized(rddId),
       "Lazily cached in-memory table shouldn't be materialized eagerly")
 
-    ctx.sql("SELECT COUNT(*) FROM testData").collect()
+    sql("SELECT COUNT(*) FROM testData").collect()
     assert(
       isMaterialized(rddId),
       "Lazily cached in-memory table should have been materialized")
@@ -273,7 +273,7 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
   }
 
   test("InMemoryRelation statistics") {
-    ctx.sql("CACHE TABLE testData")
+    sql("CACHE TABLE testData")
     ctx.table("testData").queryExecution.withCachedData.collect {
       case cached: InMemoryRelation =>
         val actualSizeInBytes = (1 to 100).map(i => INT.defaultSize + i.toString.length + 4).sum
@@ -302,32 +302,32 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Clear all cache") {
-    ctx.sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
-    ctx.sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
+    sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
+    sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
     ctx.cacheTable("t1")
     ctx.cacheTable("t2")
     ctx.clearCache()
     assert(ctx.cacheManager.isEmpty)
 
-    ctx.sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
-    ctx.sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
+    sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
+    sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
     ctx.cacheTable("t1")
     ctx.cacheTable("t2")
-    ctx.sql("Clear CACHE")
+    sql("Clear CACHE")
     assert(ctx.cacheManager.isEmpty)
   }
 
   test("Clear accumulators when uncacheTable to prevent memory leaking") {
-    ctx.sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
-    ctx.sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
+    sql("SELECT key FROM testData LIMIT 10").registerTempTable("t1")
+    sql("SELECT key FROM testData LIMIT 5").registerTempTable("t2")
 
     ctx.cacheTable("t1")
     ctx.cacheTable("t2")
 
-    ctx.sql("SELECT * FROM t1").count()
-    ctx.sql("SELECT * FROM t2").count()
-    ctx.sql("SELECT * FROM t1").count()
-    ctx.sql("SELECT * FROM t2").count()
+    sql("SELECT * FROM t1").count()
+    sql("SELECT * FROM t2").count()
+    sql("SELECT * FROM t1").count()
+    sql("SELECT * FROM t2").count()
 
     Accumulators.synchronized {
       val accsSize = Accumulators.originals.size

@@ -107,7 +107,7 @@ class PartitionBatchPruningSuite extends SparkFunSuite with SharedSQLContext {
       expectedQueryResult: => Seq[Int]): Unit = {
 
     test(query) {
-      val df = ctx.sql(query)
+      val df = sql(query)
       val queryExecution = df.queryExecution
 
       assertResult(expectedQueryResult.toArray, s"Wrong query result: $queryExecution") {

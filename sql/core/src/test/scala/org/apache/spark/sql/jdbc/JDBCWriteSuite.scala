@@ -56,14 +56,14 @@ class JDBCWriteSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLCon
       "create table test.people1 (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
     conn1.commit()
 
-    ctx.sql(
+    sql(
       s"""
         |CREATE TEMPORARY TABLE PEOPLE
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url1', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
-    ctx.sql(
+    sql(
       s"""
         |CREATE TEMPORARY TABLE PEOPLE1
         |USING org.apache.spark.sql.jdbc
@@ -142,14 +142,14 @@ class JDBCWriteSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLCon
   }
 
   test("INSERT to JDBC Datasource") {
-    ctx.sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
+    sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
     assert(2 === ctx.read.jdbc(url1, "TEST.PEOPLE1", properties).count)
     assert(2 === ctx.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
   }
 
   test("INSERT to JDBC Datasource with overwrite") {
-    ctx.sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
-    ctx.sql("INSERT OVERWRITE TABLE PEOPLE1 SELECT * FROM PEOPLE")
+    sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
+    sql("INSERT OVERWRITE TABLE PEOPLE1 SELECT * FROM PEOPLE")
     assert(2 === ctx.read.jdbc(url1, "TEST.PEOPLE1", properties).count)
     assert(2 === ctx.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
   }

@@ -27,6 +27,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+  protected override lazy val sql = caseInsensitiveContext.sql _
   private lazy val sparkContext = caseInsensitiveContext.sparkContext
   private var originalDefaultSource: String = null
   private var path: File = null
@@ -70,7 +71,7 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
     val schema = StructType(StructField("b", StringType, true) :: Nil)
     checkAnswer(
       caseInsensitiveContext.read.format("json").schema(schema).load(path.toString),
-      caseInsensitiveContext.sql(s"SELECT b FROM $tbl").collect())
+      sql(s"SELECT b FROM $tbl").collect())
   }
 
   test("save with path and load") {

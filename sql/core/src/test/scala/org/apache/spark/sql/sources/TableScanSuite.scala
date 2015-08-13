@@ -97,6 +97,8 @@ case class AllDataTypesScan(
 }
 
 class TableScanSuite extends DataSourceTest with SharedSQLContext {
+  protected override lazy val sql = caseInsensitiveContext.sql _
+
   private lazy val tableWithSchemaExpected = (1 to 10).map { i =>
     Row(
       s"str_$i",
@@ -123,7 +125,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    caseInsensitiveContext.sql(
+    sql(
       """
         |CREATE TEMPORARY TABLE oneToTen
         |USING org.apache.spark.sql.sources.SimpleScanSource
@@ -135,7 +137,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
         |)
       """.stripMargin)
 
-    caseInsensitiveContext.sql(
+    sql(
       """
         |CREATE TEMPORARY TABLE tableWithSchema (
         |`string$%Field` stRIng,
@@ -230,7 +232,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
     assert(expectedSchema == caseInsensitiveContext.table("tableWithSchema").schema)
 
     checkAnswer(
-      caseInsensitiveContext.sql(
+      sql(
         """SELECT
           | `string$%Field`,
           | cast(binaryField as string),
@@ -283,39 +285,39 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
   test("Caching")  {
     // Cached Query Execution
     caseInsensitiveContext.cacheTable("oneToTen")
-    assertCached(caseInsensitiveContext.sql("SELECT * FROM oneToTen"))
+    assertCached(sql("SELECT * FROM oneToTen"))
     checkAnswer(
-      caseInsensitiveContext.sql("SELECT * FROM oneToTen"),
+      sql("SELECT * FROM oneToTen"),
       (1 to 10).map(Row(_)).toSeq)
 
-    assertCached(caseInsensitiveContext.sql("SELECT i FROM oneToTen"))
+    assertCached(sql("SELECT i FROM oneToTen"))
     checkAnswer(
-      caseInsensitiveContext.sql("SELECT i FROM oneToTen"),
+      sql("SELECT i FROM oneToTen"),
       (1 to 10).map(Row(_)).toSeq)
 
-    assertCached(caseInsensitiveContext.sql("SELECT i FROM oneToTen WHERE i < 5"))
+    assertCached(sql("SELECT i FROM oneToTen WHERE i < 5"))
     checkAnswer(
-      caseInsensitiveContext.sql("SELECT i FROM oneToTen WHERE i < 5"),
+      sql("SELECT i FROM oneToTen WHERE i < 5"),
       (1 to 4).map(Row(_)).toSeq)
 
-    assertCached(caseInsensitiveContext.sql("SELECT i * 2 FROM oneToTen"))
+    assertCached(sql("SELECT i * 2 FROM oneToTen"))
     checkAnswer(
-      caseInsensitiveContext.sql("SELECT i * 2 FROM oneToTen"),
+      sql("SELECT i * 2 FROM oneToTen"),
       (1 to 10).map(i => Row(i * 2)).toSeq)
 
-    assertCached(caseInsensitiveContext.sql(
+    assertCached(sql(
       "SELECT a.i, b.i FROM oneToTen a JOIN oneToTen b ON a.i = b.i + 1"), 2)
-    checkAnswer(caseInsensitiveContext.sql(
+    checkAnswer(sql(
       "SELECT a.i, b.i FROM oneToTen a JOIN oneToTen b ON a.i = b.i + 1"),
       (2 to 10).map(i => Row(i, i - 1)).toSeq)
 
     // Verify uncaching
     caseInsensitiveContext.uncacheTable("oneToTen")
-    assertCached(caseInsensitiveContext.sql("SELECT * FROM oneToTen"), 0)
+    assertCached(sql("SELECT * FROM oneToTen"), 0)
   }
 
   test("defaultSource") {
-    caseInsensitiveContext.sql(
+    sql(
       """
         |CREATE TEMPORARY TABLE oneToTenDef
         |USING org.apache.spark.sql.sources
@@ -326,7 +328,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
       """.stripMargin)
 
     checkAnswer(
-      caseInsensitiveContext.sql("SELECT * FROM oneToTenDef"),
+      sql("SELECT * FROM oneToTenDef"),
       (1 to 10).map(Row(_)).toSeq)
   }
 
@@ -334,7 +336,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
     // Make sure we do throw correct exception when users use a relation provider that
     // only implements the RelationProvier or the SchemaRelationProvider.
     val schemaNotAllowed = intercept[Exception] {
-      caseInsensitiveContext.sql(
+      sql(
         """
           |CREATE TEMPORARY TABLE relationProvierWithSchema (i int)
           |USING org.apache.spark.sql.sources.SimpleScanSource
@@ -347,7 +349,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
     assert(schemaNotAllowed.getMessage.contains("does not allow user-specified schemas"))
 
     val schemaNeeded = intercept[Exception] {
-      caseInsensitiveContext.sql(
+      sql(
         """
           |CREATE TEMPORARY TABLE schemaRelationProvierWithoutSchema
           |USING org.apache.spark.sql.sources.AllDataTypesScanSource
@@ -361,7 +363,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
   }
 
   test("SPARK-5196 schema field with comment") {
-    caseInsensitiveContext.sql(
+    sql(
       """
        |CREATE TEMPORARY TABLE student(name string comment "SN", age int comment "SA", grade int)
        |USING org.apache.spark.sql.sources.AllDataTypesScanSource
@@ -373,7 +375,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
        |)
        """.stripMargin)
 
-       val planned = caseInsensitiveContext.sql("SELECT * FROM student").queryExecution.executedPlan
+       val planned = sql("SELECT * FROM student").queryExecution.executedPlan
        val comments = planned.schema.fields.map { field =>
          if (field.metadata.contains("comment")) field.metadata.getString("comment")
          else "NO_COMMENT"

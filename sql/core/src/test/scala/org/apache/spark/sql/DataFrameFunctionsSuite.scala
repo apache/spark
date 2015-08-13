@@ -117,11 +117,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("constant functions") {
     checkAnswer(
-      ctx.sql("SELECT E()"),
+      sql("SELECT E()"),
       Row(scala.math.E)
     )
     checkAnswer(
-      ctx.sql("SELECT PI()"),
+      sql("SELECT PI()"),
       Row(scala.math.Pi)
     )
   }
@@ -151,7 +151,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("nvl function") {
     checkAnswer(
-      ctx.sql("SELECT nvl(null, 'x'), nvl('y', 'x'), nvl(null, null)"),
+      sql("SELECT nvl(null, 'x'), nvl('y', 'x'), nvl(null, null)"),
       Row("x", "y", null))
   }
 
@@ -220,7 +220,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(-1)
     )
     checkAnswer(
-      ctx.sql("SELECT least(a, 2) as l from testData2 order by l"),
+      sql("SELECT least(a, 2) as l from testData2 order by l"),
       Seq(Row(1), Row(1), Row(2), Row(2), Row(2), Row(2))
     )
   }
@@ -231,7 +231,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(3)
     )
     checkAnswer(
-      ctx.sql("SELECT greatest(a, 2) as g from testData2 order by g"),
+      sql("SELECT greatest(a, 2) as g from testData2 order by g"),
       Seq(Row(2), Row(2), Row(2), Row(2), Row(3), Row(3))
     )
   }

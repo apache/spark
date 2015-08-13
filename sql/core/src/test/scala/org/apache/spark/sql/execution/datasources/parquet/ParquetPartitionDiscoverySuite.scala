@@ -282,7 +282,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
       withTempTable("t") {
         checkAnswer(
-          ctx.sql("SELECT * FROM t"),
+          sql("SELECT * FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -290,7 +290,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
-          ctx.sql("SELECT intField, pi FROM t"),
+          sql("SELECT intField, pi FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -298,14 +298,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           } yield Row(i, pi))
 
         checkAnswer(
-          ctx.sql("SELECT * FROM t WHERE pi = 1"),
+          sql("SELECT * FROM t WHERE pi = 1"),
           for {
             i <- 1 to 10
             ps <- Seq("foo", "bar")
           } yield Row(i, i.toString, 1, ps))
 
         checkAnswer(
-          ctx.sql("SELECT * FROM t WHERE ps = 'foo'"),
+          sql("SELECT * FROM t WHERE ps = 'foo'"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -329,7 +329,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
       withTempTable("t") {
         checkAnswer(
-          ctx.sql("SELECT * FROM t"),
+          sql("SELECT * FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -337,7 +337,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           } yield Row(i, pi, i.toString, ps))
 
         checkAnswer(
-          ctx.sql("SELECT intField, pi FROM t"),
+          sql("SELECT intField, pi FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -345,14 +345,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           } yield Row(i, pi))
 
         checkAnswer(
-          ctx.sql("SELECT * FROM t WHERE pi = 1"),
+          sql("SELECT * FROM t WHERE pi = 1"),
           for {
             i <- 1 to 10
             ps <- Seq("foo", "bar")
           } yield Row(i, 1, i.toString, ps))
 
         checkAnswer(
-          ctx.sql("SELECT * FROM t WHERE ps = 'foo'"),
+          sql("SELECT * FROM t WHERE ps = 'foo'"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -378,7 +378,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
       withTempTable("t") {
         checkAnswer(
-          ctx.sql("SELECT * FROM t"),
+          sql("SELECT * FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, null.asInstanceOf[Integer])
@@ -386,14 +386,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
-          ctx.sql("SELECT * FROM t WHERE pi IS NULL"),
+          sql("SELECT * FROM t WHERE pi IS NULL"),
           for {
             i <- 1 to 10
             ps <- Seq("foo", null.asInstanceOf[String])
           } yield Row(i, i.toString, null, ps))
 
         checkAnswer(
-          ctx.sql("SELECT * FROM t WHERE ps IS NULL"),
+          sql("SELECT * FROM t WHERE ps IS NULL"),
           for {
             i <- 1 to 10
             pi <- Seq(1, null.asInstanceOf[Integer])
@@ -418,7 +418,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
       withTempTable("t") {
         checkAnswer(
-          ctx.sql("SELECT * FROM t"),
+          sql("SELECT * FROM t"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -426,7 +426,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           } yield Row(i, pi, i.toString, ps))
 
         checkAnswer(
-          ctx.sql("SELECT * FROM t WHERE ps IS NULL"),
+          sql("SELECT * FROM t WHERE ps IS NULL"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
@@ -454,7 +454,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
       withTempTable("t") {
         checkAnswer(
-          ctx.sql("SELECT * FROM t"),
+          sql("SELECT * FROM t"),
           (1 to 10).map(i => Row(i, null, 1)) ++ (1 to 10).map(i => Row(i, i.toString, 2)))
       }
     }

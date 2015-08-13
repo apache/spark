@@ -28,6 +28,7 @@ import org.apache.spark.util.Utils
 
 
 class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+  protected override lazy val sql = caseInsensitiveContext.sql _
   private lazy val sparkContext = caseInsensitiveContext.sparkContext
   private var path: File = null
 
@@ -51,7 +52,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT") {
-    caseInsensitiveContext.sql(
+    sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
         |USING json
@@ -62,8 +63,8 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
       """.stripMargin)
 
     checkAnswer(
-      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable"),
-      caseInsensitiveContext.sql("SELECT a, b FROM jt").collect())
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt").collect())
 
     caseInsensitiveContext.dropTempTable("jsonTable")
   }
@@ -75,7 +76,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
     path.setWritable(false)
 
     val e = intercept[IOException] {
-      caseInsensitiveContext.sql(
+      sql(
         s"""
            |CREATE TEMPORARY TABLE jsonTable
            |USING json
@@ -84,7 +85,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
            |) AS
            |SELECT a, b FROM jt
         """.stripMargin)
-      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable").collect()
+      sql("SELECT a, b FROM jsonTable").collect()
     }
     assert(e.getMessage().contains("Unable to clear output directory"))
 
@@ -92,7 +93,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
   }
 
   test("create a table, drop it and create another one with the same name") {
-    caseInsensitiveContext.sql(
+    sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
         |USING json
@@ -103,11 +104,11 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
       """.stripMargin)
 
     checkAnswer(
-      caseInsensitiveContext.sql("SELECT a, b FROM jsonTable"),
-      caseInsensitiveContext.sql("SELECT a, b FROM jt").collect())
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a, b FROM jt").collect())
 
     val message = intercept[DDLException]{
-      caseInsensitiveContext.sql(
+      sql(
         s"""
         |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
         |USING json
@@ -122,7 +123,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
       "CREATE TEMPORARY TABLE IF NOT EXISTS should not be allowed.")
 
     // Overwrite the temporary table.
-    caseInsensitiveContext.sql(
+    sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
         |USING json
@@ -132,14 +133,14 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
         |SELECT a * 4 FROM jt
       """.stripMargin)
     checkAnswer(
-      caseInsensitiveContext.sql("SELECT * FROM jsonTable"),
-      caseInsensitiveContext.sql("SELECT a * 4 FROM jt").collect())
+      sql("SELECT * FROM jsonTable"),
+      sql("SELECT a * 4 FROM jt").collect())
 
     caseInsensitiveContext.dropTempTable("jsonTable")
     // Explicitly delete the data.
     if (path.exists()) Utils.deleteRecursively(path)
 
-    caseInsensitiveContext.sql(
+    sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
         |USING json
@@ -150,15 +151,15 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
       """.stripMargin)
 
     checkAnswer(
-      caseInsensitiveContext.sql("SELECT * FROM jsonTable"),
-      caseInsensitiveContext.sql("SELECT b FROM jt").collect())
+      sql("SELECT * FROM jsonTable"),
+      sql("SELECT b FROM jt").collect())
 
     caseInsensitiveContext.dropTempTable("jsonTable")
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT with IF NOT EXISTS is not allowed") {
     val message = intercept[DDLException]{
-      caseInsensitiveContext.sql(
+      sql(
         s"""
         |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
         |USING json
@@ -175,7 +176,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
 
   test("a CTAS statement with column definitions is not allowed") {
     intercept[DDLException]{
-      caseInsensitiveContext.sql(
+      sql(
         s"""
         |CREATE TEMPORARY TABLE jsonTable (a int, b string)
         |USING json
@@ -188,7 +189,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
   }
 
   test("it is not allowed to write to a table while querying it.") {
-    caseInsensitiveContext.sql(
+    sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
         |USING json
@@ -199,7 +200,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
       """.stripMargin)
 
     val message = intercept[AnalysisException] {
-      caseInsensitiveContext.sql(
+      sql(
         s"""
         |CREATE TEMPORARY TABLE jsonTable
         |USING json

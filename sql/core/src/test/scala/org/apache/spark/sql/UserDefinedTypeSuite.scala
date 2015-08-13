@@ -93,7 +93,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext {
     ctx.udf.register("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
     pointsRDD.registerTempTable("points")
     checkAnswer(
-      ctx.sql("SELECT testType(features) from points"),
+      sql("SELECT testType(features) from points"),
       Seq(Row(true), Row(true)))
   }
 

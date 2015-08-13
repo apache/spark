@@ -36,7 +36,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   def assertJoin(sqlString: String, c: Class[_]): Any = {
-    val df = ctx.sql(sqlString)
+    val df = sql(sqlString)
     val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
       case j: ShuffledHashJoin => j
@@ -119,7 +119,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
   test("broadcasted hash join operator selection") {
     ctx.cacheManager.clearCache()
-    ctx.sql("CACHE TABLE testData")
+    sql("CACHE TABLE testData")
     for (sortMergeJoinEnabled <- Seq(true, false)) {
       withClue(s"sortMergeJoinEnabled=$sortMergeJoinEnabled") {
         withSQLConf(SQLConf.SORTMERGE_JOIN.key -> s"$sortMergeJoinEnabled") {
@@ -134,12 +134,12 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         }
       }
     }
-    ctx.sql("UNCACHE TABLE testData")
+    sql("UNCACHE TABLE testData")
   }
 
   test("broadcasted hash outer join operator selection") {
     ctx.cacheManager.clearCache()
-    ctx.sql("CACHE TABLE testData")
+    sql("CACHE TABLE testData")
     withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true") {
       Seq(
         ("SELECT * FROM testData LEFT JOIN testData2 ON key = a",
@@ -160,7 +160,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           classOf[BroadcastHashOuterJoin])
       ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     }
-    ctx.sql("UNCACHE TABLE testData")
+    sql("UNCACHE TABLE testData")
   }
 
   test("multiple-key equi-join is hash-join") {
@@ -272,7 +272,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     // Make sure we are choosing left.outputPartitioning as the
     // outputPartitioning for the outer join operator.
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |SELECT l.N, count(*)
           |FROM upperCaseData l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
@@ -286,7 +286,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(6, 1) :: Nil)
 
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |SELECT r.a, count(*)
           |FROM upperCaseData l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
@@ -332,7 +332,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     // Make sure we are choosing right.outputPartitioning as the
     // outputPartitioning for the outer join operator.
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |SELECT l.a, count(*)
           |FROM allNulls l RIGHT OUTER JOIN upperCaseData r ON (l.a = r.N)
@@ -341,7 +341,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       Row(null, 6))
 
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |SELECT r.N, count(*)
           |FROM allNulls l RIGHT OUTER JOIN upperCaseData r ON (l.a = r.N)
@@ -393,7 +393,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
     // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join operator.
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |SELECT l.a, count(*)
           |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
@@ -402,7 +402,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       Row(null, 10))
 
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |SELECT r.N, count(*)
           |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
@@ -417,7 +417,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(null, 4) :: Nil)
 
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |SELECT l.N, count(*)
           |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
@@ -432,7 +432,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(null, 4) :: Nil)
 
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |SELECT r.a, count(*)
           |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
@@ -443,7 +443,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
   test("broadcasted left semi join operator selection") {
     ctx.cacheManager.clearCache()
-    ctx.sql("CACHE TABLE testData")
+    sql("CACHE TABLE testData")
 
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000000000") {
       Seq(
@@ -462,11 +462,11 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       }
     }
 
-    ctx.sql("UNCACHE TABLE testData")
+    sql("UNCACHE TABLE testData")
   }
 
   test("left semi join") {
-    val df = ctx.sql("SELECT * FROM testData2 LEFT SEMI JOIN testData ON key = a")
+    val df = sql("SELECT * FROM testData2 LEFT SEMI JOIN testData ON key = a")
     checkAnswer(df,
       Row(1, 1) ::
         Row(1, 2) ::

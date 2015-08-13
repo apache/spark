@@ -36,14 +36,14 @@ private[sql] trait SQLTestData { self =>
 
   // Note: all test data should be lazy because the SQLContext is not set up yet.
 
-  lazy val testData: DataFrame = {
+  protected lazy val testData: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       (1 to 100).map(i => TestData(i, i.toString))).toDF()
     df.registerTempTable("testData")
     df
   }
 
-  lazy val testData2: DataFrame = {
+  protected lazy val testData2: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       TestData2(1, 1) ::
       TestData2(1, 2) ::
@@ -55,7 +55,7 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
-  lazy val testData3: DataFrame = {
+  protected lazy val testData3: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       TestData3(1, None) ::
       TestData3(2, Some(2)) :: Nil).toDF()
@@ -63,14 +63,14 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
-  lazy val negativeData: DataFrame = {
+  protected lazy val negativeData: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       (1 to 100).map(i => TestData(-i, (-i).toString))).toDF()
     df.registerTempTable("negativeData")
     df
   }
 
-  lazy val largeAndSmallInts: DataFrame = {
+  protected lazy val largeAndSmallInts: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       LargeAndSmallInts(2147483644, 1) ::
       LargeAndSmallInts(1, 2) ::
@@ -82,7 +82,7 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
-  lazy val decimalData: DataFrame = {
+  protected lazy val decimalData: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       DecimalData(1, 1) ::
       DecimalData(1, 2) ::
@@ -94,7 +94,7 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
-  lazy val binaryData: DataFrame = {
+  protected lazy val binaryData: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       BinaryData("12".getBytes, 1) ::
       BinaryData("22".getBytes, 5) ::
@@ -105,7 +105,7 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
-  lazy val upperCaseData: DataFrame = {
+  protected lazy val upperCaseData: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       UpperCaseData(1, "A") ::
       UpperCaseData(2, "B") ::
@@ -117,7 +117,7 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
-  lazy val lowerCaseData: DataFrame = {
+  protected lazy val lowerCaseData: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       LowerCaseData(1, "a") ::
       LowerCaseData(2, "b") ::
@@ -127,7 +127,7 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
-  lazy val arrayData: RDD[ArrayData] = {
+  protected lazy val arrayData: RDD[ArrayData] = {
     val rdd = _sqlContext.sparkContext.parallelize(
       ArrayData(Seq(1, 2, 3), Seq(Seq(1, 2, 3))) ::
       ArrayData(Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
@@ -135,7 +135,7 @@ private[sql] trait SQLTestData { self =>
     rdd
   }
 
-  lazy val mapData: RDD[MapData] = {
+  protected lazy val mapData: RDD[MapData] = {
     val rdd = _sqlContext.sparkContext.parallelize(
       MapData(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
       MapData(Map(1 -> "a2", 2 -> "b2", 3 -> "c2", 4 -> "d2")) ::
@@ -146,13 +146,13 @@ private[sql] trait SQLTestData { self =>
     rdd
   }
 
-  lazy val repeatedData: RDD[StringData] = {
+  protected lazy val repeatedData: RDD[StringData] = {
     val rdd = _sqlContext.sparkContext.parallelize(List.fill(2)(StringData("test")))
     rdd.toDF().registerTempTable("repeatedData")
     rdd
   }
 
-  lazy val nullableRepeatedData: RDD[StringData] = {
+  protected lazy val nullableRepeatedData: RDD[StringData] = {
     val rdd = _sqlContext.sparkContext.parallelize(
       List.fill(2)(StringData(null)) ++
       List.fill(2)(StringData("test")))
@@ -160,7 +160,7 @@ private[sql] trait SQLTestData { self =>
     rdd
   }
 
-  lazy val nullInts: DataFrame = {
+  protected lazy val nullInts: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       NullInts(1) ::
       NullInts(2) ::
@@ -170,7 +170,7 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
-  lazy val allNulls: DataFrame = {
+  protected lazy val allNulls: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       NullInts(null) ::
       NullInts(null) ::
@@ -180,7 +180,7 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
-  lazy val nullStrings: DataFrame = {
+  protected lazy val nullStrings: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       NullStrings(1, "abc") ::
       NullStrings(2, "ABC") ::
@@ -189,13 +189,13 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
-  lazy val tableName: DataFrame = {
+  protected lazy val tableName: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(TableName("test") :: Nil).toDF()
     df.registerTempTable("tableName")
     df
   }
 
-  lazy val unparsedStrings: RDD[String] = {
+  protected lazy val unparsedStrings: RDD[String] = {
     _sqlContext.sparkContext.parallelize(
       "1, A1, true, null" ::
       "2, B2, false, null" ::
@@ -204,13 +204,13 @@ private[sql] trait SQLTestData { self =>
   }
 
   // An RDD with 4 elements and 8 partitions
-  lazy val withEmptyParts: RDD[IntField] = {
+  protected lazy val withEmptyParts: RDD[IntField] = {
     val rdd = _sqlContext.sparkContext.parallelize((1 to 4).map(IntField), 8)
     rdd.toDF().registerTempTable("withEmptyParts")
     rdd
   }
 
-  lazy val person: DataFrame = {
+  protected lazy val person: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       Person(0, "mike", 30) ::
       Person(1, "jim", 20) :: Nil).toDF()
@@ -218,7 +218,7 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
-  lazy val salary: DataFrame = {
+  protected lazy val salary: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       Salary(0, 2000.0) ::
       Salary(1, 1000.0) :: Nil).toDF()
@@ -226,7 +226,7 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
-  lazy val complexData: DataFrame = {
+  protected lazy val complexData: DataFrame = {
     val df = _sqlContext.sparkContext.parallelize(
       ComplexData(Map("1" -> 1), TestData(1, "1"), Seq(1, 1, 1), true) ::
       ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2, 2, 2), false) ::

@@ -262,7 +262,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
 
     checkAnswer(
-      ctx.sql("select isnull(null), isnull(1)"),
+      sql("select isnull(null), isnull(1)"),
       Row(true, false))
   }
 
@@ -272,7 +272,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
 
     checkAnswer(
-      ctx.sql("select isnotnull(null), isnotnull('a')"),
+      sql("select isnotnull(null), isnotnull('a')"),
       Row(false, true))
   }
 
@@ -293,7 +293,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
     checkAnswer(
-      ctx.sql("select isnan(15), isnan('invalid')"),
+      sql("select isnan(15), isnan('invalid')"),
       Row(false, false))
   }
 
@@ -313,7 +313,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     )
     testData.registerTempTable("t")
     checkAnswer(
-      ctx.sql(
+      sql(
         "select nanvl(a, 5), nanvl(b, 10), nanvl(10, b), nanvl(c, null), nanvl(d, 10), " +
           " nanvl(b, e), nanvl(e, f) from t"),
       Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
@@ -520,7 +520,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     )
 
     checkAnswer(
-      ctx.sql("SELECT upper('aB'), ucase('cDe')"),
+      sql("SELECT upper('aB'), ucase('cDe')"),
       Row("AB", "CDE"))
   }
 
@@ -541,7 +541,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     )
 
     checkAnswer(
-      ctx.sql("SELECT lower('aB'), lcase('cDe')"),
+      sql("SELECT lower('aB'), lcase('cDe')"),
       Row("ab", "cde"))
   }
 

@@ -51,6 +51,9 @@ private[sql] trait SQLTestUtils
   // Whether to materialize all test data before the first test is run
   private var loadTestDataBeforeTests = false
 
+  // Shorthand for running a query using our SQLContext
+  protected lazy val sql = _sqlContext.sql _
+
   /**
    * A helper object for importing SQL implicits.
    *

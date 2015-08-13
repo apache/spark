@@ -228,7 +228,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
-      ctx.sql("select nullstr, headers.Host from jsonTable"),
+      sql("select nullstr, headers.Host from jsonTable"),
       Seq(Row("", "1.abc.com"), Row("", null), Row("", null), Row(null, null))
     )
   }
@@ -250,7 +250,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
-      ctx.sql("select * from jsonTable"),
+      sql("select * from jsonTable"),
       Row(new java.math.BigDecimal("92233720368547758070"),
         true,
         1.7976931348623157E308,
@@ -292,45 +292,44 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     // Access elements of a primitive array.
     checkAnswer(
-      ctx.sql("select arrayOfString[0], arrayOfString[1], arrayOfString[2] from jsonTable"),
+      sql("select arrayOfString[0], arrayOfString[1], arrayOfString[2] from jsonTable"),
       Row("str1", "str2", null)
     )
 
     // Access an array of null values.
     checkAnswer(
-      ctx.sql("select arrayOfNull from jsonTable"),
+      sql("select arrayOfNull from jsonTable"),
       Row(Seq(null, null, null, null))
     )
 
     // Access elements of a BigInteger array (we use DecimalType internally).
     checkAnswer(
-      ctx.sql(
-        "select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] from jsonTable"),
+      sql("select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] from jsonTable"),
       Row(new java.math.BigDecimal("922337203685477580700"),
         new java.math.BigDecimal("-922337203685477580800"), null)
     )
 
     // Access elements of an array of arrays.
     checkAnswer(
-      ctx.sql("select arrayOfArray1[0], arrayOfArray1[1] from jsonTable"),
+      sql("select arrayOfArray1[0], arrayOfArray1[1] from jsonTable"),
       Row(Seq("1", "2", "3"), Seq("str1", "str2"))
     )
 
     // Access elements of an array of arrays.
     checkAnswer(
-      ctx.sql("select arrayOfArray2[0], arrayOfArray2[1] from jsonTable"),
+      sql("select arrayOfArray2[0], arrayOfArray2[1] from jsonTable"),
       Row(Seq(1.0, 2.0, 3.0), Seq(1.1, 2.1, 3.1))
     )
 
     // Access elements of an array inside a filed with the type of ArrayType(ArrayType).
     checkAnswer(
-      ctx.sql("select arrayOfArray1[1][1], arrayOfArray2[1][1] from jsonTable"),
+      sql("select arrayOfArray1[1][1], arrayOfArray2[1][1] from jsonTable"),
       Row("str2", 2.1)
     )
 
     // Access elements of an array of structs.
     checkAnswer(
-      ctx.sql("select arrayOfStruct[0], arrayOfStruct[1], arrayOfStruct[2], arrayOfStruct[3] " +
+      sql("select arrayOfStruct[0], arrayOfStruct[1], arrayOfStruct[2], arrayOfStruct[3] " +
         "from jsonTable"),
       Row(
         Row(true, "str1", null),
@@ -341,7 +340,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     // Access a struct and fields inside of it.
     checkAnswer(
-      ctx.sql("select struct, struct.field1, struct.field2 from jsonTable"),
+      sql("select struct, struct.field1, struct.field2 from jsonTable"),
       Row(
         Row(true, new java.math.BigDecimal("92233720368547758070")),
         true,
@@ -350,14 +349,13 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     // Access an array field of a struct.
     checkAnswer(
-      ctx.sql("select structWithArrayFields.field1, structWithArrayFields.field2 from jsonTable"),
+      sql("select structWithArrayFields.field1, structWithArrayFields.field2 from jsonTable"),
       Row(Seq(4, 5, 6), Seq("str1", "str2"))
     )
 
     // Access elements of an array field of a struct.
     checkAnswer(
-      ctx.sql(
-        "select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from jsonTable"),
+      sql("select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from jsonTable"),
       Row(5, null)
     )
   }
@@ -367,13 +365,13 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
-      ctx.sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
+      sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
       Row(true, "str1")
     )
 
     // Getting all values of a specific field from an array of structs.
     checkAnswer(
-      ctx.sql("select arrayOfStruct.field1, arrayOfStruct.field2 from jsonTable"),
+      sql("select arrayOfStruct.field1, arrayOfStruct.field2 from jsonTable"),
       Row(Seq(true, false, null), Seq("str1", null, null))
     )
   }
@@ -394,7 +392,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
-      ctx.sql("select * from jsonTable"),
+      sql("select * from jsonTable"),
       Row("true", 11L, null, 1.1, "13.1", "str1") ::
         Row("12", null, 21474836470.9, null, null, "true") ::
         Row("false", 21474836470L, 92233720368547758070d, 100, "str1", "false") ::
@@ -403,49 +401,49 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     // Number and Boolean conflict: resolve the type as number in this query.
     checkAnswer(
-      ctx.sql("select num_bool - 10 from jsonTable where num_bool > 11"),
+      sql("select num_bool - 10 from jsonTable where num_bool > 11"),
       Row(2)
     )
 
     // Widening to LongType
     checkAnswer(
-      ctx.sql("select num_num_1 - 100 from jsonTable where num_num_1 > 11"),
+      sql("select num_num_1 - 100 from jsonTable where num_num_1 > 11"),
       Row(21474836370L) :: Row(21474836470L) :: Nil
     )
 
     checkAnswer(
-      ctx.sql("select num_num_1 - 100 from jsonTable where num_num_1 > 10"),
+      sql("select num_num_1 - 100 from jsonTable where num_num_1 > 10"),
       Row(-89) :: Row(21474836370L) :: Row(21474836470L) :: Nil
     )
 
     // Widening to DecimalType
     checkAnswer(
-      ctx.sql("select num_num_2 + 1.3 from jsonTable where num_num_2 > 1.1"),
+      sql("select num_num_2 + 1.3 from jsonTable where num_num_2 > 1.1"),
       Row(21474836472.2) ::
         Row(92233720368547758071.3) :: Nil
     )
 
     // Widening to Double
     checkAnswer(
-      ctx.sql("select num_num_3 + 1.2 from jsonTable where num_num_3 > 1.1"),
+      sql("select num_num_3 + 1.2 from jsonTable where num_num_3 > 1.1"),
       Row(101.2) :: Row(21474836471.2) :: Nil
     )
 
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
-      ctx.sql("select num_str + 1.2 from jsonTable where num_str > 14"),
+      sql("select num_str + 1.2 from jsonTable where num_str > 14"),
       Row(BigDecimal("92233720368547758071.2"))
     )
 
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
-      ctx.sql("select num_str + 1.2 from jsonTable where num_str >= 92233720368547758060"),
+      sql("select num_str + 1.2 from jsonTable where num_str >= 92233720368547758060"),
       Row(new java.math.BigDecimal("92233720368547758071.2"))
     )
 
     // String and Boolean conflict: resolve the type as string.
     checkAnswer(
-      ctx.sql("select * from jsonTable where str_bool = 'str1'"),
+      sql("select * from jsonTable where str_bool = 'str1'"),
       Row("true", 11L, null, 1.1, "13.1", "str1")
     )
   }
@@ -457,24 +455,24 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     // Right now, the analyzer does not promote strings in a boolean expression.
     // Number and Boolean conflict: resolve the type as boolean in this query.
     checkAnswer(
-      ctx.sql("select num_bool from jsonTable where NOT num_bool"),
+      sql("select num_bool from jsonTable where NOT num_bool"),
       Row(false)
     )
 
     checkAnswer(
-      ctx.sql("select str_bool from jsonTable where NOT str_bool"),
+      sql("select str_bool from jsonTable where NOT str_bool"),
       Row(false)
     )
 
     // Right now, the analyzer does not know that num_bool should be treated as a boolean.
     // Number and Boolean conflict: resolve the type as boolean in this query.
     checkAnswer(
-      ctx.sql("select num_bool from jsonTable where num_bool"),
+      sql("select num_bool from jsonTable where num_bool"),
       Row(true)
     )
 
     checkAnswer(
-      ctx.sql("select str_bool from jsonTable where str_bool"),
+      sql("select str_bool from jsonTable where str_bool"),
       Row(false)
     )
 
@@ -498,7 +496,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     // which is not 14.3.
     // Number and String conflict: resolve the type as number in this query.
     checkAnswer(
-      ctx.sql("select num_str + 1.2 from jsonTable where num_str > 13"),
+      sql("select num_str + 1.2 from jsonTable where num_str > 13"),
       Row(BigDecimal("14.3")) :: Row(BigDecimal("92233720368547758071.2")) :: Nil
     )
   }
@@ -519,7 +517,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
-      ctx.sql("select * from jsonTable"),
+      sql("select * from jsonTable"),
       Row(Seq(), "11", "[1,2,3]", Row(null), "[]") ::
         Row(null, """{"field":false}""", null, null, "{}") ::
         Row(Seq(4, 5, 6), null, "str", Row(null), "[7,8,9]") ::
@@ -541,7 +539,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
-      ctx.sql("select * from jsonTable"),
+      sql("select * from jsonTable"),
       Row(Seq("1", "1.1", "true", null, "[]", "{}", "[2,3,4]",
         """{"field":"str"}"""), Seq(Row(214748364700L), Row(1)), null) ::
       Row(null, null, Seq("""{"field":"str"}""", """{"field":1}""")) ::
@@ -550,7 +548,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     // Treat an element as a number.
     checkAnswer(
-      ctx.sql("select array1[0] + 1 from jsonTable where array1 is not null"),
+      sql("select array1[0] + 1 from jsonTable where array1 is not null"),
       Row(2)
     )
   }
@@ -621,7 +619,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
-      ctx.sql("select * from jsonTable"),
+      sql("select * from jsonTable"),
       Row(new java.math.BigDecimal("92233720368547758070"),
       true,
       1.7976931348623157E308,
@@ -638,7 +636,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val path = dir.getCanonicalPath
     primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
 
-    ctx.sql(
+    sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTableSQL
         |USING org.apache.spark.sql.json
@@ -648,7 +646,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       """.stripMargin)
 
     checkAnswer(
-      ctx.sql("select * from jsonTableSQL"),
+      sql("select * from jsonTableSQL"),
       Row(new java.math.BigDecimal("92233720368547758070"),
         true,
         1.7976931348623157E308,
@@ -681,7 +679,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonDF1.registerTempTable("jsonTable1")
 
     checkAnswer(
-      ctx.sql("select * from jsonTable1"),
+      sql("select * from jsonTable1"),
       Row(new java.math.BigDecimal("92233720368547758070"),
       true,
       1.7976931348623157E308,
@@ -698,7 +696,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonDF2.registerTempTable("jsonTable2")
 
     checkAnswer(
-      ctx.sql("select * from jsonTable2"),
+      sql("select * from jsonTable2"),
       Row(new java.math.BigDecimal("92233720368547758070"),
       true,
       1.7976931348623157E308,
@@ -717,7 +715,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonWithSimpleMap.registerTempTable("jsonWithSimpleMap")
 
     checkAnswer(
-      ctx.sql("select map from jsonWithSimpleMap"),
+      sql("select map from jsonWithSimpleMap"),
       Row(Map("a" -> 1)) ::
       Row(Map("b" -> 2)) ::
       Row(Map("c" -> 3)) ::
@@ -726,7 +724,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
 
     checkAnswer(
-      ctx.sql("select map['c'] from jsonWithSimpleMap"),
+      sql("select map['c'] from jsonWithSimpleMap"),
       Row(null) ::
       Row(null) ::
       Row(3) ::
@@ -745,7 +743,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonWithComplexMap.registerTempTable("jsonWithComplexMap")
 
     checkAnswer(
-      ctx.sql("select map from jsonWithComplexMap"),
+      sql("select map from jsonWithComplexMap"),
       Row(Map("a" -> Row(Seq(1, 2, 3, null), null))) ::
       Row(Map("b" -> Row(null, 2))) ::
       Row(Map("c" -> Row(Seq(), 4))) ::
@@ -755,7 +753,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
 
     checkAnswer(
-      ctx.sql("select map['a'].field1, map['c'].field2 from jsonWithComplexMap"),
+      sql("select map['a'].field1, map['c'].field2 from jsonWithComplexMap"),
       Row(Seq(1, 2, 3, null), null) ::
       Row(null, null) ::
       Row(null, 4) ::
@@ -770,11 +768,11 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
-      ctx.sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
+      sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
       Row(true, "str1")
     )
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |select complexArrayOfStruct[0].field1[1].inner2[0], complexArrayOfStruct[1].field2[0][1]
           |from jsonTable
@@ -788,7 +786,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |select arrayOfArray1[0][0][0], arrayOfArray1[1][0][1], arrayOfArray1[1][1][0]
           |from jsonTable
@@ -796,7 +794,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       Row(5, 7, 8)
     )
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |select arrayOfArray2[0][0][0].inner1, arrayOfArray2[1][0],
           |arrayOfArray2[1][1][1].inner2[0], arrayOfArray2[2][0][0].inner3[0][0].inner4
@@ -811,7 +809,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonDF.registerTempTable("jsonTable")
 
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |select a, b, c
           |from jsonTable
@@ -841,7 +839,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     // In HiveContext, backticks should be used to access columns starting with a underscore.
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |SELECT a, b, c, _unparsed
           |FROM jsonTable
@@ -855,7 +853,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
 
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |SELECT a, b, c
           |FROM jsonTable
@@ -865,7 +863,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
 
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |SELECT _unparsed
           |FROM jsonTable
@@ -900,7 +898,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(schema === jsonDF.schema)
 
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |SELECT field1, field2, field3, field4
           |FROM jsonTable
@@ -963,7 +961,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val primTable = ctx.read.json(jsonDF.toJSON)
     primTable.registerTempTable("primativeTable")
     checkAnswer(
-        ctx.sql("select * from primativeTable"),
+        sql("select * from primativeTable"),
       Row(new java.math.BigDecimal("92233720368547758070"),
         true,
         1.7976931348623157E308,
@@ -977,19 +975,19 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     compTable.registerTempTable("complexTable")
     // Access elements of a primitive array.
     checkAnswer(
-      ctx.sql("select arrayOfString[0], arrayOfString[1], arrayOfString[2] from complexTable"),
+      sql("select arrayOfString[0], arrayOfString[1], arrayOfString[2] from complexTable"),
       Row("str1", "str2", null)
     )
 
     // Access an array of null values.
     checkAnswer(
-      ctx.sql("select arrayOfNull from complexTable"),
+      sql("select arrayOfNull from complexTable"),
       Row(Seq(null, null, null, null))
     )
 
     // Access elements of a BigInteger array (we use DecimalType internally).
     checkAnswer(
-      ctx.sql("select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] " +
+      sql("select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] " +
         " from complexTable"),
       Row(new java.math.BigDecimal("922337203685477580700"),
         new java.math.BigDecimal("-922337203685477580800"), null)
@@ -997,25 +995,25 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     // Access elements of an array of arrays.
     checkAnswer(
-      ctx.sql("select arrayOfArray1[0], arrayOfArray1[1] from complexTable"),
+      sql("select arrayOfArray1[0], arrayOfArray1[1] from complexTable"),
       Row(Seq("1", "2", "3"), Seq("str1", "str2"))
     )
 
     // Access elements of an array of arrays.
     checkAnswer(
-      ctx.sql("select arrayOfArray2[0], arrayOfArray2[1] from complexTable"),
+      sql("select arrayOfArray2[0], arrayOfArray2[1] from complexTable"),
       Row(Seq(1.0, 2.0, 3.0), Seq(1.1, 2.1, 3.1))
     )
 
     // Access elements of an array inside a filed with the type of ArrayType(ArrayType).
     checkAnswer(
-      ctx.sql("select arrayOfArray1[1][1], arrayOfArray2[1][1] from complexTable"),
+      sql("select arrayOfArray1[1][1], arrayOfArray2[1][1] from complexTable"),
       Row("str2", 2.1)
     )
 
     // Access a struct and fields inside of it.
     checkAnswer(
-      ctx.sql("select struct, struct.field1, struct.field2 from complexTable"),
+      sql("select struct, struct.field1, struct.field2 from complexTable"),
       Row(
         Row(true, new java.math.BigDecimal("92233720368547758070")),
         true,
@@ -1024,14 +1022,13 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     // Access an array field of a struct.
     checkAnswer(
-      ctx.sql(
-        "select structWithArrayFields.field1, structWithArrayFields.field2 from complexTable"),
+      sql("select structWithArrayFields.field1, structWithArrayFields.field2 from complexTable"),
       Row(Seq(4, 5, 6), Seq("str1", "str2"))
     )
 
     // Access elements of an array field of a struct.
     checkAnswer(
-      ctx.sql("select structWithArrayFields.field1[1], structWithArrayFields.field2[3] " +
+      sql("select structWithArrayFields.field1[1], structWithArrayFields.field2[3] " +
         "from complexTable"),
       Row(5, null)
     )
@@ -1158,11 +1155,11 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         "abd")
 
         ctx.read.json(root.getAbsolutePath).registerTempTable("test_myjson_with_part")
-        checkAnswer(ctx.sql(
+        checkAnswer(sql(
           "SELECT count(a) FROM test_myjson_with_part where d1 = 1 and col1='abc'"), Row(4))
-        checkAnswer(ctx.sql(
+        checkAnswer(sql(
           "SELECT count(a) FROM test_myjson_with_part where d1 = 1 and col1='abd'"), Row(5))
-        checkAnswer(ctx.sql(
+        checkAnswer(sql(
           "SELECT count(a) FROM test_myjson_with_part where d1 = 1"), Row(9))
     })
   }
