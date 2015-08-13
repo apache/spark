@@ -1109,21 +1109,20 @@ scaledData = scalerModel.transform(dataFrame)
 `MinMaxScaler` computes summary statistics on a data set and produces a `MinMaxScalerModel`. The model can then transform each feature individually such that it is in the given range.
 
 The rescaled value for a feature E is calculated as,
-
+`\begin{equation}
   Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
-
-For the case E_{max} == E_{min}, Rescaled(e_i) = 0.5 * (max + min)
+\end{equation}`
+For the case `E_{max} == E_{min}`, `Rescaled(e_i) = 0.5 * (max + min)`
 
 Note that since zero values will probably be transformed to non-zero values, output of the transformer will be DenseVector even for sparse input.
-
-More details can be found in the API docs for
-[MinMaxScaler](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScaler) and
-[MinMaxScalerModel](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScalerModel).
 
 The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [0, 1].
 
 <div class="codetabs">
 <div data-lang="scala">
+More details can be found in the API docs for
+[MinMaxScaler](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScaler) and
+[MinMaxScalerModel](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScalerModel).
 {% highlight scala %}
 import org.apache.spark.ml.feature.MinMaxScaler
 import org.apache.spark.mllib.util.MLUtils
@@ -1134,15 +1133,18 @@ val scaler = new MinMaxScaler()
   .setInputCol("features")
   .setOutputCol("scaledFeatures")
 
-// Compute summary statistics by fitting the StandardScaler
+// Compute summary statistics and generate MinMaxScalerModel
 val scalerModel = scaler.fit(dataFrame)
 
-// Normalize each feature to have unit standard deviation.
+// rescale each feature to range [min, max].
 val scaledData = scalerModel.transform(dataFrame)
 {% endhighlight %}
 </div>
 
 <div data-lang="java">
+More details can be found in the API docs for
+[MinMaxScaler](api/java/index.html#org.apache.spark.ml.feature.MinMaxScaler) and
+[MinMaxScalerModel](api/java/index.html#org.apache.spark.ml.feature.MinMaxScalerModel).
 {% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.MinMaxScaler;
@@ -1158,10 +1160,10 @@ MinMaxScaler scaler = new MinMaxScaler()
   .setInputCol("features")
   .setOutputCol("scaledFeatures");
 
-// Compute summary statistics by fitting the StandardScaler
+// Compute summary statistics and generate MinMaxScalerModel
 MinMaxScalerModel scalerModel = scaler.fit(dataFrame);
 
-// Normalize each feature to have unit standard deviation.
+// rescale each feature to range [min, max].
 DataFrame scaledData = scalerModel.transform(dataFrame);
 {% endhighlight %}
 </div>
