@@ -35,7 +35,7 @@ import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
 import org.apache.spark.util.Utils;
@@ -132,15 +132,14 @@ public final class UnsafeExternalSorter {
 
     if (existingInMemorySorter == null) {
       initializeForWriting();
+      // Acquire a new page as soon as we construct the sorter to ensure that we have at
+      // least one page to work with. Otherwise, other operators in the same task may starve
+      // this sorter (SPARK-9709). We don't need to do this if we already have an existing sorter.
+      acquireNewPage();
     } else {
       this.isInMemSorterExternal = true;
       this.inMemSorter = existingInMemorySorter;
     }
-
-    // Acquire a new page as soon as we construct the sorter to ensure that we have at
-    // least one page to work with. Otherwise, other operators in the same task may starve
-    // this sorter (SPARK-9709).
-    acquireNewPage();
 
     // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
     // the end of the task. This is necessary to avoid memory leaks in when the downstream operator
@@ -427,14 +426,10 @@ public final class UnsafeExternalSorter {
 
     final long recordAddress =
       taskMemoryManager.encodePageNumberAndOffset(dataPage, dataPagePosition);
-    PlatformDependent.UNSAFE.putInt(dataPageBaseObject, dataPagePosition, lengthInBytes);
+    Platform.putInt(dataPageBaseObject, dataPagePosition, lengthInBytes);
     dataPagePosition += 4;
-    PlatformDependent.copyMemory(
-      recordBaseObject,
-      recordBaseOffset,
-      dataPageBaseObject,
-      dataPagePosition,
-      lengthInBytes);
+    Platform.copyMemory(
+      recordBaseObject, recordBaseOffset, dataPageBaseObject, dataPagePosition, lengthInBytes);
     assert(inMemSorter != null);
     inMemSorter.insertRecord(recordAddress, prefix);
   }
@@ -493,18 +488,16 @@ public final class UnsafeExternalSorter {
 
     final long recordAddress =
       taskMemoryManager.encodePageNumberAndOffset(dataPage, dataPagePosition);
-    PlatformDependent.UNSAFE.putInt(dataPageBaseObject, dataPagePosition, keyLen + valueLen + 4);
+    Platform.putInt(dataPageBaseObject, dataPagePosition, keyLen + valueLen + 4);
     dataPagePosition += 4;
 
-    PlatformDependent.UNSAFE.putInt(dataPageBaseObject, dataPagePosition, keyLen);
+    Platform.putInt(dataPageBaseObject, dataPagePosition, keyLen);
     dataPagePosition += 4;
 
-    PlatformDependent.copyMemory(
-      keyBaseObj, keyOffset, dataPageBaseObject, dataPagePosition, keyLen);
+    Platform.copyMemory(keyBaseObj, keyOffset, dataPageBaseObject, dataPagePosition, keyLen);
     dataPagePosition += keyLen;
 
-    PlatformDependent.copyMemory(
-      valueBaseObj, valueOffset, dataPageBaseObject, dataPagePosition, valueLen);
+    Platform.copyMemory(valueBaseObj, valueOffset, dataPageBaseObject, dataPagePosition, valueLen);
 
     assert(inMemSorter != null);
     inMemSorter.insertRecord(recordAddress, prefix);

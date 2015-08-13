@@ -104,6 +104,7 @@
     <module>external/flume-sink</module>
     <module>external/flume-assembly</module>
     <module>external/mqtt</module>
+    <module>external/mqtt-assembly</module>
     <module>external/zeromq</module>
     <module>examples</module>
     <module>repl</module>
@@ -1894,6 +1895,7 @@
               <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
               <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
+              <spark.master.rest.enabled>false</spark.master.rest.enabled>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>

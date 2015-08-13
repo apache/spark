@@ -23,8 +23,8 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, ResolvedDataSource}
-import org.apache.spark.sql.jdbc.{JDBCWriteDetails, JdbcUtils}
 import org.apache.spark.sql.sources.HadoopFsRelation
 
 
@@ -264,7 +264,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
       // Create the table if the table didn't exist.
       if (!tableExists) {
-        val schema = JDBCWriteDetails.schemaString(df, url)
+        val schema = JdbcUtils.schemaString(df, url)
         val sql = s"CREATE TABLE $table ($schema)"
         conn.prepareStatement(sql).executeUpdate()
       }
@@ -272,7 +272,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       conn.close()
     }
 
-    JDBCWriteDetails.saveTable(df, url, table, connectionProperties)
+    JdbcUtils.saveTable(df, url, table, connectionProperties)
   }
 
   /**

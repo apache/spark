@@ -885,10 +885,10 @@ def crc32(col):
     returns the value as a bigint.
 
     >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(crc32('a').alias('crc32')).collect()
-    [Row(crc32=u'902fbdd2b1df0c4f70b4a5d23525e932')]
+    [Row(crc32=2743272264)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.md5(_to_java_column(col)))
+    return Column(sc._jvm.functions.crc32(_to_java_column(col)))
 
 
 @ignore_unicode_prefix

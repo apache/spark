@@ -159,7 +159,6 @@ class SparkSubmitSuite
     childArgsStr should include ("--executor-cores 5")
     childArgsStr should include ("--arg arg1 --arg arg2")
     childArgsStr should include ("--queue thequeue")
-    childArgsStr should include ("--num-executors 6")
     childArgsStr should include regex ("--jar .*thejar.jar")
     childArgsStr should include regex ("--addJars .*one.jar,.*two.jar,.*three.jar")
     childArgsStr should include regex ("--files .*file1.txt,.*file2.txt")
@@ -325,6 +324,8 @@ class SparkSubmitSuite
       "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
       "--master", "local",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -338,6 +339,8 @@ class SparkSubmitSuite
       "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
       "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       "--jars", jarsString,
       unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
     runSparkSubmit(args)
@@ -356,6 +359,7 @@ class SparkSubmitSuite
         "--packages", Seq(main, dep).mkString(","),
         "--repositories", repo,
         "--conf", "spark.ui.enabled=false",
+        "--conf", "spark.master.rest.enabled=false",
         unusedJar.toString,
         "my.great.lib.MyLib", "my.great.dep.MyLib")
       runSparkSubmit(args)
@@ -501,6 +505,8 @@ class SparkSubmitSuite
       "--master", "local",
       "--conf", "spark.driver.extraClassPath=" + systemJar,
       "--conf", "spark.driver.userClassPathFirst=true",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       userJar.toString)
     runSparkSubmit(args)
   }

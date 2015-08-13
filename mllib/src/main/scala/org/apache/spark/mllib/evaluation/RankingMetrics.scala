@@ -34,6 +34,7 @@ import org.apache.spark.rdd.RDD
  * Java users should use [[RankingMetrics$.of]] to create a [[RankingMetrics]] instance.
  *
  * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pairs.
+ * @since 1.2.0
  */
 @Experimental
 class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])])
@@ -55,6 +56,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    *
    * @param k the position to compute the truncated precision, must be positive
    * @return the average precision at the first k ranking positions
+   * @since 1.2.0
    */
   def precisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
@@ -124,6 +126,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    *
    * @param k the position to compute the truncated ndcg, must be positive
    * @return the average ndcg at the first k ranking positions
+   * @since 1.2.0
    */
   def ndcgAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
@@ -162,6 +165,7 @@ object RankingMetrics {
   /**
    * Creates a [[RankingMetrics]] instance (for Java users).
    * @param predictionAndLabels a JavaRDD of (predicted ranking, ground truth set) pairs
+   * @since 1.4.0
    */
   def of[E, T <: jl.Iterable[E]](predictionAndLabels: JavaRDD[(T, T)]): RankingMetrics[E] = {
     implicit val tag = JavaSparkContext.fakeClassTag[E]

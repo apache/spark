@@ -284,7 +284,7 @@ object SparkSubmit {
         Nil
       }
     val resolvedMavenCoordinates = SparkSubmitUtils.resolveMavenCoordinates(args.packages,
-      Some(args.repositories), Some(args.ivyRepoPath), exclusions = exclusions)
+      Option(args.repositories), Option(args.ivyRepoPath), exclusions = exclusions)
     if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
       args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
       if (args.isPython) {
@@ -422,7 +422,8 @@ object SparkSubmit {
 
       // Yarn client only
       OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
-      OptionAssigner(args.numExecutors, YARN, CLIENT, sysProp = "spark.executor.instances"),
+      OptionAssigner(args.numExecutors, YARN, ALL_DEPLOY_MODES,
+        sysProp = "spark.executor.instances"),
       OptionAssigner(args.files, YARN, CLIENT, sysProp = "spark.yarn.dist.files"),
       OptionAssigner(args.archives, YARN, CLIENT, sysProp = "spark.yarn.dist.archives"),
       OptionAssigner(args.principal, YARN, CLIENT, sysProp = "spark.yarn.principal"),
@@ -433,7 +434,6 @@ object SparkSubmit {
       OptionAssigner(args.driverMemory, YARN, CLUSTER, clOption = "--driver-memory"),
       OptionAssigner(args.driverCores, YARN, CLUSTER, clOption = "--driver-cores"),
       OptionAssigner(args.queue, YARN, CLUSTER, clOption = "--queue"),
-      OptionAssigner(args.numExecutors, YARN, CLUSTER, clOption = "--num-executors"),
       OptionAssigner(args.executorMemory, YARN, CLUSTER, clOption = "--executor-memory"),
       OptionAssigner(args.executorCores, YARN, CLUSTER, clOption = "--executor-cores"),
       OptionAssigner(args.files, YARN, CLUSTER, clOption = "--files"),

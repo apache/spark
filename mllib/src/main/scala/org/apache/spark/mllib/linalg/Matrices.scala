@@ -257,8 +257,7 @@ class DenseMatrix(
     this(numRows, numCols, values, false)
 
   override def equals(o: Any): Boolean = o match {
-    case m: DenseMatrix =>
-      m.numRows == numRows && m.numCols == numCols && Arrays.equals(toArray, m.toArray)
+    case m: Matrix => toBreeze == m.toBreeze
     case _ => false
   }
 
@@ -518,6 +517,11 @@ class SparseMatrix(
       colPtrs: Array[Int],
       rowIndices: Array[Int],
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
+
+  override def equals(o: Any): Boolean = o match {
+    case m: Matrix => toBreeze == m.toBreeze
+    case _ => false
+  }
 
   private[mllib] def toBreeze: BM[Double] = {
      if (!isTransposed) {

@@ -38,10 +38,10 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.{InternalRow, SqlParser, TableIdentifier}
-import org.apache.spark.sql.execution.datasources
+import org.apache.spark.sql.execution.{FileRelation, datasources}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation, Partition => ParquetPartition, PartitionSpec, ResolvedDataSource}
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode}
@@ -739,7 +739,7 @@ private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: HiveTable)
     (@transient sqlContext: SQLContext)
-  extends LeafNode with MultiInstanceRelation {
+  extends LeafNode with MultiInstanceRelation with FileRelation {
 
   override def equals(other: Any): Boolean = other match {
     case relation: MetastoreRelation =>
@@ -887,6 +887,18 @@ private[hive] case class MetastoreRelation
 
   /** An attribute map for determining the ordinal for non-partition columns. */
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
+
+  override def inputFiles: Array[String] = {
+    val partLocations = table.getPartitions(Nil).map(_.storage.location).toArray
+    if (partLocations.nonEmpty) {
+      partLocations
+    } else {
+      Array(
+        table.location.getOrElse(
+          sys.error(s"Could not get the location of ${table.qualifiedName}.")))
+    }
+  }
+
 
   override def newInstance(): MetastoreRelation = {
     MetastoreRelation(databaseName, tableName, alias)(table)(sqlContext)

@@ -25,8 +25,8 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.json.JSONRelation
-import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.execution.datasources.json.JSONRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SQLTestUtils}
 
@@ -132,6 +132,21 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
         .agg(countDistinct('number)),
       Row("a", 3) :: Row("b", 2) :: Row("c", 1) :: Nil
     )
+  }
+
+  test("SPARK-8930: explode should fail with a meaningful message if it takes a star") {
+    val df = Seq(("1", "1,2"), ("2", "4"), ("3", "7,8,9")).toDF("prefix", "csv")
+    val e = intercept[AnalysisException] {
+      df.explode($"*") { case Row(prefix: String, csv: String) =>
+        csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
+      }.queryExecution.assertAnalyzed()
+    }
+    assert(e.getMessage.contains(
+      "Cannot explode *, explode can only be applied on a specific column."))
+
+    df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
+      csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
+    }.queryExecution.assertAnalyzed()
   }
 
   test("explode alias and star") {
@@ -415,23 +430,6 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newCol"))
   }
 
-  test("randomSplit") {
-    val n = 600
-    val data = sqlContext.sparkContext.parallelize(1 to n, 2).toDF("id")
-    for (seed <- 1 to 5) {
-      val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
-      assert(splits.length == 3, "wrong number of splits")
-
-      assert(splits.reduce((a, b) => a.unionAll(b)).sort("id").collect().toList ==
-        data.collect().toList, "incomplete or wrong split")
-
-      val s = splits.map(_.count())
-      assert(math.abs(s(0) - 100) < 50) // std =  9.13
-      assert(math.abs(s(1) - 200) < 50) // std = 11.55
-      assert(math.abs(s(2) - 300) < 50) // std = 12.25
-    }
-  }
-
   test("describe") {
     val describeTestData = Seq(
       ("Bob", 16, 176),
@@ -487,21 +485,23 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   }
 
   test("inputFiles") {
-    val fakeRelation1 = new ParquetRelation(Array("/my/path", "/my/other/path"),
-      Some(testData.schema), None, Map.empty)(sqlContext)
-    val df1 = DataFrame(sqlContext, LogicalRelation(fakeRelation1))
-    assert(df1.inputFiles.toSet == fakeRelation1.paths.toSet)
+    withTempDir { dir =>
+      val df = Seq((1, 22)).toDF("a", "b")
 
-    val fakeRelation2 = new JSONRelation(
-      None, 1, Some(testData.schema), None, None, Array("/json/path"))(sqlContext)
-    val df2 = DataFrame(sqlContext, LogicalRelation(fakeRelation2))
-    assert(df2.inputFiles.toSet == fakeRelation2.paths.toSet)
+      val parquetDir = new File(dir, "parquet").getCanonicalPath
+      df.write.parquet(parquetDir)
+      val parquetDF = sqlContext.read.parquet(parquetDir)
+      assert(parquetDF.inputFiles.nonEmpty)
 
-    val unionDF = df1.unionAll(df2)
-    assert(unionDF.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.paths)
+      val jsonDir = new File(dir, "json").getCanonicalPath
+      df.write.json(jsonDir)
+      val jsonDF = sqlContext.read.json(jsonDir)
+      assert(parquetDF.inputFiles.nonEmpty)
 
-    val filtered = df1.filter("false").unionAll(df2.intersect(df2))
-    assert(filtered.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.paths)
+      val unioned = jsonDF.unionAll(parquetDF).inputFiles.sorted
+      val allFiles = (jsonDF.inputFiles ++ parquetDF.inputFiles).toSet.toArray.sorted
+      assert(unioned === allFiles)
+    }
   }
 
   ignore("show") {

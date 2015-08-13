@@ -26,8 +26,8 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer
 from pyspark.mllib.common import inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 
-__all__ = ['Binarizer', 'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel', 'NGram',
-           'Normalizer', 'OneHotEncoder', 'PolynomialExpansion', 'RegexTokenizer',
+__all__ = ['Binarizer', 'Bucketizer', 'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel',
+           'NGram', 'Normalizer', 'OneHotEncoder', 'PolynomialExpansion', 'RegexTokenizer',
            'StandardScaler', 'StandardScalerModel', 'StringIndexer', 'StringIndexerModel',
            'Tokenizer', 'VectorAssembler', 'VectorIndexer', 'Word2Vec', 'Word2VecModel',
            'PCA', 'PCAModel', 'RFormula', 'RFormulaModel']
