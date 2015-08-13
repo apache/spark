@@ -17,12 +17,13 @@
 
 package org.apache.spark.scheduler.cluster
 
+import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.concurrent.{Future, ExecutionContext}
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.scheduler.TaskSchedulerImpl
+import org.apache.spark.scheduler.{SlaveLost, ExecutorLossReason, TaskSchedulerImpl}
 import org.apache.spark.ui.JettyUtils
 import org.apache.spark.util.{ThreadUtils, RpcUtils}
 
@@ -91,6 +92,67 @@ private[spark] abstract class YarnSchedulerBackend(
   }
 
   /**
+   * Override the DriverEndpoint to add extra logic for the case when an executor is disconnected.
+   * We should check the cluster manager and find if the loss of the executor was caused by YARN
+   * force killing it due to preemption.
+   */
+  private class YarnDriverEndpoint(rpcEnv: RpcEnv, sparkProperties: ArrayBuffer[(String, String)])
+    extends DriverEndpoint(rpcEnv, sparkProperties) {
+
+    private val pendingDisconnectedExecutors = new HashSet[String]
+    private val handleDisconnectedExecutorThreadPool =
+      ThreadUtils.newDaemonCachedThreadPool("yarn-driver-handle-lost-executor-thread-pool")
+
+    /**
+     * When onDisconnected is received at the driver endpoint, the superclass DriverEndpoint
+     * handles it by assuming the Executor was lost for a bad reason and removes the executor
+     * immediately.
+     *
+     * In YARN's case however it is crucial to talk to the application master and ask why the
+     * executor had exited. In particular, the executor may have exited due to the executor
+     * having been preempted. If the executor "exited normally" according to the application
+     * master then we pass that information down to the TaskSetManager to inform the
+     * TaskSetManager that tasks on that lost executor should not count towards a job failure.
+     */
+    override def onDisconnected(rpcAddress: RpcAddress): Unit = {
+      addressToExecutorId.get(rpcAddress).foreach({ executorId =>
+        pendingDisconnectedExecutors.synchronized {
+          // onDisconnected could be fired multiple times from the same executor while we're
+          // asynchronously contacting the AM. So keep track of the executors we're trying to
+          // find loss reasons for and don't duplicate the work
+          if (!pendingDisconnectedExecutors.contains(executorId)) {
+            pendingDisconnectedExecutors.add(executorId)
+            handleDisconnectedExecutorThreadPool.submit(new Runnable() {
+              override def run(): Unit = {
+                val executorLossReason =
+                // Check for the loss reason and pass the loss reason to driverEndpoint
+                  yarnSchedulerEndpoint.askWithRetry[Option[ExecutorLossReason]](
+                    GetExecutorLossReason(executorId))
+                executorLossReason match {
+                  case Some(reason) =>
+                    driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason.toString))
+                  case None =>
+                    logWarning(s"Attempted to get executor loss reason" +
+                      s" for $rpcAddress but got no response. Marking as slave lost.")
+                    driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, SlaveLost().toString))
+                }
+                pendingDisconnectedExecutors.synchronized {
+                  pendingDisconnectedExecutors.remove(executorId)
+                }
+              }
+            })
+          }
+        }
+      })
+    }
+  }
+
+  override def createDriverEndpoint(properties: ArrayBuffer[(String, String)]): DriverEndpoint = {
+    new YarnDriverEndpoint(rpcEnv, properties)
+  }
+
+
+  /**
    * An [[RpcEndpoint]] that communicates with the ApplicationMaster.
    */
   private class YarnSchedulerEndpoint(override val rpcEnv: RpcEnv)
@@ -145,6 +207,21 @@ private[spark] abstract class YarnSchedulerBackend(
             context.reply(false)
         }
 
+      case c: GetExecutorLossReason =>
+        amEndpoint match {
+          case Some(am) =>
+            Future {
+              context.reply(am.askWithRetry[Option[ExecutorLossReason]](c))
+            } onFailure {
+              case NonFatal(e) =>
+                logError(s"Finding the executor loss reason was unsuccessful", e)
+                context.sendFailure(e)
+            }
+          case None =>
+            logWarning("Attempted to check if an executor exited normally" +
+              " before the AM has registered!")
+            context.reply(None)
+        }
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {

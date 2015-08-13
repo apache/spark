@@ -38,8 +38,7 @@ import org.apache.spark.util.{ThreadUtils, SerializableBuffer, AkkaUtils, Utils}
  */
 private[spark]
 class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
-  extends ExecutorAllocationClient with SchedulerBackend with Logging
-{
+  extends ExecutorAllocationClient with SchedulerBackend with Logging {
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
   // Total number of executors that are currently registered
@@ -82,7 +81,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     override protected def log = CoarseGrainedSchedulerBackend.this.log
 
-    private val addressToExecutorId = new HashMap[RpcAddress, String]
+    protected val addressToExecutorId = new HashMap[RpcAddress, String]
 
     private val reviveThread =
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
@@ -264,8 +263,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // TODO (prashant) send conf instead of properties
     driverEndpoint = rpcEnv.setupEndpoint(
-      CoarseGrainedSchedulerBackend.ENDPOINT_NAME, new DriverEndpoint(rpcEnv, properties))
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME, createDriverEndpoint(properties))
   }
+
+  protected def createDriverEndpoint(properties: ArrayBuffer[(String, String)]): DriverEndpoint =
+    new DriverEndpoint(rpcEnv, properties)
 
   def stopExecutors() {
     try {
@@ -342,7 +344,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     if (numAdditionalExecutors < 0) {
       throw new IllegalArgumentException(
         "Attempted to request a negative number of additional executor(s) " +
-        s"$numAdditionalExecutors from the cluster manager. Please specify a positive number!")
+          s"$numAdditionalExecutors from the cluster manager. Please specify a positive number!")
     }
     logInfo(s"Requesting $numAdditionalExecutors additional executor(s) from the cluster manager")
     logDebug(s"Number of pending executors is now $numPendingExecutors")
@@ -368,10 +370,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @return whether the request is acknowledged by the cluster manager.
    */
   final override def requestTotalExecutors(
-      numExecutors: Int,
-      localityAwareTasks: Int,
-      hostToLocalTaskCount: Map[String, Int]
-    ): Boolean = synchronized {
+                                            numExecutors: Int,
+                                            localityAwareTasks: Int,
+                                            hostToLocalTaskCount: Map[String, Int]
+                                            ): Boolean = synchronized {
     if (numExecutors < 0) {
       throw new IllegalArgumentException(
         "Attempted to request a negative number of executor(s) " +
