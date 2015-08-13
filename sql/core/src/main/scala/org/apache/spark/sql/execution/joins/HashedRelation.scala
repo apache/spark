@@ -66,7 +66,8 @@ private[joins] final class GeneralHashedRelation(
     private var hashTable: JavaHashMap[InternalRow, CompactBuffer[InternalRow]])
   extends HashedRelation with Externalizable {
 
-  private def this() = this(null) // Needed for serialization
+  // Needed for serialization (it is public to make Java serialization work)
+  def this() = this(null)
 
   override def get(key: InternalRow): Seq[InternalRow] = hashTable.get(key)
 
@@ -88,7 +89,8 @@ private[joins]
 final class UniqueKeyHashedRelation(private var hashTable: JavaHashMap[InternalRow, InternalRow])
   extends HashedRelation with Externalizable {
 
-  private def this() = this(null) // Needed for serialization
+  // Needed for serialization (it is public to make Java serialization work)
+  def this() = this(null)
 
   override def get(key: InternalRow): Seq[InternalRow] = {
     val v = hashTable.get(key)
