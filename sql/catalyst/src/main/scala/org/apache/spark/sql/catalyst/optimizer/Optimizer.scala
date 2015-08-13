@@ -33,14 +33,7 @@ import org.apache.spark.sql.types._
 abstract class Optimizer extends RuleExecutor[LogicalPlan]
 
 object DefaultOptimizer extends Optimizer {
-  val batches =
-    // SubQueries are only needed for analysis and can be removed before execution.
-    Batch("Remove SubQueries", FixedPoint(100),
-      EliminateSubQueries) ::
-    Batch("Aggregate", FixedPoint(100),
-      ReplaceDistinctWithAggregate,
-      RemoveLiteralFromGroupExpressions) ::
-    Batch("Operator Optimizations", FixedPoint(100),
+  val operatorOptimizations = Seq(
       // Operator push down
       SetOperationPushDown,
       SamplePushDown,
@@ -62,7 +55,19 @@ object DefaultOptimizer extends Optimizer {
       RemovePositive,
       SimplifyFilters,
       SimplifyCasts,
-      SimplifyCaseConversionExpressions) ::
+      SimplifyCaseConversionExpressions)
+
+  val batches =
+    // SubQueries are only needed for analysis and can be removed before execution.
+    Batch("Remove SubQueries", FixedPoint(100),
+      EliminateSubQueries) ::
+    Batch("Aggregate", FixedPoint(100),
+      ReplaceDistinctWithAggregate,
+      RemoveLiteralFromGroupExpressions) ::
+    Batch("Operator Optimizations", FixedPoint(100),
+      operatorOptimizations: _*) ::
+    Batch("Remove Hints", FixedPoint(100),
+      (RemoveKeyHints +: operatorOptimizations): _*) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
@@ -343,6 +348,12 @@ object JoinElimination extends Rule[LogicalPlan] {
     def query(x: A, y: A): Boolean = {
       x == y || sets.exists(s => s.contains(x) && s.contains(y))
     }
+  }
+}
+
+object RemoveKeyHints extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case KeyHint(_, child) => child
   }
 }
 
