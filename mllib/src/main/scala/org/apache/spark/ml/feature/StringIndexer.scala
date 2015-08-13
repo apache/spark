@@ -172,8 +172,9 @@ class StringIndexerModel private[ml] (
   }
 
   /**
-   * Return a [[IndexToString]] instance to perform the inverse transformation, mapping indices back
-   * to their string values.
+   * Returns an [[IndexToString]] transformer that can perform the inverse transformation, mapping
+   * indices back to their string values.
+   * Users need to set input/output column names on the transformer returned.
    */
   def inverse: IndexToString = {
     new IndexToString()
@@ -183,10 +184,12 @@ class StringIndexerModel private[ml] (
 
 /**
  * :: Experimental ::
- * Transform a provided column back to the original input types using either the metadata
- * on the input column, or if provided using the labels supplied by the user.
- * Note: By default we keep the original columns during this transformation,
- * so the inverse should only be used on new columns such as predicted labels.
+ * A [[Transformer]] that maps a column of string indices back to a new column of corresponding
+ * string values using either the ML attributes of the input column, or if provided using the labels
+ * supplied by the user.
+ * All original columns are kept during transformation.
+ *
+ * @see [[StringIndexer]]
  */
 @Experimental
 class IndexToString private[ml] (
@@ -254,7 +257,7 @@ class IndexToString private[ml] (
     }
     val indexer = udf { index: Double =>
       val idx = index.toInt
-      if (0 <= idx && idx < values.size) {
+      if (0 <= idx && idx < values.length) {
         values(idx)
       } else {
         throw new SparkException(s"Unseen index: $index ??")
