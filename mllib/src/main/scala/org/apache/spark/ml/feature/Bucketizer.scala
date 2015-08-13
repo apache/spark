@@ -90,7 +90,9 @@ final class Bucketizer(override val uid: String)
     SchemaUtils.appendColumn(schema, prepOutputField(schema))
   }
 
-  override def copy(extra: ParamMap): Bucketizer = defaultCopy(extra)
+  override def copy(extra: ParamMap): Bucketizer = {
+    defaultCopy[Bucketizer](extra).setParent(parent)
+  }
 }
 
 private[feature] object Bucketizer {

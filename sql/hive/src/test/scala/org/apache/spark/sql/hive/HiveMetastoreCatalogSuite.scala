@@ -25,7 +25,7 @@ import org.apache.spark.sql.hive.client.{ExternalTable, ManagedTable}
 import org.apache.spark.sql.hive.test.SharedHiveContext
 import org.apache.spark.sql.sources.DataSourceTest
 import org.apache.spark.sql.test.ExamplePointUDT
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 
 
 class HiveMetastoreCatalogSuite extends SparkFunSuite with SharedHiveContext with Logging {
@@ -54,7 +54,10 @@ class HiveMetastoreCatalogSuite extends SparkFunSuite with SharedHiveContext wit
 class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with SharedHiveContext {
   import testImplicits._
 
-  private lazy val testDF = (1 to 2).map(i => (i, s"val_$i")).toDF("d1", "d2").coalesce(1)
+  private lazy val testDF = ctx.range(1, 3).select(
+    ('id + 0.1) cast DecimalType(10, 3) as 'd1,
+    'id cast StringType as 'd2
+  ).coalesce(1)
 
   Seq(
     "parquet" -> (
@@ -87,10 +90,10 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with Shared
 
         val columns = hiveTable.schema
         assert(columns.map(_.name) === Seq("d1", "d2"))
-        assert(columns.map(_.hiveType) === Seq("int", "string"))
+        assert(columns.map(_.hiveType) === Seq("decimal(10,3)", "string"))
 
         checkAnswer(ctx.table("t"), testDF)
-        assert(ctx.runSqlHive("SELECT * FROM t") === Seq("1\tval_1", "2\tval_2"))
+        assert(ctx.runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
       }
     }
 
@@ -116,10 +119,10 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with Shared
 
           val columns = hiveTable.schema
           assert(columns.map(_.name) === Seq("d1", "d2"))
-          assert(columns.map(_.hiveType) === Seq("int", "string"))
+          assert(columns.map(_.hiveType) === Seq("decimal(10,3)", "string"))
 
           checkAnswer(ctx.table("t"), testDF)
-          assert(ctx.runSqlHive("SELECT * FROM t") === Seq("1\tval_1", "2\tval_2"))
+          assert(ctx.runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
         }
       }
     }
