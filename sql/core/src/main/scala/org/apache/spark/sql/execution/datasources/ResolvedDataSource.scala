@@ -180,11 +180,7 @@ object ResolvedDataSource extends Logging {
           path.makeQualified(fs.getUri, fs.getWorkingDirectory)
         }
 
-        partitionColumnsSchema(data.schema, partitionColumns).foreach { field =>
-          if (!PartitioningUtils.validPartitionColumnTypes.contains(field.dataType)) {
-            throw new AnalysisException(s"Cannot use ${field.dataType} for partition column")
-          }
-        }
+        PartitioningUtils.checkPartitionColumnOfValidDataType(data.schema, partitionColumns)
 
         val dataSchema = StructType(data.schema.filterNot(f => partitionColumns.contains(f.name)))
         val r = dataSource.createRelation(

@@ -559,16 +559,16 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
 
   test("SPARK-8887: Explicitly define which data types can be used as dynamic partition columns") {
     val df = Seq(
-      (1, "v1", Date.valueOf("2015-08-10")),
-      (2, "v2", Date.valueOf("2015-08-11")),
-      (3, "v3", Date.valueOf("2015-08-12"))).toDF("a", "b", "c")
+      (1, "v1", Array(1, 2, 3), Map("k1" -> "v1"), Tuple2(1, "4")),
+      (2, "v2", Array(4, 5, 6), Map("k2" -> "v2"), Tuple2(2, "5")),
+      (3, "v3", Array(7, 8, 9), Map("k3" -> "v3"), Tuple2(3, "6"))).toDF("a", "b", "c", "d", "e")
     withTempDir { file =>
       intercept[AnalysisException] {
-        df.write.format(dataSourceName).partitionBy("c").save(file.getCanonicalPath)
+        df.write.format(dataSourceName).partitionBy("c", "d", "e").save(file.getCanonicalPath)
       }
     }
     intercept[AnalysisException] {
-      df.write.format(dataSourceName).partitionBy("c").saveAsTable("t")
+      df.write.format(dataSourceName).partitionBy("c", "d", "e").saveAsTable("t")
     }
   }
 }

@@ -116,11 +116,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           // OK
         }
 
-        r.partitionColumns.fields.foreach { field =>
-          if (!PartitioningUtils.validPartitionColumnTypes.contains(field.dataType)) {
-            failAnalysis(s"Cannot use ${field.dataType} for partition column")
-          }
-        }
+        PartitioningUtils.checkPartitionColumnOfValidDataType(r.schema, part.keySet.toArray)
 
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
@@ -170,11 +166,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           // OK
         }
 
-        ResolvedDataSource.partitionColumnsSchema(query.schema, partitionColumns).foreach { field =>
-          if (!PartitioningUtils.validPartitionColumnTypes.contains(field.dataType)) {
-            throw new AnalysisException(s"Cannot use ${field.dataType} for partition column")
-          }
-        }
+        PartitioningUtils.checkPartitionColumnOfValidDataType(query.schema, partitionColumns)
 
       case _ => // OK
     }
