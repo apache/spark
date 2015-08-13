@@ -246,23 +246,25 @@ class HadoopTableReader(
     // Compute input splits for all the partitions together if they have the same input format.
     // This is faster than computing them individually because listing multiple input dirs can be
     // done in parallel using "mapreduce.input.fileinputformat.list-status.num-threads".
-    val homogeneousInputFormat =
-      if (hivePartitions.groupBy { case (part, _) => part.getInputFormatClass }.size == 1) {
-        true
-      } else {
-        false
-      }
+    if (sc.conf.parallelFileListing) {
+      val homogeneousInputFormat =
+        if (hivePartitions.groupBy { case (part, _) => part.getInputFormatClass }.size == 1) {
+          true
+        } else {
+          false
+        }
 
-    if (homogeneousInputFormat) {
-      val combinedInputPath = hivePartitions.map { case (part, _) => part.getLocation }.toSeq
-      val jobConf = new JobConf(hiveExtraConf)
-      val minPartitions = _minSplitsPerRDD * hivePartitions.size
-      val inputFormatClass = hivePartitions.head._1.getInputFormatClass
-      HadoopTableReader.initializeLocalJobConfFunc(combinedInputPath, relation.tableDesc)(jobConf)
-      val inputFormat =
-        ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], jobConf)
-          .asInstanceOf[FileInputFormat[_, _]]
-      SparkHadoopUtil.get.computeInputSplits(combinedInputPath, jobConf, inputFormat, minPartitions)
+      if (homogeneousInputFormat) {
+        val combinedPaths = hivePartitions.map { case (part, _) => part.getLocation }.toSeq
+        val jobConf = new JobConf(hiveExtraConf)
+        val minPartitions = _minSplitsPerRDD * hivePartitions.size
+        val inputFormatClass = hivePartitions.head._1.getInputFormatClass
+        HadoopTableReader.initializeLocalJobConfFunc(combinedPaths, relation.tableDesc)(jobConf)
+        val inputFormat =
+          ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], jobConf)
+            .asInstanceOf[FileInputFormat[_, _]]
+        SparkHadoopUtil.get.computeInputSplits(combinedPaths, jobConf, inputFormat, minPartitions)
+      }
     }
 
     // Even if we don't use any partitions, we still need an empty RDD

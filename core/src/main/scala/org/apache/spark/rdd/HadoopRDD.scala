@@ -202,8 +202,8 @@ class HadoopRDD[K, V](
     val inputPaths = FileInputFormat.getInputPaths(jobConf).map(_.toString)
     val inputSplits: Array[InputSplit] =
       // first check whether input splits are already computed
-      if (SparkHadoopUtil.get.hasCache(inputPaths)) {
-        SparkHadoopUtil.get.getCache(inputPaths)
+      if (SparkHadoopUtil.get.hasInputSplitsCache(inputPaths)) {
+        SparkHadoopUtil.get.getInputSplitsCache(inputPaths)
       } else {
         // add the credentials here as this can be called before SparkContext initialized
         SparkHadoopUtil.get.addCredentials(jobConf)

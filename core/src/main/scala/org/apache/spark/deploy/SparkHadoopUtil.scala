@@ -391,36 +391,47 @@ class SparkHadoopUtil extends Logging {
       jobConf: JobConf,
       inputFormat: FileInputFormat[_, _],
       minSplits: Int): Unit = {
+    addCredentials(jobConf)
     val inputSplits = inputFormat.getSplits(jobConf, minSplits)
-    val groupedInputSplits =
-      inputSplits.groupBy(_.asInstanceOf[FileSplit].getPath.getParent.toString)
-    inputPaths.foreach { partitionPath =>
+    val groupedInputSplits = inputSplits.groupBy(_.asInstanceOf[FileSplit].getPath.getParent)
+    inputPaths.foreach { path =>
       var files: Array[InputSplit] = Array()
       groupedInputSplits.foreach { case (commonParentPath, array) =>
-        if (commonParentPath.contains(partitionPath)) {
+        if (commonParentPath.toString.contains(path)) {
           files = Array.concat(files, array)
         }
       }
-      inputSplitsCache.put(partitionPath, files)
+      if (files.nonEmpty) {
+        inputSplitsCache.put(path, files)
+      }
     }
   }
 
   /**
-   * Return true if input splits for all the partition paths exist.
+   * Return true if input splits for all the given partition paths exist, or false.
    */
-  def hasCache(paths: Seq[String]): Boolean = {
-    paths.forall(inputSplitsCache.containsKey(_))
+  def hasInputSplitsCache(paths: Seq[String]): Boolean = {
+    inputSplitsCache.nonEmpty && paths.forall(inputSplitsCache.containsKey(_))
   }
 
   /**
-   * Return cached input splits for all the partition paths.
+   * Return cached input splits for all the given partition paths, or nothing.
    */
-  def getCache(paths: Seq[String]): Array[InputSplit] = {
+  def getInputSplitsCache(paths: Seq[String]): Array[InputSplit] = {
     var cache: Array[InputSplit] = Array()
-    for (path <- paths) {
-      cache = Array.concat(cache, inputSplitsCache.get(path))
+    if (hasInputSplitsCache(paths)) {
+      for (path <- paths) {
+        cache = Array.concat(cache, inputSplitsCache.get(path))
+      }
     }
     cache
+  }
+
+  /**
+   * Delete all the cached input splits
+   */
+  def clearInputSplitsCache(): Unit = {
+    inputSplitsCache.clear
   }
 }
 
