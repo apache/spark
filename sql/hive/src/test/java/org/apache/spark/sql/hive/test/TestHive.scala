@@ -17,18 +17,8 @@
 
 package org.apache.spark.sql.hive.test
 
-import org.apache.spark.{SparkConf, SparkContext}
 
 // Note: this should NOT be used for internal Spark unit tests because the singleton makes it
 // very difficult to start a HiveContext with a custom underlying SparkContext (SPARK-9580).
-@deprecated("instantiate new TestHiveContext instead of using this singleton", "1.5.0")
-object TestHive extends TestHiveContext(
-  new SparkContext(
-    System.getProperty("spark.sql.test.master", "local[32]"),
-    "TestSQLContext",
-    new SparkConf()
-      .set("spark.sql.test", "")
-      .set("spark.sql.hive.metastore.barrierPrefixes",
-        "org.apache.spark.sql.hive.execution.PairSerDe")
-      // SPARK-8910
-      .set("spark.ui.enabled", "false")))
+@deprecated("instantiate new TestHiveContext instead", "1.5.0")
+object TestHive extends TestHiveContext(TestHiveContext.defaultSparkContext())

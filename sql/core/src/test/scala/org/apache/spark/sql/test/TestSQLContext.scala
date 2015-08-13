@@ -50,12 +50,3 @@ private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { sel
     protected override def _sqlContext: SQLContext = self
   }
 }
-
-// Note: this should NOT be used for internal Spark unit tests because the singleton makes it
-// very difficult to start a SQLContext with a custom underlying SparkContext (SPARK-9580).
-@deprecated("instantiate new TestSQLContext instead of using this singleton", "1.5.0")
-object TestSQLContext extends SQLContext(
-  new SparkContext(
-    "local[2]",
-    "test-sql-context",
-    new SparkConf().set("spark.sql.testkey", "true")))
