@@ -102,6 +102,14 @@ class HashedRelationSuite extends SparkFunSuite {
     assert(hashed2.get(toUnsafe(InternalRow(10))) === null)
     assert(hashed2.get(unsafeData(2)) === data2)
     assert(numDataRows.value.value === data.length)
+
+    val os2 = new ByteArrayOutputStream()
+    val out2 = new ObjectOutputStream(os2)
+    hashed2.asInstanceOf[UnsafeHashedRelation].writeExternal(out2)
+    out2.flush()
+    // This depends on that the order of items in BytesToBytesMap.iterator() is exactly the same
+    // as they are inserted
+    assert(java.util.Arrays.equals(os2.toByteArray, os.toByteArray))
   }
 
   test("test serialization empty hash map") {
@@ -119,5 +127,11 @@ class HashedRelationSuite extends SparkFunSuite {
     val toUnsafe = UnsafeProjection.create(schema)
     val row = toUnsafe(InternalRow(0))
     assert(hashed2.get(row) === null)
+
+    val os2 = new ByteArrayOutputStream()
+    val out2 = new ObjectOutputStream(os2)
+    hashed2.writeExternal(out2)
+    out2.flush()
+    assert(java.util.Arrays.equals(os2.toByteArray, os.toByteArray))
   }
 }
