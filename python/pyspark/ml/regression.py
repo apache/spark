@@ -138,14 +138,13 @@ class LinearRegressionModel(JavaModel):
         return self._call_java("intercept")
 
 @inherit_doc
-class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
+class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
+                         HasWeightCol):
     """
     Currently implemented using parallelized pool adjacent violators algorithm.
     Only univariate (single feature) algorithm supported.
     """
 
-    # TODO: When weightCol is moved to shared params in Scala code follow suit
-    weightCol = Param(Params._dummy(), "weightCol"
 class TreeRegressorParams(object):
     """
     Private class to track supported impurity measures.

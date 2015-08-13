@@ -432,6 +432,33 @@ class HasStepSize(Params):
         return self.getOrDefault(self.stepSize)
 
 
+class HasWeightsCol(Params):
+    """
+    Mixin for param weightsCol: weight column name. If this is not set or empty, we treat all instance weights as 1.0..
+    """
+
+    # a placeholder to make it appear in the generated doc
+    weightsCol = Param(Params._dummy(), "weightsCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
+
+    def __init__(self):
+        super(HasWeightsCol, self).__init__()
+        #: param for weight column name. If this is not set or empty, we treat all instance weights as 1.0.
+        self.weightsCol = Param(self, "weightsCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
+
+    def setWeightsCol(self, value):
+        """
+        Sets the value of :py:attr:`weightsCol`.
+        """
+        self._paramMap[self.weightsCol] = value
+        return self
+
+    def getWeightsCol(self):
+        """
+        Gets the value of weightsCol or its default value.
+        """
+        return self.getOrDefault(self.weightsCol)
+
+
 class DecisionTreeParams(Params):
     """
     Mixin for Decision Tree parameters.

@@ -121,7 +121,9 @@ if __name__ == "__main__":
         ("checkpointInterval", "checkpoint interval (>= 1)", None),
         ("seed", "random seed", "hash(type(self).__name__)"),
         ("tol", "the convergence tolerance for iterative algorithms", None),
-        ("stepSize", "Step size to be used for each iteration of optimization.", None)]
+        ("stepSize", "Step size to be used for each iteration of optimization.", None),
+        ("weightsCol", "weight column name. If this is not set or empty, we treat " +
+         "all instance weights as 1.0.", None)]
     code = []
     for name, doc, defaultValueStr in shared:
         param_code = _gen_param_header(name, doc, defaultValueStr)
