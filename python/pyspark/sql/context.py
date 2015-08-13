@@ -39,7 +39,7 @@ from pyspark.sql.functions import UserDefinedFunction
 try:
     import pandas
     has_pandas = True
-except ImportError:
+except Exception:
     has_pandas = False
 
 __all__ = ["SQLContext", "HiveContext", "UDFRegistration"]
