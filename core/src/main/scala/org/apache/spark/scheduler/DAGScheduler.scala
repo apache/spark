@@ -111,7 +111,7 @@ class DAGScheduler(
    *
    * All accesses to this map should be guarded by synchronizing on it (see SPARK-4454).
    */
-  private val cacheLocs = new HashMap[Int, Seq[Seq[TaskLocation]]]
+  private val cacheLocs = new HashMap[Int, Array[Seq[TaskLocation]]]
 
   // For tracking failed nodes, we use the MapOutputTracker's epoch number, which is sent with
   // every task. When we detect a node failing, we note the current epoch number and failed
@@ -205,12 +205,12 @@ class DAGScheduler(
   }
 
   private[scheduler]
-  def getCacheLocs(rdd: RDD[_]): Seq[Seq[TaskLocation]] = cacheLocs.synchronized {
+  def getCacheLocs(rdd: RDD[_]): Array[Seq[TaskLocation]] = cacheLocs.synchronized {
     // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
     if (!cacheLocs.contains(rdd.id)) {
       // Note: if the storage level is NONE, we don't need to get locations from block manager.
-      val locs: Seq[Seq[TaskLocation]] = if (rdd.getStorageLevel == StorageLevel.NONE) {
-        Seq.fill(rdd.partitions.length)(Nil)
+      val locs: Array[Seq[TaskLocation]] = if (rdd.getStorageLevel == StorageLevel.NONE) {
+        Array.fill(rdd.partitions.length)(Nil)
       } else {
         val blockIds =
           rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
@@ -1359,7 +1359,7 @@ class DAGScheduler(
     // This avoids exponential path exploration.  SPARK-695
     if (!visited.add((rdd, partition))) {
       // Nil has already been returned for previously visited partitions.
-      return Nil
+      return Array.empty[TaskLocation]
     }
     // If the partition is cached, return the cache locations
     val cached = getCacheLocs(rdd)(partition)
@@ -1367,7 +1367,7 @@ class DAGScheduler(
       return cached
     }
     // If the RDD has some placement preferences (as is the case for input RDDs), get those
-    val rddPrefs = rdd.preferredLocations(rdd.partitions(partition)).toList
+    val rddPrefs = rdd.preferredLocations(rdd.partitions(partition))
     if (rddPrefs.nonEmpty) {
       return rddPrefs.map(TaskLocation(_))
     }
