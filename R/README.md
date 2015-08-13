@@ -6,7 +6,7 @@ SparkR is an R package that provides a light-weight frontend to use Spark from R
 
 #### Build Spark
 
-Build Spark with [Maven](http://spark.apache.org/docs/latest/building-spark.html#building-with-buildmvn) and include the `-PsparkR` profile to build the R package. For example to use the default Hadoop versions you can run
+Build Spark with [Maven](http://spark.apache.org/docs/latest/building-spark.html#building-with-buildmvn) and include the `-Psparkr` profile to build the R package. For example to use the default Hadoop versions you can run
 ```
   build/mvn -DskipTests -Psparkr package
 ```
@@ -52,7 +52,7 @@ The SparkR documentation (Rd files and HTML files) are not a part of the source 
 SparkR comes with several sample programs in the `examples/src/main/r` directory.
 To run one of them, use `./bin/sparkR <filename> <args>`. For example:
 
-    ./bin/sparkR examples/src/main/r/pi.R local[2]
+    ./bin/sparkR examples/src/main/r/dataframe.R
 
 You can also run the unit-tests for SparkR by running (you need to install the [testthat](http://cran.r-project.org/web/packages/testthat/index.html) package first):
 
@@ -63,5 +63,5 @@ You can also run the unit-tests for SparkR by running (you need to install the [
 The `./bin/spark-submit` and `./bin/sparkR` can also be used to submit jobs to YARN clusters. You will need to set YARN conf dir before doing so. For example on CDH you can run
 ```
 export YARN_CONF_DIR=/etc/hadoop/conf
-./bin/spark-submit --master yarn examples/src/main/r/pi.R 4
+./bin/spark-submit --master yarn examples/src/main/r/dataframe.R
 ```

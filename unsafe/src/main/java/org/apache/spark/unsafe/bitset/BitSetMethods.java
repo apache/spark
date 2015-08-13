@@ -17,7 +17,7 @@
 
 package org.apache.spark.unsafe.bitset;
 
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 
 /**
  * Methods for working with fixed-size uncompressed bitsets.
@@ -41,8 +41,8 @@ public final class BitSetMethods {
     assert index >= 0 : "index (" + index + ") should >= 0";
     final long mask = 1L << (index & 0x3f);  // mod 64 and shift
     final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
-    final long word = PlatformDependent.UNSAFE.getLong(baseObject, wordOffset);
-    PlatformDependent.UNSAFE.putLong(baseObject, wordOffset, word | mask);
+    final long word = Platform.getLong(baseObject, wordOffset);
+    Platform.putLong(baseObject, wordOffset, word | mask);
   }
 
   /**
@@ -52,8 +52,8 @@ public final class BitSetMethods {
     assert index >= 0 : "index (" + index + ") should >= 0";
     final long mask = 1L << (index & 0x3f);  // mod 64 and shift
     final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
-    final long word = PlatformDependent.UNSAFE.getLong(baseObject, wordOffset);
-    PlatformDependent.UNSAFE.putLong(baseObject, wordOffset, word & ~mask);
+    final long word = Platform.getLong(baseObject, wordOffset);
+    Platform.putLong(baseObject, wordOffset, word & ~mask);
   }
 
   /**
@@ -63,16 +63,17 @@ public final class BitSetMethods {
     assert index >= 0 : "index (" + index + ") should >= 0";
     final long mask = 1L << (index & 0x3f);  // mod 64 and shift
     final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
-    final long word = PlatformDependent.UNSAFE.getLong(baseObject, wordOffset);
+    final long word = Platform.getLong(baseObject, wordOffset);
     return (word & mask) != 0;
   }
 
   /**
    * Returns {@code true} if any bit is set.
    */
-  public static boolean anySet(Object baseObject, long baseOffset, long bitSetWidthInBytes) {
-    for (int i = 0; i <= bitSetWidthInBytes; i++) {
-      if (PlatformDependent.UNSAFE.getByte(baseObject, baseOffset + i) != 0) {
+  public static boolean anySet(Object baseObject, long baseOffset, long bitSetWidthInWords) {
+    long addr = baseOffset;
+    for (int i = 0; i < bitSetWidthInWords; i++, addr += WORD_SIZE) {
+      if (Platform.getLong(baseObject, addr) != 0) {
         return true;
       }
     }
@@ -86,7 +87,7 @@ public final class BitSetMethods {
    * To iterate over the true bits in a BitSet, use the following loop:
    * <pre>
    * <code>
-   *  for (long i = bs.nextSetBit(0, sizeInWords); i >= 0; i = bs.nextSetBit(i + 1, sizeInWords)) {
+   *  for (long i = bs.nextSetBit(0, sizeInWords); i &gt;= 0; i = bs.nextSetBit(i + 1, sizeInWords)) {
    *    // operate on index i here
    *  }
    * </code>
@@ -108,8 +109,7 @@ public final class BitSetMethods {
 
     // Try to find the next set bit in the current word
     final int subIndex = fromIndex & 0x3f;
-    long word =
-      PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + wi * WORD_SIZE) >> subIndex;
+    long word = Platform.getLong(baseObject, baseOffset + wi * WORD_SIZE) >> subIndex;
     if (word != 0) {
       return (wi << 6) + subIndex + java.lang.Long.numberOfTrailingZeros(word);
     }
@@ -117,7 +117,7 @@ public final class BitSetMethods {
     // Find the next set bit in the rest of the words
     wi += 1;
     while (wi < bitsetSizeInWords) {
-      word = PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + wi * WORD_SIZE);
+      word = Platform.getLong(baseObject, baseOffset + wi * WORD_SIZE);
       if (word != 0) {
         return (wi << 6) + java.lang.Long.numberOfTrailingZeros(word);
       }

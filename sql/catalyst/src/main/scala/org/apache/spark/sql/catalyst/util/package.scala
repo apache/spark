@@ -83,7 +83,7 @@ package object util {
   }
 
   def resourceToString(
-      resource:String,
+      resource: String,
       encoding: String = "UTF-8",
       classLoader: ClassLoader = Utils.getSparkClassLoader): String = {
     new String(resourceToBytes(resource, classLoader), encoding)
@@ -124,7 +124,9 @@ package object util {
     val startTime = System.nanoTime()
     val ret = f
     val endTime = System.nanoTime()
+    // scalastyle:off println
     println(s"${(endTime - startTime).toDouble / 1000000}ms")
+    // scalastyle:on println
     ret
   }
 

@@ -33,6 +33,7 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
  * Reference: [[http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance variance-wiki]]
  * Zero elements (including explicit zero values) are skipped when calling add(),
  * to have time complexity O(nnz) instead of O(n) for each column.
+ * @since 1.1.0
  */
 @DeveloperApi
 class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with Serializable {
@@ -52,6 +53,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    *
    * @param sample The sample in dense/sparse vector format to be added into this summarizer.
    * @return This MultivariateOnlineSummarizer object.
+   * @since 1.1.0
    */
   def add(sample: Vector): this.type = {
     if (n == 0) {
@@ -70,23 +72,30 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     require(n == sample.size, s"Dimensions mismatch when adding new sample." +
       s" Expecting $n but got ${sample.size}.")
 
+    val localCurrMean = currMean
+    val localCurrM2n = currM2n
+    val localCurrM2 = currM2
+    val localCurrL1 = currL1
+    val localNnz = nnz
+    val localCurrMax = currMax
+    val localCurrMin = currMin
     sample.foreachActive { (index, value) =>
       if (value != 0.0) {
-        if (currMax(index) < value) {
-          currMax(index) = value
+        if (localCurrMax(index) < value) {
+          localCurrMax(index) = value
         }
-        if (currMin(index) > value) {
-          currMin(index) = value
+        if (localCurrMin(index) > value) {
+          localCurrMin(index) = value
         }
 
-        val prevMean = currMean(index)
+        val prevMean = localCurrMean(index)
         val diff = value - prevMean
-        currMean(index) = prevMean + diff / (nnz(index) + 1.0)
-        currM2n(index) += (value - currMean(index)) * diff
-        currM2(index) += value * value
-        currL1(index) += math.abs(value)
+        localCurrMean(index) = prevMean + diff / (localNnz(index) + 1.0)
+        localCurrM2n(index) += (value - localCurrMean(index)) * diff
+        localCurrM2(index) += value * value
+        localCurrL1(index) += math.abs(value)
 
-        nnz(index) += 1.0
+        localNnz(index) += 1.0
       }
     }
 
@@ -100,6 +109,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    *
    * @param other The other MultivariateOnlineSummarizer to be merged.
    * @return This MultivariateOnlineSummarizer object.
+   * @since 1.1.0
    */
   def merge(other: MultivariateOnlineSummarizer): this.type = {
     if (this.totalCnt != 0 && other.totalCnt != 0) {
@@ -130,18 +140,23 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       }
     } else if (totalCnt == 0 && other.totalCnt != 0) {
       this.n = other.n
-      this.currMean = other.currMean.clone
-      this.currM2n = other.currM2n.clone
-      this.currM2 = other.currM2.clone
-      this.currL1 = other.currL1.clone
+      this.currMean = other.currMean.clone()
+      this.currM2n = other.currM2n.clone()
+      this.currM2 = other.currM2.clone()
+      this.currL1 = other.currL1.clone()
       this.totalCnt = other.totalCnt
-      this.nnz = other.nnz.clone
-      this.currMax = other.currMax.clone
-      this.currMin = other.currMin.clone
+      this.nnz = other.nnz.clone()
+      this.currMax = other.currMax.clone()
+      this.currMin = other.currMin.clone()
     }
     this
   }
 
+  /**
+   * Sample mean of each dimension.
+   *
+   * @since 1.1.0
+   */
   override def mean: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
@@ -154,6 +169,11 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     Vectors.dense(realMean)
   }
 
+  /**
+   * Sample variance of each dimension.
+   *
+   * @since 1.1.0
+   */
   override def variance: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
@@ -165,7 +185,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     if (denominator > 0.0) {
       val deltaMean = currMean
       var i = 0
-      while (i < currM2n.size) {
+      val len = currM2n.length
+      while (i < len) {
         realVariance(i) =
           currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * (totalCnt - nnz(i)) / totalCnt
         realVariance(i) /= denominator
@@ -175,14 +196,29 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     Vectors.dense(realVariance)
   }
 
+  /**
+   * Sample size.
+   *
+   * @since 1.1.0
+   */
   override def count: Long = totalCnt
 
+  /**
+   * Number of nonzero elements in each dimension.
+   *
+   * @since 1.1.0
+   */
   override def numNonzeros: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
     Vectors.dense(nnz)
   }
 
+  /**
+   * Maximum value of each dimension.
+   *
+   * @since 1.1.0
+   */
   override def max: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
@@ -194,6 +230,11 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     Vectors.dense(currMax)
   }
 
+  /**
+   * Minimum value of each dimension.
+   *
+   * @since 1.1.0
+   */
   override def min: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
@@ -205,19 +246,30 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     Vectors.dense(currMin)
   }
 
+  /**
+   * L2 (Euclidian) norm of each dimension.
+   *
+   * @since 1.2.0
+   */
   override def normL2: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
     val realMagnitude = Array.ofDim[Double](n)
 
     var i = 0
-    while (i < currM2.size) {
+    val len = currM2.length
+    while (i < len) {
       realMagnitude(i) = math.sqrt(currM2(i))
       i += 1
     }
     Vectors.dense(realMagnitude)
   }
 
+  /**
+   * L1 norm of each dimension.
+   *
+   * @since 1.2.0
+   */
   override def normL1: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 

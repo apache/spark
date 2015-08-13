@@ -56,6 +56,7 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
     // Predicate test on integer column
     def translateFilterOnA(filter: Filter): Int => Boolean = filter match {
       case EqualTo("a", v) => (a: Int) => a == v
+      case EqualNullSafe("a", v) => (a: Int) => a == v
       case LessThan("a", v: Int) => (a: Int) => a < v
       case LessThanOrEqual("a", v: Int) => (a: Int) => a <= v
       case GreaterThan("a", v: Int) => (a: Int) => a > v
@@ -97,7 +98,7 @@ object FiltersPushed {
 
 class FilteredScanSuite extends DataSourceTest {
 
-  import caseInsensisitiveContext._
+  import caseInsensitiveContext.sql
 
   before {
     sql(
@@ -154,7 +155,7 @@ class FilteredScanSuite extends DataSourceTest {
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE a IN (1,3,5)",
-    Seq(1,3,5).map(i => Row(i, i * 2)))
+    Seq(1, 3, 5).map(i => Row(i, i * 2)))
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE A = 1",

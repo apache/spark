@@ -24,7 +24,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.future
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
@@ -34,7 +34,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
  * (e.g. count) as well as multi-job action (e.g. take). We test the local and cluster schedulers
  * in both FIFO and fair scheduling modes.
  */
-class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
+class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   with LocalSparkContext {
 
   override def afterEach() {
@@ -64,7 +64,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("cluster mode, FIFO scheduler") {
     val conf = new SparkConf().set("spark.scheduler.mode", "FIFO")
-    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
+    sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     testCount()
     testTake()
     // Make sure we can still launch tasks.
@@ -75,7 +75,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
     val conf = new SparkConf().set("spark.scheduler.mode", "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
     conf.set("spark.scheduler.allocation.file", xmlPath)
-    sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
+    sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     testCount()
     testTake()
     // Make sure we can still launch tasks.

@@ -107,7 +107,8 @@ object LinearDataGenerator {
 
     x.foreach { v =>
       var i = 0
-      while (i < v.length) {
+      val len = v.length
+      while (i < len) {
         v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
         i += 1
       }
@@ -152,8 +153,10 @@ object LinearDataGenerator {
 
   def main(args: Array[String]) {
     if (args.length < 2) {
+      // scalastyle:off println
       println("Usage: LinearDataGenerator " +
         "<master> <output_dir> [num_examples] [num_features] [num_partitions]")
+      // scalastyle:on println
       System.exit(1)
     }
 

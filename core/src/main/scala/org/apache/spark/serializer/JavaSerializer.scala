@@ -62,8 +62,11 @@ private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoa
   extends DeserializationStream {
 
   private val objIn = new ObjectInputStream(in) {
-    override def resolveClass(desc: ObjectStreamClass): Class[_] =
+    override def resolveClass(desc: ObjectStreamClass): Class[_] = {
+      // scalastyle:off classforname
       Class.forName(desc.getName, false, loader)
+      // scalastyle:on classforname
+    }
   }
 
   def readObject[T: ClassTag](): T = objIn.readObject().asInstanceOf[T]
@@ -120,6 +123,8 @@ private[spark] class JavaSerializerInstance(
 class JavaSerializer(conf: SparkConf) extends Serializer with Externalizable {
   private var counterReset = conf.getInt("spark.serializer.objectStreamReset", 100)
   private var extraDebugInfo = conf.getBoolean("spark.serializer.extraDebugInfo", true)
+
+  protected def this() = this(new SparkConf())  // For deserialization only
 
   override def newInstance(): SerializerInstance = {
     val classLoader = defaultClassLoader.getOrElse(Thread.currentThread.getContextClassLoader)

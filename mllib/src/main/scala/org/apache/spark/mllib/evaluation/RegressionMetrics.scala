@@ -22,6 +22,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, MultivariateOnlineSummarizer}
+import org.apache.spark.sql.DataFrame
 
 /**
  * :: Experimental ::
@@ -31,6 +32,14 @@ import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Multivariate
  */
 @Experimental
 class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extends Logging {
+
+  /**
+   * An auxiliary constructor taking a DataFrame.
+   * @param predictionAndObservations a DataFrame with two double columns:
+   *                                  prediction and observation
+   */
+  private[mllib] def this(predictionAndObservations: DataFrame) =
+    this(predictionAndObservations.map(r => (r.getDouble(0), r.getDouble(1))))
 
   /**
    * Use MultivariateOnlineSummarizer to calculate summary statistics of observations and errors.
@@ -44,14 +53,22 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
       )
     summary
   }
+  private lazy val SSerr = math.pow(summary.normL2(1), 2)
+  private lazy val SStot = summary.variance(0) * (summary.count - 1)
+  private lazy val SSreg = {
+    val yMean = summary.mean(0)
+    predictionAndObservations.map {
+      case (prediction, _) => math.pow(prediction - yMean, 2)
+    }.sum()
+  }
 
   /**
-   * Returns the explained variance regression score.
-   * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
-   * Reference: [[http://en.wikipedia.org/wiki/Explained_variation]]
+   * Returns the variance explained by regression.
+   * explainedVariance = \sum_i (\hat{y_i} - \bar{y})^2 / n
+   * @see [[https://en.wikipedia.org/wiki/Fraction_of_variance_unexplained]]
    */
   def explainedVariance: Double = {
-    1 - summary.variance(1) / summary.variance(0)
+    SSreg / summary.count
   }
 
   /**
@@ -67,8 +84,7 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
    * expected value of the squared error loss or quadratic loss.
    */
   def meanSquaredError: Double = {
-    val rmse = summary.normL2(1) / math.sqrt(summary.count)
-    rmse * rmse
+    SSerr / summary.count
   }
 
   /**
@@ -76,14 +92,14 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
    * the mean squared error.
    */
   def rootMeanSquaredError: Double = {
-    summary.normL2(1) / math.sqrt(summary.count)
+    math.sqrt(this.meanSquaredError)
   }
 
   /**
-   * Returns R^2^, the coefficient of determination.
-   * Reference: [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
+   * Returns R^2^, the unadjusted coefficient of determination.
+   * @see [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
    */
   def r2: Double = {
-    1 - math.pow(summary.normL2(1), 2) / (summary.variance(0) * (summary.count - 1))
+    1 - SSerr / SStot
   }
 }

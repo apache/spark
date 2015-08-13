@@ -19,8 +19,7 @@ package org.apache.spark.ml.impl
 
 import scala.collection.JavaConverters._
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.tree._
@@ -29,7 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SQLContext, DataFrame}
 
 
-private[ml] object TreeTests extends FunSuite {
+private[ml] object TreeTests extends SparkFunSuite {
 
   /**
    * Convert the given data to a DataFrame, and set the features and label metadata.
@@ -124,5 +123,23 @@ private[ml] object TreeTests extends FunSuite {
       case ex: Exception => throw new AssertionError(
         "checkEqual failed since the two tree ensembles were not identical")
     }
+  }
+
+  /**
+   * Helper method for constructing a tree for testing.
+   * Given left, right children, construct a parent node.
+   * @param split  Split for parent node
+   * @return  Parent node with children attached
+   */
+  def buildParentNode(left: Node, right: Node, split: Split): Node = {
+    val leftImp = left.impurityStats
+    val rightImp = right.impurityStats
+    val parentImp = leftImp.copy.add(rightImp)
+    val leftWeight = leftImp.count / parentImp.count.toDouble
+    val rightWeight = rightImp.count / parentImp.count.toDouble
+    val gain = parentImp.calculate() -
+      (leftWeight * leftImp.calculate() + rightWeight * rightImp.calculate())
+    val pred = parentImp.predict
+    new InternalNode(pred, parentImp.calculate(), gain, left, right, split, parentImp)
   }
 }

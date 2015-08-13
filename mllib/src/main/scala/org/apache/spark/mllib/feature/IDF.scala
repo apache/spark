@@ -144,7 +144,7 @@ private object IDF {
          * Since arrays are initialized to 0 by default,
          * we just omit changing those entries.
          */
-        if(df(j) >= minDocFreq) {
+        if (df(j) >= minDocFreq) {
           inv(j) = math.log((m + 1.0) / (df(j) + 1.0))
         }
         j += 1
@@ -159,7 +159,7 @@ private object IDF {
  * Represents an IDF model that can transform term frequency vectors.
  */
 @Experimental
-class IDFModel private[mllib] (val idf: Vector) extends Serializable {
+class IDFModel private[spark] (val idf: Vector) extends Serializable {
 
   /**
    * Transforms term frequency (TF) vectors to TF-IDF vectors.

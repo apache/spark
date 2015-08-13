@@ -31,7 +31,7 @@ The base class of local vectors is
 implementations: [`DenseVector`](api/scala/index.html#org.apache.spark.mllib.linalg.DenseVector) and
 [`SparseVector`](api/scala/index.html#org.apache.spark.mllib.linalg.SparseVector).  We recommend
 using the factory methods implemented in
-[`Vectors`](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) to create local vectors.
+[`Vectors`](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors$) to create local vectors.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -57,7 +57,7 @@ The base class of local vectors is
 implementations: [`DenseVector`](api/java/org/apache/spark/mllib/linalg/DenseVector.html) and
 [`SparseVector`](api/java/org/apache/spark/mllib/linalg/SparseVector.html).  We recommend
 using the factory methods implemented in
-[`Vectors`](api/java/org/apache/spark/mllib/linalg/Vector.html) to create local vectors.
+[`Vectors`](api/java/org/apache/spark/mllib/linalg/Vectors.html) to create local vectors.
 
 {% highlight java %}
 import org.apache.spark.mllib.linalg.Vector;
@@ -84,7 +84,7 @@ and the following as sparse vectors:
   with a single column
 
 We recommend using NumPy arrays over lists for efficiency, and using the factory methods implemented
-in [`Vectors`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Vector) to create sparse vectors.
+in [`Vectors`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Vectors) to create sparse vectors.
 
 {% highlight python %}
 import numpy as np
@@ -226,7 +226,8 @@ examples = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 
 A local matrix has integer-typed row and column indices and double-typed values, stored on a single
 machine.  MLlib supports dense matrices, whose entry values are stored in a single double array in
-column major.  For example, the following matrix `\[ \begin{pmatrix}
+column-major order, and sparse matrices, whose non-zero entry values are stored in the Compressed Sparse
+Column (CSC) format in column-major order.  For example, the following dense matrix `\[ \begin{pmatrix}
 1.0 & 2.0 \\
 3.0 & 4.0 \\
 5.0 & 6.0
@@ -238,28 +239,33 @@ is stored in a one-dimensional array `[1.0, 3.0, 5.0, 2.0, 4.0, 6.0]` with the m
 <div data-lang="scala" markdown="1">
 
 The base class of local matrices is
-[`Matrix`](api/scala/index.html#org.apache.spark.mllib.linalg.Matrix), and we provide one
-implementation: [`DenseMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.DenseMatrix).
+[`Matrix`](api/scala/index.html#org.apache.spark.mllib.linalg.Matrix), and we provide two
+implementations: [`DenseMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.DenseMatrix),
+and [`SparseMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.SparseMatrix).
 We recommend using the factory methods implemented
-in [`Matrices`](api/scala/index.html#org.apache.spark.mllib.linalg.Matrices) to create local
-matrices.
+in [`Matrices`](api/scala/index.html#org.apache.spark.mllib.linalg.Matrices$) to create local
+matrices. Remember, local matrices in MLlib are stored in column-major order.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.{Matrix, Matrices}
 
 // Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
 val dm: Matrix = Matrices.dense(3, 2, Array(1.0, 3.0, 5.0, 2.0, 4.0, 6.0))
+
+// Create a sparse matrix ((9.0, 0.0), (0.0, 8.0), (0.0, 6.0))
+val sm: Matrix = Matrices.sparse(3, 2, Array(0, 1, 3), Array(0, 2, 1), Array(9, 6, 8))
 {% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
 
 The base class of local matrices is
-[`Matrix`](api/java/org/apache/spark/mllib/linalg/Matrix.html), and we provide one
-implementation: [`DenseMatrix`](api/java/org/apache/spark/mllib/linalg/DenseMatrix.html).
+[`Matrix`](api/java/org/apache/spark/mllib/linalg/Matrix.html), and we provide two
+implementations: [`DenseMatrix`](api/java/org/apache/spark/mllib/linalg/DenseMatrix.html),
+and [`SparseMatrix`](api/java/org/apache/spark/mllib/linalg/SparseMatrix.html).
 We recommend using the factory methods implemented
 in [`Matrices`](api/java/org/apache/spark/mllib/linalg/Matrices.html) to create local
-matrices.
+matrices. Remember, local matrices in MLlib are stored in column-major order.
 
 {% highlight java %}
 import org.apache.spark.mllib.linalg.Matrix;
@@ -267,6 +273,30 @@ import org.apache.spark.mllib.linalg.Matrices;
 
 // Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
 Matrix dm = Matrices.dense(3, 2, new double[] {1.0, 3.0, 5.0, 2.0, 4.0, 6.0});
+
+// Create a sparse matrix ((9.0, 0.0), (0.0, 8.0), (0.0, 6.0))
+Matrix sm = Matrices.sparse(3, 2, new int[] {0, 1, 3}, new int[] {0, 2, 1}, new double[] {9, 6, 8});
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+The base class of local matrices is
+[`Matrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Matrix), and we provide two
+implementations: [`DenseMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.DenseMatrix),
+and [`SparseMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.SparseMatrix).
+We recommend using the factory methods implemented
+in [`Matrices`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Matrices) to create local
+matrices. Remember, local matrices in MLlib are stored in column-major order.
+
+{% highlight python %}
+import org.apache.spark.mllib.linalg.{Matrix, Matrices}
+
+// Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
+dm2 = Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])
+
+// Create a sparse matrix ((9.0, 0.0), (0.0, 8.0), (0.0, 6.0))
+sm = Matrices.sparse(3, 2, [0, 1, 3], [0, 2, 1], [9, 6, 8])
 {% endhighlight %}
 </div>
 
@@ -295,6 +325,285 @@ backed by an RDD of its entries.
 
 The underlying RDDs of a distributed matrix must be deterministic, because we cache the matrix size.
 In general the use of non-deterministic RDDs can lead to errors.
+
+### RowMatrix
+
+A `RowMatrix` is a row-oriented distributed matrix without meaningful row indices, backed by an RDD
+of its rows, where each row is a local vector.
+Since each row is represented by a local vector, the number of columns is
+limited by the integer range but it should be much smaller in practice.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+A [`RowMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.RowMatrix) can be
+created from an `RDD[Vector]` instance.  Then we can compute its column summary statistics.
+
+{% highlight scala %}
+import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.distributed.RowMatrix
+
+val rows: RDD[Vector] = ... // an RDD of local vectors
+// Create a RowMatrix from an RDD[Vector].
+val mat: RowMatrix = new RowMatrix(rows)
+
+// Get its size.
+val m = mat.numRows()
+val n = mat.numCols()
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+A [`RowMatrix`](api/java/org/apache/spark/mllib/linalg/distributed/RowMatrix.html) can be
+created from a `JavaRDD<Vector>` instance.  Then we can compute its column summary statistics.
+
+{% highlight java %}
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.distributed.RowMatrix;
+
+JavaRDD<Vector> rows = ... // a JavaRDD of local vectors
+// Create a RowMatrix from an JavaRDD<Vector>.
+RowMatrix mat = new RowMatrix(rows.rdd());
+
+// Get its size.
+long m = mat.numRows();
+long n = mat.numCols();
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+A [`RowMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.RowMatrix) can be 
+created from an `RDD` of vectors.
+
+{% highlight python %}
+from pyspark.mllib.linalg.distributed import RowMatrix
+
+# Create an RDD of vectors.
+rows = sc.parallelize([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]])
+
+# Create a RowMatrix from an RDD of vectors.
+mat = RowMatrix(rows)
+
+# Get its size.
+m = mat.numRows()  # 4
+n = mat.numCols()  # 3
+
+# Get the rows as an RDD of vectors again.
+rowsRDD = mat.rows
+{% endhighlight %}
+</div>
+
+</div>
+
+### IndexedRowMatrix
+
+An `IndexedRowMatrix` is similar to a `RowMatrix` but with meaningful row indices.  It is backed by
+an RDD of indexed rows, so that each row is represented by its index (long-typed) and a local 
+vector.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+An
+[`IndexedRowMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix)
+can be created from an `RDD[IndexedRow]` instance, where
+[`IndexedRow`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRow) is a
+wrapper over `(Long, Vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping
+its row indices.
+
+{% highlight scala %}
+import org.apache.spark.mllib.linalg.distributed.{IndexedRow, IndexedRowMatrix, RowMatrix}
+
+val rows: RDD[IndexedRow] = ... // an RDD of indexed rows
+// Create an IndexedRowMatrix from an RDD[IndexedRow].
+val mat: IndexedRowMatrix = new IndexedRowMatrix(rows)
+
+// Get its size.
+val m = mat.numRows()
+val n = mat.numCols()
+
+// Drop its row indices.
+val rowMat: RowMatrix = mat.toRowMatrix()
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+An
+[`IndexedRowMatrix`](api/java/org/apache/spark/mllib/linalg/distributed/IndexedRowMatrix.html)
+can be created from an `JavaRDD<IndexedRow>` instance, where
+[`IndexedRow`](api/java/org/apache/spark/mllib/linalg/distributed/IndexedRow.html) is a
+wrapper over `(long, Vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping
+its row indices.
+
+{% highlight java %}
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.mllib.linalg.distributed.IndexedRow;
+import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
+import org.apache.spark.mllib.linalg.distributed.RowMatrix;
+
+JavaRDD<IndexedRow> rows = ... // a JavaRDD of indexed rows
+// Create an IndexedRowMatrix from a JavaRDD<IndexedRow>.
+IndexedRowMatrix mat = new IndexedRowMatrix(rows.rdd());
+
+// Get its size.
+long m = mat.numRows();
+long n = mat.numCols();
+
+// Drop its row indices.
+RowMatrix rowMat = mat.toRowMatrix();
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+An [`IndexedRowMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.IndexedRowMatrix)
+can be created from an `RDD` of `IndexedRow`s, where 
+[`IndexedRow`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.IndexedRow) is a 
+wrapper over `(long, vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping
+its row indices.
+
+{% highlight python %}
+from pyspark.mllib.linalg.distributed import IndexedRow, IndexedRowMatrix
+
+# Create an RDD of indexed rows.
+#   - This can be done explicitly with the IndexedRow class:
+indexedRows = sc.parallelize([IndexedRow(0, [1, 2, 3]), 
+                              IndexedRow(1, [4, 5, 6]), 
+                              IndexedRow(2, [7, 8, 9]), 
+                              IndexedRow(3, [10, 11, 12])])
+#   - or by using (long, vector) tuples:
+indexedRows = sc.parallelize([(0, [1, 2, 3]), (1, [4, 5, 6]), 
+                              (2, [7, 8, 9]), (3, [10, 11, 12])])
+
+# Create an IndexedRowMatrix from an RDD of IndexedRows.
+mat = IndexedRowMatrix(indexedRows)
+
+# Get its size.
+m = mat.numRows()  # 4
+n = mat.numCols()  # 3
+
+# Get the rows as an RDD of IndexedRows.
+rowsRDD = mat.rows
+
+# Convert to a RowMatrix by dropping the row indices.
+rowMat = mat.toRowMatrix()
+
+# Convert to a CoordinateMatrix.
+coordinateMat = mat.toCoordinateMatrix()
+
+# Convert to a BlockMatrix.
+blockMat = mat.toBlockMatrix()
+{% endhighlight %}
+</div>
+
+</div>
+
+### CoordinateMatrix
+
+A `CoordinateMatrix` is a distributed matrix backed by an RDD of its entries.  Each entry is a tuple
+of `(i: Long, j: Long, value: Double)`, where `i` is the row index, `j` is the column index, and
+`value` is the entry value.  A `CoordinateMatrix` should be used only when both
+dimensions of the matrix are huge and the matrix is very sparse.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+A
+[`CoordinateMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.CoordinateMatrix)
+can be created from an `RDD[MatrixEntry]` instance, where
+[`MatrixEntry`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.MatrixEntry) is a
+wrapper over `(Long, Long, Double)`.  A `CoordinateMatrix` can be converted to an `IndexedRowMatrix`
+with sparse rows by calling `toIndexedRowMatrix`.  Other computations for 
+`CoordinateMatrix` are not currently supported.
+
+{% highlight scala %}
+import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
+
+val entries: RDD[MatrixEntry] = ... // an RDD of matrix entries
+// Create a CoordinateMatrix from an RDD[MatrixEntry].
+val mat: CoordinateMatrix = new CoordinateMatrix(entries)
+
+// Get its size.
+val m = mat.numRows()
+val n = mat.numCols()
+
+// Convert it to an IndexRowMatrix whose rows are sparse vectors.
+val indexedRowMatrix = mat.toIndexedRowMatrix()
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+A
+[`CoordinateMatrix`](api/java/org/apache/spark/mllib/linalg/distributed/CoordinateMatrix.html)
+can be created from a `JavaRDD<MatrixEntry>` instance, where
+[`MatrixEntry`](api/java/org/apache/spark/mllib/linalg/distributed/MatrixEntry.html) is a
+wrapper over `(long, long, double)`.  A `CoordinateMatrix` can be converted to an `IndexedRowMatrix`
+with sparse rows by calling `toIndexedRowMatrix`. Other computations for 
+`CoordinateMatrix` are not currently supported.
+
+{% highlight java %}
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix;
+import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
+import org.apache.spark.mllib.linalg.distributed.MatrixEntry;
+
+JavaRDD<MatrixEntry> entries = ... // a JavaRDD of matrix entries
+// Create a CoordinateMatrix from a JavaRDD<MatrixEntry>.
+CoordinateMatrix mat = new CoordinateMatrix(entries.rdd());
+
+// Get its size.
+long m = mat.numRows();
+long n = mat.numCols();
+
+// Convert it to an IndexRowMatrix whose rows are sparse vectors.
+IndexedRowMatrix indexedRowMatrix = mat.toIndexedRowMatrix();
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+A [`CoordinateMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.CoordinateMatrix)
+can be created from an `RDD` of `MatrixEntry` entries, where 
+[`MatrixEntry`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.MatrixEntry) is a 
+wrapper over `(long, long, float)`.  A `CoordinateMatrix` can be converted to a `RowMatrix` by 
+calling `toRowMatrix`, or to an `IndexedRowMatrix` with sparse rows by calling `toIndexedRowMatrix`.
+
+{% highlight python %}
+from pyspark.mllib.linalg.distributed import CoordinateMatrix, MatrixEntry
+
+# Create an RDD of coordinate entries.
+#   - This can be done explicitly with the MatrixEntry class:
+entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(1, 0, 2.1), MatrixEntry(6, 1, 3.7)])
+#   - or using (long, long, float) tuples:
+entries = sc.parallelize([(0, 0, 1.2), (1, 0, 2.1), (2, 1, 3.7)])
+
+# Create an CoordinateMatrix from an RDD of MatrixEntries.
+mat = CoordinateMatrix(entries)
+
+# Get its size.
+m = mat.numRows()  # 3
+n = mat.numCols()  # 2
+
+# Get the entries as an RDD of MatrixEntries.
+entriesRDD = mat.entries
+
+# Convert to a RowMatrix.
+rowMat = mat.toRowMatrix()
+
+# Convert to an IndexedRowMatrix.
+indexedRowMat = mat.toIndexedRowMatrix()
+
+# Convert to a BlockMatrix.
+blockMat = mat.toBlockMatrix()
+{% endhighlight %}
+</div>
+
+</div>
 
 ### BlockMatrix
 
@@ -358,175 +667,39 @@ matA.validate();
 BlockMatrix ata = matA.transpose().multiply(matA);
 {% endhighlight %}
 </div>
-</div>
 
-### RowMatrix
+<div data-lang="python" markdown="1">
 
-A `RowMatrix` is a row-oriented distributed matrix without meaningful row indices, backed by an RDD
-of its rows, where each row is a local vector.
-Since each row is represented by a local vector, the number of columns is
-limited by the integer range but it should be much smaller in practice.
+A [`BlockMatrix`](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.BlockMatrix) 
+can be created from an `RDD` of sub-matrix blocks, where a sub-matrix block is a 
+`((blockRowIndex, blockColIndex), sub-matrix)` tuple.
 
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
+{% highlight python %}
+from pyspark.mllib.linalg import Matrices
+from pyspark.mllib.linalg.distributed import BlockMatrix
 
-A [`RowMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.RowMatrix) can be
-created from an `RDD[Vector]` instance.  Then we can compute its column summary statistics.
+# Create an RDD of sub-matrix blocks.
+blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])), 
+                         ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
 
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
+# Create a BlockMatrix from an RDD of sub-matrix blocks.
+mat = BlockMatrix(blocks, 3, 2)
 
-val rows: RDD[Vector] = ... // an RDD of local vectors
-// Create a RowMatrix from an RDD[Vector].
-val mat: RowMatrix = new RowMatrix(rows)
+# Get its size.
+m = mat.numRows() # 6
+n = mat.numCols() # 2
 
-// Get its size.
-val m = mat.numRows()
-val n = mat.numCols()
-{% endhighlight %}
-</div>
+# Get the blocks as an RDD of sub-matrix blocks.
+blocksRDD = mat.blocks
 
-<div data-lang="java" markdown="1">
+# Convert to a LocalMatrix.
+localMat = mat.toLocalMatrix()
 
-A [`RowMatrix`](api/java/org/apache/spark/mllib/linalg/distributed/RowMatrix.html) can be
-created from a `JavaRDD<Vector>` instance.  Then we can compute its column summary statistics.
+# Convert to an IndexedRowMatrix.
+indexedRowMat = mat.toIndexedRowMatrix()
 
-{% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.distributed.RowMatrix;
-
-JavaRDD<Vector> rows = ... // a JavaRDD of local vectors
-// Create a RowMatrix from an JavaRDD<Vector>.
-RowMatrix mat = new RowMatrix(rows.rdd());
-
-// Get its size.
-long m = mat.numRows();
-long n = mat.numCols();
-{% endhighlight %}
-</div>
-</div>
-
-### IndexedRowMatrix
-
-An `IndexedRowMatrix` is similar to a `RowMatrix` but with meaningful row indices.  It is backed by
-an RDD of indexed rows, so that each row is represented by its index (long-typed) and a local vector.
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-An
-[`IndexedRowMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix)
-can be created from an `RDD[IndexedRow]` instance, where
-[`IndexedRow`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRow) is a
-wrapper over `(Long, Vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping
-its row indices.
-
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.distributed.{IndexedRow, IndexedRowMatrix, RowMatrix}
-
-val rows: RDD[IndexedRow] = ... // an RDD of indexed rows
-// Create an IndexedRowMatrix from an RDD[IndexedRow].
-val mat: IndexedRowMatrix = new IndexedRowMatrix(rows)
-
-// Get its size.
-val m = mat.numRows()
-val n = mat.numCols()
-
-// Drop its row indices.
-val rowMat: RowMatrix = mat.toRowMatrix()
-{% endhighlight %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-An
-[`IndexedRowMatrix`](api/java/org/apache/spark/mllib/linalg/distributed/IndexedRowMatrix.html)
-can be created from an `JavaRDD<IndexedRow>` instance, where
-[`IndexedRow`](api/java/org/apache/spark/mllib/linalg/distributed/IndexedRow.html) is a
-wrapper over `(long, Vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping
-its row indices.
-
-{% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.mllib.linalg.distributed.IndexedRow;
-import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
-import org.apache.spark.mllib.linalg.distributed.RowMatrix;
-
-JavaRDD<IndexedRow> rows = ... // a JavaRDD of indexed rows
-// Create an IndexedRowMatrix from a JavaRDD<IndexedRow>.
-IndexedRowMatrix mat = new IndexedRowMatrix(rows.rdd());
-
-// Get its size.
-long m = mat.numRows();
-long n = mat.numCols();
-
-// Drop its row indices.
-RowMatrix rowMat = mat.toRowMatrix();
-{% endhighlight %}
-</div></div>
-
-### CoordinateMatrix
-
-A `CoordinateMatrix` is a distributed matrix backed by an RDD of its entries.  Each entry is a tuple
-of `(i: Long, j: Long, value: Double)`, where `i` is the row index, `j` is the column index, and
-`value` is the entry value.  A `CoordinateMatrix` should be used only when both
-dimensions of the matrix are huge and the matrix is very sparse.
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-A
-[`CoordinateMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.CoordinateMatrix)
-can be created from an `RDD[MatrixEntry]` instance, where
-[`MatrixEntry`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.MatrixEntry) is a
-wrapper over `(Long, Long, Double)`.  A `CoordinateMatrix` can be converted to an `IndexedRowMatrix`
-with sparse rows by calling `toIndexedRowMatrix`.  Other computations for 
-`CoordinateMatrix` are not currently supported.
-
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
-
-val entries: RDD[MatrixEntry] = ... // an RDD of matrix entries
-// Create a CoordinateMatrix from an RDD[MatrixEntry].
-val mat: CoordinateMatrix = new CoordinateMatrix(entries)
-
-// Get its size.
-val m = mat.numRows()
-val n = mat.numCols()
-
-// Convert it to an IndexRowMatrix whose rows are sparse vectors.
-val indexedRowMatrix = mat.toIndexedRowMatrix()
-{% endhighlight %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-A
-[`CoordinateMatrix`](api/java/org/apache/spark/mllib/linalg/distributed/CoordinateMatrix.html)
-can be created from a `JavaRDD<MatrixEntry>` instance, where
-[`MatrixEntry`](api/java/org/apache/spark/mllib/linalg/distributed/MatrixEntry.html) is a
-wrapper over `(long, long, double)`.  A `CoordinateMatrix` can be converted to an `IndexedRowMatrix`
-with sparse rows by calling `toIndexedRowMatrix`. Other computations for 
-`CoordinateMatrix` are not currently supported.
-
-{% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix;
-import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
-import org.apache.spark.mllib.linalg.distributed.MatrixEntry;
-
-JavaRDD<MatrixEntry> entries = ... // a JavaRDD of matrix entries
-// Create a CoordinateMatrix from a JavaRDD<MatrixEntry>.
-CoordinateMatrix mat = new CoordinateMatrix(entries.rdd());
-
-// Get its size.
-long m = mat.numRows();
-long n = mat.numCols();
-
-// Convert it to an IndexRowMatrix whose rows are sparse vectors.
-IndexedRowMatrix indexedRowMatrix = mat.toIndexedRowMatrix();
+# Convert to a CoordinateMatrix.
+coordinateMat = mat.toCoordinateMatrix()
 {% endhighlight %}
 </div>
 </div>

@@ -16,14 +16,13 @@
  */
 package org.apache.spark.streaming.flume.sink
 
+import java.util.UUID
 import java.util.concurrent.{CountDownLatch, Executors}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.flume.Channel
-import org.apache.commons.lang3.RandomStringUtils
 
 /**
  * Class that implements the SparkFlumeProtocol, that is used by the Avro Netty Server to process
@@ -45,8 +44,7 @@ import org.apache.commons.lang3.RandomStringUtils
 private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Channel,
   val transactionTimeout: Int, val backOffInterval: Int) extends SparkFlumeProtocol with Logging {
   val transactionExecutorOpt = Option(Executors.newFixedThreadPool(threads,
-    new ThreadFactoryBuilder().setDaemon(true)
-      .setNameFormat("Spark Sink Processor Thread - %d").build()))
+    new SparkSinkThreadFactory("Spark Sink Processor Thread - %d")))
   // Protected by `sequenceNumberToProcessor`
   private val sequenceNumberToProcessor = mutable.HashMap[CharSequence, TransactionProcessor]()
   // This sink will not persist sequence numbers and reuses them if it gets restarted.
@@ -55,7 +53,7 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
   // Since the new txn may not have the same sequence number we must guard against accidentally
   // committing a new transaction. To reduce the probability of that happening a random string is
   // prepended to the sequence number. Does not change for life of sink
-  private val seqBase = RandomStringUtils.randomAlphanumeric(8)
+  private val seqBase = UUID.randomUUID().toString.substring(0, 8)
   private val seqCounter = new AtomicLong(0)
 
   // Protected by `sequenceNumberToProcessor`

@@ -36,22 +36,21 @@ object AvroConversionUtil extends Serializable {
       return null
     }
     schema.getType match {
-      case UNION   => unpackUnion(obj, schema)
-      case ARRAY   => unpackArray(obj, schema)
-      case FIXED   => unpackFixed(obj, schema)
-      case MAP     => unpackMap(obj, schema)
-      case BYTES   => unpackBytes(obj)
-      case RECORD  => unpackRecord(obj)
-      case STRING  => obj.toString
-      case ENUM    => obj.toString
-      case NULL    => obj
+      case UNION => unpackUnion(obj, schema)
+      case ARRAY => unpackArray(obj, schema)
+      case FIXED => unpackFixed(obj, schema)
+      case MAP => unpackMap(obj, schema)
+      case BYTES => unpackBytes(obj)
+      case RECORD => unpackRecord(obj)
+      case STRING => obj.toString
+      case ENUM => obj.toString
+      case NULL => obj
       case BOOLEAN => obj
-      case DOUBLE  => obj
-      case FLOAT   => obj
-      case INT     => obj
-      case LONG    => obj
-      case other   => throw new SparkException(
-        s"Unknown Avro schema type ${other.getName}")
+      case DOUBLE => obj
+      case FLOAT => obj
+      case INT => obj
+      case LONG => obj
+      case other => throw new SparkException(s"Unknown Avro schema type ${other.getName}")
     }
   }
 

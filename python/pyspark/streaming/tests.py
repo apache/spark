@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import glob
 import os
 import sys
 from itertools import chain
@@ -23,6 +24,7 @@ import operator
 import tempfile
 import random
 import struct
+import shutil
 from functools import reduce
 
 if sys.version_info[:2] <= (2, 6):
@@ -35,14 +37,18 @@ else:
     import unittest
 
 from pyspark.context import SparkConf, SparkContext, RDD
+from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.context import StreamingContext
 from pyspark.streaming.kafka import Broker, KafkaUtils, OffsetRange, TopicAndPartition
+from pyspark.streaming.flume import FlumeUtils
+from pyspark.streaming.mqtt import MQTTUtils
+from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
 
-    timeout = 4  # seconds
-    duration = .2
+    timeout = 10  # seconds
+    duration = .5
 
     @classmethod
     def setUpClass(cls):
@@ -54,12 +60,21 @@ class PySparkStreamingTestCase(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.sc.stop()
+        # Clean up in the JVM just in case there has been some issues in Python API
+        jSparkContextOption = SparkContext._jvm.SparkContext.get()
+        if jSparkContextOption.nonEmpty():
+            jSparkContextOption.get().stop()
 
     def setUp(self):
         self.ssc = StreamingContext(self.sc, self.duration)
 
     def tearDown(self):
-        self.ssc.stop(False)
+        if self.ssc is not None:
+            self.ssc.stop(False)
+        # Clean up in the JVM just in case there has been some issues in Python API
+        jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
+        if jStreamingContextOption.nonEmpty():
+            jStreamingContextOption.get().stop(False)
 
     def wait_for(self, result, n):
         start_time = time.time()
@@ -379,13 +394,13 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
 class WindowFunctionTests(PySparkStreamingTestCase):
 
-    timeout = 5
+    timeout = 15
 
     def test_window(self):
         input = [range(1), range(2), range(3), range(4), range(5)]
 
         def func(dstream):
-            return dstream.window(.6, .2).count()
+            return dstream.window(1.5, .5).count()
 
         expected = [[1], [3], [6], [9], [12], [9], [5]]
         self._test_func(input, func, expected)
@@ -394,7 +409,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         input = [range(1), range(2), range(3), range(4), range(5)]
 
         def func(dstream):
-            return dstream.countByWindow(.6, .2)
+            return dstream.countByWindow(1.5, .5)
 
         expected = [[1], [3], [6], [9], [12], [9], [5]]
         self._test_func(input, func, expected)
@@ -403,7 +418,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         input = [range(1), range(2), range(3), range(4), range(5), range(6)]
 
         def func(dstream):
-            return dstream.countByWindow(1, .2)
+            return dstream.countByWindow(2.5, .5)
 
         expected = [[1], [3], [6], [10], [15], [20], [18], [15], [11], [6]]
         self._test_func(input, func, expected)
@@ -412,7 +427,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         input = [range(1), range(2), range(3), range(4), range(5), range(6)]
 
         def func(dstream):
-            return dstream.countByValueAndWindow(1, .2)
+            return dstream.countByValueAndWindow(2.5, .5)
 
         expected = [[1], [2], [3], [4], [5], [6], [6], [6], [6], [6]]
         self._test_func(input, func, expected)
@@ -421,7 +436,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         input = [[('a', i)] for i in range(5)]
 
         def func(dstream):
-            return dstream.groupByKeyAndWindow(.6, .2).mapValues(list)
+            return dstream.groupByKeyAndWindow(1.5, .5).mapValues(list)
 
         expected = [[('a', [0])], [('a', [0, 1])], [('a', [0, 1, 2])], [('a', [1, 2, 3])],
                     [('a', [2, 3, 4])], [('a', [3, 4])], [('a', [4])]]
@@ -437,6 +452,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
 class StreamingContextTests(PySparkStreamingTestCase):
 
     duration = 0.1
+    setupCalled = False
 
     def _add_input_stream(self):
         inputs = [range(1, x) for x in range(101)]
@@ -510,10 +526,85 @@ class StreamingContextTests(PySparkStreamingTestCase):
 
         self.assertEqual([2, 3, 1], self._take(dstream, 3))
 
+    def test_get_active(self):
+        self.assertEqual(StreamingContext.getActive(), None)
+
+        # Verify that getActive() returns the active context
+        self.ssc.queueStream([[1]]).foreachRDD(lambda rdd: rdd.count())
+        self.ssc.start()
+        self.assertEqual(StreamingContext.getActive(), self.ssc)
+
+        # Verify that getActive() returns None
+        self.ssc.stop(False)
+        self.assertEqual(StreamingContext.getActive(), None)
+
+        # Verify that if the Java context is stopped, then getActive() returns None
+        self.ssc = StreamingContext(self.sc, self.duration)
+        self.ssc.queueStream([[1]]).foreachRDD(lambda rdd: rdd.count())
+        self.ssc.start()
+        self.assertEqual(StreamingContext.getActive(), self.ssc)
+        self.ssc._jssc.stop(False)
+        self.assertEqual(StreamingContext.getActive(), None)
+
+    def test_get_active_or_create(self):
+        # Test StreamingContext.getActiveOrCreate() without checkpoint data
+        # See CheckpointTests for tests with checkpoint data
+        self.ssc = None
+        self.assertEqual(StreamingContext.getActive(), None)
+
+        def setupFunc():
+            ssc = StreamingContext(self.sc, self.duration)
+            ssc.queueStream([[1]]).foreachRDD(lambda rdd: rdd.count())
+            self.setupCalled = True
+            return ssc
+
+        # Verify that getActiveOrCreate() (w/o checkpoint) calls setupFunc when no context is active
+        self.setupCalled = False
+        self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
+        self.assertTrue(self.setupCalled)
+
+        # Verify that getActiveOrCreate() retuns active context and does not call the setupFunc
+        self.ssc.start()
+        self.setupCalled = False
+        self.assertEqual(StreamingContext.getActiveOrCreate(None, setupFunc), self.ssc)
+        self.assertFalse(self.setupCalled)
+
+        # Verify that getActiveOrCreate() calls setupFunc after active context is stopped
+        self.ssc.stop(False)
+        self.setupCalled = False
+        self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
+        self.assertTrue(self.setupCalled)
+
+        # Verify that if the Java context is stopped, then getActive() returns None
+        self.ssc = StreamingContext(self.sc, self.duration)
+        self.ssc.queueStream([[1]]).foreachRDD(lambda rdd: rdd.count())
+        self.ssc.start()
+        self.assertEqual(StreamingContext.getActive(), self.ssc)
+        self.ssc._jssc.stop(False)
+        self.setupCalled = False
+        self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
+        self.assertTrue(self.setupCalled)
+
 
 class CheckpointTests(unittest.TestCase):
 
-    def test_get_or_create(self):
+    setupCalled = False
+
+    @staticmethod
+    def tearDownClass():
+        # Clean up in the JVM just in case there has been some issues in Python API
+        jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
+        if jStreamingContextOption.nonEmpty():
+            jStreamingContextOption.get().stop()
+        jSparkContextOption = SparkContext._jvm.SparkContext.get()
+        if jSparkContextOption.nonEmpty():
+            jSparkContextOption.get().stop()
+
+    def tearDown(self):
+        if self.ssc is not None:
+            self.ssc.stop(True)
+
+    def test_get_or_create_and_get_active_or_create(self):
         inputd = tempfile.mkdtemp()
         outputd = tempfile.mkdtemp() + "/"
 
@@ -528,11 +619,12 @@ class CheckpointTests(unittest.TestCase):
             wc = dstream.updateStateByKey(updater)
             wc.map(lambda x: "%s,%d" % x).saveAsTextFiles(outputd + "test")
             wc.checkpoint(.5)
+            self.setupCalled = True
             return ssc
 
         cpd = tempfile.mkdtemp("test_streaming_cps")
-        ssc = StreamingContext.getOrCreate(cpd, setup)
-        ssc.start()
+        self.ssc = StreamingContext.getOrCreate(cpd, setup)
+        self.ssc.start()
 
         def check_output(n):
             while not os.listdir(outputd):
@@ -547,7 +639,7 @@ class CheckpointTests(unittest.TestCase):
                     # not finished
                     time.sleep(0.01)
                     continue
-                ordd = ssc.sparkContext.textFile(p).map(lambda line: line.split(","))
+                ordd = self.ssc.sparkContext.textFile(p).map(lambda line: line.split(","))
                 d = ordd.values().map(int).collect()
                 if not d:
                     time.sleep(0.01)
@@ -563,13 +655,37 @@ class CheckpointTests(unittest.TestCase):
 
         check_output(1)
         check_output(2)
-        ssc.stop(True, True)
 
+        # Verify the getOrCreate() recovers from checkpoint files
+        self.ssc.stop(True, True)
         time.sleep(1)
-        ssc = StreamingContext.getOrCreate(cpd, setup)
-        ssc.start()
+        self.setupCalled = False
+        self.ssc = StreamingContext.getOrCreate(cpd, setup)
+        self.assertFalse(self.setupCalled)
+        self.ssc.start()
         check_output(3)
-        ssc.stop(True, True)
+
+        # Verify the getActiveOrCreate() recovers from checkpoint files
+        self.ssc.stop(True, True)
+        time.sleep(1)
+        self.setupCalled = False
+        self.ssc = StreamingContext.getActiveOrCreate(cpd, setup)
+        self.assertFalse(self.setupCalled)
+        self.ssc.start()
+        check_output(4)
+
+        # Verify that getActiveOrCreate() returns active context
+        self.setupCalled = False
+        self.assertEquals(StreamingContext.getActiveOrCreate(cpd, setup), self.ssc)
+        self.assertFalse(self.setupCalled)
+
+        # Verify that getActiveOrCreate() calls setup() in absence of checkpoint files
+        self.ssc.stop(True, True)
+        shutil.rmtree(cpd)  # delete checkpoint directory
+        self.setupCalled = False
+        self.ssc = StreamingContext.getActiveOrCreate(cpd, setup)
+        self.assertTrue(self.setupCalled)
+        self.ssc.stop(True, True)
 
 
 class KafkaStreamTests(PySparkStreamingTestCase):
@@ -615,7 +731,6 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
         self._kafkaTestUtils.createTopic(topic)
         self._kafkaTestUtils.sendMessages(topic, sendData)
-        self._kafkaTestUtils.waitUntilLeaderOffset(topic, 0, sum(sendData.values()))
 
         stream = KafkaUtils.createStream(self.ssc, self._kafkaTestUtils.zkAddress(),
                                          "test-streaming-consumer", {topic: 1},
@@ -631,7 +746,6 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
         self._kafkaTestUtils.createTopic(topic)
         self._kafkaTestUtils.sendMessages(topic, sendData)
-        self._kafkaTestUtils.waitUntilLeaderOffset(topic, 0, sum(sendData.values()))
 
         stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams)
         self._validateStreamResult(sendData, stream)
@@ -646,7 +760,6 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
         self._kafkaTestUtils.createTopic(topic)
         self._kafkaTestUtils.sendMessages(topic, sendData)
-        self._kafkaTestUtils.waitUntilLeaderOffset(topic, 0, sum(sendData.values()))
 
         stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams, fromOffsets)
         self._validateStreamResult(sendData, stream)
@@ -661,7 +774,6 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
         self._kafkaTestUtils.createTopic(topic)
         self._kafkaTestUtils.sendMessages(topic, sendData)
-        self._kafkaTestUtils.waitUntilLeaderOffset(topic, 0, sum(sendData.values()))
         rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges)
         self._validateRddResult(sendData, rdd)
 
@@ -677,9 +789,476 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
         self._kafkaTestUtils.createTopic(topic)
         self._kafkaTestUtils.sendMessages(topic, sendData)
-        self._kafkaTestUtils.waitUntilLeaderOffset(topic, 0, sum(sendData.values()))
         rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges, leaders)
         self._validateRddResult(sendData, rdd)
 
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_rdd_get_offsetRanges(self):
+        """Test Python direct Kafka RDD get OffsetRanges."""
+        topic = self._randomTopic()
+        sendData = {"a": 3, "b": 4, "c": 5}
+        offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+        rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges)
+        self.assertEqual(offsetRanges, rdd.offsetRanges())
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_direct_stream_foreach_get_offsetRanges(self):
+        """Test the Python direct Kafka stream foreachRDD get offsetRanges."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
+                       "auto.offset.reset": "smallest"}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+
+        stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams)
+
+        offsetRanges = []
+
+        def getOffsetRanges(_, rdd):
+            for o in rdd.offsetRanges():
+                offsetRanges.append(o)
+
+        stream.foreachRDD(getOffsetRanges)
+        self.ssc.start()
+        self.wait_for(offsetRanges, 1)
+
+        self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_direct_stream_transform_get_offsetRanges(self):
+        """Test the Python direct Kafka stream transform get offsetRanges."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
+                       "auto.offset.reset": "smallest"}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+
+        stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams)
+
+        offsetRanges = []
+
+        def transformWithOffsetRanges(rdd):
+            for o in rdd.offsetRanges():
+                offsetRanges.append(o)
+            return rdd
+
+        stream.transform(transformWithOffsetRanges).foreachRDD(lambda rdd: rdd.count())
+        self.ssc.start()
+        self.wait_for(offsetRanges, 1)
+
+        self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
+
+
+class FlumeStreamTests(PySparkStreamingTestCase):
+    timeout = 20  # seconds
+    duration = 1
+
+    def setUp(self):
+        super(FlumeStreamTests, self).setUp()
+
+        utilsClz = self.ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+            .loadClass("org.apache.spark.streaming.flume.FlumeTestUtils")
+        self._utils = utilsClz.newInstance()
+
+    def tearDown(self):
+        if self._utils is not None:
+            self._utils.close()
+            self._utils = None
+
+        super(FlumeStreamTests, self).tearDown()
+
+    def _startContext(self, n, compressed):
+        # Start the StreamingContext and also collect the result
+        dstream = FlumeUtils.createStream(self.ssc, "localhost", self._utils.getTestPort(),
+                                          enableDecompression=compressed)
+        result = []
+
+        def get_output(_, rdd):
+            for event in rdd.collect():
+                if len(result) < n:
+                    result.append(event)
+        dstream.foreachRDD(get_output)
+        self.ssc.start()
+        return result
+
+    def _validateResult(self, input, result):
+        # Validate both the header and the body
+        header = {"test": "header"}
+        self.assertEqual(len(input), len(result))
+        for i in range(0, len(input)):
+            self.assertEqual(header, result[i][0])
+            self.assertEqual(input[i], result[i][1])
+
+    def _writeInput(self, input, compressed):
+        # Try to write input to the receiver until success or timeout
+        start_time = time.time()
+        while True:
+            try:
+                self._utils.writeInput(input, compressed)
+                break
+            except:
+                if time.time() - start_time < self.timeout:
+                    time.sleep(0.01)
+                else:
+                    raise
+
+    def test_flume_stream(self):
+        input = [str(i) for i in range(1, 101)]
+        result = self._startContext(len(input), False)
+        self._writeInput(input, False)
+        self.wait_for(result, len(input))
+        self._validateResult(input, result)
+
+    def test_compressed_flume_stream(self):
+        input = [str(i) for i in range(1, 101)]
+        result = self._startContext(len(input), True)
+        self._writeInput(input, True)
+        self.wait_for(result, len(input))
+        self._validateResult(input, result)
+
+
+class FlumePollingStreamTests(PySparkStreamingTestCase):
+    timeout = 20  # seconds
+    duration = 1
+    maxAttempts = 5
+
+    def setUp(self):
+        utilsClz = \
+            self.sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+                .loadClass("org.apache.spark.streaming.flume.PollingFlumeTestUtils")
+        self._utils = utilsClz.newInstance()
+
+    def tearDown(self):
+        if self._utils is not None:
+            self._utils.close()
+            self._utils = None
+
+    def _writeAndVerify(self, ports):
+        # Set up the streaming context and input streams
+        ssc = StreamingContext(self.sc, self.duration)
+        try:
+            addresses = [("localhost", port) for port in ports]
+            dstream = FlumeUtils.createPollingStream(
+                ssc,
+                addresses,
+                maxBatchSize=self._utils.eventsPerBatch(),
+                parallelism=5)
+            outputBuffer = []
+
+            def get_output(_, rdd):
+                for e in rdd.collect():
+                    outputBuffer.append(e)
+
+            dstream.foreachRDD(get_output)
+            ssc.start()
+            self._utils.sendDatAndEnsureAllDataHasBeenReceived()
+
+            self.wait_for(outputBuffer, self._utils.getTotalEvents())
+            outputHeaders = [event[0] for event in outputBuffer]
+            outputBodies = [event[1] for event in outputBuffer]
+            self._utils.assertOutput(outputHeaders, outputBodies)
+        finally:
+            ssc.stop(False)
+
+    def _testMultipleTimes(self, f):
+        attempt = 0
+        while True:
+            try:
+                f()
+                break
+            except:
+                attempt += 1
+                if attempt >= self.maxAttempts:
+                    raise
+                else:
+                    import traceback
+                    traceback.print_exc()
+
+    def _testFlumePolling(self):
+        try:
+            port = self._utils.startSingleSink()
+            self._writeAndVerify([port])
+            self._utils.assertChannelsAreEmpty()
+        finally:
+            self._utils.close()
+
+    def _testFlumePollingMultipleHosts(self):
+        try:
+            port = self._utils.startSingleSink()
+            self._writeAndVerify([port])
+            self._utils.assertChannelsAreEmpty()
+        finally:
+            self._utils.close()
+
+    def test_flume_polling(self):
+        self._testMultipleTimes(self._testFlumePolling)
+
+    def test_flume_polling_multiple_hosts(self):
+        self._testMultipleTimes(self._testFlumePollingMultipleHosts)
+
+
+class MQTTStreamTests(PySparkStreamingTestCase):
+    timeout = 20  # seconds
+    duration = 1
+
+    def setUp(self):
+        super(MQTTStreamTests, self).setUp()
+
+        MQTTTestUtilsClz = self.ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+            .loadClass("org.apache.spark.streaming.mqtt.MQTTTestUtils")
+        self._MQTTTestUtils = MQTTTestUtilsClz.newInstance()
+        self._MQTTTestUtils.setup()
+
+    def tearDown(self):
+        if self._MQTTTestUtils is not None:
+            self._MQTTTestUtils.teardown()
+            self._MQTTTestUtils = None
+
+        super(MQTTStreamTests, self).tearDown()
+
+    def _randomTopic(self):
+        return "topic-%d" % random.randint(0, 10000)
+
+    def _startContext(self, topic):
+        # Start the StreamingContext and also collect the result
+        stream = MQTTUtils.createStream(self.ssc, "tcp://" + self._MQTTTestUtils.brokerUri(), topic)
+        result = []
+
+        def getOutput(_, rdd):
+            for data in rdd.collect():
+                result.append(data)
+
+        stream.foreachRDD(getOutput)
+        self.ssc.start()
+        return result
+
+    def test_mqtt_stream(self):
+        """Test the Python MQTT stream API."""
+        sendData = "MQTT demo for spark streaming"
+        topic = self._randomTopic()
+        result = self._startContext(topic)
+
+        def retry():
+            self._MQTTTestUtils.publishData(topic, sendData)
+            # Because "publishData" sends duplicate messages, here we should use > 0
+            self.assertTrue(len(result) > 0)
+            self.assertEqual(sendData, result[0])
+
+        # Retry it because we don't know when the receiver will start.
+        self._retry_or_timeout(retry)
+
+    def _retry_or_timeout(self, test_func):
+        start_time = time.time()
+        while True:
+            try:
+                test_func()
+                break
+            except:
+                if time.time() - start_time > self.timeout:
+                    raise
+                time.sleep(0.01)
+
+
+class KinesisStreamTests(PySparkStreamingTestCase):
+
+    def test_kinesis_stream_api(self):
+        # Don't start the StreamingContext because we cannot test it in Jenkins
+        kinesisStream1 = KinesisUtils.createStream(
+            self.ssc, "myAppNam", "mySparkStream",
+            "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
+            InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_2)
+        kinesisStream2 = KinesisUtils.createStream(
+            self.ssc, "myAppNam", "mySparkStream",
+            "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
+            InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_2,
+            "awsAccessKey", "awsSecretKey")
+
+    def test_kinesis_stream(self):
+        if not are_kinesis_tests_enabled:
+            sys.stderr.write(
+                "Skipped test_kinesis_stream (enable by setting environment variable %s=1"
+                % kinesis_test_environ_var)
+            return
+
+        import random
+        kinesisAppName = ("KinesisStreamTests-%d" % abs(random.randint(0, 10000000)))
+        kinesisTestUtilsClz = \
+            self.sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+                .loadClass("org.apache.spark.streaming.kinesis.KinesisTestUtils")
+        kinesisTestUtils = kinesisTestUtilsClz.newInstance()
+        try:
+            kinesisTestUtils.createStream()
+            aWSCredentials = kinesisTestUtils.getAWSCredentials()
+            stream = KinesisUtils.createStream(
+                self.ssc, kinesisAppName, kinesisTestUtils.streamName(),
+                kinesisTestUtils.endpointUrl(), kinesisTestUtils.regionName(),
+                InitialPositionInStream.LATEST, 10, StorageLevel.MEMORY_ONLY,
+                aWSCredentials.getAWSAccessKeyId(), aWSCredentials.getAWSSecretKey())
+
+            outputBuffer = []
+
+            def get_output(_, rdd):
+                for e in rdd.collect():
+                    outputBuffer.append(e)
+
+            stream.foreachRDD(get_output)
+            self.ssc.start()
+
+            testData = [i for i in range(1, 11)]
+            expectedOutput = set([str(i) for i in testData])
+            start_time = time.time()
+            while time.time() - start_time < 120:
+                kinesisTestUtils.pushData(testData)
+                if expectedOutput == set(outputBuffer):
+                    break
+                time.sleep(10)
+            self.assertEqual(expectedOutput, set(outputBuffer))
+        except:
+            import traceback
+            traceback.print_exc()
+            raise
+        finally:
+            self.ssc.stop(False)
+            kinesisTestUtils.deleteStream()
+            kinesisTestUtils.deleteDynamoDBTable(kinesisAppName)
+
+
+def search_kafka_assembly_jar():
+    SPARK_HOME = os.environ["SPARK_HOME"]
+    kafka_assembly_dir = os.path.join(SPARK_HOME, "external/kafka-assembly")
+    jars = glob.glob(
+        os.path.join(kafka_assembly_dir, "target/scala-*/spark-streaming-kafka-assembly-*.jar"))
+    if not jars:
+        raise Exception(
+            ("Failed to find Spark Streaming kafka assembly jar in %s. " % kafka_assembly_dir) +
+            "You need to build Spark with "
+            "'build/sbt assembly/assembly streaming-kafka-assembly/assembly' or "
+            "'build/mvn package' before running this test.")
+    elif len(jars) > 1:
+        raise Exception(("Found multiple Spark Streaming Kafka assembly JARs in %s; please "
+                         "remove all but one") % kafka_assembly_dir)
+    else:
+        return jars[0]
+
+
+def search_flume_assembly_jar():
+    SPARK_HOME = os.environ["SPARK_HOME"]
+    flume_assembly_dir = os.path.join(SPARK_HOME, "external/flume-assembly")
+    jars = glob.glob(
+        os.path.join(flume_assembly_dir, "target/scala-*/spark-streaming-flume-assembly-*.jar"))
+    if not jars:
+        raise Exception(
+            ("Failed to find Spark Streaming Flume assembly jar in %s. " % flume_assembly_dir) +
+            "You need to build Spark with "
+            "'build/sbt assembly/assembly streaming-flume-assembly/assembly' or "
+            "'build/mvn package' before running this test.")
+    elif len(jars) > 1:
+        raise Exception(("Found multiple Spark Streaming Flume assembly JARs in %s; please "
+                        "remove all but one") % flume_assembly_dir)
+    else:
+        return jars[0]
+
+
+def search_mqtt_assembly_jar():
+    SPARK_HOME = os.environ["SPARK_HOME"]
+    mqtt_assembly_dir = os.path.join(SPARK_HOME, "external/mqtt-assembly")
+    jars = glob.glob(
+        os.path.join(mqtt_assembly_dir, "target/scala-*/spark-streaming-mqtt-assembly-*.jar"))
+    if not jars:
+        raise Exception(
+            ("Failed to find Spark Streaming MQTT assembly jar in %s. " % mqtt_assembly_dir) +
+            "You need to build Spark with "
+            "'build/sbt assembly/assembly streaming-mqtt-assembly/assembly' or "
+            "'build/mvn package' before running this test")
+    elif len(jars) > 1:
+        raise Exception(("Found multiple Spark Streaming MQTT assembly JARs in %s; please "
+                         "remove all but one") % mqtt_assembly_dir)
+    else:
+        return jars[0]
+
+
+def search_mqtt_test_jar():
+    SPARK_HOME = os.environ["SPARK_HOME"]
+    mqtt_test_dir = os.path.join(SPARK_HOME, "external/mqtt")
+    jars = glob.glob(
+        os.path.join(mqtt_test_dir, "target/scala-*/spark-streaming-mqtt-test-*.jar"))
+    if not jars:
+        raise Exception(
+            ("Failed to find Spark Streaming MQTT test jar in %s. " % mqtt_test_dir) +
+            "You need to build Spark with "
+            "'build/sbt assembly/assembly streaming-mqtt/test:assembly'")
+    elif len(jars) > 1:
+        raise Exception(("Found multiple Spark Streaming MQTT test JARs in %s; please "
+                         "remove all but one") % mqtt_test_dir)
+    else:
+        return jars[0]
+
+
+def search_kinesis_asl_assembly_jar():
+    SPARK_HOME = os.environ["SPARK_HOME"]
+    kinesis_asl_assembly_dir = os.path.join(SPARK_HOME, "extras/kinesis-asl-assembly")
+    jars = glob.glob(
+        os.path.join(kinesis_asl_assembly_dir,
+                     "target/scala-*/spark-streaming-kinesis-asl-assembly-*.jar"))
+    if not jars:
+        return None
+    elif len(jars) > 1:
+        raise Exception(("Found multiple Spark Streaming Kinesis ASL assembly JARs in %s; please "
+                         "remove all but one") % kinesis_asl_assembly_dir)
+    else:
+        return jars[0]
+
+
+# Must be same as the variable and condition defined in KinesisTestUtils.scala
+kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
+are_kinesis_tests_enabled = os.environ.get(kinesis_test_environ_var) == '1'
+
 if __name__ == "__main__":
-    unittest.main()
+    kafka_assembly_jar = search_kafka_assembly_jar()
+    flume_assembly_jar = search_flume_assembly_jar()
+    mqtt_assembly_jar = search_mqtt_assembly_jar()
+    mqtt_test_jar = search_mqtt_test_jar()
+    kinesis_asl_assembly_jar = search_kinesis_asl_assembly_jar()
+
+    if kinesis_asl_assembly_jar is None:
+        kinesis_jar_present = False
+        jars = "%s,%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, mqtt_assembly_jar,
+                                mqtt_test_jar)
+    else:
+        kinesis_jar_present = True
+        jars = "%s,%s,%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, mqtt_assembly_jar,
+                                   mqtt_test_jar, kinesis_asl_assembly_jar)
+
+    os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
+    testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests,
+                 CheckpointTests, KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests]
+
+    if kinesis_jar_present is True:
+        testcases.append(KinesisStreamTests)
+    elif are_kinesis_tests_enabled is False:
+        sys.stderr.write("Skipping all Kinesis Python tests as the optional Kinesis project was "
+                         "not compiled into a JAR. To run these tests, "
+                         "you need to build Spark with 'build/sbt -Pkinesis-asl assembly/assembly "
+                         "streaming-kinesis-asl-assembly/assembly' or "
+                         "'build/mvn -Pkinesis-asl package' before running this test.")
+    else:
+        raise Exception(
+            ("Failed to find Spark Streaming Kinesis assembly jar in %s. "
+             % kinesis_asl_assembly_dir) +
+            "You need to build Spark with 'build/sbt -Pkinesis-asl "
+            "assembly/assembly streaming-kinesis-asl-assembly/assembly'"
+            "or 'build/mvn -Pkinesis-asl package' before running this test.")
+
+    sys.stderr.write("Running tests: %s \n" % (str(testcases)))
+    for testcase in testcases:
+        sys.stderr.write("[Running %s]\n" % (testcase))
+        tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
+        unittest.TextTestRunner(verbosity=3).run(tests)

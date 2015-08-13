@@ -90,7 +90,7 @@ public final class BitSet {
    * To iterate over the true bits in a BitSet, use the following loop:
    * <pre>
    * <code>
-   *  for (long i = bs.nextSetBit(0); i >= 0; i = bs.nextSetBit(i + 1)) {
+   *  for (long i = bs.nextSetBit(0); i &gt;= 0; i = bs.nextSetBit(i + 1)) {
    *    // operate on index i here
    *  }
    * </code>
@@ -102,4 +102,12 @@ public final class BitSet {
   public int nextSetBit(int fromIndex) {
     return BitSetMethods.nextSetBit(baseObject, baseOffset, fromIndex, numWords);
   }
+
+  /**
+   * Returns {@code true} if any bit is set.
+   */
+  public boolean anySet() {
+    return BitSetMethods.anySet(baseObject, baseOffset, numWords);
+  }
+
 }

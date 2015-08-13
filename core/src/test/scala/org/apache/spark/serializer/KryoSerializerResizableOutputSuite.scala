@@ -17,15 +17,13 @@
 
 package org.apache.spark.serializer
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.SparkContext
 import org.apache.spark.LocalSparkContext
 import org.apache.spark.SparkException
 
 
-class KryoSerializerResizableOutputSuite extends FunSuite {
+class KryoSerializerResizableOutputSuite extends SparkFunSuite {
 
   // trial and error showed this will not serialize with 1mb buffer
   val x = (1 to 400000).toArray

@@ -21,38 +21,38 @@ import java.io.IOException
 import java.util.{List => JList}
 import javax.security.auth.login.LoginException
 
-import scala.collection.JavaConversions._
-
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.shims.ShimLoader
+import org.apache.hadoop.hive.shims.Utils
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.Service.STATE
 import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli._
+import org.apache.hive.service.server.HiveServer2
 import org.apache.hive.service.{AbstractService, Service, ServiceException}
 
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
-import org.apache.spark.util.Utils
 
-private[hive] class SparkSQLCLIService(hiveContext: HiveContext)
-  extends CLIService
+import scala.collection.JavaConversions._
+
+private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: HiveContext)
+  extends CLIService(hiveServer)
   with ReflectedCompositeService {
 
   override def init(hiveConf: HiveConf) {
     setSuperField(this, "hiveConf", hiveConf)
 
-    val sparkSqlSessionManager = new SparkSQLSessionManager(hiveContext)
+    val sparkSqlSessionManager = new SparkSQLSessionManager(hiveServer, hiveContext)
     setSuperField(this, "sessionManager", sparkSqlSessionManager)
     addService(sparkSqlSessionManager)
     var sparkServiceUGI: UserGroupInformation = null
 
-    if (ShimLoader.getHadoopShims.isSecurityEnabled) {
+    if (UserGroupInformation.isSecurityEnabled) {
       try {
         HiveAuthFactory.loginFromKeytab(hiveConf)
-        sparkServiceUGI = ShimLoader.getHadoopShims.getUGIForConf(hiveConf)
-        HiveThriftServerShim.setServerUserName(sparkServiceUGI, this)
+        sparkServiceUGI = Utils.getUGI()
+        setSuperField(this, "serviceUGI", sparkServiceUGI)
       } catch {
         case e @ (_: IOException | _: LoginException) =>
           throw new ServiceException("Unable to login to kerberos with given principal/keytab", e)

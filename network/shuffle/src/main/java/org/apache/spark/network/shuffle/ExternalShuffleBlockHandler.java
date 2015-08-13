@@ -46,18 +46,18 @@ import org.apache.spark.network.shuffle.protocol.StreamHandle;
 public class ExternalShuffleBlockHandler extends RpcHandler {
   private final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockHandler.class);
 
-  private final ExternalShuffleBlockManager blockManager;
+  private final ExternalShuffleBlockResolver blockManager;
   private final OneForOneStreamManager streamManager;
 
   public ExternalShuffleBlockHandler(TransportConf conf) {
-    this(new OneForOneStreamManager(), new ExternalShuffleBlockManager(conf));
+    this(new OneForOneStreamManager(), new ExternalShuffleBlockResolver(conf));
   }
 
   /** Enables mocking out the StreamManager and BlockManager. */
   @VisibleForTesting
   ExternalShuffleBlockHandler(
       OneForOneStreamManager streamManager,
-      ExternalShuffleBlockManager blockManager) {
+      ExternalShuffleBlockResolver blockManager) {
     this.streamManager = streamManager;
     this.blockManager = blockManager;
   }
@@ -65,7 +65,13 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   @Override
   public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
     BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteArray(message);
+    handleMessage(msgObj, client, callback);
+  }
 
+  protected void handleMessage(
+      BlockTransferMessage msgObj,
+      TransportClient client,
+      RpcResponseCallback callback) {
     if (msgObj instanceof OpenBlocks) {
       OpenBlocks msg = (OpenBlocks) msgObj;
       List<ManagedBuffer> blocks = Lists.newArrayList();

@@ -17,17 +17,20 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
+import org.apache.spark.sql.types.DecimalType
+
+// MutableProjection is not accessible in Java
+abstract class BaseMutableProjection extends MutableProjection
 
 /**
  * Generates byte code that produces a [[MutableRow]] object that can update itself based on a new
- * input [[Row]] for a fixed set of [[Expression Expressions]].
+ * input [[InternalRow]] for a fixed set of [[Expression Expressions]].
  */
 object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => MutableProjection] {
-  import scala.reflect.runtime.{universe => ru}
-  import scala.reflect.runtime.universe._
-
-  val mutableRowName = newTermName("mutableRow")
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
@@ -36,41 +39,75 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
     in.map(BindReferences.bindReference(_, inputSchema))
 
   protected def create(expressions: Seq[Expression]): (() => MutableProjection) = {
-    val projectionCode = expressions.zipWithIndex.flatMap { case (e, i) =>
-      val evaluationCode = expressionEvaluator(e)
-
-      evaluationCode.code :+
-      q"""
-        if(${evaluationCode.nullTerm})
-          mutableRow.setNullAt($i)
-        else
-          ${setColumn(mutableRowName, e.dataType, i, evaluationCode.primitiveTerm)}
-      """
+    val ctx = newCodeGenContext()
+    val projectionCodes = expressions.zipWithIndex.map {
+      case (NoOp, _) => ""
+      case (e, i) =>
+        val evaluationCode = e.gen(ctx)
+        if (e.dataType.isInstanceOf[DecimalType]) {
+          // Can't call setNullAt on DecimalType, because we need to keep the offset
+          s"""
+            ${evaluationCode.code}
+            if (${evaluationCode.isNull}) {
+              ${ctx.setColumn("mutableRow", e.dataType, i, null)};
+            } else {
+              ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
+            }
+          """
+        } else {
+          s"""
+            ${evaluationCode.code}
+            if (${evaluationCode.isNull}) {
+              mutableRow.setNullAt($i);
+            } else {
+              ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
+            }
+          """
+        }
     }
+    val allProjections = ctx.splitExpressions("i", projectionCodes)
 
-    val code =
-      q"""
-        () => { new $mutableProjectionType {
+    val code = s"""
+      public Object generate($exprType[] expr) {
+        return new SpecificMutableProjection(expr);
+      }
 
-          private[this] var $mutableRowName: $mutableRowType =
-            new $genericMutableRowType(${expressions.size})
+      class SpecificMutableProjection extends ${classOf[BaseMutableProjection].getName} {
 
-          def target(row: $mutableRowType): $mutableProjectionType = {
-            $mutableRowName = row
-            this
-          }
+        private $exprType[] expressions;
+        private $mutableRowType mutableRow;
+        ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
 
-          /* Provide immutable access to the last projected row. */
-          def currentValue: $rowType = mutableRow
+        public SpecificMutableProjection($exprType[] expr) {
+          expressions = expr;
+          mutableRow = new $genericMutableRowType(${expressions.size});
+          ${initMutableStates(ctx)}
+        }
 
-          def apply(i: $rowType): $rowType = {
-            ..$projectionCode
-            mutableRow
-          }
-        } }
-      """
+        public ${classOf[BaseMutableProjection].getName} target($mutableRowType row) {
+          mutableRow = row;
+          return this;
+        }
 
-    log.debug(s"code for ${expressions.mkString(",")}:\n$code")
-    toolBox.eval(code).asInstanceOf[() => MutableProjection]
+        /* Provide immutable access to the last projected row. */
+        public InternalRow currentValue() {
+          return (InternalRow) mutableRow;
+        }
+
+        public Object apply(Object _i) {
+          InternalRow i = (InternalRow) _i;
+          $allProjections
+          return mutableRow;
+        }
+      }
+    """
+
+    logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
+
+    val c = compile(code)
+    () => {
+      c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
+    }
   }
 }

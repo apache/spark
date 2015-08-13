@@ -41,14 +41,16 @@ abstract class EdgeRDD[ED](
     @transient sc: SparkContext,
     @transient deps: Seq[Dependency[_]]) extends RDD[Edge[ED]](sc, deps) {
 
+  // scalastyle:off structural.type
   private[graphx] def partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])] forSome { type VD }
+  // scalastyle:on structural.type
 
   override protected def getPartitions: Array[Partition] = partitionsRDD.partitions
 
   override def compute(part: Partition, context: TaskContext): Iterator[Edge[ED]] = {
     val p = firstParent[(PartitionID, EdgePartition[ED, _])].iterator(part, context)
     if (p.hasNext) {
-      p.next._2.iterator.map(_.copy())
+      p.next()._2.iterator.map(_.copy())
     } else {
       Iterator.empty
     }

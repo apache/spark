@@ -69,7 +69,8 @@ class IsotonicRegressionModel (
   /** Asserts the input array is monotone with the given ordering. */
   private def assertOrdered(xs: Array[Double])(implicit ord: Ordering[Double]): Unit = {
     var i = 1
-    while (i < xs.length) {
+    val len = xs.length
+    while (i < len) {
       require(ord.compare(xs(i - 1), xs(i)) <= 0,
         s"Elements (${xs(i - 1)}, ${xs(i)}) are not ordered.")
       i += 1
@@ -169,26 +170,26 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
     case class Data(boundary: Double, prediction: Double)
 
     def save(
-        sc: SparkContext, 
-        path: String, 
-        boundaries: Array[Double], 
-        predictions: Array[Double], 
+        sc: SparkContext,
+        path: String,
+        boundaries: Array[Double],
+        predictions: Array[Double],
         isotonic: Boolean): Unit = {
       val sqlContext = new SQLContext(sc)
 
       val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ 
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
           ("isotonic" -> isotonic)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       sqlContext.createDataFrame(
         boundaries.toSeq.zip(predictions).map { case (b, p) => Data(b, p) }
-      ).saveAsParquetFile(dataPath(path))
+      ).write.parquet(dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): (Array[Double], Array[Double]) = {
       val sqlContext = new SQLContext(sc)
-      val dataRDD = sqlContext.parquetFile(dataPath(path))
+      val dataRDD = sqlContext.read.parquet(dataPath(path))
 
       checkSchema[Data](dataRDD.schema)
       val dataArray = dataRDD.select("boundary", "prediction").collect()
@@ -202,7 +203,7 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
   override def load(sc: SparkContext, path: String): IsotonicRegressionModel = {
     implicit val formats = DefaultFormats
     val (loadedClassName, version, metadata) = loadMetadata(sc, path)
-    val isotonic =  (metadata \ "isotonic").extract[Boolean]
+    val isotonic = (metadata \ "isotonic").extract[Boolean]
     val classNameV1_0 = SaveLoadV1_0.thisClassName
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
@@ -329,11 +330,12 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     }
 
     var i = 0
-    while (i < input.length) {
+    val len = input.length
+    while (i < len) {
       var j = i
 
       // Find monotonicity violating sequence, if any.
-      while (j < input.length - 1 && input(j)._1 > input(j + 1)._1) {
+      while (j < len - 1 && input(j)._1 > input(j + 1)._1) {
         j = j + 1
       }
 

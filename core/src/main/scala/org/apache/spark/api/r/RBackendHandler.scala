@@ -20,12 +20,14 @@ package org.apache.spark.api.r
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.HashMap
+import scala.language.existentials
 
 import io.netty.channel.ChannelHandler.Sharable
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
 
 import org.apache.spark.Logging
 import org.apache.spark.api.r.SerDe._
+import org.apache.spark.util.Utils
 
 /**
  * Handler for RBackend
@@ -67,8 +69,11 @@ private[r] class RBackendHandler(server: RBackend)
             case e: Exception =>
               logError(s"Removing $objId failed", e)
               writeInt(dos, -1)
+              writeString(dos, s"Removing $objId failed: ${e.getMessage}")
           }
-        case _ => dos.writeInt(-1)
+        case _ =>
+          dos.writeInt(-1)
+          writeString(dos, s"Error: unknown method $methodName")
       }
     } else {
       handleMethodCall(isStatic, objId, methodName, numArgs, dis, dos)
@@ -77,7 +82,7 @@ private[r] class RBackendHandler(server: RBackend)
     val reply = bos.toByteArray
     ctx.write(reply)
   }
-  
+
   override def channelReadComplete(ctx: ChannelHandlerContext): Unit = {
     ctx.flush()
   }
@@ -98,7 +103,7 @@ private[r] class RBackendHandler(server: RBackend)
     var obj: Object = null
     try {
       val cls = if (isStatic) {
-        Class.forName(objId)
+        Utils.classForName(objId)
       } else {
         JVMObjectTracker.get(objId) match {
           case None => throw new IllegalArgumentException("Object not found " + objId)
@@ -124,7 +129,7 @@ private[r] class RBackendHandler(server: RBackend)
           }
           throw new Exception(s"No matched method found for $cls.$methodName")
         }
-        val ret = methods.head.invoke(obj, args:_*)
+        val ret = methods.head.invoke(obj, args : _*)
 
         // Write status bit
         writeInt(dos, 0)
@@ -135,7 +140,7 @@ private[r] class RBackendHandler(server: RBackend)
           matchMethod(numArgs, args, x.getParameterTypes)
         }.head
 
-        val obj = ctor.newInstance(args:_*)
+        val obj = ctor.newInstance(args : _*)
 
         writeInt(dos, 0)
         writeObject(dos, obj.asInstanceOf[AnyRef])
@@ -144,8 +149,11 @@ private[r] class RBackendHandler(server: RBackend)
       }
     } catch {
       case e: Exception =>
-        logError(s"$methodName on $objId failed", e)
+        logError(s"$methodName on $objId failed")
         writeInt(dos, -1)
+        // Writing the error message of the cause for the exception. This will be returned
+        // to user in the R process.
+        writeString(dos, Utils.exceptionString(e.getCause))
     }
   }
 

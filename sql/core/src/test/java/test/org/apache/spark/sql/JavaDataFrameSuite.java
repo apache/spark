@@ -30,7 +30,6 @@ import org.junit.*;
 
 import scala.collection.JavaConversions;
 import scala.collection.Seq;
-import scala.collection.mutable.Buffer;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -168,10 +167,11 @@ public class JavaDataFrameSuite {
     for (int i = 0; i < result.length(); i++) {
       Assert.assertEquals(bean.getB()[i], result.apply(i));
     }
-    Buffer<Integer> outputBuffer = (Buffer<Integer>) first.getJavaMap(2).get("hello");
+    @SuppressWarnings("unchecked")
+    Seq<Integer> outputBuffer = (Seq<Integer>) first.getJavaMap(2).get("hello");
     Assert.assertArrayEquals(
       bean.getC().get("hello"),
-      Ints.toArray(JavaConversions.bufferAsJavaList(outputBuffer)));
+      Ints.toArray(JavaConversions.seqAsJavaList(outputBuffer)));
     Seq<String> d = first.getAs(3);
     Assert.assertEquals(bean.getD().size(), d.length());
     for (int i = 0; i < d.length(); i++) {
@@ -226,5 +226,14 @@ public class JavaDataFrameSuite {
     DataFrame df = context.table("testData2");
     Double result = df.stat().cov("a", "b");
     Assert.assertTrue(Math.abs(result) < 1e-6);
+  }
+
+  @Test
+  public void testSampleBy() {
+    DataFrame df = context.range(0, 100).select(col("id").mod(3).as("key"));
+    DataFrame sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
+    Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
+    Row[] expected = new Row[] {RowFactory.create(0, 5), RowFactory.create(1, 8)};
+    Assert.assertArrayEquals(expected, actual);
   }
 }

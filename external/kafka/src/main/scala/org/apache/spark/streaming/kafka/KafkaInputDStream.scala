@@ -135,7 +135,7 @@ class KafkaReceiver[
           store((msgAndMetadata.key, msgAndMetadata.message))
         }
       } catch {
-        case e: Throwable => logError("Error handling message; exiting", e)
+        case e: Throwable => reportError("Error handling message; exiting", e)
       }
     }
   }

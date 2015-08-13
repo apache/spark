@@ -68,7 +68,9 @@ private[spark] object JettyUtils extends Logging {
             response.setStatus(HttpServletResponse.SC_OK)
             val result = servletParams.responder(request)
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+            // scalastyle:off println
             response.getWriter.println(servletParams.extractFn(result))
+            // scalastyle:on println
           } else {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -78,6 +80,9 @@ private[spark] object JettyUtils extends Logging {
         } catch {
           case e: IllegalArgumentException =>
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage)
+          case e: Exception =>
+            logWarning(s"GET ${request.getRequestURI} failed: $e", e)
+            throw e
         }
       }
       // SPARK-5983 ensure TRACE is not supported
@@ -101,7 +106,11 @@ private[spark] object JettyUtils extends Logging {
       path: String,
       servlet: HttpServlet,
       basePath: String): ServletContextHandler = {
-    val prefixedPath = attachPrefix(basePath, path)
+    val prefixedPath = if (basePath == "" && path == "/") {
+      path
+    } else {
+      (basePath + path).stripSuffix("/")
+    }
     val contextHandler = new ServletContextHandler
     val holder = new ServletHolder(servlet)
     contextHandler.setContextPath(prefixedPath)
@@ -116,7 +125,7 @@ private[spark] object JettyUtils extends Logging {
       beforeRedirect: HttpServletRequest => Unit = x => (),
       basePath: String = "",
       httpMethods: Set[String] = Set("GET")): ServletContextHandler = {
-    val prefixedDestPath = attachPrefix(basePath, destPath)
+    val prefixedDestPath = basePath + destPath
     val servlet = new HttpServlet {
       override def doGet(request: HttpServletRequest, response: HttpServletResponse): Unit = {
         if (httpMethods.contains("GET")) {
@@ -207,9 +216,15 @@ private[spark] object JettyUtils extends Logging {
       conf: SparkConf,
       serverName: String = ""): ServerInfo = {
 
-    val collection = new ContextHandlerCollection
-    collection.setHandlers(handlers.toArray)
     addFilters(handlers, conf)
+
+    val collection = new ContextHandlerCollection
+    val gzipHandlers = handlers.map { h =>
+      val gzipHandler = new GzipHandler
+      gzipHandler.setHandler(h)
+      gzipHandler
+    }
+    collection.setHandlers(gzipHandlers.toArray)
 
     // Bind to the given port, or throw a java.net.BindException if the port is occupied
     def connect(currentPort: Int): (Server, Int) = {
@@ -217,6 +232,9 @@ private[spark] object JettyUtils extends Logging {
       val pool = new QueuedThreadPool
       pool.setDaemon(true)
       server.setThreadPool(pool)
+      val errorHandler = new ErrorHandler()
+      errorHandler.setShowStacks(true)
+      server.addBean(errorHandler)
       server.setHandler(collection)
       try {
         server.start()
@@ -231,11 +249,6 @@ private[spark] object JettyUtils extends Logging {
 
     val (server, boundPort) = Utils.startServiceOnPort[Server](port, connect, conf, serverName)
     ServerInfo(server, boundPort, collection)
-  }
-
-  /** Attach a prefix to the given path, but avoid returning an empty path */
-  private def attachPrefix(basePath: String, relativePath: String): String = {
-    if (basePath == "") relativePath else (basePath + relativePath).stripSuffix("/")
   }
 }
 

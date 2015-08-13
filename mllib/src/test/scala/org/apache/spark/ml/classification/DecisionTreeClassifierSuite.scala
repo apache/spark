@@ -17,19 +17,19 @@
 
 package org.apache.spark.ml.classification
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.tree.LeafNode
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
-  DecisionTreeSuite => OldDecisionTreeSuite}
+import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.Row
 
-
-class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
+class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import DecisionTreeClassifierSuite.compareAPIs
 
@@ -54,6 +54,12 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       sc.parallelize(OldDecisionTreeSuite.generateContinuousDataPointsForMulticlass())
     categoricalDataPointsForMulticlassForOrderedFeaturesRDD = sc.parallelize(
       OldDecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures())
+  }
+
+  test("params") {
+    ParamsSuite.checkParams(new DecisionTreeClassifier)
+    val model = new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 2)
+    ParamsSuite.checkParams(model)
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -226,6 +232,31 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
     compareAPIs(rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
   }
 
+  test("predictRaw and predictProbability") {
+    val rdd = continuousDataPointsForMulticlassRDD
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(4)
+      .setMaxBins(100)
+    val categoricalFeatures = Map(0 -> 3)
+    val numClasses = 3
+
+    val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val newTree = dt.fit(newData)
+
+    val predictions = newTree.transform(newData)
+      .select(newTree.getPredictionCol, newTree.getRawPredictionCol, newTree.getProbabilityCol)
+      .collect()
+
+    predictions.foreach { case Row(pred: Double, rawPred: Vector, probPred: Vector) =>
+      assert(pred === rawPred.argmax,
+        s"Expected prediction $pred but calculated ${rawPred.argmax} from rawPrediction.")
+      val sum = rawPred.toArray.sum
+      assert(Vectors.dense(rawPred.toArray.map(_ / sum)) === probPred,
+        "probability prediction mismatch")
+    }
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
@@ -251,7 +282,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   */
 }
 
-private[ml] object DecisionTreeClassifierSuite extends FunSuite {
+private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
 
   /**
    * Train 2 decision trees on the given dataset, one using the old API and one using the new API.
@@ -266,9 +297,9 @@ private[ml] object DecisionTreeClassifierSuite extends FunSuite {
     val oldTree = OldDecisionTree.train(data, oldStrategy)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
-    // Use parent, fittingParamMap from newTree since these are not checked anyways.
+    // Use parent from newTree since this is not checked anyways.
     val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(
-      oldTree, newTree.parent, categoricalFeatures)
+      oldTree, newTree.parent.asInstanceOf[DecisionTreeClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
   }
 }

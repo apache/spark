@@ -57,7 +57,11 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 
   private val supportedMasterPrefixes = Seq("spark://", "mesos://")
 
-  private val masters: Array[String] = Utils.parseStandaloneMasterUrls(master)
+  private val masters: Array[String] = if (master.startsWith("spark://")) {
+    Utils.parseStandaloneMasterUrls(master)
+  } else {
+    Array(master)
+  }
 
   // Set of masters that lost contact with us, used to keep track of
   // whether there are masters still alive for us to communicate with

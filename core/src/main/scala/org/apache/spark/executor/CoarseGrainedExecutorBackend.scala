@@ -33,7 +33,7 @@ import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{SignalLogger, Utils}
+import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
@@ -55,18 +55,22 @@ private[spark] class CoarseGrainedExecutorBackend(
   private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
   override def onStart() {
-    import scala.concurrent.ExecutionContext.Implicits.global
     logInfo("Connecting to driver: " + driverUrl)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
+      // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
       ref.ask[RegisteredExecutor.type](
         RegisterExecutor(executorId, self, hostPort, cores, extractLogUrls))
-    } onComplete {
+    }(ThreadUtils.sameThread).onComplete {
+      // This is a very fast action so we can use "ThreadUtils.sameThread"
       case Success(msg) => Utils.tryLogNonFatalError {
         Option(self).foreach(_.send(msg)) // msg must be RegisteredExecutor
       }
-      case Failure(e) => logError(s"Cannot register with driver: $driverUrl", e)
-    }
+      case Failure(e) => {
+        logError(s"Cannot register with driver: $driverUrl", e)
+        System.exit(1)
+      }
+    }(ThreadUtils.sameThread)
   }
 
   def extractLogUrls: Map[String, String] = {
@@ -231,7 +235,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           argv = tail
         case Nil =>
         case tail =>
+          // scalastyle:off println
           System.err.println(s"Unrecognized options: ${tail.mkString(" ")}")
+          // scalastyle:on println
           printUsageAndExit()
       }
     }
@@ -245,6 +251,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
   }
 
   private def printUsageAndExit() = {
+    // scalastyle:off println
     System.err.println(
       """
       |"Usage: CoarseGrainedExecutorBackend [options]
@@ -258,6 +265,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       |   --worker-url <workerUrl>
       |   --user-class-path <url>
       |""".stripMargin)
+    // scalastyle:on println
     System.exit(1)
   }
 

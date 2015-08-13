@@ -18,9 +18,12 @@
 package org.apache.spark.ml.param
 
 import org.apache.spark.ml.param.shared.{HasInputCol, HasMaxIter}
+import org.apache.spark.ml.util.Identifiable
 
 /** A subclass of Params for testing. */
-class TestParams extends Params with HasMaxIter with HasInputCol {
+class TestParams(override val uid: String) extends Params with HasMaxIter with HasInputCol {
+
+  def this() = this(Identifiable.randomUID("testParams"))
 
   def setMaxIter(value: Int): this.type = { set(maxIter, value); this }
 
@@ -35,7 +38,5 @@ class TestParams extends Params with HasMaxIter with HasInputCol {
     require(isDefined(inputCol))
   }
 
-  override def copy(extra: ParamMap): TestParams = {
-    super.copy(extra).asInstanceOf[TestParams]
-  }
+  override def copy(extra: ParamMap): TestParams = defaultCopy(extra)
 }

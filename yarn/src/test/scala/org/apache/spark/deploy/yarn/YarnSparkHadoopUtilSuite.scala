@@ -25,15 +25,15 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.Matchers
 
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.util.Utils
 
 
-class YarnSparkHadoopUtilSuite extends FunSuite with Matchers with Logging {
+class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging {
 
   val hasBash =
     try {

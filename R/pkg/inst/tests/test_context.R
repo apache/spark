@@ -48,3 +48,10 @@ test_that("rdd GC across sparkR.stop", {
   count(rdd3)
   count(rdd4)
 })
+
+test_that("job group functions can be called", {
+  sc <- sparkR.init()
+  setJobGroup(sc, "groupId", "job description", TRUE)
+  cancelJobGroup(sc, "groupId")
+  clearJobGroup(sc)
+})

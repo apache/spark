@@ -20,15 +20,15 @@ package org.apache.spark.storage
 import java.io.File
 
 import org.apache.spark.util.Utils
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
 
 /**
  * Tests for the spark.local.dir and SPARK_LOCAL_DIRS configuration options.
  */
-class LocalDirsSuite extends FunSuite with BeforeAndAfter {
+class LocalDirsSuite extends SparkFunSuite with BeforeAndAfter {
 
   before {
     Utils.clearLocalRootDirs()
