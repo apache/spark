@@ -23,10 +23,7 @@ import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
-import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.execution.datasources.json.JSONRelation
-import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SharedSQLContext}
 
@@ -482,21 +479,23 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("inputFiles") {
-    val fakeRelation1 = new ParquetRelation(Array("/my/path", "/my/other/path"),
-      Some(testData.schema), None, Map.empty)(sqlContext)
-    val df1 = DataFrame(sqlContext, LogicalRelation(fakeRelation1))
-    assert(df1.inputFiles.toSet == fakeRelation1.paths.toSet)
+    withTempDir { dir =>
+      val df = Seq((1, 22)).toDF("a", "b")
 
-    val fakeRelation2 = new JSONRelation(
-      None, 1, Some(testData.schema), None, None, Array("/json/path"))(sqlContext)
-    val df2 = DataFrame(sqlContext, LogicalRelation(fakeRelation2))
-    assert(df2.inputFiles.toSet == fakeRelation2.paths.toSet)
+      val parquetDir = new File(dir, "parquet").getCanonicalPath
+      df.write.parquet(parquetDir)
+      val parquetDF = sqlContext.read.parquet(parquetDir)
+      assert(parquetDF.inputFiles.nonEmpty)
 
-    val unionDF = df1.unionAll(df2)
-    assert(unionDF.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.paths)
+      val jsonDir = new File(dir, "json").getCanonicalPath
+      df.write.json(jsonDir)
+      val jsonDF = sqlContext.read.json(jsonDir)
+      assert(parquetDF.inputFiles.nonEmpty)
 
-    val filtered = df1.filter("false").unionAll(df2.intersect(df2))
-    assert(filtered.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.paths)
+      val unioned = jsonDF.unionAll(parquetDF).inputFiles.sorted
+      val allFiles = (jsonDF.inputFiles ++ parquetDF.inputFiles).toSet.toArray.sorted
+      assert(unioned === allFiles)
+    }
   }
 
   ignore("show") {

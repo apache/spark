@@ -15,21 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg
-
-import org.apache.spark.annotation.Experimental
+package org.apache.spark.sql.execution
 
 /**
- * :: Experimental ::
- * Represents singular value decomposition (SVD) factors.
+ * An interface for relations that are backed by files.  When a class implements this interface,
+ * the list of paths that it returns will be returned to a user who calls `inputPaths` on any
+ * DataFrame that queries this relation.
  */
-@Experimental
-case class SingularValueDecomposition[UType, VType](U: UType, s: Vector, V: VType)
-
-/**
- * :: Experimental ::
- * Represents QR factors.
- */
-@Experimental
-case class QRDecomposition[QType, RType](Q: QType, R: RType)
-
+private[sql] trait FileRelation {
+  /** Returns the list of files that will be read when scanning this relation. */
+  def inputFiles: Array[String]
+}
