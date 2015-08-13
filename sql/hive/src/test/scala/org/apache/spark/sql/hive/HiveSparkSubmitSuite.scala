@@ -41,6 +41,8 @@ import org.apache.spark.util.{ResetSystemProperties, Utils}
 class HiveSparkSubmitSuite
   extends SparkFunSuite
   with Matchers
+  // This test suite sometimes gets extremely slow out of unknown reason on Jenkins.  Here we
+  // add a timestamp to provide more diagnosis information.
   with ResetSystemProperties
   with Timeouts {
 
@@ -126,7 +128,9 @@ class HiveSparkSubmitSuite
       // 2. Log lines are not correctly redirected to unit-tests.log as expected, so here we print
       //    them out for debugging purposes.
       val logLine = s"${new Timestamp(new Date().getTime)} - $source> $line"
+      // scalastyle:off println
       println(logLine)
+      // scalastyle:on println
       history += logLine
     }
 
