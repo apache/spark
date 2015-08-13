@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, AggregateExpression2, AggregateFunction2}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{StandardDeviation, Complete, AggregateExpression2, AggregateFunction2}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -524,23 +524,60 @@ class Analyzer(
         q transformExpressions {
           case u @ UnresolvedFunction(name, children, isDistinct) =>
             withPosition(u) {
-              registry.lookupFunction(name, children) match {
-                // We get an aggregate function built based on AggregateFunction2 interface.
-                // So, we wrap it in AggregateExpression2.
-                case agg2: AggregateFunction2 => AggregateExpression2(agg2, Complete, isDistinct)
-                // Currently, our old aggregate function interface supports SUM(DISTINCT ...)
-                // and COUTN(DISTINCT ...).
-                case sumDistinct: SumDistinct => sumDistinct
-                case countDistinct: CountDistinct => countDistinct
-                // DISTINCT is not meaningful with Max and Min.
-                case max: Max if isDistinct => max
-                case min: Min if isDistinct => min
-                // For other aggregate functions, DISTINCT keyword is not supported for now.
-                // Once we converted to the new code path, we will allow using DISTINCT keyword.
-                case other: AggregateExpression1 if isDistinct =>
-                  failAnalysis(s"$name does not support DISTINCT keyword.")
-                // If it does not have DISTINCT keyword, we will return it as is.
-                case other => other
+
+              // TODO: This is a hack. Hive uses stddev and std as aliases of stddev_pop, which
+              // is different from other widely used systems (these systems use these two function
+              // names as aliases of stddev_samp). So, we explicitly rename it to stddev_samp.
+              // Once we remove AggregateExpression1, we can remove this hack. Also, because
+              // we do not have stddev in SimpleFunctionRegistry (we want to resolve
+              // it to the HiveGenericUDAF based on AggregateExpression1 and then do the
+              // conversion to AggregateExpression2), if it does not exist in function registry,
+              // we create StandardDeviation directly.
+              name.toLowerCase match {
+                case "std" | "stddev" | "stddev_samp" =>
+                  if (children.length != 1) {
+                    failAnalysis(s"$name requires exactly one argument.")
+                  }
+                  val funcInRegistry =
+                    registry
+                      .lookupFunction("stddev_samp")
+                      .map(_ => registry.lookupFunction("stddev_samp", children))
+                  funcInRegistry.getOrElse {
+                    AggregateExpression2(
+                      StandardDeviation(children.head, sample = true), Complete, isDistinct)
+                  }
+                case "stddev_pop" =>
+                  if (children.length != 1) {
+                    failAnalysis(s"$name requires exactly one argument.")
+                  }
+                  val funcInRegistry =
+                    registry
+                      .lookupFunction("stddev_pop")
+                      .map(_ => registry.lookupFunction("stddev_pop", children))
+                  funcInRegistry.getOrElse {
+                    AggregateExpression2(
+                      StandardDeviation(children.head, sample = true), Complete, isDistinct)
+                  }
+                case _ =>
+                  registry.lookupFunction(name, children) match {
+                    // We get an aggregate function built based on AggregateFunction2 interface.
+                    // So, we wrap it in AggregateExpression2.
+                    case agg2: AggregateFunction2 =>
+                      AggregateExpression2(agg2, Complete, isDistinct)
+                    // Currently, our old aggregate function interface supports SUM(DISTINCT ...)
+                    // and COUTN(DISTINCT ...).
+                    case sumDistinct: SumDistinct => sumDistinct
+                    case countDistinct: CountDistinct => countDistinct
+                    // DISTINCT is not meaningful with Max and Min.
+                    case max: Max if isDistinct => max
+                    case min: Min if isDistinct => min
+                    // For other aggregate functions, DISTINCT keyword is not supported for now.
+                    // Once we converted to the new code path, we will allow using DISTINCT keyword.
+                    case other: AggregateExpression1 if isDistinct =>
+                      failAnalysis(s"$name does not support DISTINCT keyword.")
+                    // If it does not have DISTINCT keyword, we will return it as is.
+                    case other => other
+                  }
               }
             }
         }

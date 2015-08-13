@@ -295,6 +295,64 @@ object functions {
   def min(columnName: String): Column = min(Column(columnName))
 
   /**
+   * Aggregate function: returns the sample standard deviation of the values in a group.
+   * Alias for stddevSamp.
+   *
+   * @group agg_funcs
+   * @since 1.5.0
+   */
+  def stddev(e: Column): Column = stddevSamp(e)
+
+  /**
+   * Aggregate function: returns the sample standard deviation of the values in a group.
+   * Alias for stddevSamp.
+   *
+   * @group agg_funcs
+   * @since 1.5.0
+   */
+  def stddev(columnName: String): Column = stddevSamp(Column(columnName))
+
+  /**
+   * Aggregate function: returns the population standard deviation of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.5.0
+   */
+  def stddevPop(e: Column): Column = {
+    Alias(
+      UnresolvedFunction("stddev_pop", e.expr :: Nil, false),
+      s"stddev_pop(${e.expr.prettyString})")()
+  }
+
+  /**
+   * Aggregate function: returns the population standard deviation of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.5.0
+   */
+  def stddevPop(columnName: String): Column = stddevPop(Column(columnName))
+
+  /**
+   * Aggregate function: returns the sample standard deviation of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.5.0
+   */
+  def stddevSamp(e: Column): Column = {
+    Alias(
+      UnresolvedFunction("stddev_samp", e.expr :: Nil, false),
+      s"stddev_samp(${e.expr.prettyString})")()
+  }
+
+  /**
+   * Aggregate function: returns the sample standard deviation of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.5.0
+   */
+  def stddevSamp(columnName: String): Column = stddevSamp(Column(columnName))
+
+  /**
    * Aggregate function: returns the sum of all values in the expression.
    *
    * @group agg_funcs

@@ -108,6 +108,10 @@ case class SortBasedAggregate(
 
   override def simpleString: String = {
     val allAggregateExpressions = nonCompleteAggregateExpressions ++ completeAggregateExpressions
-    s"""SortBasedAggregate ${groupingExpressions} ${allAggregateExpressions}"""
+
+    val keyString = groupingExpressions.mkString("[", ",", "]")
+    val valueString = allAggregateExpressions.mkString("[", ",", "]")
+    val outputString = output.mkString("[", ",", "]")
+    s"SortBasedAggregate(key=$keyString, functions=$valueString, output=$outputString)"
   }
 }

@@ -302,3 +302,116 @@ case class Sum(child: Expression) extends AlgebraicAggregate {
 
   override val evaluateExpression = Cast(currentSum, resultType)
 }
+
+/**
+ * Calculates the Standard Deviation using the online formula here:
+ * https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
+ * If sample is true, then we will return the unbiased standard deviation.
+ */
+case class StandardDeviation(child: Expression, sample: Boolean) extends AlgebraicAggregate {
+
+  override def children: Seq[Expression] = child :: Nil
+
+  override def nullable: Boolean = true
+
+  // Return data type.
+  override def dataType: DataType = resultType
+
+  // Expected input data type.
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
+
+  private lazy val resultType = child.dataType match {
+    case DecimalType.Fixed(p, s) =>
+      DecimalType.bounded(p + 4, s + 4)
+    case _ => DoubleType
+  }
+
+  private lazy val sumDataType = child.dataType match {
+    case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
+    case _ => DoubleType
+  }
+
+  private lazy val currentCount = AttributeReference("currentCount", LongType)()
+  private lazy val leftCount = AttributeReference("leftCount", LongType)()
+  private lazy val rightCount = AttributeReference("rightCount", LongType)()
+  private lazy val currentDelta = AttributeReference("currentDelta", sumDataType)()
+  private lazy val currentAvg = AttributeReference("currentAverage", sumDataType)()
+  private lazy val currentMk = AttributeReference("currentMoment", sumDataType)()
+
+  // the values should be updated in a special order, because they re-use each other
+  override lazy val bufferAttributes =
+    leftCount :: rightCount :: currentCount :: currentDelta :: currentAvg :: currentMk :: Nil
+
+  override lazy val initialValues = Seq(
+    /* leftCount = */ Literal(0L),
+    /* rightCount = */ Literal(0L),
+    /* currentCount = */ Literal(0L),
+    /* currentDelta = */ Cast(Literal(0), sumDataType),
+    /* currentAvg = */ Cast(Literal(0), sumDataType),
+    /* currentMk = */ Cast(Literal(0), sumDataType)
+  )
+
+  override lazy val updateExpressions = {
+    val currentValue = Coalesce(Cast(child, sumDataType) :: Cast(Literal(0), sumDataType) :: Nil)
+    val deltaX = Subtract(currentValue, currentAvg)
+    val updatedCount = If(IsNull(child), currentCount, currentCount + 1L)
+    val updatedAvg = Add(currentAvg, Divide(currentDelta, currentCount))
+    Seq(
+      /* leftCount = */ leftCount, // used only during merging. dummy value
+      /* rightCount = */ rightCount, // used only during merging. dummy value
+      /* currentCount = */ updatedCount,
+      /* currentDelta = */ deltaX,
+      /* currentAvg = */ updatedAvg,
+      /* currentMk = */ If(IsNull(child),
+        currentMk, Add(currentMk, currentDelta * Subtract(currentValue, currentAvg)))
+    )
+  }
+
+  override lazy val mergeExpressions = {
+    val totalCount = currentCount.left + currentCount.right
+    val deltaX = currentAvg.left - currentAvg.right
+    val deltaX2 = deltaX * deltaX
+    val sumMoments = currentMk.left + currentMk.right
+    val sumLeft = currentAvg.left * leftCount
+    val sumRight = currentAvg.right * rightCount
+    val mergedAvg = (sumLeft + sumRight) / currentCount
+    val mergedMk = sumMoments + currentDelta * leftCount / currentCount * rightCount
+    Seq(
+      /* leftCount = */ currentCount.left,
+      /* rightCount = */ currentCount.right,
+      /* currentCount = */ totalCount,
+      /* currentDelta = */ deltaX2,
+      /* currentAvg = */ If(EqualTo(leftCount, Cast(Literal(0L), LongType)), currentAvg.right,
+        If(EqualTo(rightCount, Cast(Literal(0L), LongType)), currentAvg.left, mergedAvg)),
+      /* currentMk = */ If(EqualTo(leftCount, Cast(Literal(0L), LongType)), currentMk.right,
+        If(EqualTo(rightCount, Cast(Literal(0L), LongType)), currentMk.left, mergedMk))
+    )
+  }
+
+  override lazy val evaluateExpression = {
+    val count =
+      if (sample) {
+        If(EqualTo(currentCount, Cast(Literal(0L), LongType)), currentCount,
+          currentCount - Cast(Literal(1L), LongType))
+      } else {
+        currentCount
+      }
+
+    child.dataType match {
+      case DecimalType.Fixed(p, s) =>
+        // increase the precision and scale to prevent precision loss
+        val dt = DecimalType.bounded(p + 14, s + 4)
+        Cast(Sqrt(Cast(currentMk, dt) / Cast(count, dt)), resultType)
+      case _ =>
+        Sqrt(Cast(currentMk, resultType) / Cast(count, resultType))
+    }
+  }
+
+  override def prettyName: String = {
+    if (sample) {
+      "stddev_samp"
+    } else {
+      "stddev_pop"
+    }
+  }
+}

@@ -111,7 +111,6 @@ class SortBasedAggregationIterator(
       // Check if the current row belongs the current input row.
       if (currentGroupingKey == groupingKey) {
         processRow(sortBasedAggregationBuffer, currentRow)
-
         hasNext = inputKVIterator.next()
       } else {
         // We find a new group.

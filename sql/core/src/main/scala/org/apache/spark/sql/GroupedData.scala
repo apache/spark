@@ -21,7 +21,7 @@ import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, Star}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedAlias, UnresolvedAttribute, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Rollup, Cube, Aggregate}
 import org.apache.spark.sql.types.NumericType
@@ -281,6 +281,52 @@ class GroupedData protected[sql](
   @scala.annotation.varargs
   def min(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames : _*)(Min)
+  }
+
+  /**
+   * Compute the sample standard deviation for each numeric column for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the standard deviation for them.
+   *
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def stddev(colNames: String*): DataFrame = {
+    stddevSamp(colNames : _*)
+  }
+
+  /**
+   * Compute the population standard deviation for each numeric column for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the standard deviation for them.
+   *
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def stddevPop(colNames: String*): DataFrame = {
+    def builder(e: Expression): Expression = {
+      Alias(
+        UnresolvedFunction("stddev_pop", e :: Nil, false),
+        s"stddev_pop(${e.prettyString})")()
+    }
+    aggregateNumericColumns(colNames : _*)(builder)
+  }
+
+  /**
+   * Compute the sample standard deviation for each numeric column for each group.
+   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * When specified columns are given, only compute the standard deviation for them.
+   *
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def stddevSamp(colNames: String*): DataFrame = {
+    def builder(e: Expression): Expression = {
+        Alias(
+          UnresolvedFunction("stddev_samp", e :: Nil, false),
+          s"stddev_samp(${e.prettyString})")()
+    }
+    aggregateNumericColumns(colNames : _*)(builder)
   }
 
   /**

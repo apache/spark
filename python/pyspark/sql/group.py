@@ -155,6 +155,48 @@ class GroupedData(object):
         """
 
     @df_varargs_api
+    @since(1.5)
+    def stddev(self, *cols):
+        """Computes the sample standard deviation for each numeric column for each group.
+        Alias for stddevSamp.
+
+        :param cols: list of column names (string). Non-numeric columns are ignored.
+
+        >>> df.groupBy().stddev('age').collect()
+        [Row(stddev_samp(age)=2.12...)]
+        >>> df3.groupBy().stddev('age', 'height').collect()
+        [Row(stddev_samp(age)=2.12..., stddev_samp(height)=3.53...)]
+        """
+
+    @df_varargs_api
+    @since(1.5)
+    def stddevPop(self, *cols):
+        """Computes the sample standard deviation for each numeric column for each group.
+        Alias for stddevSamp.
+
+        :param cols: list of column names (string). Non-numeric columns are ignored.
+
+        >>> df.groupBy().stddevPop('age').collect()
+        [Row(min(age)=1.06...)]
+        >>> df3.groupBy().stddevPop('age', 'height').collect()
+        [Row(min(age)=1.06..., min(height)=1.76...)]
+        """
+
+    @df_varargs_api
+    @since(1.5)
+    def stddevSamp(self, *cols):
+        """Computes the sample standard deviation for each numeric column for each group.
+        Alias for stddevSamp.
+
+        :param cols: list of column names (string). Non-numeric columns are ignored.
+
+        >>> df.groupBy().stddevSamp('age').collect()
+        [Row(stddev_samp(age)=2.12...)]
+        >>> df3.groupBy().stddevSamp('age', 'height').collect()
+        [Row(stddev_samp(age)=2.12..., stddev_samp(height)=3.53...)]
+        """
+
+    @df_varargs_api
     @since(1.3)
     def sum(self, *cols):
         """Compute the sum for each numeric columns for each group.
