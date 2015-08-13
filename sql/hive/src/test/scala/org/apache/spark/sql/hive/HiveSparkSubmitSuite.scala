@@ -271,7 +271,11 @@ object SPARK_9757 extends QueryTest with Logging {
     val sparkContext = new SparkContext(
       new SparkConf()
         .set("spark.sql.hive.metastore.version", "0.13.1")
-        .set("spark.sql.hive.metastore.jars", "maven"))
+        .set("spark.sql.hive.metastore.jars", "maven")
+        .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
+        .set(SQLConf.DIALECT.key, "hiveql")
+        .set(SQLConf.CASE_SENSITIVE.key, "false")
+        .set("spark.ui.enabled", "false"))
 
     val hiveContext = new TestHiveContext(sparkContext)
     import hiveContext.implicits._
