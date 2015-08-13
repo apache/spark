@@ -210,7 +210,7 @@ class DAGScheduler(
     if (!cacheLocs.contains(rdd.id)) {
       // Note: if the storage level is NONE, we don't need to get locations from block manager.
       val locs: Seq[Seq[TaskLocation]] = if (rdd.getStorageLevel == StorageLevel.NONE) {
-        Seq.fill(rdd.partitions.size)(Nil)
+        Seq.fill(rdd.partitions.length)(Nil)
       } else {
         val blockIds =
           rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
@@ -302,12 +302,12 @@ class DAGScheduler(
       shuffleDep: ShuffleDependency[_, _, _],
       firstJobId: Int): ShuffleMapStage = {
     val rdd = shuffleDep.rdd
-    val numTasks = rdd.partitions.size
+    val numTasks = rdd.partitions.length
     val stage = newShuffleMapStage(rdd, numTasks, shuffleDep, firstJobId, rdd.creationSite)
     if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
       val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
       val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
-      for (i <- 0 until locs.size) {
+      for (i <- 0 until locs.length) {
         stage.outputLocs(i) = Option(locs(i)).toList // locs(i) will be null if missing
       }
       stage.numAvailableOutputs = locs.count(_ != null)
@@ -315,7 +315,7 @@ class DAGScheduler(
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
       // since we can't do it in the RDD constructor because # of partitions is unknown
       logInfo("Registering RDD " + rdd.id + " (" + rdd.getCreationSite + ")")
-      mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.size)
+      mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length)
     }
     stage
   }
@@ -566,7 +566,7 @@ class DAGScheduler(
       properties: Properties): PartialResult[R] = {
     val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
-    val partitions = (0 until rdd.partitions.size).toArray
+    val partitions = (0 until rdd.partitions.length).toArray
     val jobId = nextJobId.getAndIncrement()
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions, callSite, listener, SerializationUtils.clone(properties)))
@@ -715,7 +715,7 @@ class DAGScheduler(
     try {
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
-      finalStage = newResultStage(finalRDD, partitions.size, jobId, callSite)
+      finalStage = newResultStage(finalRDD, partitions.length, jobId, callSite)
     } catch {
       case e: Exception =>
         logWarning("Creating new stage failed due to exception - job: " + jobId, e)
@@ -1387,11 +1387,11 @@ class DAGScheduler(
         // For shuffle dependencies, pick locations which have at least REDUCER_PREF_LOCS_FRACTION
         // of data as preferred locations
         if (shuffleLocalityEnabled &&
-            rdd.partitions.size < SHUFFLE_PREF_REDUCE_THRESHOLD &&
-            s.rdd.partitions.size < SHUFFLE_PREF_MAP_THRESHOLD) {
+            rdd.partitions.length < SHUFFLE_PREF_REDUCE_THRESHOLD &&
+            s.rdd.partitions.length < SHUFFLE_PREF_MAP_THRESHOLD) {
           // Get the preferred map output locations for this reducer
           val topLocsForReducer = mapOutputTracker.getLocationsWithLargestOutputs(s.shuffleId,
-            partition, rdd.partitions.size, REDUCER_PREF_LOCS_FRACTION)
+            partition, rdd.partitions.length, REDUCER_PREF_LOCS_FRACTION)
           if (topLocsForReducer.nonEmpty) {
             return topLocsForReducer.get.map(loc => TaskLocation(loc.host, loc.executorId))
           }
