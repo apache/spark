@@ -97,7 +97,6 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
 
   /**
    * Print a summary of the model.
-   * @since 1.1.0
    */
   override def toString: String = algo match {
     case Classification =>
@@ -110,7 +109,6 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
 
   /**
    * Print the full model to a string.
-   * @since 1.2.0
    */
   def toDebugString: String = {
     val header = toString + "\n"

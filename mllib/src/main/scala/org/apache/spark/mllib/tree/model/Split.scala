@@ -39,9 +39,6 @@ case class Split(
     featureType: FeatureType,
     categories: List[Double]) {
 
-  /**
-   * @since 1.0.0
-   */
   override def toString: String = {
     s"Feature = $feature, threshold = $threshold, featureType = $featureType, " +
       s"categories = $categories"
