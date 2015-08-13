@@ -140,12 +140,13 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
   hiveFilesTemp.mkdir()
   ShutdownHookManager.registerShutdownDeleteDir(hiveFilesTemp)
 
-  private val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
-    new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
-  } else {
-    new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
-      File.separator + "resources")
-  }
+  private val inRepoTests =
+    if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
+      new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
+    } else {
+      new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
+        File.separator + "resources")
+    }
 
   def getHiveFile(path: String): File = {
     val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
