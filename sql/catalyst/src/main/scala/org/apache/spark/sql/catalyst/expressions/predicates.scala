@@ -57,6 +57,30 @@ trait PredicateHelper {
     }
   }
 
+  /**
+   * Convert an expression into its conjunctive normal form (CNF), i.e. AND of ORs.
+   * For example, a && b || c is normalized to (a || c) && (b || c) by this method.
+   *
+   * Refer to https://en.wikipedia.org/wiki/Conjunctive_normal_form for more information
+   */
+  protected def cnfNormalization(condition: Expression): Expression = {
+    condition.transformUp {
+      case or: Or => pushOrToBottom(or)
+    }
+  }
+
+  private def pushOrToBottom(condition: Expression): Expression = {
+    condition match {
+      case Or(left, right) => (left, right) match {
+        case (And(ll, lr), r) =>
+          And(pushOrToBottom(Or(ll, r)), pushOrToBottom(Or(lr, r)))
+        case (l, And(rl, rr)) =>
+          And(pushOrToBottom(Or(l, rl)), pushOrToBottom(Or(l, rr)))
+        case (l, r) => Or(l, r)
+      }
+    }
+  }
+
   protected def splitDisjunctivePredicates(condition: Expression): Seq[Expression] = {
     condition match {
       case Or(cond1, cond2) =>
