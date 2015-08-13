@@ -236,9 +236,10 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
       // We ran 3 stages, and the accumulator values should be distinct
       val stageInfos = listener.getCompletedStageInfos
       assert(stageInfos.size === 3)
-      val firstStageAccum = findAccumulableInfo(stageInfos(0).accumulables.values, TEST_ACCUMULATOR)
-      val secondStageAccum = findAccumulableInfo(stageInfos(1).accumulables.values, TEST_ACCUMULATOR)
-      val thirdStageAccum = findAccumulableInfo(stageInfos(2).accumulables.values, TEST_ACCUMULATOR)
+      val (firstStageAccum, secondStageAccum, thirdStageAccum) =
+        (findAccumulableInfo(stageInfos(0).accumulables.values, TEST_ACCUMULATOR),
+        findAccumulableInfo(stageInfos(1).accumulables.values, TEST_ACCUMULATOR),
+        findAccumulableInfo(stageInfos(2).accumulables.values, TEST_ACCUMULATOR))
       assert(firstStageAccum.value.toLong === numPartitions)
       assert(secondStageAccum.value.toLong === numPartitions * 10)
       assert(thirdStageAccum.value.toLong === numPartitions * 2 * 100)
