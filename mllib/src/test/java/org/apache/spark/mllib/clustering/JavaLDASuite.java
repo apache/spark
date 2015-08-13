@@ -124,6 +124,10 @@ public class JavaLDASuite implements Serializable {
         }
     });
     assertEquals(topicDistributions.count(), nonEmptyCorpus.count());
+
+    // Check: javaTopTopicsPerDocuments
+    JavaRDD<scala.Tuple3<java.lang.Long, int[], java.lang.Double[]>> topTopics =
+      model.javaTopTopicsPerDocument(3);
   }
 
   @Test
@@ -160,11 +164,31 @@ public class JavaLDASuite implements Serializable {
     assertEquals(roundedLocalTopicSummary.length, k);
   }
 
+  @Test
+  public void localLdaMethods() {
+    JavaRDD<Tuple2<Long, Vector>> docs = sc.parallelize(toyData, 2);
+    JavaPairRDD<Long, Vector> pairedDocs = JavaPairRDD.fromJavaRDD(docs);
+
+    // check: topicDistributions
+    assertEquals(toyModel.topicDistributions(pairedDocs).count(), pairedDocs.count());
+
+    // check: logPerplexity
+    double logPerplexity = toyModel.logPerplexity(pairedDocs);
+
+    // check: logLikelihood.
+    ArrayList<Tuple2<Long, Vector>> docsSingleWord = new ArrayList<Tuple2<Long, Vector>>();
+    docsSingleWord.add(new Tuple2<Long, Vector>(Long.valueOf(0), Vectors.dense(1.0, 0.0, 0.0)));
+    JavaPairRDD<Long, Vector> single = JavaPairRDD.fromJavaRDD(sc.parallelize(docsSingleWord));
+    double logLikelihood = toyModel.logLikelihood(single);
+  }
+
   private static int tinyK = LDASuite$.MODULE$.tinyK();
   private static int tinyVocabSize = LDASuite$.MODULE$.tinyVocabSize();
   private static Matrix tinyTopics = LDASuite$.MODULE$.tinyTopics();
   private static Tuple2<int[], double[]>[] tinyTopicDescription =
       LDASuite$.MODULE$.tinyTopicDescription();
   private JavaPairRDD<Long, Vector> corpus;
+  private LocalLDAModel toyModel = LDASuite$.MODULE$.toyModel();
+  private ArrayList<Tuple2<Long, Vector>> toyData = LDASuite$.MODULE$.javaToyData();
 
 }
