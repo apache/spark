@@ -17,11 +17,7 @@
 
 package org.apache.spark
 
-import org.apache.spark.annotation.DeveloperApi
-
 /**
- * :: DeveloperApi ::
- * Hold statistics about the output sizes in a map stage.
+ * Holds statistics about the output sizes in a map stage. May become a DeveloperApi in the future.
  */
-@DeveloperApi
-class MapOutputStatistics(val shuffleId: Int, val bytesByPartitionId: Array[Long])
+private[spark] class MapOutputStatistics(val shuffleId: Int, val bytesByPartitionId: Array[Long])

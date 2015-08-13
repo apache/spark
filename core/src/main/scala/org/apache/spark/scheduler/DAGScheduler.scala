@@ -822,11 +822,7 @@ class DAGScheduler(
     try {
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
-<<<<<<< HEAD
-      finalStage = newResultStage(finalRDD, partitions.length, jobId, callSite)
-=======
       finalStage = newResultStage(finalRDD, func, partitions, jobId, callSite)
->>>>>>> 9c0f689... Remove reduce task stuff, clean up, add docs and tests
     } catch {
       case e: Exception =>
         logWarning("Creating new stage failed due to exception - job: " + jobId, e)
@@ -838,7 +834,7 @@ class DAGScheduler(
       clearCacheLocs()
       logInfo("Got job %s (%s) with %d output partitions".format(
         job.jobId, callSite.shortForm, partitions.length))
-      logInfo("Final stage: " + finalStage + "(" + finalStage.name + ")")
+      logInfo("Final stage: " + finalStage + " (" + finalStage.name + ")")
       logInfo("Parents of final stage: " + finalStage.parents)
       logInfo("Missing parents: " + getMissingParentStages(finalStage))
       val jobSubmissionTime = clock.getTimeMillis()
@@ -877,7 +873,7 @@ class DAGScheduler(
       clearCacheLocs()
       logInfo("Got map stage job %s (%s) with %d output partitions".format(
         jobId, callSite.shortForm, dependency.rdd.partitions.size))
-      logInfo("Final stage: " + finalStage + "(" + finalStage.name + ")")
+      logInfo("Final stage: " + finalStage + " (" + finalStage.name + ")")
       logInfo("Parents of final stage: " + finalStage.parents)
       logInfo("Missing parents: " + getMissingParentStages(finalStage))
 
