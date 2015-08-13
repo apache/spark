@@ -106,7 +106,11 @@ private[spark] object JettyUtils extends Logging {
       path: String,
       servlet: HttpServlet,
       basePath: String): ServletContextHandler = {
-    val prefixedPath = attachPrefix(basePath, path)
+    val prefixedPath = if (basePath == "" && path == "/") {
+      path
+    } else {
+      (basePath + path).stripSuffix("/")
+    }
     val contextHandler = new ServletContextHandler
     val holder = new ServletHolder(servlet)
     contextHandler.setContextPath(prefixedPath)
@@ -121,7 +125,7 @@ private[spark] object JettyUtils extends Logging {
       beforeRedirect: HttpServletRequest => Unit = x => (),
       basePath: String = "",
       httpMethods: Set[String] = Set("GET")): ServletContextHandler = {
-    val prefixedDestPath = attachPrefix(basePath, destPath)
+    val prefixedDestPath = basePath + destPath
     val servlet = new HttpServlet {
       override def doGet(request: HttpServletRequest, response: HttpServletResponse): Unit = {
         if (httpMethods.contains("GET")) {
@@ -245,11 +249,6 @@ private[spark] object JettyUtils extends Logging {
 
     val (server, boundPort) = Utils.startServiceOnPort[Server](port, connect, conf, serverName)
     ServerInfo(server, boundPort, collection)
-  }
-
-  /** Attach a prefix to the given path, but avoid returning an empty path */
-  private def attachPrefix(basePath: String, relativePath: String): String = {
-    if (basePath == "") relativePath else (basePath + relativePath).stripSuffix("/")
   }
 }
 

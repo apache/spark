@@ -15,42 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.util
-
-import java.util.UUID
-
-import org.apache.spark.annotation.DeveloperApi
-
+package org.apache.spark.sql.execution
 
 /**
- * :: DeveloperApi ::
- *
- * Trait for an object with an immutable unique ID that identifies itself and its derivatives.
- *
- * WARNING: There have not yet been final discussions on this API, so it may be broken in future
- *          releases.
+ * An interface for relations that are backed by files.  When a class implements this interface,
+ * the list of paths that it returns will be returned to a user who calls `inputPaths` on any
+ * DataFrame that queries this relation.
  */
-@DeveloperApi
-trait Identifiable {
-
-  /**
-   * An immutable unique ID for the object and its derivatives.
-   */
-  val uid: String
-
-  override def toString: String = uid
-}
-
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
-object Identifiable {
-
-  /**
-   * Returns a random UID that concatenates the given prefix, "_", and 12 random hex chars.
-   */
-  def randomUID(prefix: String): String = {
-    prefix + "_" + UUID.randomUUID().toString.takeRight(12)
-  }
+private[sql] trait FileRelation {
+  /** Returns the list of files that will be read when scanning this relation. */
+  def inputFiles: Array[String]
 }

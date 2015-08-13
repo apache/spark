@@ -19,12 +19,12 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Transformer
+import org.apache.spark.ml.param.{BooleanParam, ParamMap, StringArrayParam}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.param.{ParamMap, StringArrayParam, BooleanParam, Param}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.types.{StringType, StructField, ArrayType, StructType}
 import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.types.{ArrayType, StringType, StructField, StructType}
 
 /**
  * stop words list

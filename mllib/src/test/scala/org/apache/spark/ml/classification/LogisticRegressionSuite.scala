@@ -19,6 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -135,6 +136,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     lr.setFitIntercept(false)
     val model = lr.fit(dataset)
     assert(model.intercept === 0.0)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
   }
 
   test("logistic regression with setters") {

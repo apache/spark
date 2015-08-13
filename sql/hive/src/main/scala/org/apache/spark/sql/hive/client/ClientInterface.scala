@@ -88,6 +88,9 @@ private[hive] case class HiveTable(
  */
 private[hive] trait ClientInterface {
 
+  /** Returns the Hive Version of this client. */
+  def version: HiveVersion
+
   /** Returns the configuration for the given key in the current session. */
   def getConf(key: String, defaultValue: String): String
 

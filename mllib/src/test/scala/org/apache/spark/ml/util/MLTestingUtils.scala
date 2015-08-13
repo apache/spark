@@ -17,40 +17,14 @@
 
 package org.apache.spark.ml.util
 
-import java.util.UUID
+import org.apache.spark.ml.Model
+import org.apache.spark.ml.param.ParamMap
 
-import org.apache.spark.annotation.DeveloperApi
-
-
-/**
- * :: DeveloperApi ::
- *
- * Trait for an object with an immutable unique ID that identifies itself and its derivatives.
- *
- * WARNING: There have not yet been final discussions on this API, so it may be broken in future
- *          releases.
- */
-@DeveloperApi
-trait Identifiable {
-
-  /**
-   * An immutable unique ID for the object and its derivatives.
-   */
-  val uid: String
-
-  override def toString: String = uid
-}
-
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
-object Identifiable {
-
-  /**
-   * Returns a random UID that concatenates the given prefix, "_", and 12 random hex chars.
-   */
-  def randomUID(prefix: String): String = {
-    prefix + "_" + UUID.randomUUID().toString.takeRight(12)
+object MLTestingUtils {
+  def checkCopy(model: Model[_]): Unit = {
+    val copied = model.copy(ParamMap.empty)
+      .asInstanceOf[Model[_]]
+    assert(copied.parent.uid == model.parent.uid)
+    assert(copied.parent == model.parent)
   }
 }

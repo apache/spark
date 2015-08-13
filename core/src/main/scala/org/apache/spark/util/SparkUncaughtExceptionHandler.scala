@@ -33,7 +33,7 @@ private[spark] object SparkUncaughtExceptionHandler
 
       // We may have been called from a shutdown hook. If so, we must not call System.exit().
       // (If we do, we will deadlock.)
-      if (!Utils.inShutdown()) {
+      if (!ShutdownHookManager.inShutdown()) {
         if (exception.isInstanceOf[OutOfMemoryError]) {
           System.exit(SparkExitCode.OOM)
         } else {
