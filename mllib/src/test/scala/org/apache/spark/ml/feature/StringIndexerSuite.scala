@@ -22,6 +22,8 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.functions.col
 
 class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -52,19 +54,6 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     // a -> 0, b -> 2, c -> 1
     val expected = Set((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0))
     assert(output === expected)
-    // convert reverse our transform
-    val reversed = indexer.invert("labelIndex", "label2")
-      .transform(transformed)
-      .select("id", "label2")
-    assert(df.collect().map(r => (r.getInt(0), r.getString(1))).toSet ===
-      reversed.collect().map(r => (r.getInt(0), r.getString(1))).toSet)
-    // Check invert using only metadata
-    val inverse2 = new StringIndexerInverse()
-      .setInputCol("labelIndex")
-      .setOutputCol("label2")
-    val reversed2 = inverse2.transform(transformed).select("id", "label2")
-    assert(df.collect().map(r => (r.getInt(0), r.getString(1))).toSet ===
-      reversed2.collect().map(r => (r.getInt(0), r.getString(1))).toSet)
   }
 
   test("StringIndexer with a numeric input column") {
@@ -92,5 +81,37 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("labelIndex")
     val df = sqlContext.range(0L, 10L)
     assert(indexerModel.transform(df).eq(df))
+  }
+
+  test("IndexToString params") {
+    val idxToStr = new IndexToString()
+    ParamsSuite.checkParams(idxToStr)
+  }
+
+  test("IndexToString.transform") {
+    val labels = Array("a", "b", "c")
+    val df0 = sqlContext.createDataFrame(Seq(
+      (0, "a"), (1, "b"), (2, "c"), (0, "a")
+    )).toDF("index", "expected")
+
+    val idxToStr0 = new IndexToString()
+      .setInputCol("index")
+      .setOutputCol("actual")
+      .setLabels(labels)
+    idxToStr0.transform(df0).select("actual", "expected").collect().foreach {
+      case Row(actual, expected) =>
+        assert(actual === expected)
+    }
+
+    val attr = NominalAttribute.defaultAttr.withValues(labels)
+    val df1 = df0.select(col("index").as("indexWithAttr", attr.toMetadata()), col("expected"))
+
+    val idxToStr1 = new IndexToString()
+      .setInputCol("indexWithAttr")
+      .setOutputCol("actual")
+    idxToStr1.transform(df1).select("actual", "expected").collect().foreach {
+      case Row(actual, expected) =>
+        assert(actual === expected)
+    }
   }
 }

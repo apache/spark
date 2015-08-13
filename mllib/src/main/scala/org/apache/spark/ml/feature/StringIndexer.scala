@@ -24,7 +24,7 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, NumericType, StringType, StructType}
@@ -58,6 +58,8 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
  * If the input column is numeric, we cast it to string and index the string values.
  * The indices are in [0, numLabels), ordered by label frequencies.
  * So the most frequent label gets index 0.
+ *
+ * @see [[IndexToString]] for the inverse transformation
  */
 @Experimental
 class StringIndexer(override val uid: String) extends Estimator[StringIndexerModel]
@@ -152,34 +154,24 @@ class StringIndexerModel private[ml] (
     val copied = new StringIndexerModel(uid, labels)
     copyValues(copied, extra).setParent(parent)
   }
-
-  /**
-   * Return a model to perform the inverse transformation.
-   * Note: By default we keep the original columns during this transformation, so the inverse
-   * should only be used on new columns such as predicted labels.
-   */
-  def invert(inputCol: String, outputCol: String): StringIndexerInverse = {
-    new StringIndexerInverse()
-      .setInputCol(inputCol)
-      .setOutputCol(outputCol)
-      .setLabels(labels)
-  }
 }
 
 /**
  * :: Experimental ::
- * Transform a provided column back to the original input types using either the metadata
- * on the input column, or if provided using the labels supplied by the user.
- * Note: By default we keep the original columns during this transformation,
- * so the inverse should only be used on new columns such as predicted labels.
+ * A [[Transformer]] that maps a column of string indices back to a new column of corresponding
+ * string values using either the ML attributes of the input column, or if provided using the labels
+ * supplied by the user.
+ * All original columns are kept during transformation.
+ *
+ * @see [[StringIndexer]] for converting strings into indices
  */
 @Experimental
-class StringIndexerInverse private[ml] (
+class IndexToString private[ml] (
   override val uid: String) extends Transformer
     with HasInputCol with HasOutputCol {
 
   def this() =
-    this(Identifiable.randomUID("strIdxInv"))
+    this(Identifiable.randomUID("idxToStr"))
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -239,7 +231,7 @@ class StringIndexerInverse private[ml] (
     }
     val indexer = udf { index: Double =>
       val idx = index.toInt
-      if (0 <= idx && idx < values.size) {
+      if (0 <= idx && idx < values.length) {
         values(idx)
       } else {
         throw new SparkException(s"Unseen index: $index ??")
@@ -250,7 +242,7 @@ class StringIndexerInverse private[ml] (
       indexer(dataset($(inputCol)).cast(DoubleType)).as(outputColName))
   }
 
-  override def copy(extra: ParamMap): StringIndexerInverse = {
+  override def copy(extra: ParamMap): IndexToString = {
     defaultCopy(extra)
   }
 }
