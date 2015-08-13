@@ -54,17 +54,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
   import TestHiveContext._
 
   def this() {
-    this(new SparkContext(
-      System.getProperty("spark.sql.test.master", "local[32]"),
-      "TestSQLContext",
-      new SparkConf()
-        // SPARK-3729: Test key required to check for initialization errors with config.
-        .set("spark.sql.test", "")
-        .set("spark.sql.hive.metastore.barrierPrefixes",
-          "org.apache.spark.sql.hive.execution.PairSerDe")
-        .set("spark.buffer.pageSize", "4m")
-        // SPARK-8910
-        .set("spark.ui.enabled", "false")))
+    this(defaultSparkContext())
   }
 
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
@@ -456,4 +446,23 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
 
 private[hive] object TestHiveContext {
   case class TestTable(name: String, commands: (() => Unit)*)
+
+  def defaultSparkContext(): SparkContext = {
+    new SparkContext(
+      System.getProperty("spark.sql.test.master", "local[32]"),
+      "TestSQLContext",
+      new SparkConf()
+        // SPARK-3729: Test key required to check for initialization errors with config.
+        .set("spark.sql.test", "")
+        .set("spark.sql.hive.metastore.barrierPrefixes",
+          "org.apache.spark.sql.hive.execution.PairSerDe")
+        .set("spark.buffer.pageSize", "4m")
+        // SPARK-8910
+        .set("spark.ui.enabled", "false"))
+  }
 }
+
+// Note: this should NOT be used for internal Spark unit tests because the singleton makes it
+// very difficult to start a HiveContext with a custom underlying SparkContext (SPARK-9580).
+@deprecated("instantiate new TestHiveContext instead of using this singleton", "1.5.0")
+object GlobalTestHiveContext extends TestHiveContext(TestHiveContext.defaultSparkContext())

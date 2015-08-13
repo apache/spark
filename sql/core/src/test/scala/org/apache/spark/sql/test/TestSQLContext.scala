@@ -27,8 +27,7 @@ import org.apache.spark.sql.{SQLConf, SQLContext}
 private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { self =>
 
   def this() {
-    this(new SparkContext("local[2]", "test-sql-context",
-      new SparkConf().set("spark.sql.testkey", "true")))
+    this(TestSQLContext.defaultSparkContext())
   }
 
   // Use fewer partitions to speed up testing
@@ -51,11 +50,14 @@ private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { sel
   }
 }
 
+private[sql] object TestSQLContext {
+  def defaultSparkContext(): SparkContext = {
+    new SparkContext("local[2]", "test-sql-context",
+      new SparkConf().set("spark.sql.testkey", "true"))
+  }
+}
+
 // Note: this should NOT be used for internal Spark unit tests because the singleton makes it
 // very difficult to start a SQLContext with a custom underlying SparkContext (SPARK-9580).
 @deprecated("instantiate new TestSQLContext instead of using this singleton", "1.5.0")
-object TestSQLContext extends SQLContext(
-  new SparkContext(
-    "local[2]",
-    "test-sql-context",
-    new SparkConf().set("spark.sql.testkey", "true")))
+object SingletonTestSQLContext extends TestSQLContext(TestSQLContext.defaultSparkContext())
