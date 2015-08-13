@@ -38,6 +38,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
   private val testTempDir = Utils.createTempDir()
 
   override def beforeAll() {
+    super.beforeAll()
     ctx.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
@@ -100,10 +101,14 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
   }
 
   override def afterAll() {
-    ctx.cacheTables = false
-    TimeZone.setDefault(originalTimeZone)
-    Locale.setDefault(originalLocale)
-    ctx.reset()
+    try {
+      ctx.cacheTables = false
+      TimeZone.setDefault(originalTimeZone)
+      Locale.setDefault(originalLocale)
+      ctx.reset()
+    } finally {
+      super.afterAll()
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -766,6 +771,7 @@ class HiveWindowFunctionQueryFileSuite
   private val testTempDir = Utils.createTempDir()
 
   override def beforeAll() {
+    super.beforeAll()
     ctx.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
@@ -783,10 +789,14 @@ class HiveWindowFunctionQueryFileSuite
   }
 
   override def afterAll() {
-    ctx.cacheTables = false
-    TimeZone.setDefault(originalTimeZone)
-    Locale.setDefault(originalLocale)
-    ctx.reset()
+    try {
+      ctx.cacheTables = false
+      TimeZone.setDefault(originalTimeZone)
+      Locale.setDefault(originalLocale)
+      ctx.reset()
+    } finally {
+      super.afterAll()
+    }
   }
 
   override def blackList: Seq[String] = Seq(
