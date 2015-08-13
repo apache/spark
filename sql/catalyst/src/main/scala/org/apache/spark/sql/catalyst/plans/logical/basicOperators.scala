@@ -143,6 +143,16 @@ case class Join(
     }
   }
 
+  override def keys: Seq[Key] = {
+    // TODO: try to propagate unique keys as well as foreign keys
+    def fk(keys: Seq[Key]): Seq[ForeignKey] = keys.collect { case k: ForeignKey => k }
+    joinType match {
+      case LeftSemi | LeftOuter => fk(left.keys)
+      case RightOuter => fk(right.keys)
+      case _ => fk(left.keys ++ right.keys)
+    }
+  }
+
   def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
   // Joins are only resolved if they don't introduce ambiguous expression ids.
