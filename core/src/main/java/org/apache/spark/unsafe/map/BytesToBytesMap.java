@@ -332,7 +332,7 @@ public final class BytesToBytesMap {
   }
 
   /**
-   * Looks up a key, and saves the result in provided `loc` and returns it.
+   * Looks up a key, and saves the result in provided `loc`.
    *
    * This is a thread-safe version of `lookup`, could be used by multiple threads.
    */
