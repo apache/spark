@@ -21,8 +21,6 @@ import java.io.File
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
-import org.apache.spark.launcher.YarnCommandBuilderUtils
-
 import scala.collection.mutable.HashMap
 import scala.util.Try
 
@@ -39,6 +37,7 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, P
 import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.util.Utils
 
@@ -236,7 +235,7 @@ object YarnSparkHadoopUtil {
    * @return The correct OOM Error handler JVM option, platform dependent.
    */
   def getOutOfMemoryErrorArgument : String = {
-    if (YarnCommandBuilderUtils.isWindows) {
+    if (Utils.isWindows) {
       escapeForShell("-XX:OnOutOfMemoryError=taskkill /F /PID %%%%p")
     } else {
       escapeForShell("-XX:OnOutOfMemoryError='kill %%p'")
@@ -262,7 +261,7 @@ object YarnSparkHadoopUtil {
    */
   def escapeForShell(arg: String): String = {
     if (arg != null) {
-      if (YarnCommandBuilderUtils.isWindows) {
+      if (Utils.isWindows) {
         YarnCommandBuilderUtils.quoteForBatchScript(arg)
       } else {
         val escaped = new StringBuilder("'")

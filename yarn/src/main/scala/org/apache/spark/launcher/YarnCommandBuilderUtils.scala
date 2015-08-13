@@ -19,18 +19,9 @@ package org.apache.spark.launcher
 
 /**
  * Exposes needed methods
- * TODO: Is there a better way?
  */
 private[spark] object YarnCommandBuilderUtils {
   def quoteForBatchScript(arg: String) : String = {
-    org.apache.spark.launcher.CommandBuilderUtils.quoteForBatchScript(arg)
-  }
-
-  def quoteForCommandString(arg: String) : String = {
-    org.apache.spark.launcher.CommandBuilderUtils.quoteForCommandString(arg)
-  }
-
-  def isWindows : Boolean = {
-    org.apache.spark.launcher.CommandBuilderUtils.isWindows()
+    CommandBuilderUtils.quoteForBatchScript(arg)
   }
 }
