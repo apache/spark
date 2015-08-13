@@ -149,16 +149,32 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     basicScheduling(spreadOut = true)
   }
 
+  test("basic scheduling with priority scheduler - spread out") {
+    basicSchedulingWithPriorityScheduler(spreadOut = true)
+  }
+
   test("basic scheduling - no spread out") {
     basicScheduling(spreadOut = false)
+  }
+
+  test("basic scheduling with priority scheduler - no spread out") {
+    basicSchedulingWithPriorityScheduler(spreadOut = false)
   }
 
   test("basic scheduling with more memory - spread out") {
     basicSchedulingWithMoreMemory(spreadOut = true)
   }
 
+  test("basic scheduling with more memory with priority scheduler - spread out") {
+    basicSchedulingWithMoreMemoryWithPriorityScheduler(spreadOut = true)
+  }
+
   test("basic scheduling with more memory - no spread out") {
     basicSchedulingWithMoreMemory(spreadOut = false)
+  }
+
+  test("basic scheduling with more memory with priority scheduler - no spread out") {
+    basicSchedulingWithMoreMemoryWithPriorityScheduler(spreadOut = false)
   }
 
   test("scheduling with max cores - spread out") {
@@ -230,31 +246,9 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
   }
 
   test("building pool and queue") {
-    val conf = new SparkConf()
-    val securityManager = new SecurityManager(conf)
-    val masterRpcEnv: RpcEnv =
-      RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityManager)
-    val setting: SchedulingSetting = SchedulingSetting(SchedulingMode.PRIORITY, None)
+    val master = makeMasterWithPriorityScheduler()
+    val algo = makePrioritySchedulingAlgorithm(master)
 
-    val master = new Master(masterRpcEnv, masterRpcEnv.address, 0, securityManager, conf, setting)
-    val schedulingSetting = master.schedulingSetting
-    val algo = new PrioritySchedulingAlgorithm(master, schedulingSetting)
-
-    val exampleXML = """<?xml version="1.0"?>
-                        <allocations>
-                          <pool name="production">
-                            <priority>10</priority>
-                            <cores>5</cores>
-                          </pool>
-                          <pool name="test">
-                            <priority>2</priority>
-                            <cores>1</cores>
-                          </pool>
-                        </allocations>"""
-
-    val stream = new ByteArrayInputStream(exampleXML.getBytes(StandardCharsets.UTF_8))
-
-    algo.buildFairSchedulerPool(stream)
     assert(algo.queueSize() == 2)
 
     val firstPool = algo.nextPool().get
@@ -285,12 +279,40 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     assert(scheduledCores === Array(10, 10, 10))
   }
 
+  private def basicSchedulingWithPriorityScheduler(spreadOut: Boolean): Unit = {
+    val master = makeMasterWithPriorityScheduler()
+    val appInfo = makeAppInfo(1024)
+    val algo = makePrioritySchedulingAlgorithm(master)
+    val firstPool = algo.nextPool().get
+    assert(firstPool.cores == 5)
+    val scheduledCores = scheduleExecutorsOnWorkersForPool(algo, appInfo, workerInfos, spreadOut, firstPool)
+    if (spreadOut) {
+      assert(scheduledCores === Array(2, 2, 1))
+    } else {
+      assert(scheduledCores === Array(5, 0, 0))
+    }
+  }
+
   private def basicSchedulingWithMoreMemory(spreadOut: Boolean): Unit = {
     val master = makeMaster()
     val appInfo = makeAppInfo(3072)
     val algo = new FIFOSchedulingAlgorithm(master)
     val scheduledCores = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     assert(scheduledCores === Array(10, 10, 10))
+  }
+
+  private def basicSchedulingWithMoreMemoryWithPriorityScheduler(spreadOut: Boolean): Unit = {
+    val master = makeMasterWithPriorityScheduler()
+    val appInfo = makeAppInfo(3072)
+    val algo = makePrioritySchedulingAlgorithm(master)
+    val firstPool = algo.nextPool().get
+    assert(firstPool.cores == 5)
+    val scheduledCores = scheduleExecutorsOnWorkersForPool(algo, appInfo, workerInfos, spreadOut, firstPool)
+    if (spreadOut) {
+      assert(scheduledCores === Array(2, 2, 1))
+    } else {
+      assert(scheduledCores === Array(5, 0, 0))
+    }
   }
 
   private def schedulingWithMaxCores(spreadOut: Boolean): Unit = {
@@ -424,6 +446,8 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
   // ==========================================
 
   private val _scheduleExecutorsOnWorkers = PrivateMethod[Array[Int]]('scheduleExecutorsOnWorkers)
+  private val _scheduleExecutorsOnWorkersForPool =
+    PrivateMethod[Array[Int]]('scheduleExecutorsOnWorkersForPool)
   private val workerInfo = makeWorkerInfo(4096, 10)
   private val workerInfos = Array(workerInfo, workerInfo, workerInfo)
 
@@ -431,6 +455,14 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityMgr)
     val master = new Master(rpcEnv, rpcEnv.address, 0, securityMgr, conf)
+    master
+  }
+
+  private def makeMasterWithPriorityScheduler(conf: SparkConf = new SparkConf): Master = {
+    val securityMgr = new SecurityManager(conf)
+    val rpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityMgr)
+    val setting: SchedulingSetting = SchedulingSetting(SchedulingMode.PRIORITY, None)
+    val master = new Master(rpcEnv, rpcEnv.address, 0, securityMgr, conf, setting)
     master
   }
 
@@ -449,12 +481,44 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     new WorkerInfo(workerId, "host", 100, cores, memoryMb, null, 101, "address")
   }
 
+  private def makePrioritySchedulingAlgorithm(master: Master): PrioritySchedulingAlgorithm = {
+    val schedulingSetting = master.schedulingSetting
+    val algo = new PrioritySchedulingAlgorithm(master, schedulingSetting)
+
+    val exampleXML = """<?xml version="1.0"?>
+                        <allocations>
+                          <pool name="production">
+                            <priority>10</priority>
+                            <cores>5</cores>
+                          </pool>
+                          <pool name="test">
+                            <priority>2</priority>
+                            <cores>1</cores>
+                          </pool>
+                        </allocations>"""
+
+    val stream = new ByteArrayInputStream(exampleXML.getBytes(StandardCharsets.UTF_8))
+
+    algo.buildFairSchedulerPool(stream)
+    algo
+  }
+
   private def scheduleExecutorsOnWorkers(
       schedulingAlgo: SchedulingAlgorithm,
       appInfo: ApplicationInfo,
       workerInfos: Array[WorkerInfo],
       spreadOut: Boolean): Array[Int] = {
     schedulingAlgo.invokePrivate(_scheduleExecutorsOnWorkers(appInfo, workerInfos, spreadOut))
+  }
+
+  private def scheduleExecutorsOnWorkersForPool(
+      schedulingAlgo: PrioritySchedulingAlgorithm,
+      appInfo: ApplicationInfo,
+      workerInfos: Array[WorkerInfo],
+      spreadOut: Boolean,
+      pool: PrioritySchedulingAlgorithm#Pool): Array[Int] = {
+    schedulingAlgo.invokePrivate(
+      _scheduleExecutorsOnWorkersForPool(appInfo, workerInfos, spreadOut, pool))
   }
 
 }

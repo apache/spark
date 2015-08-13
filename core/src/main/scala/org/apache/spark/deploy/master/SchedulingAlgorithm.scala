@@ -340,8 +340,8 @@ private[master] class PrioritySchedulingAlgorithm(
           .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
             worker.coresFree >= coresPerExecutor.getOrElse(1))
           .sortBy(_.coresFree).reverse
-        currentPool = pool
-        val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, master.spreadOutApps)
+        val assignedCores =
+          scheduleExecutorsOnWorkersForPool(app, usableWorkers, master.spreadOutApps, pool)
 
         // Now that we've decided how many cores to allocate on each worker, let's allocate them
         for (pos <- 0 until usableWorkers.length if assignedCores(pos) > 0) {
@@ -350,6 +350,18 @@ private[master] class PrioritySchedulingAlgorithm(
         }
       }
     }}
+  }
+
+  /**
+   * A wrapper for scheduleExecutorsOnWorkers method with additional pool parameter
+   */
+  def scheduleExecutorsOnWorkersForPool(
+      app: ApplicationInfo,
+      usableWorkers: Array[WorkerInfo],
+      spreadOutApps: Boolean,
+      pool: Pool): Array[Int] = {
+    currentPool = pool
+    scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
   }
 
   def scheduleExecutorsOnWorkers(
