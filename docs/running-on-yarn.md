@@ -199,7 +199,7 @@ If you need a reference to the proper location to put log files in the YARN so t
  <td><code>spark.executor.instances</code></td>
   <td>2</td>
   <td>
-    The number of executors. Note that this property is incompatible with <code>spark.dynamicAllocation.enabled</code>.
+    The number of executors. Note that this property is incompatible with <code>spark.dynamicAllocation.enabled</code>. If both <code>spark.dynamicAllocation.enabled</code> and <code>spark.executor.instances</code> are specified, dynamic allocation is turned off and the specified number of <code>spark.executor.instances</code> is used. 
   </td>
 </tr>
 <tr>

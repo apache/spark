@@ -42,11 +42,18 @@ private[hive] object IsolatedClientLoader {
   def forVersion(
       version: String,
       config: Map[String, String] = Map.empty,
-      ivyPath: Option[String] = None): IsolatedClientLoader = synchronized {
+      ivyPath: Option[String] = None,
+      sharedPrefixes: Seq[String] = Seq.empty,
+      barrierPrefixes: Seq[String] = Seq.empty): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(version)
     val files = resolvedVersions.getOrElseUpdate(resolvedVersion,
       downloadVersion(resolvedVersion, ivyPath))
-    new IsolatedClientLoader(hiveVersion(version), files, config)
+    new IsolatedClientLoader(
+      version = hiveVersion(version),
+      execJars = files,
+      config = config,
+      sharedPrefixes = sharedPrefixes,
+      barrierPrefixes = barrierPrefixes)
   }
 
   def hiveVersion(version: String): HiveVersion = version match {

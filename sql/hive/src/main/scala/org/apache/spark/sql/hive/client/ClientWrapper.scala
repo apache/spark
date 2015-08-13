@@ -58,7 +58,7 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  *                        this ClientWrapper.
  */
 private[hive] class ClientWrapper(
-    version: HiveVersion,
+    override val version: HiveVersion,
     config: Map[String, String],
     initClassLoader: ClassLoader)
   extends ClientInterface
