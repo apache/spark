@@ -271,13 +271,13 @@ private[sql] object PartitioningUtils {
   private val upCastingOrder: Seq[DataType] =
     Seq(NullType, IntegerType, LongType, FloatType, DoubleType, StringType)
 
-  def checkPartitionColumnOfValidDataType(
+  def validatePartitionColumnDataTypes(
       schema: StructType,
       partitionColumns: Array[String]): Unit = {
 
     ResolvedDataSource.partitionColumnsSchema(schema, partitionColumns).foreach { field =>
       field.dataType match {
-        case _: AtomicType | NullType => // OK
+        case _: AtomicType => // OK
         case _ => throw new AnalysisException(s"Cannot use ${field.dataType} for partition column")
       }
     }
