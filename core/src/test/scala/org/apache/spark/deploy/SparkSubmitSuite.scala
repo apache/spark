@@ -324,6 +324,8 @@ class SparkSubmitSuite
       "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
       "--master", "local",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -337,6 +339,8 @@ class SparkSubmitSuite
       "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
       "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       "--jars", jarsString,
       unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
     runSparkSubmit(args)
@@ -355,6 +359,7 @@ class SparkSubmitSuite
         "--packages", Seq(main, dep).mkString(","),
         "--repositories", repo,
         "--conf", "spark.ui.enabled=false",
+        "--conf", "spark.master.rest.enabled=false",
         unusedJar.toString,
         "my.great.lib.MyLib", "my.great.dep.MyLib")
       runSparkSubmit(args)
@@ -500,6 +505,8 @@ class SparkSubmitSuite
       "--master", "local",
       "--conf", "spark.driver.extraClassPath=" + systemJar,
       "--conf", "spark.driver.userClassPathFirst=true",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       userJar.toString)
     runSparkSubmit(args)
   }
