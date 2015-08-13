@@ -173,6 +173,6 @@ class MinMaxScalerModel private[ml] (
 
   override def copy(extra: ParamMap): MinMaxScalerModel = {
     val copied = new MinMaxScalerModel(uid, originalMin, originalMax)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }
