@@ -107,6 +107,11 @@ private[orc] object OrcFilters extends Logging {
           .filter(isSearchableLiteral)
           .map(builder.equals(attribute, _))
 
+      case EqualNullSafe(attribute, value) =>
+        Option(value)
+          .filter(isSearchableLiteral)
+          .map(builder.nullSafeEquals(attribute, _))
+
       case LessThan(attribute, value) =>
         Option(value)
           .filter(isSearchableLiteral)
