@@ -20,10 +20,10 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.{Row, QueryTest}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHive.implicits._
 
-class HiveDataFrameWindowSuite extends QueryTest with SharedHiveContext {
-  import testImplicits._
+class HiveDataFrameWindowSuite extends QueryTest {
 
   test("reuse window partitionBy") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
@@ -54,7 +54,7 @@ class HiveDataFrameWindowSuite extends QueryTest with SharedHiveContext {
     checkAnswer(
       df.select(
         lead("value", 1).over(Window.partitionBy($"key").orderBy($"value"))),
-      ctx.sql(
+      sql(
         """SELECT
           | lead(value) OVER (PARTITION BY key ORDER BY value)
           | FROM window_table""".stripMargin).collect())
@@ -67,7 +67,7 @@ class HiveDataFrameWindowSuite extends QueryTest with SharedHiveContext {
     checkAnswer(
       df.select(
         lag("value", 1).over(Window.partitionBy($"key").orderBy($"value"))),
-      ctx.sql(
+      sql(
         """SELECT
           | lag(value) OVER (PARTITION BY key ORDER BY value)
           | FROM window_table""".stripMargin).collect())
@@ -80,7 +80,7 @@ class HiveDataFrameWindowSuite extends QueryTest with SharedHiveContext {
     checkAnswer(
       df.select(
         lead("value", 2, "n/a").over(Window.partitionBy("key").orderBy("value"))),
-      ctx.sql(
+      sql(
         """SELECT
           | lead(value, 2, "n/a") OVER (PARTITION BY key ORDER BY value)
           | FROM window_table""".stripMargin).collect())
@@ -93,7 +93,7 @@ class HiveDataFrameWindowSuite extends QueryTest with SharedHiveContext {
     checkAnswer(
       df.select(
         lag("value", 2, "n/a").over(Window.partitionBy($"key").orderBy($"value"))),
-      ctx.sql(
+      sql(
         """SELECT
           | lag(value, 2, "n/a") OVER (PARTITION BY key ORDER BY value)
           | FROM window_table""".stripMargin).collect())
@@ -116,7 +116,7 @@ class HiveDataFrameWindowSuite extends QueryTest with SharedHiveContext {
         rank().over(Window.partitionBy("value").orderBy("key")),
         cumeDist().over(Window.partitionBy("value").orderBy("key")),
         percentRank().over(Window.partitionBy("value").orderBy("key"))),
-      ctx.sql(
+      sql(
         s"""SELECT
            |key,
            |max(key) over (partition by value order by key),
@@ -139,7 +139,7 @@ class HiveDataFrameWindowSuite extends QueryTest with SharedHiveContext {
     checkAnswer(
       df.select(
         avg("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 2))),
-      ctx.sql(
+      sql(
         """SELECT
           | avg(key) OVER
           |   (PARTITION BY value ORDER BY key ROWS BETWEEN 1 preceding and 2 following)
@@ -152,7 +152,7 @@ class HiveDataFrameWindowSuite extends QueryTest with SharedHiveContext {
     checkAnswer(
       df.select(
         avg("key").over(Window.partitionBy($"value").orderBy($"key").rangeBetween(-1, 1))),
-      ctx.sql(
+      sql(
         """SELECT
           | avg(key) OVER
           |   (PARTITION BY value ORDER BY key RANGE BETWEEN 1 preceding and 1 following)
@@ -170,7 +170,7 @@ class HiveDataFrameWindowSuite extends QueryTest with SharedHiveContext {
         last("value").over(
           Window.partitionBy($"value").orderBy($"key").rowsBetween(Long.MinValue, 0)),
         last("value").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 3))),
-      ctx.sql(
+      sql(
         """SELECT
           | key,
           | last_value(value) OVER
@@ -199,7 +199,7 @@ class HiveDataFrameWindowSuite extends QueryTest with SharedHiveContext {
         avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(-1, 0))
           .as("avg_key3")
       ),
-      ctx.sql(
+      sql(
         """SELECT
           | key,
           | last_value(value) OVER

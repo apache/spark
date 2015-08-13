@@ -22,50 +22,49 @@ import java.util.{Locale, TimeZone}
 
 import scala.util.Try
 
+import org.scalatest.BeforeAndAfter
+
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkFiles, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.hive.test.TestHiveContext
-import org.apache.spark.sql.test.SQLTestData.TestData
+import org.apache.spark.sql.hive._
+import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.TestHive._
 
+case class TestData(a: Int, b: String)
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests
  * included in the hive distribution.
  */
-class HiveQuerySuite extends HiveComparisonTest {
-  import testImplicits._
-
+class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    ctx.cacheTables = true
+  import org.apache.spark.sql.hive.test.TestHive.implicits._
+
+  override def beforeAll() {
+    TestHive.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
   }
 
-  override def afterAll(): Unit = {
-    try {
-      ctx.cacheTables = false
-      TimeZone.setDefault(originalTimeZone)
-      Locale.setDefault(originalLocale)
-      ctx.sql("DROP TEMPORARY FUNCTION udtf_count2")
-    } finally {
-      super.afterAll()
-    }
+  override def afterAll() {
+    TestHive.cacheTables = false
+    TimeZone.setDefault(originalTimeZone)
+    Locale.setDefault(originalLocale)
+    sql("DROP TEMPORARY FUNCTION udtf_count2")
   }
 
   test("SPARK-4908: concurrent hive native commands") {
     (1 to 100).par.map { _ =>
-      ctx.sql("USE default")
-      ctx.sql("SHOW DATABASES")
+      sql("USE default")
+      sql("SHOW DATABASES")
     }
   }
 
@@ -149,11 +148,11 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   test("multiple generators in projection") {
     intercept[AnalysisException] {
-      ctx.sql("SELECT explode(array(key, key)), explode(array(key, key)) FROM src").collect()
+      sql("SELECT explode(array(key, key)), explode(array(key, key)) FROM src").collect()
     }
 
     intercept[AnalysisException] {
-      ctx.sql("SELECT explode(array(key, key)) as k1, explode(array(key, key)) FROM src").collect()
+      sql("SELECT explode(array(key, key)) as k1, explode(array(key, key)) FROM src").collect()
     }
   }
 
@@ -243,8 +242,8 @@ class HiveQuerySuite extends HiveComparisonTest {
     """.stripMargin)
 
   test("CREATE TABLE AS runs once") {
-    ctx.sql("CREATE TABLE foo AS SELECT 1 FROM src LIMIT 1").collect()
-    assert(ctx.sql("SELECT COUNT(*) FROM foo").collect().head.getLong(0) === 1,
+    sql("CREATE TABLE foo AS SELECT 1 FROM src LIMIT 1").collect()
+    assert(sql("SELECT COUNT(*) FROM foo").collect().head.getLong(0) === 1,
       "Incorrect number of rows in created table")
   }
 
@@ -256,7 +255,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   // Jdk version leads to different query output for double, so not use createQueryTest here
   test("division") {
-    val res = ctx.sql("SELECT 2 / 1, 1 / 2, 1 / 3, 1 / COUNT(*) FROM src LIMIT 1").collect().head
+    val res = sql("SELECT 2 / 1, 1 / 2, 1 / 3, 1 / COUNT(*) FROM src LIMIT 1").collect().head
     Seq(2.0, 0.5, 0.3333333333333333, 0.002).zip(res.toSeq).foreach( x =>
       assert(x._1 == x._2.asInstanceOf[Double]))
   }
@@ -266,17 +265,17 @@ class HiveQuerySuite extends HiveComparisonTest {
       "(101 / 2) % 10 FROM src LIMIT 1")
 
   test("Query expressed in SQL") {
-    ctx.setConf("spark.sql.dialect", "sql")
-    assert(ctx.sql("SELECT 1").collect() === Array(Row(1)))
-    ctx.setConf("spark.sql.dialect", "hiveql")
+    setConf("spark.sql.dialect", "sql")
+    assert(sql("SELECT 1").collect() === Array(Row(1)))
+    setConf("spark.sql.dialect", "hiveql")
   }
 
   test("Query expressed in HiveQL") {
-    ctx.sql("FROM src SELECT key").collect()
+    sql("FROM src SELECT key").collect()
   }
 
   test("Query with constant folding the CAST") {
-    ctx.sql("SELECT CAST(CAST('123' AS binary) AS binary) FROM src LIMIT 1").collect()
+    sql("SELECT CAST(CAST('123' AS binary) AS binary) FROM src LIMIT 1").collect()
   }
 
   createQueryTest("Constant Folding Optimization for AVG_SUM_COUNT",
@@ -375,10 +374,10 @@ class HiveQuerySuite extends HiveComparisonTest {
     """.stripMargin)
 
   test("SPARK-7270: consider dynamic partition when comparing table output") {
-    ctx.sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
-    ctx.sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
+    sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
+    sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
 
-    val analyzedPlan = ctx.sql(
+    val analyzedPlan = sql(
       """
         |INSERT OVERWRITE table test_partition PARTITION (b=1, c)
         |SELECT 'a', 'c' from ptest
@@ -432,11 +431,11 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   test("transform with SerDe2") {
 
-    ctx.sql("CREATE TABLE small_src(key INT, value STRING)")
-    ctx.sql("INSERT OVERWRITE TABLE small_src SELECT key, value FROM src LIMIT 10")
+    sql("CREATE TABLE small_src(key INT, value STRING)")
+    sql("INSERT OVERWRITE TABLE small_src SELECT key, value FROM src LIMIT 10")
 
-    val expected = ctx.sql("SELECT key FROM small_src").collect().head
-    val res = ctx.sql(
+    val expected = sql("SELECT key FROM small_src").collect().head
+    val res = sql(
       """
         |SELECT TRANSFORM (key) ROW FORMAT SERDE
         |'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
@@ -510,13 +509,13 @@ class HiveQuerySuite extends HiveComparisonTest {
     "SELECT d FROM (SELECT explode(array(1,1)) d FROM src LIMIT 1) t")
 
   test("sampling") {
-    ctx.sql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
-    ctx.sql("SELECT * FROM src TABLESAMPLE(100 PERCENT) s")
+    sql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
+    sql("SELECT * FROM src TABLESAMPLE(100 PERCENT) s")
   }
 
   test("DataFrame toString") {
-    ctx.sql("SHOW TABLES").toString
-    ctx.sql("SELECT * FROM src").toString
+    sql("SHOW TABLES").toString
+    sql("SELECT * FROM src").toString
   }
 
   createQueryTest("case statements with key #1",
@@ -545,7 +544,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   // Jdk version leads to different query output for double, so not use createQueryTest here
   test("timestamp cast #1") {
-    val res = ctx.sql("SELECT CAST(CAST(1 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1").collect().head
+    val res = sql("SELECT CAST(CAST(1 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1").collect().head
     assert(0.001 == res.getDouble(0))
   }
 
@@ -640,7 +639,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     "SELECT get_json_object(src_json.json, '$.fb:testid') FROM src_json")
 
   test("predicates contains an empty AttributeSet() references") {
-    ctx.sql(
+    sql(
       """
         |SELECT a FROM (
         |  SELECT 1 AS a FROM src LIMIT 1 ) t
@@ -649,12 +648,12 @@ class HiveQuerySuite extends HiveComparisonTest {
   }
 
   test("implement identity function using case statement") {
-    val actual = ctx.sql("SELECT (CASE key WHEN key THEN key END) FROM src")
+    val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src")
       .map { case Row(i: Int) => i }
       .collect()
       .toSet
 
-    val expected = ctx.sql("SELECT key FROM src")
+    val expected = sql("SELECT key FROM src")
       .map { case Row(i: Int) => i }
       .collect()
       .toSet
@@ -666,7 +665,7 @@ class HiveQuerySuite extends HiveComparisonTest {
   // See https://github.com/apache/spark/pull/1055#issuecomment-45820167 for a discussion.
   ignore("non-boolean conditions in a CaseWhen are illegal") {
     intercept[Exception] {
-      ctx.sql("SELECT (CASE WHEN key > 2 THEN 3 WHEN 1 THEN 2 ELSE 0 END) FROM src").collect()
+      sql("SELECT (CASE WHEN key > 2 THEN 3 WHEN 1 THEN 2 ELSE 0 END) FROM src").collect()
     }
   }
 
@@ -675,13 +674,13 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   test("case sensitivity: registered table") {
     val testData =
-      ctx.sparkContext.parallelize(
+      TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(2, "str2") :: Nil)
     testData.toDF().registerTempTable("REGisteredTABle")
 
     assertResult(Array(Row(2, "str2"))) {
-      ctx.sql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
+      sql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
         "WHERE TableAliaS.a > 1").collect()
     }
   }
@@ -692,94 +691,92 @@ class HiveQuerySuite extends HiveComparisonTest {
   }
 
   test("SPARK-1704: Explain commands as a DataFrame") {
-    ctx.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+    sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 
-    val df = ctx.sql("explain select key, count(value) from src group by key")
+    val df = sql("explain select key, count(value) from src group by key")
     assert(isExplanation(df))
 
-    ctx.reset()
+    TestHive.reset()
   }
 
   test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
     val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
       .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
-    ctx.sparkContext.parallelize(fixture).toDF().registerTempTable("having_test")
+    TestHive.sparkContext.parallelize(fixture).toDF().registerTempTable("having_test")
     val results =
-      ctx.sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
+      sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
       .collect()
       .map(x => Pair(x.getString(0), x.getInt(1)))
 
     assert(results === Array(Pair("foo", 4)))
-    ctx.reset()
+    TestHive.reset()
   }
 
   test("SPARK-2180: HAVING with non-boolean clause raises no exceptions") {
-    ctx.sql("select key, count(*) c from src group by key having c").collect()
+    sql("select key, count(*) c from src group by key having c").collect()
   }
 
   test("SPARK-2225: turn HAVING without GROUP BY into a simple filter") {
-    assert(ctx.sql("select key from src having key > 490").collect().size < 100)
+    assert(sql("select key from src having key > 490").collect().size < 100)
   }
 
   test("SPARK-5383 alias for udfs with multi output columns") {
     assert(
-      ctx.sql("select stack(2, key, value, key, value) as (a, b) from src limit 5")
+      sql("select stack(2, key, value, key, value) as (a, b) from src limit 5")
         .collect()
         .size == 5)
 
     assert(
-      ctx.sql(
-        "select a, b from (select stack(2, key, value, key, value) as (a, b) from src) t limit 5")
+      sql("select a, b from (select stack(2, key, value, key, value) as (a, b) from src) t limit 5")
         .collect()
         .size == 5)
   }
 
   test("SPARK-5367: resolve star expression in udf") {
-    assert(ctx.sql("select concat(*) from src limit 5").collect().size == 5)
-    assert(ctx.sql("select array(*) from src limit 5").collect().size == 5)
-    assert(ctx.sql("select concat(key, *) from src limit 5").collect().size == 5)
-    assert(ctx.sql("select array(key, *) from src limit 5").collect().size == 5)
+    assert(sql("select concat(*) from src limit 5").collect().size == 5)
+    assert(sql("select array(*) from src limit 5").collect().size == 5)
+    assert(sql("select concat(key, *) from src limit 5").collect().size == 5)
+    assert(sql("select array(key, *) from src limit 5").collect().size == 5)
   }
 
   test("Query Hive native command execution result") {
     val databaseName = "test_native_commands"
 
     assertResult(0) {
-      ctx.sql(s"DROP DATABASE IF EXISTS $databaseName").count()
+      sql(s"DROP DATABASE IF EXISTS $databaseName").count()
     }
 
     assertResult(0) {
-      ctx.sql(s"CREATE DATABASE $databaseName").count()
+      sql(s"CREATE DATABASE $databaseName").count()
     }
 
     assert(
-      ctx.sql("SHOW DATABASES")
+      sql("SHOW DATABASES")
         .select('result)
         .collect()
         .map(_.getString(0))
         .contains(databaseName))
 
-    assert(isExplanation(ctx.sql(s"EXPLAIN SELECT key, COUNT(*) FROM src GROUP BY key")))
+    assert(isExplanation(sql(s"EXPLAIN SELECT key, COUNT(*) FROM src GROUP BY key")))
 
-    ctx.reset()
+    TestHive.reset()
   }
 
   test("Exactly once semantics for DDL and command statements") {
     val tableName = "test_exactly_once"
-    val q0 = ctx.sql(s"CREATE TABLE $tableName(key INT, value STRING)")
+    val q0 = sql(s"CREATE TABLE $tableName(key INT, value STRING)")
 
     // If the table was not created, the following assertion would fail
-    assert(Try(ctx.table(tableName)).isSuccess)
+    assert(Try(table(tableName)).isSuccess)
 
     // If the CREATE TABLE command got executed again, the following assertion would fail
     assert(Try(q0.count()).isSuccess)
   }
 
   test("DESCRIBE commands") {
-    ctx.sql(
-      s"CREATE TABLE test_describe_commands1 (key INT, value STRING) PARTITIONED BY (dt STRING)")
+    sql(s"CREATE TABLE test_describe_commands1 (key INT, value STRING) PARTITIONED BY (dt STRING)")
 
-    ctx.sql(
+    sql(
       """FROM src INSERT OVERWRITE TABLE test_describe_commands1 PARTITION (dt='2008-06-08')
         |SELECT key, value
       """.stripMargin)
@@ -794,7 +791,7 @@ class HiveQuerySuite extends HiveComparisonTest {
         Row("# col_name", "data_type", "comment"),
         Row("dt", "string", null))
     ) {
-      ctx.sql("DESCRIBE test_describe_commands1")
+      sql("DESCRIBE test_describe_commands1")
         .select('col_name, 'data_type, 'comment)
         .collect()
     }
@@ -809,14 +806,14 @@ class HiveQuerySuite extends HiveComparisonTest {
         Row("# col_name", "data_type", "comment"),
         Row("dt", "string", null))
     ) {
-      ctx.sql("DESCRIBE default.test_describe_commands1")
+      sql("DESCRIBE default.test_describe_commands1")
         .select('col_name, 'data_type, 'comment)
         .collect()
     }
 
     // Describe a column is a native command
     assertResult(Array(Array("value", "string", "from deserializer"))) {
-      ctx.sql("DESCRIBE test_describe_commands1 value")
+      sql("DESCRIBE test_describe_commands1 value")
         .select('result)
         .collect()
         .map(_.getString(0).split("\t").map(_.trim))
@@ -824,7 +821,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
     // Describe a column is a native command
     assertResult(Array(Array("value", "string", "from deserializer"))) {
-      ctx.sql("DESCRIBE default.test_describe_commands1 value")
+      sql("DESCRIBE default.test_describe_commands1 value")
         .select('result)
         .collect()
         .map(_.getString(0).split("\t").map(_.trim))
@@ -842,7 +839,7 @@ class HiveQuerySuite extends HiveComparisonTest {
         Array(""),
         Array("dt", "string"))
     ) {
-      ctx.sql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
+      sql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
         .select('result)
         .collect()
         .map(_.getString(0).replaceAll("None", "").trim.split("\t").map(_.trim))
@@ -850,7 +847,7 @@ class HiveQuerySuite extends HiveComparisonTest {
 
     // Describe a registered temporary table.
     val testData =
-      ctx.sparkContext.parallelize(
+      TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(1, "str2") :: Nil)
     testData.toDF().registerTempTable("test_describe_commands2")
@@ -860,16 +857,16 @@ class HiveQuerySuite extends HiveComparisonTest {
         Row("a", "int", ""),
         Row("b", "string", ""))
     ) {
-      ctx.sql("DESCRIBE test_describe_commands2")
+      sql("DESCRIBE test_describe_commands2")
         .select('col_name, 'data_type, 'comment)
         .collect()
     }
   }
 
   test("SPARK-2263: Insert Map<K, V> values") {
-    ctx.sql("CREATE TABLE m(value MAP<INT, STRING>)")
-    ctx.sql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
-    ctx.sql("SELECT * FROM m").collect().zip(ctx.sql("SELECT * FROM src LIMIT 10").collect()).map {
+    sql("CREATE TABLE m(value MAP<INT, STRING>)")
+    sql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
+    sql("SELECT * FROM m").collect().zip(sql("SELECT * FROM src LIMIT 10").collect()).map {
       case (Row(map: Map[_, _]), Row(key: Int, value: String)) =>
         assert(map.size === 1)
         assert(map.head === (key, value))
@@ -877,35 +874,35 @@ class HiveQuerySuite extends HiveComparisonTest {
   }
 
   test("ADD JAR command") {
-    val testJar = TestHiveContext.getHiveFile("data/files/TestSerDe.jar").getCanonicalPath
-    ctx.sql("CREATE TABLE alter1(a INT, b INT)")
+    val testJar = TestHive.getHiveFile("data/files/TestSerDe.jar").getCanonicalPath
+    sql("CREATE TABLE alter1(a INT, b INT)")
     intercept[Exception] {
-      ctx.sql(
+      sql(
         """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
           |WITH serdeproperties('s1'='9')
         """.stripMargin)
     }
-    ctx.sql("DROP TABLE alter1")
+    sql("DROP TABLE alter1")
   }
 
   test("ADD JAR command 2") {
     // this is a test case from mapjoin_addjar.q
-    val testJar = TestHiveContext.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
-    val testData = TestHiveContext.getHiveFile("data/files/sample.json").getCanonicalPath
-    ctx.sql(s"ADD JAR $testJar")
-    ctx.sql(
+    val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
+    val testData = TestHive.getHiveFile("data/files/sample.json").getCanonicalPath
+    sql(s"ADD JAR $testJar")
+    sql(
       """CREATE TABLE t1(a string, b string)
       |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
-    ctx.sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
-    ctx.sql("select * from src join t1 on src.key = t1.a")
-    ctx.sql("DROP TABLE t1")
+    sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
+    sql("select * from src join t1 on src.key = t1.a")
+    sql("DROP TABLE t1")
   }
 
   test("ADD FILE command") {
-    val testFile = TestHiveContext.getHiveFile("data/files/v1.txt").getCanonicalFile
-    ctx.sql(s"ADD FILE $testFile")
+    val testFile = TestHive.getHiveFile("data/files/v1.txt").getCanonicalFile
+    sql(s"ADD FILE $testFile")
 
-    val checkAddFileRDD = ctx.sparkContext.parallelize(1 to 2, 1).mapPartitions { _ =>
+    val checkAddFileRDD = sparkContext.parallelize(1 to 2, 1).mapPartitions { _ =>
       Iterator.single(new File(SparkFiles.get("v1.txt")).canRead)
     }
 
@@ -938,10 +935,9 @@ class HiveQuerySuite extends HiveComparisonTest {
     """.stripMargin)
 
   ignore("Dynamic partition folder layout") {
-    ctx.sql("DROP TABLE IF EXISTS dynamic_part_table")
-    ctx.sql(
-      "CREATE TABLE dynamic_part_table(intcol INT) PARTITIONED BY (partcol1 INT, partcol2 INT)")
-    ctx.sql("SET hive.exec.dynamic.partition.mode=nonstrict")
+    sql("DROP TABLE IF EXISTS dynamic_part_table")
+    sql("CREATE TABLE dynamic_part_table(intcol INT) PARTITIONED BY (partcol1 INT, partcol2 INT)")
+    sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
     val data = Map(
       Seq("1", "1") -> 1,
@@ -950,7 +946,7 @@ class HiveQuerySuite extends HiveComparisonTest {
       Seq("NULL", "NULL") -> 4)
 
     data.foreach { case (parts, value) =>
-      ctx.sql(
+      sql(
         s"""INSERT INTO TABLE dynamic_part_table PARTITION(partcol1, partcol2)
            |SELECT $value, ${parts.mkString(", ")} FROM src WHERE key=150
          """.stripMargin)
@@ -967,18 +963,18 @@ class HiveQuerySuite extends HiveComparisonTest {
         .mkString("/")
 
       // Loads partition data to a temporary table to verify contents
-      val path = s"${ctx.warehousePath}/dynamic_part_table/$partFolder/part-00000"
+      val path = s"$warehousePath/dynamic_part_table/$partFolder/part-00000"
 
-      ctx.sql("DROP TABLE IF EXISTS dp_verify")
-      ctx.sql("CREATE TABLE dp_verify(intcol INT)")
-      ctx.sql(s"LOAD DATA LOCAL INPATH '$path' INTO TABLE dp_verify")
+      sql("DROP TABLE IF EXISTS dp_verify")
+      sql("CREATE TABLE dp_verify(intcol INT)")
+      sql(s"LOAD DATA LOCAL INPATH '$path' INTO TABLE dp_verify")
 
-      assert(ctx.sql("SELECT * FROM dp_verify").collect() === Array(Row(value)))
+      assert(sql("SELECT * FROM dp_verify").collect() === Array(Row(value)))
     }
   }
 
   test("SPARK-5592: get java.net.URISyntaxException when dynamic partitioning") {
-    ctx.sql("""
+    sql("""
       |create table sc as select *
       |from (select '2011-01-11', '2011-01-11+14:18:26' from src tablesample (1 rows)
       |union all
@@ -986,31 +982,31 @@ class HiveQuerySuite extends HiveComparisonTest {
       |union all
       |select '2011-01-11', '2011-01-11+16:18:26' from src tablesample (1 rows) ) s
     """.stripMargin)
-    ctx.sql("create table sc_part (key string) partitioned by (ts string) stored as rcfile")
-    ctx.sql("set hive.exec.dynamic.partition=true")
-    ctx.sql("set hive.exec.dynamic.partition.mode=nonstrict")
-    ctx.sql("insert overwrite table sc_part partition(ts) select * from sc")
-    ctx.sql("drop table sc_part")
+    sql("create table sc_part (key string) partitioned by (ts string) stored as rcfile")
+    sql("set hive.exec.dynamic.partition=true")
+    sql("set hive.exec.dynamic.partition.mode=nonstrict")
+    sql("insert overwrite table sc_part partition(ts) select * from sc")
+    sql("drop table sc_part")
   }
 
   test("Partition spec validation") {
-    ctx.sql("DROP TABLE IF EXISTS dp_test")
-    ctx.sql("CREATE TABLE dp_test(key INT, value STRING) PARTITIONED BY (dp INT, sp INT)")
-    ctx.sql("SET hive.exec.dynamic.partition.mode=strict")
+    sql("DROP TABLE IF EXISTS dp_test")
+    sql("CREATE TABLE dp_test(key INT, value STRING) PARTITIONED BY (dp INT, sp INT)")
+    sql("SET hive.exec.dynamic.partition.mode=strict")
 
     // Should throw when using strict dynamic partition mode without any static partition
     intercept[SparkException] {
-      ctx.sql(
+      sql(
         """INSERT INTO TABLE dp_test PARTITION(dp)
           |SELECT key, value, key % 5 FROM src
         """.stripMargin)
     }
 
-    ctx.sql("SET hive.exec.dynamic.partition.mode=nonstrict")
+    sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
     // Should throw when a static partition appears after a dynamic partition
     intercept[SparkException] {
-      ctx.sql(
+      sql(
         """INSERT INTO TABLE dp_test PARTITION(dp, sp = 1)
           |SELECT key, value, key % 5 FROM src
         """.stripMargin)
@@ -1018,10 +1014,10 @@ class HiveQuerySuite extends HiveComparisonTest {
   }
 
   test("SPARK-3414 regression: should store analyzed logical plan when registering a temp table") {
-    ctx.sparkContext.makeRDD(Seq.empty[LogEntry]).toDF().registerTempTable("rawLogs")
-    ctx.sparkContext.makeRDD(Seq.empty[LogFile]).toDF().registerTempTable("logFiles")
+    sparkContext.makeRDD(Seq.empty[LogEntry]).toDF().registerTempTable("rawLogs")
+    sparkContext.makeRDD(Seq.empty[LogFile]).toDF().registerTempTable("logFiles")
 
-    ctx.sql(
+    sql(
       """
       SELECT name, message
       FROM rawLogs
@@ -1033,15 +1029,15 @@ class HiveQuerySuite extends HiveComparisonTest {
       """).registerTempTable("boom")
 
     // This should be successfully analyzed
-    ctx.sql("SELECT * FROM boom").queryExecution.analyzed
+    sql("SELECT * FROM boom").queryExecution.analyzed
   }
 
   test("SPARK-3810: PreInsertionCasts static partitioning support") {
     val analyzedPlan = {
-      ctx.loadTestTable("srcpart")
-      ctx.sql("DROP TABLE IF EXISTS withparts")
-      ctx.sql("CREATE TABLE withparts LIKE srcpart")
-      ctx.sql("INSERT INTO TABLE withparts PARTITION(ds='1', hr='2') SELECT key, value FROM src")
+      loadTestTable("srcpart")
+      sql("DROP TABLE IF EXISTS withparts")
+      sql("CREATE TABLE withparts LIKE srcpart")
+      sql("INSERT INTO TABLE withparts PARTITION(ds='1', hr='2') SELECT key, value FROM src")
         .queryExecution.analyzed
     }
 
@@ -1054,13 +1050,13 @@ class HiveQuerySuite extends HiveComparisonTest {
 
   test("SPARK-3810: PreInsertionCasts dynamic partitioning support") {
     val analyzedPlan = {
-      ctx.loadTestTable("srcpart")
-      ctx.sql("DROP TABLE IF EXISTS withparts")
-      ctx.sql("CREATE TABLE withparts LIKE srcpart")
-      ctx.sql("SET hive.exec.dynamic.partition.mode=nonstrict")
+      loadTestTable("srcpart")
+      sql("DROP TABLE IF EXISTS withparts")
+      sql("CREATE TABLE withparts LIKE srcpart")
+      sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
-      ctx.sql("CREATE TABLE IF NOT EXISTS withparts LIKE srcpart")
-      ctx.sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value FROM src")
+      sql("CREATE TABLE IF NOT EXISTS withparts LIKE srcpart")
+      sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value FROM src")
         .queryExecution.analyzed
     }
 
@@ -1076,19 +1072,19 @@ class HiveQuerySuite extends HiveComparisonTest {
     val testKey = "spark.sql.key.usedfortestonly"
     val testVal = "val0,val_1,val2.3,my_table"
 
-    ctx.sql(s"set $testKey=$testVal")
-    assert(ctx.getConf(testKey, testVal + "_") == testVal)
+    sql(s"set $testKey=$testVal")
+    assert(getConf(testKey, testVal + "_") == testVal)
 
-    ctx.sql("set some.property=20")
-    assert(ctx.getConf("some.property", "0") == "20")
-    ctx.sql("set some.property = 40")
-    assert(ctx.getConf("some.property", "0") == "40")
+    sql("set some.property=20")
+    assert(getConf("some.property", "0") == "20")
+    sql("set some.property = 40")
+    assert(getConf("some.property", "0") == "40")
 
-    ctx.sql(s"set $testKey=$testVal")
-    assert(ctx.getConf(testKey, "0") == testVal)
+    sql(s"set $testKey=$testVal")
+    assert(getConf(testKey, "0") == testVal)
 
-    ctx.sql(s"set $testKey=")
-    assert(ctx.getConf(testKey, "0") == "")
+    sql(s"set $testKey=")
+    assert(getConf(testKey, "0") == "")
   }
 
   test("SET commands semantics for a HiveContext") {
@@ -1101,38 +1097,38 @@ class HiveQuerySuite extends HiveComparisonTest {
         case Row(key: String, value: String) => key -> value
         case Row(key: String, defaultValue: String, doc: String) => (key, defaultValue, doc)
       }.toSet
-    ctx.conf.clear()
+    conf.clear()
 
-    val expectedConfs = ctx.conf.getAllDefinedConfs.toSet
-    assertResult(expectedConfs)(collectResults(ctx.sql("SET -v")))
+    val expectedConfs = conf.getAllDefinedConfs.toSet
+    assertResult(expectedConfs)(collectResults(sql("SET -v")))
 
     // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
-    assert(ctx.sql("SET").collect().size == 0)
+    assert(sql("SET").collect().size == 0)
 
     assertResult(Set(testKey -> testVal)) {
-      collectResults(ctx.sql(s"SET $testKey=$testVal"))
+      collectResults(sql(s"SET $testKey=$testVal"))
     }
 
-    assert(ctx.hiveconf.get(testKey, "") == testVal)
-    assertResult(Set(testKey -> testVal))(collectResults(ctx.sql("SET")))
+    assert(hiveconf.get(testKey, "") == testVal)
+    assertResult(Set(testKey -> testVal))(collectResults(sql("SET")))
 
-    ctx.sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    assert(ctx.hiveconf.get(testKey + testKey, "") == testVal + testVal)
+    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
+    assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
     assertResult(Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      collectResults(ctx.sql("SET"))
+      collectResults(sql("SET"))
     }
 
     // "SET key"
     assertResult(Set(testKey -> testVal)) {
-      collectResults(ctx.sql(s"SET $testKey"))
+      collectResults(sql(s"SET $testKey"))
     }
 
     assertResult(Set(nonexistentKey -> "<undefined>")) {
-      collectResults(ctx.sql(s"SET $nonexistentKey"))
+      collectResults(sql(s"SET $nonexistentKey"))
     }
 
-    ctx.conf.clear()
+    conf.clear()
   }
 
   createQueryTest("select from thrift based table",
@@ -1143,4 +1139,4 @@ class HiveQuerySuite extends HiveComparisonTest {
 }
 
 // for SPARK-2180 test
-private case class HavingRow(key: Int, value: String, attr: Int)
+case class HavingRow(key: Int, value: String, attr: Int)

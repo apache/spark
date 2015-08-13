@@ -28,9 +28,10 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 
 class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
-  import testImplicits._
-
   override val dataSourceName: String = "parquet"
+
+  import sqlContext._
+  import sqlContext.implicits._
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
@@ -40,7 +41,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
       for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
         val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
-        ctx.sparkContext
+        sparkContext
           .parallelize(for (i <- 1 to 3) yield (i, s"val_$i", p1))
           .toDF("a", "b", "p1")
           .write.parquet(partitionDir.toString)
@@ -50,7 +51,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        ctx.read.format(dataSourceName)
+        read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
     }
@@ -68,7 +69,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         .format("parquet")
         .save(s"${dir.getCanonicalPath}/_temporary")
 
-      checkAnswer(ctx.read.format("parquet").load(dir.getCanonicalPath), df.collect())
+      checkAnswer(read.format("parquet").load(dir.getCanonicalPath), df.collect())
     }
   }
 
@@ -96,7 +97,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
       // This shouldn't throw anything.
       df.write.format("parquet").mode(SaveMode.Overwrite).save(path)
-      checkAnswer(ctx.read.format("parquet").load(path), df)
+      checkAnswer(read.format("parquet").load(path), df)
     }
   }
 
@@ -106,7 +107,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         // Parquet doesn't allow field names with spaces.  Here we are intentionally making an
         // exception thrown from the `ParquetRelation2.prepareForWriteJob()` method to trigger
         // the bug.  Please refer to spark-8079 for more details.
-        ctx.range(1, 10)
+        range(1, 10)
           .withColumnRenamed("id", "a b")
           .write
           .format("parquet")
@@ -118,7 +119,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   test("SPARK-8604: Parquet data source should write summary file while doing appending") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val df = ctx.range(0, 5)
+      val df = sqlContext.range(0, 5)
       df.write.mode(SaveMode.Overwrite).parquet(path)
 
       val summaryPath = new Path(path, "_metadata")
@@ -129,7 +130,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       fs.delete(commonSummaryPath, true)
 
       df.write.mode(SaveMode.Append).parquet(path)
-      checkAnswer(ctx.read.parquet(path), df.unionAll(df))
+      checkAnswer(sqlContext.read.parquet(path), df.unionAll(df))
 
       assert(fs.exists(summaryPath))
       assert(fs.exists(commonSummaryPath))

@@ -22,15 +22,14 @@ import scala.util.Try
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 
 
-class ErrorPositionSuite extends QueryTest with BeforeAndAfter with SharedHiveContext {
-  import testImplicits._
+class ErrorPositionSuite extends QueryTest with BeforeAndAfter {
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
+  before {
     Seq((1, 1, 1)).toDF("a", "a", "b").registerTempTable("dupAttributes")
   }
 
@@ -123,7 +122,7 @@ class ErrorPositionSuite extends QueryTest with BeforeAndAfter with SharedHiveCo
 
     test(name) {
       val error = intercept[AnalysisException] {
-        quietly(ctx.sql(query))
+        quietly(sql(query))
       }
 
       assert(!error.getMessage.contains("Seq("))

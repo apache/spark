@@ -365,14 +365,10 @@ object Hive {
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.functions._
         |import org.apache.spark.sql.hive._
+        |import org.apache.spark.sql.hive.test.TestHive._
         |import org.apache.spark.sql.types._
-        |
-        |val sc = new SparkContext("local[*]", "dev-shell")
-        |val hc = new HiveContext(sc)
-        |import hc.implicits._
-        |import hc._
       """.stripMargin,
-    cleanupCommands in console := "sc.stop()",
+    cleanupCommands in console := "sparkContext.stop()",
     // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce
     // in order to generate golden files.  This is only required for developers who are adding new
     // new query tests.

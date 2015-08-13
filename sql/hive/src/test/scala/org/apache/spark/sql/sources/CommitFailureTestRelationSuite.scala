@@ -20,9 +20,13 @@ package org.apache.spark.sql.sources
 import org.apache.hadoop.fs.Path
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.test.SQLTestUtils
 
-class CommitFailureTestRelationSuite extends SparkFunSuite with SharedHiveContext {
+
+class CommitFailureTestRelationSuite extends SparkFunSuite with SQLTestUtils {
+  override val sqlContext = TestHive
+
   // When committing a task, `CommitFailureTestSource` throws an exception for testing purpose.
   val dataSourceName: String = classOf[CommitFailureTestSource].getCanonicalName
 
@@ -31,7 +35,7 @@ class CommitFailureTestRelationSuite extends SparkFunSuite with SharedHiveContex
       // Here we coalesce partition number to 1 to ensure that only a single task is issued.  This
       // prevents race condition happened when FileOutputCommitter tries to remove the `_temporary`
       // directory while committing/aborting the job.  See SPARK-8513 for more details.
-      val df = ctx.range(0, 10).coalesce(1)
+      val df = sqlContext.range(0, 10).coalesce(1)
       intercept[SparkException] {
         df.write.format(dataSourceName).save(file.getCanonicalPath)
       }

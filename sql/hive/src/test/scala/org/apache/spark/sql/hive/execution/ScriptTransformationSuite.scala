@@ -22,13 +22,16 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.{UnaryNode, SparkPlan, SparkPlanTest}
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.types.StringType
 
-class ScriptTransformationSuite extends SparkPlanTest with SharedHiveContext {
+class ScriptTransformationSuite extends SparkPlanTest {
+
+  override def sqlContext: SQLContext = TestHive
 
   private val noSerdeIOSchema = HiveScriptIOSchema(
     inputRowFormat = Seq.empty,
@@ -55,7 +58,7 @@ class ScriptTransformationSuite extends SparkPlanTest with SharedHiveContext {
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
         ioschema = noSerdeIOSchema
-      )(ctx),
+      )(TestHive),
       rowsDf.collect())
   }
 
@@ -69,7 +72,7 @@ class ScriptTransformationSuite extends SparkPlanTest with SharedHiveContext {
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
         ioschema = serdeIOSchema
-      )(ctx),
+      )(TestHive),
       rowsDf.collect())
   }
 
@@ -84,7 +87,7 @@ class ScriptTransformationSuite extends SparkPlanTest with SharedHiveContext {
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
           ioschema = noSerdeIOSchema
-        )(ctx),
+        )(TestHive),
         rowsDf.collect())
     }
     assert(e.getMessage().contains("intentional exception"))
@@ -101,7 +104,7 @@ class ScriptTransformationSuite extends SparkPlanTest with SharedHiveContext {
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
           ioschema = serdeIOSchema
-        )(ctx),
+        )(TestHive),
         rowsDf.collect())
     }
     assert(e.getMessage().contains("intentional exception"))

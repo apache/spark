@@ -19,17 +19,18 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.apache.spark.{Logging, SparkFunSuite}
-import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.hive.client.{ExternalTable, ManagedTable}
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.sources.DataSourceTest
-import org.apache.spark.sql.test.ExamplePointUDT
+import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
+import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.{Logging, SparkFunSuite}
 
 
-class HiveMetastoreCatalogSuite extends SparkFunSuite with SharedHiveContext with Logging {
-  import testImplicits._
+class HiveMetastoreCatalogSuite extends SparkFunSuite with Logging {
 
   test("struct field should accept underscore in sub-column name") {
     val hiveTypeStr = "struct<a: int, b_1: string, c: string>"
@@ -45,16 +46,16 @@ class HiveMetastoreCatalogSuite extends SparkFunSuite with SharedHiveContext wit
   }
 
   test("duplicated metastore relations") {
-    val df = ctx.sql("SELECT * FROM src")
+    val df = sql("SELECT * FROM src")
     logInfo(df.queryExecution.toString)
     df.as('a).join(df.as('b), $"a.key" === $"b.key")
   }
 }
 
-class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with SharedHiveContext {
-  import testImplicits._
+class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with SQLTestUtils {
+  override val sqlContext = TestHive
 
-  private lazy val testDF = ctx.range(1, 3).select(
+  private val testDF = range(1, 3).select(
     ('id + 0.1) cast DecimalType(10, 3) as 'd1,
     'id cast StringType as 'd2
   ).coalesce(1)
@@ -80,7 +81,7 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with Shared
           .format(provider)
           .saveAsTable("t")
 
-        val hiveTable = ctx.catalog.client.getTable("default", "t")
+        val hiveTable = catalog.client.getTable("default", "t")
         assert(hiveTable.inputFormat === Some(inputFormat))
         assert(hiveTable.outputFormat === Some(outputFormat))
         assert(hiveTable.serde === Some(serde))
@@ -92,8 +93,8 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with Shared
         assert(columns.map(_.name) === Seq("d1", "d2"))
         assert(columns.map(_.hiveType) === Seq("decimal(10,3)", "string"))
 
-        checkAnswer(ctx.table("t"), testDF)
-        assert(ctx.runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
+        checkAnswer(table("t"), testDF)
+        assert(runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
       }
     }
 
@@ -109,7 +110,7 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with Shared
             .option("path", path.toString)
             .saveAsTable("t")
 
-          val hiveTable = ctx.catalog.client.getTable("default", "t")
+          val hiveTable = catalog.client.getTable("default", "t")
           assert(hiveTable.inputFormat === Some(inputFormat))
           assert(hiveTable.outputFormat === Some(outputFormat))
           assert(hiveTable.serde === Some(serde))
@@ -121,8 +122,8 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with Shared
           assert(columns.map(_.name) === Seq("d1", "d2"))
           assert(columns.map(_.hiveType) === Seq("decimal(10,3)", "string"))
 
-          checkAnswer(ctx.table("t"), testDF)
-          assert(ctx.runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
+          checkAnswer(table("t"), testDF)
+          assert(runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
         }
       }
     }
@@ -132,13 +133,13 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with Shared
         withTable("t") {
           val path = dir.getCanonicalPath
 
-          ctx.sql(
+          sql(
             s"""CREATE TABLE t USING $provider
                |OPTIONS (path '$path')
                |AS SELECT 1 AS d1, "val_1" AS d2
              """.stripMargin)
 
-          val hiveTable = ctx.catalog.client.getTable("default", "t")
+          val hiveTable = catalog.client.getTable("default", "t")
           assert(hiveTable.inputFormat === Some(inputFormat))
           assert(hiveTable.outputFormat === Some(outputFormat))
           assert(hiveTable.serde === Some(serde))
@@ -151,8 +152,8 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with Shared
           assert(columns.map(_.name) === Seq("d1", "d2"))
           assert(columns.map(_.hiveType) === Seq("int", "string"))
 
-          checkAnswer(ctx.table("t"), Row(1, "val_1"))
-          assert(ctx.runSqlHive("SELECT * FROM t") === Seq("1\tval_1"))
+          checkAnswer(table("t"), Row(1, "val_1"))
+          assert(runSqlHive("SELECT * FROM t") === Seq("1\tval_1"))
         }
       }
     }

@@ -19,16 +19,15 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 
-import org.scalatest.GivenWhenThen
+import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 
 import org.apache.spark.{Logging, SparkFunSuite}
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.DescribeCommand
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.TestHive
 
 /**
  * Allows the creations of tests that execute the same query against both hive
@@ -41,10 +40,7 @@ import org.apache.spark.sql.hive.test.SharedHiveContext
  * configured using system properties.
  */
 abstract class HiveComparisonTest
-  extends SparkFunSuite
-  with GivenWhenThen
-  with SharedHiveContext
-  with Logging {
+  extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
 
   /**
    * When set, any cache files that result in test failures will be deleted.  Used when the test
@@ -132,9 +128,9 @@ abstract class HiveComparisonTest
     new java.math.BigInteger(1, digest.digest).toString(16)
   }
 
-  private def prepareAnswer(ctx: SQLContext)(
-      hiveQuery: ctx.type#QueryExecution,
-      answer: Seq[String]): Seq[String] = {
+  protected def prepareAnswer(
+    hiveQuery: TestHive.type#QueryExecution,
+    answer: Seq[String]): Seq[String] = {
 
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
@@ -271,11 +267,9 @@ abstract class HiveComparisonTest
         }.mkString("\n== Console version of this test ==\n", "\n", "\n")
       }
 
-      val _ctx = ctx
-
       try {
         if (reset) {
-          ctx.reset()
+          TestHive.reset()
         }
 
         val hiveCacheFiles = queryList.zipWithIndex.map {
@@ -304,7 +298,7 @@ abstract class HiveComparisonTest
             hiveCachedResults
           } else {
 
-            val hiveQueries = queryList.map(new _ctx.QueryExecution(_))
+            val hiveQueries = queryList.map(new TestHive.QueryExecution(_))
             // Make sure we can at least parse everything before attempting hive execution.
             // Note this must only look at the logical plan as we might not be able to analyze if
             // other DDL has not been executed yet.
@@ -324,7 +318,7 @@ abstract class HiveComparisonTest
                     case _: ExplainCommand =>
                       // No need to execute EXPLAIN queries as we don't check the output.
                       Nil
-                    case _ => ctx.runSqlHive(queryString)
+                    case _ => TestHive.runSqlHive(queryString)
                   }
 
                   // We need to add a new line to non-empty answers so we can differentiate Seq()
@@ -347,15 +341,15 @@ abstract class HiveComparisonTest
                     fail(errorMessage)
                 }
             }.toSeq
-            if (reset) { ctx.reset() }
+            if (reset) { TestHive.reset() }
 
             computedResults
           }
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          val query = new _ctx.QueryExecution(queryString)
-          try { (query, prepareAnswer(_ctx)(query, query.stringResult())) } catch {
+          val query = new TestHive.QueryExecution(queryString)
+          try { (query, prepareAnswer(query, query.stringResult())) } catch {
             case e: Throwable =>
               val errorMessage =
                 s"""
@@ -374,7 +368,7 @@ abstract class HiveComparisonTest
         (queryList, hiveResults, catalystResults).zipped.foreach {
           case (query, hive, (hiveQuery, catalyst)) =>
             // Check that the results match unless its an EXPLAIN query.
-            val preparedHive = prepareAnswer(_ctx)(hiveQuery, hive)
+            val preparedHive = prepareAnswer(hiveQuery, hive)
 
             // We will ignore the ExplainCommand, ShowFunctions, DescribeFunction
             if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) &&
@@ -414,8 +408,8 @@ abstract class HiveComparisonTest
             // okay by running a simple query. If this fails then we halt testing since
             // something must have gone seriously wrong.
             try {
-              new _ctx.QueryExecution("SELECT key FROM src").stringResult()
-              ctx.runSqlHive("SELECT key FROM src")
+              new TestHive.QueryExecution("SELECT key FROM src").stringResult()
+              TestHive.runSqlHive("SELECT key FROM src")
             } catch {
               case e: Exception =>
                 logError(s"FATAL ERROR: Canary query threw $e This implies that the " +

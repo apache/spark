@@ -17,39 +17,39 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.scalatest.BeforeAndAfterAll
 
-class ListTablesSuite extends QueryTest with SharedHiveContext {
-  import testImplicits._
+import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.Row
 
-  private lazy val df =
-    ctx.sparkContext.parallelize((1 to 10).map(i => (i, s"str$i"))).toDF("key", "value")
+class ListTablesSuite extends QueryTest with BeforeAndAfterAll {
+
+  import org.apache.spark.sql.hive.test.TestHive.implicits._
+
+  val df =
+    sparkContext.parallelize((1 to 10).map(i => (i, s"str$i"))).toDF("key", "value")
 
   override def beforeAll(): Unit = {
-    super.beforeAll()
     // The catalog in HiveContext is a case insensitive one.
-    ctx.catalog.registerTable(Seq("ListTablesSuiteTable"), df.logicalPlan)
-    ctx.catalog.registerTable(Seq("ListTablesSuiteDB", "InDBListTablesSuiteTable"), df.logicalPlan)
-    ctx.sql("CREATE TABLE HiveListTablesSuiteTable (key int, value string)")
-    ctx.sql("CREATE DATABASE IF NOT EXISTS ListTablesSuiteDB")
-    ctx.sql("CREATE TABLE ListTablesSuiteDB.HiveInDBListTablesSuiteTable (key int, value string)")
+    catalog.registerTable(Seq("ListTablesSuiteTable"), df.logicalPlan)
+    catalog.registerTable(Seq("ListTablesSuiteDB", "InDBListTablesSuiteTable"), df.logicalPlan)
+    sql("CREATE TABLE HiveListTablesSuiteTable (key int, value string)")
+    sql("CREATE DATABASE IF NOT EXISTS ListTablesSuiteDB")
+    sql("CREATE TABLE ListTablesSuiteDB.HiveInDBListTablesSuiteTable (key int, value string)")
   }
 
   override def afterAll(): Unit = {
-    try {
-      ctx.catalog.unregisterTable(Seq("ListTablesSuiteTable"))
-      ctx.catalog.unregisterTable(Seq("ListTablesSuiteDB", "InDBListTablesSuiteTable"))
-      ctx.sql("DROP TABLE IF EXISTS HiveListTablesSuiteTable")
-      ctx.sql("DROP TABLE IF EXISTS ListTablesSuiteDB.HiveInDBListTablesSuiteTable")
-      ctx.sql("DROP DATABASE IF EXISTS ListTablesSuiteDB")
-    } finally {
-      super.afterAll()
-    }
+    catalog.unregisterTable(Seq("ListTablesSuiteTable"))
+    catalog.unregisterTable(Seq("ListTablesSuiteDB", "InDBListTablesSuiteTable"))
+    sql("DROP TABLE IF EXISTS HiveListTablesSuiteTable")
+    sql("DROP TABLE IF EXISTS ListTablesSuiteDB.HiveInDBListTablesSuiteTable")
+    sql("DROP DATABASE IF EXISTS ListTablesSuiteDB")
   }
 
   test("get all tables of current database") {
-    Seq(ctx.tables(), ctx.sql("SHOW TABLes")).foreach {
+    Seq(tables(), sql("SHOW TABLes")).foreach {
       case allTables =>
         // We are using default DB.
         checkAnswer(
@@ -64,7 +64,7 @@ class ListTablesSuite extends QueryTest with SharedHiveContext {
   }
 
   test("getting all tables with a database name") {
-    Seq(ctx.tables("listtablessuiteDb"), ctx.sql("SHOW TABLes in listTablesSuitedb")).foreach {
+    Seq(tables("listtablessuiteDb"), sql("SHOW TABLes in listTablesSuitedb")).foreach {
       case allTables =>
         checkAnswer(
           allTables.filter("tableName = 'listtablessuitetable'"),

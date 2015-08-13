@@ -19,14 +19,15 @@ package org.apache.spark.sql.hive
 
 import com.google.common.io.Files
 
-import org.apache.spark.sql.hive.test.SharedHiveContext
-import org.apache.spark.sql.test.SQLTestData.TestData
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.util.Utils
 
 
-class QueryPartitionSuite extends QueryTest with SharedHiveContext {
-  import testImplicits._
+class QueryPartitionSuite extends QueryTest {
+
+  private lazy val ctx = org.apache.spark.sql.hive.test.TestHive
+  import ctx.implicits._
+  import ctx.sql
 
   test("SPARK-5068: query data when path doesn't exist"){
     val testData = ctx.sparkContext.parallelize(
@@ -35,19 +36,19 @@ class QueryPartitionSuite extends QueryTest with SharedHiveContext {
 
     val tmpDir = Files.createTempDir()
     // create the table for test
-    ctx.sql(s"CREATE TABLE table_with_partition(key int,value string) " +
+    sql(s"CREATE TABLE table_with_partition(key int,value string) " +
       s"PARTITIONED by (ds string) location '${tmpDir.toURI.toString}' ")
-    ctx.sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') " +
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') " +
       "SELECT key,value FROM testData")
-    ctx.sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='2') " +
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='2') " +
       "SELECT key,value FROM testData")
-    ctx.sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='3') " +
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='3') " +
       "SELECT key,value FROM testData")
-    ctx.sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='4') " +
+    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='4') " +
       "SELECT key,value FROM testData")
 
     // test for the exist path
-    checkAnswer(ctx.sql("select key,value from table_with_partition"),
+    checkAnswer(sql("select key,value from table_with_partition"),
       testData.toDF.collect ++ testData.toDF.collect
         ++ testData.toDF.collect ++ testData.toDF.collect)
 
@@ -57,10 +58,10 @@ class QueryPartitionSuite extends QueryTest with SharedHiveContext {
       .foreach { f => Utils.deleteRecursively(f) }
 
     // test for after delete the path
-    checkAnswer(ctx.sql("select key,value from table_with_partition"),
+    checkAnswer(sql("select key,value from table_with_partition"),
       testData.toDF.collect ++ testData.toDF.collect ++ testData.toDF.collect)
 
-    ctx.sql("DROP TABLE table_with_partition")
-    ctx.sql("DROP TABLE createAndInsertTest")
+    sql("DROP TABLE table_with_partition")
+    sql("DROP TABLE createAndInsertTest")
   }
 }

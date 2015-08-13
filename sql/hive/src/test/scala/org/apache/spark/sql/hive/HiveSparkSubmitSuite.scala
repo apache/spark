@@ -28,8 +28,8 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.sql.hive.test.{TestHiveContext, SharedHiveContext}
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.types.DecimalType
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
@@ -40,17 +40,20 @@ class HiveSparkSubmitSuite
   extends SparkFunSuite
   with Matchers
   with ResetSystemProperties
-  with Timeouts
-  with SharedHiveContext {
+  with Timeouts {
 
   // TODO: rewrite these or mark them as slow tests to be run sparingly
+
+  def beforeAll() {
+    System.setProperty("spark.testing", "true")
+  }
 
   test("SPARK-8368: includes jars passed in through --jars") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
-    val jar3 = TestHiveContext.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath
-    val jar4 = TestHiveContext.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
+    val jar3 = TestHive.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath
+    val jar4 = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
     val jarsString = Seq(jar1, jar2, jar3, jar4).map(j => j.toString).mkString(",")
     val args = Seq(
       "--class", SparkSubmitClassLoaderTest.getClass.getName.stripSuffix("$"),
@@ -96,8 +99,6 @@ class HiveSparkSubmitSuite
       "--class", SPARK_9757.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
       "--master", "local-cluster[2,1,1024]",
-      "--conf", "spark.ui.enabled=false",
-      "--conf", "spark.master.rest.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }

@@ -28,12 +28,16 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 
-abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
-  import testImplicits._
+abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
+  override lazy val sqlContext: SQLContext = TestHive
+
+  import sqlContext.sql
+  import sqlContext.implicits._
 
   val dataSourceName: String
 
@@ -88,7 +92,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
     df.registerTempTable("t")
     withTempTable("t") {
       checkAnswer(
-        ctx.sql(
+        sql(
           """SELECT l.a, r.b, l.p1, r.p2
             |FROM t l JOIN t r
             |ON l.a = r.a AND l.p1 = r.p1 AND l.p2 = r.p2
@@ -103,7 +107,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
       testDF.write.mode(SaveMode.Overwrite).format(dataSourceName).save(file.getCanonicalPath)
 
       checkAnswer(
-        ctx.read.format(dataSourceName)
+        sqlContext.read.format(dataSourceName)
           .option("path", file.getCanonicalPath)
           .option("dataSchema", dataSchema.json)
           .load(),
@@ -117,7 +121,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
       testDF.write.mode(SaveMode.Append).format(dataSourceName).save(file.getCanonicalPath)
 
       checkAnswer(
-        ctx.read.format(dataSourceName)
+        sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath).orderBy("a"),
         testDF.unionAll(testDF).orderBy("a").collect())
@@ -137,7 +141,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
       testDF.write.mode(SaveMode.Ignore).format(dataSourceName).save(file.getCanonicalPath)
 
       val path = new Path(file.getCanonicalPath)
-      val fs = path.getFileSystem(ctx.sparkContext.hadoopConfiguration)
+      val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
       assert(fs.listStatus(path).isEmpty)
     }
   }
@@ -151,7 +155,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
         .save(file.getCanonicalPath)
 
       checkQueries(
-        ctx.read.format(dataSourceName)
+        sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath))
     }
@@ -172,7 +176,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
         .save(file.getCanonicalPath)
 
       checkAnswer(
-        ctx.read.format(dataSourceName)
+        sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
         partitionedTestDF.collect())
@@ -194,7 +198,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
         .save(file.getCanonicalPath)
 
       checkAnswer(
-        ctx.read.format(dataSourceName)
+        sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
         partitionedTestDF.unionAll(partitionedTestDF).collect())
@@ -216,7 +220,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
         .save(file.getCanonicalPath)
 
       checkAnswer(
-        ctx.read.format(dataSourceName)
+        sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
         partitionedTestDF.collect())
@@ -252,7 +256,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(ctx.table("t"), testDF.collect())
+      checkAnswer(sqlContext.table("t"), testDF.collect())
     }
   }
 
@@ -261,7 +265,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
     testDF.write.format(dataSourceName).mode(SaveMode.Append).saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(ctx.table("t"), testDF.unionAll(testDF).orderBy("a").collect())
+      checkAnswer(sqlContext.table("t"), testDF.unionAll(testDF).orderBy("a").collect())
     }
   }
 
@@ -280,7 +284,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
 
     withTempTable("t") {
       testDF.write.format(dataSourceName).mode(SaveMode.Ignore).saveAsTable("t")
-      assert(ctx.table("t").collect().isEmpty)
+      assert(sqlContext.table("t").collect().isEmpty)
     }
   }
 
@@ -291,7 +295,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
       .saveAsTable("t")
 
     withTable("t") {
-      checkQueries(ctx.table("t"))
+      checkQueries(sqlContext.table("t"))
     }
   }
 
@@ -311,7 +315,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(ctx.table("t"), partitionedTestDF.collect())
+      checkAnswer(sqlContext.table("t"), partitionedTestDF.collect())
     }
   }
 
@@ -331,7 +335,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(ctx.table("t"), partitionedTestDF.unionAll(partitionedTestDF).collect())
+      checkAnswer(sqlContext.table("t"), partitionedTestDF.unionAll(partitionedTestDF).collect())
     }
   }
 
@@ -351,7 +355,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(ctx.table("t"), partitionedTestDF.collect())
+      checkAnswer(sqlContext.table("t"), partitionedTestDF.collect())
     }
   }
 
@@ -400,7 +404,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
         .partitionBy("p1", "p2")
         .saveAsTable("t")
 
-      assert(ctx.table("t").collect().isEmpty)
+      assert(sqlContext.table("t").collect().isEmpty)
     }
   }
 
@@ -412,7 +416,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
 
-      val df = ctx.read
+      val df = sqlContext.read
         .format(dataSourceName)
         .option("dataSchema", dataSchema.json)
         .load(s"${file.getCanonicalPath}/p1=*/p2=???")
@@ -424,7 +428,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
         s"${file.getCanonicalFile}/p1=2/p2=bar"
       ).map { p =>
         val path = new Path(p)
-        val fs = path.getFileSystem(ctx.sparkContext.hadoopConfiguration)
+        val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
         path.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
       }
 
@@ -454,7 +458,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
         .saveAsTable("t")
 
       withTempTable("t") {
-        checkAnswer(ctx.table("t"), input.collect())
+        checkAnswer(sqlContext.table("t"), input.collect())
       }
     }
   }
@@ -469,7 +473,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(ctx.table("t"), df.select('b, 'c, 'a).collect())
+      checkAnswer(sqlContext.table("t"), df.select('b, 'c, 'a).collect())
     }
   }
 
@@ -481,7 +485,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
   test("SPARK-8406: Avoids name collision while writing files") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      ctx
+      sqlContext
         .range(10000)
         .repartition(250)
         .write
@@ -490,7 +494,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
         .save(path)
 
       assertResult(10000) {
-        ctx
+        sqlContext
           .read
           .format(dataSourceName)
           .option("dataSchema", StructType(StructField("id", LongType) :: Nil).json)
@@ -503,7 +507,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
   test("SPARK-8578 specified custom output committer will not be used to append data") {
     val clonedConf = new Configuration(configuration)
     try {
-      val df = ctx.range(1, 10).toDF("i")
+      val df = sqlContext.range(1, 10).toDF("i")
       withTempPath { dir =>
         df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
         configuration.set(
@@ -518,7 +522,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SharedHiveContext {
         // with file format and AlwaysFailOutputCommitter will not be used.
         df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
         checkAnswer(
-          ctx.read
+          sqlContext.read
             .format(dataSourceName)
             .option("dataSchema", df.schema.json)
             .load(dir.getCanonicalPath),

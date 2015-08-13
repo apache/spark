@@ -38,7 +38,7 @@ import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.QueryTest$;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.hive.HiveContext;
-import org.apache.spark.sql.hive.test.TestHiveContext;
+import org.apache.spark.sql.hive.test.TestHive$;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
@@ -63,7 +63,7 @@ public class JavaMetastoreDataSourcesSuite {
 
   @Before
   public void setUp() throws IOException {
-    sqlContext = new TestHiveContext();
+    sqlContext = TestHive$.MODULE$;
     sc = new JavaSparkContext(sqlContext.sparkContext());
 
     originalDefaultSource = sqlContext.conf().defaultDataSourceName();

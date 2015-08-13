@@ -32,7 +32,8 @@ import org.apache.spark.sql.expressions.Window;
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction;
 import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.hive.HiveContext;
-import org.apache.spark.sql.hive.test.TestHiveContext;
+import org.apache.spark.sql.hive.test.TestHive$;
+import org.apache.spark.sql.expressions.UserDefinedAggregateFunction;
 import test.org.apache.spark.sql.hive.aggregate.MyDoubleSum;
 
 public class JavaDataFrameSuite {
@@ -50,7 +51,7 @@ public class JavaDataFrameSuite {
 
   @Before
   public void setUp() throws IOException {
-    hc = new TestHiveContext();
+    hc = TestHive$.MODULE$;
     sc = new JavaSparkContext(hc.sparkContext());
 
     List<String> jsonObjects = new ArrayList<String>(10);

@@ -22,7 +22,8 @@ import java.util.{Locale, TimeZone}
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.hive.test.TestHiveContext
+import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.util.Utils
 
 /**
@@ -32,22 +33,20 @@ import org.apache.spark.util.Utils
  * files, every `createQueryTest` calls should explicitly set `reset` to `false`.
  */
 class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfter {
-
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
   private val testTempDir = Utils.createTempDir()
 
   override def beforeAll() {
-    super.beforeAll()
-    ctx.cacheTables = true
+    TestHive.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
 
     // Create the table used in windowing.q
-    ctx.sql("DROP TABLE IF EXISTS part")
-    ctx.sql(
+    sql("DROP TABLE IF EXISTS part")
+    sql(
       """
         |CREATE TABLE part(
         |  p_partkey INT,
@@ -60,14 +59,14 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
         |  p_retailprice DOUBLE,
         |  p_comment STRING)
       """.stripMargin)
-    val testData1 = TestHiveContext.getHiveFile("data/files/part_tiny.txt").getCanonicalPath
-    ctx.sql(
+    val testData1 = TestHive.getHiveFile("data/files/part_tiny.txt").getCanonicalPath
+    sql(
       s"""
         |LOAD DATA LOCAL INPATH '$testData1' overwrite into table part
       """.stripMargin)
 
-    ctx.sql("DROP TABLE IF EXISTS over1k")
-    ctx.sql(
+    sql("DROP TABLE IF EXISTS over1k")
+    sql(
       """
         |create table over1k(
         |  t tinyint,
@@ -84,8 +83,8 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
         |row format delimited
         |fields terminated by '|'
       """.stripMargin)
-    val testData2 = TestHiveContext.getHiveFile("data/files/over1k").getCanonicalPath
-    ctx.sql(
+    val testData2 = TestHive.getHiveFile("data/files/over1k").getCanonicalPath
+    sql(
       s"""
         |LOAD DATA LOCAL INPATH '$testData2' overwrite into table over1k
       """.stripMargin)
@@ -93,22 +92,18 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     // The following settings are used for generating golden files with Hive.
     // We have to use kryo to correctly let Hive serialize plans with window functions.
     // This is used to generate golden files.
-    ctx.sql("set hive.plan.serialization.format=kryo")
+    sql("set hive.plan.serialization.format=kryo")
     // Explicitly set fs to local fs.
-    ctx.sql(s"set fs.default.name=file://$testTempDir/")
+    sql(s"set fs.default.name=file://$testTempDir/")
     // Ask Hive to run jobs in-process as a single map and reduce task.
-    ctx.sql("set mapred.job.tracker=local")
+    sql("set mapred.job.tracker=local")
   }
 
   override def afterAll() {
-    try {
-      ctx.cacheTables = false
-      TimeZone.setDefault(originalTimeZone)
-      Locale.setDefault(originalLocale)
-      ctx.reset()
-    } finally {
-      super.afterAll()
-    }
+    TestHive.cacheTables = false
+    TimeZone.setDefault(originalTimeZone)
+    Locale.setDefault(originalLocale)
+    TestHive.reset()
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -771,8 +766,7 @@ class HiveWindowFunctionQueryFileSuite
   private val testTempDir = Utils.createTempDir()
 
   override def beforeAll() {
-    super.beforeAll()
-    ctx.cacheTables = true
+    TestHive.cacheTables = true
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
@@ -781,22 +775,18 @@ class HiveWindowFunctionQueryFileSuite
     // The following settings are used for generating golden files with Hive.
     // We have to use kryo to correctly let Hive serialize plans with window functions.
     // This is used to generate golden files.
-    // ctx.sql("set hive.plan.serialization.format=kryo")
+    // sql("set hive.plan.serialization.format=kryo")
     // Explicitly set fs to local fs.
-    // ctx.sql(s"set fs.default.name=file://$testTempDir/")
+    // sql(s"set fs.default.name=file://$testTempDir/")
     // Ask Hive to run jobs in-process as a single map and reduce task.
-    // ctx.sql("set mapred.job.tracker=local")
+    // sql("set mapred.job.tracker=local")
   }
 
   override def afterAll() {
-    try {
-      ctx.cacheTables = false
-      TimeZone.setDefault(originalTimeZone)
-      Locale.setDefault(originalLocale)
-      ctx.reset()
-    } finally {
-      super.afterAll()
-    }
+    TestHive.cacheTables = false
+    TimeZone.setDefault(originalTimeZone)
+    Locale.setDefault(originalLocale)
+    TestHive.reset()
   }
 
   override def blackList: Seq[String] = Seq(

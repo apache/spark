@@ -19,51 +19,47 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.scalatest.BeforeAndAfterAll
 
 // TODO ideally we should put the test suite into the package `sql`, as
 // `hive` package is optional in compiling, however, `SQLContext.sql` doesn't
 // support the `cube` or `rollup` yet.
-class HiveDataFrameAnalyticsSuite extends QueryTest with SharedHiveContext {
-  import testImplicits._
+class HiveDataFrameAnalyticsSuite extends QueryTest with BeforeAndAfterAll {
+  private var testData: DataFrame = _
 
-  private var _testData: DataFrame = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    _testData = Seq((1, 2), (2, 4)).toDF("a", "b")
-    ctx.registerDataFrameAsTable(_testData, "mytable")
+  override def beforeAll() {
+    testData = Seq((1, 2), (2, 4)).toDF("a", "b")
+    TestHive.registerDataFrameAsTable(testData, "mytable")
   }
 
   override def afterAll(): Unit = {
-    try {
-      ctx.dropTempTable("mytable")
-    } finally {
-      super.afterAll()
-    }
+    TestHive.dropTempTable("mytable")
   }
 
   test("rollup") {
     checkAnswer(
-      _testData.rollup($"a" + $"b", $"b").agg(sum($"a" - $"b")),
-      ctx.sql("select a + b, b, sum(a - b) from mytable group by a + b, b with rollup").collect()
+      testData.rollup($"a" + $"b", $"b").agg(sum($"a" - $"b")),
+      sql("select a + b, b, sum(a - b) from mytable group by a + b, b with rollup").collect()
     )
 
     checkAnswer(
-      _testData.rollup("a", "b").agg(sum("b")),
-      ctx.sql("select a, b, sum(b) from mytable group by a, b with rollup").collect()
+      testData.rollup("a", "b").agg(sum("b")),
+      sql("select a, b, sum(b) from mytable group by a, b with rollup").collect()
     )
   }
 
   test("cube") {
     checkAnswer(
-      _testData.cube($"a" + $"b", $"b").agg(sum($"a" - $"b")),
-      ctx.sql("select a + b, b, sum(a - b) from mytable group by a + b, b with cube").collect()
+      testData.cube($"a" + $"b", $"b").agg(sum($"a" - $"b")),
+      sql("select a + b, b, sum(a - b) from mytable group by a + b, b with cube").collect()
     )
 
     checkAnswer(
-      _testData.cube("a", "b").agg(sum("b")),
-      ctx.sql("select a, b, sum(b) from mytable group by a, b with cube").collect()
+      testData.cube("a", "b").agg(sum("b")),
+      sql("select a, b, sum(b) from mytable group by a, b with cube").collect()
     )
   }
 }

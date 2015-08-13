@@ -17,30 +17,35 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.hive.test.SharedHiveContext
-import org.apache.spark.sql.{QueryTest, SaveMode}
+import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.{QueryTest, SQLContext, SaveMode}
 
-class MultiDatabaseSuite extends QueryTest with SharedHiveContext {
-  private lazy val df = ctx.range(10).coalesce(1)
+class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
+  override val sqlContext: SQLContext = TestHive
+
+  import sqlContext.sql
+
+  private val df = sqlContext.range(10).coalesce(1)
 
   test(s"saveAsTable() to non-default database - with USE - Overwrite") {
     withTempDatabase { db =>
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
-        assert(ctx.tableNames().contains("t"))
-        checkAnswer(ctx.table("t"), df)
+        assert(sqlContext.tableNames().contains("t"))
+        checkAnswer(sqlContext.table("t"), df)
       }
 
-      assert(ctx.tableNames(db).contains("t"))
-      checkAnswer(ctx.table(s"$db.t"), df)
+      assert(sqlContext.tableNames(db).contains("t"))
+      checkAnswer(sqlContext.table(s"$db.t"), df)
     }
   }
 
   test(s"saveAsTable() to non-default database - without USE - Overwrite") {
     withTempDatabase { db =>
       df.write.mode(SaveMode.Overwrite).saveAsTable(s"$db.t")
-      assert(ctx.tableNames(db).contains("t"))
-      checkAnswer(ctx.table(s"$db.t"), df)
+      assert(sqlContext.tableNames(db).contains("t"))
+      checkAnswer(sqlContext.table(s"$db.t"), df)
     }
   }
 
@@ -49,12 +54,12 @@ class MultiDatabaseSuite extends QueryTest with SharedHiveContext {
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
         df.write.mode(SaveMode.Append).saveAsTable("t")
-        assert(ctx.tableNames().contains("t"))
-        checkAnswer(ctx.table("t"), df.unionAll(df))
+        assert(sqlContext.tableNames().contains("t"))
+        checkAnswer(sqlContext.table("t"), df.unionAll(df))
       }
 
-      assert(ctx.tableNames(db).contains("t"))
-      checkAnswer(ctx.table(s"$db.t"), df.unionAll(df))
+      assert(sqlContext.tableNames(db).contains("t"))
+      checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
     }
   }
 
@@ -62,8 +67,8 @@ class MultiDatabaseSuite extends QueryTest with SharedHiveContext {
     withTempDatabase { db =>
       df.write.mode(SaveMode.Overwrite).saveAsTable(s"$db.t")
       df.write.mode(SaveMode.Append).saveAsTable(s"$db.t")
-      assert(ctx.tableNames(db).contains("t"))
-      checkAnswer(ctx.table(s"$db.t"), df.unionAll(df))
+      assert(sqlContext.tableNames(db).contains("t"))
+      checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
     }
   }
 
@@ -71,10 +76,10 @@ class MultiDatabaseSuite extends QueryTest with SharedHiveContext {
     withTempDatabase { db =>
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
-        assert(ctx.tableNames().contains("t"))
+        assert(sqlContext.tableNames().contains("t"))
 
         df.write.insertInto(s"$db.t")
-        checkAnswer(ctx.table(s"$db.t"), df.unionAll(df))
+        checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
       }
     }
   }
@@ -83,46 +88,46 @@ class MultiDatabaseSuite extends QueryTest with SharedHiveContext {
     withTempDatabase { db =>
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
-        assert(ctx.tableNames().contains("t"))
+        assert(sqlContext.tableNames().contains("t"))
       }
 
-      assert(ctx.tableNames(db).contains("t"))
+      assert(sqlContext.tableNames(db).contains("t"))
 
       df.write.insertInto(s"$db.t")
-      checkAnswer(ctx.table(s"$db.t"), df.unionAll(df))
+      checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
     }
   }
 
   test("Looks up tables in non-default database") {
     withTempDatabase { db =>
       activateDatabase(db) {
-        ctx.sql("CREATE TABLE t (key INT)")
-        checkAnswer(ctx.table("t"), ctx.emptyDataFrame)
+        sql("CREATE TABLE t (key INT)")
+        checkAnswer(sqlContext.table("t"), sqlContext.emptyDataFrame)
       }
 
-      checkAnswer(ctx.table(s"$db.t"), ctx.emptyDataFrame)
+      checkAnswer(sqlContext.table(s"$db.t"), sqlContext.emptyDataFrame)
     }
   }
 
   test("Drops a table in a non-default database") {
     withTempDatabase { db =>
       activateDatabase(db) {
-        ctx.sql(s"CREATE TABLE t (key INT)")
-        assert(ctx.tableNames().contains("t"))
-        assert(!ctx.tableNames("default").contains("t"))
+        sql(s"CREATE TABLE t (key INT)")
+        assert(sqlContext.tableNames().contains("t"))
+        assert(!sqlContext.tableNames("default").contains("t"))
       }
 
-      assert(!ctx.tableNames().contains("t"))
-      assert(ctx.tableNames(db).contains("t"))
+      assert(!sqlContext.tableNames().contains("t"))
+      assert(sqlContext.tableNames(db).contains("t"))
 
       activateDatabase(db) {
-        ctx.sql(s"DROP TABLE t")
-        assert(!ctx.tableNames().contains("t"))
-        assert(!ctx.tableNames("default").contains("t"))
+        sql(s"DROP TABLE t")
+        assert(!sqlContext.tableNames().contains("t"))
+        assert(!sqlContext.tableNames("default").contains("t"))
       }
 
-      assert(!ctx.tableNames().contains("t"))
-      assert(!ctx.tableNames(db).contains("t"))
+      assert(!sqlContext.tableNames().contains("t"))
+      assert(!sqlContext.tableNames(db).contains("t"))
     }
   }
 
@@ -134,19 +139,19 @@ class MultiDatabaseSuite extends QueryTest with SharedHiveContext {
         val path = dir.getCanonicalPath
 
         activateDatabase(db) {
-          ctx.sql(
+          sql(
             s"""CREATE EXTERNAL TABLE t (id BIGINT)
                |PARTITIONED BY (p INT)
                |STORED AS PARQUET
                |LOCATION '$path'
              """.stripMargin)
 
-          checkAnswer(ctx.table("t"), ctx.emptyDataFrame)
+          checkAnswer(sqlContext.table("t"), sqlContext.emptyDataFrame)
 
           df.write.parquet(s"$path/p=1")
-          ctx.sql("ALTER TABLE t ADD PARTITION (p=1)")
-          ctx.sql("REFRESH TABLE t")
-          checkAnswer(ctx.table("t"), df.withColumn("p", lit(1)))
+          sql("ALTER TABLE t ADD PARTITION (p=1)")
+          sql("REFRESH TABLE t")
+          checkAnswer(sqlContext.table("t"), df.withColumn("p", lit(1)))
         }
       }
     }

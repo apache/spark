@@ -30,7 +30,6 @@ import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -38,9 +37,23 @@ import org.apache.spark.sql.execution.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.{SparkConf, SparkContext}
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
+
+// SPARK-3729: Test key required to check for initialization errors with config.
+object TestHive
+  extends TestHiveContext(
+    new SparkContext(
+      System.getProperty("spark.sql.test.master", "local[32]"),
+      "TestSQLContext",
+      new SparkConf()
+        .set("spark.sql.test", "")
+        .set("spark.sql.hive.metastore.barrierPrefixes",
+          "org.apache.spark.sql.hive.execution.PairSerDe")
+        // SPARK-8910
+        .set("spark.ui.enabled", "false")))
 
 /**
  * A locally running test instance of Spark's Hive execution engine.
@@ -48,14 +61,15 @@ import scala.collection.JavaConversions._
  * Data from [[testTables]] will be automatically loaded whenever a query is run over those tables.
  * Calling [[reset]] will delete all tables and other state in the database, leaving the database
  * in a "clean" state.
+ *
+ * TestHive is singleton object version of this class because instantiating multiple copies of the
+ * hive metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of
+ * test cases that rely on TestHive must be serialized.
  */
-class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
-  import HiveContext._
-  import TestHiveContext._
+class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
+  self =>
 
-  def this() {
-    this(TestHiveContext.defaultSparkContext())
-  }
+  import HiveContext._
 
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
@@ -66,7 +80,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
 
   lazy val warehousePath = Utils.createTempDir(namePrefix = "warehouse-")
 
-  private lazy val scratchDirPath = {
+  lazy val scratchDirPath = {
     val dir = Utils.createTempDir(namePrefix = "scratch-")
     dir.delete()
     dir
@@ -84,10 +98,15 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
     )
   }
 
-  private val testTempDir = Utils.createTempDir()
+  val testTempDir = Utils.createTempDir()
 
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
+
+  /** The location of the compiled hive distribution */
+  lazy val hiveHome = envVarToFile("HIVE_HOME")
+  /** The location of the hive source code. */
+  lazy val hiveDevHome = envVarToFile("HIVE_DEV_HOME")
 
   // Override so we can intercept relative paths and rewrite them to point at hive.
   override def runSqlHive(sql: String): Seq[String] =
@@ -112,6 +131,14 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
   }
 
   /**
+   * Returns the value of specified environmental variable as a [[java.io.File]] after checking
+   * to ensure it exists
+   */
+  private def envVarToFile(envVar: String): Option[File] = {
+    Option(System.getenv(envVar)).map(new File(_))
+  }
+
+  /**
    * Replaces relative paths to the parent directory "../" with hiveDevHome since this is how the
    * hive test cases assume the system is set up.
    */
@@ -124,12 +151,27 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
       cmd
     }
 
-  private val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
+  val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
   ShutdownHookManager.registerShutdownDeleteDir(hiveFilesTemp)
 
-  private val describedTable = "DESCRIBE (\\w+)".r
+  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
+    new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
+  } else {
+    new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
+      File.separator + "resources")
+  }
+
+  def getHiveFile(path: String): File = {
+    val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
+    hiveDevHome
+      .map(new File(_, stripped))
+      .filter(_.exists)
+      .getOrElse(new File(inRepoTests, stripped))
+  }
+
+  val describedTable = "DESCRIBE (\\w+)".r
 
   /**
    * Override QueryExecution with special debug workflow.
@@ -156,6 +198,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
     }
   }
 
+  case class TestTable(name: String, commands: (() => Unit)*)
+
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
       () => new QueryExecution(sql).stringResult(): Unit
@@ -167,7 +211,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
    * demand when a query are run against it.
    */
   @transient
-  private lazy val testTables = new mutable.HashMap[String, TestTable]()
+  lazy val testTables = new mutable.HashMap[String, TestTable]()
 
   def registerTestTable(testTable: TestTable): Unit = {
     testTables += (testTable.name -> testTable)
@@ -177,7 +221,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
   // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
   // https://github.com/apache/hive/blob/branch-0.13/data/scripts/q_test_init.sql
   @transient
-  private val hiveQTestUtilTables = Seq(
+  val hiveQTestUtilTables = Seq(
     TestTable("src",
       "CREATE TABLE src (key INT, value STRING)".cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}' INTO TABLE src".cmd),
@@ -416,47 +460,4 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
         logError("FATAL ERROR: Failed to reset TestDB state.", e)
     }
   }
-}
-
-private[hive] object TestHiveContext {
-  case class TestTable(name: String, commands: (() => Unit)*)
-
-  def defaultSparkContext(): SparkContext = {
-    new SparkContext(
-      System.getProperty("spark.sql.test.master", "local[32]"),
-      "TestSQLContext",
-      new SparkConf()
-        .set("spark.sql.test", "")
-        .set("spark.sql.hive.metastore.barrierPrefixes",
-          "org.apache.spark.sql.hive.execution.PairSerDe")
-        // SPARK-8910
-        .set("spark.ui.enabled", "false"))
-  }
-
-  def getHiveFile(path: String): File = {
-    val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
-    hiveDevHome
-      .map(new File(_, stripped))
-      .filter(_.exists)
-      .getOrElse(new File(inRepoTests, stripped))
-  }
-
-  /**
-   * Returns the value of specified environmental variable as a [[java.io.File]] after checking
-   * to ensure it exists
-   */
-  private def envVarToFile(envVar: String): Option[File] = {
-    Option(System.getenv(envVar)).map(new File(_))
-  }
-
-  /** The location of the hive source code. */
-  private lazy val hiveDevHome: Option[File] = envVarToFile("HIVE_DEV_HOME")
-
-  private lazy val inRepoTests: File =
-    if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
-      new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
-    } else {
-      new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
-        File.separator + "resources")
-    }
 }

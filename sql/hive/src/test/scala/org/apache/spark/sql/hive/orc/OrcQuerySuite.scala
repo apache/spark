@@ -21,8 +21,11 @@ import java.io.File
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc.CompressionKind
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.TestHive.implicits._
 
 case class AllDataTypesWithNonPrimitiveType(
     stringField: String,
@@ -45,8 +48,7 @@ case class Contact(name: String, phone: String)
 
 case class Person(name: String, age: Int, contacts: Seq[Contact])
 
-class OrcQuerySuite extends QueryTest with OrcTest {
-  import testImplicits._
+class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   def getTempFilePath(prefix: String, suffix: String = ""): File = {
     val tempFile = File.createTempFile(prefix, suffix)
@@ -61,14 +63,14 @@ class OrcQuerySuite extends QueryTest with OrcTest {
 
     withOrcFile(data) { file =>
       checkAnswer(
-        ctx.read.orc(file),
+        sqlContext.read.orc(file),
         data.toDF().collect())
     }
   }
 
   test("Read/write binary data") {
     withOrcFile(BinaryData("test".getBytes("utf8")) :: Nil) { file =>
-      val bytes = ctx.read.orc(file).head().getAs[Array[Byte]](0)
+      val bytes = read.orc(file).head().getAs[Array[Byte]](0)
       assert(new String(bytes, "utf8") === "test")
     }
   }
@@ -86,16 +88,16 @@ class OrcQuerySuite extends QueryTest with OrcTest {
 
     withOrcFile(data) { file =>
       checkAnswer(
-        ctx.read.orc(file),
+        read.orc(file),
         data.toDF().collect())
     }
   }
 
   test("Creating case class RDD table") {
     val data = (1 to 100).map(i => (i, s"val_$i"))
-    ctx.sparkContext.parallelize(data).toDF().registerTempTable("t")
+    sparkContext.parallelize(data).toDF().registerTempTable("t")
     withTempTable("t") {
-      checkAnswer(ctx.sql("SELECT * FROM t"), data.toDF().collect())
+      checkAnswer(sql("SELECT * FROM t"), data.toDF().collect())
     }
   }
 
@@ -108,13 +110,13 @@ class OrcQuerySuite extends QueryTest with OrcTest {
       // ppd:
       // leaf-0 = (LESS_THAN_EQUALS age 5)
       // expr = leaf-0
-      assert(ctx.sql("SELECT name FROM t WHERE age <= 5").count() === 5)
+      assert(sql("SELECT name FROM t WHERE age <= 5").count() === 5)
 
       // ppd:
       // leaf-0 = (LESS_THAN_EQUALS age 5)
       // expr = (not leaf-0)
       assertResult(10) {
-        ctx.sql("SELECT name, contacts FROM t where age > 5")
+        sql("SELECT name, contacts FROM t where age > 5")
           .flatMap(_.getAs[Seq[_]]("contacts"))
           .count()
       }
@@ -124,7 +126,7 @@ class OrcQuerySuite extends QueryTest with OrcTest {
       // leaf-1 = (LESS_THAN age 8)
       // expr = (and (not leaf-0) leaf-1)
       {
-        val df = ctx.sql("SELECT name, contacts FROM t WHERE age > 5 AND age < 8")
+        val df = sql("SELECT name, contacts FROM t WHERE age > 5 AND age < 8")
         assert(df.count() === 2)
         assertResult(4) {
           df.flatMap(_.getAs[Seq[_]]("contacts")).count()
@@ -136,7 +138,7 @@ class OrcQuerySuite extends QueryTest with OrcTest {
       // leaf-1 = (LESS_THAN_EQUALS age 8)
       // expr = (or leaf-0 (not leaf-1))
       {
-        val df = ctx.sql("SELECT name, contacts FROM t WHERE age < 2 OR age > 8")
+        val df = sql("SELECT name, contacts FROM t WHERE age < 2 OR age > 8")
         assert(df.count() === 3)
         assertResult(6) {
           df.flatMap(_.getAs[Seq[_]]("contacts")).count()
@@ -156,7 +158,7 @@ class OrcQuerySuite extends QueryTest with OrcTest {
 
     withOrcFile(data) { file =>
       checkAnswer(
-        ctx.read.orc(file),
+        read.orc(file),
         Row(Seq.fill(5)(null): _*))
     }
   }
@@ -173,7 +175,7 @@ class OrcQuerySuite extends QueryTest with OrcTest {
   // Following codec is supported in hive-0.13.1, ignore it now
   ignore("Other compression options for writing to an ORC file - 0.13.1 and above") {
     val data = (1 to 100).map(i => (i, s"val_$i"))
-    val conf = ctx.sparkContext.hadoopConfiguration
+    val conf = sparkContext.hadoopConfiguration
 
     conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "SNAPPY")
     withOrcFile(data) { file =>
@@ -200,33 +202,33 @@ class OrcQuerySuite extends QueryTest with OrcTest {
   test("simple select queries") {
     withOrcTable((0 until 10).map(i => (i, i.toString)), "t") {
       checkAnswer(
-        ctx.sql("SELECT `_1` FROM t where t.`_1` > 5"),
+        sql("SELECT `_1` FROM t where t.`_1` > 5"),
         (6 until 10).map(Row.apply(_)))
 
       checkAnswer(
-        ctx.sql("SELECT `_1` FROM t as tmp where tmp.`_1` < 5"),
+        sql("SELECT `_1` FROM t as tmp where tmp.`_1` < 5"),
         (0 until 5).map(Row.apply(_)))
     }
   }
 
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
-    ctx.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
     withOrcTable(data, "t") {
-      ctx.sql("INSERT INTO TABLE t SELECT * FROM tmp")
-      checkAnswer(ctx.table("t"), (data ++ data).map(Row.fromTuple))
+      sql("INSERT INTO TABLE t SELECT * FROM tmp")
+      checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
     }
-    ctx.catalog.unregisterTable(Seq("tmp"))
+    catalog.unregisterTable(Seq("tmp"))
   }
 
   test("overwriting") {
     val data = (0 until 10).map(i => (i, i.toString))
-    ctx.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
     withOrcTable(data, "t") {
-      ctx.sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
-      checkAnswer(ctx.table("t"), data.map(Row.fromTuple))
+      sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
+      checkAnswer(table("t"), data.map(Row.fromTuple))
     }
-    ctx.catalog.unregisterTable(Seq("tmp"))
+    catalog.unregisterTable(Seq("tmp"))
   }
 
   test("self-join") {
@@ -237,7 +239,7 @@ class OrcQuerySuite extends QueryTest with OrcTest {
     }
 
     withOrcTable(data, "t") {
-      val selfJoin = ctx.sql("SELECT * FROM t x JOIN t y WHERE x.`_1` = y.`_1`")
+      val selfJoin = sql("SELECT * FROM t x JOIN t y WHERE x.`_1` = y.`_1`")
       val queryOutput = selfJoin.queryExecution.analyzed.output
 
       assertResult(4, "Field count mismatches")(queryOutput.size)
@@ -252,7 +254,7 @@ class OrcQuerySuite extends QueryTest with OrcTest {
   test("nested data - struct with array field") {
     val data = (1 to 10).map(i => Tuple1((i, Seq("val_$i"))))
     withOrcTable(data, "t") {
-      checkAnswer(ctx.sql("SELECT `_1`.`_2`[0] FROM t"), data.map {
+      checkAnswer(sql("SELECT `_1`.`_2`[0] FROM t"), data.map {
         case Tuple1((_, Seq(string))) => Row(string)
       })
     }
@@ -261,7 +263,7 @@ class OrcQuerySuite extends QueryTest with OrcTest {
   test("nested data - array of struct") {
     val data = (1 to 10).map(i => Tuple1(Seq(i -> "val_$i")))
     withOrcTable(data, "t") {
-      checkAnswer(ctx.sql("SELECT `_1`[0].`_2` FROM t"), data.map {
+      checkAnswer(sql("SELECT `_1`[0].`_2` FROM t"), data.map {
         case Tuple1(Seq((_, string))) => Row(string)
       })
     }
@@ -269,18 +271,18 @@ class OrcQuerySuite extends QueryTest with OrcTest {
 
   test("columns only referenced by pushed down filters should remain") {
     withOrcTable((1 to 10).map(Tuple1.apply), "t") {
-      checkAnswer(ctx.sql("SELECT `_1` FROM t WHERE `_1` < 10"), (1 to 9).map(Row.apply(_)))
+      checkAnswer(sql("SELECT `_1` FROM t WHERE `_1` < 10"), (1 to 9).map(Row.apply(_)))
     }
   }
 
   test("SPARK-5309 strings stored using dictionary compression in orc") {
     withOrcTable((0 until 1000).map(i => ("same", "run_" + i / 100, 1)), "t") {
       checkAnswer(
-        ctx.sql("SELECT `_1`, `_2`, SUM(`_3`) FROM t GROUP BY `_1`, `_2`"),
+        sql("SELECT `_1`, `_2`, SUM(`_3`) FROM t GROUP BY `_1`, `_2`"),
         (0 until 10).map(i => Row("same", "run_" + i, 100)))
 
       checkAnswer(
-        ctx.sql("SELECT `_1`, `_2`, SUM(`_3`) FROM t WHERE `_2` = 'run_5' GROUP BY `_1`, `_2`"),
+        sql("SELECT `_1`, `_2`, SUM(`_3`) FROM t WHERE `_2` = 'run_5' GROUP BY `_1`, `_2`"),
         List(Row("same", "run_5", 100)))
     }
   }
@@ -291,7 +293,7 @@ class OrcQuerySuite extends QueryTest with OrcTest {
 
       withTable("empty_orc") {
         withTempTable("empty", "single") {
-          ctx.sql(
+          sqlContext.sql(
             s"""CREATE TABLE empty_orc(key INT, value STRING)
                |STORED AS ORC
                |LOCATION '$path'
@@ -302,13 +304,13 @@ class OrcQuerySuite extends QueryTest with OrcTest {
 
           // This creates 1 empty ORC file with Hive ORC SerDe.  We are using this trick because
           // Spark SQL ORC data source always avoids write empty ORC files.
-          ctx.sql(
+          sqlContext.sql(
             s"""INSERT INTO TABLE empty_orc
                |SELECT key, value FROM empty
              """.stripMargin)
 
           val errorMessage = intercept[AnalysisException] {
-            ctx.read.orc(path)
+            sqlContext.read.orc(path)
           }.getMessage
 
           assert(errorMessage.contains("Failed to discover schema from ORC files"))
@@ -316,12 +318,12 @@ class OrcQuerySuite extends QueryTest with OrcTest {
           val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
           singleRowDF.registerTempTable("single")
 
-          ctx.sql(
+          sqlContext.sql(
             s"""INSERT INTO TABLE empty_orc
                |SELECT key, value FROM single
              """.stripMargin)
 
-          val df = ctx.read.orc(path)
+          val df = sqlContext.read.orc(path)
           assert(df.schema === singleRowDF.schema.asNullable)
           checkAnswer(df, singleRowDF)
         }

@@ -19,12 +19,14 @@ package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.conf.HiveConf
 
-import org.apache.spark.sql.{Row, SQLConf}
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.execution.datasources.parquet.ParquetCompatibilityTest
-import org.apache.spark.sql.hive.test.SharedHiveContext
+import org.apache.spark.sql.{Row, SQLConf, SQLContext}
 
-class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with SharedHiveContext {
+class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest {
   import ParquetCompatibilityTest.makeNullable
+
+  override val sqlContext: SQLContext = TestHive
 
   /**
    * Set the staging directory (and hence path to ignore Parquet files under)
@@ -36,31 +38,33 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with Shared
     withTable("parquet_compat") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
+
         withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "false") {
           withTempTable("data") {
-            ctx.sql(
+            sqlContext.sql(
               s"""CREATE TABLE parquet_compat(
-                       |  bool_column BOOLEAN,
-                       |  byte_column TINYINT,
-                       |  short_column SMALLINT,
-                       |  int_column INT,
-                       |  long_column BIGINT,
-                       |  float_column FLOAT,
-                       |  double_column DOUBLE,
-                       |
-                       |  strings_column ARRAY<STRING>,
-                       |  int_to_string_column MAP<INT, STRING>
-                       |)
-                       |STORED AS PARQUET
-                       |LOCATION '$path'
-                     """.stripMargin)
+                 |  bool_column BOOLEAN,
+                 |  byte_column TINYINT,
+                 |  short_column SMALLINT,
+                 |  int_column INT,
+                 |  long_column BIGINT,
+                 |  float_column FLOAT,
+                 |  double_column DOUBLE,
+                 |
+                 |  strings_column ARRAY<STRING>,
+                 |  int_to_string_column MAP<INT, STRING>
+                 |)
+                 |STORED AS PARQUET
+                 |LOCATION '$path'
+               """.stripMargin)
 
-            val schema = ctx.table("parquet_compat").schema
-            val rowRDD = ctx.sparkContext.parallelize(makeRows).coalesce(1)
-            ctx.createDataFrame(rowRDD, schema).registerTempTable("data")
-            ctx.sql("INSERT INTO TABLE parquet_compat SELECT * FROM data")
+            val schema = sqlContext.table("parquet_compat").schema
+            val rowRDD = sqlContext.sparkContext.parallelize(makeRows).coalesce(1)
+            sqlContext.createDataFrame(rowRDD, schema).registerTempTable("data")
+            sqlContext.sql("INSERT INTO TABLE parquet_compat SELECT * FROM data")
           }
         }
+
         val schema = readParquetSchema(path, { path =>
           !path.getName.startsWith("_") && !path.getName.startsWith(stagingDir)
         })
@@ -73,13 +77,13 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with Shared
         // Unfortunately parquet-hive doesn't add `UTF8` annotation to BINARY when writing strings.
         // Have to assume all BINARY values are strings here.
         withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "true") {
-          checkAnswer(ctx.read.parquet(path), makeRows)
+          checkAnswer(sqlContext.read.parquet(path), makeRows)
         }
       }
     }
   }
 
-  private def makeRows: Seq[Row] = {
+  def makeRows: Seq[Row] = {
     (0 until 10).map { i =>
       def nullable[T <: AnyRef]: ( => T) => T = makeNullable[T](i)
 
