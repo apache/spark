@@ -285,7 +285,8 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     val algo = makePrioritySchedulingAlgorithm(master)
     val firstPool = algo.nextPool().get
     assert(firstPool.cores == 5)
-    val scheduledCores = scheduleExecutorsOnWorkersForPool(algo, appInfo, workerInfos, spreadOut, firstPool)
+    val scheduledCores =
+      scheduleExecutorsOnWorkersForPool(algo, appInfo, workerInfos, spreadOut, firstPool)
     if (spreadOut) {
       assert(scheduledCores === Array(2, 2, 1))
     } else {
@@ -307,7 +308,8 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     val algo = makePrioritySchedulingAlgorithm(master)
     val firstPool = algo.nextPool().get
     assert(firstPool.cores == 5)
-    val scheduledCores = scheduleExecutorsOnWorkersForPool(algo, appInfo, workerInfos, spreadOut, firstPool)
+    val scheduledCores =
+      scheduleExecutorsOnWorkersForPool(algo, appInfo, workerInfos, spreadOut, firstPool)
     if (spreadOut) {
       assert(scheduledCores === Array(2, 2, 1))
     } else {
