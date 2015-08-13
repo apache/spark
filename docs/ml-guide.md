@@ -801,6 +801,141 @@ jsc.stop();
 
 </div>
 
+## Examples: Summaries for LogisticRegression.
+
+Once LogisticRegression is run on data, it is useful to extract statistics such as the
+loss per iteration which will provide an intuition on overfitting and metrics to understand
+how well the model has performed on training and test data.
+
+LogisticRegressionTrainingSummary provides an interface to access such relevant information
+i.e the objectiveHistory and metrics to evaluate the performance on the training data
+directly with very less code to be rewritten by the user.
+In the future, a method would be made available in the fitted LogisticRegressionModel to obtain
+a LogisticRegressionSummary of the test data as well.
+
+This examples illustrates the use of LogisticRegressionTrainingSummary on some toyData.
+
+<div class="codetabs">
+<div data-lang="scala">
+{% highlight scala %}
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.ml.classification.{LogisticRegression, BinaryLogisticRegressionSummary}
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.sql.{Row, SQLContext}
+
+val conf = new SparkConf().setAppName("LogisticRegressionSummary")
+val sc = new SparkContext(conf)
+val sqlContext = new SQLContext(sc)
+import sqlContext.implicits._
+
+// Use some random data for demonstration.
+// Note that the RDD of LabeledPoints can be converted to a dataframe directly.
+val data = sc.parallelize(Array(
+  LabeledPoint(0.0, Vectors.dense(0.2, 4.5, 1.6)),
+  LabeledPoint(1.0, Vectors.dense(3.1, 6.8, 3.6)),
+  LabeledPoint(0.0, Vectors.dense(2.4, 0.9, 1.9)),
+  LabeledPoint(1.0, Vectors.dense(9.1, 3.1, 3.6)),
+  LabeledPoint(0.0, Vectors.dense(2.5, 1.9, 9.1)))
+)
+val logRegDataFrame = data.toDF()
+
+// Run Logistic Regression on your toy data.
+// Since LogisticRegression is an estimator, it returns an instance of LogisticRegressionModel
+// which is a transformer.
+val logReg = new LogisticRegression()
+logReg.setMaxIter(5)
+logReg.setRegParam(0.01)
+val logRegModel = logReg.fit(logRegDataFrame)
+
+// Extract the summary directly from the returned LogisticRegressionModel instance.
+val trainingSummary = logRegModel.summary
+
+// Obtain the loss per iteration. This should decrease upto a certain point and
+// then increase or show negligible change after this.
+val objectiveHistory = trainingSummary.objectiveHistory
+objectiveHistory.foreach(loss => println(loss))
+
+// Obtain the metrics useful to judge performance on test data.
+val binarySummary = trainingSummary.asInstanceOf[BinaryLogisticRegressionSummary]
+
+// Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
+val roc = binarySummary.roc
+val truePositiveRate = roc.select("FPR")
+val area = binarySummary.areaUnderROC
+
+// Obtain the threshold with the highest fMeasure.
+val fMeasure = binarySummary.fMeasureByThreshold
+val fScoreRDD = fMeasure.map { case Row(thresh: Double, fscore: Double) => (thresh, fscore) }
+val (highThresh, highFScore) = fScoreRDD.fold((0.0, 0.0))((threshFScore1, threshFScore2) => {
+  if (threshFScore1._2 > threshFScore2._2) threshFScore1 else threshFScore2
+})
+{% endhighlight %}
+</div>
+
+<div data-lang="java">
+{% highlight java %}
+import com.google.common.collect.Lists;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.classification.BinaryLogisticRegressionSummary;
+import org.apache.spark.ml.classification.LogisticRegression;
+import org.apache.spark.ml.classification.LogisticRegressionModel;
+import org.apache.spark.ml.classification.LogisticRegressionTrainingSummary;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+
+// Use some random data for demonstration.
+// Note that the RDD of LabeledPoints can be converted to a dataframe directly.
+JavaRDD<LabeledPoint> data = sc.parallelize(Lists.newArrayList(
+  new LabeledPoint(0.0, Vectors.dense(0.2, 4.5, 1.6)),
+  new LabeledPoint(1.0, Vectors.dense(3.1, 6.8, 3.6)),
+  new LabeledPoint(0.0, Vectors.dense(2.4, 0.9, 1.9)),
+  new LabeledPoint(1.0, Vectors.dense(9.1, 3.1, 3.6)),
+  new LabeledPoint(0.0, Vectors.dense(2.5, 1.9, 9.1)))
+);
+DataFrame logRegDataFrame = sql.createDataFrame(data, LabeledPoint.class);
+
+// Run Logistic Regression on your toy data.
+// Since LogisticRegression is an estimator, it returns an instance of LogisticRegressionModel
+// which is a transformer.
+LogisticRegression logReg = new LogisticRegression();
+logReg.setMaxIter(5);
+logReg.setRegParam(0.01);
+LogisticRegressionModel logRegModel = logReg.fit(logRegDataFrame);
+
+// Extract the summary directly from the returned LogisticRegressionModel instance.
+LogisticRegressionTrainingSummary trainingSummary = logRegModel.summary();
+
+// Obtain the loss per iteration. This should decrease upto a certain point and
+// then increase or show negligible change after this.
+double[] objectiveHistory = trainingSummary.objectiveHistory();
+for (double lossPerIteration: objectiveHistory) {
+  System.out.println(lossPerIteration);
+}
+
+// Obtain the metrics useful to judge performance on test data.
+BinaryLogisticRegressionSummary binarySummary = (BinaryLogisticRegressionSummary) trainingSummary;
+
+// Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
+DataFrame roc = binarySummary.roc();
+DataFrame truePositiveRate = roc.select("FPR");
+double area = binarySummary.areaUnderROC();
+
+// Obtain the threshold with the highest fMeasure.
+DataFrame fMeasure = binarySummary.fMeasureByThreshold();
+
+
+{% highlight %}
+</div>
+
+</div>
+
+
+
+
 # Dependencies
 
 Spark ML currently depends on MLlib and has the same dependencies.
