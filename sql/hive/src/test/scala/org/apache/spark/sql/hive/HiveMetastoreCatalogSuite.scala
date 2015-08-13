@@ -54,6 +54,7 @@ class HiveMetastoreCatalogSuite extends SparkFunSuite with Logging {
 
 class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with SQLTestUtils {
   override def _sqlContext: SQLContext = TestHive
+  import testImplicits._
 
   private val testDF = range(1, 3).select(
     ('id + 0.1) cast DecimalType(10, 3) as 'd1,

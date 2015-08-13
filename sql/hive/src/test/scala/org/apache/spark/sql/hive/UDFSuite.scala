@@ -17,21 +17,19 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{Row, QueryTest}
+import org.apache.spark.sql.QueryTest
 
 case class FunctionResult(f1: String, f2: String)
 
 class UDFSuite extends QueryTest {
-
   private lazy val ctx = org.apache.spark.sql.hive.test.TestHive
-  import ctx.implicits._
 
   test("UDF case insensitive") {
     ctx.udf.register("random0", () => { Math.random() })
     ctx.udf.register("RANDOM1", () => { Math.random() })
     ctx.udf.register("strlenScala", (_: String).length + (_: Int))
-    assert(sql("SELECT RANDOM0() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
-    assert(sql("SELECT RANDOm1() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
-    assert(sql("SELECT strlenscala('test', 1) FROM src LIMIT 1").head().getInt(0) === 5)
+    assert(ctx.sql("SELECT RANDOM0() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
+    assert(ctx.sql("SELECT RANDOm1() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
+    assert(ctx.sql("SELECT strlenscala('test', 1) FROM src LIMIT 1").head().getInt(0) === 5)
   }
 }
