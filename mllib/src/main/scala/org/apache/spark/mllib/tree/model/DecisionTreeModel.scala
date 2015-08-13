@@ -127,9 +127,6 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
     DecisionTreeModel.SaveLoadV1_0.save(sc, path, this)
   }
 
-  /**
-   * @since 1.3.0
-   */
   override protected def formatVersion: String = DecisionTreeModel.formatVersion
 }
 

@@ -58,6 +58,7 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
    * Method to train a gradient boosting model
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @return a gradient boosted trees model that can be used for prediction
+   * @since 1.2.0
    */
   def run(input: RDD[LabeledPoint]): GradientBoostedTreesModel = {
     val algo = boostingStrategy.treeStrategy.algo

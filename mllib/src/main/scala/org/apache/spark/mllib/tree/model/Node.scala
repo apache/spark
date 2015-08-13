@@ -84,7 +84,7 @@ class Node (
    * predict value if node is not leaf
    * @param features feature value
    * @return predicted value
-   * @since 1.0.0
+   * @since 1.1.0
    */
   def predict(features: Vector) : Double = {
     if (isLeaf) {
