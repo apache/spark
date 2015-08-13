@@ -238,7 +238,7 @@ object YarnSparkHadoopUtil {
     if (Utils.isWindows) {
       escapeForShell("-XX:OnOutOfMemoryError=taskkill /F /PID %%%%p")
     } else {
-      escapeForShell("-XX:OnOutOfMemoryError='kill %%p'")
+      "-XX:OnOutOfMemoryError='kill %p'"
     }
   }
 
