@@ -33,7 +33,6 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with SharedSQLContext {
   import ParquetCompatibilityTest._
-  import testImplicits._
 
   private def withWriter[T <: IndexedRecord]
       (path: String, schema: Schema)
@@ -128,6 +127,8 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
   }
 
   test("SPARK-9407 Don't push down predicates involving Parquet ENUM columns") {
+    import testImplicits._
+
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 

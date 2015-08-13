@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.test.SharedSQLContext
 
 
-class JoinSuite extends QueryTest with BeforeAndAfterEach with SharedSQLContext {
+class JoinSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   setupTestData()

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow

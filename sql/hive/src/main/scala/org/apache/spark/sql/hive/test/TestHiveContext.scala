@@ -49,9 +49,7 @@ import scala.collection.JavaConversions._
  * Calling [[reset]] will delete all tables and other state in the database, leaving the database
  * in a "clean" state.
  */
-class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
-  self =>
-
+class TestHiveContext(sc: SparkContext) extends HiveContext(sc) { self =>
   import HiveContext._
   import TestHiveContext._
 
@@ -78,7 +76,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   lazy val warehousePath = Utils.createTempDir(namePrefix = "warehouse-")
 
-  lazy val scratchDirPath = {
+  private lazy val scratchDirPath = {
     val dir = Utils.createTempDir(namePrefix = "scratch-")
     dir.delete()
     dir
@@ -96,15 +94,13 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     )
   }
 
-  val testTempDir = Utils.createTempDir()
+  private val testTempDir = Utils.createTempDir()
 
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
 
-  /** The location of the compiled hive distribution */
-  lazy val hiveHome = envVarToFile("HIVE_HOME")
   /** The location of the hive source code. */
-  lazy val hiveDevHome = envVarToFile("HIVE_DEV_HOME")
+  private lazy val hiveDevHome = envVarToFile("HIVE_DEV_HOME")
 
   // Override so we can intercept relative paths and rewrite them to point at hive.
   override def runSqlHive(sql: String): Seq[String] =
@@ -149,12 +145,12 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       cmd
     }
 
-  val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
+  private val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
   Utils.registerShutdownDeleteDir(hiveFilesTemp)
 
-  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
+  private val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
     new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
   } else {
     new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
@@ -169,7 +165,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       .getOrElse(new File(inRepoTests, stripped))
   }
 
-  val describedTable = "DESCRIBE (\\w+)".r
+  private val describedTable = "DESCRIBE (\\w+)".r
 
   /**
    * Override QueryExecution with special debug workflow.
@@ -207,7 +203,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    * demand when a query are run against it.
    */
   @transient
-  lazy val testTables = new mutable.HashMap[String, TestTable]()
+  private lazy val testTables = new mutable.HashMap[String, TestTable]()
 
   def registerTestTable(testTable: TestTable): Unit = {
     testTables += (testTable.name -> testTable)
@@ -217,7 +213,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
   // https://github.com/apache/hive/blob/branch-0.13/data/scripts/q_test_init.sql
   @transient
-  val hiveQTestUtilTables = Seq(
+  private val hiveQTestUtilTables = Seq(
     TestTable("src",
       "CREATE TABLE src (key INT, value STRING)".cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}' INTO TABLE src".cmd),
