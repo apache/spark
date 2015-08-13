@@ -560,6 +560,11 @@ test_that("select with column", {
   df2 <- select(df, df$age)
   expect_equal(columns(df2), c("age"))
   expect_equal(count(df2), 3)
+
+  df3 <- select(df, lit("x"))
+  expect_equal(columns(df3), c("x"))
+  expect_equal(count(df3), 3)
+  expect_equal(collect(select(df3, "x"))[[1, 1]], "x")
 })
 
 test_that("selectExpr() on a DataFrame", {
@@ -692,6 +697,14 @@ test_that("string operators", {
   expect_equal(count(where(df, startsWith(df$name, "A"))), 1)
   expect_equal(first(select(df, substr(df$name, 1, 2)))[[1]], "Mi")
   expect_equal(collect(select(df, cast(df$age, "string")))[[2, 1]], "30")
+  expect_equal(collect(select(df, concat(df$name, lit(":"), df$age)))[[2, 1]], "Andy:30")
+})
+
+test_that("greatest() and least() on a DataFrame", {
+  l <- list(list(a = 1, b = 2), list(a = 3, b = 4))
+  df <- createDataFrame(sqlContext, l)
+  expect_equal(collect(select(df, greatest(df$a, df$b)))[, 1], c(2, 4))
+  expect_equal(collect(select(df, least(df$a, df$b)))[, 1], c(1, 3))
 })
 
 test_that("group by", {
