@@ -73,6 +73,6 @@ public class JavaStatisticsSuite implements Serializable {
       new LabeledPoint(0.0, Vectors.dense(0.1, 2.3)),
       new LabeledPoint(1.0, Vectors.dense(1.5, 5.1)),
       new LabeledPoint(0.0, Vectors.dense(2.4, 8.1))));
-      ChiSqTestResult[] testResults = Statistics.chiSqTest(data);
+    ChiSqTestResult[] testResults = Statistics.chiSqTest(data);
   }
 }
