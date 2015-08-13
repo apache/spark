@@ -179,6 +179,21 @@ class SQLTests(ReusedPySparkTestCase):
         ReusedPySparkTestCase.tearDownClass()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
 
+    def test_row_should_be_read_only(self):
+        row = Row(a=1, b=2)
+        self.assertEqual(1, row.a)
+
+        def foo():
+            row.a = 3
+        self.assertRaises(Exception, foo)
+
+        row2 = self.sqlCtx.range(10).first()
+        self.assertEqual(0, row2.id)
+
+        def foo2():
+            row2.id = 2
+        self.assertRaises(Exception, foo2)
+
     def test_range(self):
         self.assertEqual(self.sqlCtx.range(1, 1).count(), 0)
         self.assertEqual(self.sqlCtx.range(1, 0, -1).count(), 1)
@@ -628,6 +643,16 @@ class SQLTests(ReusedPySparkTestCase):
         rndn = df.select('key', functions.randn(5)).collect()
         for row in rndn:
             assert row[1] >= -4.0 and row[1] <= 4.0, "got: %s" % row[1]
+
+        # If the specified seed is 0, we should use it.
+        # https://issues.apache.org/jira/browse/SPARK-9691
+        rnd1 = df.select('key', functions.rand(0)).collect()
+        rnd2 = df.select('key', functions.rand(0)).collect()
+        self.assertEqual(sorted(rnd1), sorted(rnd2))
+
+        rndn1 = df.select('key', functions.randn(0)).collect()
+        rndn2 = df.select('key', functions.randn(0)).collect()
+        self.assertEqual(sorted(rndn1), sorted(rndn2))
 
     def test_between_function(self):
         df = self.sc.parallelize([

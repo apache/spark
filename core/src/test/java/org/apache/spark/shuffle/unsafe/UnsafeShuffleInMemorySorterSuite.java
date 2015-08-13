@@ -24,7 +24,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.HashPartitioner;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.ExecutorMemoryManager;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
@@ -34,11 +34,7 @@ public class UnsafeShuffleInMemorySorterSuite {
 
   private static String getStringFromDataPage(Object baseObject, long baseOffset, int strLength) {
     final byte[] strBytes = new byte[strLength];
-    PlatformDependent.copyMemory(
-      baseObject,
-      baseOffset,
-      strBytes,
-      PlatformDependent.BYTE_ARRAY_OFFSET, strLength);
+    Platform.copyMemory(baseObject, baseOffset, strBytes, Platform.BYTE_ARRAY_OFFSET, strLength);
     return new String(strBytes);
   }
 
@@ -74,14 +70,10 @@ public class UnsafeShuffleInMemorySorterSuite {
     for (String str : dataToSort) {
       final long recordAddress = memoryManager.encodePageNumberAndOffset(dataPage, position);
       final byte[] strBytes = str.getBytes("utf-8");
-      PlatformDependent.UNSAFE.putInt(baseObject, position, strBytes.length);
+      Platform.putInt(baseObject, position, strBytes.length);
       position += 4;
-      PlatformDependent.copyMemory(
-        strBytes,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
-        baseObject,
-        position,
-        strBytes.length);
+      Platform.copyMemory(
+        strBytes, Platform.BYTE_ARRAY_OFFSET, baseObject, position, strBytes.length);
       position += strBytes.length;
       sorter.insertRecord(recordAddress, hashPartitioner.getPartition(str));
     }
@@ -98,7 +90,7 @@ public class UnsafeShuffleInMemorySorterSuite {
       Assert.assertTrue("Partition id " + partitionId + " should be >= prev id " + prevPartitionId,
         partitionId >= prevPartitionId);
       final long recordAddress = iter.packedRecordPointer.getRecordPointer();
-      final int recordLength = PlatformDependent.UNSAFE.getInt(
+      final int recordLength = Platform.getInt(
         memoryManager.getPage(recordAddress), memoryManager.getOffsetInPage(recordAddress));
       final String str = getStringFromDataPage(
         memoryManager.getPage(recordAddress),

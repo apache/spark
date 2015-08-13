@@ -28,6 +28,8 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
+  import IntegralLiteralTestUtils._
+
   val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
   val sdfDate = new SimpleDateFormat("yyyy-MM-dd")
   val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
@@ -212,6 +214,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null)
     checkEvaluation(DateAdd(Literal.create(null, DateType), Literal.create(null, IntegerType)),
       null)
+    checkEvaluation(
+      DateAdd(Literal(Date.valueOf("2016-02-28")), positiveIntLit), 49627)
+    checkEvaluation(
+      DateAdd(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -15910)
   }
 
   test("date_sub") {
@@ -226,6 +232,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null)
     checkEvaluation(DateSub(Literal.create(null, DateType), Literal.create(null, IntegerType)),
       null)
+    checkEvaluation(
+      DateSub(Literal(Date.valueOf("2016-02-28")), positiveIntLit), -15909)
+    checkEvaluation(
+      DateSub(Literal(Date.valueOf("2016-02-28")), negativeIntLit), 49628)
   }
 
   test("time_add") {
@@ -282,6 +292,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null)
     checkEvaluation(
       AddMonths(Literal(Date.valueOf("2015-01-30")), Literal(Int.MinValue)), -7293498)
+    checkEvaluation(
+      AddMonths(Literal(Date.valueOf("2016-02-28")), positiveIntLit), 1014213)
+    checkEvaluation(
+      AddMonths(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -980528)
   }
 
   test("months_between") {

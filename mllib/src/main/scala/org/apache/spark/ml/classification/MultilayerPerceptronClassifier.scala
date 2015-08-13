@@ -131,7 +131,7 @@ private object LabelConverter {
  */
 @Experimental
 class MultilayerPerceptronClassifier(override val uid: String)
-  extends Predictor[Vector, MultilayerPerceptronClassifier, MultilayerPerceptronClassifierModel]
+  extends Predictor[Vector, MultilayerPerceptronClassifier, MultilayerPerceptronClassificationModel]
   with MultilayerPerceptronParams {
 
   def this() = this(Identifiable.randomUID("mlpc"))
@@ -146,7 +146,7 @@ class MultilayerPerceptronClassifier(override val uid: String)
    * @param dataset Training dataset
    * @return Fitted model
    */
-  override protected def train(dataset: DataFrame): MultilayerPerceptronClassifierModel = {
+  override protected def train(dataset: DataFrame): MultilayerPerceptronClassificationModel = {
     val myLayers = $(layers)
     val labels = myLayers.last
     val lpData = extractLabeledPoints(dataset)
@@ -156,13 +156,13 @@ class MultilayerPerceptronClassifier(override val uid: String)
     FeedForwardTrainer.LBFGSOptimizer.setConvergenceTol($(tol)).setNumIterations($(maxIter))
     FeedForwardTrainer.setStackSize($(blockSize))
     val mlpModel = FeedForwardTrainer.train(data)
-    new MultilayerPerceptronClassifierModel(uid, myLayers, mlpModel.weights())
+    new MultilayerPerceptronClassificationModel(uid, myLayers, mlpModel.weights())
   }
 }
 
 /**
  * :: Experimental ::
- * Classifier model based on the Multilayer Perceptron.
+ * Classification model based on the Multilayer Perceptron.
  * Each layer has sigmoid activation function, output layer has softmax.
  * @param uid uid
  * @param layers array of layer sizes including input and output layers
@@ -170,11 +170,11 @@ class MultilayerPerceptronClassifier(override val uid: String)
  * @return prediction model
  */
 @Experimental
-class MultilayerPerceptronClassifierModel private[ml] (
+class MultilayerPerceptronClassificationModel private[ml] (
     override val uid: String,
     layers: Array[Int],
     weights: Vector)
-  extends PredictionModel[Vector, MultilayerPerceptronClassifierModel]
+  extends PredictionModel[Vector, MultilayerPerceptronClassificationModel]
   with Serializable {
 
   private val mlpModel = FeedForwardTopology.multiLayerPerceptron(layers, true).getInstance(weights)
@@ -187,7 +187,7 @@ class MultilayerPerceptronClassifierModel private[ml] (
     LabelConverter.decodeLabel(mlpModel.predict(features))
   }
 
-  override def copy(extra: ParamMap): MultilayerPerceptronClassifierModel = {
-    copyValues(new MultilayerPerceptronClassifierModel(uid, layers, weights), extra)
+  override def copy(extra: ParamMap): MultilayerPerceptronClassificationModel = {
+    copyValues(new MultilayerPerceptronClassificationModel(uid, layers, weights), extra)
   }
 }

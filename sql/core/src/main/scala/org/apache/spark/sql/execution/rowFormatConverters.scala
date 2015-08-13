@@ -21,6 +21,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
@@ -33,6 +34,8 @@ case class ConvertToUnsafe(child: SparkPlan) extends UnaryNode {
   require(UnsafeProjection.canSupport(child.schema), s"Cannot convert ${child.schema} to Unsafe")
 
   override def output: Seq[Attribute] = child.output
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
   override def outputsUnsafeRows: Boolean = true
   override def canProcessUnsafeRows: Boolean = false
   override def canProcessSafeRows: Boolean = true
@@ -51,6 +54,8 @@ case class ConvertToUnsafe(child: SparkPlan) extends UnaryNode {
 @DeveloperApi
 case class ConvertToSafe(child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
   override def outputsUnsafeRows: Boolean = false
   override def canProcessUnsafeRows: Boolean = true
   override def canProcessSafeRows: Boolean = false

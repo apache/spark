@@ -138,7 +138,7 @@ final class OneVsRestModel private[ml] (
   override def copy(extra: ParamMap): OneVsRestModel = {
     val copied = new OneVsRestModel(
       uid, labelMetadata, models.map(_.copy(extra).asInstanceOf[ClassificationModel[_, _]]))
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }
 

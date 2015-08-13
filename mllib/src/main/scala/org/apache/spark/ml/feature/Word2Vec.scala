@@ -153,7 +153,7 @@ class Word2VecModel private[ml] (
    * Returns a dataframe with two fields, "word" and "vector", with "word" being a String and
    * and the vector the DenseVector that it is mapped to.
    */
-  val getVectors: DataFrame = {
+  @transient lazy val getVectors: DataFrame = {
     val sc = SparkContext.getOrCreate()
     val sqlContext = SQLContext.getOrCreate(sc)
     import sqlContext.implicits._
@@ -221,6 +221,6 @@ class Word2VecModel private[ml] (
 
   override def copy(extra: ParamMap): Word2VecModel = {
     val copied = new Word2VecModel(uid, wordVectors)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }

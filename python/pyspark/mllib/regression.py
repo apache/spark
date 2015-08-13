@@ -207,8 +207,10 @@ class LinearRegressionWithSGD(object):
         Train a linear regression model using Stochastic Gradient
         Descent (SGD).
         This solves the least squares regression formulation
-                f(weights) = 1/n ||A weights-y||^2^
-        (which is the mean squared error).
+
+            f(weights) = 1/(2n) ||A weights - y||^2,
+
+        which is the mean squared error.
         Here the data matrix has n rows, and the input RDD holds the
         set of rows of A, each with its corresponding right hand side
         label y. See also the documentation for the precise formulation.
@@ -334,7 +336,9 @@ class LassoWithSGD(object):
         Stochastic Gradient Descent.
         This solves the l1-regularized least squares regression
         formulation
-            f(weights) = 1/2n ||A weights-y||^2^  + regParam ||weights||_1
+
+            f(weights) = 1/(2n) ||A weights - y||^2  + regParam ||weights||_1.
+
         Here the data matrix has n rows, and the input RDD holds the
         set of rows of A, each with its corresponding right hand side
         label y. See also the documentation for the precise formulation.
@@ -451,7 +455,9 @@ class RidgeRegressionWithSGD(object):
         Stochastic Gradient Descent.
         This solves the l2-regularized least squares regression
         formulation
-            f(weights) = 1/2n ||A weights-y||^2^  + regParam/2 ||weights||^2^
+
+            f(weights) = 1/(2n) ||A weights - y||^2 + regParam/2 ||weights||^2.
+
         Here the data matrix has n rows, and the input RDD holds the
         set of rows of A, each with its corresponding right hand side
         label y. See also the documentation for the precise formulation.

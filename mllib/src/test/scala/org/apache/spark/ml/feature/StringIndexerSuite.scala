@@ -17,9 +17,11 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -37,6 +39,10 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("label")
       .setOutputCol("labelIndex")
       .fit(df)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(indexer)
+
     val transformed = indexer.transform(df)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
@@ -60,6 +66,37 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val reversed2 = inverse2.transform(transformed).select("id", "label2")
     assert(df.collect().map(r => (r.getInt(0), r.getString(1))).toSet ===
       reversed2.collect().map(r => (r.getInt(0), r.getString(1))).toSet)
+  }
+
+  test("StringIndexerUnseen") {
+    val data = sc.parallelize(Seq((0, "a"), (1, "b"), (4, "b")), 2)
+    val data2 = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c")), 2)
+    val df = sqlContext.createDataFrame(data).toDF("id", "label")
+    val df2 = sqlContext.createDataFrame(data2).toDF("id", "label")
+    val indexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+      .fit(df)
+    // Verify we throw by default with unseen values
+    intercept[SparkException] {
+      indexer.transform(df2).collect()
+    }
+    val indexerSkipInvalid = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+      .setHandleInvalid("skip")
+      .fit(df)
+    // Verify that we skip the c record
+    val transformed = indexerSkipInvalid.transform(df2)
+    val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
+      .asInstanceOf[NominalAttribute]
+    assert(attr.values.get === Array("b", "a"))
+    val output = transformed.select("id", "labelIndex").map { r =>
+      (r.getInt(0), r.getDouble(1))
+    }.collect().toSet
+    // a -> 1, b -> 0
+    val expected = Set((0, 1.0), (1, 0.0))
+    assert(output === expected)
   }
 
   test("StringIndexer with a numeric input column") {

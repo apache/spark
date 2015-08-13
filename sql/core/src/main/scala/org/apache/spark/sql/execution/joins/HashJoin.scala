@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.metric.LongSQLMetric
 
 
 trait HashJoin {
@@ -44,7 +45,8 @@ trait HashJoin {
   override def output: Seq[Attribute] = left.output ++ right.output
 
   protected[this] def isUnsafeMode: Boolean = {
-    (self.codegenEnabled && UnsafeProjection.canSupport(buildKeys)
+    (self.codegenEnabled && self.unsafeEnabled
+      && UnsafeProjection.canSupport(buildKeys)
       && UnsafeProjection.canSupport(self.schema))
   }
 
@@ -52,14 +54,14 @@ trait HashJoin {
   override def canProcessUnsafeRows: Boolean = isUnsafeMode
   override def canProcessSafeRows: Boolean = !isUnsafeMode
 
-  @transient protected lazy val buildSideKeyGenerator: Projection =
+  protected def buildSideKeyGenerator: Projection =
     if (isUnsafeMode) {
       UnsafeProjection.create(buildKeys, buildPlan.output)
     } else {
       newMutableProjection(buildKeys, buildPlan.output)()
     }
 
-  @transient protected lazy val streamSideKeyGenerator: Projection =
+  protected def streamSideKeyGenerator: Projection =
     if (isUnsafeMode) {
       UnsafeProjection.create(streamedKeys, streamedPlan.output)
     } else {
@@ -68,7 +70,9 @@ trait HashJoin {
 
   protected def hashJoin(
       streamIter: Iterator[InternalRow],
-      hashedRelation: HashedRelation): Iterator[InternalRow] =
+      numStreamRows: LongSQLMetric,
+      hashedRelation: HashedRelation,
+      numOutputRows: LongSQLMetric): Iterator[InternalRow] =
   {
     new Iterator[InternalRow] {
       private[this] var currentStreamedRow: InternalRow = _
@@ -97,6 +101,7 @@ trait HashJoin {
           case BuildLeft => joinRow(currentHashMatches(currentMatchPosition), currentStreamedRow)
         }
         currentMatchPosition += 1
+        numOutputRows += 1
         resultProjection(ret)
       }
 
@@ -112,6 +117,7 @@ trait HashJoin {
 
         while (currentHashMatches == null && streamIter.hasNext) {
           currentStreamedRow = streamIter.next()
+          numStreamRows += 1
           val key = joinKeys(currentStreamedRow)
           if (!key.anyNull) {
             currentHashMatches = hashedRelation.get(key)

@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.{SparkConf, SparkContext}
 
 /* Implicit conversions */
@@ -52,7 +52,6 @@ object TestHive
         .set("spark.sql.test", "")
         .set("spark.sql.hive.metastore.barrierPrefixes",
           "org.apache.spark.sql.hive.execution.PairSerDe")
-        .set("spark.buffer.pageSize", "4m")
         // SPARK-8910
         .set("spark.ui.enabled", "false")))
 
@@ -155,7 +154,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
-  Utils.registerShutdownDeleteDir(hiveFilesTemp)
+  ShutdownHookManager.registerShutdownDeleteDir(hiveFilesTemp)
 
   val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
     new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
@@ -374,7 +373,11 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         INSERT OVERWRITE TABLE episodes_part PARTITION (doctor_pt=1)
         SELECT title, air_date, doctor FROM episodes
       """.cmd
-      )
+      ),
+    TestTable("src_json",
+      s"""CREATE TABLE src_json (json STRING) STORED AS TEXTFILE
+       """.stripMargin.cmd,
+      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/json.txt")}' INTO TABLE src_json".cmd)
   )
 
   hiveQTestUtilTables.foreach(registerTestTable)

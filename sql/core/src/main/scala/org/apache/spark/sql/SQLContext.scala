@@ -43,6 +43,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -73,6 +74,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @return Spark SQL configuration
    */
   protected[sql] def conf = currentSession().conf
+
+  // `listener` should be only used in the driver
+  @transient private[sql] val listener = new SQLListener(this)
+  sparkContext.addSparkListener(listener)
+  sparkContext.ui.foreach(new SQLTab(this, _))
 
   /**
    * Set Spark SQL configuration properties.
@@ -285,9 +291,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   val udf: UDFRegistration = new UDFRegistration(this)
 
-  @transient
-  val udaf: UDAFRegistration = new UDAFRegistration(this)
-
   /**
    * Returns true if the table is currently cached in-memory.
    * @group cachemgmt
@@ -340,7 +343,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
      */
     implicit class StringToColumn(val sc: StringContext) {
       def $(args: Any*): ColumnName = {
-        new ColumnName(sc.s(args : _*))
+        new ColumnName(sc.s(args: _*))
       }
     }
 
@@ -870,7 +873,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       HashAggregation ::
       Aggregation ::
       LeftSemiJoin ::
-      HashJoin ::
+      EquiJoinSelection ::
       InMemoryScans ::
       BasicOperators ::
       CartesianProduct ::
@@ -1008,9 +1011,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       def output =
         analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}").mkString(", ")
 
-      // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})
-      // however, the `toRdd` will cause the real execution, which is not what we want.
-      // We need to think about how to avoid the side effect.
       s"""== Parsed Logical Plan ==
          |${stringOrError(logical)}
          |== Analyzed Logical Plan ==
@@ -1021,7 +1021,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |== Physical Plan ==
          |${stringOrError(executedPlan)}
          |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
-         |== RDD ==
       """.stripMargin.trim
     }
   }

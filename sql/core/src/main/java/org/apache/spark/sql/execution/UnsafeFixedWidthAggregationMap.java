@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution;
 
 import java.io.IOException;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -27,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.KVIterator;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryLocation;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
@@ -72,7 +74,7 @@ public final class UnsafeFixedWidthAggregationMap {
    */
   public static boolean supportsAggregationBufferSchema(StructType schema) {
     for (StructField field: schema.fields()) {
-      if (!UnsafeRow.isFixedLength(field.dataType())) {
+      if (!UnsafeRow.isMutable(field.dataType())) {
         return false;
       }
     }
@@ -111,8 +113,6 @@ public final class UnsafeFixedWidthAggregationMap {
     // Initialize the buffer for aggregation value
     final UnsafeProjection valueProjection = UnsafeProjection.create(aggregationBufferSchema);
     this.emptyAggregationBuffer = valueProjection.apply(emptyAggregationBuffer).getBytes();
-    assert(this.emptyAggregationBuffer.length == aggregationBufferSchema.length() * 8 +
-      UnsafeRow.calculateBitSetWidthInBytes(aggregationBufferSchema.length()));
   }
 
   /**
@@ -123,6 +123,10 @@ public final class UnsafeFixedWidthAggregationMap {
   public UnsafeRow getAggregationBuffer(InternalRow groupingKey) {
     final UnsafeRow unsafeGroupingKeyRow = this.groupingKeyProjection.apply(groupingKey);
 
+    return getAggregationBufferFromUnsafeRow(unsafeGroupingKeyRow);
+  }
+
+  public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow unsafeGroupingKeyRow) {
     // Probe our map using the serialized key
     final BytesToBytesMap.Location loc = map.lookup(
       unsafeGroupingKeyRow.getBaseObject(),
@@ -136,7 +140,7 @@ public final class UnsafeFixedWidthAggregationMap {
         unsafeGroupingKeyRow.getBaseOffset(),
         unsafeGroupingKeyRow.getSizeInBytes(),
         emptyAggregationBuffer,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
+        Platform.BYTE_ARRAY_OFFSET,
         emptyAggregationBuffer.length
       );
       if (!putSucceeded) {
@@ -156,14 +160,17 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
-   * Returns an iterator over the keys and values in this map.
+   * Returns an iterator over the keys and values in this map. This uses destructive iterator of
+   * BytesToBytesMap. So it is illegal to call any other method on this map after `iterator()` has
+   * been called.
    *
    * For efficiency, each call returns the same object.
    */
   public KVIterator<UnsafeRow, UnsafeRow> iterator() {
     return new KVIterator<UnsafeRow, UnsafeRow>() {
 
-      private final BytesToBytesMap.BytesToBytesMapIterator mapLocationIterator = map.iterator();
+      private final BytesToBytesMap.BytesToBytesMapIterator mapLocationIterator =
+        map.destructiveIterator();
       private final UnsafeRow key = new UnsafeRow();
       private final UnsafeRow value = new UnsafeRow();
 
@@ -209,11 +216,15 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
-   * The memory used by this map's managed structures, in bytes.
-   * Note that this is also the peak memory used by this map, since the map is append-only.
+   * Return the peak memory used so far, in bytes.
    */
-  public long getMemoryUsage() {
-    return map.getTotalMemoryConsumption();
+  public long getPeakMemoryUsedBytes() {
+    return map.getPeakMemoryUsedBytes();
+  }
+
+  @VisibleForTesting
+  public int getNumDataPages() {
+    return map.getNumDataPages();
   }
 
   /**

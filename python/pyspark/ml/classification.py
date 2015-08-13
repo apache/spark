@@ -34,6 +34,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                          HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol):
     """
     Logistic regression.
+    Currently, this class only supports binary classification.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.mllib.linalg import Vectors
@@ -69,17 +70,27 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
               "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
               "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
     fitIntercept = Param(Params._dummy(), "fitIntercept", "whether to fit an intercept term.")
+    thresholds = Param(Params._dummy(), "thresholds",
+                       "Thresholds in multi-class classification" +
+                       " to adjust the probability of predicting each class." +
+                       " Array must have length equal to the number of classes, with values >= 0." +
+                       " The class with largest value p/t is predicted, where p is the original" +
+                       " probability of that class and t is the class' threshold.")
     threshold = Param(Params._dummy(), "threshold",
-                      "threshold in binary classification prediction, in range [0, 1].")
+                      "Threshold in binary classification prediction, in range [0, 1]." +
+                      " If threshold and thresholds are both set, they must match.")
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                 threshold=0.5, probabilityCol="probability", rawPredictionCol="rawPrediction"):
+                 threshold=0.5, thresholds=None,
+                 probabilityCol="probability", rawPredictionCol="rawPrediction"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                 threshold=0.5, probabilityCol="probability", rawPredictionCol="rawPrediction")
+                 threshold=0.5, thresholds=None, \
+                 probabilityCol="probability", rawPredictionCol="rawPrediction")
+        If the threshold and thresholds Params are both set, they must be equivalent.
         """
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -88,30 +99,45 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         #  is an L2 penalty. For alpha = 1, it is an L1 penalty.
         self.elasticNetParam = \
             Param(self, "elasticNetParam",
-                  "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty " +
-                  "is an L2 penalty. For alpha = 1, it is an L1 penalty.")
+                  "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
+                  "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.")
         #: param for whether to fit an intercept term.
         self.fitIntercept = Param(self, "fitIntercept", "whether to fit an intercept term.")
-        #: param for threshold in binary classification prediction, in range [0, 1].
+        #: param for threshold in binary classification, in range [0, 1].
         self.threshold = Param(self, "threshold",
-                               "threshold in binary classification prediction, in range [0, 1].")
+                               "Threshold in binary classification prediction, in range [0, 1]." +
+                               " If threshold and thresholds are both set, they must match.")
+        #: param for thresholds or cutoffs in binary or multiclass classification
+        self.thresholds = \
+            Param(self, "thresholds",
+                  "Thresholds in multi-class classification" +
+                  " to adjust the probability of predicting each class." +
+                  " Array must have length equal to the number of classes, with values >= 0." +
+                  " The class with largest value p/t is predicted, where p is the original" +
+                  " probability of that class and t is the class' threshold.")
         self._setDefault(maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1E-6,
                          fitIntercept=True, threshold=0.5)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
+        self._checkThresholdConsistency()
 
     @keyword_only
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                  threshold=0.5, probabilityCol="probability", rawPredictionCol="rawPrediction"):
+                  threshold=0.5, thresholds=None,
+                  probabilityCol="probability", rawPredictionCol="rawPrediction"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.1, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                 threshold=0.5, probabilityCol="probability", rawPredictionCol="rawPrediction")
+                  threshold=0.5, thresholds=None, \
+                  probabilityCol="probability", rawPredictionCol="rawPrediction")
         Sets params for logistic regression.
+        If the threshold and thresholds Params are both set, they must be equivalent.
         """
         kwargs = self.setParams._input_kwargs
-        return self._set(**kwargs)
+        self._set(**kwargs)
+        self._checkThresholdConsistency()
+        return self
 
     def _create_model(self, java_model):
         return LogisticRegressionModel(java_model)
@@ -145,15 +171,64 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     def setThreshold(self, value):
         """
         Sets the value of :py:attr:`threshold`.
+        Clears value of :py:attr:`thresholds` if it has been set.
         """
         self._paramMap[self.threshold] = value
+        if self.isSet(self.thresholds):
+            del self._paramMap[self.thresholds]
         return self
 
     def getThreshold(self):
         """
         Gets the value of threshold or its default value.
         """
-        return self.getOrDefault(self.threshold)
+        self._checkThresholdConsistency()
+        if self.isSet(self.thresholds):
+            ts = self.getOrDefault(self.thresholds)
+            if len(ts) != 2:
+                raise ValueError("Logistic Regression getThreshold only applies to" +
+                                 " binary classification, but thresholds has length != 2." +
+                                 "  thresholds: " + ",".join(ts))
+            return 1.0/(1.0 + ts[0]/ts[1])
+        else:
+            return self.getOrDefault(self.threshold)
+
+    def setThresholds(self, value):
+        """
+        Sets the value of :py:attr:`thresholds`.
+        Clears value of :py:attr:`threshold` if it has been set.
+        """
+        self._paramMap[self.thresholds] = value
+        if self.isSet(self.threshold):
+            del self._paramMap[self.threshold]
+        return self
+
+    def getThresholds(self):
+        """
+        If :py:attr:`thresholds` is set, return its value.
+        Otherwise, if :py:attr:`threshold` is set, return the equivalent thresholds for binary
+        classification: (1-threshold, threshold).
+        If neither are set, throw an error.
+        """
+        self._checkThresholdConsistency()
+        if not self.isSet(self.thresholds) and self.isSet(self.threshold):
+            t = self.getOrDefault(self.threshold)
+            return [1.0-t, t]
+        else:
+            return self.getOrDefault(self.thresholds)
+
+    def _checkThresholdConsistency(self):
+        if self.isSet(self.threshold) and self.isSet(self.thresholds):
+            ts = self.getParam(self.thresholds)
+            if len(ts) != 2:
+                raise ValueError("Logistic Regression getThreshold only applies to" +
+                                 " binary classification, but thresholds has length != 2." +
+                                 " thresholds: " + ",".join(ts))
+            t = 1.0/(1.0 + ts[0]/ts[1])
+            t2 = self.getParam(self.threshold)
+            if abs(t2 - t) >= 1E-5:
+                raise ValueError("Logistic Regression getThreshold found inconsistent values for" +
+                                 " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
 
 
 class LogisticRegressionModel(JavaModel):
@@ -299,6 +374,7 @@ class DecisionTreeClassificationModel(DecisionTreeModel):
 
 @inherit_doc
 class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasSeed,
+                             HasRawPredictionCol, HasProbabilityCol,
                              DecisionTreeParams, HasCheckpointInterval):
     """
     `http://en.wikipedia.org/wiki/Random_forest  Random Forest`
@@ -306,6 +382,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     It supports both binary and multiclass labels, as well as both continuous and categorical
     features.
 
+    >>> import numpy
     >>> from numpy import allclose
     >>> from pyspark.mllib.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
@@ -320,8 +397,13 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> allclose(model.treeWeights, [1.0, 1.0, 1.0])
     True
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.transform(test0).head().prediction
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
     0.0
+    >>> numpy.argmax(result.probability)
+    0
+    >>> numpy.argmax(result.rawPrediction)
+    0
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
@@ -342,11 +424,13 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 probabilityCol="probability", rawPredictionCol="rawPrediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
                  numTrees=20, featureSubsetStrategy="auto", seed=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
                  numTrees=20, featureSubsetStrategy="auto", seed=None)
@@ -379,11 +463,13 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
     @keyword_only
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  probabilityCol="probability", rawPredictionCol="rawPrediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None,
                   impurity="gini", numTrees=20, featureSubsetStrategy="auto"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None, \
                   impurity="gini", numTrees=20, featureSubsetStrategy="auto")
@@ -597,6 +683,13 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
                  HasRawPredictionCol):
     """
     Naive Bayes Classifiers.
+    It supports both Multinomial and Bernoulli NB. Multinomial NB
+    (`http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html`)
+    can handle finitely supported discrete data. For example, by converting documents into
+    TF-IDF vectors, it can be used for document classification. By making every vector a
+    binary (0/1) data, it can also be used as Bernoulli NB
+    (`http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html`).
+    The input feature values must be nonnegative.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.mllib.linalg import Vectors
