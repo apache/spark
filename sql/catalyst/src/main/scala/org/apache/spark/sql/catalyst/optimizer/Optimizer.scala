@@ -382,6 +382,102 @@ object ConstantFolding extends Rule[LogicalPlan] {
           case Literal(candidate, _) if candidate == v => true
           case _ => false
         } => Literal.create(true, BooleanType)
+
+      case EqualTo(c @ Cast(a: Attribute, _), Literal(v, _)) if isUpCastingIntegral(c) &&
+        (v.asInstanceOf[Number].longValue < minValue(a.dataType) ||
+          v.asInstanceOf[Number].longValue > maxValue(a.dataType)) =>
+        Literal.create(false, BooleanType)
+      case EqualTo(Literal(v, _), c @ Cast(a: Attribute, _)) if isUpCastingIntegral(c) &&
+        (v.asInstanceOf[Number].longValue < minValue(a.dataType) ||
+          v.asInstanceOf[Number].longValue > maxValue(a.dataType)) =>
+        Literal.create(false, BooleanType)
+
+      case EqualNullSafe(c @ Cast(a: Attribute, _), Literal(v, _)) if isUpCastingIntegral(c) &&
+        (v.asInstanceOf[Number].longValue < minValue(a.dataType) ||
+          v.asInstanceOf[Number].longValue > maxValue(a.dataType)) =>
+        Literal.create(false, BooleanType)
+      case EqualNullSafe(Literal(v, _), c @ Cast(a: Attribute, _)) if isUpCastingIntegral(c) &&
+        (v.asInstanceOf[Number].longValue < minValue(a.dataType) ||
+          v.asInstanceOf[Number].longValue > maxValue(a.dataType)) =>
+        Literal.create(false, BooleanType)
+
+      case GreaterThan(c @ Cast(a: Attribute, _), Literal(v, _)) if isUpCastingIntegral(c) &&
+        v.asInstanceOf[Number].longValue < minValue(a.dataType) =>
+        Literal.create(true, BooleanType)
+      case GreaterThan(c @ Cast(a: Attribute, _), Literal(v, _)) if isUpCastingIntegral(c) &&
+        v.asInstanceOf[Number].longValue >= maxValue(a.dataType) =>
+        Literal.create(false, BooleanType)
+      case GreaterThan(Literal(v, _), c @ Cast(a: Attribute, _)) if isUpCastingIntegral(c) &&
+        v.asInstanceOf[Number].longValue <= minValue(a.dataType) =>
+        Literal.create(false, BooleanType)
+      case GreaterThan(Literal(v, _), c @ Cast(a: Attribute, _)) if isUpCastingIntegral(c) &&
+        v.asInstanceOf[Number].longValue > maxValue(a.dataType) =>
+        Literal.create(true, BooleanType)
+
+      case LessThan(c @ Cast(a: Attribute, _), Literal(v, _)) if isUpCastingIntegral(c) &&
+        v.asInstanceOf[Number].longValue <= minValue(a.dataType) =>
+        Literal.create(false, BooleanType)
+      case LessThan(c @ Cast(a: Attribute, _), Literal(v, _)) if isUpCastingIntegral(c) &&
+        v.asInstanceOf[Number].longValue > maxValue(a.dataType) =>
+        Literal.create(true, BooleanType)
+      case LessThan(Literal(v, _), c @ Cast(a: Attribute, _)) if isUpCastingIntegral(c) &&
+        v.asInstanceOf[Number].longValue < minValue(a.dataType) =>
+        Literal.create(true, BooleanType)
+      case LessThan(Literal(v, _), c @ Cast(a: Attribute, _)) if isUpCastingIntegral(c) &&
+        v.asInstanceOf[Number].longValue >= maxValue(a.dataType) =>
+        Literal.create(false, BooleanType)
+
+      case GreaterThanOrEqual(c @ Cast(a: Attribute, _), Literal(v, _))
+        if isUpCastingIntegral(c) && v.asInstanceOf[Number].longValue <= minValue(a.dataType) =>
+        Literal.create(true, BooleanType)
+      case GreaterThanOrEqual(c @ Cast(a: Attribute, _), Literal(v, _))
+        if isUpCastingIntegral(c) && v.asInstanceOf[Number].longValue > maxValue(a.dataType) =>
+        Literal.create(false, BooleanType)
+      case GreaterThanOrEqual(Literal(v, _), c @ Cast(a: Attribute, _))
+        if isUpCastingIntegral(c) && v.asInstanceOf[Number].longValue < minValue(a.dataType) =>
+        Literal.create(false, BooleanType)
+      case GreaterThanOrEqual(Literal(v, _), c @ Cast(a: Attribute, _))
+        if isUpCastingIntegral(c) && v.asInstanceOf[Number].longValue >= maxValue(a.dataType) =>
+        Literal.create(true, BooleanType)
+
+      case LessThanOrEqual(c @ Cast(a: Attribute, _), Literal(v, _)) if isUpCastingIntegral(c) &&
+        v.asInstanceOf[Number].longValue < minValue(a.dataType) =>
+        Literal.create(false, BooleanType)
+      case LessThanOrEqual(c @ Cast(a: Attribute, _), Literal(v, _)) if isUpCastingIntegral(c) &&
+        v.asInstanceOf[Number].longValue >= maxValue(a.dataType) =>
+        Literal.create(true, BooleanType)
+      case LessThanOrEqual(Literal(v, _), c @ Cast(a: Attribute, _)) if isUpCastingIntegral(c) &&
+        v.asInstanceOf[Number].longValue <= minValue(a.dataType) =>
+        Literal.create(true, BooleanType)
+      case LessThanOrEqual(Literal(v, _), c @ Cast(a: Attribute, _)) if isUpCastingIntegral(c) &&
+        v.asInstanceOf[Number].longValue > maxValue(a.dataType) =>
+        Literal.create(false, BooleanType)
+    }
+  }
+
+  private val integralPrecedence = Seq(ByteType, ShortType, IntegerType, LongType)
+
+  private def isUpCastingIntegral(c: Cast): Boolean = {
+    (c.child.dataType, c.dataType) match {
+      case (from: IntegralType, to: IntegralType)
+        if integralPrecedence.indexOf(from) < integralPrecedence.indexOf(to) => true
+      case _ => false
+    }
+  }
+
+  private def maxValue(dataType: DataType): Long = {
+    dataType match {
+      case ByteType => Byte.MaxValue.toLong
+      case ShortType => Short.MaxValue.toLong
+      case IntegerType => Int.MaxValue.toLong
+    }
+  }
+
+  private def minValue(dataType: DataType): Long = {
+    dataType match {
+      case ByteType => Byte.MinValue.toLong
+      case ShortType => Short.MinValue.toLong
+      case IntegerType => Int.MinValue.toLong
     }
   }
 }
