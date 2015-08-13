@@ -54,6 +54,8 @@ class HiveSparkSubmitSuite
       "--class", SparkSubmitClassLoaderTest.getClass.getName.stripSuffix("$"),
       "--name", "SparkSubmitClassLoaderTest",
       "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       "--jars", jarsString,
       unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
     runSparkSubmit(args)
@@ -65,6 +67,8 @@ class HiveSparkSubmitSuite
       "--class", SparkSQLConfTest.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
       "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -76,7 +80,11 @@ class HiveSparkSubmitSuite
     // the HiveContext code mistakenly overrides the class loader that contains user classes.
     // For more detail, see sql/hive/src/test/resources/regression-test-SPARK-8489/*scala.
     val testJar = "sql/hive/src/test/resources/regression-test-SPARK-8489/test.jar"
-    val args = Seq("--class", "Main", testJar)
+    val args = Seq(
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--class", "Main",
+      testJar)
     runSparkSubmit(args)
   }
 
