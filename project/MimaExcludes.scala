@@ -188,6 +188,10 @@ object MimaExcludes {
               "org.apache.spark.sql.test.TestSQLContext"),
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.spark.sql.test.TestSQLContext$")
+          ) ++ Seq(
+            // SPARK-9704 Made ProbabilisticClassifier, Identifiable, VectorUDT public APIs
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.mllib.linalg.VectorUDT.serialize")
           )
 
         case v if v.startsWith("1.4") =>
