@@ -154,13 +154,13 @@ class WindowSpec private[sql](
         // TODO this is a hack for Hive UDAF first_value
         UnresolvedWindowFunction(
           "first_value",
-          child :: Literal.create(ignoreNulls, BooleanType) :: Nil),
+          child :: ignoreNulls :: Nil),
         WindowSpecDefinition(partitionSpec, orderSpec, frame))
       case Last(child, ignoreNulls) => WindowExpression(
         // TODO this is a hack for Hive UDAF last_value
         UnresolvedWindowFunction(
           "last_value",
-          child :: Literal.create(ignoreNulls, BooleanType) :: Nil),
+          child :: ignoreNulls :: Nil),
         WindowSpecDefinition(partitionSpec, orderSpec, frame))
       case Min(child) => WindowExpression(
         UnresolvedWindowFunction("min", child :: Nil),
