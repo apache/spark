@@ -102,9 +102,10 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     import org.apache.spark.sql.catalyst.plans.logical.Join
 
     val personK = person.uniqueKey("id")
+    val personKA = personK.select($"id".as("p_id"))
     val salaryK = salary.foreignKey("personId", personK, "id")
-    val salaries = salaryK.join(personK, salaryK("personId") === person("id"), "left_outer")
-      .select(person("id"), salary("salary"))
+    val salaries = salaryK.join(personKA, salaryK("personId") === personKA("p_id"), "left_outer")
+      .select(personKA("p_id"), salary("salary"))
     checkAnswer(salaries, salary.collect().toSeq)
     assert(salaries.queryExecution.optimizedPlan.collect {
       case j: Join => j

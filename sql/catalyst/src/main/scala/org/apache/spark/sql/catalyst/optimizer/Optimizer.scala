@@ -291,25 +291,58 @@ object JoinElimination extends Rule[LogicalPlan] {
       val aliasMap = AttributeMap(rightKeys.zip(leftKeys).collect {
         case (a: NamedExpression, b: NamedExpression) => (a.toAttribute, b.toAttribute)
       })
-      val foreignKeyConstraintsSatisfied = projectList.flatMap(_.collect {
-        case a: Attribute if aliasMap.contains(a) && left.keys.collect {
+      val eq = equivalences(right)
+      val foreignKeyConstraintsSatisfied = AttributeSet(projectList).forall(a =>
+        !aliasMap.contains(a) || left.keys.exists {
           case ForeignKey(leftAttr, referencedAttr)
-              if leftAttr == aliasMap(a) && referencedAttr == a => true
-        }.nonEmpty => true
-      }).nonEmpty
+              if leftAttr == aliasMap(a) && eq.query(referencedAttr, a) => true
+          case _ => false
+        })
 
-      if (onlyLeftCols) {
+      if (noDups && onlyLeftCols) {
         Project(projectList, left)
-      } else if (onlyLeftOrEquiCols && foreignKeyConstraintsSatisfied) {
+      } else if (noDups && onlyLeftOrEquiCols && foreignKeyConstraintsSatisfied) {
         val substitutedProjection = projectList.map(_.transform {
           case a: Attribute =>
-            if (aliasMap.contains(a)) Alias(aliasMap(a), a.name)()
+            if (aliasMap.contains(a)) Alias(aliasMap(a), a.name)(a.exprId)
             else a
         }).asInstanceOf[Seq[NamedExpression]]
         Project(substitutedProjection, left)
       } else {
         p
       }
+  }
+
+  private def equivalences(plan: LogicalPlan): MutableDisjointSet[Attribute] = {
+    val s = new MutableDisjointSet[Attribute]
+    plan.collect {
+      case Project(projectList, _) => projectList.collect {
+        case a @ Alias(old: Attribute, _) => s.union(old, a.toAttribute)
+      }
+    }
+    s
+  }
+
+  private class MutableDisjointSet[A]() {
+    import scala.collection.mutable.Set
+    private var sets = Set[Set[A]]()
+    def add(x: A): Unit = {
+      if (!sets.exists(_.contains(x))) {
+        sets += Set(x)
+      }
+    }
+    def union(x: A, y: A): Unit = {
+      add(x)
+      add(y)
+      val xSet = sets.find(_.contains(x)).get
+      val ySet = sets.find(_.contains(y)).get
+      sets -= xSet
+      sets -= ySet
+      sets += (xSet ++ ySet)
+    }
+    def query(x: A, y: A): Boolean = {
+      x == y || sets.exists(s => s.contains(x) && s.contains(y))
+    }
   }
 }
 

@@ -77,13 +77,24 @@ class JoinEliminationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("collapse outer join with cross-table aliasing") {
+  test("collapse outer join with foreign key") {
     val query = testRelation3K
-      .join(testRelation1, LeftOuter, Some('e === 'a))
+      .join(testRelation1K, LeftOuter, Some('e === 'a))
       .select('a, 'f)
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation3K.select('e.as('a), 'f).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("collapse outer join with foreign key despite alias") {
+    val query = testRelation3K
+      .join(testRelation1K.select('a.as('g), 'b), LeftOuter, Some('e === 'g))
+      .select('g, 'f)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation3K.select('e.as('g), 'f).analyze
 
     comparePlans(optimized, correctAnswer)
   }

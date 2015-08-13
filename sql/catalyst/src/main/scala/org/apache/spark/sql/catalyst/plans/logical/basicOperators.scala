@@ -23,10 +23,10 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
-case class KeyHint(
-    override val keys: Seq[Key],
-    child: LogicalPlan) extends UnaryNode {
+case class KeyHint(newKeys: Seq[Key], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  override def keys: Seq[Key] = newKeys ++ child.keys
 }
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
