@@ -27,7 +27,11 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.stat.test.ChiSqTestResult;
 import org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult;
 
 public class JavaStatisticsSuite implements Serializable {
@@ -57,9 +61,18 @@ public class JavaStatisticsSuite implements Serializable {
 
   @Test
   public void kolmogorovSmirnovTest() {
-    JavaRDD<Double> data = sc.parallelize(Lists.newArrayList(0.2, 1.0, -1.0, 2.0));
+    JavaDoubleRDD data = sc.parallelizeDoubles(Lists.newArrayList(0.2, 1.0, -1.0, 2.0));
     KolmogorovSmirnovTestResult testResult1 = Statistics.kolmogorovSmirnovTest(data, "norm");
     KolmogorovSmirnovTestResult testResult2 = Statistics.kolmogorovSmirnovTest(
       data, "norm", 0.0, 1.0);
+  }
+
+  @Test
+  public void chiSqTest() {
+    JavaRDD<LabeledPoint> data = sc.parallelize(Lists.newArrayList(
+      new LabeledPoint(0.0, Vectors.dense(0.1, 2.3)),
+      new LabeledPoint(1.0, Vectors.dense(1.5, 5.1)),
+      new LabeledPoint(0.0, Vectors.dense(2.4, 8.1))));
+      ChiSqTestResult[] testResults = Statistics.chiSqTest(data);
   }
 }

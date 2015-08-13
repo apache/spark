@@ -677,7 +677,7 @@ class DistributedLDAModel private[clustering] (
   def javaTopTopicsPerDocument(
       k: Int): JavaRDD[(java.lang.Long, Array[Int], Array[java.lang.Double])] = {
     val topics = topTopicsPerDocument(k)
-    topics.asInstanceOf[JavaRDD[(java.lang.Long, Array[Int], Array[java.lang.Double])]]
+    topics.asInstanceOf[RDD[(java.lang.Long, Array[Int], Array[java.lang.Double])]].toJavaRDD()
   }
 
   // TODO:

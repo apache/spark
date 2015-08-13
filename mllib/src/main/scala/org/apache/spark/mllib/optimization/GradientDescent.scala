@@ -22,7 +22,6 @@ import scala.collection.mutable.ArrayBuffer
 import breeze.linalg.{DenseVector => BDV, norm}
 
 import org.apache.spark.annotation.{Experimental, DeveloperApi}
-import org.apache.spark.api.java.{JavaRDD, JavaPairRDD}
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
@@ -145,21 +144,6 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
  */
 @DeveloperApi
 object GradientDescent extends Logging {
-  /** Java-friendly version of [[runMiniBatchSGD()]] */
-  def runMiniBatchSGD(
-      data: JavaPairRDD[java.lang.Double, Vector],
-      gradient: Gradient,
-      updater: Updater,
-      stepSize: Double,
-      numIterations: Int,
-      regParam: Double,
-      miniBatchFraction: Double,
-      initialWeights: Vector,
-      convergenceTol: Double): (Vector, Array[Double]) = {
-    runMiniBatchSGD(data.rdd.asInstanceOf[RDD[(Double, Vector)]], gradient, updater, stepSize,
-      numIterations, regParam, miniBatchFraction, initialWeights, convergenceTol)
-  }
-
   /**
    * Run stochastic gradient descent (SGD) in parallel using mini batches.
    * In each iteration, we sample a subset (fraction miniBatchFraction) of the total data

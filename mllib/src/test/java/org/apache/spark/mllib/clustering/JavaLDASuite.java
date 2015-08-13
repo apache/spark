@@ -124,6 +124,10 @@ public class JavaLDASuite implements Serializable {
         }
     });
     assertEquals(topicDistributions.count(), nonEmptyCorpus.count());
+
+    // Check: javaTopTopicsPerDocuments
+    JavaRDD<scala.Tuple3<java.lang.Long, int[], java.lang.Double[]>> topTopics =
+      model.javaTopTopicsPerDocument(3);
   }
 
   @Test
@@ -161,32 +165,21 @@ public class JavaLDASuite implements Serializable {
   }
 
   @Test
-  public void logPerplexity(){
-    // Blindly copied from LDASuite.
-    JavaRDD<Tuple2<Long, Vector>> docs = sc.parallelize(toyData, 2);
-    assertEquals(toyModel.logPerplexity(JavaPairRDD.fromJavaRDD(docs)), 3.690, 1e-3);
-  }
-
-  @Test
-  public void logLikelihood() {
-    // Blindly copied from LDASuite.
-    ArrayList<Tuple2<Long, Vector>> docsSingleWord = new ArrayList<Tuple2<Long, Vector>>();
-    ArrayList<Tuple2<Long, Vector>> docsRepeatWord = new ArrayList<Tuple2<Long, Vector>>();
-    docsSingleWord.add(new Tuple2<Long, Vector>(
-      Long.valueOf(0), Vectors.dense(1.0, 0.0, 0.0, 0.0, 0.0, 0.0)));
-    docsRepeatWord.add(new Tuple2<Long, Vector>(
-      Long.valueOf(0), Vectors.dense(5.0, 0.0, 0.0, 0.0, 0.0, 0.0)));
-    JavaPairRDD<Long, Vector> single = JavaPairRDD.fromJavaRDD(sc.parallelize(docsSingleWord));
-    JavaPairRDD<Long, Vector> repeat = JavaPairRDD.fromJavaRDD(sc.parallelize(docsRepeatWord));
-    assertEquals(toyModel.logLikelihood(single), -25.971, 1e-3);
-    assertEquals(toyModel.logLikelihood(repeat), -31.441, 1e-3);
-  }
-
-  @Test
-  public void topicDistributions(){
+  public void localLdaMethods() {
     JavaRDD<Tuple2<Long, Vector>> docs = sc.parallelize(toyData, 2);
     JavaPairRDD<Long, Vector> pairedDocs = JavaPairRDD.fromJavaRDD(docs);
+
+    // check: topicDistributions
     assertEquals(toyModel.topicDistributions(pairedDocs).count(), pairedDocs.count());
+
+    // check: logPerplexity
+    double logPerplexity = toyModel.logPerplexity(pairedDocs);
+
+    // check: logLikelihood.
+    ArrayList<Tuple2<Long, Vector>> docsSingleWord = new ArrayList<Tuple2<Long, Vector>>();
+    docsSingleWord.add(new Tuple2<Long, Vector>(Long.valueOf(0), Vectors.dense(1.0, 0.0, 0.0)));
+    JavaPairRDD<Long, Vector> single = JavaPairRDD.fromJavaRDD(sc.parallelize(docsSingleWord));
+    double logLikelihood = toyModel.logLikelihood(single);
   }
 
   private static int tinyK = LDASuite$.MODULE$.tinyK();
