@@ -438,20 +438,40 @@ run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstra
 and interpret the hypothesis tests.
 
 {% highlight scala %}
-import org.apache.spark.SparkContext
-import org.apache.spark.mllib.stat.Statistics._
+import org.apache.spark.mllib.stat.Statistics
 
 val data: RDD[Double] = ... // an RDD of sample data
 
 // run a KS test for the sample versus a standard normal distribution
 val testResult = Statistics.kolmogorovSmirnovTest(data, "norm", 0, 1)
 println(testResult) // summary of the test including the p-value, test statistic,
-                      // and null hypothesis
-                      // if our p-value indicates significance, we can reject the null hypothesis
+                    // and null hypothesis
+                    // if our p-value indicates significance, we can reject the null hypothesis
 
 // perform a KS test using a cumulative distribution function of our making
 val myCDF: Double => Double = ...
 val testResult2 = Statistics.kolmogorovSmirnovTest(data, myCDF)
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+[`Statistics`](api/python/index.html#org.apache.spark.mllib.stat.Statistics$) provides methods to
+run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstrates how to run
+and interpret the hypothesis tests.
+
+{% highlight python %}
+from pyspark.mllib.stat import Statistics
+
+localData = [1.0, 2.0, ... ] #a list of doubles
+parallelData =  sc.parallelize(localData) # an RDD of Double
+
+# run a KS test for the sample versus a standard normal distribution
+testResult = Statistics.kolmogorovSmirnovTest(parallelData, "norm", 0, 1)
+print(testResult) # summary of the test including the p-value, test statistic,
+                  # and null hypothesis
+                  # if our p-value indicates significance, we can reject the null hypothesis
+# Note that the Scala functionality of calling Statistics.kolmogorovSmirnovTest with
+# a lambda to calculate the CDF is not made available in the Python API
 {% endhighlight %}
 </div>
 </div>
