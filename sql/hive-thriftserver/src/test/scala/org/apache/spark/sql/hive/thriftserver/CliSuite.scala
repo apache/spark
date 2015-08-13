@@ -18,18 +18,19 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
+import java.sql.Timestamp
+import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
-import scala.sys.process.{Process, ProcessLogger}
-import scala.util.Failure
+import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkFunSuite}
 
 /**
  * A test suite for the `spark-sql` CLI tool.  Note that all test cases share the same temporary
@@ -70,6 +71,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       queriesAndExpectedAnswers: (String, String)*): Unit = {
 
     val (queries, expectedAnswers) = queriesAndExpectedAnswers.unzip
+    // Explicitly adds ENTER for each statement to make sure they are actually entered into the CLI.
+    val queriesString = queries.map(_ + "\n").mkString
+
     val command = {
       val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
       val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
@@ -83,13 +87,14 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
 
     var next = 0
     val foundAllExpectedAnswers = Promise.apply[Unit]()
-    // Explicitly adds ENTER for each statement to make sure they are actually entered into the CLI.
-    val queryStream = new ByteArrayInputStream(queries.map(_ + "\n").mkString.getBytes)
     val buffer = new ArrayBuffer[String]()
     val lock = new Object
 
     def captureOutput(source: String)(line: String): Unit = lock.synchronized {
-      buffer += s"$source> $line"
+      // This test suite sometimes gets extremely slow out of unknown reason on Jenkins.  Here we
+      // add a timestamp to provide more diagnosis information.
+      buffer += s"${new Timestamp(new Date().getTime)} - $source> $line"
+
       // If we haven't found all expected answers and another expected answer comes up...
       if (next < expectedAnswers.size && line.startsWith(expectedAnswers(next))) {
         next += 1
@@ -98,48 +103,27 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
           foundAllExpectedAnswers.trySuccess(())
         }
       } else {
-        errorResponses.foreach( r => {
+        errorResponses.foreach { r =>
           if (line.startsWith(r)) {
             foundAllExpectedAnswers.tryFailure(
               new RuntimeException(s"Failed with error line '$line'"))
-          }})
-      }
-    }
-
-    // Searching expected output line from both stdout and stderr of the CLI process
-    val process = (Process(command, None) #< queryStream).run(
-      ProcessLogger(captureOutput("stdout"), captureOutput("stderr")))
-
-    // catch the output value
-    class exitCodeCatcher extends Runnable {
-      var exitValue = 0
-
-      override def run(): Unit = {
-        try {
-          exitValue = process.exitValue()
-        } catch {
-          case rte: RuntimeException =>
-            // ignored as it will get triggered when the process gets destroyed
-            logDebug("Ignoring exception while waiting for exit code", rte)
-        }
-        if (exitValue != 0) {
-          // process exited: fail fast
-          foundAllExpectedAnswers.tryFailure(
-            new RuntimeException(s"Failed with exit code $exitValue"))
+          }
         }
       }
     }
-    // spin off the code catche thread. No attempt is made to kill this
-    // as it will exit once the launched process terminates.
-    val codeCatcherThread = new Thread(new exitCodeCatcher())
-    codeCatcherThread.start()
+
+    val process = new ProcessBuilder(command: _*).start()
+
+    val stdinWriter = new OutputStreamWriter(process.getOutputStream)
+    stdinWriter.write(queriesString)
+    stdinWriter.flush()
+    stdinWriter.close()
+
+    new ProcessOutputCapturer(process.getInputStream, captureOutput("stdout")).start()
+    new ProcessOutputCapturer(process.getErrorStream, captureOutput("stderr")).start()
 
     try {
-      Await.ready(foundAllExpectedAnswers.future, timeout)
-      foundAllExpectedAnswers.future.value match {
-        case Some(Failure(t)) => throw t
-        case _ =>
-      }
+      Await.result(foundAllExpectedAnswers.future, timeout)
     } catch { case cause: Throwable =>
       val message =
         s"""
