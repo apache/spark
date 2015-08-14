@@ -435,4 +435,15 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   def stronglyConnectedComponents(numIter: Int): Graph[VertexId, ED] = {
     StronglyConnectedComponents.run(graph, numIter)
   }
+
+  /**
+   * Compute the closeness centrality of each vertex and return a graph with the
+   * vertex value containing the reciprocal of the average weighted sum of its distance
+   * to all other vertices in the graph.
+   *
+   * @see [[org.apache.spark.graphx.lib.ClosenessCentrality#run]]
+   */
+  def closenessCentrality(): Graph[Double, ED] = {
+    ClosenessCentrality.run(graph)
+  }
 } // end of GraphOps
