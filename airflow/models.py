@@ -1001,6 +1001,58 @@ class TaskInstance(Base):
         else:
             self.duration = None
 
+    def xcom_push(
+            self,
+            key,
+            value,
+            to_tasks=None,
+            to_dags=None,
+            visible_on=None):
+
+        for to_task_i in as_tuple(to_tasks):
+            for to_dag_i in as_tuple(to_dags):
+
+                if to_dag_i is None:
+                    to_dag_i = self.dag_id
+
+                XCom.set(
+                    key=key,
+                    value=value,
+                    from_task=self.task_id,
+                    from_dag=self.dag_id,
+                    to_task=to_task_i,
+                    to_dag=to_dag_i,
+                    visible_on=visible_on or self.execution_date)
+
+    def xcom_pull(
+            self,
+            key=None,
+            from_tasks=None,
+            from_dags=None,
+            include_prior_dates=False,
+            limit=100):
+
+        if from_dags is None:
+            from_dags = self.dag_id
+
+        # pull XComs pushed to this task/DAG
+        to_tasks, to_dags = [self.task_id], [self.dag_id]
+
+        # ...unless we are pulling from specific tasks,
+        # in which case include XComs with no targets
+        if from_tasks:
+            to_tasks.append(None)
+
+        return XCom.get(
+            visible_on=self.execution_date,
+            key=key,
+            from_tasks=from_tasks,
+            from_dags=from_dags,
+            to_tasks=to_tasks,
+            to_dags=to_dags,
+            include_prior_dates=include_prior_dates,
+            limit=limit)
+
 
 class Log(Base):
     """
