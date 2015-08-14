@@ -36,6 +36,8 @@ Base = declarative_base()
 ID_LEN = 250
 SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
 DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
+RETURN_XCOM = '<XCom from return>'
+
 
 if 'mysql' in SQL_ALCHEMY_CONN:
     LongText = LONGTEXT
@@ -844,12 +846,19 @@ class TaskInstance(Base):
 
                     # If a timout is specified for the task, make it fail
                     # if it goes beyond
+                    result = None
                     if task_copy.execution_timeout:
                         with utils.timeout(int(
                                 task_copy.execution_timeout.total_seconds())):
-                            task_copy.execute(context=context)
+                            result = task_copy.execute(context=context)
+
                     else:
-                        task_copy.execute(context=context)
+                        result = task_copy.execute(context=context)
+
+                    # If the task returns a result, push an XCom containing it
+                    if result is not None:
+                        self.xcom_push(key=RETURN_XCOM, value=result)
+
                     task_copy.post_execute(context=context)
             except (Exception, KeyboardInterrupt) as e:
                 self.handle_failure(e, test_mode, context)
