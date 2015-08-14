@@ -161,8 +161,8 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("sameLabel")
       .setLabels(indexer.labels)
     idx2str.transform(transformed).select("label", "sameLabel").collect().foreach {
-      case Row(a: Double, b: String) =>
-        assert(a.toString === b)
+      case Row(a: String, b: String) =>
+        assert(a === b)
     }
   }
 }
