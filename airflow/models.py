@@ -1519,6 +1519,42 @@ class BaseOperator(object):
         """
         self._set_relatives(task_or_task_list, upstream=True)
 
+    def xcom_push(
+            self,
+            context,
+            key,
+            value,
+            to_tasks=None,
+            to_dags=None,
+            visible_on=None):
+        """
+        See TaskInstance.xcom_push()
+        """
+        context['ti'].xcom_push(
+            key=key,
+            value=value,
+            to_tasks=to_tasks,
+            to_dags=to_dags,
+            visible_on=visible_on)
+
+    def xcom_pull(
+            self,
+            context,
+            key,
+            from_tasks=None,
+            from_dags=None,
+            include_prior_dates=None,
+            limit=100):
+        """
+        See TaskInstance.xcom_pull()
+        """
+        return context['ti'].xcom_pull(
+            key=key,
+            from_tasks=from_tasks,
+            from_dags=from_dags,
+            include_prior_dates=include_prior_dates,
+            limit=limit)
+
 
 class DagModel(Base):
 
