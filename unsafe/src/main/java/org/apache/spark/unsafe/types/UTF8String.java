@@ -18,8 +18,7 @@
 package org.apache.spark.unsafe.types;
 
 import javax.annotation.Nonnull;
-import java.io.Serializable;
-import java.io.UnsupportedEncodingException;
+import java.io.*;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Map;
@@ -41,9 +40,9 @@ import static org.apache.spark.unsafe.Platform.*;
 public final class UTF8String implements Comparable<UTF8String>, Serializable {
 
   @Nonnull
-  private final Object base;
-  private final long offset;
-  private final int numBytes;
+  private Object base;
+  private long offset;
+  private int numBytes;
 
   public Object getBaseObject() { return base; }
   public long getBaseOffset() { return offset; }
@@ -978,4 +977,20 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     }
     return UTF8String.fromBytes(sx);
   }
+
+  private static final long serialVersionUID = 42L;
+
+  private void writeObject(ObjectOutputStream out) throws IOException {
+    byte[] bytes = getBytes();
+    out.writeInt(bytes.length);
+    out.write(bytes);
+  }
+
+  private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+    offset = BYTE_ARRAY_OFFSET;
+    numBytes = in.readInt();
+    base = new byte[numBytes];
+    in.readFully((byte[]) base);
+  }
+
 }
