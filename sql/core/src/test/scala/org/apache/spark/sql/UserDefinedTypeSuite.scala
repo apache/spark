@@ -24,6 +24,7 @@ import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{OpenHashSetUDT, HyperLogLogUDT}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashSet
@@ -66,10 +67,8 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
   private[spark] override def asNullable: MyDenseVectorUDT = this
 }
 
-class UserDefinedTypeSuite extends QueryTest {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
+class UserDefinedTypeSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   private lazy val pointsRDD = Seq(
     MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
@@ -94,7 +93,7 @@ class UserDefinedTypeSuite extends QueryTest {
     ctx.udf.register("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
     pointsRDD.registerTempTable("points")
     checkAnswer(
-      ctx.sql("SELECT testType(features) from points"),
+      sql("SELECT testType(features) from points"),
       Seq(Row(true), Row(true)))
   }
 

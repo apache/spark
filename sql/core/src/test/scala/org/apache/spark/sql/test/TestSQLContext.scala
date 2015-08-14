@@ -15,18 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.test
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.{SQLConf, SQLContext}
 
-class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
-  import testImplicits._
 
-  test("function get_json_object") {
-    val df: DataFrame = Seq(("""{"name": "alice", "age": 5}""", "")).toDF("a", "b")
-    checkAnswer(
-      df.selectExpr("get_json_object(a, '$.name')", "get_json_object(a, '$.age')"),
-      Row("alice", "5"))
+/**
+ * A special [[SQLContext]] prepared for testing.
+ */
+private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { self =>
+
+  def this() {
+    this(new SparkContext("local[2]", "test-sql-context",
+      new SparkConf()
+        .set("spark.sql.testkey", "true")
+        // Fewer partitions to speed up testing
+        .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")))
   }
 
+  // Needed for Java tests
+  def loadTestData(): Unit = {
+    testData.loadTestData()
+  }
+
+  private object testData extends SQLTestData {
+    protected override def _sqlContext: SQLContext = self
+  }
 }

@@ -20,12 +20,13 @@ package org.apache.spark.sql.execution.datasources.parquet
 import org.apache.parquet.filter2.predicate.Operators._
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
 
+import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row, SQLConf}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row, SQLConf}
 
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
@@ -39,8 +40,7 @@ import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row, SQLConf}
  * 2. `Tuple1(Option(x))` is used together with `AnyVal` types like `Int` to ensure the inferred
  *    data type is nullable.
  */
-class ParquetFilterSuite extends QueryTest with ParquetTest {
-  lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
+class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
   private def checkFilterPredicate(
       df: DataFrame,
@@ -301,7 +301,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
   }
 
   test("SPARK-6554: don't push down predicates which reference partition columns") {
-    import sqlContext.implicits._
+    import testImplicits._
 
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withTempPath { dir =>

@@ -62,8 +62,6 @@ object MimaExcludes {
               "org.apache.spark.ml.classification.LogisticCostFun.this"),
             // SQL execution is considered private.
             excludePackage("org.apache.spark.sql.execution"),
-            // Always exclude LocalSQLContext, which is only used in unit tests.
-            ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.test.LocalSQLContext$SQLSession"),
             // The old JSON RDD is removed in favor of streaming Jackson
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD$"),
             ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.json.JsonRDD"),
@@ -180,6 +178,16 @@ object MimaExcludes {
             // SPARK-4751 Dynamic allocation for standalone mode
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.SparkContext.supportDynamicAllocation")
+          ) ++ Seq(
+            // SPARK-9580: Remove SQL test singletons
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.test.LocalSQLContext$SQLSession"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.test.LocalSQLContext"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.test.TestSQLContext"),
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.test.TestSQLContext$")
           ) ++ Seq(
             // SPARK-9704 Made ProbabilisticClassifier, Identifiable, VectorUDT public APIs
             ProblemFilters.exclude[IncompatibleResultTypeProblem](

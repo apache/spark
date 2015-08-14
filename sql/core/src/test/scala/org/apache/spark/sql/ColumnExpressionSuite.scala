@@ -21,16 +21,20 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.sql.execution.{Project, TungstenProject}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.SQLTestUtils
 
-class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
-  import org.apache.spark.sql.TestData._
+class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
-
-  override def sqlContext(): SQLContext = ctx
+  private lazy val booleanData = {
+    ctx.createDataFrame(ctx.sparkContext.parallelize(
+      Row(false, false) ::
+      Row(false, true) ::
+      Row(true, false) ::
+      Row(true, true) :: Nil),
+      StructType(Seq(StructField("a", BooleanType), StructField("b", BooleanType))))
+  }
 
   test("column names with space") {
     val df = Seq((1, "a")).toDF("name with space", "name.with.dot")
@@ -258,7 +262,7 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
 
     checkAnswer(
-      ctx.sql("select isnull(null), isnull(1)"),
+      sql("select isnull(null), isnull(1)"),
       Row(true, false))
   }
 
@@ -268,7 +272,7 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
 
     checkAnswer(
-      ctx.sql("select isnotnull(null), isnotnull('a')"),
+      sql("select isnotnull(null), isnotnull('a')"),
       Row(false, true))
   }
 
@@ -289,7 +293,7 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
       Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
     checkAnswer(
-      ctx.sql("select isnan(15), isnan('invalid')"),
+      sql("select isnan(15), isnan('invalid')"),
       Row(false, false))
   }
 
@@ -309,7 +313,7 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
     )
     testData.registerTempTable("t")
     checkAnswer(
-      ctx.sql(
+      sql(
         "select nanvl(a, 5), nanvl(b, 10), nanvl(10, b), nanvl(c, null), nanvl(d, 10), " +
           " nanvl(b, e), nanvl(e, f) from t"),
       Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
@@ -433,13 +437,6 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  val booleanData = ctx.createDataFrame(ctx.sparkContext.parallelize(
-    Row(false, false) ::
-      Row(false, true) ::
-      Row(true, false) ::
-      Row(true, true) :: Nil),
-    StructType(Seq(StructField("a", BooleanType), StructField("b", BooleanType))))
-
   test("&&") {
     checkAnswer(
       booleanData.filter($"a" && true),
@@ -523,7 +520,7 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
     )
 
     checkAnswer(
-      ctx.sql("SELECT upper('aB'), ucase('cDe')"),
+      sql("SELECT upper('aB'), ucase('cDe')"),
       Row("AB", "CDE"))
   }
 
@@ -544,7 +541,7 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
     )
 
     checkAnswer(
-      ctx.sql("SELECT lower('aB'), lcase('cDe')"),
+      sql("SELECT lower('aB'), lcase('cDe')"),
       Row("ab", "cde"))
   }
 
