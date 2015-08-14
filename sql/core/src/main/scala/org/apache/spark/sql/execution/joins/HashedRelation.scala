@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
-import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
+import org.apache.spark.unsafe.memory.{MemoryLocation, ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.{SparkConf, SparkEnv}
@@ -66,7 +66,8 @@ private[joins] final class GeneralHashedRelation(
     private var hashTable: JavaHashMap[InternalRow, CompactBuffer[InternalRow]])
   extends HashedRelation with Externalizable {
 
-  private def this() = this(null) // Needed for serialization
+  // Needed for serialization (it is public to make Java serialization work)
+  def this() = this(null)
 
   override def get(key: InternalRow): Seq[InternalRow] = hashTable.get(key)
 
@@ -88,7 +89,8 @@ private[joins]
 final class UniqueKeyHashedRelation(private var hashTable: JavaHashMap[InternalRow, InternalRow])
   extends HashedRelation with Externalizable {
 
-  private def this() = this(null) // Needed for serialization
+  // Needed for serialization (it is public to make Java serialization work)
+  def this() = this(null)
 
   override def get(key: InternalRow): Seq[InternalRow] = {
     val v = hashTable.get(key)
@@ -213,8 +215,10 @@ private[joins] final class UnsafeHashedRelation(
 
     if (binaryMap != null) {
       // Used in Broadcast join
-      val loc = binaryMap.lookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-        unsafeKey.getSizeInBytes)
+      val map = binaryMap  // avoid the compiler error
+      val loc = new map.Location  // this could be allocated in stack
+      binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
+        unsafeKey.getSizeInBytes, loc)
       if (loc.isDefined) {
         val buffer = CompactBuffer[UnsafeRow]()
 
@@ -243,40 +247,67 @@ private[joins] final class UnsafeHashedRelation(
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
-    out.writeInt(hashTable.size())
+    if (binaryMap != null) {
+      // This could happen when a cached broadcast object need to be dumped into disk to free memory
+      out.writeInt(binaryMap.numElements())
 
-    val iter = hashTable.entrySet().iterator()
-    while (iter.hasNext) {
-      val entry = iter.next()
-      val key = entry.getKey
-      val values = entry.getValue
-
-      // write all the values as single byte array
-      var totalSize = 0L
-      var i = 0
-      while (i < values.length) {
-        totalSize += values(i).getSizeInBytes + 4 + 4
-        i += 1
-      }
-      assert(totalSize < Integer.MAX_VALUE, "values are too big")
-
-      // [key size] [values size] [key bytes] [values bytes]
-      out.writeInt(key.getSizeInBytes)
-      out.writeInt(totalSize.toInt)
-      out.write(key.getBytes)
-      i = 0
-      while (i < values.length) {
-        // [num of fields] [num of bytes] [row bytes]
-        // write the integer in native order, so they can be read by UNSAFE.getInt()
-        if (ByteOrder.nativeOrder() == ByteOrder.BIG_ENDIAN) {
-          out.writeInt(values(i).numFields())
-          out.writeInt(values(i).getSizeInBytes)
-        } else {
-          out.writeInt(Integer.reverseBytes(values(i).numFields()))
-          out.writeInt(Integer.reverseBytes(values(i).getSizeInBytes))
+      var buffer = new Array[Byte](64)
+      def write(addr: MemoryLocation, length: Int): Unit = {
+        if (buffer.length < length) {
+          buffer = new Array[Byte](length)
         }
-        out.write(values(i).getBytes)
-        i += 1
+        Platform.copyMemory(addr.getBaseObject, addr.getBaseOffset,
+          buffer, Platform.BYTE_ARRAY_OFFSET, length)
+        out.write(buffer, 0, length)
+      }
+
+      val iter = binaryMap.iterator()
+      while (iter.hasNext) {
+        val loc = iter.next()
+        // [key size] [values size] [key bytes] [values bytes]
+        out.writeInt(loc.getKeyLength)
+        out.writeInt(loc.getValueLength)
+        write(loc.getKeyAddress, loc.getKeyLength)
+        write(loc.getValueAddress, loc.getValueLength)
+      }
+
+    } else {
+      assert(hashTable != null)
+      out.writeInt(hashTable.size())
+
+      val iter = hashTable.entrySet().iterator()
+      while (iter.hasNext) {
+        val entry = iter.next()
+        val key = entry.getKey
+        val values = entry.getValue
+
+        // write all the values as single byte array
+        var totalSize = 0L
+        var i = 0
+        while (i < values.length) {
+          totalSize += values(i).getSizeInBytes + 4 + 4
+          i += 1
+        }
+        assert(totalSize < Integer.MAX_VALUE, "values are too big")
+
+        // [key size] [values size] [key bytes] [values bytes]
+        out.writeInt(key.getSizeInBytes)
+        out.writeInt(totalSize.toInt)
+        out.write(key.getBytes)
+        i = 0
+        while (i < values.length) {
+          // [num of fields] [num of bytes] [row bytes]
+          // write the integer in native order, so they can be read by UNSAFE.getInt()
+          if (ByteOrder.nativeOrder() == ByteOrder.BIG_ENDIAN) {
+            out.writeInt(values(i).numFields())
+            out.writeInt(values(i).getSizeInBytes)
+          } else {
+            out.writeInt(Integer.reverseBytes(values(i).numFields()))
+            out.writeInt(Integer.reverseBytes(values(i).getSizeInBytes))
+          }
+          out.write(values(i).getBytes)
+          i += 1
+        }
       }
     }
   }
@@ -299,7 +330,7 @@ private[joins] final class UnsafeHashedRelation(
     binaryMap = new BytesToBytesMap(
       taskMemoryManager,
       shuffleMemoryManager,
-      nKeys * 2, // reduce hash collision
+      (nKeys * 1.5 + 1).toInt, // reduce hash collision
       pageSizeBytes)
 
     var i = 0

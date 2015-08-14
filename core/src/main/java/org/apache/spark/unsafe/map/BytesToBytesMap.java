@@ -17,25 +17,24 @@
 
 package org.apache.spark.unsafe.map;
 
-import java.lang.Override;
-import java.lang.UnsupportedOperationException;
+import javax.annotation.Nullable;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-
-import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.shuffle.ShuffleMemoryManager;
-import org.apache.spark.unsafe.*;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.bitset.BitSet;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
-import org.apache.spark.unsafe.memory.*;
+import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryLocation;
+import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
 /**
  * An append-only hash map where keys and values are contiguous regions of bytes.
@@ -193,6 +192,11 @@ public final class BytesToBytesMap {
         TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES);
     }
     allocate(initialCapacity);
+
+    // Acquire a new page as soon as we construct the map to ensure that we have at least
+    // one page to work with. Otherwise, other operators in the same task may starve this
+    // map (SPARK-9747).
+    acquireNewPage();
   }
 
   public BytesToBytesMap(
@@ -323,6 +327,20 @@ public final class BytesToBytesMap {
       Object keyBaseObject,
       long keyBaseOffset,
       int keyRowLengthBytes) {
+    safeLookup(keyBaseObject, keyBaseOffset, keyRowLengthBytes, loc);
+    return loc;
+  }
+
+  /**
+   * Looks up a key, and saves the result in provided `loc`.
+   *
+   * This is a thread-safe version of `lookup`, could be used by multiple threads.
+   */
+  public void safeLookup(
+      Object keyBaseObject,
+      long keyBaseOffset,
+      int keyRowLengthBytes,
+      Location loc) {
     assert(bitset != null);
     assert(longArray != null);
 
@@ -338,7 +356,8 @@ public final class BytesToBytesMap {
       }
       if (!bitset.isSet(pos)) {
         // This is a new key.
-        return loc.with(pos, hashcode, false);
+        loc.with(pos, hashcode, false);
+        return;
       } else {
         long stored = longArray.get(pos * 2 + 1);
         if ((int) (stored) == hashcode) {
@@ -356,7 +375,7 @@ public final class BytesToBytesMap {
               keyRowLengthBytes
             );
             if (areEqual) {
-              return loc;
+              return;
             } else {
               if (enablePerfMetrics) {
                 numHashCollisions++;
@@ -574,16 +593,9 @@ public final class BytesToBytesMap {
           final long lengthOffsetInPage = currentDataPage.getBaseOffset() + pageCursor;
           Platform.putInt(pageBaseObject, lengthOffsetInPage, END_OF_PAGE_MARKER);
         }
-        final long memoryGranted = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
-        if (memoryGranted != pageSizeBytes) {
-          shuffleMemoryManager.release(memoryGranted);
-          logger.debug("Failed to acquire {} bytes of memory", pageSizeBytes);
+        if (!acquireNewPage()) {
           return false;
         }
-        MemoryBlock newPage = taskMemoryManager.allocatePage(pageSizeBytes);
-        dataPages.add(newPage);
-        pageCursor = 0;
-        currentDataPage = newPage;
         dataPage = currentDataPage;
         dataPageBaseObject = currentDataPage.getBaseObject();
         dataPageInsertOffset = currentDataPage.getBaseOffset();
@@ -640,6 +652,24 @@ public final class BytesToBytesMap {
       }
       return true;
     }
+  }
+
+  /**
+   * Acquire a new page from the {@link ShuffleMemoryManager}.
+   * @return whether there is enough space to allocate the new page.
+   */
+  private boolean acquireNewPage() {
+    final long memoryGranted = shuffleMemoryManager.tryToAcquire(pageSizeBytes);
+    if (memoryGranted != pageSizeBytes) {
+      shuffleMemoryManager.release(memoryGranted);
+      logger.debug("Failed to acquire {} bytes of memory", pageSizeBytes);
+      return false;
+    }
+    MemoryBlock newPage = taskMemoryManager.allocatePage(pageSizeBytes);
+    dataPages.add(newPage);
+    pageCursor = 0;
+    currentDataPage = newPage;
+    return true;
   }
 
   /**
@@ -748,7 +778,7 @@ public final class BytesToBytesMap {
   }
 
   @VisibleForTesting
-  int getNumDataPages() {
+  public int getNumDataPages() {
     return dataPages.size();
   }
 

@@ -182,7 +182,7 @@ class DataFrameReader(object):
 
     @since(1.4)
     def jdbc(self, url, table, column=None, lowerBound=None, upperBound=None, numPartitions=None,
-             predicates=None, properties={}):
+             predicates=None, properties=None):
         """
         Construct a :class:`DataFrame` representing the database table accessible
         via JDBC URL `url` named `table` and connection `properties`.
@@ -208,6 +208,8 @@ class DataFrameReader(object):
                            should be included.
         :return: a DataFrame
         """
+        if properties is None:
+            properties = dict()
         jprop = JavaClass("java.util.Properties", self._sqlContext._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
@@ -427,7 +429,7 @@ class DataFrameWriter(object):
         self._jwrite.orc(path)
 
     @since(1.4)
-    def jdbc(self, url, table, mode=None, properties={}):
+    def jdbc(self, url, table, mode=None, properties=None):
         """Saves the content of the :class:`DataFrame` to a external database table via JDBC.
 
         .. note:: Don't create too many partitions in parallel on a large cluster;\
@@ -445,6 +447,8 @@ class DataFrameWriter(object):
                            arbitrary string tag/value. Normally at least a
                            "user" and "password" property should be included.
         """
+        if properties is None:
+            properties = dict()
         jprop = JavaClass("java.util.Properties", self._sqlContext._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])

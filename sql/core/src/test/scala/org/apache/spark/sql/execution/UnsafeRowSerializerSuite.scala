@@ -17,13 +17,25 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.{DataOutputStream, ByteArrayInputStream, ByteArrayOutputStream}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.types._
+
+
+/**
+ * used to test close InputStream in UnsafeRowSerializer
+ */
+class ClosableByteArrayInputStream(buf: Array[Byte]) extends ByteArrayInputStream(buf) {
+  var closed: Boolean = false
+  override def close(): Unit = {
+    closed = true
+    super.close()
+  }
+}
 
 class UnsafeRowSerializerSuite extends SparkFunSuite {
 
@@ -52,8 +64,8 @@ class UnsafeRowSerializerSuite extends SparkFunSuite {
       serializerStream.writeValue(unsafeRow)
     }
     serializerStream.close()
-    val deserializerIter = serializer.deserializeStream(
-      new ByteArrayInputStream(baos.toByteArray)).asKeyValueIterator
+    val input = new ClosableByteArrayInputStream(baos.toByteArray)
+    val deserializerIter = serializer.deserializeStream(input).asKeyValueIterator
     for (expectedRow <- unsafeRows) {
       val actualRow = deserializerIter.next().asInstanceOf[(Integer, UnsafeRow)]._2
       assert(expectedRow.getSizeInBytes === actualRow.getSizeInBytes)
@@ -61,5 +73,18 @@ class UnsafeRowSerializerSuite extends SparkFunSuite {
       assert(expectedRow.getInt(1) === actualRow.getInt(1))
     }
     assert(!deserializerIter.hasNext)
+    assert(input.closed)
+  }
+
+  test("close empty input stream") {
+    val baos = new ByteArrayOutputStream()
+    val dout = new DataOutputStream(baos)
+    dout.writeInt(-1)  // EOF
+    dout.flush()
+    val input = new ClosableByteArrayInputStream(baos.toByteArray)
+    val serializer = new UnsafeRowSerializer(numFields = 2).newInstance()
+    val deserializerIter = serializer.deserializeStream(input).asKeyValueIterator
+    assert(!deserializerIter.hasNext)
+    assert(input.closed)
   }
 }

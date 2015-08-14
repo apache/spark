@@ -543,7 +543,7 @@ public abstract class AbstractBytesToBytesMapSuite {
           Platform.LONG_ARRAY_OFFSET,
           8);
         newPeakMemory = map.getPeakMemoryUsedBytes();
-        if (i % numRecordsPerPage == 0) {
+        if (i % numRecordsPerPage == 0 && i > 0) {
           // We allocated a new page for this record, so peak memory should change
           assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
         } else {
@@ -561,4 +561,13 @@ public abstract class AbstractBytesToBytesMapSuite {
       map.free();
     }
   }
+
+  @Test
+  public void testAcquirePageInConstructor() {
+    final BytesToBytesMap map = new BytesToBytesMap(
+      taskMemoryManager, shuffleMemoryManager, 1, PAGE_SIZE_BYTES);
+    assertEquals(1, map.getNumDataPages());
+    map.free();
+  }
+
 }

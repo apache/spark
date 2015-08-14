@@ -566,8 +566,7 @@ class DataFrame(object):
 
         if on is None or len(on) == 0:
             jdf = self._jdf.join(other._jdf)
-
-        if isinstance(on[0], basestring):
+        elif isinstance(on[0], basestring):
             jdf = self._jdf.join(other._jdf, self._jseq(on))
         else:
             assert isinstance(on[0], Column), "on should be Column or list of Column"
@@ -723,8 +722,6 @@ class DataFrame(object):
         [Row(age=5, name=u'Bob')]
         """
         if isinstance(item, basestring):
-            if item not in self.columns:
-                raise IndexError("no such column: %s" % item)
             jc = self._jdf.apply(item)
             return Column(jc)
         elif isinstance(item, Column):

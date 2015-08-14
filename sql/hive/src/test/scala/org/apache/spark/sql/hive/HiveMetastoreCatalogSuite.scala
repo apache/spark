@@ -19,14 +19,14 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.apache.spark.sql.hive.client.{ExternalTable, HiveColumn, ManagedTable}
+import org.apache.spark.sql.hive.client.{ExternalTable, ManagedTable}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.sources.DataSourceTest
 import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
+import org.apache.spark.sql.{Row, SaveMode, SQLContext}
 import org.apache.spark.{Logging, SparkFunSuite}
 
 
@@ -53,9 +53,13 @@ class HiveMetastoreCatalogSuite extends SparkFunSuite with Logging {
 }
 
 class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with SQLTestUtils {
-  override val sqlContext = TestHive
+  override def _sqlContext: SQLContext = TestHive
+  import testImplicits._
 
-  private val testDF = (1 to 2).map(i => (i, s"val_$i")).toDF("d1", "d2").coalesce(1)
+  private val testDF = range(1, 3).select(
+    ('id + 0.1) cast DecimalType(10, 3) as 'd1,
+    'id cast StringType as 'd2
+  ).coalesce(1)
 
   Seq(
     "parquet" -> (
@@ -88,10 +92,10 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with SQLTes
 
         val columns = hiveTable.schema
         assert(columns.map(_.name) === Seq("d1", "d2"))
-        assert(columns.map(_.hiveType) === Seq("int", "string"))
+        assert(columns.map(_.hiveType) === Seq("decimal(10,3)", "string"))
 
         checkAnswer(table("t"), testDF)
-        assert(runSqlHive("SELECT * FROM t") === Seq("1\tval_1", "2\tval_2"))
+        assert(runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
       }
     }
 
@@ -117,10 +121,10 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with SQLTes
 
           val columns = hiveTable.schema
           assert(columns.map(_.name) === Seq("d1", "d2"))
-          assert(columns.map(_.hiveType) === Seq("int", "string"))
+          assert(columns.map(_.hiveType) === Seq("decimal(10,3)", "string"))
 
           checkAnswer(table("t"), testDF)
-          assert(runSqlHive("SELECT * FROM t") === Seq("1\tval_1", "2\tval_2"))
+          assert(runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
         }
       }
     }
