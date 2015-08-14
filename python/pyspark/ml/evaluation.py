@@ -46,7 +46,7 @@ class Evaluator(Params):
         """
         raise NotImplementedError()
 
-    def evaluate(self, dataset, params={}):
+    def evaluate(self, dataset, params=None):
         """
         Evaluates the output with optional parameters.
 
@@ -56,6 +56,8 @@ class Evaluator(Params):
                        params
         :return: metric
         """
+        if params is None:
+            params = dict()
         if isinstance(params, dict):
             if params:
                 return self.copy(params)._evaluate(dataset)
