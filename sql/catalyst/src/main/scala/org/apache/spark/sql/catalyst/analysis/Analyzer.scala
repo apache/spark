@@ -931,6 +931,7 @@ class Analyzer(
    */
   object PullOutNondeterministic extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case p if !p.resolved => p // Skip unresolved nodes.
       case p: Project => p
       case f: Filter => f
 

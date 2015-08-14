@@ -1618,12 +1618,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-9511: error with table starting with number") {
-    val df = sqlContext.sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
-      .toDF("num", "str")
-    df.registerTempTable("1one")
+    withTempTable("1one") {
+      sqlContext.sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
+        .toDF("num", "str")
+        .registerTempTable("1one")
+      checkAnswer(sql("select count(num) from 1one"), Row(10))
+    }
+  }
 
-    checkAnswer(sql("select count(num) from 1one"), Row(10))
-
-    sqlContext.dropTempTable("1one")
+  test("SPARK-9955: correct error message for aggregate") {
+    val e = intercept[AnalysisException] {
+      sql("select key, max(value) from testData where bad_column > 1 group by key")
+    }
+    assert(e.message.contains("cannot resolve 'bad_column'"))
   }
 }
