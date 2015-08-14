@@ -23,6 +23,8 @@ import scala.sys.process.BasicIO
 
 object ProcessTestUtils {
   class ProcessOutputCapturer(stream: InputStream, capture: String => Unit) extends Thread {
+    this.setDaemon(true)
+
     override def run(): Unit = {
       try {
         BasicIO.processFully(capture)(stream)
