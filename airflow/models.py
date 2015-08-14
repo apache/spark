@@ -1017,12 +1017,11 @@ class TaskInstance(Base):
             to_tasks=None,
             to_dags=None,
             visible_on=None):
+        if to_dags is None:
+            to_dags = self.dag_id
 
         for to_task_i in as_tuple(to_tasks):
             for to_dag_i in as_tuple(to_dags):
-
-                if to_dag_i is None:
-                    to_dag_i = self.dag_id
 
                 XCom.set(
                     key=key,
