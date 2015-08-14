@@ -26,7 +26,7 @@ import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.sources.DataSourceTest
 import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
-import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.{Row, SaveMode, SQLContext}
 import org.apache.spark.{Logging, SparkFunSuite}
 
 
@@ -53,7 +53,8 @@ class HiveMetastoreCatalogSuite extends SparkFunSuite with Logging {
 }
 
 class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with SQLTestUtils {
-  override val sqlContext = TestHive
+  override def _sqlContext: SQLContext = TestHive
+  import testImplicits._
 
   private val testDF = range(1, 3).select(
     ('id + 0.1) cast DecimalType(10, 3) as 'd1,
