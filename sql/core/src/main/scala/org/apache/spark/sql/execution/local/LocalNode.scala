@@ -17,14 +17,11 @@
 
 package org.apache.spark.sql.execution.local
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.StructType
-
 
 /**
  * A local physical operator, in the form of an iterator.
@@ -65,7 +62,7 @@ abstract class LocalNode extends TreeNode[LocalNode] {
    */
   def collect(): Seq[Row] = {
     val converter = CatalystTypeConverters.createToScalaConverter(StructType.fromAttributes(output))
-    val result = new ArrayBuffer[Row]
+    val result = new scala.collection.mutable.ArrayBuffer[Row]
     open()
     while (next()) {
       result += converter.apply(get()).asInstanceOf[Row]
