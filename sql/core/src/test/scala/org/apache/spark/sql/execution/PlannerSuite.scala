@@ -171,7 +171,7 @@ class PlannerSuite extends SparkFunSuite with SharedSQLContext {
     }
 
     {
-      // We need to make sure TakeOrderedAndProject's is correct when we push a projec
+      // We need to make sure TakeOrderedAndProject's output is correct when we push a project
       // into it.
       val query =
         testData.select('key, 'value).sort('key).select('value, 'key).limit(2).logicalPlan
