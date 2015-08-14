@@ -23,7 +23,7 @@ import java.util.Properties
 
 import org.scalatest.BeforeAndAfterAll
 
-import com.spotify.docker.client.DockerClient
+import com.spotify.docker.client.{ImageNotFoundException, DockerClient}
 import com.spotify.docker.client.messages.ContainerConfig
 
 import org.apache.spark.SparkFunSuite
@@ -31,20 +31,37 @@ import org.apache.spark.sql.test._
 
 class MySQLDatabase {
   val docker: DockerClient = DockerClientFactory.get()
+  var containerId: String = null
 
-  val containerId = {
-    docker.pull("mysql")
-    val config = ContainerConfig.builder().image("mysql")
-      .env("MYSQL_ROOT_PASSWORD=rootpass")
-      .build()
-    val id = docker.createContainer(config).id
-    docker.startContainer(id)
-    id
+  start()
+
+  def start(): Unit = {
+    while (true) {
+      try {
+        val config = ContainerConfig.builder()
+          .image("mysql").env("MYSQL_ROOT_PASSWORD=rootpass")
+          .build()
+        containerId = docker.createContainer(config).id
+        docker.startContainer(containerId)
+        return
+      } catch {
+        case e: ImageNotFoundException => retry(3)(docker.pull("mysql"))
+      }
+    }
   }
 
-  val ip = docker.inspectContainer(containerId).networkSettings.ipAddress
+  private def retry[T](n: Int)(fn: => T): T = {
+    try {
+      fn
+    } catch {
+      case e if n > 1 =>
+        retry(n - 1)(fn)
+    }
+  }
 
-  def close() {
+  lazy val ip = docker.inspectContainer(containerId).networkSettings.ipAddress
+
+  def close(): Unit = {
     docker.killContainer(containerId)
     docker.removeContainer(containerId)
     DockerClientFactory.close(docker)
@@ -52,6 +69,7 @@ class MySQLDatabase {
 }
 
 class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
+  lazy val db: MySQLDatabase = new MySQLDatabase()
   var ip: String = null
 
   def url(ip: String): String = url(ip, "mysql")
@@ -107,8 +125,6 @@ class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
-  var db: MySQLDatabase = null
-
   override def beforeAll() {
     // If you load the MySQL driver here, DriverManager will deadlock.  The
     // MySQL driver gets loaded when its jar gets loaded, unlike the Postgres
@@ -116,8 +132,6 @@ class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
     // scalastyle:off classforname
     // Class.forName("com.mysql.jdbc.Driver")
     // scalastyle:on classforname
-
-    db = new MySQLDatabase()
     waitForDatabase(db.ip, 60000)
     setupDatabase(db.ip)
     ip = db.ip
@@ -175,11 +189,11 @@ class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(types(2).equals("class java.sql.Timestamp"))
     assert(types(3).equals("class java.sql.Timestamp"))
     assert(types(4).equals("class java.sql.Date"))
-    assert(rows(0).getAs[Date](0).equals(new Date(91, 10, 9)))
-    assert(rows(0).getAs[Timestamp](1).equals(new Timestamp(70, 0, 1, 13, 31, 24, 0)))
-    assert(rows(0).getAs[Timestamp](2).equals(new Timestamp(96, 0, 1, 1, 23, 45, 0)))
-    assert(rows(0).getAs[Timestamp](3).equals(new Timestamp(109, 1, 13, 23, 31, 30, 0)))
-    assert(rows(0).getAs[Date](4).equals(new Date(101, 0, 1)))
+    assert(rows(0).getAs[Date](0).equals(Date.valueOf("1991-11-09")))
+    assert(rows(0).getAs[Timestamp](1).equals(Timestamp.valueOf("1970-01-01 13:31:24")))
+    assert(rows(0).getAs[Timestamp](2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
+    assert(rows(0).getAs[Timestamp](3).equals(Timestamp.valueOf("2009-02-13 23:31:30")))
+    assert(rows(0).getAs[Date](4).equals(Date.valueOf("2001-01-01")))
   }
 
   test("String types") {

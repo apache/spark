@@ -22,7 +22,7 @@ import java.util.Properties
 
 import org.scalatest.BeforeAndAfterAll
 
-import com.spotify.docker.client.DockerClient
+import com.spotify.docker.client.{ImageNotFoundException, DockerClient}
 import com.spotify.docker.client.messages.ContainerConfig
 
 import org.apache.spark.SparkFunSuite
@@ -30,20 +30,37 @@ import org.apache.spark.sql.test._
 
 class PostgresDatabase {
   val docker: DockerClient = DockerClientFactory.get()
+  var containerId: String = null
 
-  val containerId = {
-    docker.pull("postgres")
-    val config = ContainerConfig.builder().image("postgres")
-      .env("POSTGRES_PASSWORD=rootpass")
-      .build()
-    val id = docker.createContainer(config).id
-    docker.startContainer(id)
-    id
+  start()
+
+  def start(): Unit = {
+    while (true) {
+      try {
+        val config = ContainerConfig.builder()
+          .image("postgres").env("POSTGRES_PASSWORD=rootpass")
+          .build()
+        containerId = docker.createContainer(config).id
+        docker.startContainer(containerId)
+        return
+      } catch {
+        case e: ImageNotFoundException => retry(3)(docker.pull("postgres"))
+      }
+    }
   }
 
-  val ip = docker.inspectContainer(containerId).networkSettings.ipAddress
+  private def retry[T](n: Int)(fn: => T): T = {
+    try {
+      fn
+    } catch {
+      case e if n > 1 =>
+        retry(n - 1)(fn)
+    }
+  }
 
-  def close() {
+  lazy val ip = docker.inspectContainer(containerId).networkSettings.ipAddress
+
+  def close(): Unit = {
     docker.killContainer(containerId)
     docker.removeContainer(containerId)
     DockerClientFactory.close(docker)
