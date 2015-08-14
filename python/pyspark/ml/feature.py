@@ -26,12 +26,11 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer
 from pyspark.mllib.common import inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 
-__all__ = ['Binarizer', 'Bucketizer', 'HashingTF', 'IDF', 'IDFModel', 'NGram', 'Normalizer',
-           'OneHotEncoder', 'PolynomialExpansion', 'RegexTokenizer', 'StandardScaler',
+__all__ = ['Binarizer', 'Bucketizer', 'HashingTF', 'IDF', 'IDFModel', 'IndexToString', 'NGram',
+           'Normalizer', 'OneHotEncoder', 'PolynomialExpansion', 'RegexTokenizer', 'StandardScaler',
            'StandardScalerModel', 'StringIndexer', 'StringIndexerModel', 'Tokenizer',
            'VectorAssembler', 'VectorIndexer', 'Word2Vec', 'Word2VecModel', 'PCA',
            'PCAModel', 'RFormula', 'RFormulaModel']
-
 
 @inherit_doc
 class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
@@ -731,7 +730,7 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)]
-    >>> inverter = model.invert("indexed", "label2")
+    >>> inverter = IndexToString("indexed", "label2", model.labels())
     >>> itd = inverter.transform(td)
     >>> sorted(set([(i[0], str(i[1])) for i in itd.select(itd.id, itd.label2).collect()]),
     ...     key=lambda x: x[0])
@@ -757,6 +756,10 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @property
+    def labels(self):
+        return self._java_obj.labels
+
     def _create_model(self, java_model):
         return StringIndexerModel(java_model)
 
@@ -766,21 +769,10 @@ class StringIndexerModel(JavaModel):
     Model fitted by StringIndexer.
     """
 
-    def invert(self, inputCol, outputCol):
-        """
-        Return a model to perform the inverse transformation.
-        Note: By default we keep the original columns during this transformation, so the inverse
-        should only be used on new columns such as predicted labels.
-        """
-        labels = self._java_obj.getLabels()
-        return StringIndexerInverse(inputCol=inputCol, outputCol=outputCol,
-                                    labels=labels)
-
-
-class StringIndexerInverse(JavaTransformer, HasInputCol, HasOutputCol):
+class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     """
-    Transform a provided column back to the original input types using the metadata on
-    the input column.
+    Convert provided indexes back to strings using either the metadata on the input column
+    or user provided labels.
     Note: By default we keep the original columns during StringIndexerModel's transformation,
     so the inverse should only be used on new columns such as predicted labels.
     """
@@ -796,7 +788,7 @@ class StringIndexerInverse(JavaTransformer, HasInputCol, HasOutputCol):
         Initialize this instace of the StringIndexerInverse using the provided java_obj.
         """
         super(StringIndexerInverse, self).__init__()
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexerInverse",
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IndexToString",
                                             self.uid)
         self.labels = Param(self, "labels",
                             "Optional labels to be provided by the user, if not supplied column " +
