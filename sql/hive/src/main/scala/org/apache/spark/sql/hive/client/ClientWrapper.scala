@@ -287,9 +287,10 @@ private[hive] class ClientWrapper(
 
   override def getDatabaseOption(name: String): Option[HiveDatabase] = withHiveState {
     Option(client.getDatabase(name)).map { d =>
+      val uri: String = conf.get("hive.metastore.warehouse.dir", d.getLocationUri)
       HiveDatabase(
         name = d.getName,
-        location = d.getLocationUri)
+        location = uri)
     }
   }
 
