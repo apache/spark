@@ -100,6 +100,21 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(features ~== expected absTol 1e-14)
     }
   }
+
+  test("CountVectorizer throws exception when vocab is empty") {
+    intercept[IllegalArgumentException] {
+      val df = sqlContext.createDataFrame(Seq(
+        (0, "a a b b c c".split("\\s+").toSeq),
+        (1, "aa bb cc".split("\\s+").toSeq))
+      ).toDF("id", "words")
+      val cvModel = new CountVectorizer()
+        .setInputCol("words")
+        .setOutputCol("features")
+        .setVocabSize(3)  // limit vocab size to 3
+        .setMinCount(3)
+        .fit(df)
+    }
+  }
 }
 
 

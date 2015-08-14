@@ -59,7 +59,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
 
 /**
  * :: Experimental ::
- * Extracts a vocabulary from document collections and generates a CountVectorizerModel.
+ * Extracts a vocabulary from document collections and generates a [[CountVectorizerModel]].
  */
 class CountVectorizer(override val uid: String)
   extends Estimator[CountVectorizerModel] with CountVectorizerParams {
@@ -95,21 +95,19 @@ class CountVectorizer(override val uid: String)
   override def fit(dataset: DataFrame): CountVectorizerModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map(_.getAs[Seq[String]](0))
-    val min_count = $(minCount)
-    val vocab_size = $(vocabSize)
     val wordCounts: RDD[(String, Long)] = input
       .flatMap { case (tokens) => tokens.map(_ -> 1L) }
       .reduceByKey(_ + _)
-      .filter(_._2 >= min_count)
+      .filter(_._2 >= $(minCount))
     wordCounts.cache()
     val fullVocabSize = wordCounts.count()
     val vocab: Array[String] = {
-      val tmpSortedWC: Array[(String, Long)] = if (fullVocabSize <= vocab_size) {
+      val tmpSortedWC: Array[(String, Long)] = if (fullVocabSize <= $(vocabSize)) {
         // Use all terms
         wordCounts.collect().sortBy(-_._2)
       } else {
         // Sort terms to select vocab
-        wordCounts.sortBy(_._2, ascending = false).take(vocab_size)
+        wordCounts.sortBy(_._2, ascending = false).take($(vocabSize))
       }
       tmpSortedWC.map(_._1)
     }
