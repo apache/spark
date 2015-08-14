@@ -97,7 +97,7 @@ private[spark] object CoarseGrainedClusterMessages {
   // Check if an executor was force-killed but for a normal reason
   // This could be the case if e.g. the cluster manager supports killing an executor to
   // move it elsewhere or to kill an executor in order to free resources
-  case class GetExecutorLossReason(executorId: String)
+  case class GetExecutorLossReason(executorId: String) extends CoarseGrainedClusterMessage
 
   case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage
 
