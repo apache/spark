@@ -122,7 +122,7 @@ if __name__ == "__main__":
         ("seed", "random seed", "hash(type(self).__name__)"),
         ("tol", "the convergence tolerance for iterative algorithms", None),
         ("stepSize", "Step size to be used for each iteration of optimization.", None),
-        ("weightsCol", "weight column name. If this is not set or empty, we treat " +
+        ("weightCol", "weight column name. If this is not set or empty, we treat " +
          "all instance weights as 1.0.", None)]
     code = []
     for name, doc, defaultValueStr in shared:
