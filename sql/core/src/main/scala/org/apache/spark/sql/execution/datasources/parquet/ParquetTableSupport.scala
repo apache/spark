@@ -52,7 +52,6 @@ private[parquet] class RowWriteSupport extends WriteSupport[InternalRow] with Lo
     }
 
     log.debug(s"write support initialized for requested schema $attributes")
-    ParquetRelation.enableLogForwarding()
     new WriteSupport.WriteContext(ParquetTypesConverter.convertFromAttributes(attributes), metadata)
   }
 

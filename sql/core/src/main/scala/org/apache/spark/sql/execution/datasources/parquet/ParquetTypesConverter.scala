@@ -104,7 +104,6 @@ private[parquet] object ParquetTypesConverter extends Logging {
       extraMetadata,
       "Spark")
 
-    ParquetRelation.enableLogForwarding()
     ParquetFileWriter.writeMetadataFile(
       conf,
       path,
@@ -139,8 +138,6 @@ private[parquet] object ParquetTypesConverter extends Logging {
           val name = status.getPath.getName
           (name(0) == '.' || name(0) == '_') && name != ParquetFileWriter.PARQUET_METADATA_FILE
         }
-
-    ParquetRelation.enableLogForwarding()
 
     // NOTE (lian): Parquet "_metadata" file can be very slow if the file consists of lots of row
     // groups. Since Parquet schema is replicated among all row groups, we only need to touch a
