@@ -17,6 +17,10 @@
 
 package org.apache.spark.scheduler
 
+import sun.misc.{Signal, SignalHandler}
+
+import org.apache.spark.Logging
+
 /**
  * An object that waits for a DAGScheduler job to complete. As tasks finish, it passes their
  * results to the given handler function.
@@ -27,6 +31,26 @@ private[spark] class JobWaiter[T](
     totalTasks: Int,
     resultHandler: (Int, T) => Unit)
   extends JobListener {
+
+  private val sigint: Signal = new Signal("INT")
+  @volatile
+  private var _originalHandler: SignalHandler = _
+
+  def attachSigintHandler(): SignalHandler = {
+    Signal.handle(sigint, new SignalHandler with Logging {
+      override def handle(signal: Signal): Unit = {
+        logInfo("Cancelling running job.. This might take some time, so be patient. " +
+          "Press Ctrl-C again to kill JVM.")
+        // Detach sigint handler so that pressing ctrl-c again will interrupt the jvm.
+        detachSigintHandler(_originalHandler)
+        cancel()
+      }
+    })
+  }
+
+  def detachSigintHandler(originalHandler: SignalHandler): Unit = {
+    Signal.handle(sigint, originalHandler)
+  }
 
   private var finishedTasks = 0
 
@@ -69,9 +93,11 @@ private[spark] class JobWaiter[T](
   }
 
   def awaitResult(): JobResult = synchronized {
+    _originalHandler = attachSigintHandler()
     while (!_jobFinished) {
       this.wait()
     }
+    detachSigintHandler(_originalHandler)
     return jobResult
   }
 }
