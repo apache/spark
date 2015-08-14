@@ -37,8 +37,9 @@ import static org.apache.spark.unsafe.Platform.*;
  * <p>
  * Note: This is not designed for general use cases, should not be used outside SQL.
  */
-public final class UTF8String implements Comparable<UTF8String>, Serializable {
+public final class UTF8String implements Comparable<UTF8String>, Externalizable {
 
+  // These are only updated by readExternal()
   @Nonnull
   private Object base;
   private long offset;
@@ -124,6 +125,11 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     this.base = base;
     this.offset = offset;
     this.numBytes = numBytes;
+  }
+
+  // for serialization
+  public UTF8String() {
+    this(null, 0, 0);
   }
 
   /**
@@ -978,15 +984,17 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     return UTF8String.fromBytes(sx);
   }
 
-  private static final long serialVersionUID = 42L;
-
-  private void writeObject(ObjectOutputStream out) throws IOException {
+  public void writeExternal(ObjectOutput out) throws IOException {
     byte[] bytes = getBytes();
     out.writeInt(bytes.length);
     out.write(bytes);
   }
 
-  private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+  static {
+
+  }
+
+  public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
     offset = BYTE_ARRAY_OFFSET;
     numBytes = in.readInt();
     base = new byte[numBytes];
