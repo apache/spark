@@ -144,6 +144,78 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     Currently implemented using parallelized pool adjacent violators algorithm.
     Only univariate (single feature) algorithm supported.
     """
+    # a placeholder to make it appear in the generated doc
+    isotonic = \
+        Param(Params._dummy(), "isotonic",
+              "whether the output sequence should be isotonic/increasing (true) or" +
+              "antitonic/decreasing (false)")
+    featureIndex = \
+        Param(Params._dummy(), "featureIndex",
+              "The index of the feature if featuresCol is a vector column, no effect otherwise. " +
+              "(default 0)")
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 weightCol=None, istonic=false, featureIndex=0):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 weightCol=None, istonic=false, featureIndex=0):
+        """
+        super(IsotonicRegression, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.IsotonicRegression", self.uid)
+        self.isotonic = \
+            Param(self._dummy(), "isotonic",
+                  "whether the output sequence should be isotonic/increasing (true) or" +
+                  "antitonic/decreasing (false)")
+        self.featureIndex = \
+            Param(self, "featureIndex",
+                  "The index of the feature if featuresCol is a vector column, no effect "+
+                  "otherwise. (default 0)")
+        self._setDefault(isotonic=false, featureIndex=0)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  weightCol=None, istonic=false, featureIndex=0):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 weightCol=None, istonic=false, featureIndex=0):
+        Set the params for IsotonicRegression
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return LinearRegressionModel(java_model)
+
+    def setIsotonicParam(self, value):
+        """
+        Sets the value of :py:attr:`isotonicParam`.
+        """
+        self._paramMap[self.isotonicParam] = value
+        return self
+
+    def getIsotonicParam(self):
+        """
+        Gets the value of isotonicParam or its default value.
+        """
+        return self.getOrDefault(self.isotonicParam)
+
+    def setFeautreIndexParam(self, value):
+        """
+        Sets the value of :py:attr:`featureIndexParam`.
+        """
+        self._paramMap[self.featureIndexParam] = value
+        return self
+
+    def getFeatureIndexParam(self):
+        """
+        Gets the value of elasticNetParam or its default value.
+        """
+        return self.getOrDefault(self.featureIndexParam)
+
+
 
 class TreeRegressorParams(object):
     """
