@@ -72,7 +72,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("CountVectorizer vocabSize and minCount") {
+  test("CountVectorizer vocabSize and minTokenCount") {
     val df = sqlContext.createDataFrame(Seq(
       (0, "a a a a a".split("\\s+").toSeq, Vectors.sparse(3, Seq((0, 5.0)))),
       (1, "b b b b".split("\\s+").toSeq, Vectors.sparse(3, Seq((1, 4.0)))),
@@ -89,7 +89,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val cvModel2 = new CountVectorizer()
       .setInputCol("words")
       .setOutputCol("features")
-      .setMinCount(3)  // ignore terms with count less than 3
+      .setMinTokenCount(3)  // ignore terms with count less than 3
       .fit(df)
     assert(cvModel2.vocabulary.deep == Array("a", "b", "c").deep)
 
@@ -111,10 +111,27 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
         .setInputCol("words")
         .setOutputCol("features")
         .setVocabSize(3)  // limit vocab size to 3
-        .setMinCount(3)
+        .setMinTokenCount(3)
         .fit(df)
     }
   }
+
+  test("CountVectorizerModel with minTermFreq") {
+    val df = sqlContext.createDataFrame(Seq(
+      (0, "a a a b b c c c d ".split(" ").toSeq, Vectors.sparse(4, Seq((0, 3.0), (2, 3.0)))),
+      (1, "c c c c c c".split(" ").toSeq, Vectors.sparse(4, Seq((2, 6.0)))),
+      (2, "a".split(" ").toSeq, Vectors.sparse(4, Seq())),
+      (3, "e e e e e".split(" ").toSeq, Vectors.sparse(4, Seq())))
+    ).toDF("id", "words", "expected")
+    val cv = new CountVectorizerModel(Array("a", "b", "c", "d"))
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMinTermFreq(3)
+    val output = cv.transform(df).collect()
+    output.foreach { p =>
+      val features = p.getAs[Vector]("features")
+      val expected = p.getAs[Vector]("expected")
+      assert(features ~== expected absTol 1e-14)
+    }
+  }
 }
-
-
