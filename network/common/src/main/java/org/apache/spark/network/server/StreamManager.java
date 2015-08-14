@@ -20,6 +20,7 @@ package org.apache.spark.network.server;
 import io.netty.channel.Channel;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.client.TransportClient;
 
 /**
  * The StreamManager is used to fetch individual chunks from a stream. This is used in
@@ -60,4 +61,12 @@ public abstract class StreamManager {
    * to read from the associated streams again, so any state can be cleaned up.
    */
   public void connectionTerminated(Channel channel) { }
+
+  /**
+   * Verify that the client is authorized to read from the given stream.
+   *
+   * @throws SecurityException If client is not authorized.
+   */
+  public void checkAuthorization(TransportClient client, long streamId) { }
+
 }

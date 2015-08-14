@@ -70,6 +70,7 @@ public class TransportClient implements Closeable {
 
   private final Channel channel;
   private final TransportResponseHandler handler;
+  private String clientId;
 
   public TransportClient(Channel channel, TransportResponseHandler handler) {
     this.channel = Preconditions.checkNotNull(channel);
@@ -82,6 +83,24 @@ public class TransportClient implements Closeable {
 
   public SocketAddress getSocketAddress() {
     return channel.remoteAddress();
+  }
+
+  /**
+   * Returns the ID used by the client to authenticate itself when authentication is enabled.
+   *
+   * @return The client ID.
+   */
+  public String getClientId() {
+    return clientId;
+  }
+
+  /**
+   * Sets the authenticated client ID. This is meant to be used by the authentication layer;
+   * trying to set a different client ID after it's been set will result in an exception.
+   */
+  public void setClientId(String id) {
+    Preconditions.checkState(clientId == null, "Client ID has already been set.");
+    this.clientId = id;
   }
 
   /**
@@ -207,6 +226,7 @@ public class TransportClient implements Closeable {
   public String toString() {
     return Objects.toStringHelper(this)
       .add("remoteAdress", channel.remoteAddress())
+      .add("clientId", clientId)
       .add("isActive", isActive())
       .toString();
   }
