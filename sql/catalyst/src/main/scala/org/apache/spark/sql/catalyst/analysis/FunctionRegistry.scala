@@ -203,6 +203,7 @@ object FunctionRegistry {
     expression[Substring]("substr"),
     expression[Substring]("substring"),
     expression[SubstringIndex]("substring_index"),
+    expression[StringTranslate]("translate"),
     expression[StringTrim]("trim"),
     expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),
@@ -240,6 +241,7 @@ object FunctionRegistry {
     // collection functions
     expression[Size]("size"),
     expression[SortArray]("sort_array"),
+    expression[ArrayContains]("array_contains"),
 
     // misc functions
     expression[Crc32]("crc32"),

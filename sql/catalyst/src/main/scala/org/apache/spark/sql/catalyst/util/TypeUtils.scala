@@ -54,10 +54,10 @@ object TypeUtils {
   def getNumeric(t: DataType): Numeric[Any] =
     t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
 
-  def getOrdering(t: DataType): Ordering[Any] = {
+  def getInterpretedOrdering(t: DataType): Ordering[Any] = {
     t match {
       case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-      case s: StructType => s.ordering.asInstanceOf[Ordering[Any]]
+      case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }
   }
 

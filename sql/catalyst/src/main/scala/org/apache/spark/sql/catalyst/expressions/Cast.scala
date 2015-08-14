@@ -26,8 +26,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-import scala.collection.mutable
-
 
 object Cast {
 
@@ -109,6 +107,8 @@ object Cast {
 case class Cast(child: Expression, dataType: DataType)
   extends UnaryExpression with CodegenFallback {
 
+  override def toString: String = s"cast($child as ${dataType.simpleString})"
+
   override def checkInputDataTypes(): TypeCheckResult = {
     if (Cast.canCast(child.dataType, dataType)) {
       TypeCheckResult.TypeCheckSuccess
@@ -119,8 +119,6 @@ case class Cast(child: Expression, dataType: DataType)
   }
 
   override def nullable: Boolean = Cast.forceNullable(child.dataType, dataType) || child.nullable
-
-  override def toString: String = s"CAST($child, $dataType)"
 
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
@@ -157,7 +155,7 @@ case class Cast(child: Expression, dataType: DataType)
     case ByteType =>
       buildCast[Byte](_, _ != 0)
     case DecimalType() =>
-      buildCast[Decimal](_, _ != Decimal(0))
+      buildCast[Decimal](_, !_.isZero)
     case DoubleType =>
       buildCast[Double](_, _ != 0)
     case FloatType =>
@@ -311,19 +309,19 @@ case class Cast(child: Expression, dataType: DataType)
         case _: NumberFormatException => null
       })
     case BooleanType =>
-      buildCast[Boolean](_, b => changePrecision(if (b) Decimal(1) else Decimal(0), target))
+      buildCast[Boolean](_, b => changePrecision(if (b) Decimal.ONE else Decimal.ZERO, target))
     case DateType =>
       buildCast[Int](_, d => null) // date can't cast to decimal in Hive
     case TimestampType =>
       // Note that we lose precision here.
       buildCast[Long](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
-    case DecimalType() =>
+    case dt: DecimalType =>
       b => changePrecision(b.asInstanceOf[Decimal].clone(), target)
-    case LongType =>
-      b => changePrecision(Decimal(b.asInstanceOf[Long]), target)
-    case x: NumericType => // All other numeric types can be represented precisely as Doubles
+    case t: IntegralType =>
+      b => changePrecision(Decimal(t.integral.asInstanceOf[Integral[Any]].toLong(b)), target)
+    case x: FractionalType =>
       b => try {
-        changePrecision(Decimal(x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)), target)
+        changePrecision(Decimal(x.fractional.asInstanceOf[Fractional[Any]].toDouble(b)), target)
       } catch {
         case _: NumberFormatException => null
       }
@@ -536,10 +534,7 @@ case class Cast(child: Expression, dataType: DataType)
         (c, evPrim, evNull) =>
           s"""
             try {
-              org.apache.spark.sql.types.Decimal tmpDecimal =
-                new org.apache.spark.sql.types.Decimal().set(
-                  new scala.math.BigDecimal(
-                    new java.math.BigDecimal($c.toString())));
+              Decimal tmpDecimal = Decimal.apply(new java.math.BigDecimal($c.toString()));
               ${changePrecision("tmpDecimal", target, evPrim, evNull)}
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
@@ -548,12 +543,7 @@ case class Cast(child: Expression, dataType: DataType)
       case BooleanType =>
         (c, evPrim, evNull) =>
           s"""
-            org.apache.spark.sql.types.Decimal tmpDecimal = null;
-            if ($c) {
-              tmpDecimal = new org.apache.spark.sql.types.Decimal().set(1);
-            } else {
-              tmpDecimal = new org.apache.spark.sql.types.Decimal().set(0);
-            }
+            Decimal tmpDecimal = $c ? Decimal.apply(1) : Decimal.apply(0);
             ${changePrecision("tmpDecimal", target, evPrim, evNull)}
           """
       case DateType =>
@@ -563,32 +553,28 @@ case class Cast(child: Expression, dataType: DataType)
         // Note that we lose precision here.
         (c, evPrim, evNull) =>
           s"""
-            org.apache.spark.sql.types.Decimal tmpDecimal =
-              new org.apache.spark.sql.types.Decimal().set(
-                scala.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
+            Decimal tmpDecimal = Decimal.apply(
+              scala.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
             ${changePrecision("tmpDecimal", target, evPrim, evNull)}
           """
       case DecimalType() =>
         (c, evPrim, evNull) =>
           s"""
-            org.apache.spark.sql.types.Decimal tmpDecimal = $c.clone();
+            Decimal tmpDecimal = $c.clone();
             ${changePrecision("tmpDecimal", target, evPrim, evNull)}
           """
-      case LongType =>
+      case x: IntegralType =>
         (c, evPrim, evNull) =>
           s"""
-            org.apache.spark.sql.types.Decimal tmpDecimal =
-              new org.apache.spark.sql.types.Decimal().set($c);
+            Decimal tmpDecimal = Decimal.apply((long) $c);
             ${changePrecision("tmpDecimal", target, evPrim, evNull)}
           """
-      case x: NumericType =>
+      case x: FractionalType =>
         // All other numeric types can be represented precisely as Doubles
         (c, evPrim, evNull) =>
           s"""
             try {
-              org.apache.spark.sql.types.Decimal tmpDecimal =
-                new org.apache.spark.sql.types.Decimal().set(
-                  scala.math.BigDecimal.valueOf((double) $c));
+              Decimal tmpDecimal = Decimal.apply(scala.math.BigDecimal.valueOf((double) $c));
               ${changePrecision("tmpDecimal", target, evPrim, evNull)}
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;

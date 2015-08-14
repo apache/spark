@@ -212,8 +212,7 @@ class DataFrame(object):
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
         >>> df.explain()
-        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at applySchemaToPythonRDD at\
-          NativeMethodAccessorImpl.java:...
+        Scan PhysicalRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -224,7 +223,6 @@ class DataFrame(object):
         ...
         == Physical Plan ==
         ...
-        == RDD ==
         """
         if extended:
             print(self._jdf.queryExecution().toString())
@@ -568,8 +566,7 @@ class DataFrame(object):
 
         if on is None or len(on) == 0:
             jdf = self._jdf.join(other._jdf)
-
-        if isinstance(on[0], basestring):
+        elif isinstance(on[0], basestring):
             jdf = self._jdf.join(other._jdf, self._jseq(on))
         else:
             assert isinstance(on[0], Column), "on should be Column or list of Column"

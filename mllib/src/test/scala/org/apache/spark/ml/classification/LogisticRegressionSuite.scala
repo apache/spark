@@ -19,6 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -94,12 +95,13 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("setThreshold, getThreshold") {
     val lr = new LogisticRegression
     // default
-    withClue("LogisticRegression should not have thresholds set by default") {
-      intercept[java.util.NoSuchElementException] {
+    assert(lr.getThreshold === 0.5, "LogisticRegression.threshold should default to 0.5")
+    withClue("LogisticRegression should not have thresholds set by default.") {
+      intercept[java.util.NoSuchElementException] { // Note: The exception type may change in future
         lr.getThresholds
       }
     }
-    // Set via thresholds.
+    // Set via threshold.
     // Intuition: Large threshold or large thresholds(1) makes class 0 more likely.
     lr.setThreshold(1.0)
     assert(lr.getThresholds === Array(0.0, 1.0))
@@ -107,10 +109,26 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(lr.getThresholds === Array(1.0, 0.0))
     lr.setThreshold(0.5)
     assert(lr.getThresholds === Array(0.5, 0.5))
-    // Test getThreshold
-    lr.setThresholds(Array(0.3, 0.7))
+    // Set via thresholds
+    val lr2 = new LogisticRegression
+    lr2.setThresholds(Array(0.3, 0.7))
     val expectedThreshold = 1.0 / (1.0 + 0.3 / 0.7)
-    assert(lr.getThreshold ~== expectedThreshold relTol 1E-7)
+    assert(lr2.getThreshold ~== expectedThreshold relTol 1E-7)
+    // thresholds and threshold must be consistent
+    lr2.setThresholds(Array(0.1, 0.2, 0.3))
+    withClue("getThreshold should throw error if thresholds has length != 2.") {
+      intercept[IllegalArgumentException] {
+        lr2.getThreshold
+      }
+    }
+    // thresholds and threshold must be consistent: values
+    withClue("fit with ParamMap should throw error if threshold, thresholds do not match.") {
+      intercept[IllegalArgumentException] {
+        val lr2model = lr2.fit(dataset,
+          lr2.thresholds -> Array(0.3, 0.7), lr2.threshold -> (expectedThreshold / 2.0))
+        lr2model.getThreshold
+      }
+    }
   }
 
   test("logistic regression doesn't fit intercept when fitIntercept is off") {
@@ -118,6 +136,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     lr.setFitIntercept(false)
     val model = lr.fit(dataset)
     assert(model.intercept === 0.0)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
   }
 
   test("logistic regression with setters") {
@@ -145,7 +166,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       s" ${predAllZero.count(_ === 0)} of ${dataset.count()} were 0.")
     // Call transform with params, and check that the params worked.
     val predNotAllZero =
-      model.transform(dataset, model.thresholds -> Array(1.0, 0.0),
+      model.transform(dataset, model.threshold -> 0.0,
         model.probabilityCol -> "myProb")
         .select("prediction", "myProb")
         .collect()
@@ -153,8 +174,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(predNotAllZero.exists(_ !== 0.0))
 
     // Call fit() with new params, and check as many params as we can.
+    lr.setThresholds(Array(0.6, 0.4))
     val model2 = lr.fit(dataset, lr.maxIter -> 5, lr.regParam -> 0.1,
-      lr.thresholds -> Array(0.6, 0.4),
       lr.probabilityCol -> "theProb")
     val parent2 = model2.parent.asInstanceOf[LogisticRegression]
     assert(parent2.getMaxIter === 5)
@@ -723,6 +744,41 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val weightsR = Vectors.dense(0.0, 0.0, 0.0, 0.0)
 
     assert(model1.intercept ~== interceptR relTol 1E-5)
-    assert(model1.weights ~= weightsR absTol 1E-6)
+    assert(model1.weights ~== weightsR absTol 1E-6)
+  }
+
+  test("evaluate on test set") {
+    // Evaluate on test set should be same as that of the transformed training data.
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(1.0)
+      .setThreshold(0.6)
+    val model = lr.fit(dataset)
+    val summary = model.summary.asInstanceOf[BinaryLogisticRegressionSummary]
+
+    val sameSummary = model.evaluate(dataset).asInstanceOf[BinaryLogisticRegressionSummary]
+    assert(summary.areaUnderROC === sameSummary.areaUnderROC)
+    assert(summary.roc.collect() === sameSummary.roc.collect())
+    assert(summary.pr.collect === sameSummary.pr.collect())
+    assert(
+      summary.fMeasureByThreshold.collect() === sameSummary.fMeasureByThreshold.collect())
+    assert(summary.recallByThreshold.collect() === sameSummary.recallByThreshold.collect())
+    assert(
+      summary.precisionByThreshold.collect() === sameSummary.precisionByThreshold.collect())
+  }
+
+  test("statistics on training data") {
+    // Test that loss is monotonically decreasing.
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(1.0)
+      .setThreshold(0.6)
+    val model = lr.fit(dataset)
+    assert(
+      model.summary
+        .objectiveHistory
+        .sliding(2)
+        .forall(x => x(0) >= x(1)))
+
   }
 }

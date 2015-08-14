@@ -19,7 +19,9 @@ package org.apache.spark.unsafe.types;
 
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
+import java.util.HashMap;
 
+import com.google.common.collect.ImmutableMap;
 import org.junit.Test;
 
 import static junit.framework.Assert.*;
@@ -389,6 +391,35 @@ public class UTF8StringSuite {
     assertEquals(fromString("hippo").levenshteinDistance(fromString("zzzzzzzz")), 8);
     assertEquals(fromString("hello").levenshteinDistance(fromString("hallo")),1);
     assertEquals(fromString("世界千世").levenshteinDistance(fromString("千a世b")),4);
+  }
+
+  @Test
+  public void translate() {
+    assertEquals(
+      fromString("1a2s3ae"),
+      fromString("translate").translate(ImmutableMap.of(
+        'r', '1',
+        'n', '2',
+        'l', '3',
+        't', '\0'
+      )));
+    assertEquals(
+      fromString("translate"),
+      fromString("translate").translate(new HashMap<Character, Character>()));
+    assertEquals(
+      fromString("asae"),
+      fromString("translate").translate(ImmutableMap.of(
+        'r', '\0',
+        'n', '\0',
+        'l', '\0',
+        't', '\0'
+      )));
+    assertEquals(
+      fromString("aa世b"),
+      fromString("花花世界").translate(ImmutableMap.of(
+        '花', 'a',
+        '界', 'b'
+      )));
   }
 
   @Test

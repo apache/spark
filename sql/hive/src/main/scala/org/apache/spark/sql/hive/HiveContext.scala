@@ -231,7 +231,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
       // TODO: Support for loading the jars from an already downloaded location.
       logInfo(
         s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using maven.")
-      IsolatedClientLoader.forVersion(hiveMetastoreVersion, allConfig)
+      IsolatedClientLoader.forVersion(
+        version = hiveMetastoreVersion,
+        config = allConfig,
+        barrierPrefixes = hiveMetastoreBarrierPrefixes,
+        sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else {
       // Convert to files and expand any directories.
       val jars =
@@ -531,7 +535,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
       HashAggregation,
       Aggregation,
       LeftSemiJoin,
-      HashJoin,
+      EquiJoinSelection,
       BasicOperators,
       CartesianProduct,
       BroadcastNestedLoopJoin

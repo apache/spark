@@ -18,13 +18,10 @@
 package org.apache.spark.deploy.yarn
 
 import java.util.{Arrays, List => JList}
-import org.mockito.Mockito._
-import scala.collection.JavaConversions._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic
 import org.apache.hadoop.net.DNSToSwitchMapping
-import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -38,7 +35,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.YarnAllocator._
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.scheduler.{ExecutorExitedAbnormally, ExecutorExitedNormally, SplitInfo}
+import org.apache.spark.scheduler.SplitInfo
 
 class MockResolver extends DNSToSwitchMapping {
 
@@ -75,7 +72,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   var containerNum = 0
 
   override def beforeEach() {
-    rmClient = spy(AMRMClient.createAMRMClient())
+    rmClient = AMRMClient.createAMRMClient()
     rmClient.init(conf)
     rmClient.start()
   }
@@ -90,16 +87,17 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   def createAllocator(maxExecutors: Int = 5): YarnAllocator = {
     val args = Array(
-      "--num-executors", s"$maxExecutors",
       "--executor-cores", "5",
       "--executor-memory", "2048",
       "--jar", "somejar.jar",
       "--class", "SomeClass")
+    val sparkConfClone = sparkConf.clone()
+    sparkConfClone.set("spark.executor.instances", maxExecutors.toString)
     new YarnAllocator(
       "not used",
       mock(classOf[RpcEndpointRef]),
       conf,
-      sparkConf,
+      sparkConfClone,
       rmClient,
       appAttemptId,
       new ApplicationMasterArguments(args),

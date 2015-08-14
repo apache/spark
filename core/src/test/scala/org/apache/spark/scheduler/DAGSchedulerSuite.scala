@@ -242,7 +242,7 @@ class DAGSchedulerSuite
 
   /** Sends TaskSetFailed to the scheduler. */
   private def failed(taskSet: TaskSet, message: String) {
-    runEvent(TaskSetFailed(taskSet, message))
+    runEvent(TaskSetFailed(taskSet, message, None))
   }
 
   /** Sends JobCancelled to the DAG scheduler. */

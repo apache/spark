@@ -1884,11 +1884,11 @@ that these options will be deprecated in future release as more optimizations ar
     </td>
   </tr>
   <tr>
-    <td><code>spark.sql.codegen</code></td>
+    <td><code>spark.sql.tungsten.enabled</code></td>
     <td>true</td>
     <td>
-      When true, code will be dynamically generated at runtime for expression evaluation in a specific
-      query. For some queries with complicated expression this option can lead to significant speed-ups.
+      When true, use the optimized Tungsten physical execution backend which explicitly manages memory
+      and dynamically generates bytecode for expression evaluation.
     </td>
   </tr>
   <tr>

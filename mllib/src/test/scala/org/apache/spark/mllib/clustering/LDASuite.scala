@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.clustering
 
+import java.util.{ArrayList => JArrayList}
+
 import breeze.linalg.{DenseMatrix => BDM, argtopk, max, argmax}
 
 import org.apache.spark.SparkFunSuite
@@ -160,8 +162,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("setter alias") {
     val lda = new LDA().setAlpha(2.0).setBeta(3.0)
-    assert(lda.getAlpha.toArray.forall(_ === 2.0))
-    assert(lda.getDocConcentration.toArray.forall(_ === 2.0))
+    assert(lda.getAsymmetricAlpha.toArray.forall(_ === 2.0))
+    assert(lda.getAsymmetricDocConcentration.toArray.forall(_ === 2.0))
     assert(lda.getBeta === 3.0)
     assert(lda.getTopicConcentration === 3.0)
   }
@@ -574,6 +576,17 @@ private[clustering] object LDASuite {
     Vectors.sparse(6, Array(3, 5), Array(1, 1)),
     Vectors.sparse(6, Array(4, 5), Array(1, 1))
   ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
+
+  /** Used in the Java Test Suite */
+  def javaToyData: JArrayList[(java.lang.Long, Vector)] = {
+    val javaData = new JArrayList[(java.lang.Long, Vector)]
+    var i = 0
+    while (i < toyData.size) {
+      javaData.add((toyData(i)._1, toyData(i)._2))
+      i += 1
+    }
+    javaData
+  }
 
   def toyModel: LocalLDAModel = {
     val k = 2

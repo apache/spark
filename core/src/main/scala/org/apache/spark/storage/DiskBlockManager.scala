@@ -22,7 +22,7 @@ import java.io.{IOException, File}
 
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
@@ -133,7 +133,6 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
       try {
         val localDir = Utils.createDirectory(rootDir, "blockmgr")
-        Utils.chmod700(localDir)
         logInfo(s"Created local directory at $localDir")
         Some(localDir)
       } catch {
@@ -145,7 +144,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   }
 
   private def addShutdownHook(): AnyRef = {
-    Utils.addShutdownHook(Utils.TEMP_DIR_SHUTDOWN_PRIORITY + 1) { () =>
+    ShutdownHookManager.addShutdownHook(ShutdownHookManager.TEMP_DIR_SHUTDOWN_PRIORITY + 1) { () =>
       logInfo("Shutdown hook called")
       DiskBlockManager.this.doStop()
     }
@@ -155,7 +154,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   private[spark] def stop() {
     // Remove the shutdown hook.  It causes memory leaks if we leave it around.
     try {
-      Utils.removeShutdownHook(shutdownHook)
+      ShutdownHookManager.removeShutdownHook(shutdownHook)
     } catch {
       case e: Exception =>
         logError(s"Exception while removing shutdown hook.", e)
@@ -169,7 +168,9 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
       localDirs.foreach { localDir =>
         if (localDir.isDirectory() && localDir.exists()) {
           try {
-            if (!Utils.hasRootAsShutdownDeleteDir(localDir)) Utils.deleteRecursively(localDir)
+            if (!ShutdownHookManager.hasRootAsShutdownDeleteDir(localDir)) {
+              Utils.deleteRecursively(localDir)
+            }
           } catch {
             case e: Exception =>
               logError(s"Exception while deleting local spark dir: $localDir", e)

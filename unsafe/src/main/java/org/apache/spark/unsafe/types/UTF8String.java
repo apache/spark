@@ -22,11 +22,12 @@ import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.Map;
 
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 
-import static org.apache.spark.unsafe.PlatformDependent.*;
+import static org.apache.spark.unsafe.Platform.*;
 
 
 /**
@@ -132,13 +133,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * bytes in this string.
    */
   public void writeToMemory(Object target, long targetOffset) {
-    PlatformDependent.copyMemory(
-      base,
-      offset,
-      target,
-      targetOffset,
-      numBytes
-    );
+    Platform.copyMemory(base, offset, target, targetOffset, numBytes);
   }
 
   /**
@@ -182,12 +177,12 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     long mask = 0;
     if (isLittleEndian) {
       if (numBytes >= 8) {
-        p = PlatformDependent.UNSAFE.getLong(base, offset);
+        p = Platform.getLong(base, offset);
       } else if (numBytes > 4) {
-        p = PlatformDependent.UNSAFE.getLong(base, offset);
+        p = Platform.getLong(base, offset);
         mask = (1L << (8 - numBytes) * 8) - 1;
       } else if (numBytes > 0) {
-        p = (long) PlatformDependent.UNSAFE.getInt(base, offset);
+        p = (long) Platform.getInt(base, offset);
         mask = (1L << (8 - numBytes) * 8) - 1;
       } else {
         p = 0;
@@ -196,12 +191,12 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     } else {
       // byteOrder == ByteOrder.BIG_ENDIAN
       if (numBytes >= 8) {
-        p = PlatformDependent.UNSAFE.getLong(base, offset);
+        p = Platform.getLong(base, offset);
       } else if (numBytes > 4) {
-        p = PlatformDependent.UNSAFE.getLong(base, offset);
+        p = Platform.getLong(base, offset);
         mask = (1L << (8 - numBytes) * 8) - 1;
       } else if (numBytes > 0) {
-        p = ((long) PlatformDependent.UNSAFE.getInt(base, offset)) << 32;
+        p = ((long) Platform.getInt(base, offset)) << 32;
         mask = (1L << (8 - numBytes) * 8) - 1;
       } else {
         p = 0;
@@ -292,7 +287,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
    * Returns the byte at position `i`.
    */
   private byte getByte(int i) {
-    return UNSAFE.getByte(base, offset + i);
+    return Platform.getByte(base, offset + i);
   }
 
   private boolean matchAt(final UTF8String s, int pos) {
@@ -768,7 +763,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
         int len = inputs[i].numBytes;
         copyMemory(
           inputs[i].base, inputs[i].offset,
-          result, PlatformDependent.BYTE_ARRAY_OFFSET + offset,
+          result, BYTE_ARRAY_OFFSET + offset,
           len);
         offset += len;
 
@@ -777,7 +772,7 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
         if (j < numInputs) {
           copyMemory(
             separator.base, separator.offset,
-            result, PlatformDependent.BYTE_ARRAY_OFFSET + offset,
+            result, BYTE_ARRAY_OFFSET + offset,
             separator.numBytes);
           offset += separator.numBytes;
         }
@@ -793,6 +788,21 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
       res[i] = fromString(splits[i]);
     }
     return res;
+  }
+
+  // TODO: Need to use `Code Point` here instead of Char in case the character longer than 2 bytes
+  public UTF8String translate(Map<Character, Character> dict) {
+    String srcStr = this.toString();
+
+    StringBuilder sb = new StringBuilder();
+    for(int k = 0; k< srcStr.length(); k++) {
+      if (null == dict.get(srcStr.charAt(k))) {
+        sb.append(srcStr.charAt(k));
+      } else if ('\0' != dict.get(srcStr.charAt(k))){
+        sb.append(dict.get(srcStr.charAt(k)));
+      }
+    }
+    return fromString(sb.toString());
   }
 
   @Override
