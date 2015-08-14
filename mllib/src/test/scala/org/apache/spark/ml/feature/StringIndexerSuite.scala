@@ -30,7 +30,9 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("params") {
     ParamsSuite.checkParams(new StringIndexer)
     val model = new StringIndexerModel("indexer", Array("a", "b"))
+    val modelWithoutUid = new StringIndexerModel(Array("a", "b"))
     ParamsSuite.checkParams(model)
+    ParamsSuite.checkParams(modelWithoutUid)
   }
 
   test("StringIndexer") {
