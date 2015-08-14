@@ -228,7 +228,7 @@ private[spark] object SQLConf {
     doc = "When true, use the optimized Tungsten physical execution backend which explicitly " +
           "manages memory and dynamically generates bytecode for expression evaluation.")
 
-  val CODEGEN_ENABLED = booleanConf("spark..codegen",
+  val CODEGEN_ENABLED = booleanConf("spark.sql.codegen",
     defaultValue = Some(true),  // use TUNGSTEN_ENABLED as default
     doc = "When true, code will be dynamically generated at runtime for expression evaluation in" +
       " a specific query.",
