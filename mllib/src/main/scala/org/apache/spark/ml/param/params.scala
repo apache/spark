@@ -166,6 +166,11 @@ object ParamValidators {
   def inArray[T](allowed: java.util.List[T]): T => Boolean = { (value: T) =>
     allowed.contains(value)
   }
+
+  /** Check that the array length is greater than lowerBound. */
+  def arrayLengthGt[T](lowerBound: Double): Array[T] => Boolean = { (value: Array[T]) =>
+    value.length > lowerBound
+  }
 }
 
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
@@ -554,13 +559,26 @@ trait Params extends Identifiable with Serializable {
 
   /**
    * Copies param values from this instance to another instance for params shared by them.
-   * @param to the target instance
-   * @param extra extra params to be copied
+   *
+   * This handles default Params and explicitly set Params separately.
+   * Default Params are copied from and to [[defaultParamMap]], and explicitly set Params are
+   * copied from and to [[paramMap]].
+   * Warning: This implicitly assumes that this [[Params]] instance and the target instance
+   *          share the same set of default Params.
+   *
+   * @param to the target instance, which should work with the same set of default Params as this
+   *           source instance
+   * @param extra extra params to be copied to the target's [[paramMap]]
    * @return the target instance with param values copied
    */
   protected def copyValues[T <: Params](to: T, extra: ParamMap = ParamMap.empty): T = {
-    val map = extractParamMap(extra)
+    val map = paramMap ++ extra
     params.foreach { param =>
+      // copy default Params
+      if (defaultParamMap.contains(param) && to.hasParam(param.name)) {
+        to.defaultParamMap.put(to.getParam(param.name), defaultParamMap(param))
+      }
+      // copy explicitly set Params
       if (map.contains(param) && to.hasParam(param.name)) {
         to.set(param.name, map(param))
       }

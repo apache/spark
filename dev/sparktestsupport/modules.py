@@ -134,10 +134,11 @@ streaming = Module(
 # files in streaming_kinesis_asl are changed, so that if Kinesis experiences an outage, we don't
 # fail other PRs.
 streaming_kinesis_asl = Module(
-    name="kinesis-asl",
+    name="streaming-kinesis-asl",
     dependencies=[],
     source_file_regexes=[
         "extras/kinesis-asl/",
+        "extras/kinesis-asl-assembly/",
     ],
     build_profile_flags=[
         "-Pkinesis-asl",
@@ -146,7 +147,7 @@ streaming_kinesis_asl = Module(
         "ENABLE_KINESIS_TESTS": "1"
     },
     sbt_test_goals=[
-        "kinesis-asl/test",
+        "streaming-kinesis-asl/test",
     ]
 )
 
@@ -180,6 +181,7 @@ streaming_mqtt = Module(
     dependencies=[streaming],
     source_file_regexes=[
         "external/mqtt",
+        "external/mqtt-assembly",
     ],
     sbt_test_goals=[
         "streaming-mqtt/test",
@@ -300,7 +302,14 @@ pyspark_sql = Module(
 
 pyspark_streaming = Module(
     name="pyspark-streaming",
-    dependencies=[pyspark_core, streaming, streaming_kafka, streaming_flume_assembly],
+    dependencies=[
+        pyspark_core,
+        streaming,
+        streaming_kafka,
+        streaming_flume_assembly,
+        streaming_mqtt,
+        streaming_kinesis_asl
+    ],
     source_file_regexes=[
         "python/pyspark/streaming"
     ],
@@ -323,7 +332,8 @@ pyspark_mllib = Module(
         "pyspark.mllib.evaluation",
         "pyspark.mllib.feature",
         "pyspark.mllib.fpm",
-        "pyspark.mllib.linalg",
+        "pyspark.mllib.linalg.__init__",
+        "pyspark.mllib.linalg.distributed",
         "pyspark.mllib.random",
         "pyspark.mllib.recommendation",
         "pyspark.mllib.regression",

@@ -27,6 +27,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.MutablePair
@@ -39,20 +40,26 @@ import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner, SparkEn
 @DeveloperApi
 case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
 
+  override def nodeName: String = if (tungstenMode) "TungstenExchange" else "Exchange"
+
+  /**
+   * Returns true iff we can support the data type, and we are not doing range partitioning.
+   */
+  private lazy val tungstenMode: Boolean = {
+    unsafeEnabled && codegenEnabled && GenerateUnsafeProjection.canSupport(child.schema) &&
+      !newPartitioning.isInstanceOf[RangePartitioning]
+  }
+
   override def outputPartitioning: Partitioning = newPartitioning
 
   override def output: Seq[Attribute] = child.output
 
-  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
-
-  override def canProcessSafeRows: Boolean = true
-
-  override def canProcessUnsafeRows: Boolean = {
-    // Do not use the Unsafe path if we are using a RangePartitioning, since this may lead to
-    // an interpreted RowOrdering being applied to an UnsafeRow, which will lead to
-    // ClassCastExceptions at runtime. This check can be removed after SPARK-9054 is fixed.
-    !newPartitioning.isInstanceOf[RangePartitioning]
-  }
+  // This setting is somewhat counterintuitive:
+  // If the schema works with UnsafeRow, then we tell the planner that we don't support safe row,
+  // so the planner inserts a converter to convert data into UnsafeRow if needed.
+  override def outputsUnsafeRows: Boolean = tungstenMode
+  override def canProcessSafeRows: Boolean = !tungstenMode
+  override def canProcessUnsafeRows: Boolean = tungstenMode
 
   /**
    * Determines whether records must be defensively copied before being sent to the shuffle.
@@ -124,23 +131,9 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 
   private val serializer: Serializer = {
     val rowDataTypes = child.output.map(_.dataType).toArray
-    // It is true when there is no field that needs to be write out.
-    // For now, we will not use SparkSqlSerializer2 when noField is true.
-    val noField = rowDataTypes == null || rowDataTypes.length == 0
-
-    val useSqlSerializer2 =
-        child.sqlContext.conf.useSqlSerializer2 &&   // SparkSqlSerializer2 is enabled.
-        SparkSqlSerializer2.support(rowDataTypes) &&  // The schema of row is supported.
-        !noField
-
-    if (child.outputsUnsafeRows) {
-      logInfo("Using UnsafeRowSerializer.")
+    if (tungstenMode) {
       new UnsafeRowSerializer(child.output.size)
-    } else if (useSqlSerializer2) {
-      logInfo("Using SparkSqlSerializer2.")
-      new SparkSqlSerializer2(rowDataTypes)
     } else {
-      logInfo("Using SparkSqlSerializer.")
       new SparkSqlSerializer(sparkConf)
     }
   }
@@ -156,7 +149,10 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
           val mutablePair = new MutablePair[InternalRow, Null]()
           iter.map(row => mutablePair.update(row.copy(), null))
         }
-        implicit val ordering = new RowOrdering(sortingExpressions, child.output)
+        // We need to use an interpreted ordering here because generated orderings cannot be
+        // serialized and this ordering needs to be created on the driver in order to be passed into
+        // Spark core code.
+        implicit val ordering = new InterpretedOrdering(sortingExpressions, child.output)
         new RangePartitioner(numPartitions, rddForSampling, ascending = true)
       case SinglePartition =>
         new Partitioner {
@@ -194,108 +190,72 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
  * of input data meets the
  * [[org.apache.spark.sql.catalyst.plans.physical.Distribution Distribution]] requirements for
  * each operator by inserting [[Exchange]] Operators where required.  Also ensure that the
- * required input partition ordering requirements are met.
+ * input partition ordering requirements are met.
  */
 private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[SparkPlan] {
   // TODO: Determine the number of partitions.
-  def numPartitions: Int = sqlContext.conf.numShufflePartitions
+  private def numPartitions: Int = sqlContext.conf.numShufflePartitions
+
+  /**
+   * Given a required distribution, returns a partitioning that satisfies that distribution.
+   */
+  private def canonicalPartitioning(requiredDistribution: Distribution): Partitioning = {
+    requiredDistribution match {
+      case AllTuples => SinglePartition
+      case ClusteredDistribution(clustering) => HashPartitioning(clustering, numPartitions)
+      case OrderedDistribution(ordering) => RangePartitioning(ordering, numPartitions)
+      case dist => sys.error(s"Do not know how to satisfy distribution $dist")
+    }
+  }
+
+  private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
+    val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
+    val requiredChildOrderings: Seq[Seq[SortOrder]] = operator.requiredChildOrdering
+    var children: Seq[SparkPlan] = operator.children
+
+    // Ensure that the operator's children satisfy their output distribution requirements:
+    children = children.zip(requiredChildDistributions).map { case (child, distribution) =>
+      if (child.outputPartitioning.satisfies(distribution)) {
+        child
+      } else {
+        Exchange(canonicalPartitioning(distribution), child)
+      }
+    }
+
+    // If the operator has multiple children and specifies child output distributions (e.g. join),
+    // then the children's output partitionings must be compatible:
+    if (children.length > 1
+        && requiredChildDistributions.toSet != Set(UnspecifiedDistribution)
+        && !Partitioning.allCompatible(children.map(_.outputPartitioning))) {
+      children = children.zip(requiredChildDistributions).map { case (child, distribution) =>
+        val targetPartitioning = canonicalPartitioning(distribution)
+        if (child.outputPartitioning.guarantees(targetPartitioning)) {
+          child
+        } else {
+          Exchange(targetPartitioning, child)
+        }
+      }
+    }
+
+    // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
+    children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
+      if (requiredOrdering.nonEmpty) {
+        // If child.outputOrdering is [a, b] and requiredOrdering is [a], we do not need to sort.
+        val minSize = Seq(requiredOrdering.size, child.outputOrdering.size).min
+        if (minSize == 0 || requiredOrdering.take(minSize) != child.outputOrdering.take(minSize)) {
+          sqlContext.planner.BasicOperators.getSortOperator(requiredOrdering, global = false, child)
+        } else {
+          child
+        }
+      } else {
+        child
+      }
+    }
+
+    operator.withNewChildren(children)
+  }
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
-    case operator: SparkPlan =>
-      // True iff every child's outputPartitioning satisfies the corresponding
-      // required data distribution.
-      def meetsRequirements: Boolean =
-        operator.requiredChildDistribution.zip(operator.children).forall {
-          case (required, child) =>
-            val valid = child.outputPartitioning.satisfies(required)
-            logDebug(
-              s"${if (valid) "Valid" else "Invalid"} distribution," +
-                s"required: $required current: ${child.outputPartitioning}")
-            valid
-        }
-
-      // True iff any of the children are incorrectly sorted.
-      def needsAnySort: Boolean =
-        operator.requiredChildOrdering.zip(operator.children).exists {
-          case (required, child) => required.nonEmpty && required != child.outputOrdering
-        }
-
-      // True iff outputPartitionings of children are compatible with each other.
-      // It is possible that every child satisfies its required data distribution
-      // but two children have incompatible outputPartitionings. For example,
-      // A dataset is range partitioned by "a.asc" (RangePartitioning) and another
-      // dataset is hash partitioned by "a" (HashPartitioning). Tuples in these two
-      // datasets are both clustered by "a", but these two outputPartitionings are not
-      // compatible.
-      // TODO: ASSUMES TRANSITIVITY?
-      def compatible: Boolean =
-        operator.children
-          .map(_.outputPartitioning)
-          .sliding(2)
-          .forall {
-            case Seq(a) => true
-            case Seq(a, b) => a.compatibleWith(b)
-          }
-
-      // Adds Exchange or Sort operators as required
-      def addOperatorsIfNecessary(
-          partitioning: Partitioning,
-          rowOrdering: Seq[SortOrder],
-          child: SparkPlan): SparkPlan = {
-
-        def addShuffleIfNecessary(child: SparkPlan): SparkPlan = {
-          if (child.outputPartitioning != partitioning) {
-            Exchange(partitioning, child)
-          } else {
-            child
-          }
-        }
-
-        def addSortIfNecessary(child: SparkPlan): SparkPlan = {
-
-          if (rowOrdering.nonEmpty) {
-            // If child.outputOrdering is [a, b] and rowOrdering is [a], we do not need to sort.
-            val minSize = Seq(rowOrdering.size, child.outputOrdering.size).min
-            if (minSize == 0 || rowOrdering.take(minSize) != child.outputOrdering.take(minSize)) {
-              sqlContext.planner.BasicOperators.getSortOperator(rowOrdering, global = false, child)
-            } else {
-              child
-            }
-          } else {
-            child
-          }
-        }
-
-        addSortIfNecessary(addShuffleIfNecessary(child))
-      }
-
-      if (meetsRequirements && compatible && !needsAnySort) {
-        operator
-      } else {
-        // At least one child does not satisfies its required data distribution or
-        // at least one child's outputPartitioning is not compatible with another child's
-        // outputPartitioning. In this case, we need to add Exchange operators.
-        val requirements =
-          (operator.requiredChildDistribution, operator.requiredChildOrdering, operator.children)
-
-        val fixedChildren = requirements.zipped.map {
-          case (AllTuples, rowOrdering, child) =>
-            addOperatorsIfNecessary(SinglePartition, rowOrdering, child)
-          case (ClusteredDistribution(clustering), rowOrdering, child) =>
-            addOperatorsIfNecessary(HashPartitioning(clustering, numPartitions), rowOrdering, child)
-          case (OrderedDistribution(ordering), rowOrdering, child) =>
-            addOperatorsIfNecessary(RangePartitioning(ordering, numPartitions), rowOrdering, child)
-
-          case (UnspecifiedDistribution, Seq(), child) =>
-            child
-          case (UnspecifiedDistribution, rowOrdering, child) =>
-            sqlContext.planner.BasicOperators.getSortOperator(rowOrdering, global = false, child)
-
-          case (dist, ordering, _) =>
-            sys.error(s"Don't know how to ensure $dist with ordering $ordering")
-        }
-
-        operator.withNewChildren(fixedChildren)
-      }
+    case operator: SparkPlan => ensureDistributionAndOrdering(operator)
   }
 }

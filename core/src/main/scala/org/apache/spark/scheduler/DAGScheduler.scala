@@ -200,8 +200,8 @@ class DAGScheduler(
 
   // Called by TaskScheduler to cancel an entire TaskSet due to either repeated failures or
   // cancellation of the job itself.
-  def taskSetFailed(taskSet: TaskSet, reason: String): Unit = {
-    eventProcessLoop.post(TaskSetFailed(taskSet, reason))
+  def taskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable]): Unit = {
+    eventProcessLoop.post(TaskSetFailed(taskSet, reason, exception))
   }
 
   private[scheduler]
@@ -677,8 +677,11 @@ class DAGScheduler(
     submitWaitingStages()
   }
 
-  private[scheduler] def handleTaskSetFailed(taskSet: TaskSet, reason: String) {
-    stageIdToStage.get(taskSet.stageId).foreach {abortStage(_, reason) }
+  private[scheduler] def handleTaskSetFailed(
+      taskSet: TaskSet,
+      reason: String,
+      exception: Option[Throwable]): Unit = {
+    stageIdToStage.get(taskSet.stageId).foreach { abortStage(_, reason, exception) }
     submitWaitingStages()
   }
 
@@ -762,7 +765,7 @@ class DAGScheduler(
         }
       }
     } else {
-      abortStage(stage, "No active job for stage " + stage.id)
+      abortStage(stage, "No active job for stage " + stage.id, None)
     }
   }
 
@@ -773,14 +776,25 @@ class DAGScheduler(
     stage.pendingTasks.clear()
 
     // First figure out the indexes of partition ids to compute.
-    val partitionsToCompute: Seq[Int] = {
+    val (allPartitions: Seq[Int], partitionsToCompute: Seq[Int]) = {
       stage match {
         case stage: ShuffleMapStage =>
-          (0 until stage.numPartitions).filter(id => stage.outputLocs(id).isEmpty)
+          val allPartitions = 0 until stage.numPartitions
+          val filteredPartitions = allPartitions.filter { id => stage.outputLocs(id).isEmpty }
+          (allPartitions, filteredPartitions)
         case stage: ResultStage =>
           val job = stage.resultOfJob.get
-          (0 until job.numPartitions).filter(id => !job.finished(id))
+          val allPartitions = 0 until job.numPartitions
+          val filteredPartitions = allPartitions.filter { id => !job.finished(id) }
+          (allPartitions, filteredPartitions)
       }
+    }
+
+    // Create internal accumulators if the stage has no accumulators initialized.
+    // Reset internal accumulators only if this stage is not partially submitted
+    // Otherwise, we may override existing accumulator values from some tasks
+    if (stage.internalAccumulators.isEmpty || allPartitions == partitionsToCompute) {
+      stage.resetInternalAccumulators()
     }
 
     val properties = jobIdToActiveJob.get(stage.firstJobId).map(_.properties).orNull
@@ -806,7 +820,7 @@ class DAGScheduler(
       case NonFatal(e) =>
         stage.makeNewStageAttempt(partitionsToCompute.size)
         listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
-        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}")
+        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}", Some(e))
         runningStages -= stage
         return
     }
@@ -835,13 +849,13 @@ class DAGScheduler(
     } catch {
       // In the case of a failure during serialization, abort the stage.
       case e: NotSerializableException =>
-        abortStage(stage, "Task not serializable: " + e.toString)
+        abortStage(stage, "Task not serializable: " + e.toString, Some(e))
         runningStages -= stage
 
         // Abort execution
         return
       case NonFatal(e) =>
-        abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
+        abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}", Some(e))
         runningStages -= stage
         return
     }
@@ -852,7 +866,8 @@ class DAGScheduler(
           partitionsToCompute.map { id =>
             val locs = taskIdToLocations(id)
             val part = stage.rdd.partitions(id)
-            new ShuffleMapTask(stage.id, stage.latestInfo.attemptId, taskBinary, part, locs)
+            new ShuffleMapTask(stage.id, stage.latestInfo.attemptId,
+              taskBinary, part, locs, stage.internalAccumulators)
           }
 
         case stage: ResultStage =>
@@ -861,12 +876,13 @@ class DAGScheduler(
             val p: Int = job.partitions(id)
             val part = stage.rdd.partitions(p)
             val locs = taskIdToLocations(id)
-            new ResultTask(stage.id, stage.latestInfo.attemptId, taskBinary, part, locs, id)
+            new ResultTask(stage.id, stage.latestInfo.attemptId,
+              taskBinary, part, locs, id, stage.internalAccumulators)
           }
       }
     } catch {
       case NonFatal(e) =>
-        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}")
+        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}", Some(e))
         runningStages -= stage
         return
     }
@@ -916,9 +932,11 @@ class DAGScheduler(
           // To avoid UI cruft, ignore cases where value wasn't updated
           if (acc.name.isDefined && partialValue != acc.zero) {
             val name = acc.name.get
-            stage.latestInfo.accumulables(id) = AccumulableInfo(id, name, s"${acc.value}")
+            val value = s"${acc.value}"
+            stage.latestInfo.accumulables(id) =
+              new AccumulableInfo(id, name, None, value, acc.isInternal)
             event.taskInfo.accumulables +=
-              AccumulableInfo(id, name, Some(s"$partialValue"), s"${acc.value}")
+              new AccumulableInfo(id, name, Some(s"$partialValue"), value, acc.isInternal)
           }
         }
       } catch {
@@ -1084,7 +1102,8 @@ class DAGScheduler(
           }
 
           if (disallowStageRetryForTest) {
-            abortStage(failedStage, "Fetch failure will not retry stage due to testing config")
+            abortStage(failedStage, "Fetch failure will not retry stage due to testing config",
+              None)
           } else if (failedStages.isEmpty) {
             // Don't schedule an event to resubmit failed stages if failed isn't empty, because
             // in that case the event will already have been scheduled.
@@ -1112,7 +1131,7 @@ class DAGScheduler(
       case commitDenied: TaskCommitDenied =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
-      case ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics) =>
+      case exceptionFailure: ExceptionFailure =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
 
       case TaskResultLost =>
@@ -1221,7 +1240,10 @@ class DAGScheduler(
    * Aborts all jobs depending on a particular Stage. This is called in response to a task set
    * being canceled by the TaskScheduler. Use taskSetFailed() to inject this event from outside.
    */
-  private[scheduler] def abortStage(failedStage: Stage, reason: String) {
+  private[scheduler] def abortStage(
+      failedStage: Stage,
+      reason: String,
+      exception: Option[Throwable]): Unit = {
     if (!stageIdToStage.contains(failedStage.id)) {
       // Skip all the actions if the stage has been removed.
       return
@@ -1230,7 +1252,7 @@ class DAGScheduler(
       activeJobs.filter(job => stageDependsOn(job.finalStage, failedStage)).toSeq
     failedStage.latestInfo.completionTime = Some(clock.getTimeMillis())
     for (job <- dependentJobs) {
-      failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason")
+      failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason", exception)
     }
     if (dependentJobs.isEmpty) {
       logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
@@ -1238,8 +1260,11 @@ class DAGScheduler(
   }
 
   /** Fails a job and all stages that are only used by that job, and cleans up relevant state. */
-  private def failJobAndIndependentStages(job: ActiveJob, failureReason: String) {
-    val error = new SparkException(failureReason)
+  private def failJobAndIndependentStages(
+      job: ActiveJob,
+      failureReason: String,
+      exception: Option[Throwable] = None): Unit = {
+    val error = new SparkException(failureReason, exception.getOrElse(null))
     var ableToCancelStages = true
 
     val shouldInterruptThread =
@@ -1448,8 +1473,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case completion @ CompletionEvent(task, reason, _, _, taskInfo, taskMetrics) =>
       dagScheduler.handleTaskCompletion(completion)
 
-    case TaskSetFailed(taskSet, reason) =>
-      dagScheduler.handleTaskSetFailed(taskSet, reason)
+    case TaskSetFailed(taskSet, reason, exception) =>
+      dagScheduler.handleTaskSetFailed(taskSet, reason, exception)
 
     case ResubmitFailedStages =>
       dagScheduler.resubmitFailedStages()

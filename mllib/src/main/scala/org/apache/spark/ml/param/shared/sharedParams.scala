@@ -139,7 +139,7 @@ private[ml] trait HasProbabilityCol extends Params {
 }
 
 /**
- * Trait for shared param threshold.
+ * Trait for shared param threshold (default: 0.5).
  */
 private[ml] trait HasThreshold extends Params {
 
@@ -149,8 +149,25 @@ private[ml] trait HasThreshold extends Params {
    */
   final val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in binary classification prediction, in range [0, 1]", ParamValidators.inRange(0, 1))
 
+  setDefault(threshold, 0.5)
+
   /** @group getParam */
-  final def getThreshold: Double = $(threshold)
+  def getThreshold: Double = $(threshold)
+}
+
+/**
+ * Trait for shared param thresholds.
+ */
+private[ml] trait HasThresholds extends Params {
+
+  /**
+   * Param for Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold..
+   * @group param
+   */
+  final val thresholds: DoubleArrayParam = new DoubleArrayParam(this, "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.", (t: Array[Double]) => t.forall(_ >= 0))
+
+  /** @group getParam */
+  def getThresholds: Array[Double] = $(thresholds)
 }
 
 /**
@@ -233,6 +250,21 @@ private[ml] trait HasFitIntercept extends Params {
 }
 
 /**
+ * Trait for shared param handleInvalid.
+ */
+private[ml] trait HasHandleInvalid extends Params {
+
+  /**
+   * Param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later..
+   * @group param
+   */
+  final val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.", ParamValidators.inArray(Array("skip", "error")))
+
+  /** @group getParam */
+  final def getHandleInvalid: String = $(handleInvalid)
+}
+
+/**
  * Trait for shared param standardization (default: true).
  */
 private[ml] trait HasStandardization extends Params {
@@ -309,5 +341,20 @@ private[ml] trait HasStepSize extends Params {
 
   /** @group getParam */
   final def getStepSize: Double = $(stepSize)
+}
+
+/**
+ * Trait for shared param weightCol.
+ */
+private[ml] trait HasWeightCol extends Params {
+
+  /**
+   * Param for weight column name. If this is not set or empty, we treat all instance weights as 1.0..
+   * @group param
+   */
+  final val weightCol: Param[String] = new Param[String](this, "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
+
+  /** @group getParam */
+  final def getWeightCol: String = $(weightCol)
 }
 // scalastyle:on

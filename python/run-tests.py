@@ -158,7 +158,7 @@ def main():
     else:
         log_level = logging.INFO
     logging.basicConfig(stream=sys.stdout, level=log_level, format="%(message)s")
-    LOGGER.info("Running PySpark tests. Output is in python/%s", LOG_FILE)
+    LOGGER.info("Running PySpark tests. Output is in %s", LOG_FILE)
     if os.path.exists(LOG_FILE):
         os.remove(LOG_FILE)
     python_execs = opts.python_executables.split(',')

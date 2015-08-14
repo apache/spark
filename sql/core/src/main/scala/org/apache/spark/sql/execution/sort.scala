@@ -17,16 +17,15 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{MapPartitionsWithPreparationRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
-import org.apache.spark.sql.catalyst.expressions.{Descending, BindReferences, Attribute, SortOrder}
-import org.apache.spark.sql.catalyst.plans.physical.{UnspecifiedDistribution, OrderedDistribution, Distribution}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
-import org.apache.spark.util.collection.unsafe.sort.PrefixComparator
+import org.apache.spark.{SparkEnv, InternalAccumulator, TaskContext}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines various sort operators.
@@ -78,6 +77,11 @@ case class ExternalSort(
       val sorter = new ExternalSorter[InternalRow, Null, InternalRow](ordering = Some(ordering))
       sorter.insertAll(iterator.map(r => (r.copy(), null)))
       val baseIterator = sorter.iterator.map(_._1)
+      val context = TaskContext.get()
+      context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
+      context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
+      context.internalMetricsToAccumulators(
+        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.peakMemoryUsedBytes)
       // TODO(marmbrus): The complex type signature below thwarts inference for no reason.
       CompletionIterator[InternalRow, Iterator[InternalRow]](baseIterator, sorter.stop())
     }, preservesPartitioning = true)
@@ -97,59 +101,77 @@ case class ExternalSort(
  * @param testSpillFrequency Method for configuring periodic spilling in unit tests. If set, will
  *                           spill every `frequency` records.
  */
-case class UnsafeExternalSort(
+case class TungstenSort(
     sortOrder: Seq[SortOrder],
     global: Boolean,
     child: SparkPlan,
     testSpillFrequency: Int = 0)
   extends UnaryNode {
 
-  private[this] val schema: StructType = child.schema
-
-  override def requiredChildDistribution: Seq[Distribution] =
-    if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
-
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "sort") {
-    assert(codegenEnabled, "UnsafeExternalSort requires code generation to be enabled")
-    def doSort(iterator: Iterator[InternalRow]): Iterator[InternalRow] = {
-      val ordering = newOrdering(sortOrder, child.output)
-      val boundSortExpression = BindReferences.bindReference(sortOrder.head, child.output)
-      // Hack until we generate separate comparator implementations for ascending vs. descending
-      // (or choose to codegen them):
-      val prefixComparator = {
-        val comp = SortPrefixUtils.getPrefixComparator(boundSortExpression)
-        if (sortOrder.head.direction == Descending) {
-          new PrefixComparator {
-            override def compare(p1: Long, p2: Long): Int = -1 * comp.compare(p1, p2)
-          }
-        } else {
-          comp
-        }
-      }
-      val prefixComputer = {
-        val prefixComputer = SortPrefixUtils.getPrefixComputer(boundSortExpression)
-        new UnsafeExternalRowSorter.PrefixComputer {
-          override def computePrefix(row: InternalRow): Long = prefixComputer(row)
-        }
-      }
-      val sorter = new UnsafeExternalRowSorter(schema, ordering, prefixComparator, prefixComputer)
-      if (testSpillFrequency > 0) {
-        sorter.setTestSpillFrequency(testSpillFrequency)
-      }
-      sorter.sort(iterator)
-    }
-    child.execute().mapPartitions(doSort, preservesPartitioning = true)
-  }
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = false
 
   override def output: Seq[Attribute] = child.output
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
 
-  override def outputsUnsafeRows: Boolean = true
+  override def requiredChildDistribution: Seq[Distribution] =
+    if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val schema = child.schema
+    val childOutput = child.output
+
+    /**
+     * Set up the sorter in each partition before computing the parent partition.
+     * This makes sure our sorter is not starved by other sorters used in the same task.
+     */
+    def preparePartition(): UnsafeExternalRowSorter = {
+      val ordering = newOrdering(sortOrder, childOutput)
+
+      // The comparator for comparing prefix
+      val boundSortExpression = BindReferences.bindReference(sortOrder.head, childOutput)
+      val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
+
+      // The generator for prefix
+      val prefixProjection = UnsafeProjection.create(Seq(SortPrefix(boundSortExpression)))
+      val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
+        override def computePrefix(row: InternalRow): Long = {
+          prefixProjection.apply(row).getLong(0)
+        }
+      }
+
+      val pageSize = SparkEnv.get.shuffleMemoryManager.pageSizeBytes
+      val sorter = new UnsafeExternalRowSorter(
+        schema, ordering, prefixComparator, prefixComputer, pageSize)
+      if (testSpillFrequency > 0) {
+        sorter.setTestSpillFrequency(testSpillFrequency)
+      }
+      sorter
+    }
+
+    /** Compute a partition using the sorter already set up previously. */
+    def executePartition(
+        taskContext: TaskContext,
+        partitionIndex: Int,
+        sorter: UnsafeExternalRowSorter,
+        parentIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
+      val sortedIterator = sorter.sort(parentIterator.asInstanceOf[Iterator[UnsafeRow]])
+      taskContext.internalMetricsToAccumulators(
+        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.getPeakMemoryUsage)
+      sortedIterator
+    }
+
+    // Note: we need to set up the external sorter in each partition before computing
+    // the parent partition, so we cannot simply use `mapPartitions` here (SPARK-9709).
+    new MapPartitionsWithPreparationRDD[InternalRow, InternalRow, UnsafeExternalRowSorter](
+      child.execute(), preparePartition, executePartition, preservesPartitioning = true)
+  }
+
 }
 
-@DeveloperApi
-object UnsafeExternalSort {
+object TungstenSort {
   /**
    * Return true if UnsafeExternalSort can sort rows with the given schema, false otherwise.
    */

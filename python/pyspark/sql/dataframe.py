@@ -212,8 +212,7 @@ class DataFrame(object):
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
         >>> df.explain()
-        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at applySchemaToPythonRDD at\
-          NativeMethodAccessorImpl.java:...
+        Scan PhysicalRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -224,7 +223,6 @@ class DataFrame(object):
         ...
         == Physical Plan ==
         ...
-        == RDD ==
         """
         if extended:
             print(self._jdf.queryExecution().toString())
@@ -441,6 +439,42 @@ class DataFrame(object):
         rdd = self._jdf.sample(withReplacement, fraction, long(seed))
         return DataFrame(rdd, self.sql_ctx)
 
+    @since(1.5)
+    def sampleBy(self, col, fractions, seed=None):
+        """
+        Returns a stratified sample without replacement based on the
+        fraction given on each stratum.
+
+        :param col: column that defines strata
+        :param fractions:
+            sampling fraction for each stratum. If a stratum is not
+            specified, we treat its fraction as zero.
+        :param seed: random seed
+        :return: a new DataFrame that represents the stratified sample
+
+        >>> from pyspark.sql.functions import col
+        >>> dataset = sqlContext.range(0, 100).select((col("id") % 3).alias("key"))
+        >>> sampled = dataset.sampleBy("key", fractions={0: 0.1, 1: 0.2}, seed=0)
+        >>> sampled.groupBy("key").count().orderBy("key").show()
+        +---+-----+
+        |key|count|
+        +---+-----+
+        |  0|    3|
+        |  1|    8|
+        +---+-----+
+
+        """
+        if not isinstance(col, str):
+            raise ValueError("col must be a string, but got %r" % type(col))
+        if not isinstance(fractions, dict):
+            raise ValueError("fractions must be a dict but got %r" % type(fractions))
+        for k, v in fractions.items():
+            if not isinstance(k, (float, int, long, basestring)):
+                raise ValueError("key must be float, int, long, or string, but got %r" % type(k))
+            fractions[k] = float(v)
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
+        return DataFrame(self._jdf.stat().sampleBy(col, self._jmap(fractions), seed), self.sql_ctx)
+
     @since(1.4)
     def randomSplit(self, weights, seed=None):
         """Randomly splits this :class:`DataFrame` with the provided weights.
@@ -532,8 +566,7 @@ class DataFrame(object):
 
         if on is None or len(on) == 0:
             jdf = self._jdf.join(other._jdf)
-
-        if isinstance(on[0], basestring):
+        elif isinstance(on[0], basestring):
             jdf = self._jdf.join(other._jdf, self._jseq(on))
         else:
             assert isinstance(on[0], Column), "on should be Column or list of Column"
@@ -1313,6 +1346,11 @@ class DataFrameStatFunctions(object):
         return self.df.freqItems(cols, support)
 
     freqItems.__doc__ = DataFrame.freqItems.__doc__
+
+    def sampleBy(self, col, fractions, seed=None):
+        return self.df.sampleBy(col, fractions, seed)
+
+    sampleBy.__doc__ = DataFrame.sampleBy.__doc__
 
 
 def _test():

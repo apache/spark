@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.math.BigInteger;
+
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.ByteArray;
 import org.apache.spark.unsafe.types.CalendarInterval;
@@ -29,6 +32,59 @@ import org.apache.spark.unsafe.types.UTF8String;
  * used by {@link org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection}.
  */
 public class UnsafeRowWriters {
+
+  /** Writer for Decimal with precision under 18. */
+  public static class CompactDecimalWriter {
+
+    public static int getSize(Decimal input) {
+      return 0;
+    }
+
+    public static int write(UnsafeRow target, int ordinal, int cursor, Decimal input) {
+      target.setLong(ordinal, input.toUnscaledLong());
+      return 0;
+    }
+  }
+
+  /** Writer for Decimal with precision larger than 18. */
+  public static class DecimalWriter {
+    private static final int SIZE = 16;
+    public static int getSize(Decimal input) {
+      // bounded size
+      return SIZE;
+    }
+
+    public static int write(UnsafeRow target, int ordinal, int cursor, Decimal input) {
+      final Object base = target.getBaseObject();
+      final long offset = target.getBaseOffset() + cursor;
+      // zero-out the bytes
+      Platform.putLong(base, offset, 0L);
+      Platform.putLong(base, offset + 8, 0L);
+
+      if (input == null) {
+        target.setNullAt(ordinal);
+        // keep the offset and length for update
+        int fieldOffset = UnsafeRow.calculateBitSetWidthInBytes(target.numFields()) + ordinal * 8;
+        Platform.putLong(base, target.getBaseOffset() + fieldOffset,
+          ((long) cursor) << 32);
+        return SIZE;
+      }
+
+      final BigInteger integer = input.toJavaBigDecimal().unscaledValue();
+      int signum = integer.signum() + 1;
+      final int[] mag = (int[]) Platform.getObjectVolatile(
+        integer, Platform.BIG_INTEGER_MAG_OFFSET);
+      assert(mag.length <= 4);
+
+      // Write the bytes to the variable length portion.
+      Platform.copyMemory(
+        mag, Platform.INT_ARRAY_OFFSET, base, target.getBaseOffset() + cursor, mag.length * 4);
+      // Set the fixed length portion.
+      target.setLong(ordinal, (((long) cursor) << 32) | ((long) ((signum << 8) + mag.length)));
+
+      return SIZE;
+    }
+  }
 
   /** Writer for UTF8String. */
   public static class UTF8StringWriter {
@@ -43,8 +99,7 @@ public class UnsafeRowWriters {
 
       // zero-out the padding bytes
       if ((numBytes & 0x07) > 0) {
-        PlatformDependent.UNSAFE.putLong(
-          target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
+        Platform.putLong(target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
       }
 
       // Write the bytes to the variable length portion.
@@ -69,8 +124,7 @@ public class UnsafeRowWriters {
 
       // zero-out the padding bytes
       if ((numBytes & 0x07) > 0) {
-        PlatformDependent.UNSAFE.putLong(
-          target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
+        Platform.putLong(target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
       }
 
       // Write the bytes to the variable length portion.
@@ -111,8 +165,7 @@ public class UnsafeRowWriters {
 
         // zero-out the padding bytes
         if ((numBytes & 0x07) > 0) {
-          PlatformDependent.UNSAFE.putLong(
-            target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
+          Platform.putLong(target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
         }
 
         // Write the bytes to the variable length portion.
@@ -135,12 +188,80 @@ public class UnsafeRowWriters {
       final long offset = target.getBaseOffset() + cursor;
 
       // Write the months and microseconds fields of Interval to the variable length portion.
-      PlatformDependent.UNSAFE.putLong(target.getBaseObject(), offset, input.months);
-      PlatformDependent.UNSAFE.putLong(target.getBaseObject(), offset + 8, input.microseconds);
+      Platform.putLong(target.getBaseObject(), offset, input.months);
+      Platform.putLong(target.getBaseObject(), offset + 8, input.microseconds);
 
       // Set the fixed length portion.
       target.setLong(ordinal, ((long) cursor) << 32);
       return 16;
+    }
+  }
+
+  public static class ArrayWriter {
+
+    public static int getSize(UnsafeArrayData input) {
+      // we need extra 4 bytes the store the number of elements in this array.
+      return ByteArrayMethods.roundNumberOfBytesToNearestWord(input.getSizeInBytes() + 4);
+    }
+
+    public static int write(UnsafeRow target, int ordinal, int cursor, UnsafeArrayData input) {
+      final int numBytes = input.getSizeInBytes() + 4;
+      final long offset = target.getBaseOffset() + cursor;
+
+      // write the number of elements into first 4 bytes.
+      Platform.putInt(target.getBaseObject(), offset, input.numElements());
+
+      // zero-out the padding bytes
+      if ((numBytes & 0x07) > 0) {
+        Platform.putLong(target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
+      }
+
+      // Write the bytes to the variable length portion.
+      input.writeToMemory(target.getBaseObject(), offset + 4);
+
+      // Set the fixed length portion.
+      target.setLong(ordinal, (((long) cursor) << 32) | ((long) numBytes));
+
+      return ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
+    }
+  }
+
+  public static class MapWriter {
+
+    public static int getSize(UnsafeMapData input) {
+      // we need extra 8 bytes to store number of elements and numBytes of key array.
+      final int sizeInBytes = 4 + 4 + input.getSizeInBytes();
+      return ByteArrayMethods.roundNumberOfBytesToNearestWord(sizeInBytes);
+    }
+
+    public static int write(UnsafeRow target, int ordinal, int cursor, UnsafeMapData input) {
+      final long offset = target.getBaseOffset() + cursor;
+      final UnsafeArrayData keyArray = input.keys;
+      final UnsafeArrayData valueArray = input.values;
+      final int keysNumBytes = keyArray.getSizeInBytes();
+      final int valuesNumBytes = valueArray.getSizeInBytes();
+      final int numBytes = 4 + 4 + keysNumBytes + valuesNumBytes;
+
+      // write the number of elements into first 4 bytes.
+      Platform.putInt(target.getBaseObject(), offset, input.numElements());
+      // write the numBytes of key array into second 4 bytes.
+      Platform.putInt(target.getBaseObject(), offset + 4, keysNumBytes);
+
+      // zero-out the padding bytes
+      if ((numBytes & 0x07) > 0) {
+        Platform.putLong(target.getBaseObject(), offset + ((numBytes >> 3) << 3), 0L);
+      }
+
+      // Write the bytes of key array to the variable length portion.
+      keyArray.writeToMemory(target.getBaseObject(), offset + 8);
+
+      // Write the bytes of value array to the variable length portion.
+      valueArray.writeToMemory(target.getBaseObject(), offset + 8 + keysNumBytes);
+
+      // Set the fixed length portion.
+      target.setLong(ordinal, (((long) cursor) << 32) | ((long) numBytes));
+
+      return ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
     }
   }
 }

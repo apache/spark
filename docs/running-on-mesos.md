@@ -216,6 +216,20 @@ node. Please refer to [Hadoop on Mesos](https://github.com/mesos/hadoop).
 
 In either case, HDFS runs separately from Hadoop MapReduce, without being scheduled through Mesos.
 
+# Dynamic Resource Allocation with Mesos
+
+Mesos supports dynamic allocation only with coarse grain mode, which can resize the number of executors based on statistics
+of the application. While dynamic allocation supports both scaling up and scaling down the number of executors, the coarse grain scheduler only supports scaling down
+since it is already designed to run one executor per slave with the configured amount of resources. However, after scaling down the number of executors the coarse grain scheduler
+can scale back up to the same amount of executors when Spark signals more executors are needed.
+
+Users that like to utilize this feature should launch the Mesos Shuffle Service that
+provides shuffle data cleanup functionality on top of the Shuffle Service since Mesos doesn't yet support notifying another framework's
+termination. To launch/stop the Mesos Shuffle Service please use the provided sbin/start-mesos-shuffle-service.sh and sbin/stop-mesos-shuffle-service.sh
+scripts accordingly.
+
+The Shuffle Service is expected to be running on each slave node that will run Spark executors. One way to easily achieve this with Mesos
+is to launch the Shuffle Service with Marathon with a unique host constraint.
 
 # Configuration
 
@@ -304,6 +318,14 @@ See the [configuration page](configuration.html) for information on Spark config
     The amount of additional memory, specified in MB, to be allocated per executor. By default,
     the overhead will be larger of either 384 or 10% of `spark.executor.memory`. If it's set,
     the final overhead will be this value.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.uris</code></td>
+  <td>(none)</td>
+  <td>
+    A list of URIs to be downloaded to the sandbox when driver or executor is launched by Mesos.
+    This applies to both coarse-grain and fine-grain mode.
   </td>
 </tr>
 <tr>

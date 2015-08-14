@@ -23,7 +23,7 @@ import com.google.common.io.ByteStreams;
 
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManager;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 
 /**
  * Reads spill files written by {@link UnsafeSorterSpillWriter} (see that class for a description
@@ -31,6 +31,7 @@ import org.apache.spark.unsafe.PlatformDependent;
  */
 final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
 
+  private final File file;
   private InputStream in;
   private DataInputStream din;
 
@@ -41,13 +42,14 @@ final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
 
   private byte[] arr = new byte[1024 * 1024];
   private Object baseObject = arr;
-  private final long baseOffset = PlatformDependent.BYTE_ARRAY_OFFSET;
+  private final long baseOffset = Platform.BYTE_ARRAY_OFFSET;
 
   public UnsafeSorterSpillReader(
       BlockManager blockManager,
       File file,
       BlockId blockId) throws IOException {
     assert (file.length() > 0);
+    this.file = file;
     final BufferedInputStream bs = new BufferedInputStream(new FileInputStream(file));
     this.in = blockManager.wrapForCompression(blockId, bs);
     this.din = new DataInputStream(this.in);
@@ -71,6 +73,7 @@ final class UnsafeSorterSpillReader extends UnsafeSorterIterator {
     numRecordsRemaining--;
     if (numRecordsRemaining == 0) {
       in.close();
+      file.delete();
       in = null;
       din = null;
     }

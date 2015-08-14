@@ -15,16 +15,22 @@
 # limitations under the License.
 #
 
+import sys
+if sys.version > '3':
+    basestring = str
+
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer
 from pyspark.mllib.common import inherit_doc
+from pyspark.mllib.linalg import _convert_to_vector
 
-__all__ = ['Binarizer', 'HashingTF', 'IDF', 'IDFModel', 'NGram', 'Normalizer', 'OneHotEncoder',
-           'PolynomialExpansion', 'RegexTokenizer', 'StandardScaler', 'StandardScalerModel',
-           'StringIndexer', 'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer',
-           'Word2Vec', 'Word2VecModel', 'PCA', 'PCAModel']
+__all__ = ['Binarizer', 'Bucketizer', 'HashingTF', 'IDF', 'IDFModel', 'NGram', 'Normalizer',
+           'OneHotEncoder', 'PolynomialExpansion', 'RegexTokenizer', 'StandardScaler',
+           'StandardScalerModel', 'StringIndexer', 'StringIndexerModel', 'Tokenizer',
+           'VectorAssembler', 'VectorIndexer', 'Word2Vec', 'Word2VecModel', 'PCA',
+           'PCAModel', 'RFormula', 'RFormulaModel']
 
 
 @inherit_doc
@@ -954,6 +960,23 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     >>> sent = ("a b " * 100 + "a c " * 10).split(" ")
     >>> doc = sqlContext.createDataFrame([(sent,), (sent,)], ["sentence"])
     >>> model = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model").fit(doc)
+    >>> model.getVectors().show()
+    +----+--------------------+
+    |word|              vector|
+    +----+--------------------+
+    |   a|[-0.3511952459812...|
+    |   b|[0.29077222943305...|
+    |   c|[0.02315592765808...|
+    +----+--------------------+
+    ...
+    >>> model.findSynonyms("a", 2).show()
+    +----+-------------------+
+    |word|         similarity|
+    +----+-------------------+
+    |   b|0.29255685145799626|
+    |   c|-0.5414068302988307|
+    +----+-------------------+
+    ...
     >>> model.transform(doc).head().model
     DenseVector([-0.0422, -0.5138, -0.2546, 0.6885, 0.276])
     """
@@ -1047,6 +1070,24 @@ class Word2VecModel(JavaModel):
     Model fitted by Word2Vec.
     """
 
+    def getVectors(self):
+        """
+        Returns the vector representation of the words as a dataframe
+        with two fields, word and vector.
+        """
+        return self._call_java("getVectors")
+
+    def findSynonyms(self, word, num):
+        """
+        Find "num" number of words closest in similarity to "word".
+        word can be a string or vector representation.
+        Returns a dataframe with two fields word and similarity (which
+        gives the cosine similarity).
+        """
+        if not isinstance(word, basestring):
+            word = _convert_to_vector(word)
+        return self._call_java("findSynonyms", word, num)
+
 
 @inherit_doc
 class PCA(JavaEstimator, HasInputCol, HasOutputCol):
@@ -1107,6 +1148,89 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
 class PCAModel(JavaModel):
     """
     Model fitted by PCA.
+    """
+
+
+@inherit_doc
+class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol):
+    """
+    .. note:: Experimental
+
+    Implements the transforms required for fitting a dataset against an
+    R model formula. Currently we support a limited subset of the R
+    operators, including '~', '+', '-', and '.'. Also see the R formula
+    docs:
+    http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
+
+    >>> df = sqlContext.createDataFrame([
+    ...     (1.0, 1.0, "a"),
+    ...     (0.0, 2.0, "b"),
+    ...     (0.0, 0.0, "a")
+    ... ], ["y", "x", "s"])
+    >>> rf = RFormula(formula="y ~ x + s")
+    >>> rf.fit(df).transform(df).show()
+    +---+---+---+---------+-----+
+    |  y|  x|  s| features|label|
+    +---+---+---+---------+-----+
+    |1.0|1.0|  a|[1.0,1.0]|  1.0|
+    |0.0|2.0|  b|[2.0,0.0]|  0.0|
+    |0.0|0.0|  a|[0.0,1.0]|  0.0|
+    +---+---+---+---------+-----+
+    ...
+    >>> rf.fit(df, {rf.formula: "y ~ . - s"}).transform(df).show()
+    +---+---+---+--------+-----+
+    |  y|  x|  s|features|label|
+    +---+---+---+--------+-----+
+    |1.0|1.0|  a|   [1.0]|  1.0|
+    |0.0|2.0|  b|   [2.0]|  0.0|
+    |0.0|0.0|  a|   [0.0]|  0.0|
+    +---+---+---+--------+-----+
+    ...
+    """
+
+    # a placeholder to make it appear in the generated doc
+    formula = Param(Params._dummy(), "formula", "R model formula")
+
+    @keyword_only
+    def __init__(self, formula=None, featuresCol="features", labelCol="label"):
+        """
+        __init__(self, formula=None, featuresCol="features", labelCol="label")
+        """
+        super(RFormula, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
+        self.formula = Param(self, "formula", "R model formula")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, formula=None, featuresCol="features", labelCol="label"):
+        """
+        setParams(self, formula=None, featuresCol="features", labelCol="label")
+        Sets params for RFormula.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setFormula(self, value):
+        """
+        Sets the value of :py:attr:`formula`.
+        """
+        self._paramMap[self.formula] = value
+        return self
+
+    def getFormula(self):
+        """
+        Gets the value of :py:attr:`formula`.
+        """
+        return self.getOrDefault(self.formula)
+
+    def _create_model(self, java_model):
+        return RFormulaModel(java_model)
+
+
+class RFormulaModel(JavaModel):
+    """
+    Model fitted by :py:class:`RFormula`.
     """
 
 

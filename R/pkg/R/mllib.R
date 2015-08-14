@@ -56,10 +56,10 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
 #'
 #' Makes predictions from a model produced by glm(), similarly to R's predict().
 #'
-#' @param model A fitted MLlib model
+#' @param object A fitted MLlib model
 #' @param newData DataFrame for testing
 #' @return DataFrame containing predicted values
-#' @rdname glm
+#' @rdname predict
 #' @export
 #' @examples
 #'\dontrun{
@@ -70,4 +70,30 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
 setMethod("predict", signature(object = "PipelineModel"),
           function(object, newData) {
             return(dataFrame(callJMethod(object@model, "transform", newData@sdf)))
+          })
+
+#' Get the summary of a model
+#'
+#' Returns the summary of a model produced by glm(), similarly to R's summary().
+#'
+#' @param x A fitted MLlib model
+#' @return a list with a 'coefficient' component, which is the matrix of coefficients. See
+#'         summary.glm for more information.
+#' @rdname summary
+#' @export
+#' @examples
+#'\dontrun{
+#' model <- glm(y ~ x, trainingData)
+#' summary(model)
+#'}
+setMethod("summary", signature(x = "PipelineModel"),
+          function(x, ...) {
+            features <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getModelFeatures", x@model)
+            weights <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getModelWeights", x@model)
+            coefficients <- as.matrix(unlist(weights))
+            colnames(coefficients) <- c("Estimate")
+            rownames(coefficients) <- unlist(features)
+            return(list(coefficients = coefficients))
           })

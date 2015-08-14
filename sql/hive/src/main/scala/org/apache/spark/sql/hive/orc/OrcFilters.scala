@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.orc
 
 import org.apache.hadoop.hive.common.`type`.{HiveChar, HiveDecimal, HiveVarchar}
-import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
+import org.apache.hadoop.hive.ql.io.sarg.{SearchArgumentFactory, SearchArgument}
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 import org.apache.hadoop.hive.serde2.io.DateWritable
 
@@ -33,13 +33,13 @@ import org.apache.spark.sql.sources._
 private[orc] object OrcFilters extends Logging {
   def createFilter(expr: Array[Filter]): Option[SearchArgument] = {
     expr.reduceOption(And).flatMap { conjunction =>
-      val builder = SearchArgument.FACTORY.newBuilder()
+      val builder = SearchArgumentFactory.newBuilder()
       buildSearchArgument(conjunction, builder).map(_.build())
     }
   }
 
   private def buildSearchArgument(expression: Filter, builder: Builder): Option[Builder] = {
-    def newBuilder = SearchArgument.FACTORY.newBuilder()
+    def newBuilder = SearchArgumentFactory.newBuilder()
 
     def isSearchableLiteral(value: Any): Boolean = value match {
       // These are types recognized by the `SearchArgumentImpl.BuilderImpl.boxLiteral()` method.
@@ -106,6 +106,11 @@ private[orc] object OrcFilters extends Logging {
         Option(value)
           .filter(isSearchableLiteral)
           .map(builder.equals(attribute, _))
+
+      case EqualNullSafe(attribute, value) =>
+        Option(value)
+          .filter(isSearchableLiteral)
+          .map(builder.nullSafeEquals(attribute, _))
 
       case LessThan(attribute, value) =>
         Option(value)

@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.linalg.{Vector, Vectors, DenseMatrix, Matrices}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -55,6 +56,9 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("pca_features")
       .setK(3)
       .fit(df)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(pca)
 
     pca.transform(df).select("pca_features", "expected").collect().foreach {
       case Row(x: Vector, y: Vector) =>

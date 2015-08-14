@@ -648,7 +648,7 @@ class UserDefinedType(DataType):
 
     @classmethod
     def fromJson(cls, json):
-        pyUDT = str(json["pyClass"])
+        pyUDT = str(json["pyClass"])  # convert unicode to str
         split = pyUDT.rfind(".")
         pyModule = pyUDT[:split]
         pyClass = pyUDT[split+1:]
@@ -1197,13 +1197,36 @@ class Row(tuple):
         else:
             raise ValueError("No args or kwargs")
 
-    def asDict(self):
+    def asDict(self, recursive=False):
         """
         Return as an dict
+
+        :param recursive: turns the nested Row as dict (default: False).
+
+        >>> Row(name="Alice", age=11).asDict() == {'name': 'Alice', 'age': 11}
+        True
+        >>> row = Row(key=1, value=Row(name='a', age=2))
+        >>> row.asDict() == {'key': 1, 'value': Row(age=2, name='a')}
+        True
+        >>> row.asDict(True) == {'key': 1, 'value': {'name': 'a', 'age': 2}}
+        True
         """
         if not hasattr(self, "__fields__"):
             raise TypeError("Cannot convert a Row class into dict")
-        return dict(zip(self.__fields__, self))
+
+        if recursive:
+            def conv(obj):
+                if isinstance(obj, Row):
+                    return obj.asDict(True)
+                elif isinstance(obj, list):
+                    return [conv(o) for o in obj]
+                elif isinstance(obj, dict):
+                    return dict((k, conv(v)) for k, v in obj.items())
+                else:
+                    return obj
+            return dict(zip(self.__fields__, (conv(o) for o in self)))
+        else:
+            return dict(zip(self.__fields__, self))
 
     # let object acts like class
     def __call__(self, *args):
@@ -1222,6 +1245,11 @@ class Row(tuple):
             raise AttributeError(item)
         except ValueError:
             raise AttributeError(item)
+
+    def __setattr__(self, key, value):
+        if key != '__fields__':
+            raise Exception("Row is read-only")
+        self.__dict__[key] = value
 
     def __reduce__(self):
         """Returns a tuple so Python knows how to pickle Row."""

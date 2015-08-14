@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.ScalaUDF
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, AggregateExpression2}
+import org.apache.spark.sql.execution.aggregate.ScalaUDAF
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.types._
 import org.apache.spark.annotation.Experimental
 
@@ -87,6 +90,33 @@ abstract class UserDefinedAggregateFunction extends Serializable {
    * aggregation buffer.
    */
   def evaluate(buffer: Row): Any
+
+  /**
+   * Creates a [[Column]] for this UDAF with given [[Column]]s as arguments.
+   */
+  @scala.annotation.varargs
+  def apply(exprs: Column*): Column = {
+    val aggregateExpression =
+      AggregateExpression2(
+        ScalaUDAF(exprs.map(_.expr), this),
+        Complete,
+        isDistinct = false)
+    Column(aggregateExpression)
+  }
+
+  /**
+   * Creates a [[Column]] for this UDAF with given [[Column]]s as arguments.
+   * If `isDistinct` is true, this UDAF is working on distinct input values.
+   */
+  @scala.annotation.varargs
+  def apply(isDistinct: Boolean, exprs: Column*): Column = {
+    val aggregateExpression =
+      AggregateExpression2(
+        ScalaUDAF(exprs.map(_.expr), this),
+        Complete,
+        isDistinct = isDistinct)
+    Column(aggregateExpression)
+  }
 }
 
 /**

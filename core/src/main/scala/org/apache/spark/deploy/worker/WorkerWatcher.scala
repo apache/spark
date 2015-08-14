@@ -43,7 +43,7 @@ private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: Strin
   private[deploy] def setTesting(testing: Boolean) = isTesting = testing
   private var isTesting = false
 
-  // Lets us filter events only from the worker's actor system
+  // Lets filter events only from the worker's rpc system
   private val expectedAddress = RpcAddress.fromURIString(workerUrl)
   private def isWorker(address: RpcAddress) = expectedAddress == address
 
@@ -62,7 +62,7 @@ private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: Strin
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     if (isWorker(remoteAddress)) {
       // This log message will never be seen
-      logError(s"Lost connection to worker actor $workerUrl. Exiting.")
+      logError(s"Lost connection to worker rpc endpoint $workerUrl. Exiting.")
       exitNonZero()
     }
   }

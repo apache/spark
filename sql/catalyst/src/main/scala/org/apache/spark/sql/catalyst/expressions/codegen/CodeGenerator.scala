@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
@@ -27,6 +28,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
 
 
@@ -79,6 +81,16 @@ class CodeGenContext {
     mutableStates += ((javaType, variableName, initCode))
   }
 
+  /**
+   * Holding all the functions those will be added into generated class.
+   */
+  val addedFuntions: mutable.Map[String, String] =
+    mutable.Map.empty[String, String]
+
+  def addNewFunction(funcName: String, funcCode: String): Unit = {
+    addedFuntions += ((funcName, funcCode))
+  }
+
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
   final val JAVA_SHORT = "short"
@@ -106,12 +118,15 @@ class CodeGenContext {
     val jt = javaType(dataType)
     dataType match {
       case _ if isPrimitiveType(jt) => s"$getter.get${primitiveTypeName(jt)}($ordinal)"
+      case t: DecimalType => s"$getter.getDecimal($ordinal, ${t.precision}, ${t.scale})"
       case StringType => s"$getter.getUTF8String($ordinal)"
       case BinaryType => s"$getter.getBinary($ordinal)"
       case CalendarIntervalType => s"$getter.getInterval($ordinal)"
       case t: StructType => s"$getter.getStruct($ordinal, ${t.size})"
-      case a: ArrayType => s"$getter.getArray($ordinal)"
-      case _ => s"($jt)$getter.get($ordinal)" // todo: remove generic getter.
+      case _: ArrayType => s"$getter.getArray($ordinal)"
+      case _: MapType => s"$getter.getMap($ordinal)"
+      case NullType => "null"
+      case _ => s"($jt)$getter.get($ordinal, null)"
     }
   }
 
@@ -120,10 +135,12 @@ class CodeGenContext {
    */
   def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
     val jt = javaType(dataType)
-    if (isPrimitiveType(jt)) {
-      s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
-    } else {
-      s"$row.update($ordinal, $value)"
+    dataType match {
+      case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
+      case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
+      // The UTF8String may came from UnsafeRow, otherwise clone is cheap (re-use the bytes)
+      case StringType => s"$row.update($ordinal, $value.clone())"
+      case _ => s"$row.update($ordinal, $value)"
     }
   }
 
@@ -154,7 +171,7 @@ class CodeGenContext {
     case CalendarIntervalType => "CalendarInterval"
     case _: StructType => "InternalRow"
     case _: ArrayType => "ArrayData"
-    case _: MapType => "scala.collection.Map"
+    case _: MapType => "MapData"
     case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
     case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
     case _ => "Object"
@@ -204,7 +221,11 @@ class CodeGenContext {
   }
 
   /**
-   * Generates code for compare expression in Java.
+   * Generates code for comparing two expressions.
+   *
+   * @param dataType data type of the expressions
+   * @param c1 name of the variable of expression 1's output
+   * @param c2 name of the variable of expression 2's output
    */
   def genComp(dataType: DataType, c1: String, c2: String): String = dataType match {
     // java boolean doesn't support > or < operator
@@ -215,9 +236,22 @@ class CodeGenContext {
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
     case NullType => "0"
+    case schema: StructType =>
+      val comparisons = GenerateOrdering.genComparisons(this, schema)
+      val compareFunc = freshName("compareStruct")
+      val funcCode: String =
+        s"""
+          public int $compareFunc(InternalRow a, InternalRow b) {
+            InternalRow i = null;
+            $comparisons
+            return 0;
+          }
+        """
+      addNewFunction(compareFunc, funcCode)
+      s"this.$compareFunc($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
-    case _ => throw new IllegalArgumentException(
-      "cannot generate compare code for un-comparable type")
+    case _ =>
+      throw new IllegalArgumentException("cannot generate compare code for un-comparable type")
   }
 
   /**
@@ -232,6 +266,45 @@ class CodeGenContext {
   def isPrimitiveType(jt: String): Boolean = primitiveTypes.contains(jt)
 
   def isPrimitiveType(dt: DataType): Boolean = isPrimitiveType(javaType(dt))
+
+  /**
+   * Splits the generated code of expressions into multiple functions, because function has
+   * 64kb code size limit in JVM
+   *
+   * @param row the variable name of row that is used by expressions
+   */
+  def splitExpressions(row: String, expressions: Seq[String]): String = {
+    val blocks = new ArrayBuffer[String]()
+    val blockBuilder = new StringBuilder()
+    for (code <- expressions) {
+      // We can't know how many byte code will be generated, so use the number of bytes as limit
+      if (blockBuilder.length > 64 * 1000) {
+        blocks.append(blockBuilder.toString())
+        blockBuilder.clear()
+      }
+      blockBuilder.append(code)
+    }
+    blocks.append(blockBuilder.toString())
+
+    if (blocks.length == 1) {
+      // inline execution if only one block
+      blocks.head
+    } else {
+      val apply = freshName("apply")
+      val functions = blocks.zipWithIndex.map { case (body, i) =>
+        val name = s"${apply}_$i"
+        val code = s"""
+           |private void $name(InternalRow $row) {
+           |  $body
+           |}
+         """.stripMargin
+         addNewFunction(name, code)
+         name
+      }
+
+      functions.map(name => s"$name($row);").mkString("\n")
+    }
+  }
 }
 
 /**
@@ -256,11 +329,15 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected def declareMutableStates(ctx: CodeGenContext): String = {
     ctx.mutableStates.map { case (javaType, variableName, _) =>
       s"private $javaType $variableName;"
-    }.mkString("\n      ")
+    }.mkString("\n")
   }
 
   protected def initMutableStates(ctx: CodeGenContext): String = {
-    ctx.mutableStates.map(_._3).mkString("\n        ")
+    ctx.mutableStates.map(_._3).mkString("\n")
+  }
+
+  protected def declareAddedFunctions(ctx: CodeGenContext): String = {
+    ctx.addedFuntions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
   }
 
   /**
@@ -291,20 +368,26 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(getClass.getClassLoader)
+    // Cannot be under package codegen, or fail with java.lang.InstantiationException
+    evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
     evaluator.setDefaultImports(Array(
+      classOf[Platform].getName,
       classOf[InternalRow].getName,
       classOf[UnsafeRow].getName,
       classOf[UTF8String].getName,
       classOf[Decimal].getName,
       classOf[CalendarInterval].getName,
-      classOf[ArrayData].getName
+      classOf[ArrayData].getName,
+      classOf[UnsafeArrayData].getName,
+      classOf[MapData].getName,
+      classOf[UnsafeMapData].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
     try {
       evaluator.cook(code)
     } catch {
       case e: Exception =>
-        val msg = "failed to compile:\n " + CodeFormatter.format(code)
+        val msg = s"failed to compile: $e\n" + CodeFormatter.format(code)
         logError(msg, e)
         throw new Exception(msg, e)
     }

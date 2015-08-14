@@ -185,12 +185,65 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(s.substr(0), "example", row)
     checkEvaluation(s.substring(0, 2), "ex", row)
     checkEvaluation(s.substring(0), "example", row)
+
+    val bytes = Array[Byte](1, 2, 3, 4)
+    checkEvaluation(Substring(bytes, 0, 2), Array[Byte](1, 2))
+    checkEvaluation(Substring(bytes, 1, 2), Array[Byte](1, 2))
+    checkEvaluation(Substring(bytes, 2, 2), Array[Byte](2, 3))
+    checkEvaluation(Substring(bytes, 3, 2), Array[Byte](3, 4))
+    checkEvaluation(Substring(bytes, 4, 2), Array[Byte](4))
+    checkEvaluation(Substring(bytes, 8, 2), Array[Byte]())
+    checkEvaluation(Substring(bytes, -1, 2), Array[Byte](4))
+    checkEvaluation(Substring(bytes, -2, 2), Array[Byte](3, 4))
+    checkEvaluation(Substring(bytes, -3, 2), Array[Byte](2, 3))
+    checkEvaluation(Substring(bytes, -4, 2), Array[Byte](1, 2))
+    checkEvaluation(Substring(bytes, -5, 2), Array[Byte](1))
+    checkEvaluation(Substring(bytes, -8, 2), Array[Byte]())
+  }
+
+  test("string substring_index function") {
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(3)), "www.apache.org")
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(2)), "www.apache")
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(1)), "www")
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(0)), "")
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(-3)), "www.apache.org")
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(-2)), "apache.org")
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(-1)), "org")
+    checkEvaluation(
+      SubstringIndex(Literal(""), Literal("."), Literal(-2)), "")
+    checkEvaluation(
+      SubstringIndex(Literal.create(null, StringType), Literal("."), Literal(-2)), null)
+    checkEvaluation(SubstringIndex(
+        Literal("www.apache.org"), Literal.create(null, StringType), Literal(-2)), null)
+    // non ascii chars
+    // scalastyle:off
+    checkEvaluation(
+      SubstringIndex(Literal("大千世界大千世界"), Literal( "千"), Literal(2)), "大千世界大")
+    // scalastyle:on
+    checkEvaluation(
+      SubstringIndex(Literal("www||apache||org"), Literal( "||"), Literal(2)), "www||apache")
   }
 
   test("LIKE literal Regular Expression") {
     checkEvaluation(Literal.create(null, StringType).like("a"), null)
     checkEvaluation(Literal.create("a", StringType).like(Literal.create(null, StringType)), null)
     checkEvaluation(Literal.create(null, StringType).like(Literal.create(null, StringType)), null)
+    checkEvaluation(
+      Literal.create("a", StringType).like(NonFoldableLiteral.create("a", StringType)), true)
+    checkEvaluation(
+      Literal.create("a", StringType).like(NonFoldableLiteral.create(null, StringType)), null)
+    checkEvaluation(
+      Literal.create(null, StringType).like(NonFoldableLiteral.create("a", StringType)), null)
+    checkEvaluation(
+      Literal.create(null, StringType).like(NonFoldableLiteral.create(null, StringType)), null)
+
     checkEvaluation("abdef" like "abdef", true)
     checkEvaluation("a_%b" like "a\\__b", true)
     checkEvaluation("addb" like "a_%b", true)
@@ -232,6 +285,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, StringType) rlike "abdef", null)
     checkEvaluation("abdef" rlike Literal.create(null, StringType), null)
     checkEvaluation(Literal.create(null, StringType) rlike Literal.create(null, StringType), null)
+    checkEvaluation("abdef" rlike NonFoldableLiteral.create("abdef", StringType), true)
+    checkEvaluation("abdef" rlike NonFoldableLiteral.create(null, StringType), null)
+    checkEvaluation(
+      Literal.create(null, StringType) rlike NonFoldableLiteral.create("abdef", StringType), null)
+    checkEvaluation(
+      Literal.create(null, StringType) rlike NonFoldableLiteral.create(null, StringType), null)
+
     checkEvaluation("abdef" rlike "abdef", true)
     checkEvaluation("abbbbc" rlike "a.*c", true)
 
@@ -317,6 +377,18 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Decode(b, Literal.create(null, StringType)), null, create_row(null))
   }
 
+  test("initcap unit test") {
+    checkEvaluation(InitCap(Literal.create(null, StringType)), null)
+    checkEvaluation(InitCap(Literal("a b")), "A B")
+    checkEvaluation(InitCap(Literal(" a")), " A")
+    checkEvaluation(InitCap(Literal("the test")), "The Test")
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    checkEvaluation(InitCap(Literal("世界")), "世界")
+    // scalastyle:on
+  }
+
+
   test("Levenshtein distance") {
     checkEvaluation(Levenshtein(Literal.create(null, StringType), Literal("")), null)
     checkEvaluation(Levenshtein(Literal(""), Literal.create(null, StringType)), null)
@@ -328,6 +400,48 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     checkEvaluation(Levenshtein(Literal("千世"), Literal("fog")), 3)
     checkEvaluation(Levenshtein(Literal("世界千世"), Literal("大a界b")), 4)
+    // scalastyle:on
+  }
+
+  test("soundex unit test") {
+    checkEvaluation(SoundEx(Literal("ZIN")), "Z500")
+    checkEvaluation(SoundEx(Literal("SU")), "S000")
+    checkEvaluation(SoundEx(Literal("")), "")
+    checkEvaluation(SoundEx(Literal.create(null, StringType)), null)
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    checkEvaluation(SoundEx(Literal("测试")), "测试")
+    checkEvaluation(SoundEx(Literal("Tschüss")), "T220")
+    // scalastyle:on
+    checkEvaluation(SoundEx(Literal("zZ")), "Z000", create_row("s8"))
+    checkEvaluation(SoundEx(Literal("RAGSSEEESSSVEEWE")), "R221")
+    checkEvaluation(SoundEx(Literal("Ashcraft")), "A261")
+    checkEvaluation(SoundEx(Literal("Aswcraft")), "A261")
+    checkEvaluation(SoundEx(Literal("Tymczak")), "T522")
+    checkEvaluation(SoundEx(Literal("Pfister")), "P236")
+    checkEvaluation(SoundEx(Literal("Miller")), "M460")
+    checkEvaluation(SoundEx(Literal("Peterson")), "P362")
+    checkEvaluation(SoundEx(Literal("Peters")), "P362")
+    checkEvaluation(SoundEx(Literal("Auerbach")), "A612")
+    checkEvaluation(SoundEx(Literal("Uhrbach")), "U612")
+    checkEvaluation(SoundEx(Literal("Moskowitz")), "M232")
+    checkEvaluation(SoundEx(Literal("Moskovitz")), "M213")
+    checkEvaluation(SoundEx(Literal("relyheewsgeessg")), "R422")
+    checkEvaluation(SoundEx(Literal("!!")), "!!")
+  }
+
+  test("translate") {
+    checkEvaluation(
+      StringTranslate(Literal("translate"), Literal("rnlt"), Literal("123")), "1a2s3ae")
+    checkEvaluation(StringTranslate(Literal("translate"), Literal(""), Literal("123")), "translate")
+    checkEvaluation(StringTranslate(Literal("translate"), Literal("rnlt"), Literal("")), "asae")
+    // test for multiple mapping
+    checkEvaluation(StringTranslate(Literal("abcd"), Literal("aba"), Literal("123")), "12cd")
+    checkEvaluation(StringTranslate(Literal("abcd"), Literal("aba"), Literal("12")), "12cd")
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(StringTranslate(Literal("花花世界"), Literal("花界"), Literal("ab")), "aa世b")
     // scalastyle:on
   }
 
@@ -574,5 +688,15 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "15,159,339,180,002,773.2778")
     checkEvaluation(FormatNumber(Literal.create(null, IntegerType), Literal(3)), null)
     checkEvaluation(FormatNumber(Literal.create(null, NullType), Literal(3)), null)
+  }
+
+  test("find in set") {
+    checkEvaluation(
+      FindInSet(Literal.create(null, StringType), Literal.create(null, StringType)), null)
+    checkEvaluation(FindInSet(Literal("ab"), Literal.create(null, StringType)), null)
+    checkEvaluation(FindInSet(Literal.create(null, StringType), Literal("abc,b,ab,c,def")), null)
+    checkEvaluation(FindInSet(Literal("ab"), Literal("abc,b,ab,c,def")), 3)
+    checkEvaluation(FindInSet(Literal("abf"), Literal("abc,b,ab,c,def")), 0)
+    checkEvaluation(FindInSet(Literal("ab,"), Literal("abc,b,ab,c,def")), 0)
   }
 }

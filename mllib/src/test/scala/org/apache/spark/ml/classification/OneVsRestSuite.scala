@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
-import org.apache.spark.ml.util.MetadataUtils
+import org.apache.spark.ml.util.{MLTestingUtils, MetadataUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
@@ -70,6 +70,10 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(ova.getLabelCol === "label")
     assert(ova.getPredictionCol === "prediction")
     val ovaModel = ova.fit(dataset)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(ovaModel)
+
     assert(ovaModel.models.size === numClasses)
     val transformedDataset = ovaModel.transform(dataset)
 
@@ -151,7 +155,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     require(ovr1.getClassifier.getOrDefault(lr.maxIter) === 10,
       "copy should handle extra classifier params")
 
-    val ovrModel = ovr1.fit(dataset).copy(ParamMap(lr.threshold -> 0.1))
+    val ovrModel = ovr1.fit(dataset).copy(ParamMap(lr.thresholds -> Array(0.9, 0.1)))
     ovrModel.models.foreach { case m: LogisticRegressionModel =>
       require(m.getThreshold === 0.1, "copy should handle extra model params")
     }

@@ -26,7 +26,7 @@ import scala.collection.JavaConverters._
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
@@ -159,15 +159,13 @@ sealed trait Vector extends Serializable {
 }
 
 /**
- * :: DeveloperApi ::
+ * :: AlphaComponent ::
  *
  * User-defined type for [[Vector]] which allows easy interaction with SQL
  * via [[org.apache.spark.sql.DataFrame]].
- *
- * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
-@DeveloperApi
-private[spark] class VectorUDT extends UserDefinedType[Vector] {
+@AlphaComponent
+class VectorUDT extends UserDefinedType[Vector] {
 
   override def sqlType: StructType = {
     // type: 0 = sparse, 1 = dense
@@ -209,11 +207,11 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
         tpe match {
           case 0 =>
             val size = row.getInt(1)
-            val indices = row.getArray(2).toArray().map(_.asInstanceOf[Int])
-            val values = row.getArray(3).toArray().map(_.asInstanceOf[Double])
+            val indices = row.getArray(2).toIntArray()
+            val values = row.getArray(3).toDoubleArray()
             new SparseVector(size, indices, values)
           case 1 =>
-            val values = row.getArray(3).toArray().map(_.asInstanceOf[Double])
+            val values = row.getArray(3).toDoubleArray()
             new DenseVector(values)
         }
     }
@@ -765,6 +763,30 @@ class SparseVector(
 
       maxIdx
     }
+  }
+
+  /**
+   * Create a slice of this vector based on the given indices.
+   * @param selectedIndices Unsorted list of indices into the vector.
+   *                        This does NOT do bound checking.
+   * @return  New SparseVector with values in the order specified by the given indices.
+   *
+   * NOTE: The API needs to be discussed before making this public.
+   *       Also, if we have a version assuming indices are sorted, we should optimize it.
+   */
+  private[spark] def slice(selectedIndices: Array[Int]): SparseVector = {
+    var currentIdx = 0
+    val (sliceInds, sliceVals) = selectedIndices.flatMap { origIdx =>
+      val iIdx = java.util.Arrays.binarySearch(this.indices, origIdx)
+      val i_v = if (iIdx >= 0) {
+        Iterator((currentIdx, this.values(iIdx)))
+      } else {
+        Iterator()
+      }
+      currentIdx += 1
+      i_v
+    }.unzip
+    new SparseVector(selectedIndices.length, sliceInds.toArray, sliceVals.toArray)
   }
 }
 

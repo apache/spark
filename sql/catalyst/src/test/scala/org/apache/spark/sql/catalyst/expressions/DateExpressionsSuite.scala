@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Timestamp, Date}
+import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+
+  import IntegralLiteralTestUtils._
 
   val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
   val sdfDate = new SimpleDateFormat("yyyy-MM-dd")
@@ -48,15 +50,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("DayOfYear") {
     val sdfDay = new SimpleDateFormat("D")
-    (1998 to 2002).foreach { y =>
-      (0 to 3).foreach { m =>
-        (0 to 5).foreach { i =>
-          val c = Calendar.getInstance()
-          c.set(y, m, 28, 0, 0, 0)
-          c.add(Calendar.DATE, i)
-          checkEvaluation(DayOfYear(Literal(new Date(c.getTimeInMillis))),
-            sdfDay.format(c.getTime).toInt)
-        }
+    (0 to 3).foreach { m =>
+      (0 to 5).foreach { i =>
+        val c = Calendar.getInstance()
+        c.set(2000, m, 28, 0, 0, 0)
+        c.add(Calendar.DATE, i)
+        checkEvaluation(DayOfYear(Literal(new Date(c.getTimeInMillis))),
+          sdfDay.format(c.getTime).toInt)
       }
     }
     checkEvaluation(DayOfYear(Literal.create(null, DateType)), null)
@@ -214,6 +214,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null)
     checkEvaluation(DateAdd(Literal.create(null, DateType), Literal.create(null, IntegerType)),
       null)
+    checkEvaluation(
+      DateAdd(Literal(Date.valueOf("2016-02-28")), positiveIntLit), 49627)
+    checkEvaluation(
+      DateAdd(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -15910)
   }
 
   test("date_sub") {
@@ -228,6 +232,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null)
     checkEvaluation(DateSub(Literal.create(null, DateType), Literal.create(null, IntegerType)),
       null)
+    checkEvaluation(
+      DateSub(Literal(Date.valueOf("2016-02-28")), positiveIntLit), -15909)
+    checkEvaluation(
+      DateSub(Literal(Date.valueOf("2016-02-28")), negativeIntLit), 49628)
   }
 
   test("time_add") {
@@ -282,6 +290,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(AddMonths(Literal.create(null, DateType), Literal(1)), null)
     checkEvaluation(AddMonths(Literal.create(null, DateType), Literal.create(null, IntegerType)),
       null)
+    checkEvaluation(
+      AddMonths(Literal(Date.valueOf("2015-01-30")), Literal(Int.MinValue)), -7293498)
+    checkEvaluation(
+      AddMonths(Literal(Date.valueOf("2016-02-28")), positiveIntLit), 1014213)
+    checkEvaluation(
+      AddMonths(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -980528)
   }
 
   test("months_between") {
@@ -351,6 +365,34 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType)), null)
   }
 
+  test("function to_date") {
+    checkEvaluation(
+      ToDate(Literal(Date.valueOf("2015-07-22"))),
+      DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-22")))
+    checkEvaluation(ToDate(Literal.create(null, DateType)), null)
+  }
+
+  test("function trunc") {
+    def testTrunc(input: Date, fmt: String, expected: Date): Unit = {
+      checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
+        expected)
+      checkEvaluation(
+        TruncDate(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
+        expected)
+    }
+    val date = Date.valueOf("2015-07-22")
+    Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach{ fmt =>
+      testTrunc(date, fmt, Date.valueOf("2015-01-01"))
+    }
+    Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
+      testTrunc(date, fmt, Date.valueOf("2015-07-01"))
+    }
+    testTrunc(date, "DD", null)
+    testTrunc(date, null, null)
+    testTrunc(null, "MON", null)
+    testTrunc(null, null, null)
+  }
+
   test("from_unixtime") {
     val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
     val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
@@ -406,4 +448,57 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       UnixTimestamp(Literal("2015-07-24"), Literal("not a valid format")), null)
   }
 
+  test("datediff") {
+    checkEvaluation(
+      DateDiff(Literal(Date.valueOf("2015-07-24")), Literal(Date.valueOf("2015-07-21"))), 3)
+    checkEvaluation(
+      DateDiff(Literal(Date.valueOf("2015-07-21")), Literal(Date.valueOf("2015-07-24"))), -3)
+    checkEvaluation(DateDiff(Literal.create(null, DateType), Literal(Date.valueOf("2015-07-24"))),
+      null)
+    checkEvaluation(DateDiff(Literal(Date.valueOf("2015-07-24")), Literal.create(null, DateType)),
+      null)
+    checkEvaluation(
+      DateDiff(Literal.create(null, DateType), Literal.create(null, DateType)),
+      null)
+  }
+
+  test("to_utc_timestamp") {
+    def test(t: String, tz: String, expected: String): Unit = {
+      checkEvaluation(
+        ToUTCTimestamp(
+          Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
+          Literal.create(tz, StringType)),
+        if (expected != null) Timestamp.valueOf(expected) else null)
+      checkEvaluation(
+        ToUTCTimestamp(
+          Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
+          NonFoldableLiteral.create(tz, StringType)),
+        if (expected != null) Timestamp.valueOf(expected) else null)
+    }
+    test("2015-07-24 00:00:00", "PST", "2015-07-24 07:00:00")
+    test("2015-01-24 00:00:00", "PST", "2015-01-24 08:00:00")
+    test(null, "UTC", null)
+    test("2015-07-24 00:00:00", null, null)
+    test(null, null, null)
+  }
+
+  test("from_utc_timestamp") {
+    def test(t: String, tz: String, expected: String): Unit = {
+      checkEvaluation(
+        FromUTCTimestamp(
+          Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
+          Literal.create(tz, StringType)),
+        if (expected != null) Timestamp.valueOf(expected) else null)
+      checkEvaluation(
+        FromUTCTimestamp(
+          Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
+          NonFoldableLiteral.create(tz, StringType)),
+        if (expected != null) Timestamp.valueOf(expected) else null)
+    }
+    test("2015-07-24 00:00:00", "PST", "2015-07-23 17:00:00")
+    test("2015-01-24 00:00:00", "PST", "2015-01-23 16:00:00")
+    test(null, "UTC", null)
+    test("2015-07-24 00:00:00", null, null)
+    test(null, null, null)
+  }
 }

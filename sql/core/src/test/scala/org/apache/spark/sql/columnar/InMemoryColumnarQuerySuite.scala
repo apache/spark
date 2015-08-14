@@ -19,18 +19,16 @@ package org.apache.spark.sql.columnar
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{QueryTest, Row, TestData}
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 
-class InMemoryColumnarQuerySuite extends QueryTest {
-  // Make sure the tables are loaded.
-  TestData
+class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
-  import ctx.{logicalPlanToSparkQuery, sql}
+  setupTestData()
 
   test("simple columnar query") {
     val plan = ctx.executePlan(testData.logicalPlan).executedPlan
@@ -148,7 +146,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
     val dataTypes =
       Seq(StringType, BinaryType, NullType, BooleanType,
         ByteType, ShortType, IntegerType, LongType,
-        FloatType, DoubleType, DecimalType.SYSTEM_DEFAULT, DecimalType(6, 5),
+        FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
         DateType, TimestampType,
         ArrayType(IntegerType), MapType(StringType, LongType), struct)
     val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>

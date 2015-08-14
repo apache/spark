@@ -18,7 +18,7 @@
 package org.apache.spark.sql.columnar
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -66,7 +66,7 @@ private[sql] sealed trait ColumnStats extends Serializable {
    * Column statistics represented as a single row, currently including closed lower bound, closed
    * upper bound and null count.
    */
-  def collectedStatistics: InternalRow
+  def collectedStatistics: GenericInternalRow
 }
 
 /**
@@ -75,7 +75,8 @@ private[sql] sealed trait ColumnStats extends Serializable {
 private[sql] class NoopColumnStats extends ColumnStats {
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = super.gatherStats(row, ordinal)
 
-  override def collectedStatistics: InternalRow = InternalRow(null, null, nullCount, count, 0L)
+  override def collectedStatistics: GenericInternalRow =
+    new GenericInternalRow(Array[Any](null, null, nullCount, count, 0L))
 }
 
 private[sql] class BooleanColumnStats extends ColumnStats {
@@ -92,8 +93,8 @@ private[sql] class BooleanColumnStats extends ColumnStats {
     }
   }
 
-  override def collectedStatistics: InternalRow =
-    InternalRow(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: GenericInternalRow =
+    new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
 private[sql] class ByteColumnStats extends ColumnStats {
@@ -110,8 +111,8 @@ private[sql] class ByteColumnStats extends ColumnStats {
     }
   }
 
-  override def collectedStatistics: InternalRow =
-    InternalRow(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: GenericInternalRow =
+    new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
 private[sql] class ShortColumnStats extends ColumnStats {
@@ -128,8 +129,8 @@ private[sql] class ShortColumnStats extends ColumnStats {
     }
   }
 
-  override def collectedStatistics: InternalRow =
-    InternalRow(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: GenericInternalRow =
+    new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
 private[sql] class IntColumnStats extends ColumnStats {
@@ -146,8 +147,8 @@ private[sql] class IntColumnStats extends ColumnStats {
     }
   }
 
-  override def collectedStatistics: InternalRow =
-    InternalRow(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: GenericInternalRow =
+    new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
 private[sql] class LongColumnStats extends ColumnStats {
@@ -164,8 +165,8 @@ private[sql] class LongColumnStats extends ColumnStats {
     }
   }
 
-  override def collectedStatistics: InternalRow =
-    InternalRow(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: GenericInternalRow =
+    new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
 private[sql] class FloatColumnStats extends ColumnStats {
@@ -182,8 +183,8 @@ private[sql] class FloatColumnStats extends ColumnStats {
     }
   }
 
-  override def collectedStatistics: InternalRow =
-    InternalRow(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: GenericInternalRow =
+    new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
 private[sql] class DoubleColumnStats extends ColumnStats {
@@ -200,8 +201,8 @@ private[sql] class DoubleColumnStats extends ColumnStats {
     }
   }
 
-  override def collectedStatistics: InternalRow =
-    InternalRow(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: GenericInternalRow =
+    new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
 private[sql] class StringColumnStats extends ColumnStats {
@@ -218,8 +219,8 @@ private[sql] class StringColumnStats extends ColumnStats {
     }
   }
 
-  override def collectedStatistics: InternalRow =
-    InternalRow(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: GenericInternalRow =
+    new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
 private[sql] class BinaryColumnStats extends ColumnStats {
@@ -230,26 +231,26 @@ private[sql] class BinaryColumnStats extends ColumnStats {
     }
   }
 
-  override def collectedStatistics: InternalRow =
-    InternalRow(null, null, nullCount, count, sizeInBytes)
+  override def collectedStatistics: GenericInternalRow =
+    new GenericInternalRow(Array[Any](null, null, nullCount, count, sizeInBytes))
 }
 
-private[sql] class FixedDecimalColumnStats extends ColumnStats {
+private[sql] class FixedDecimalColumnStats(precision: Int, scale: Int) extends ColumnStats {
   protected var upper: Decimal = null
   protected var lower: Decimal = null
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
-      val value = row.getDecimal(ordinal)
+      val value = row.getDecimal(ordinal, precision, scale)
       if (upper == null || value.compareTo(upper) > 0) upper = value
       if (lower == null || value.compareTo(lower) < 0) lower = value
       sizeInBytes += FIXED_DECIMAL.defaultSize
     }
   }
 
-  override def collectedStatistics: InternalRow =
-    InternalRow(lower, upper, nullCount, count, sizeInBytes)
+  override def collectedStatistics: GenericInternalRow =
+    new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
 private[sql] class GenericColumnStats(dataType: DataType) extends ColumnStats {
@@ -262,8 +263,8 @@ private[sql] class GenericColumnStats(dataType: DataType) extends ColumnStats {
     }
   }
 
-  override def collectedStatistics: InternalRow =
-    InternalRow(null, null, nullCount, count, sizeInBytes)
+  override def collectedStatistics: GenericInternalRow =
+    new GenericInternalRow(Array[Any](null, null, nullCount, count, sizeInBytes))
 }
 
 private[sql] class DateColumnStats extends IntColumnStats

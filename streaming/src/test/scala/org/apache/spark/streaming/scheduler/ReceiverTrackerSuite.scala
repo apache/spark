@@ -17,115 +17,118 @@
 
 package org.apache.spark.streaming.scheduler
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.receiver._
 
 /** Testsuite for receiver scheduling */
 class ReceiverTrackerSuite extends TestSuiteBase {
-  val sparkConf = new SparkConf().setMaster("local[8]").setAppName("test")
-  val ssc = new StreamingContext(sparkConf, Milliseconds(100))
 
-  ignore("Receiver tracker - propagates rate limit") {
-    object ReceiverStartedWaiter extends StreamingListener {
-      @volatile
-      var started = false
+  test("send rate update to receivers") {
+    withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
+      ssc.scheduler.listenerBus.start(ssc.sc)
 
-      override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
-        started = true
+      val newRateLimit = 100L
+      val inputDStream = new RateTestInputDStream(ssc)
+      val tracker = new ReceiverTracker(ssc)
+      tracker.start()
+      try {
+        // we wait until the Receiver has registered with the tracker,
+        // otherwise our rate update is lost
+        eventually(timeout(5 seconds)) {
+          assert(RateTestReceiver.getActive().nonEmpty)
+        }
+
+
+        // Verify that the rate of the block generator in the receiver get updated
+        val activeReceiver = RateTestReceiver.getActive().get
+        tracker.sendRateUpdate(inputDStream.id, newRateLimit)
+        eventually(timeout(5 seconds)) {
+          assert(activeReceiver.getDefaultBlockGeneratorRateLimit() === newRateLimit,
+            "default block generator did not receive rate update")
+          assert(activeReceiver.getCustomBlockGeneratorRateLimit() === newRateLimit,
+            "other block generator did not receive rate update")
+        }
+      } finally {
+        tracker.stop(false)
       }
-    }
-
-    ssc.addStreamingListener(ReceiverStartedWaiter)
-    ssc.scheduler.listenerBus.start(ssc.sc)
-    SingletonTestRateReceiver.reset()
-
-    val newRateLimit = 100L
-    val inputDStream = new RateLimitInputDStream(ssc)
-    val tracker = new ReceiverTracker(ssc)
-    tracker.start()
-
-    // we wait until the Receiver has registered with the tracker,
-    // otherwise our rate update is lost
-    eventually(timeout(5 seconds)) {
-      assert(ReceiverStartedWaiter.started)
-    }
-    tracker.sendRateUpdate(inputDStream.id, newRateLimit)
-    // this is an async message, we need to wait a bit for it to be processed
-    eventually(timeout(3 seconds)) {
-      assert(inputDStream.getCurrentRateLimit.get === newRateLimit)
     }
   }
 }
 
-/**
- * An input DStream with a hard-coded receiver that gives access to internals for testing.
- *
- * @note Make sure to call {{{SingletonDummyReceiver.reset()}}} before using this in a test,
- *       or otherwise you may get {{{NotSerializableException}}} when trying to serialize
- *       the receiver.
- * @see [[[SingletonDummyReceiver]]].
- */
-private[streaming] class RateLimitInputDStream(@transient ssc_ : StreamingContext)
+/** An input DStream with for testing rate controlling */
+private[streaming] class RateTestInputDStream(@transient ssc_ : StreamingContext)
   extends ReceiverInputDStream[Int](ssc_) {
 
-  override def getReceiver(): RateTestReceiver = SingletonTestRateReceiver
-
-  def getCurrentRateLimit: Option[Long] = {
-    invokeExecutorMethod.getCurrentRateLimit
-  }
+  override def getReceiver(): Receiver[Int] = new RateTestReceiver(id)
 
   @volatile
-  var publishCalls = 0
+  var publishedRates = 0
 
   override val rateController: Option[RateController] = {
-    Some(new RateController(id, new ConstantEstimator(100.0)) {
+    Some(new RateController(id, new ConstantEstimator(100)) {
       override def publish(rate: Long): Unit = {
-        publishCalls += 1
+        publishedRates += 1
       }
     })
   }
-
-  private def invokeExecutorMethod: ReceiverSupervisor = {
-    val c = classOf[Receiver[_]]
-    val ex = c.getDeclaredMethod("executor")
-    ex.setAccessible(true)
-    ex.invoke(SingletonTestRateReceiver).asInstanceOf[ReceiverSupervisor]
-  }
 }
 
-/**
- * A Receiver as an object so we can read its rate limit. Make sure to call `reset()` when
- * reusing this receiver, otherwise a non-null `executor_` field will prevent it from being
- * serialized when receivers are installed on executors.
- *
- * @note It's necessary to be a top-level object, or else serialization would create another
- *       one on the executor side and we won't be able to read its rate limit.
- */
-private[streaming] object SingletonTestRateReceiver extends RateTestReceiver(0) {
-
-  /** Reset the object to be usable in another test. */
-  def reset(): Unit = {
-    executor_ = null
-  }
-}
-
-/**
- * Dummy receiver implementation
- */
+/** A receiver implementation for testing rate controlling */
 private[streaming] class RateTestReceiver(receiverId: Int, host: Option[String] = None)
   extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
 
+  private lazy val customBlockGenerator = supervisor.createBlockGenerator(
+    new BlockGeneratorListener {
+      override def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]): Unit = {}
+      override def onError(message: String, throwable: Throwable): Unit = {}
+      override def onGenerateBlock(blockId: StreamBlockId): Unit = {}
+      override def onAddData(data: Any, metadata: Any): Unit = {}
+    }
+  )
+
   setReceiverId(receiverId)
 
-  override def onStart(): Unit = {}
+  override def onStart(): Unit = {
+    customBlockGenerator
+    RateTestReceiver.registerReceiver(this)
+  }
 
-  override def onStop(): Unit = {}
+  override def onStop(): Unit = {
+    RateTestReceiver.deregisterReceiver()
+  }
 
   override def preferredLocation: Option[String] = host
+
+  def getDefaultBlockGeneratorRateLimit(): Long = {
+    supervisor.getCurrentRateLimit
+  }
+
+  def getCustomBlockGeneratorRateLimit(): Long = {
+    customBlockGenerator.getCurrentLimit
+  }
+}
+
+/**
+ * A helper object to RateTestReceiver that give access to the currently active RateTestReceiver
+ * instance.
+ */
+private[streaming] object RateTestReceiver {
+  @volatile private var activeReceiver: RateTestReceiver = null
+
+  def registerReceiver(receiver: RateTestReceiver): Unit = {
+    activeReceiver = receiver
+  }
+
+  def deregisterReceiver(): Unit = {
+    activeReceiver = null
+  }
+
+  def getActive(): Option[RateTestReceiver] = Option(activeReceiver)
 }
