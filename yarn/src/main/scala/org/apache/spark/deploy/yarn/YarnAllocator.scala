@@ -505,7 +505,7 @@ private[yarn] class YarnAllocator(
           completedContainerReason.fold("") {
             reasonString => s" Reason: $reasonString"
           }
-        completedExecutorExitReasons.put(eid,SlaveLost(exitReason))
+        completedExecutorExitReasons.put(eid, SlaveLost(exitReason))
 
         if (!alreadyReleased) {
           // The executor could have gone away (like no route to host, node failure, etc)

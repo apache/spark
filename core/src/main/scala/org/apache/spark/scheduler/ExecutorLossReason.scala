@@ -23,7 +23,7 @@ import org.apache.spark.executor.ExecutorExitCode
  * Represents an explanation for a executor or whole slave failing or exiting.
  */
 private[spark]
-class ExecutorLossReason(val message: String) {
+class ExecutorLossReason(val message: String) extends Serializable {
   override def toString: String = message
 }
 
