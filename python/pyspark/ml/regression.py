@@ -137,6 +137,7 @@ class LinearRegressionModel(JavaModel):
         """
         return self._call_java("intercept")
 
+
 @inherit_doc
 class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                          HasWeightCol):
@@ -164,6 +165,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         Param(Params._dummy(), "featureIndex",
               "The index of the feature if featuresCol is a vector column, no effect otherwise. " +
               "(default 0)")
+
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  weightCol=None, istonic=False, featureIndex=0):
@@ -180,7 +182,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                   "antitonic/decreasing (false)")
         self.featureIndex = \
             Param(self, "featureIndex",
-                  "The index of the feature if featuresCol is a vector column, no effect "+
+                  "The index of the feature if featuresCol is a vector column, no effect " +
                   "otherwise. (default 0)")
         self._setDefault(isotonic=False, featureIndex=0)
         kwargs = self.__init__._input_kwargs
@@ -238,6 +240,7 @@ class IsotonicRegressionModel(JavaModel):
         Model boundaries.
         """
         return self._call_java("boundaries")
+
 
 class TreeRegressorParams(object):
     """
