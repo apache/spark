@@ -12,6 +12,7 @@ import logging
 import os
 import dill
 import re
+import pandas as pd
 import signal
 import socket
 import sys
@@ -19,7 +20,7 @@ import sys
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType,
     Index, BigInteger)
-from sqlalchemy import case, func, or_
+from sqlalchemy import case, func, or_, and_
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import relationship
@@ -28,7 +29,8 @@ from airflow import settings, utils
 from airflow.executors import DEFAULT_EXECUTOR, LocalExecutor
 from airflow.configuration import conf
 from airflow.utils import (
-    AirflowException, State, apply_defaults, provide_session)
+    AirflowException, XComException, State, apply_defaults, provide_session,
+    as_tuple)
 
 Base = declarative_base()
 ID_LEN = 250
@@ -2004,6 +2006,137 @@ class Variable(Base):
         if deserialize_json and v:
             v = json.loads(v)
         return v
+
+
+class XCom(Base):
+    """
+    Base class for XCom objects.
+    """
+    __tablename__ = "xcom"
+
+    id = Column(Integer, primary_key=True)
+    key = Column(String)
+    value = Column(PickleType(pickler=dill))
+    timestamp = Column(DateTime, server_default=func.current_timestamp())
+    visible_on = Column(DateTime, nullable=False)
+
+    # source information
+    from_task = Column(
+        String,
+        ForeignKey('task_instance.task_id'),
+        nullable=False)
+    from_dag = Column(
+        String,
+        ForeignKey('task_instance.dag_id'),
+        nullable=False)
+
+    # target information (optional)
+    to_task = Column(String, ForeignKey('task_instance.task_id'))
+    to_dag = Column(String, ForeignKey('task_instance.dag_id'))
+
+    def __repr__(self):
+        return '<XCom "{key}" ({from_task} -> {to_task})>'.format(
+            key=self.key,
+            from_task=self.from_task,
+            to_task=self.to_task)
+
+    @classmethod
+    def resolve_args(cls, tasks, dags):
+        tasks_dags = []
+        for t in as_tuple(tasks):
+            for d in as_tuple(dags):
+                if isinstance(t, TaskInstance):
+                    t, d = t.task_id, t.dag_id
+                elif isinstance(d, DAG):
+                    d = d.dag_id
+            tasks_dags.append((t, d))
+        tasks, dags = zip(*tasks_dags)
+        return tasks, dags
+
+    @classmethod
+    @provide_session
+    def set(
+            cls,
+            key,
+            value,
+            visible_on,
+            from_task,
+            from_dag,
+            to_task=None,
+            to_dag=None,
+            session=None):
+        """
+        Store an XCom value.
+        """
+
+        from_task, from_dag = cls.resolve_args(from_task, from_dag)
+        to_task, to_dag = cls.resolve_args(to_task, to_dag)
+
+        session.expunge_all()
+        session.add(XCom(
+            key=key,
+            value=value,
+            visible_on=visible_on,
+            from_task=from_task[0],
+            from_dag=from_dag[0],
+            to_task=to_task[0],
+            to_dag=to_dag[0]))
+        session.commit()
+
+    @classmethod
+    @provide_session
+    def get(
+            cls,
+            visible_on,
+            key=None,
+            from_tasks=None,
+            from_dags=None,
+            to_tasks=None,
+            to_dags=None,
+            include_prior_dates=False,
+            limit=100,
+            session=None):
+        """
+        Retrieve an XCom value, optionally meeting certain criteria
+        """
+        from_tasks, from_dags = cls.resolve_args(from_tasks, from_dags)
+        to_tasks, to_dags = cls.resolve_args(to_tasks, to_dags)
+
+        filter_map = zip(
+            (cls.from_task, cls.from_dag, cls.to_task, cls.to_dag),
+            (from_tasks, from_dags, to_tasks, to_dags))
+
+        filters = []
+        if key:
+            filters.append(cls.key == key)
+
+        for column, values in filter_map:
+            if any(v is not None for v in values):
+                non_null_values = [v for v in values if v is not None]
+                filters.append(or_(
+                    column.in_(non_null_values) if non_null_values else False,
+                    (column == None) if None in values else False))
+
+        if include_prior_dates:
+            filters.append(cls.visible_on <= visible_on)
+        else:
+            filters.append(cls.visible_on == visible_on)
+
+        query = (
+            session.query(cls)
+            .filter(and_(*filters))
+            .order_by(cls.timestamp.desc())
+            .limit(limit))
+
+        result = pd.read_sql(
+            sql=query.statement,
+            con=query.session.bind,
+            index_col='id',
+            parse_dates=['timestamp', 'visible_on'])
+
+        if result.empty:
+            raise XComException('No XCom values found.')
+        return result
 
 
 class Pool(Base):

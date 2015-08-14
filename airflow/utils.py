@@ -32,6 +32,10 @@ class AirflowException(Exception):
     pass
 
 
+class XComException(AirflowException):
+    pass
+
+
 class AirflowSensorTimeout(Exception):
     pass
 
@@ -467,3 +471,20 @@ class timeout(object):
 
     def __exit__(self, type, value, traceback):
         signal.alarm(0)
+
+
+def as_tuple(obj):
+    """
+    If obj is a container, returns obj as a tuple.
+    Otherwise, returns a tuple containing obj.
+    """
+    def _inner_gen():
+        try:
+            for i in obj:
+                yield i
+        except:
+            yield obj
+    if isinstance(obj, basestring):
+        return (obj,)
+    else:
+        return tuple(_inner_gen())
