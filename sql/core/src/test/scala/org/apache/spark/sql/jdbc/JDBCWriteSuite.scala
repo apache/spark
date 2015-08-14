@@ -23,11 +23,13 @@ import java.util.Properties
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{SaveMode, Row}
+import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCWriteSuite extends SparkFunSuite with BeforeAndAfter {
+class JDBCWriteSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
+
   val url = "jdbc:h2:mem:testdb2"
   var conn: java.sql.Connection = null
   val url1 = "jdbc:h2:mem:testdb3"
@@ -36,10 +38,6 @@ class JDBCWriteSuite extends SparkFunSuite with BeforeAndAfter {
   properties.setProperty("user", "testUser")
   properties.setProperty("password", "testPass")
   properties.setProperty("rowId", "false")
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
-  import ctx.sql
 
   before {
     Utils.classForName("org.h2.Driver")
@@ -58,14 +56,14 @@ class JDBCWriteSuite extends SparkFunSuite with BeforeAndAfter {
       "create table test.people1 (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
     conn1.commit()
 
-    ctx.sql(
+    sql(
       s"""
         |CREATE TEMPORARY TABLE PEOPLE
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url1', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
-    ctx.sql(
+    sql(
       s"""
         |CREATE TEMPORARY TABLE PEOPLE1
         |USING org.apache.spark.sql.jdbc
@@ -144,14 +142,14 @@ class JDBCWriteSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("INSERT to JDBC Datasource") {
-    ctx.sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
+    sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
     assert(2 === ctx.read.jdbc(url1, "TEST.PEOPLE1", properties).count)
     assert(2 === ctx.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
   }
 
   test("INSERT to JDBC Datasource with overwrite") {
-    ctx.sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
-    ctx.sql("INSERT OVERWRITE TABLE PEOPLE1 SELECT * FROM PEOPLE")
+    sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
+    sql("INSERT OVERWRITE TABLE PEOPLE1 SELECT * FROM PEOPLE")
     assert(2 === ctx.read.jdbc(url1, "TEST.PEOPLE1", properties).count)
     assert(2 === ctx.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
   }
