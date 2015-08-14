@@ -98,9 +98,11 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
  * This is a temporary fix for the case when target labels do not exist during prediction.
  */
 @Experimental
-class StringIndexerModel private[ml] (
+class StringIndexerModel (
     override val uid: String,
     labels: Array[String]) extends Model[StringIndexerModel] with StringIndexerBase {
+
+  def this(labels: Array[String]) = this(Identifiable.randomUID("strIdx"), labels)
 
   private val labelToIndex: OpenHashMap[String, Double] = {
     val n = labels.length
