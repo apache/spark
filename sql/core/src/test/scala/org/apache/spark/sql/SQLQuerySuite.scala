@@ -1626,21 +1626,4 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
     sqlContext.dropTempTable("1one")
   }
-
-  test("SPARK-9949: check TakeOrderedAndProject's results") {
-    // We add a dummy limit (i.e. limit(count)) to trigger TakeOrderedAndProject.
-    val count = testData.count().toInt
-    val df =
-      testData
-        .select('key, 'value)
-        .sort('key)
-        .limit(count)
-        .select('value + 1 as "added")
-        .groupBy()
-        .sum("added")
-    checkAnswer(
-      df,
-      testData.select('value + 1 as "added").groupBy().sum("added")
-    )
-  }
 }
