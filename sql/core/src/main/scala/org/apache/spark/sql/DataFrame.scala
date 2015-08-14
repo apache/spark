@@ -1150,6 +1150,23 @@ class DataFrame private[sql](
   }
 
   /**
+   * Returns a new [[DataFrame]] by adding a column with metadata.
+   */
+  private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
+    val replaced = schema.exists(f => resolver(f.name, colName))
+    if (replaced) {
+      val colNames = schema.map { field =>
+        val name = field.name
+        if (resolver(name, colName)) col.as(colName, metadata) else Column(name)
+      }
+      select(colNames : _*)
+    } else {
+      select(Column("*"), col.as(colName, metadata))
+    }
+  }
+
+  /**
    * Returns a new [[DataFrame]] with a column renamed.
    * This is a no-op if schema doesn't contain existingName.
    * @group dfops
