@@ -115,6 +115,55 @@ could take thousands of tasks without a problem), or from an environment
 perspective (you want a worker running from within the Spark cluster
 itself because it needs a very specific environment and security rights).
 
+XComs
+'''''
+
+XComs let tasks exchange messages, allowing more nuanced forms of control and
+shared state. The name is an abbreviation of "cross-communication". XComs are
+principally defined by a key, value, and timestamp, but also track attributes
+like the task and DAG that created the XComas well as any intended recipients.
+Any object that can be pickled can be used as an XCom value, so users should
+make sure to use objects of appropriate size.
+
+
+XComs can be "pushed" (sent) or "pulled" (received). When a task pushes an
+XCom, it makes it generally available to other tasks (though by default, only
+those in its own DAG). In addition, the task can specify that only certain
+tasks or DAGs can pull the XCom (a "targeted XCom") by providing ``to_tasks``
+or ``to_dags`` to ``xcom_push()``. Lastly, if a task returns a value (either
+from its Operator's ``execute`` method, or from a PythonOperator's
+``python_callable`` function), then an XCom containing the value is
+automatically pushed.
+
+When a task pulls, the default action is to receive any XComs of which the
+pulling task is a target. However, by providing a source task, XComs that were
+broadcast without targets can be pulled as well. Note that if an XCom was pushed to
+specific targets, only the target tasks can pull it.
+
+When XComs are pulled, the result is a pandas ``DataFrame`` of any messages
+that meet the provided criteria. By default, any XComs that 1) target the
+calling task and 2) were sent on the same execution date are pulled. Users can
+provide other criteria to expand or filter the pull.
+
+.. code:: python
+
+    # inside a PythonOperator called pushing_task
+    def push_function(**context)
+        context['ti'].xcom_push(
+            key='targeted XCom',
+            value=v,
+            to_tasks=['pulling_task'])
+
+    # inside a PythonOperator called pulling_task
+    def pull_function(**context):
+        values = context['ti'].xcom_pull()
+        # extract first value from Dataframe
+        v = values.iloc[0].value
+
+
+XComs are similar to Variables, but are specifically designed for inter-task communication rather
+than global settings.
+
 
 Variables
 '''''''''

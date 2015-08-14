@@ -1017,6 +1017,29 @@ class TaskInstance(Base):
             to_tasks=None,
             to_dags=None,
             visible_on=None):
+        """
+        Make an XCom available for tasks to pull.
+
+        :param key: A key for the XCom
+        :type key: string
+        :param value: A value for the XCom. The value is pickled and stored
+            in the database.
+        :type value: any pickleable object
+        :param to_tasks: If provided, only these tasks will be able to pull
+            the XCom. If None (the default), no targets are specified.
+        :type to_tasks: TaskInstance, string (representing task_id), or
+            an iterable of TaskInstances or strings.
+        :param to_dags: If provided, only tasks in these DAGs will be able to
+            pull the XCom. If None (the default), the calling task's DAG is
+            used. To remove the DAG filter entirely, pass [None].
+        :type to_dags: DAG, string (representing dag_id), or an iterable of
+            DAGs or strings.
+        :param visible_on: if provided, the XCom will not be visible until
+            this date. This can be used, for example, to send a message to a
+            task on a future date without it being immediately visible.
+        :type visible_on: datetime
+        """
+
         if visible_on and visible_on < self.execution_date:
             raise ValueError(
                 'visible_on can not be in the past (current execution_date '
@@ -1044,6 +1067,31 @@ class TaskInstance(Base):
             from_dags=None,
             include_prior_dates=False,
             limit=100):
+        """
+        Pull an XCom that meets certain criteria.
+
+        :param key: A key for the XCom. If provided, only XComs with matching
+            keys will be returned. Defaults to None.
+        :type key: string
+        :param from_tasks: If None, only XComs that specifically target the
+            calling task can be pulled. If from_tasks is provided, then XComs
+            pushed by those tasks without targets will also be pulled. To clear
+            the task filter entirely, pass [None].
+        :type from_tasks: TaskInstance, string (representing task_id), or
+            an iterable of TaskInstances or strings.
+        :param from_dags: If provided, only XComs from these DAGs will be
+            pulled. Defaults to the DAG of the calling task. To clear the DAG
+            filter entirely, pass [None]
+        :type from_dags: DAG, string (representing dag_id), or an iterable of
+            DAGs or strings.
+        :param include_prior_dates: If False, only XComs from the current
+            execution_date are returned. If True, XComs from previous dates
+            are returned as well.
+        :type include_prior_dates: bool
+        :param limit: the maximum number of results to return. Pass None for
+            no limit.
+        :type limit: int
+        """
 
         if from_dags is None:
             from_dags = self.dag_id
