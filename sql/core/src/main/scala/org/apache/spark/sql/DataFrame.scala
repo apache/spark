@@ -1150,11 +1150,9 @@ class DataFrame private[sql](
   }
 
   /**
-   * Returns a new [[DataFrame]] by adding a column with medadata.
-   * @group dfops
-   * @since 1.5.0
+   * Returns a new [[DataFrame]] by adding a column with metadata.
    */
-  def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
+  private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
     val replaced = schema.exists(f => resolver(f.name, colName))
     if (replaced) {
