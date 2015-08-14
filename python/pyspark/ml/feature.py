@@ -32,6 +32,7 @@ __all__ = ['Binarizer', 'Bucketizer', 'HashingTF', 'IDF', 'IDFModel', 'IndexToSt
            'VectorAssembler', 'VectorIndexer', 'Word2Vec', 'Word2VecModel', 'PCA',
            'PCAModel', 'RFormula', 'RFormulaModel']
 
+
 @inherit_doc
 class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
     """
@@ -730,7 +731,7 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)]
-    >>> inverter = IndexToString("indexed", "label2", model.labels())
+    >>> inverter = IndexToString(inputCol="indexed", outputCol="label2", labels=model.labels())
     >>> itd = inverter.transform(td)
     >>> sorted(set([(i[0], str(i[1])) for i in itd.select(itd.id, itd.label2).collect()]),
     ...     key=lambda x: x[0])
@@ -756,10 +757,6 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
-    @property
-    def labels(self):
-        return self._java_obj.labels
-
     def _create_model(self, java_model):
         return StringIndexerModel(java_model)
 
@@ -768,6 +765,10 @@ class StringIndexerModel(JavaModel):
     """
     Model fitted by StringIndexer.
     """
+    @property
+    def labels(self):
+        return self._java_obj.labels
+
 
 class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     """
@@ -785,9 +786,9 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, labels=[]):
         """
-        Initialize this instace of the StringIndexerInverse using the provided java_obj.
+        Initialize this instace of the IndexToString using the provided java_obj.
         """
-        super(StringIndexerInverse, self).__init__()
+        super(IndexToString, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IndexToString",
                                             self.uid)
         self.labels = Param(self, "labels",
@@ -801,7 +802,7 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     def setParams(self, inputCol=None, outputCol=None, labels=[]):
         """
         setParams(self, inputCol="input", outputCol="output", labels=[])
-        Sets params for this StringIndexerInverse
+        Sets params for this IndexToString
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
