@@ -1535,7 +1535,11 @@ class DAG(object):
         Note that jinja/airflow includes the path of your DAG file by
         default
     :type template_searchpath: string or list of stings
-    :param user_defined_macros: a dictionary of macros that will be merged
+    :param user_defined_macros: a dictionary of macros that will be exposed
+        in your jinja templates. For example, passing ``dict(foo='bar')``
+        to this argument allows you to ``{{ foo }}`` in all jinja
+        templates related to this DAG. Note that you can pass any
+        type of object here.
     :type user_defined_macros: dict
     :param default_args: A dictionary of default parameters to be used
         as constructor keyword parameters when initialising operators.
