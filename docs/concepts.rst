@@ -148,7 +148,7 @@ provide other criteria to expand or filter the pull.
 .. code:: python
 
     # inside a PythonOperator called pushing_task
-    def push_function(**context)
+    def push_function(**context):
         context['ti'].xcom_push(
             key='targeted XCom',
             value=v,
