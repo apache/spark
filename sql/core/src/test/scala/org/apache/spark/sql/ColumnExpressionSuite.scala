@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.scalatest.Matchers._
 
 import org.apache.spark.sql.execution.{Project, TungstenProject}
@@ -104,6 +105,14 @@ class ColumnExpressionSuite extends QueryTest with SQLTestUtils {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     assert(df.select(df("a").as("b")).columns.head === "b")
     assert(df.select(df("a").alias("b")).columns.head === "b")
+  }
+
+  test("as propagates metadata") {
+    val metadata = new MetadataBuilder
+    metadata.putString("key", "value")
+    val origCol = $"a".as("b", metadata.build())
+    val newCol = origCol.as("c")
+    assert(newCol.expr.asInstanceOf[NamedExpression].metadata.getString("key") === "value")
   }
 
   test("single explode") {
