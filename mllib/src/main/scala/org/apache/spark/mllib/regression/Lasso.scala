@@ -46,7 +46,7 @@ class LassoModel (
     weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
   }
 
-  /*
+  /**
    * @since 1.3.0
    */
   override def save(sc: SparkContext, path: String): Unit = {
@@ -56,12 +56,12 @@ class LassoModel (
   override protected def formatVersion: String = "1.0"
 }
 
-/*
+/**
  * @since 1.3.0
  */
 object LassoModel extends Loader[LassoModel] {
 
-  /*
+  /**
    * @since 1.3.0
    */
   override def load(sc: SparkContext, path: String): LassoModel = {

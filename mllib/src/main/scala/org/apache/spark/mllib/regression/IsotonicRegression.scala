@@ -160,7 +160,7 @@ class IsotonicRegressionModel (
   /** A convenient method for boundaries called by the Python API. */
   private[mllib] def predictionVector: Vector = Vectors.dense(predictions)
 
-  /*
+  /**
    * @since 1.4.0
    */
   override def save(sc: SparkContext, path: String): Unit = {
@@ -170,7 +170,7 @@ class IsotonicRegressionModel (
   override protected def formatVersion: String = "1.0"
 }
 
-/*
+/**
  * @since 1.4.0
  */
 object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
@@ -218,7 +218,7 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
     }
   }
 
-  /*
+  /**
    * @since 1.4.0
    */
   override def load(sc: SparkContext, path: String): IsotonicRegressionModel = {

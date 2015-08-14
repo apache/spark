@@ -47,7 +47,7 @@ class RidgeRegressionModel (
     weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
   }
 
-  /*
+  /**
    * @since 1.3.0
    */
   override def save(sc: SparkContext, path: String): Unit = {
@@ -57,12 +57,12 @@ class RidgeRegressionModel (
   override protected def formatVersion: String = "1.0"
 }
 
-/*
+/**
  * @since 1.3.0
  */
 object RidgeRegressionModel extends Loader[RidgeRegressionModel] {
 
-  /*
+  /**
    * @since 1.3.0
    */
   override def load(sc: SparkContext, path: String): RidgeRegressionModel = {
