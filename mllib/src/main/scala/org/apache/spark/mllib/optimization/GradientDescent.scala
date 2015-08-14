@@ -32,7 +32,7 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
  * @param gradient Gradient function to be used.
  * @param updater Updater to be used to update weights after every iteration.
  */
-class GradientDescent private[mllib] (private var gradient: Gradient, private var updater: Updater)
+class GradientDescent private[spark] (private var gradient: Gradient, private var updater: Updater)
   extends Optimizer with Logging {
 
   private var stepSize: Double = 1.0

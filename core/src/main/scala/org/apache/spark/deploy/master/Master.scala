@@ -45,7 +45,7 @@ import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
 
-private[master] class Master(
+private[deploy] class Master(
     override val rpcEnv: RpcEnv,
     address: RpcAddress,
     webUiPort: Int,
@@ -468,6 +468,13 @@ private[master] class Master(
     case BoundPortsRequest => {
       context.reply(BoundPortsResponse(address.port, webUi.boundPort, restServerBoundPort))
     }
+
+    case RequestExecutors(appId, requestedTotal) =>
+      context.reply(handleRequestExecutors(appId, requestedTotal))
+
+    case KillExecutors(appId, executorIds) =>
+      val formattedExecutorIds = formatExecutorIds(executorIds)
+      context.reply(handleKillExecutors(appId, formattedExecutorIds))
   }
 
   override def onDisconnected(address: RpcAddress): Unit = {
@@ -541,6 +548,7 @@ private[master] class Master(
 
   /**
    * Schedule executors to be launched on the workers.
+   * Returns an array containing number of cores assigned to each worker.
    *
    * There are two modes of launching executors. The first attempts to spread out an application's
    * executors on as many workers as possible, while the second does the opposite (i.e. launch them
@@ -551,39 +559,97 @@ private[master] class Master(
    * multiple executors from the same application may be launched on the same worker if the worker
    * has enough cores and memory. Otherwise, each executor grabs all the cores available on the
    * worker by default, in which case only one executor may be launched on each worker.
+   *
+   * It is important to allocate coresPerExecutor on each worker at a time (instead of 1 core
+   * at a time). Consider the following example: cluster has 4 workers with 16 cores each.
+   * User requests 3 executors (spark.cores.max = 48, spark.executor.cores = 16). If 1 core is
+   * allocated at a time, 12 cores from each worker would be assigned to each executor.
+   * Since 12 < 16, no executors would launch [SPARK-8881].
+   */
+  private def scheduleExecutorsOnWorkers(
+      app: ApplicationInfo,
+      usableWorkers: Array[WorkerInfo],
+      spreadOutApps: Boolean): Array[Int] = {
+    val coresPerExecutor = app.desc.coresPerExecutor
+    val minCoresPerExecutor = coresPerExecutor.getOrElse(1)
+    val oneExecutorPerWorker = coresPerExecutor.isEmpty
+    val memoryPerExecutor = app.desc.memoryPerExecutorMB
+    val numUsable = usableWorkers.length
+    val assignedCores = new Array[Int](numUsable) // Number of cores to give to each worker
+    val assignedExecutors = new Array[Int](numUsable) // Number of new executors on each worker
+    var coresToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
+
+    /** Return whether the specified worker can launch an executor for this app. */
+    def canLaunchExecutor(pos: Int): Boolean = {
+      val keepScheduling = coresToAssign >= minCoresPerExecutor
+      val enoughCores = usableWorkers(pos).coresFree - assignedCores(pos) >= minCoresPerExecutor
+
+      // If we allow multiple executors per worker, then we can always launch new executors.
+      // Otherwise, if there is already an executor on this worker, just give it more cores.
+      val launchingNewExecutor = !oneExecutorPerWorker || assignedExecutors(pos) == 0
+      if (launchingNewExecutor) {
+        val assignedMemory = assignedExecutors(pos) * memoryPerExecutor
+        val enoughMemory = usableWorkers(pos).memoryFree - assignedMemory >= memoryPerExecutor
+        val underLimit = assignedExecutors.sum + app.executors.size < app.executorLimit
+        keepScheduling && enoughCores && enoughMemory && underLimit
+      } else {
+        // We're adding cores to an existing executor, so no need
+        // to check memory and executor limits
+        keepScheduling && enoughCores
+      }
+    }
+
+    // Keep launching executors until no more workers can accommodate any
+    // more executors, or if we have reached this application's limits
+    var freeWorkers = (0 until numUsable).filter(canLaunchExecutor)
+    while (freeWorkers.nonEmpty) {
+      freeWorkers.foreach { pos =>
+        var keepScheduling = true
+        while (keepScheduling && canLaunchExecutor(pos)) {
+          coresToAssign -= minCoresPerExecutor
+          assignedCores(pos) += minCoresPerExecutor
+
+          // If we are launching one executor per worker, then every iteration assigns 1 core
+          // to the executor. Otherwise, every iteration assigns cores to a new executor.
+          if (oneExecutorPerWorker) {
+            assignedExecutors(pos) = 1
+          } else {
+            assignedExecutors(pos) += 1
+          }
+
+          // Spreading out an application means spreading out its executors across as
+          // many workers as possible. If we are not spreading out, then we should keep
+          // scheduling executors on this worker until we use all of its resources.
+          // Otherwise, just move on to the next worker.
+          if (spreadOutApps) {
+            keepScheduling = false
+          }
+        }
+      }
+      freeWorkers = freeWorkers.filter(canLaunchExecutor)
+    }
+    assignedCores
+  }
+
+  /**
+   * Schedule and launch executors on workers
    */
   private def startExecutorsOnWorkers(): Unit = {
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
-    if (spreadOutApps) {
-      // Try to spread out each app among all the workers, until it has all its cores
-      for (app <- waitingApps if app.coresLeft > 0) {
-        val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-          .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
-            worker.coresFree >= app.desc.coresPerExecutor.getOrElse(1))
-          .sortBy(_.coresFree).reverse
-        val numUsable = usableWorkers.length
-        val assigned = new Array[Int](numUsable) // Number of cores to give on each node
-        var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
-        var pos = 0
-        while (toAssign > 0) {
-          if (usableWorkers(pos).coresFree - assigned(pos) > 0) {
-            toAssign -= 1
-            assigned(pos) += 1
-          }
-          pos = (pos + 1) % numUsable
-        }
-        // Now that we've decided how many cores to give on each node, let's actually give them
-        for (pos <- 0 until numUsable if assigned(pos) > 0) {
-          allocateWorkerResourceToExecutors(app, assigned(pos), usableWorkers(pos))
-        }
-      }
-    } else {
-      // Pack each app into as few workers as possible until we've assigned all its cores
-      for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
-        for (app <- waitingApps if app.coresLeft > 0) {
-          allocateWorkerResourceToExecutors(app, app.coresLeft, worker)
-        }
+    for (app <- waitingApps if app.coresLeft > 0) {
+      val coresPerExecutor: Option[Int] = app.desc.coresPerExecutor
+      // Filter out workers that don't have enough resources to launch an executor
+      val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
+        .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
+          worker.coresFree >= coresPerExecutor.getOrElse(1))
+        .sortBy(_.coresFree).reverse
+      val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
+
+      // Now that we've decided how many cores to allocate on each worker, let's allocate them
+      for (pos <- 0 until usableWorkers.length if assignedCores(pos) > 0) {
+        allocateWorkerResourceToExecutors(
+          app, assignedCores(pos), coresPerExecutor, usableWorkers(pos))
       }
     }
   }
@@ -591,19 +657,22 @@ private[master] class Master(
   /**
    * Allocate a worker's resources to one or more executors.
    * @param app the info of the application which the executors belong to
-   * @param coresToAllocate cores on this worker to be allocated to this application
+   * @param assignedCores number of cores on this worker for this application
+   * @param coresPerExecutor number of cores per executor
    * @param worker the worker info
    */
   private def allocateWorkerResourceToExecutors(
       app: ApplicationInfo,
-      coresToAllocate: Int,
+      assignedCores: Int,
+      coresPerExecutor: Option[Int],
       worker: WorkerInfo): Unit = {
-    val memoryPerExecutor = app.desc.memoryPerExecutorMB
-    val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(coresToAllocate)
-    var coresLeft = coresToAllocate
-    while (coresLeft >= coresPerExecutor && worker.memoryFree >= memoryPerExecutor) {
-      val exec = app.addExecutor(worker, coresPerExecutor)
-      coresLeft -= coresPerExecutor
+    // If the number of cores per executor is specified, we divide the cores assigned
+    // to this worker evenly among the executors with no remainder.
+    // Otherwise, we launch a single executor that grabs all the assignedCores on this worker.
+    val numExecutors = coresPerExecutor.map { assignedCores / _ }.getOrElse(1)
+    val coresToAssign = coresPerExecutor.getOrElse(assignedCores)
+    for (i <- 1 to numExecutors) {
+      val exec = app.addExecutor(worker, coresToAssign)
       launchExecutor(worker, exec)
       app.state = ApplicationState.RUNNING
     }
@@ -743,9 +812,7 @@ private[master] class Master(
       rebuildSparkUI(app)
 
       for (exec <- app.executors.values) {
-        exec.worker.removeExecutor(exec)
-        exec.worker.endpoint.send(KillExecutor(masterUrl, exec.application.id, exec.id))
-        exec.state = ExecutorState.KILLED
+        killExecutor(exec)
       }
       app.markFinished(state)
       if (state != ApplicationState.FINISHED) {
@@ -759,6 +826,87 @@ private[master] class Master(
         w.endpoint.send(ApplicationFinished(app.id))
       }
     }
+  }
+
+  /**
+   * Handle a request to set the target number of executors for this application.
+   *
+   * If the executor limit is adjusted upwards, new executors will be launched provided
+   * that there are workers with sufficient resources. If it is adjusted downwards, however,
+   * we do not kill existing executors until we explicitly receive a kill request.
+   *
+   * @return whether the application has previously registered with this Master.
+   */
+  private def handleRequestExecutors(appId: String, requestedTotal: Int): Boolean = {
+    idToApp.get(appId) match {
+      case Some(appInfo) =>
+        logInfo(s"Application $appId requested to set total executors to $requestedTotal.")
+        appInfo.executorLimit = requestedTotal
+        schedule()
+        true
+      case None =>
+        logWarning(s"Unknown application $appId requested $requestedTotal total executors.")
+        false
+    }
+  }
+
+  /**
+   * Handle a kill request from the given application.
+   *
+   * This method assumes the executor limit has already been adjusted downwards through
+   * a separate [[RequestExecutors]] message, such that we do not launch new executors
+   * immediately after the old ones are removed.
+   *
+   * @return whether the application has previously registered with this Master.
+   */
+  private def handleKillExecutors(appId: String, executorIds: Seq[Int]): Boolean = {
+    idToApp.get(appId) match {
+      case Some(appInfo) =>
+        logInfo(s"Application $appId requests to kill executors: " + executorIds.mkString(", "))
+        val (known, unknown) = executorIds.partition(appInfo.executors.contains)
+        known.foreach { executorId =>
+          val desc = appInfo.executors(executorId)
+          appInfo.removeExecutor(desc)
+          killExecutor(desc)
+        }
+        if (unknown.nonEmpty) {
+          logWarning(s"Application $appId attempted to kill non-existent executors: "
+            + unknown.mkString(", "))
+        }
+        schedule()
+        true
+      case None =>
+        logWarning(s"Unregistered application $appId requested us to kill executors!")
+        false
+    }
+  }
+
+  /**
+   * Cast the given executor IDs to integers and filter out the ones that fail.
+   *
+   * All executors IDs should be integers since we launched these executors. However,
+   * the kill interface on the driver side accepts arbitrary strings, so we need to
+   * handle non-integer executor IDs just to be safe.
+   */
+  private def formatExecutorIds(executorIds: Seq[String]): Seq[Int] = {
+    executorIds.flatMap { executorId =>
+      try {
+        Some(executorId.toInt)
+      } catch {
+        case e: NumberFormatException =>
+          logError(s"Encountered executor with a non-integer ID: $executorId. Ignoring")
+          None
+      }
+    }
+  }
+
+  /**
+   * Ask the worker on which the specified executor is launched to kill the executor.
+   */
+  private def killExecutor(exec: ExecutorDesc): Unit = {
+    exec.worker.removeExecutor(exec)
+    exec.worker.endpoint.send(KillExecutor(masterUrl, exec.application.id, exec.id))
+    exec.state = ExecutorState.KILLED
   }
 
   /**

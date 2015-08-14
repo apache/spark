@@ -24,6 +24,7 @@ import java.security.PrivilegedExceptionAction
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.ivy.Ivy
@@ -37,6 +38,7 @@ import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{FileSystemResolver, ChainResolver, IBiblioResolver}
+
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.deploy.rest._
@@ -275,22 +277,25 @@ object SparkSubmit {
 
     // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
     // too for packages that include Python code
-    val resolvedMavenCoordinates =
-      SparkSubmitUtils.resolveMavenCoordinates(
-        args.packages, Option(args.repositories), Option(args.ivyRepoPath))
-    if (!resolvedMavenCoordinates.trim.isEmpty) {
-      if (args.jars == null || args.jars.trim.isEmpty) {
-        args.jars = resolvedMavenCoordinates
+    val exclusions: Seq[String] =
+      if (!StringUtils.isBlank(args.packagesExclusions)) {
+        args.packagesExclusions.split(",")
       } else {
-        args.jars += s",$resolvedMavenCoordinates"
+        Nil
       }
+    val resolvedMavenCoordinates = SparkSubmitUtils.resolveMavenCoordinates(args.packages,
+      Option(args.repositories), Option(args.ivyRepoPath), exclusions = exclusions)
+    if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
+      args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
       if (args.isPython) {
-        if (args.pyFiles == null || args.pyFiles.trim.isEmpty) {
-          args.pyFiles = resolvedMavenCoordinates
-        } else {
-          args.pyFiles += s",$resolvedMavenCoordinates"
-        }
+        args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
       }
+    }
+
+    // install any R packages that may have been passed through --jars or --packages.
+    // Spark Packages may contain R source code inside the jar.
+    if (args.isR && !StringUtils.isBlank(args.jars)) {
+      RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
     }
 
     // Require all python files to be local, so we can add them to the PYTHONPATH
@@ -362,7 +367,8 @@ object SparkSubmit {
       if (rPackagePath.isEmpty) {
         printErrorAndExit("SPARK_HOME does not exist for R application in YARN mode.")
       }
-      val rPackageFile = new File(rPackagePath.get, SPARKR_PACKAGE_ARCHIVE)
+      val rPackageFile =
+        RPackageUtils.zipRLibraries(new File(rPackagePath.get), SPARKR_PACKAGE_ARCHIVE)
       if (!rPackageFile.exists()) {
         printErrorAndExit(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in YARN mode.")
       }
@@ -416,7 +422,8 @@ object SparkSubmit {
 
       // Yarn client only
       OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
-      OptionAssigner(args.numExecutors, YARN, CLIENT, sysProp = "spark.executor.instances"),
+      OptionAssigner(args.numExecutors, YARN, ALL_DEPLOY_MODES,
+        sysProp = "spark.executor.instances"),
       OptionAssigner(args.files, YARN, CLIENT, sysProp = "spark.yarn.dist.files"),
       OptionAssigner(args.archives, YARN, CLIENT, sysProp = "spark.yarn.dist.archives"),
       OptionAssigner(args.principal, YARN, CLIENT, sysProp = "spark.yarn.principal"),
@@ -427,7 +434,6 @@ object SparkSubmit {
       OptionAssigner(args.driverMemory, YARN, CLUSTER, clOption = "--driver-memory"),
       OptionAssigner(args.driverCores, YARN, CLUSTER, clOption = "--driver-cores"),
       OptionAssigner(args.queue, YARN, CLUSTER, clOption = "--queue"),
-      OptionAssigner(args.numExecutors, YARN, CLUSTER, clOption = "--num-executors"),
       OptionAssigner(args.executorMemory, YARN, CLUSTER, clOption = "--executor-memory"),
       OptionAssigner(args.executorCores, YARN, CLUSTER, clOption = "--executor-cores"),
       OptionAssigner(args.files, YARN, CLUSTER, clOption = "--files"),
@@ -736,7 +742,7 @@ object SparkSubmit {
    * no files, into a single comma-separated string.
    */
   private def mergeFileLists(lists: String*): String = {
-    val merged = lists.filter(_ != null)
+    val merged = lists.filterNot(StringUtils.isBlank)
                       .flatMap(_.split(","))
                       .mkString(",")
     if (merged == "") null else merged
@@ -938,7 +944,7 @@ private[spark] object SparkSubmitUtils {
         // are supplied to spark-submit
         val alternateIvyCache = ivyPath.getOrElse("")
         val packagesDirectory: File =
-          if (alternateIvyCache.trim.isEmpty) {
+          if (alternateIvyCache == null || alternateIvyCache.trim.isEmpty) {
             new File(ivySettings.getDefaultIvyUserDir, "jars")
           } else {
             ivySettings.setDefaultIvyUserDir(new File(alternateIvyCache))
@@ -988,11 +994,9 @@ private[spark] object SparkSubmitUtils {
         addExclusionRules(ivySettings, ivyConfName, md)
         // add all supplied maven artifacts as dependencies
         addDependenciesToIvy(md, artifacts, ivyConfName)
-
         exclusions.foreach { e =>
           md.addExcludeRule(createExclusion(e + ":*", ivySettings, ivyConfName))
         }
-
         // resolve dependencies
         val rr: ResolveReport = ivy.resolve(md, resolveOptions)
         if (rr.hasError) {
@@ -1010,7 +1014,7 @@ private[spark] object SparkSubmitUtils {
     }
   }
 
-  private def createExclusion(
+  private[deploy] def createExclusion(
       coords: String,
       ivySettings: IvySettings,
       ivyConfName: String): ExcludeRule = {

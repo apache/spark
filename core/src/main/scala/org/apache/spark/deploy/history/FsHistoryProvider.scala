@@ -272,9 +272,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Replay the log files in the list and merge the list of old applications with new ones
    */
   private def mergeApplicationListing(logs: Seq[FileStatus]): Unit = {
-    val bus = new ReplayListenerBus()
     val newAttempts = logs.flatMap { fileStatus =>
       try {
+        val bus = new ReplayListenerBus()
         val res = replay(fileStatus, bus)
         res match {
           case Some(r) => logDebug(s"Application log ${r.logPath} loaded successfully.")

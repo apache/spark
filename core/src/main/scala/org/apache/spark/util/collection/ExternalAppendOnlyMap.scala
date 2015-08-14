@@ -89,6 +89,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
   // Number of bytes spilled in total
   private var _diskBytesSpilled = 0L
+  def diskBytesSpilled: Long = _diskBytesSpilled
 
   // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
   private val fileBufferSize =
@@ -96,6 +97,10 @@ class ExternalAppendOnlyMap[K, V, C](
 
   // Write metrics for current spill
   private var curWriteMetrics: ShuffleWriteMetrics = _
+
+  // Peak size of the in-memory map observed so far, in bytes
+  private var _peakMemoryUsedBytes: Long = 0L
+  def peakMemoryUsedBytes: Long = _peakMemoryUsedBytes
 
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
@@ -126,7 +131,11 @@ class ExternalAppendOnlyMap[K, V, C](
 
     while (entries.hasNext) {
       curEntry = entries.next()
-      if (maybeSpill(currentMap, currentMap.estimateSize())) {
+      val estimatedSize = currentMap.estimateSize()
+      if (estimatedSize > _peakMemoryUsedBytes) {
+        _peakMemoryUsedBytes = estimatedSize
+      }
+      if (maybeSpill(currentMap, estimatedSize)) {
         currentMap = new SizeTrackingAppendOnlyMap[K, C]
       }
       currentMap.changeValue(curEntry._1, update)
@@ -206,8 +215,6 @@ class ExternalAppendOnlyMap[K, V, C](
 
     spilledMaps.append(new DiskMapIterator(file, blockId, batchSizes))
   }
-
-  def diskBytesSpilled: Long = _diskBytesSpilled
 
   /**
    * Return an iterator that merges the in-memory map with the spilled maps.

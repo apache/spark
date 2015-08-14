@@ -38,12 +38,11 @@ class WorkerWatcherSuite extends SparkFunSuite {
     val conf = new SparkConf()
     val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
     val targetWorkerUrl = rpcEnv.uriOf("test", RpcAddress("1.2.3.4", 1234), "Worker")
-    val otherAddress = "akka://test@4.3.2.1:1234/user/OtherActor"
-    val otherAkkaAddress = RpcAddress("4.3.2.1", 1234)
+    val otherRpcAddress = RpcAddress("4.3.2.1", 1234)
     val workerWatcher = new WorkerWatcher(rpcEnv, targetWorkerUrl)
     workerWatcher.setTesting(testing = true)
     rpcEnv.setupEndpoint("worker-watcher", workerWatcher)
-    workerWatcher.onDisconnected(otherAkkaAddress)
+    workerWatcher.onDisconnected(otherRpcAddress)
     assert(!workerWatcher.isShutDown)
     rpcEnv.shutdown()
   }

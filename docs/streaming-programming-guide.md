@@ -683,7 +683,7 @@ for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.strea
 {:.no_toc}
 
 <span class="badge" style="background-color: grey">Python API</span> As of Spark {{site.SPARK_VERSION_SHORT}},
-out of these sources, *only* Kafka and Flume are available in the Python API. We will add more advanced sources in the Python API in future.
+out of these sources, *only* Kafka, Flume and MQTT are available in the Python API. We will add more advanced sources in the Python API in future.
 
 This category of sources require interfacing with external non-Spark libraries, some of them with
 complex dependencies (e.g., Kafka and Flume). Hence, to minimize issues related to version conflicts
@@ -1141,7 +1141,7 @@ val joinedStream = stream1.join(stream2)
 {% highlight java %}
 JavaPairDStream<String, String> stream1 = ...
 JavaPairDStream<String, String> stream2 = ...
-JavaPairDStream<String, String> joinedStream = stream1.join(stream2);
+JavaPairDStream<String, Tuple2<String, String>> joinedStream = stream1.join(stream2);
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
@@ -1166,7 +1166,7 @@ val joinedStream = windowedStream1.join(windowedStream2)
 {% highlight java %}
 JavaPairDStream<String, String> windowedStream1 = stream1.window(Durations.seconds(20));
 JavaPairDStream<String, String> windowedStream2 = stream2.window(Durations.minutes(1));
-JavaPairDStream<String, String> joinedStream = windowedStream1.join(windowedStream2);
+JavaPairDStream<String, Tuple2<String, String>> joinedStream = windowedStream1.join(windowedStream2);
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
@@ -1525,7 +1525,7 @@ def getSqlContextInstance(sparkContext):
 words = ... # DStream of strings
 
 def process(time, rdd):
-    print "========= %s =========" % str(time)
+    print("========= %s =========" % str(time))
     try:
         # Get the singleton instance of SQLContext
         sqlContext = getSqlContextInstance(rdd.context)

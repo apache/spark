@@ -28,7 +28,7 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.{SecurityManager, SparkConf, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.util.logging.FileAppender
 
 /**
@@ -70,7 +70,8 @@ private[deploy] class ExecutorRunner(
     }
     workerThread.start()
     // Shutdown hook that kills actors on shutdown.
-    shutdownHook = Utils.addShutdownHook { () => killProcess(Some("Worker shutting down")) }
+    shutdownHook = ShutdownHookManager.addShutdownHook { () =>
+      killProcess(Some("Worker shutting down")) }
   }
 
   /**
@@ -102,7 +103,7 @@ private[deploy] class ExecutorRunner(
       workerThread = null
       state = ExecutorState.KILLED
       try {
-        Utils.removeShutdownHook(shutdownHook)
+        ShutdownHookManager.removeShutdownHook(shutdownHook)
       } catch {
         case e: IllegalStateException => None
       }

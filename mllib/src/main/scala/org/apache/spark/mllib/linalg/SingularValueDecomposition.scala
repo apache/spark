@@ -25,3 +25,11 @@ import org.apache.spark.annotation.Experimental
  */
 @Experimental
 case class SingularValueDecomposition[UType, VType](U: UType, s: Vector, V: VType)
+
+/**
+ * :: Experimental ::
+ * Represents QR factors.
+ */
+@Experimental
+case class QRDecomposition[QType, RType](Q: QType, R: RType)
+

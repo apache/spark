@@ -22,7 +22,6 @@ import org.apache.spark.sql.QueryTest
 case class FunctionResult(f1: String, f2: String)
 
 class UDFSuite extends QueryTest {
-
   private lazy val ctx = org.apache.spark.sql.hive.test.TestHive
 
   test("UDF case insensitive") {

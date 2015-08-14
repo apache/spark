@@ -97,9 +97,11 @@ class LinearRegressionModelBase(LinearModel):
 
     def predict(self, x):
         """
-        Predict the value of the dependent variable given a vector x
-        containing values for the independent variables.
+        Predict the value of the dependent variable given a vector or
+        an RDD of vectors containing values for the independent variables.
         """
+        if isinstance(x, RDD):
+            return x.map(self.predict)
         x = _convert_to_vector(x)
         return self.weights.dot(x) + self.intercept
 
@@ -123,6 +125,8 @@ class LinearRegressionModel(LinearRegressionModelBase):
     >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5
     True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
@@ -203,8 +207,10 @@ class LinearRegressionWithSGD(object):
         Train a linear regression model using Stochastic Gradient
         Descent (SGD).
         This solves the least squares regression formulation
-                f(weights) = 1/n ||A weights-y||^2^
-        (which is the mean squared error).
+
+            f(weights) = 1/(2n) ||A weights - y||^2,
+
+        which is the mean squared error.
         Here the data matrix has n rows, and the input RDD holds the
         set of rows of A, each with its corresponding right hand side
         label y. See also the documentation for the precise formulation.
@@ -267,6 +273,8 @@ class LassoModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5
+    True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> lrm.save(sc, path)
@@ -328,7 +336,9 @@ class LassoWithSGD(object):
         Stochastic Gradient Descent.
         This solves the l1-regularized least squares regression
         formulation
-            f(weights) = 1/2n ||A weights-y||^2^  + regParam ||weights||_1
+
+            f(weights) = 1/(2n) ||A weights - y||^2  + regParam ||weights||_1.
+
         Here the data matrix has n rows, and the input RDD holds the
         set of rows of A, each with its corresponding right hand side
         label y. See also the documentation for the precise formulation.
@@ -381,6 +391,8 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     >>> abs(lrm.predict(np.array([1.0])) - 1) < 0.5
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
+    True
+    >>> abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5
     True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
@@ -443,7 +455,9 @@ class RidgeRegressionWithSGD(object):
         Stochastic Gradient Descent.
         This solves the l2-regularized least squares regression
         formulation
-            f(weights) = 1/2n ||A weights-y||^2^  + regParam/2 ||weights||^2^
+
+            f(weights) = 1/(2n) ||A weights - y||^2 + regParam/2 ||weights||^2.
+
         Here the data matrix has n rows, and the input RDD holds the
         set of rows of A, each with its corresponding right hand side
         label y. See also the documentation for the precise formulation.

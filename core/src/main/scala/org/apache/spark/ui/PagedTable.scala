@@ -159,9 +159,9 @@ private[ui] trait PagedTable[T] {
       // "goButtonJsFuncName"
       val formJs =
         s"""$$(function(){
-          |  $$( "#form-task-page" ).submit(function(event) {
-          |    var page = $$("#form-task-page-no").val()
-          |    var pageSize = $$("#form-task-page-size").val()
+          |  $$( "#form-$tableId-page" ).submit(function(event) {
+          |    var page = $$("#form-$tableId-page-no").val()
+          |    var pageSize = $$("#form-$tableId-page-size").val()
           |    pageSize = pageSize ? pageSize: 100;
           |    if (page != "") {
           |      ${goButtonJsFuncName}(page, pageSize);
@@ -173,12 +173,14 @@ private[ui] trait PagedTable[T] {
 
       <div>
         <div>
-          <form id="form-task-page" class="form-inline pull-right" style="margin-bottom: 0px;">
+          <form id={s"form-$tableId-page"}
+                class="form-inline pull-right" style="margin-bottom: 0px;">
             <label>{totalPages} Pages. Jump to</label>
-            <input type="text" id="form-task-page-no" value={page.toString} class="span1" />
+            <input type="text" id={s"form-$tableId-page-no"} value={page.toString} class="span1" />
             <label>. Show </label>
-            <input type="text" id="form-task-page-size" value={pageSize.toString} class="span1" />
-            <label>tasks in a page.</label>
+            <input type="text"
+                   id={s"form-$tableId-page-size"} value={pageSize.toString} class="span1" />
+            <label>items in a page.</label>
             <button type="submit" class="btn">Go</button>
           </form>
         </div>
