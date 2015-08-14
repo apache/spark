@@ -59,14 +59,17 @@ import org.apache.spark.sql.Row
 
 // Load and parse the data file, converting it to a DataFrame.
 val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
-// Split the data into training and test sets (30% held out for testing)
-val splits = data.randomSplit(Array(0.7, 0.3))
-val (trainingData, testData) = (splits(0), splits(1))
 
 // Index labels, adding metadata to the label column.
+// Fit on whole dataset to include all labels in index.
 val labelIndexer = new StringIndexer()
   .setInputCol("label")
   .setOutputCol("indexedLabel")
+  .fit(data)
+
+// Split the data into training and test sets (30% held out for testing)
+val splits = data.randomSplit(Array(0.7, 0.3))
+val (trainingData, testData) = (splits(0), splits(1))
 
 // Automatically identify categorical features, and index them.
 val featureIndexer = new VectorIndexer()
