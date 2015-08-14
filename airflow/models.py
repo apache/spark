@@ -1017,6 +1017,11 @@ class TaskInstance(Base):
             to_tasks=None,
             to_dags=None,
             visible_on=None):
+        if visible_on and visible_on < self.execution_date:
+            raise ValueError(
+                'visible_on can not be in the past (current execution_date '
+                'is {}; received {})'.format(self.execution_date, visible_on))
+
         if to_dags is None:
             to_dags = self.dag_id
 
