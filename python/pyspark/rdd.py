@@ -699,13 +699,16 @@ class RDD(object):
         return self.map(lambda x: (f(x), x)).groupByKey(numPartitions)
 
     @ignore_unicode_prefix
-    def pipe(self, command, env={}):
+    def pipe(self, command, env=None):
         """
         Return an RDD created by piping elements to a forked external process.
 
         >>> sc.parallelize(['1', '2', '', '3']).pipe('cat').collect()
         [u'1', u'2', u'', u'3']
         """
+        if env is None:
+            env = dict()
+
         def func(iterator):
             pipe = Popen(
                 shlex.split(command), env=env, stdin=PIPE, stdout=PIPE)

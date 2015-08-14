@@ -33,7 +33,7 @@ def utf8_decoder(s):
 class KafkaUtils(object):
 
     @staticmethod
-    def createStream(ssc, zkQuorum, groupId, topics, kafkaParams={},
+    def createStream(ssc, zkQuorum, groupId, topics, kafkaParams=None,
                      storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2,
                      keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
         """
@@ -50,6 +50,8 @@ class KafkaUtils(object):
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
         :return: A DStream object
         """
+        if kafkaParams is None:
+            kafkaParams = dict()
         kafkaParams.update({
             "zookeeper.connect": zkQuorum,
             "group.id": groupId,
@@ -75,7 +77,7 @@ class KafkaUtils(object):
         return stream.map(lambda k_v: (keyDecoder(k_v[0]), valueDecoder(k_v[1])))
 
     @staticmethod
-    def createDirectStream(ssc, topics, kafkaParams, fromOffsets={},
+    def createDirectStream(ssc, topics, kafkaParams, fromOffsets=None,
                            keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
         """
         .. note:: Experimental
@@ -103,6 +105,8 @@ class KafkaUtils(object):
         :param valueDecoder:  A function used to decode value (default is utf8_decoder).
         :return: A DStream object
         """
+        if fromOffsets is None:
+            fromOffsets = dict()
         if not isinstance(topics, list):
             raise TypeError("topics should be list")
         if not isinstance(kafkaParams, dict):
@@ -126,7 +130,7 @@ class KafkaUtils(object):
         return stream.map(lambda k_v: (keyDecoder(k_v[0]), valueDecoder(k_v[1])))
 
     @staticmethod
-    def createRDD(sc, kafkaParams, offsetRanges, leaders={},
+    def createRDD(sc, kafkaParams, offsetRanges, leaders=None,
                   keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
         """
         .. note:: Experimental
@@ -142,6 +146,8 @@ class KafkaUtils(object):
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
         :return: A RDD object
         """
+        if leaders is None:
+            leaders = dict()
         if not isinstance(kafkaParams, dict):
             raise TypeError("kafkaParams should be dict")
         if not isinstance(offsetRanges, list):
