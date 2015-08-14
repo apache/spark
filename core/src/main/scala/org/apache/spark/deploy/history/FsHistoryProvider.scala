@@ -204,20 +204,27 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           mod1 >= mod2
       }
 
-      val tasks: Iterator[Future[_]] = logInfos.grouped(20).map { batch =>
-        replayExecutor.submit(new Runnable {
-          override def run(): Unit = mergeApplicationListing(batch)
-        })
-      }
+      logInfos.grouped(20)
+        .map { batch =>
+          replayExecutor.submit(new Runnable {
+            override def run(): Unit = mergeApplicationListing(batch)
+          })
+        }
+        .foreach { task =>
+          try {
+            // Wait for all tasks to finish. This makes sure that checkForLogs
+            // is not scheduled again while some tasks are already running in
+            // the replayExecutor.
+            task.get()
+          } catch {
+            case e: InterruptedException =>
+              throw e
+            case e: Exception =>
+              logError("Exception while merging application listings", e)
+          }
+        }
 
       lastModifiedTime = newLastModifiedTime
-
-      for (task <- tasks) {
-        // Wait for all tasks to finish. This makes sure that checkForLogs is
-        // not scheduled again while some tasks are already running in the
-        // replayExecutor.
-        task.get()
-      }
     } catch {
       case e: Exception => logError("Exception in checking for event log updates", e)
     }
