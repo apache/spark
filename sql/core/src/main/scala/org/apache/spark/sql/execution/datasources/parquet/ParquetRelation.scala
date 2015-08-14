@@ -769,13 +769,17 @@ private[sql] object ParquetRelation extends Logging {
     }
 
     // For parquet-mr 1.7.0 and above versions, which are under `org.apache.parquet` namespace.
+    // scalastyle:off classforname
     Class.forName(classOf[ApacheParquetLog].getName)
+    // scalastyle:on classforname
     redirect(JLogger.getLogger(classOf[ApacheParquetLog].getName))
 
     // For parquet-mr 1.6.0 and lower versions bundled with Hive, which are under `parquet`
     // namespace.
     try {
+      // scalastyle:off classforname
       Class.forName("parquet.Log")
+      // scalastyle:on classforname
       redirect(JLogger.getLogger("parquet.Log"))
     } catch { case _: Throwable =>
       // SPARK-9974: com.twitter:parquet-hadoop-bundle:1.6.0 is not packaged into the assembly jar
