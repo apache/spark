@@ -84,7 +84,7 @@ abstract class StreamingLinearAlgorithm[
    *
    * @param data DStream containing labeled data
    *
-   * @since 1.1.0
+   * @since 1.3.0
    */
   def trainOn(data: DStream[LabeledPoint]): Unit = {
     if (model.isEmpty) {
@@ -106,7 +106,7 @@ abstract class StreamingLinearAlgorithm[
   /**
    * Java-friendly version of `trainOn`.
    *
-   * @since 1.1.0
+   * @since 1.3.0
    */
   def trainOn(data: JavaDStream[LabeledPoint]): Unit = trainOn(data.dstream)
 
@@ -153,7 +153,7 @@ abstract class StreamingLinearAlgorithm[
   /**
    * Java-friendly version of `predictOnValues`.
    *
-   * @since 1.1.0
+   * @since 1.3.0
    */
   def predictOnValues[K](data: JavaPairDStream[K, Vector]): JavaPairDStream[K, java.lang.Double] = {
     implicit val tag = fakeClassTag[K]

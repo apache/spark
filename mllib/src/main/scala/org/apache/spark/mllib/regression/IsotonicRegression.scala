@@ -167,11 +167,9 @@ class IsotonicRegressionModel (
     IsotonicRegressionModel.SaveLoadV1_0.save(sc, path, boundaries, predictions, isotonic)
   }
 
-  /*
-   * @since 1.4.0
-   */
   override protected def formatVersion: String = "1.0"
 }
+
 /*
  * @since 1.4.0
  */
@@ -260,8 +258,6 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
  *   Available from [[http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf]]
  *
  * @see [[http://en.wikipedia.org/wiki/Isotonic_regression Isotonic regression (Wikipedia)]]
- *
- * @since 1.3.0
  */
 @Experimental
 class IsotonicRegression private (private var isotonic: Boolean) extends Serializable {
@@ -270,8 +266,6 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    * Constructs IsotonicRegression instance with default parameter isotonic = true.
    *
    * @return New instance of IsotonicRegression.
-   *
-   * @since 1.3.0
    */
   def this() = this(true)
 
@@ -280,8 +274,6 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    *
    * @param isotonic Isotonic (increasing) or antitonic (decreasing) sequence.
    * @return This instance of IsotonicRegression.
-   *
-   * @since 1.3.0
    */
   def setIsotonic(isotonic: Boolean): this.type = {
     this.isotonic = isotonic
@@ -297,8 +289,6 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    *              If multiple labels share the same feature value then they are ordered before
    *              the algorithm is executed.
    * @return Isotonic regression model.
-   *
-   * @since 1.3.0
    */
   def run(input: RDD[(Double, Double, Double)]): IsotonicRegressionModel = {
     val preprocessedInput = if (isotonic) {
@@ -324,8 +314,6 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    *              If multiple labels share the same feature value then they are ordered before
    *              the algorithm is executed.
    * @return Isotonic regression model.
-   *
-   * @since 1.3.0
    */
   def run(input: JavaRDD[(JDouble, JDouble, JDouble)]): IsotonicRegressionModel = {
     run(input.rdd.retag.asInstanceOf[RDD[(Double, Double, Double)]])

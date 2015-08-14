@@ -47,8 +47,6 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * @param dataMatrix Row vector containing the features for this data point
    * @param weightMatrix Column vector containing the weights of the model
    * @param intercept Intercept of the model.
-   *
-   * @since 0.8.0
    */
   protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector, intercept: Double): Double
 
@@ -58,7 +56,7 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * @param testData RDD representing data points to be predicted
    * @return RDD[Double] where each entry contains the corresponding prediction
    *
-   * @since 0.8.0
+   * @since 1.0.0
    */
   def predict(testData: RDD[Vector]): RDD[Double] = {
     // A small optimization to avoid serializing the entire model. Only the weightsMatrix
@@ -78,7 +76,7 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * @param testData array representing a single data point
    * @return Double prediction from the trained model
    *
-   * @since 0.8.0
+   * @since 1.0.0
    */
   def predict(testData: Vector): Double = {
     predictPoint(testData, weights, intercept)
@@ -86,8 +84,6 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
 
   /**
    * Print a summary of the model.
-   *
-   * @since 1.2.0
    */
   override def toString: String = {
     s"${this.getClass.getName}: intercept = ${intercept}, numFeatures = ${weights.size}"
@@ -166,8 +162,6 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   /**
    * Create a model given the weights and intercept
-   *
-   * @since 0.8.0
    */
   protected def createModel(weights: Vector, intercept: Double): M
 
@@ -237,7 +231,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * Run the algorithm with the configured parameters on an input RDD
    * of LabeledPoint entries starting from the initial weights provided.
    *
-   * @since 0.8.0
+   * @since 1.0.0
    */
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
 

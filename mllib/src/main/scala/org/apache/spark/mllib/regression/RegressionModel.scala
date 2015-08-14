@@ -35,7 +35,7 @@ trait RegressionModel extends Serializable {
    * @param testData RDD representing data points to be predicted
    * @return RDD[Double] where each entry contains the corresponding prediction
    *
-   * @since 0.8.0
+   * @since 1.0.0
    */
   def predict(testData: RDD[Vector]): RDD[Double]
 
@@ -45,7 +45,7 @@ trait RegressionModel extends Serializable {
    * @param testData array representing a single data point
    * @return Double prediction from the trained model
    *
-   * @since 0.8.0
+   * @since 1.0.0
    */
   def predict(testData: Vector): Double
 

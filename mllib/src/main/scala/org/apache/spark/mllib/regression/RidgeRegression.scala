@@ -40,9 +40,6 @@ class RidgeRegressionModel (
   extends GeneralizedLinearModel(weights, intercept)
   with RegressionModel with Serializable with Saveable with PMMLExportable {
 
-  /*
-   * @since 0.8.0
-   */
   override protected def predictPoint(
       dataMatrix: Vector,
       weightMatrix: Vector,
@@ -57,9 +54,6 @@ class RidgeRegressionModel (
     GLMRegressionModel.SaveLoadV1_0.save(sc, path, this.getClass.getName, weights, intercept)
   }
 
-  /*
-   * @since 1.3.0
-   */
   override protected def formatVersion: String = "1.0"
 }
 
@@ -95,8 +89,6 @@ object RidgeRegressionModel extends Loader[RidgeRegressionModel] {
  * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
- *
- * @since 0.8.0
  */
 class RidgeRegressionWithSGD private (
     private var stepSize: Double,
@@ -117,14 +109,9 @@ class RidgeRegressionWithSGD private (
   /**
    * Construct a RidgeRegression object with default parameters: {stepSize: 1.0, numIterations: 100,
    * regParam: 0.01, miniBatchFraction: 1.0}.
-   *
-   * @since 0.8.0
    */
   def this() = this(1.0, 100, 0.01, 1.0)
 
-  /*
-  * @since 0.8.0
-  */
   override protected def createModel(weights: Vector, intercept: Double) = {
     new RidgeRegressionModel(weights, intercept)
   }

@@ -88,8 +88,6 @@ object LassoModel extends Loader[LassoModel] {
  * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
- *
- * @since 0.8.0
  */
 class LassoWithSGD private (
     private var stepSize: Double,
@@ -109,8 +107,6 @@ class LassoWithSGD private (
   /**
    * Construct a Lasso object with default parameters: {stepSize: 1.0, numIterations: 100,
    * regParam: 0.01, miniBatchFraction: 1.0}.
-   *
-   * @since 0.8.0
    */
   def this() = this(1.0, 100, 0.01, 1.0)
 
@@ -141,7 +137,7 @@ object LassoWithSGD {
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to
    *        the number of features in the data.
    *
-   * @since 0.8.0
+   * @since 1.0.0
    */
   def train(
       input: RDD[LabeledPoint],

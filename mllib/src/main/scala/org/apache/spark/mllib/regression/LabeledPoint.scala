@@ -33,9 +33,6 @@ import org.apache.spark.SparkException
  */
 @BeanInfo
 case class LabeledPoint(label: Double, features: Vector) {
-  /*
-   * @since 0.9.0
-   */
   override def toString: String = {
     s"($label,$features)"
   }
