@@ -990,10 +990,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable 
     out.write(bytes);
   }
 
-  static {
-
-  }
-
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
     offset = BYTE_ARRAY_OFFSET;
     numBytes = in.readInt();
