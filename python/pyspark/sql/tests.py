@@ -770,7 +770,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(isinstance(df['key'], Column))
         self.assertTrue(isinstance(df[0], Column))
         self.assertRaises(IndexError, lambda: df[2])
-        self.assertRaises(IndexError, lambda: df["bad_key"])
+        self.assertRaises(AnalysisException, lambda: df["bad_key"])
         self.assertRaises(TypeError, lambda: df[{}])
 
     def test_column_name_with_non_ascii(self):
@@ -794,7 +794,9 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.sc.parallelize([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})]).toDF()
         self.assertEqual(1, df.select(df.l[0]).first()[0])
         self.assertEqual(1, df.select(df.r["a"]).first()[0])
+        self.assertEqual(1, df.select(df["r.a"]).first()[0])
         self.assertEqual("b", df.select(df.r["b"]).first()[0])
+        self.assertEqual("b", df.select(df["r.b"]).first()[0])
         self.assertEqual("v", df.select(df.d["k"]).first()[0])
 
     def test_infer_long_type(self):

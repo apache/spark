@@ -722,8 +722,6 @@ class DataFrame(object):
         [Row(age=5, name=u'Bob')]
         """
         if isinstance(item, basestring):
-            if item not in self.columns:
-                raise IndexError("no such column: %s" % item)
             jc = self._jdf.apply(item)
             return Column(jc)
         elif isinstance(item, Column):

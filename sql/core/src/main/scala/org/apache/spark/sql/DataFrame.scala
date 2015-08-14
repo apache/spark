@@ -634,6 +634,7 @@ class DataFrame private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
+   * Note that the column name can also reference to a nested column like `a.b`.
    * @group dfops
    * @since 1.3.0
    */
@@ -641,6 +642,7 @@ class DataFrame private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
+   * Note that the column name can also reference to a nested column like `a.b`.
    * @group dfops
    * @since 1.3.0
    */
