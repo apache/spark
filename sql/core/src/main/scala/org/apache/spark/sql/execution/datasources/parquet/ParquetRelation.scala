@@ -26,6 +26,7 @@ import scala.collection.mutable
 import scala.util.{Failure, Try}
 
 import com.google.common.base.Objects
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
@@ -40,7 +41,6 @@ import org.apache.parquet.{Log => ParquetLog}
 import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{SqlNewHadoopPartition, SqlNewHadoopRDD, RDD}
-import org.apache.spark.rdd.RDD._
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.PartitionSpec
@@ -82,7 +82,9 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
         override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
           val uniqueWriteJobId = context.getConfiguration.get("spark.sql.sources.writeJobUUID")
           val split = context.getTaskAttemptID.getTaskID.getId
-          new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+          val file = new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+          file.getFileSystem(context.getConfiguration).delete(file, false)
+          file
         }
       }
     }

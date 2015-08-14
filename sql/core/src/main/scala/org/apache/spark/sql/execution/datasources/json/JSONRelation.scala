@@ -169,18 +169,21 @@ private[json] class JsonOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter with SparkHadoopMapRedUtil with Logging {
 
-  val writer = new CharArrayWriter()
-  // create the Generator without separator inserted between 2 records
-  val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
+  private val writer = new CharArrayWriter()
 
-  val result = new Text()
+  // create the Generator without separator inserted between 2 records
+  private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
+
+  private val result = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
         val uniqueWriteJobId = context.getConfiguration.get("spark.sql.sources.writeJobUUID")
         val split = context.getTaskAttemptID.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+        val file = new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+        file.getFileSystem(context.getConfiguration).delete(file, false)
+        file
       }
     }.getRecordWriter(context)
   }
