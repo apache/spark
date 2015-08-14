@@ -1135,18 +1135,17 @@ class DataFrame private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def withColumn(colName: String, col: Column, metadata: Option[Metadata] = None): DataFrame = {
+  def withColumn(colName: String, col: Column): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
     val replaced = schema.exists(f => resolver(f.name, colName))
-    val aliasedColumn = metadata.map(md => col.as(colName, md)).getOrElse(col.as(colName))
     if (replaced) {
       val colNames = schema.map { field =>
         val name = field.name
-        if (resolver(name, colName)) aliasedColumn else Column(name)
+        if (resolver(name, colName)) col.as(colName) else Column(name)
       }
       select(colNames : _*)
     } else {
-      select(Column("*"), aliasedColumn)
+      select(Column("*"), col.as(colName))
     }
   }
 
