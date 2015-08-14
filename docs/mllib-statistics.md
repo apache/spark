@@ -454,16 +454,37 @@ val testResult2 = Statistics.kolmogorovSmirnovTest(data, myCDF)
 {% endhighlight %}
 </div>
 
+<div data-lang="java" markdown="1">
+[`Statistics`](api/java/org/apache/spark/mllib/stat/Statistics.html) provides methods to
+run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstrates how to run
+and interpret the hypothesis tests.
+
+{% highlight java %}
+import com.google.common.collect.Lists;
+import org.apache.spark.api.java.JavaDoubleRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.stat.Statistics;
+import org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult;
+
+JavaSparkContext jsc = ...
+JavaDoubleRDD data = jsc.parallelizeDoubles(Lists.newArrayList(0.2, 1.0, ...));
+KolmogorovSmirnovTestResult testResult = Statistics.kolmogorovSmirnovTest(data, "norm", 0.0, 1.0);
+// summary of the test including the p-value, test statistic,
+// and null hypothesis
+// if our p-value indicates significance, we can reject the null hypothesis
+System.out.println(testResult1);
+{% endhighlight %}
+</div>
+
 <div data-lang="python" markdown="1">
-[`Statistics`](api/python/index.html#org.apache.spark.mllib.stat.Statistics$) provides methods to
+[`Statistics`](api/python/index.html#pyspark.mllib.stat.Statistics$) provides methods to
 run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstrates how to run
 and interpret the hypothesis tests.
 
 {% highlight python %}
 from pyspark.mllib.stat import Statistics
 
-localData = [1.0, 2.0, ... ] #a list of doubles
-parallelData =  sc.parallelize(localData) # an RDD of Double
+parallelData = sc.parallelize([1.0, 2.0, ... ])
 
 # run a KS test for the sample versus a standard normal distribution
 testResult = Statistics.kolmogorovSmirnovTest(parallelData, "norm", 0, 1)
