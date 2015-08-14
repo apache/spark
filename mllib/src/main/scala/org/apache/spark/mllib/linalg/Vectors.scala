@@ -544,9 +544,6 @@ class DenseVector(val values: Array[Double]) extends Vector {
    */
   override def size: Int = values.length
 
-  /**
-   * @since 1.0.0
-   */
   override def toString: String = values.mkString("[", ",", "]")
 
   /**
@@ -680,9 +677,6 @@ class SparseVector(
     s" indices match the dimension of the values. You provided ${indices.length} indices and " +
     s" ${values.length} values.")
 
-  /**
-   * @since 1.0.0
-   */
   override def toString: String =
     s"($size,${indices.mkString("[", ",", "]")},${values.mkString("[", ",", "]")})"
 
