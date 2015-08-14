@@ -488,3 +488,10 @@ def as_tuple(obj):
         return (obj,)
     else:
         return tuple(_inner_gen())
+
+
+def round_time(dt, delta):
+    delta = delta.total_seconds()
+    seconds = (dt - dt.min).seconds
+    rounding = (seconds + delta / 2) // delta * delta
+    return dt + timedelta(0, rounding - seconds, -dt.microsecond)
