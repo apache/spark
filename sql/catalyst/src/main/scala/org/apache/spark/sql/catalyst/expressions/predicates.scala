@@ -64,20 +64,19 @@ trait PredicateHelper {
    * Refer to https://en.wikipedia.org/wiki/Conjunctive_normal_form for more information
    */
   protected def cnfNormalization(condition: Expression): Expression = {
-    condition.transformUp {
-      case or: Or => pushOrToBottom(or)
-    }
-  }
-
-  private def pushOrToBottom(condition: Expression): Expression = {
-    condition match {
-      case Or(left, right) => (left, right) match {
-        case (And(ll, lr), r) =>
-          And(pushOrToBottom(Or(ll, r)), pushOrToBottom(Or(lr, r)))
-        case (l, And(rl, rr)) =>
-          And(pushOrToBottom(Or(l, rl)), pushOrToBottom(Or(l, rr)))
-        case (l, r) => Or(l, r)
+    // reverse Or with its And child to eliminate (And under Or) occurrence
+    def normalize(condition: Expression): Expression = {
+      condition match {
+        case Or(And(innerLhs, innerRhs), rhs) =>
+          And(normalize(Or(innerLhs, rhs)), normalize(Or(innerRhs, rhs)))
+        case Or(lhs, And(innerLhs, innerRhs)) =>
+          And(normalize(Or(lhs, innerLhs)), normalize(Or(lhs, innerRhs)))
+        case _ => condition
       }
+    }
+
+    condition.transformUp {
+      case or: Or => normalize(or)
     }
   }
 

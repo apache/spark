@@ -20,41 +20,54 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.optimizer._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class CNFNormalizationSuite extends SparkFunSuite with PredicateHelper {
+
+  object Optimize extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("AnalysisNodes", Once,
+        EliminateSubQueries) ::
+      Batch("Constant Folding", FixedPoint(50),
+        NullPropagation,
+        ConstantFolding,
+        BooleanSimplification,
+        SimplifyFilters) :: Nil
+  }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.int, 'e.int)
 
   // Take in expression without And, normalize to its leftmost representation to be comparable
   private def normalizeOrExpression(expression: Expression): Expression = {
-    val atoms = ArrayBuffer.empty[Expression]
+    val elements = ArrayBuffer.empty[Expression]
     expression.foreachUp {
-      case Or(l: Or, r: Or) => // do nothing
-      case Or(l, r: Or) => atoms += l
-      case Or(l: Or, r) => atoms += r
-      case Or(l, r) => atoms += l; atoms += r
+      case Or(lhs, rhs) =>
+        if (!lhs.isInstanceOf[Or]) elements += lhs
+        if (!rhs.isInstanceOf[Or]) elements += rhs
       case _ => // do nothing
     }
     if (!expression.isInstanceOf[Or]) {
-      atoms += expression
+      elements += expression
     }
-    atoms.sortBy(_.toString).reduce(Or)
+    elements.sortBy(_.toString).reduce(Or)
   }
 
   private def checkCondition(input: Expression, expected: Expression): Unit = {
-    val actual = testRelation.where(input).analyze
-    val correctAnswer = testRelation.where(expected).analyze
+    val actual = Optimize.execute(testRelation.where(input).analyze)
+    val correctAnswer = Optimize.execute(testRelation.where(expected).analyze)
 
     val resultFilterExpression = actual.collectFirst { case f: Filter => f.condition }.get
     val expectedFilterExpression = correctAnswer.collectFirst { case f: Filter => f.condition }.get
 
-    val exprs = splitConjunctivePredicates(cnfNormalization(resultFilterExpression)).
-      map(normalizeOrExpression).sortBy(_.toString)
-    val expectedExprs = splitConjunctivePredicates(cnfNormalization(expectedFilterExpression)).
-      map(normalizeOrExpression).sortBy(_.toString)
+    val exprs = splitConjunctivePredicates(cnfNormalization(resultFilterExpression))
+      .map(normalizeOrExpression).sortBy(_.toString)
+    val expectedExprs = splitConjunctivePredicates(cnfNormalization(expectedFilterExpression))
+      .map(normalizeOrExpression).sortBy(_.toString)
 
     assert(exprs === expectedExprs)
   }
@@ -74,6 +87,10 @@ class CNFNormalizationSuite extends SparkFunSuite with PredicateHelper {
     checkCondition(a && b && c, a && b && c)
   }
 
+  test("a && !(b || c) => a && !b && !c") {
+    checkCondition(a && !(b || c), a && !b && !c)
+  }
+
   test("a && b || c => (a || c) && (b || c)") {
     checkCondition(a && b || c, (a || c) && (b || c))
   }
@@ -86,6 +103,10 @@ class CNFNormalizationSuite extends SparkFunSuite with PredicateHelper {
     checkCondition((a && b) || (c && d), (a || c) && (b || c) && (a || d) && (b || d))
   }
 
+  test("(a && b) || !(c && d) => (a || !c || !d) && (b || !c || !d)") {
+    checkCondition((a && b) || !(c && d), (a || !c || !d) && (b || !c || !d))
+  }
+
   test("a || b || c && d => (a || b || c) && (a || b || d)") {
     checkCondition(a || b || c && d, (a || b || c) && (a || b || d))
   }
@@ -94,16 +115,35 @@ class CNFNormalizationSuite extends SparkFunSuite with PredicateHelper {
     checkCondition(a || (b && c || d), (a || b || d) && (a || c || d))
   }
 
+  test("a || !(b && c || d) => (a || !b || !c) && (a || !d)") {
+    checkCondition(a || !(b && c || d), (a || !b || !c) && (a || !d))
+  }
+
   test("a && (b && c || d && e) => a && (b || d) && (c || d) && (b || e) && (c || e)") {
     val input = a && (b && c || d && e)
     val expected = a && (b || d) && (c || d) && (b || e) && (c || e)
     checkCondition(input, expected)
   }
 
+  test("a && !(b && c || d && e) => a && (!b || !c) && (!d || !e)") {
+    checkCondition(a && !(b && c || d && e), a && (!b || !c) && (!d || !e))
+  }
+
   test(
     "a || (b && c || d && e) => (a || b || d) && (a || c || d) && (a || b || e) && (a || c || e)") {
     val input = a || (b && c || d && e)
     val expected = (a || b || d) && (a || c || d) && (a || b || e) && (a || c || e)
+    checkCondition(input, expected)
+  }
+
+  test(
+    "a || !(b && c || d && e) => (a || !b || !c) && (a || !d || !e)") {
+    checkCondition(a || !(b && c || d && e), (a || !b || !c) && (a || !d || !e))
+  }
+
+  test("a && b && c || !(d && e) => (a || !d || !e) && (b || !d || !e) && (c || !d || !e)") {
+    val input = a && b && c || !(d && e)
+    val expected = (a || !d || !e) && (b || !d || !e) && (c || !d || !e)
     checkCondition(input, expected)
   }
 

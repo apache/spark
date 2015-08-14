@@ -573,6 +573,10 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         case And(l, r) => Or(Not(l), Not(r))
         // not(not(e))  =>  e
         case Not(e) => e
+        // De Morgan's law: !(a || b) => !a && !b
+        case Or(lhs, rhs) => And(Not(lhs), Not(rhs))
+        // De Morgan's law: !(a && b) => !a || !b
+        case And(lhs, rhs) => Or(Not(lhs), Not(rhs))
         case _ => not
       }  // end of Not(exp)
 
