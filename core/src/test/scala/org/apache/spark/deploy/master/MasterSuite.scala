@@ -216,17 +216,31 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     schedulingWithEverything(spreadOut = false)
   }
 
+  test("default scheduling mode") {
+    val conf = new SparkConf()
+    val securityManager = new SecurityManager(conf)
+    val masterRpcEnv: RpcEnv =
+      RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityManager)
+
+    val master = new Master(masterRpcEnv, masterRpcEnv.address, 0, securityManager, conf)
+    val schedulingSetting = master.schedulingSetting
+    assert(schedulingSetting.mode == SchedulingMode.FIFO)
+    assert(schedulingSetting.configFile == None)
+  }
+
   private def basicScheduling(spreadOut: Boolean): Unit = {
     val master = makeMaster()
     val appInfo = makeAppInfo(1024)
-    val scheduledCores = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    val algo = new FIFOSchedulingAlgorithm(master)
+    val scheduledCores = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     assert(scheduledCores === Array(10, 10, 10))
   }
 
   private def basicSchedulingWithMoreMemory(spreadOut: Boolean): Unit = {
     val master = makeMaster()
     val appInfo = makeAppInfo(3072)
-    val scheduledCores = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    val algo = new FIFOSchedulingAlgorithm(master)
+    val scheduledCores = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     assert(scheduledCores === Array(10, 10, 10))
   }
 
@@ -234,8 +248,9 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     val master = makeMaster()
     val appInfo1 = makeAppInfo(1024, maxCores = Some(8))
     val appInfo2 = makeAppInfo(1024, maxCores = Some(16))
-    val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo1, workerInfos, spreadOut)
-    val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo2, workerInfos, spreadOut)
+    val algo = new FIFOSchedulingAlgorithm(master)
+    val scheduledCores1 = scheduleExecutorsOnWorkers(algo, appInfo1, workerInfos, spreadOut)
+    val scheduledCores2 = scheduleExecutorsOnWorkers(algo, appInfo2, workerInfos, spreadOut)
     if (spreadOut) {
       assert(scheduledCores1 === Array(3, 3, 2))
       assert(scheduledCores2 === Array(6, 5, 5))
@@ -250,9 +265,10 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     val appInfo1 = makeAppInfo(1024, coresPerExecutor = Some(2))
     val appInfo2 = makeAppInfo(256, coresPerExecutor = Some(2))
     val appInfo3 = makeAppInfo(256, coresPerExecutor = Some(3))
-    val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo1, workerInfos, spreadOut)
-    val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo2, workerInfos, spreadOut)
-    val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo3, workerInfos, spreadOut)
+    val algo = new FIFOSchedulingAlgorithm(master)
+    val scheduledCores1 = scheduleExecutorsOnWorkers(algo, appInfo1, workerInfos, spreadOut)
+    val scheduledCores2 = scheduleExecutorsOnWorkers(algo, appInfo2, workerInfos, spreadOut)
+    val scheduledCores3 = scheduleExecutorsOnWorkers(algo, appInfo3, workerInfos, spreadOut)
     assert(scheduledCores1 === Array(8, 8, 8)) // 4 * 2 because of memory limits
     assert(scheduledCores2 === Array(10, 10, 10)) // 5 * 2
     assert(scheduledCores3 === Array(9, 9, 9)) // 3 * 3
@@ -264,9 +280,10 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     val appInfo1 = makeAppInfo(256, coresPerExecutor = Some(2), maxCores = Some(4))
     val appInfo2 = makeAppInfo(256, coresPerExecutor = Some(2), maxCores = Some(20))
     val appInfo3 = makeAppInfo(256, coresPerExecutor = Some(3), maxCores = Some(20))
-    val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo1, workerInfos, spreadOut)
-    val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo2, workerInfos, spreadOut)
-    val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo3, workerInfos, spreadOut)
+    val algo = new FIFOSchedulingAlgorithm(master)
+    val scheduledCores1 = scheduleExecutorsOnWorkers(algo, appInfo1, workerInfos, spreadOut)
+    val scheduledCores2 = scheduleExecutorsOnWorkers(algo, appInfo2, workerInfos, spreadOut)
+    val scheduledCores3 = scheduleExecutorsOnWorkers(algo, appInfo3, workerInfos, spreadOut)
     if (spreadOut) {
       assert(scheduledCores1 === Array(2, 2, 0))
       assert(scheduledCores2 === Array(8, 6, 6))
@@ -282,11 +299,12 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     val master = makeMaster()
     val appInfo = makeAppInfo(256)
     appInfo.executorLimit = 0
-    val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    val algo = new FIFOSchedulingAlgorithm(master)
+    val scheduledCores1 = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     appInfo.executorLimit = 2
-    val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    val scheduledCores2 = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     appInfo.executorLimit = 5
-    val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    val scheduledCores3 = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     assert(scheduledCores1 === Array(0, 0, 0))
     assert(scheduledCores2 === Array(10, 10, 0))
     assert(scheduledCores3 === Array(10, 10, 10))
@@ -296,11 +314,12 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     val master = makeMaster()
     val appInfo = makeAppInfo(256, maxCores = Some(16))
     appInfo.executorLimit = 0
-    val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    val algo = new FIFOSchedulingAlgorithm(master)
+    val scheduledCores1 = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     appInfo.executorLimit = 2
-    val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    val scheduledCores2 = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     appInfo.executorLimit = 5
-    val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    val scheduledCores3 = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     assert(scheduledCores1 === Array(0, 0, 0))
     if (spreadOut) {
       assert(scheduledCores2 === Array(8, 8, 0))
@@ -315,11 +334,12 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     val master = makeMaster()
     val appInfo = makeAppInfo(256, coresPerExecutor = Some(4))
     appInfo.executorLimit = 0
-    val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    val algo = new FIFOSchedulingAlgorithm(master)
+    val scheduledCores1 = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     appInfo.executorLimit = 2
-    val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    val scheduledCores2 = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     appInfo.executorLimit = 5
-    val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    val scheduledCores3 = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     assert(scheduledCores1 === Array(0, 0, 0))
     if (spreadOut) {
       assert(scheduledCores2 === Array(4, 4, 0))
@@ -334,11 +354,12 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     val master = makeMaster()
     val appInfo = makeAppInfo(256, coresPerExecutor = Some(4), maxCores = Some(18))
     appInfo.executorLimit = 0
-    val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    val algo = new FIFOSchedulingAlgorithm(master)
+    val scheduledCores1 = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     appInfo.executorLimit = 2
-    val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    val scheduledCores2 = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     appInfo.executorLimit = 5
-    val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    val scheduledCores3 = scheduleExecutorsOnWorkers(algo, appInfo, workerInfos, spreadOut)
     assert(scheduledCores1 === Array(0, 0, 0))
     if (spreadOut) {
       assert(scheduledCores2 === Array(4, 4, 0))
@@ -380,11 +401,11 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
   }
 
   private def scheduleExecutorsOnWorkers(
-      master: Master,
+      schedulingAlgo: SchedulingAlgorithm,
       appInfo: ApplicationInfo,
       workerInfos: Array[WorkerInfo],
       spreadOut: Boolean): Array[Int] = {
-    master.invokePrivate(_scheduleExecutorsOnWorkers(appInfo, workerInfos, spreadOut))
+    schedulingAlgo.invokePrivate(_scheduleExecutorsOnWorkers(appInfo, workerInfos, spreadOut))
   }
 
 }

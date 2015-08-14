@@ -37,6 +37,7 @@ import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
+import org.apache.spark.deploy.master.SchedulingMode.SchedulingMode
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.metrics.MetricsSystem
@@ -50,7 +51,8 @@ private[deploy] class Master(
     address: RpcAddress,
     webUiPort: Int,
     val securityMgr: SecurityManager,
-    val conf: SparkConf)
+    val conf: SparkConf,
+    val schedulingSetting: SchedulingSetting = SchedulingSetting(SchedulingMode.FIFO, None))
   extends ThreadSafeRpcEndpoint with Logging with LeaderElectable {
 
   private val forwardMessageThread =
@@ -114,10 +116,18 @@ private[deploy] class Master(
 
   private var checkForWorkerTimeOutTask: ScheduledFuture[_] = _
 
+  private val appScheduler: SchedulingAlgorithm = schedulingSetting.mode match {
+    case SchedulingMode.FIFO =>
+      new FIFOSchedulingAlgorithm(this)
+    case _ =>
+      // Just a placeholder, we shouldn't reach here
+      throw new SparkException("Unknown Scheduling Algorithm")
+  }
+
   // As a temporary workaround before better ways of configuring memory, we allow users to set
   // a flag that will perform round-robin scheduling across the nodes (spreading out each app
   // among all the nodes) instead of trying to consolidate each app onto a small # of nodes.
-  private val spreadOutApps = conf.getBoolean("spark.deploy.spreadOut", true)
+  private[master] val spreadOutApps = conf.getBoolean("spark.deploy.spreadOut", true)
 
   // Default maxCores for applications that don't specify it (i.e. pass Int.MaxValue)
   private val defaultCores = conf.getInt("spark.deploy.defaultCores", Int.MaxValue)
@@ -547,135 +557,10 @@ private[deploy] class Master(
   }
 
   /**
-   * Schedule executors to be launched on the workers.
-   * Returns an array containing number of cores assigned to each worker.
-   *
-   * There are two modes of launching executors. The first attempts to spread out an application's
-   * executors on as many workers as possible, while the second does the opposite (i.e. launch them
-   * on as few workers as possible). The former is usually better for data locality purposes and is
-   * the default.
-   *
-   * The number of cores assigned to each executor is configurable. When this is explicitly set,
-   * multiple executors from the same application may be launched on the same worker if the worker
-   * has enough cores and memory. Otherwise, each executor grabs all the cores available on the
-   * worker by default, in which case only one executor may be launched on each worker.
-   *
-   * It is important to allocate coresPerExecutor on each worker at a time (instead of 1 core
-   * at a time). Consider the following example: cluster has 4 workers with 16 cores each.
-   * User requests 3 executors (spark.cores.max = 48, spark.executor.cores = 16). If 1 core is
-   * allocated at a time, 12 cores from each worker would be assigned to each executor.
-   * Since 12 < 16, no executors would launch [SPARK-8881].
-   */
-  private def scheduleExecutorsOnWorkers(
-      app: ApplicationInfo,
-      usableWorkers: Array[WorkerInfo],
-      spreadOutApps: Boolean): Array[Int] = {
-    val coresPerExecutor = app.desc.coresPerExecutor
-    val minCoresPerExecutor = coresPerExecutor.getOrElse(1)
-    val oneExecutorPerWorker = coresPerExecutor.isEmpty
-    val memoryPerExecutor = app.desc.memoryPerExecutorMB
-    val numUsable = usableWorkers.length
-    val assignedCores = new Array[Int](numUsable) // Number of cores to give to each worker
-    val assignedExecutors = new Array[Int](numUsable) // Number of new executors on each worker
-    var coresToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
-
-    /** Return whether the specified worker can launch an executor for this app. */
-    def canLaunchExecutor(pos: Int): Boolean = {
-      val keepScheduling = coresToAssign >= minCoresPerExecutor
-      val enoughCores = usableWorkers(pos).coresFree - assignedCores(pos) >= minCoresPerExecutor
-
-      // If we allow multiple executors per worker, then we can always launch new executors.
-      // Otherwise, if there is already an executor on this worker, just give it more cores.
-      val launchingNewExecutor = !oneExecutorPerWorker || assignedExecutors(pos) == 0
-      if (launchingNewExecutor) {
-        val assignedMemory = assignedExecutors(pos) * memoryPerExecutor
-        val enoughMemory = usableWorkers(pos).memoryFree - assignedMemory >= memoryPerExecutor
-        val underLimit = assignedExecutors.sum + app.executors.size < app.executorLimit
-        keepScheduling && enoughCores && enoughMemory && underLimit
-      } else {
-        // We're adding cores to an existing executor, so no need
-        // to check memory and executor limits
-        keepScheduling && enoughCores
-      }
-    }
-
-    // Keep launching executors until no more workers can accommodate any
-    // more executors, or if we have reached this application's limits
-    var freeWorkers = (0 until numUsable).filter(canLaunchExecutor)
-    while (freeWorkers.nonEmpty) {
-      freeWorkers.foreach { pos =>
-        var keepScheduling = true
-        while (keepScheduling && canLaunchExecutor(pos)) {
-          coresToAssign -= minCoresPerExecutor
-          assignedCores(pos) += minCoresPerExecutor
-
-          // If we are launching one executor per worker, then every iteration assigns 1 core
-          // to the executor. Otherwise, every iteration assigns cores to a new executor.
-          if (oneExecutorPerWorker) {
-            assignedExecutors(pos) = 1
-          } else {
-            assignedExecutors(pos) += 1
-          }
-
-          // Spreading out an application means spreading out its executors across as
-          // many workers as possible. If we are not spreading out, then we should keep
-          // scheduling executors on this worker until we use all of its resources.
-          // Otherwise, just move on to the next worker.
-          if (spreadOutApps) {
-            keepScheduling = false
-          }
-        }
-      }
-      freeWorkers = freeWorkers.filter(canLaunchExecutor)
-    }
-    assignedCores
-  }
-
-  /**
    * Schedule and launch executors on workers
    */
   private def startExecutorsOnWorkers(): Unit = {
-    // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
-    // in the queue, then the second app, etc.
-    for (app <- waitingApps if app.coresLeft > 0) {
-      val coresPerExecutor: Option[Int] = app.desc.coresPerExecutor
-      // Filter out workers that don't have enough resources to launch an executor
-      val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-        .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
-          worker.coresFree >= coresPerExecutor.getOrElse(1))
-        .sortBy(_.coresFree).reverse
-      val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
-
-      // Now that we've decided how many cores to allocate on each worker, let's allocate them
-      for (pos <- 0 until usableWorkers.length if assignedCores(pos) > 0) {
-        allocateWorkerResourceToExecutors(
-          app, assignedCores(pos), coresPerExecutor, usableWorkers(pos))
-      }
-    }
-  }
-
-  /**
-   * Allocate a worker's resources to one or more executors.
-   * @param app the info of the application which the executors belong to
-   * @param assignedCores number of cores on this worker for this application
-   * @param coresPerExecutor number of cores per executor
-   * @param worker the worker info
-   */
-  private def allocateWorkerResourceToExecutors(
-      app: ApplicationInfo,
-      assignedCores: Int,
-      coresPerExecutor: Option[Int],
-      worker: WorkerInfo): Unit = {
-    // If the number of cores per executor is specified, we divide the cores assigned
-    // to this worker evenly among the executors with no remainder.
-    // Otherwise, we launch a single executor that grabs all the assignedCores on this worker.
-    val numExecutors = coresPerExecutor.map { assignedCores / _ }.getOrElse(1)
-    val coresToAssign = coresPerExecutor.getOrElse(assignedCores)
-    for (i <- 1 to numExecutors) {
-      val exec = app.addExecutor(worker, coresToAssign)
-      launchExecutor(worker, exec)
-      app.state = ApplicationState.RUNNING
-    }
+    appScheduler.startExecutorsOnWorkers(waitingApps.toArray, workers.toArray)
   }
 
   /**
@@ -697,7 +582,7 @@ private[deploy] class Master(
     startExecutorsOnWorkers()
   }
 
-  private def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc): Unit = {
+  private[master] def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc): Unit = {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
     worker.endpoint.send(LaunchExecutor(masterUrl,
@@ -1055,7 +940,9 @@ private[deploy] object Master extends Logging {
     SignalLogger.register(log)
     val conf = new SparkConf
     val args = new MasterArguments(argStrings, conf)
-    val (rpcEnv, _, _) = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, conf)
+    val schedulingSetting = SchedulingSetting(args.schedulingMode, args.schedulingConfigFile)
+    val (rpcEnv, _, _) = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, conf,
+      schedulingSetting)
     rpcEnv.awaitTermination()
   }
 
@@ -1069,11 +956,13 @@ private[deploy] object Master extends Logging {
       host: String,
       port: Int,
       webUiPort: Int,
-      conf: SparkConf): (RpcEnv, Int, Option[Int]) = {
+      conf: SparkConf,
+      schedulingSetting: SchedulingSetting = SchedulingSetting(SchedulingMode.FIFO, None)
+      ): (RpcEnv, Int, Option[Int]) = {
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create(SYSTEM_NAME, host, port, conf, securityMgr)
     val masterEndpoint = rpcEnv.setupEndpoint(ENDPOINT_NAME,
-      new Master(rpcEnv, rpcEnv.address, webUiPort, securityMgr, conf))
+      new Master(rpcEnv, rpcEnv.address, webUiPort, securityMgr, conf, schedulingSetting))
     val portsResponse = masterEndpoint.askWithRetry[BoundPortsResponse](BoundPortsRequest)
     (rpcEnv, portsResponse.webUIPort, portsResponse.restPort)
   }
