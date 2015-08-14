@@ -700,7 +700,7 @@ abstract class StddevAgg(child: Expression) extends UnaryExpression with Partial
   def isSampleStddev: Boolean 
 
   override def asPartial: SplitEvaluation = {
-    val partialStd = Alias(ComputePartialStd(Cast(child, dataType)), "PartialStddev")()
+    val partialStd = Alias(ComputePartialStd(child), "PartialStddev")()
     SplitEvaluation(MergePartialStd(partialStd.toAttribute, isSampleStddev), partialStd :: Nil)
   }
 
@@ -738,7 +738,7 @@ case class ComputePartialStd(child: Expression) extends UnaryExpression with Agg
     override def children: Seq[Expression] = child :: Nil
     override def nullable: Boolean = false
     override def dataType: DataType = child.dataType match {
-      case DecimalType.Fixed(p, s) => ArrayType(DecimalType.bounded(p, s))
+      case DecimalType.Fixed(p, s) => ArrayType(DecimalType.bounded(p + 10, s + 4))
       case _ => ArrayType(DoubleType)
     }
     override def toString: String = s"computePartialStddev($child)"
@@ -752,7 +752,10 @@ case class ComputePartialStdFunction (
 ) extends AggregateFunction1 {
   def this() = this(null, null)  // Required for serialization
 
-  private val computeType = expr.dataType
+  private val computeType = expr.dataType match {
+    case DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s + 4)
+    case _ => DoubleType
+  }
   private val zero = Cast(Literal(0), computeType)
   private var partialCount: Long = 0L
 
@@ -789,9 +792,9 @@ case class ComputePartialStdFunction (
   }
 
   override def eval(input: InternalRow): Any = {
-    Seq(Cast(Literal(partialCount), computeType).eval(null),
+    new GenericArrayData(Array(Cast(Literal(partialCount), computeType).eval(null),
         partialAvg.eval(null),
-        partialMk.eval(null))
+        partialMk.eval(null)))
   }
 }
 
@@ -801,7 +804,7 @@ case class MergePartialStd(child: Expression, isSample: Boolean) extends UnaryEx
   override def children: Seq[Expression] = child:: Nil
   override def nullable: Boolean = false
   override def dataType: DataType = child.dataType match {
-    case ArrayType(DecimalType.Fixed(p, s), _) => DecimalType.bounded(p, s)
+    case ArrayType(DecimalType.Fixed(p, s), _) => DecimalType.bounded(p + 14, s + 4)
     case _ => DoubleType
   }
   override def toString: String = s"MergePartialStd($child)"
@@ -818,7 +821,7 @@ case class MergePartialStdFunction(
   def this() = this (null, null, false) // Required for serialization
 
   private val computeType = expr.dataType match {
-    case ArrayType(DecimalType.Fixed(p, s), _) => DecimalType.bounded(p, s)
+    case ArrayType(DecimalType.Fixed(p, s), _) => DecimalType.bounded(p + 14, s + 4)
     case _ => DoubleType
   }
   private val zero = Cast(Literal(0), computeType)
@@ -835,10 +838,10 @@ case class MergePartialStdFunction(
   }
 
   override def update(input: InternalRow): Unit = {
-    val evaluatedExpr = expr.eval(input)
+    val evaluatedExpr = expr.eval(input).asInstanceOf[ArrayData]
 
     if (evaluatedExpr != null) {
-      val exprValue = evaluatedExpr.asInstanceOf[Seq[Any]]
+      val exprValue = evaluatedExpr.toArray(computeType)
       val (partialCount, partialAvg, partialMk) =
         (Literal.create(exprValue(0), computeType),
          Literal.create(exprValue(1), computeType),
@@ -876,13 +879,13 @@ case class MergePartialStdFunction(
       // stddev_pop = sqrt (combineMk/combineCount)
       val cov = {
         if (isSample) {
-          Cast(Divide(combineMk, Cast(Literal(count - 1), computeType)), DoubleType)
+          Divide(combineMk, Cast(Literal(count - 1), computeType))
         }
         else {
-          Cast(Divide(combineMk, Cast(Literal(count), computeType)), DoubleType)
+          Divide(combineMk, Cast(Literal(count), computeType))
         }
       }
-      Cast(Literal(math.sqrt(cov.eval(null).asInstanceOf[Double])), computeType).eval(null)
+      Sqrt(cov).eval(null)
     }
   }
 }
@@ -934,13 +937,13 @@ case class StddevFunction(
       // stddev_pop = sqrt(curMk/curCount)
       val cov = {
         if(isSample) {
-          Cast(Divide(curMk, Cast(Literal(curCount - 1), computeType)), DoubleType)
+          Divide(curMk, Cast(Literal(curCount - 1), computeType))
         }
         else {
-          Cast(Divide(curMk, Cast(Literal(curCount), computeType)), DoubleType)
+          Divide(curMk, Cast(Literal(curCount), computeType))
         }
       }
-      Cast(Literal(math.sqrt(cov.eval(null).asInstanceOf[Double])), computeType).eval(null)
+      Sqrt(cov).eval(null)
     }
   }
 }

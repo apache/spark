@@ -179,13 +179,18 @@ class DataFrameAggregateSuite extends QueryTest {
 
   test("stddev") {
     val testData2ADev = math.sqrt(4/5.0)
+
     checkAnswer(
       testData2.agg(stddev('a)),
       Row(testData2ADev))
 
     checkAnswer(
-      decimalData.agg(stddev('a)),
-      Row(new java.math.BigDecimal(testData2ADev)))
+      testData2.agg(stddev_pop('a)),
+      Row(math.sqrt(4/6.0)))
+
+    checkAnswer(
+      testData2.agg(stddev_samp('a)),
+      Row(testData2ADev))
   }
 
   test("zero stddev") {
@@ -194,6 +199,14 @@ class DataFrameAggregateSuite extends QueryTest {
 
     checkAnswer(
     emptyTableData.agg(stddev('a)),
+    Row(null))
+
+    checkAnswer(
+    emptyTableData.agg(stddev_pop('a)),
+    Row(null))
+
+    checkAnswer(
+    emptyTableData.agg(stddev_samp('a)),
     Row(null))
   }
 
