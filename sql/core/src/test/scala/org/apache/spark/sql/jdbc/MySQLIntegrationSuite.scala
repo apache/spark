@@ -27,7 +27,7 @@ import com.spotify.docker.client.{ImageNotFoundException, DockerClient}
 import com.spotify.docker.client.messages.ContainerConfig
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test._
+import org.apache.spark.sql.test.SharedSQLContext
 
 class MySQLDatabase {
   val docker: DockerClient = DockerClientFactory.get()
@@ -68,7 +68,7 @@ class MySQLDatabase {
   }
 }
 
-class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
+class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll with SharedSQLContext {
   lazy val db: MySQLDatabase = new MySQLDatabase()
   var ip: String = null
 
@@ -132,6 +132,7 @@ class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
     // scalastyle:off classforname
     // Class.forName("com.mysql.jdbc.Driver")
     // scalastyle:on classforname
+    super.beforeAll()
     waitForDatabase(db.ip, 60000)
     setupDatabase(db.ip)
     ip = db.ip
@@ -142,7 +143,7 @@ class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Basic test") {
-    val df = TestSQLContext.read.jdbc(url(ip, "foo"), "tbl", new Properties)
+    val df = sqlContext.read.jdbc(url(ip, "foo"), "tbl", new Properties)
     val rows = df.collect()
     assert(rows.length == 2)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -152,7 +153,7 @@ class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Numeric types") {
-    val df = TestSQLContext.read.jdbc(url(ip, "foo"), "numbers", new Properties)
+    val df = sqlContext.read.jdbc(url(ip, "foo"), "numbers", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -179,7 +180,7 @@ class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Date types") {
-    val df = TestSQLContext.read.jdbc(url(ip, "foo"), "dates", new Properties)
+    val df = sqlContext.read.jdbc(url(ip, "foo"), "dates", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -197,7 +198,7 @@ class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("String types") {
-    val df = TestSQLContext.read.jdbc(url(ip, "foo"), "strings", new Properties)
+    val df = sqlContext.read.jdbc(url(ip, "foo"), "strings", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -223,9 +224,9 @@ class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Basic write test") {
-    val df1 = TestSQLContext.read.jdbc(url(ip, "foo"), "numbers", new Properties)
-    val df2 = TestSQLContext.read.jdbc(url(ip, "foo"), "dates", new Properties)
-    val df3 = TestSQLContext.read.jdbc(url(ip, "foo"), "strings", new Properties)
+    val df1 = sqlContext.read.jdbc(url(ip, "foo"), "numbers", new Properties)
+    val df2 = sqlContext.read.jdbc(url(ip, "foo"), "dates", new Properties)
+    val df3 = sqlContext.read.jdbc(url(ip, "foo"), "strings", new Properties)
     df1.write.jdbc(url(ip, "foo"), "numberscopy", new Properties)
     df2.write.jdbc(url(ip, "foo"), "datescopy", new Properties)
     df3.write.jdbc(url(ip, "foo"), "stringscopy", new Properties)

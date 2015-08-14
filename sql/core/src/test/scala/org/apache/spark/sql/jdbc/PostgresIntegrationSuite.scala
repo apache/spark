@@ -26,7 +26,7 @@ import com.spotify.docker.client.{ImageNotFoundException, DockerClient}
 import com.spotify.docker.client.messages.ContainerConfig
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test._
+import org.apache.spark.sql.test.SharedSQLContext
 
 class PostgresDatabase {
   val docker: DockerClient = DockerClientFactory.get()
@@ -67,7 +67,7 @@ class PostgresDatabase {
   }
 }
 
-class PostgresIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
+class PostgresIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll with SharedSQLContext {
   lazy val db = new PostgresDatabase()
 
   def url(ip: String): String =
@@ -108,6 +108,7 @@ class PostgresIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   override def beforeAll() {
+    super.beforeAll()
     waitForDatabase(db.ip, 60000)
     setupDatabase(db.ip)
   }
@@ -117,7 +118,7 @@ class PostgresIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Type mapping for various types") {
-    val df = TestSQLContext.read.jdbc(url(db.ip), "public.bar", new Properties)
+    val df = sqlContext.read.jdbc(url(db.ip), "public.bar", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -148,7 +149,7 @@ class PostgresIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("Basic write test") {
-    val df = TestSQLContext.read.jdbc(url(db.ip), "public.bar", new Properties)
+    val df = sqlContext.read.jdbc(url(db.ip), "public.bar", new Properties)
     df.write.jdbc(url(db.ip), "public.barcopy", new Properties)
     // Test only that it doesn't bomb out.
   }
