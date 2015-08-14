@@ -2235,6 +2235,11 @@ class XCom(Base):
             index_col='id',
             parse_dates=['timestamp', 'visible_on'])
 
+        result.drop_duplicates(
+            subset=['key', 'visible_on',
+                    'from_task', 'from_dag', 'to_task', 'to_dag'],
+            inplace=True)
+
         if result.empty:
             raise XComException('No XCom values found.')
         return result
