@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import java.io.Serializable;
 import java.util.Arrays;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -39,7 +38,7 @@ public class ExecutorShuffleInfo implements Encodable {
 
   @JsonCreator
   public ExecutorShuffleInfo(
-      @JsonProperty("localDirs")String[] localDirs,
+      @JsonProperty("localDirs") String[] localDirs,
       @JsonProperty("subDirsPerLocalDir") int subDirsPerLocalDir,
       @JsonProperty("shuffleManager") String shuffleManager) {
     this.localDirs = localDirs;

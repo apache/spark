@@ -58,6 +58,10 @@ public class ExternalShuffleBlockResolver {
   private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockResolver.class);
 
   private static final ObjectMapper mapper = new ObjectMapper();
+  /**
+   * This a common prefix to the key for each app registration we stick in leveldb, so they
+   * are easy to find, since leveldb lets you search based on prefix.
+   */
   private static final String APP_KEY_PREFIX = "AppExecShuffleInfo";
   private static final StoreVersion CURRENT_VERSION = new StoreVersion(1, 0);
 
@@ -142,18 +146,16 @@ public class ExternalShuffleBlockResolver {
       ExecutorShuffleInfo executorInfo) {
     AppExecId fullId = new AppExecId(appId, execId);
     logger.info("Registered executor {} with {}", fullId, executorInfo);
-    synchronized (executors) {
-      executors.put(fullId, executorInfo);
-      try {
-        if (db != null) {
-          byte[] key = dbAppExecKey(new AppExecId(appId, execId));
-          byte[] value = mapper.writeValueAsString(executorInfo).getBytes(Charsets.UTF_8);
-          db.put(key, value);
-        }
-      } catch (Exception e) {
-        logger.error("Error saving registered executors", e);
+    try {
+      if (db != null) {
+        byte[] key = dbAppExecKey(fullId);
+        byte[] value = mapper.writeValueAsString(executorInfo).getBytes(Charsets.UTF_8);
+        db.put(key, value);
       }
+    } catch (Exception e) {
+      logger.error("Error saving registered executors", e);
     }
+    executors.put(fullId, executorInfo);
   }
 
   /**
