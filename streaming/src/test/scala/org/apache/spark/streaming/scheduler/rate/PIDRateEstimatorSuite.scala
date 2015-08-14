@@ -133,13 +133,14 @@ class PIDRateEstimatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("with some accumulated and some positive error, |I| > 0, stay below the processing speed") {
-    val p = new PIDRateEstimator(20, 1D, .01D, 0D, 10)
+    val minRate = 10D
+    val p = new PIDRateEstimator(20, 1D, .01D, 0D, minRate)
     val times = List.tabulate(50)(x => x * 20) // every 20ms
     val rng = new Random()
-    val elements = List.tabulate(50)(x => rng.nextInt(1000))
+    val elements = List.tabulate(50)(x => rng.nextInt(1000) + 1000)
     val procDelayMs = 20
     val proc = List.fill(50)(procDelayMs) // 20ms of processing
-    val sched = List.tabulate(50)(x => rng.nextInt(19)) // random wait
+    val sched = List.tabulate(50)(x => rng.nextInt(19) + 1) // random wait
     val speeds = elements map ((x) => x.toDouble / procDelayMs * 1000)
 
     val res = for (i <- List.range(0, 50)) yield p.compute(times(i), elements(i), proc(i), sched(i))
@@ -148,6 +149,7 @@ class PIDRateEstimatorSuite extends SparkFunSuite with Matchers {
       res(n) should not be None
       if (res(n).get > 0 && sched(n) > 0) {
         res(n).get should be < speeds(n)
+        res(n).get should be >= minRate
       }
     }
   }

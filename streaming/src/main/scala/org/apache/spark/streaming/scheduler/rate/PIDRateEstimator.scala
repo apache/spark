@@ -42,7 +42,7 @@ import org.apache.spark.Logging
  *        This term is not used very often, as it impacts stability of the system. The default
  *        value is 0.
  * @param minRate what is the minimum rate that can be estimated.
- *        This must be more than zero, so that the system always receives so data for rate
+ *        This must be greater than zero, so that the system always receives some data for rate
  *        estimation to work.
  */
 private[streaming] class PIDRateEstimator(
