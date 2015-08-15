@@ -873,4 +873,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       """{"a": {"b": 1}}""" :: Nil))
     checkAnswer(df.orderBy("a.b"), Row(Row(1)))
   }
+
+  test("SPARK-9950: correctly analyze grouping/aggregating on struct fields") {
+    val df = Seq(("x", (1,1)), ("y", (2, 2))).toDF("a", "b")
+    checkAnswer(df.groupBy("b._1").agg(sum("b._2")), Row(1, 1) :: Row(2, 2) :: Nil)
+  }
 }
