@@ -808,10 +808,6 @@ setGeneric("soundex", function(x) { standardGeneric("soundex") })
 
 #' @rdname functions
 #' @export
-setGeneric("struct", function(x, ...) { standardGeneric("struct") })
-
-#' @rdname functions
-#' @export
 setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
 
 #' @rdname functions
