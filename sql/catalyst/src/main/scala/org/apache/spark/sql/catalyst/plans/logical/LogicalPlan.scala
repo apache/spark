@@ -259,13 +259,13 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       // One match, but we also need to extract the requested nested field.
       case Seq((a, nestedFields)) =>
         // The foldLeft adds ExtractValues for every remaining parts of the identifier,
-        // and wrap it with UnresolvedAlias which will be removed later.
+        // and aliased it with the last part of the name.
         // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
-        // Then this will add ExtractValue("c", ExtractValue("b", a)), and wrap it as
-        // UnresolvedAlias(ExtractValue("c", ExtractValue("b", a))).
+        // Then this will add ExtractValue("c", ExtractValue("b", a)), and alias the final
+        // expression as "c".
         val fieldExprs = nestedFields.foldLeft(a: Expression)((expr, fieldName) =>
           ExtractValue(expr, Literal(fieldName), resolver))
-        Some(UnresolvedAlias(fieldExprs))
+        Some(Alias(fieldExprs, nestedFields.last)())
 
       // No matches.
       case Seq() =>
