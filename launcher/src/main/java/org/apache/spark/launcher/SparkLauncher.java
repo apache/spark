@@ -193,7 +193,7 @@ public class SparkLauncher {
    * Adds a no-value argument to the Spark invocation. If the argument is known, this method
    * validates whether the argument is indeed a no-value argument, and throws an exception
    * otherwise.
-   * <p/>
+   * <p>
    * Use this method with caution. It is possible to create an invalid Spark command by passing
    * unknown arguments to this method, since those are allowed for forward compatibility.
    *
@@ -211,10 +211,10 @@ public class SparkLauncher {
    * Adds an argument with a value to the Spark invocation. If the argument name corresponds to
    * a known argument, the code validates that the argument actually expects a value, and throws
    * an exception otherwise.
-   * <p/>
+   * <p>
    * It is safe to add arguments modified by other methods in this class (such as
    * {@link #setMaster(String)} - the last invocation will be the one to take effect.
-   * <p/>
+   * <p>
    * Use this method with caution. It is possible to create an invalid Spark command by passing
    * unknown arguments to this method, since those are allowed for forward compatibility.
    *
