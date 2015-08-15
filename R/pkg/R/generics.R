@@ -682,7 +682,7 @@ setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
 #' @export
 setGeneric("ceil", function(x) { standardGeneric("ceil") })
 
-#' @rdname column
+#' @rdname functions
 #' @export
 setGeneric("concat", function(x, ...) { standardGeneric("concat") })
 
@@ -706,7 +706,7 @@ setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 #' @export
 setGeneric("explode", function(x) { standardGeneric("explode") })
 
-#' @rdname column
+#' @rdname functions
 #' @export
 setGeneric("greatest", function(x, ...) { standardGeneric("greatest") })
 
@@ -730,7 +730,7 @@ setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
 #' @export
 setGeneric("last_day", function(x) { standardGeneric("last_day") })
 
-#' @rdname column
+#' @rdname functions
 #' @export
 setGeneric("least", function(x, ...) { standardGeneric("least") })
 
@@ -806,7 +806,7 @@ setGeneric("size", function(x) { standardGeneric("size") })
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
 
-#' @rdname column
+#' @rdname functions
 #' @export
 setGeneric("struct", function(x, ...) { standardGeneric("struct") })
 
