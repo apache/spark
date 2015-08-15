@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.scalacheck.Gen
 import org.scalactic.TripleEqualsSupport.Spread
-
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 import org.apache.spark.SparkFunSuite
@@ -32,7 +31,7 @@ import org.apache.spark.sql.types.DataType
 /**
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
  */
-trait ExpressionEvalHelper extends LiteralGenerator with GeneratorDrivenPropertyChecks {
+trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
   self: SparkFunSuite =>
 
   protected def create_row(values: Any*): InternalRow = {
@@ -216,51 +215,82 @@ trait ExpressionEvalHelper extends LiteralGenerator with GeneratorDrivenProperty
     assert(checkResult(actual, expected))
   }
 
-  def checkConsistency(dt: DataType, clazz: Class[_]): Unit = {
-    val ctor = clazz.getDeclaredConstructor(classOf[Expression])
-    forAll (randomGen(dt)) { (l: Literal) =>
-      val expr = ctor.newInstance(l).asInstanceOf[Expression]
-      cmpInterpretWithCodegen(EmptyRow, expr)
+  /**
+   * Test evaluation results between Interpreted mode and Codegen mode, making sure we have
+   * consistent result regardless of the evaluation method we use.
+   *
+   * This method test against unary expressions by feeding them arbitrary literals of `dataType`.
+   */
+  def checkConsistencyBetweenInterpretedAndCodegen(
+      c: Expression => Expression,
+      dataType: DataType): Unit = {
+    forAll (LiteralGenerator.randomGen(dataType)) { (l: Literal) =>
+      cmpInterpretWithCodegen(EmptyRow, c(l))
     }
   }
 
-  def checkConsistency(dt1: DataType, dt2: DataType, clazz: Class[_]): Unit = {
-    val ctor = clazz.getDeclaredConstructor(classOf[Expression], classOf[Expression])
+  /**
+   * Test evaluation results between Interpreted mode and Codegen mode, making sure we have
+   * consistent result regardless of the evaluation method we use.
+   *
+   * This method test against binary expressions by feeding them arbitrary literals of `dataType1`
+   * and `dataType2`.
+   */
+  def checkConsistencyBetweenInterpretedAndCodegen(
+      c: (Expression, Expression) => Expression,
+      dataType1: DataType,
+      dataType2: DataType): Unit = {
     forAll (
-        randomGen(dt1),
-        randomGen(dt2)
+      LiteralGenerator.randomGen(dataType1),
+      LiteralGenerator.randomGen(dataType2)
     ) { (l1: Literal, l2: Literal) =>
-      val expr = ctor.newInstance(l1, l2).asInstanceOf[Expression]
-      cmpInterpretWithCodegen(EmptyRow, expr)
+      cmpInterpretWithCodegen(EmptyRow, c(l1, l2))
     }
   }
 
-  def checkConsistency(dt1: DataType, dt2: DataType, dt3: DataType,
-      clazz: Class[_]): Unit = {
-    val ctor = clazz.getDeclaredConstructor(
-      classOf[Expression], classOf[Expression], classOf[Expression])
+  /**
+   * Test evaluation results between Interpreted mode and Codegen mode, making sure we have
+   * consistent result regardless of the evaluation method we use.
+   *
+   * This method test against ternary expressions by feeding them arbitrary literals of `dataType1`,
+   * `dataType2` and `dataType3`.
+   */
+  def checkConsistencyBetweenInterpretedAndCodegen(
+      c: (Expression, Expression, Expression) => Expression,
+      dataType1: DataType,
+      dataType2: DataType,
+      dataType3: DataType): Unit = {
     forAll (
-        randomGen(dt1),
-        randomGen(dt2),
-        randomGen(dt3)
+      LiteralGenerator.randomGen(dataType1),
+      LiteralGenerator.randomGen(dataType2),
+      LiteralGenerator.randomGen(dataType3)
     ) { (l1: Literal, l2: Literal, l3: Literal) =>
-      val expr = ctor.newInstance(l1, l2, l3).asInstanceOf[Expression]
-      cmpInterpretWithCodegen(EmptyRow, expr)
+      cmpInterpretWithCodegen(EmptyRow, c(l1, l2, l3))
     }
   }
 
-  def checkSeqConsistency(dt: DataType, clazz: Class[_], leastNumOfElements: Int = 0): Unit = {
-    val ctor = clazz.getDeclaredConstructor(classOf[Seq[Expression]])
-    forAll (Gen.listOf(randomGen(dt))) { (literals: Seq[Literal]) =>
-      whenever(literals.size >= leastNumOfElements) {
-        val expr = ctor.newInstance(literals).asInstanceOf[Expression]
-        cmpInterpretWithCodegen(EmptyRow, expr)
+  /**
+   * Test evaluation results between Interpreted mode and Codegen mode, making sure we have
+   * consistent result regardless of the evaluation method we use.
+   *
+   * This method test against expressions take Seq[Expression] as input by feeding them
+   * arbitrary length Seq of arbitrary literal of `dataType`.
+   */
+  def checkConsistencyBetweenInterpretedAndCodegen(
+      c: Seq[Expression] => Expression,
+      dataType: DataType,
+      minNumElements: Int = 0): Unit = {
+    forAll (Gen.listOf(LiteralGenerator.randomGen(dataType))) { (literals: Seq[Literal]) =>
+      whenever(literals.size >= minNumElements) {
+        cmpInterpretWithCodegen(EmptyRow, c(literals))
       }
     }
   }
 
   private def cmpInterpretWithCodegen(inputRow: InternalRow, expr: Expression): Unit = {
-    val interpret = try evaluate(expr, inputRow) catch {
+    val interpret = try {
+      evaluate(expr, inputRow)
+    } catch {
       case e: Exception => fail(s"Exception evaluating $expr", e)
     }
 
@@ -269,7 +299,7 @@ trait ExpressionEvalHelper extends LiteralGenerator with GeneratorDrivenProperty
       expr)
     val codegen = plan(inputRow).get(0, expr.dataType)
 
-    if (!checkResultRegardingNaN(interpret, codegen)) {
+    if (!compareResults(interpret, codegen)) {
       fail(s"Incorrect evaluation: $expr, interpret: $interpret, codegen: $codegen")
     }
   }
@@ -278,7 +308,7 @@ trait ExpressionEvalHelper extends LiteralGenerator with GeneratorDrivenProperty
    * Check the equality between result of expression and expected value, it will handle
    * Array[Byte] and Spread[Double].
    */
-  private[this] def checkResultRegardingNaN(result: Any, expected: Any): Boolean = {
+  private[this] def compareResults(result: Any, expected: Any): Boolean = {
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)

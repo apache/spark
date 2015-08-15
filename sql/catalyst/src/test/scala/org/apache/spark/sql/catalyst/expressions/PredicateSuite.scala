@@ -73,15 +73,15 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     notTrueTable.foreach { case (v, answer) =>
       checkEvaluation(Not(Literal.create(v, BooleanType)), answer)
     }
-    checkConsistency(BooleanType, classOf[Not])
+    checkConsistencyBetweenInterpretedAndCodegen(Not, BooleanType)
   }
 
   test("AND, OR, EqualTo, EqualNullSafe consistency check") {
-    checkConsistency(BooleanType, BooleanType, classOf[And])
-    checkConsistency(BooleanType, BooleanType, classOf[Or])
+    checkConsistencyBetweenInterpretedAndCodegen(And, BooleanType, BooleanType)
+    checkConsistencyBetweenInterpretedAndCodegen(Or, BooleanType, BooleanType)
     DataTypeTestUtils.propertyCheckSupported.foreach { dt =>
-      checkConsistency(dt, dt, classOf[EqualTo])
-      checkConsistency(dt, dt, classOf[EqualNullSafe])
+      checkConsistencyBetweenInterpretedAndCodegen(EqualTo, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(EqualNullSafe, dt, dt)
     }
   }
 
@@ -192,10 +192,10 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("BinaryComparison consistency check") {
     DataTypeTestUtils.ordered.foreach { dt =>
-      checkConsistency(dt, dt, classOf[LessThan])
-      checkConsistency(dt, dt, classOf[LessThanOrEqual])
-      checkConsistency(dt, dt, classOf[GreaterThan])
-      checkConsistency(dt, dt, classOf[GreaterThanOrEqual])
+      checkConsistencyBetweenInterpretedAndCodegen(LessThan, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(LessThanOrEqual, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(GreaterThan, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(GreaterThanOrEqual, dt, dt)
     }
   }
 

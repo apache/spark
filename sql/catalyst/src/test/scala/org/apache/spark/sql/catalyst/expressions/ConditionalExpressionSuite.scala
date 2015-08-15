@@ -68,7 +68,7 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     testIf(_.toString, StringType)
 
     DataTypeTestUtils.propertyCheckSupported.foreach { dt =>
-      checkConsistency(BooleanType, dt, dt, classOf[If])
+      checkConsistencyBetweenInterpretedAndCodegen(If, BooleanType, dt, dt)
     }
   }
 
@@ -182,7 +182,7 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
       Timestamp.valueOf("2015-07-01 08:00:00"), InternalRow.empty)
 
     DataTypeTestUtils.ordered.foreach { dt =>
-      checkSeqConsistency(dt, classOf[Least], 2)
+      checkConsistencyBetweenInterpretedAndCodegen(Least, dt, 2)
     }
   }
 
@@ -228,7 +228,7 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
       Timestamp.valueOf("2015-07-01 10:00:00"), InternalRow.empty)
 
     DataTypeTestUtils.ordered.foreach { dt =>
-      checkSeqConsistency(dt, classOf[Greatest], 2)
+      checkConsistencyBetweenInterpretedAndCodegen(Greatest, dt, 2)
     }
   }
 }

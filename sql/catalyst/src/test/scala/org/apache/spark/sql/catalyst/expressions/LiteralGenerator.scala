@@ -52,7 +52,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * }}}
  *
  */
-trait LiteralGenerator {
+object LiteralGenerator {
 
   lazy val byteLiteralGen: Gen[Literal] =
     for { b <- Arbitrary.arbByte.arbitrary } yield Literal.create(b, ByteType)

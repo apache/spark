@@ -54,7 +54,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Add(positiveLongLit, negativeLongLit), -1L)
 
     DataTypeTestUtils.numericAndInterval.foreach { tpe =>
-      checkConsistency(tpe, tpe, classOf[Add])
+      checkConsistencyBetweenInterpretedAndCodegen(Add, tpe, tpe)
     }
   }
 
@@ -77,7 +77,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(UnaryMinus(negativeLongLit), - negativeLong)
 
     DataTypeTestUtils.numericAndInterval.foreach { tpe =>
-      checkConsistency(tpe, classOf[UnaryMinus])
+      checkConsistencyBetweenInterpretedAndCodegen(UnaryMinus, tpe)
     }
   }
 
@@ -95,7 +95,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Subtract(positiveLongLit, negativeLongLit), positiveLong - negativeLong)
 
     DataTypeTestUtils.numericAndInterval.foreach { tpe =>
-      checkConsistency(tpe, tpe, classOf[Subtract])
+      checkConsistencyBetweenInterpretedAndCodegen(Subtract, tpe, tpe)
     }
   }
 
@@ -113,7 +113,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Multiply(positiveLongLit, negativeLongLit), positiveLong * negativeLong)
 
     DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
-      checkConsistency(tpe, tpe, classOf[Multiply])
+      checkConsistencyBetweenInterpretedAndCodegen(Multiply, tpe, tpe)
     }
   }
 
@@ -129,7 +129,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
 
     DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
-      checkConsistency(tpe, tpe, classOf[Divide])
+      checkConsistencyBetweenInterpretedAndCodegen(Divide, tpe, tpe)
     }
   }
 
@@ -168,7 +168,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     // TODO: the following lines would fail the test due to inconsistency result of interpret
     // and codegen for remainder between giant values, seems like a numeric stability issue
     // DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
-    //  checkConsistency(tpe, tpe, classOf[Remainder])
+    //  checkConsistencyBetweenInterpretedAndCodegen(Remainder, tpe, tpe)
     // }
   }
 
@@ -189,7 +189,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Abs(negativeLongLit), - negativeLong)
 
     DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
-      checkConsistency(tpe, classOf[Abs])
+      checkConsistencyBetweenInterpretedAndCodegen(Abs, tpe)
     }
   }
 
@@ -207,7 +207,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(MaxOf(positiveLongLit, negativeLongLit), positiveLong)
 
     DataTypeTestUtils.ordered.foreach { tpe =>
-      checkConsistency(tpe, tpe, classOf[MaxOf])
+      checkConsistencyBetweenInterpretedAndCodegen(MaxOf, tpe, tpe)
     }
   }
 
@@ -232,7 +232,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(MinOf(positiveLongLit, negativeLongLit), negativeLong)
 
     DataTypeTestUtils.ordered.foreach { tpe =>
-      checkConsistency(tpe, tpe, classOf[MinOf])
+      checkConsistencyBetweenInterpretedAndCodegen(MinOf, tpe, tpe)
     }
   }
 
@@ -262,6 +262,6 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
-    checkConsistency(tpe, tpe, classOf[MinOf])
+    checkConsistencyBetweenInterpretedAndCodegen(MinOf, tpe, tpe)
   }
 }
