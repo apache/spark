@@ -676,7 +676,7 @@ class TaskInstance(Base):
                 return False
 
         # Checking that all upstream dependencies have succeeded
-        if not task._upstream_list or t.trigger_rule == TR.DUMMY:
+        if not task._upstream_list or task.trigger_rule == TR.DUMMY:
             return True
         else:
             upstream_task_ids = [t.task_id for t in task._upstream_list]
@@ -713,18 +713,18 @@ class TaskInstance(Base):
                 self.end_date = datetime.now()
                 session.merge(self)
 
-            if t.trigger_rule == TR.ONE_SUCCESS and successes > 0:
+            if task.trigger_rule == TR.ONE_SUCCESS and successes > 0:
                 return True
-            elif (t.trigger_rule == TR.ONE_FAILED and
+            elif (task.trigger_rule == TR.ONE_FAILED and
                   (failed + upstream_failed) > 0):
                 return True
-            elif (t.trigger_rule == TR.ALL_SUCCESS and
+            elif (task.trigger_rule == TR.ALL_SUCCESS and
                   successes == len(task._upstream_list)):
                 return True
-            elif (t.trigger_rule == TR.ALL_FAILED and
+            elif (task.trigger_rule == TR.ALL_FAILED and
                   failed + upstream_failed == len(task._upstream_list)):
                 return True
-            elif (t.trigger_rule == TR.ALL_DONE and
+            elif (task.trigger_rule == TR.ALL_DONE and
                   done == len(task._upstream_list)):
                 return True
 
