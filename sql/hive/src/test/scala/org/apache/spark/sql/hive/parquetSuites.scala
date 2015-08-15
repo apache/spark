@@ -28,7 +28,7 @@ import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -685,7 +685,8 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
  * A collection of tests for parquet data with various forms of partitioning.
  */
 abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
-  override def sqlContext: SQLContext = TestHive
+  override def _sqlContext: SQLContext = TestHive
+  protected val sqlContext = _sqlContext
 
   var partitionedTableDir: File = null
   var normalTableDir: File = null

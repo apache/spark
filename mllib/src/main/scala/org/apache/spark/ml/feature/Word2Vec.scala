@@ -221,6 +221,6 @@ class Word2VecModel private[ml] (
 
   override def copy(extra: ParamMap): Word2VecModel = {
     val copied = new Word2VecModel(uid, wordVectors)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }

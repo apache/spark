@@ -24,7 +24,7 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, NumericType, StringType, StructType}
@@ -33,7 +33,8 @@ import org.apache.spark.util.collection.OpenHashMap
 /**
  * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
  */
-private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol {
+private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol
+    with HasHandleInvalid {
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
@@ -58,6 +59,8 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
  * If the input column is numeric, we cast it to string and index the string values.
  * The indices are in [0, numLabels), ordered by label frequencies.
  * So the most frequent label gets index 0.
+ *
+ * @see [[IndexToString]] for the inverse transformation
  */
 @Experimental
 class StringIndexer(override val uid: String) extends Estimator[StringIndexerModel]
@@ -66,12 +69,15 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
   def this() = this(Identifiable.randomUID("strIdx"))
 
   /** @group setParam */
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+  setDefault(handleInvalid, "error")
+
+  /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  // TODO: handle unseen labels
 
   override def fit(dataset: DataFrame): StringIndexerModel = {
     val counts = dataset.select(col($(inputCol)).cast(StringType))
@@ -91,14 +97,19 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
 /**
  * :: Experimental ::
  * Model fitted by [[StringIndexer]].
+ *
  * NOTE: During transformation, if the input column does not exist,
  * [[StringIndexerModel.transform]] would return the input dataset unmodified.
  * This is a temporary fix for the case when target labels do not exist during prediction.
+ *
+ * @param labels  Ordered list of labels, corresponding to indices to be assigned
  */
 @Experimental
-class StringIndexerModel private[ml] (
+class StringIndexerModel (
     override val uid: String,
-    labels: Array[String]) extends Model[StringIndexerModel] with StringIndexerBase {
+    val labels: Array[String]) extends Model[StringIndexerModel] with StringIndexerBase {
+
+  def this(labels: Array[String]) = this(Identifiable.randomUID("strIdx"), labels)
 
   private val labelToIndex: OpenHashMap[String, Double] = {
     val n = labels.length
@@ -110,6 +121,10 @@ class StringIndexerModel private[ml] (
     }
     map
   }
+
+  /** @group setParam */
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+  setDefault(handleInvalid, "error")
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -128,14 +143,24 @@ class StringIndexerModel private[ml] (
       if (labelToIndex.contains(label)) {
         labelToIndex(label)
       } else {
-        // TODO: handle unseen labels
         throw new SparkException(s"Unseen label: $label.")
       }
     }
+
     val outputColName = $(outputCol)
     val metadata = NominalAttribute.defaultAttr
       .withName(outputColName).withValues(labels).toMetadata()
-    dataset.select(col("*"),
+    // If we are skipping invalid records, filter them out.
+    val filteredDataset = (getHandleInvalid) match {
+      case "skip" => {
+        val filterer = udf { label: String =>
+          labelToIndex.contains(label)
+        }
+        dataset.where(filterer(dataset($(inputCol))))
+      }
+      case _ => dataset
+    }
+    filteredDataset.select(col("*"),
       indexer(dataset($(inputCol)).cast(StringType)).as(outputColName, metadata))
   }
 
@@ -150,36 +175,26 @@ class StringIndexerModel private[ml] (
 
   override def copy(extra: ParamMap): StringIndexerModel = {
     val copied = new StringIndexerModel(uid, labels)
-    copyValues(copied, extra)
-  }
-
-  /**
-   * Return a model to perform the inverse transformation.
-   * Note: By default we keep the original columns during this transformation, so the inverse
-   * should only be used on new columns such as predicted labels.
-   */
-  def invert(inputCol: String, outputCol: String): StringIndexerInverse = {
-    new StringIndexerInverse()
-      .setInputCol(inputCol)
-      .setOutputCol(outputCol)
-      .setLabels(labels)
+    copyValues(copied, extra).setParent(parent)
   }
 }
 
 /**
  * :: Experimental ::
- * Transform a provided column back to the original input types using either the metadata
- * on the input column, or if provided using the labels supplied by the user.
- * Note: By default we keep the original columns during this transformation,
- * so the inverse should only be used on new columns such as predicted labels.
+ * A [[Transformer]] that maps a column of string indices back to a new column of corresponding
+ * string values using either the ML attributes of the input column, or if provided using the labels
+ * supplied by the user.
+ * All original columns are kept during transformation.
+ *
+ * @see [[StringIndexer]] for converting strings into indices
  */
 @Experimental
-class StringIndexerInverse private[ml] (
+class IndexToString private[ml] (
   override val uid: String) extends Transformer
     with HasInputCol with HasOutputCol {
 
   def this() =
-    this(Identifiable.randomUID("strIdxInv"))
+    this(Identifiable.randomUID("idxToStr"))
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -239,7 +254,7 @@ class StringIndexerInverse private[ml] (
     }
     val indexer = udf { index: Double =>
       val idx = index.toInt
-      if (0 <= idx && idx < values.size) {
+      if (0 <= idx && idx < values.length) {
         values(idx)
       } else {
         throw new SparkException(s"Unseen index: $index ??")
@@ -250,7 +265,7 @@ class StringIndexerInverse private[ml] (
       indexer(dataset($(inputCol)).cast(DoubleType)).as(outputColName))
   }
 
-  override def copy(extra: ParamMap): StringIndexerInverse = {
+  override def copy(extra: ParamMap): IndexToString = {
     defaultCopy(extra)
   }
 }

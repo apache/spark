@@ -33,15 +33,14 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.{InternalRow, SqlParser, TableIdentifier}
-import org.apache.spark.sql.execution.datasources
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation, Partition => ParquetPartition, PartitionSpec, ResolvedDataSource}
+import org.apache.spark.sql.execution.{FileRelation, datasources}
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode}
@@ -86,9 +85,9 @@ private[hive] object HiveSerDe {
           serde = Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")))
 
     val key = source.toLowerCase match {
-      case _ if source.startsWith("org.apache.spark.sql.parquet") => "parquet"
-      case _ if source.startsWith("org.apache.spark.sql.orc") => "orc"
-      case _ => source.toLowerCase
+      case s if s.startsWith("org.apache.spark.sql.parquet") => "parquet"
+      case s if s.startsWith("org.apache.spark.sql.orc") => "orc"
+      case s => s
     }
 
     serdeMap.get(key)
@@ -309,11 +308,31 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     val hiveTable = (maybeSerDe, dataSource.relation) match {
       case (Some(serde), relation: HadoopFsRelation)
           if relation.paths.length == 1 && relation.partitionColumns.isEmpty =>
-        logInfo {
-          "Persisting data source relation with a single input path into Hive metastore in Hive " +
-            s"compatible format.  Input path: ${relation.paths.head}"
+        // Hive ParquetSerDe doesn't support decimal type until 1.2.0.
+        val isParquetSerDe = serde.inputFormat.exists(_.toLowerCase.contains("parquet"))
+        val hasDecimalFields = relation.schema.existsRecursively(_.isInstanceOf[DecimalType])
+
+        val hiveParquetSupportsDecimal = client.version match {
+          case org.apache.spark.sql.hive.client.hive.v1_2 => true
+          case _ => false
         }
-        newHiveCompatibleMetastoreTable(relation, serde)
+
+        if (isParquetSerDe && !hiveParquetSupportsDecimal && hasDecimalFields) {
+          // If Hive version is below 1.2.0, we cannot save Hive compatible schema to
+          // metastore when the file format is Parquet and the schema has DecimalType.
+          logWarning {
+            "Persisting Parquet relation with decimal field(s) into Hive metastore in Spark SQL " +
+              "specific format, which is NOT compatible with Hive. Because ParquetHiveSerDe in " +
+              s"Hive ${client.version.fullVersion} doesn't support decimal type. See HIVE-6384."
+          }
+          newSparkSQLSpecificMetastoreTable()
+        } else {
+          logInfo {
+            "Persisting data source relation with a single input path into Hive metastore in " +
+              s"Hive compatible format. Input path: ${relation.paths.head}"
+          }
+          newHiveCompatibleMetastoreTable(relation, serde)
+        }
 
       case (Some(serde), relation: HadoopFsRelation) if relation.partitionColumns.nonEmpty =>
         logWarning {
@@ -739,7 +758,7 @@ private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: HiveTable)
     (@transient sqlContext: SQLContext)
-  extends LeafNode with MultiInstanceRelation {
+  extends LeafNode with MultiInstanceRelation with FileRelation {
 
   override def equals(other: Any): Boolean = other match {
     case relation: MetastoreRelation =>
@@ -887,6 +906,18 @@ private[hive] case class MetastoreRelation
 
   /** An attribute map for determining the ordinal for non-partition columns. */
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
+
+  override def inputFiles: Array[String] = {
+    val partLocations = table.getPartitions(Nil).map(_.storage.location).toArray
+    if (partLocations.nonEmpty) {
+      partLocations
+    } else {
+      Array(
+        table.location.getOrElse(
+          sys.error(s"Could not get the location of ${table.qualifiedName}.")))
+    }
+  }
+
 
   override def newInstance(): MetastoreRelation = {
     MetastoreRelation(databaseName, tableName, alias)(table)(sqlContext)

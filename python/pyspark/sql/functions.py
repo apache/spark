@@ -530,9 +530,10 @@ def lead(col, count=1, default=None):
 @since(1.4)
 def ntile(n):
     """
-    Window function: returns a group id from 1 to `n` (inclusive) in a round-robin fashion in
-    a window partition. Fow example, if `n` is 3, the first row will get 1, the second row will
-    get 2, the third row will get 3, and the fourth row will get 1...
+    Window function: returns the ntile group id (from 1 to `n` inclusive)
+    in an ordered window partition. Fow example, if `n` is 4, the first
+    quarter of the rows will get value 1, the second quarter will get 2,
+    the third quarter will get 3, and the last quarter will get 4.
 
     This is equivalent to the NTILE function in SQL.
 
@@ -885,10 +886,10 @@ def crc32(col):
     returns the value as a bigint.
 
     >>> sqlContext.createDataFrame([('ABC',)], ['a']).select(crc32('a').alias('crc32')).collect()
-    [Row(crc32=u'902fbdd2b1df0c4f70b4a5d23525e932')]
+    [Row(crc32=2743272264)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.md5(_to_java_column(col)))
+    return Column(sc._jvm.functions.crc32(_to_java_column(col)))
 
 
 @ignore_unicode_prefix

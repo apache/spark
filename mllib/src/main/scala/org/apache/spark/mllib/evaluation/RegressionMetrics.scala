@@ -29,6 +29,7 @@ import org.apache.spark.sql.DataFrame
  * Evaluator for regression.
  *
  * @param predictionAndObservations an RDD of (prediction, observation) pairs.
+ * @since 1.2.0
  */
 @Experimental
 class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extends Logging {
@@ -66,6 +67,7 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
    * Returns the variance explained by regression.
    * explainedVariance = \sum_i (\hat{y_i} - \bar{y})^2 / n
    * @see [[https://en.wikipedia.org/wiki/Fraction_of_variance_unexplained]]
+   * @since 1.2.0
    */
   def explainedVariance: Double = {
     SSreg / summary.count
@@ -74,6 +76,7 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
   /**
    * Returns the mean absolute error, which is a risk function corresponding to the
    * expected value of the absolute error loss or l1-norm loss.
+   * @since 1.2.0
    */
   def meanAbsoluteError: Double = {
     summary.normL1(1) / summary.count
@@ -82,6 +85,7 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
   /**
    * Returns the mean squared error, which is a risk function corresponding to the
    * expected value of the squared error loss or quadratic loss.
+   * @since 1.2.0
    */
   def meanSquaredError: Double = {
     SSerr / summary.count
@@ -90,6 +94,7 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
   /**
    * Returns the root mean squared error, which is defined as the square root of
    * the mean squared error.
+   * @since 1.2.0
    */
   def rootMeanSquaredError: Double = {
     math.sqrt(this.meanSquaredError)
@@ -98,6 +103,7 @@ class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extend
   /**
    * Returns R^2^, the unadjusted coefficient of determination.
    * @see [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
+   * @since 1.2.0
    */
   def r2: Double = {
     1 - SSerr / SStot

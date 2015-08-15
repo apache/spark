@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.scalatest.BeforeAndAfterAll
+
+import org.apache.spark.sql._
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.sql._
-import org.scalatest.BeforeAndAfterAll
 import _root_.test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 
 abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
-
-  override val sqlContext = TestHive
+  override def _sqlContext: SQLContext = TestHive
+  protected val sqlContext = _sqlContext
   import sqlContext.implicits._
 
   var originalUseAggregate2: Boolean = _

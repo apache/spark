@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import java.io.File
+import java.io.{File, NotSerializableException}
 import java.lang.management.ManagementFactory
 import java.net.URL
 import java.nio.ByteBuffer
@@ -305,8 +305,16 @@ private[spark] class Executor(
               m
             }
           }
-          val taskEndReason = new ExceptionFailure(t, metrics)
-          execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(taskEndReason))
+          val serializedTaskEndReason = {
+            try {
+              ser.serialize(new ExceptionFailure(t, metrics))
+            } catch {
+              case _: NotSerializableException =>
+                // t is not serializable so just send the stacktrace
+                ser.serialize(new ExceptionFailure(t, metrics, false))
+            }
+          }
+          execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
           // stopping other tasks unnecessarily.
