@@ -27,7 +27,7 @@ __all__ = ['LogisticRegression', 'LogisticRegressionModel', 'DecisionTreeClassif
            'DecisionTreeClassificationModel', 'GBTClassifier', 'GBTClassificationModel',
            'RandomForestClassifier', 'RandomForestClassificationModel', 'NaiveBayes',
            'NaiveBayesModel', 'MultilayerPerceptronClassifier',
-           'MultilayerPerceptronClassifierModel']
+           'MultilayerPerceptronClassificationModel']
 
 
 @inherit_doc
@@ -879,7 +879,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
-        return MultilayerPerceptronClassifierModel(java_model)
+        return MultilayerPerceptronClassificationModel(java_model)
 
     def setLayers(self, value):
         """
@@ -908,7 +908,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self.getOrDefault(self.blockSize)
 
 
-class MultilayerPerceptronClassifierModel(JavaModel):
+class MultilayerPerceptronClassificationModel(JavaModel):
     """
     Model fitted by MultilayerPerceptronClassifier.
     """
