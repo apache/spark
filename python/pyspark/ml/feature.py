@@ -184,7 +184,8 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
     """
 
     # a placeholder to make it appear in the generated doc
-    scalingVec = Param(Params._dummy(), "scalingVec", "vector for hadamard product.")
+    scalingVec = Param(Params._dummy(), "scalingVec", "vector for hadamard product, " +
+                       "it must be MLlib Vector type.")
 
     @keyword_only
     def __init__(self, scalingVec=None, inputCol=None, outputCol=None):
@@ -194,7 +195,8 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
         super(ElementwiseProduct, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ElementwiseProduct",
                                             self.uid)
-        self.scalingVec = Param(self, "scalingVec", "vector for hadamard product.")
+        self.scalingVec = Param(self, "scalingVec", "vector for hadamard product, " +
+                                "it must be MLlib Vector type.")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
