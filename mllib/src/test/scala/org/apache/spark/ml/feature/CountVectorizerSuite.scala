@@ -21,6 +21,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.sql.Row
 
 class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -42,11 +43,9 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val cv = new CountVectorizerModel(Array("a", "b", "c", "d"))
       .setInputCol("words")
       .setOutputCol("features")
-    val output = cv.transform(df).collect()
-    output.foreach { p =>
-      val features = p.getAs[Vector]("features")
-      val expected = p.getAs[Vector]("expected")
-      assert(features ~== expected absTol 1e-14)
+    cv.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
     }
   }
 
@@ -64,20 +63,18 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .fit(df)
     assert(cv.vocabulary.deep == Array("a", "b", "c", "d", "e").deep)
 
-    val output = cv.transform(df).collect()
-    output.foreach { p =>
-      val features = p.getAs[Vector]("features")
-      val expected = p.getAs[Vector]("expected")
-      assert(features ~== expected absTol 1e-14)
+    cv.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
     }
   }
 
-  test("CountVectorizer vocabSize and minTokenCount") {
+  test("CountVectorizer vocabSize and minDocFreq") {
     val df = sqlContext.createDataFrame(Seq(
-      (0, "a a a a a".split("\\s+").toSeq, Vectors.sparse(3, Seq((0, 5.0)))),
-      (1, "b b b b".split("\\s+").toSeq, Vectors.sparse(3, Seq((1, 4.0)))),
-      (2, "c c c".split("\\s+").toSeq, Vectors.sparse(3, Seq((2, 3.0)))),
-      (3, "d d".split("\\s+").toSeq, Vectors.sparse(3, Seq())))
+      (0, "a b c d".split("\\s+").toSeq, Vectors.sparse(3, Seq((0, 1.0), (1, 1.0)))),
+      (1, "a b c".split("\\s+").toSeq, Vectors.sparse(3, Seq((0, 1.0), (1, 1.0)))),
+      (2, "a b".split("\\s+").toSeq, Vectors.sparse(3, Seq((0, 1.0), (1, 1.0)))),
+      (3, "a".split("\\s+").toSeq, Vectors.sparse(3, Seq((0, 1.0)))))
     ).toDF("id", "words", "expected")
     val cvModel = new CountVectorizer()
       .setInputCol("words")
@@ -89,15 +86,13 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val cvModel2 = new CountVectorizer()
       .setInputCol("words")
       .setOutputCol("features")
-      .setMinTokenCount(3)  // ignore terms with count less than 3
+      .setMinDocFreq(3)  // ignore terms with count less than 3
       .fit(df)
-    assert(cvModel2.vocabulary.deep == Array("a", "b", "c").deep)
+    assert(cvModel2.vocabulary.deep == Array("a", "b").deep)
 
-    val output = cvModel2.transform(df).collect()
-    output.foreach { p =>
-      val features = p.getAs[Vector]("features")
-      val expected = p.getAs[Vector]("expected")
-      assert(features ~== expected absTol 1e-14)
+    cvModel2.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
     }
   }
 
@@ -111,7 +106,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
         .setInputCol("words")
         .setOutputCol("features")
         .setVocabSize(3)  // limit vocab size to 3
-        .setMinTokenCount(3)
+        .setMinDocFreq(3)
         .fit(df)
     }
   }
@@ -127,11 +122,9 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("words")
       .setOutputCol("features")
       .setMinTermFreq(3)
-    val output = cv.transform(df).collect()
-    output.foreach { p =>
-      val features = p.getAs[Vector]("features")
-      val expected = p.getAs[Vector]("expected")
-      assert(features ~== expected absTol 1e-14)
+    cv.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
     }
   }
 }
