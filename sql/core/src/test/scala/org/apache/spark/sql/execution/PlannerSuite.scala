@@ -144,8 +144,22 @@ class PlannerSuite extends SparkFunSuite {
   }
 
   test("efficient limit -> project -> sort") {
-    val query = testData.sort('key).select('value).limit(2).logicalPlan
-    val planned = planner.TakeOrderedAndProject(query)
-    assert(planned.head.isInstanceOf[execution.TakeOrderedAndProject])
+    {
+      val query =
+        testData.select('key, 'value).sort('key).limit(2).logicalPlan
+      val planned = planner.TakeOrderedAndProject(query)
+      assert(planned.head.isInstanceOf[execution.TakeOrderedAndProject])
+      assert(planned.head.output === testData.select('key, 'value).logicalPlan.output)
+    }
+
+    {
+      // We need to make sure TakeOrderedAndProject's output is correct when we push a project
+      // into it.
+      val query =
+        testData.select('key, 'value).sort('key).select('value, 'key).limit(2).logicalPlan
+      val planned = planner.TakeOrderedAndProject(query)
+      assert(planned.head.isInstanceOf[execution.TakeOrderedAndProject])
+      assert(planned.head.output === testData.select('value, 'key).logicalPlan.output)
+    }
   }
 }
