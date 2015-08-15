@@ -803,17 +803,20 @@ jsc.stop();
 
 ## Examples: Summaries for LogisticRegression.
 
-Once LogisticRegression is run on data, it is useful to extract statistics such as the
+Once [`LogisticRegression`](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegression)
+is run on data, it is useful to extract statistics such as the
 loss per iteration which will provide an intuition on overfitting and metrics to understand
 how well the model has performed on training and test data.
 
-LogisticRegressionTrainingSummary provides an interface to access such relevant information
-i.e the objectiveHistory and metrics to evaluate the performance on the training data
-directly with very less code to be rewritten by the user.
-In the future, a method would be made available in the fitted LogisticRegressionModel to obtain
-a LogisticRegressionSummary of the test data as well.
+[`LogisticRegressionTrainingSummary`](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionTrainingSummary)
+provides an interface to access such relevant information. i.e the objectiveHistory and metrics
+to evaluate the performance on the training data directly with very less code to be rewritten by
+the user. In the future, a method would be made available in the fitted
+[`LogisticRegressionModel`](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegressionModel) to obtain
+a [`LogisticRegressionSummary`](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionSummary)
+of the test data as well.
 
-This examples illustrates the use of LogisticRegressionTrainingSummary on some toyData.
+This examples illustrates the use of `LogisticRegressionTrainingSummary` on some toy data.
 
 <div class="codetabs">
 <div data-lang="scala">
@@ -861,8 +864,9 @@ val binarySummary = trainingSummary.asInstanceOf[BinaryLogisticRegressionSummary
 
 // Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
 val roc = binarySummary.roc
-val truePositiveRate = roc.select("FPR")
-val area = binarySummary.areaUnderROC
+roc.show()
+roc.select("FPR").show()
+println(binarySummary.areaUnderROC)
 
 // Obtain the threshold with the highest fMeasure.
 val fMeasure = binarySummary.fMeasureByThreshold
@@ -921,8 +925,9 @@ BinaryLogisticRegressionSummary binarySummary = (BinaryLogisticRegressionSummary
 
 // Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
 DataFrame roc = binarySummary.roc();
-DataFrame truePositiveRate = roc.select("FPR");
-double area = binarySummary.areaUnderROC();
+roc.show();
+roc.select("FPR").show();
+System.out.println(binarySummary.areaUnderROC());
 
 // Obtain the threshold with the highest fMeasure.
 DataFrame fMeasure = binarySummary.fMeasureByThreshold();
