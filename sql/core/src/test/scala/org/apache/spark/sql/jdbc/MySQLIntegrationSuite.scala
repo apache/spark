@@ -45,7 +45,7 @@ class MySQLDatabase {
         docker.startContainer(containerId)
         return
       } catch {
-        case e: ImageNotFoundException => retry(3)(docker.pull("mysql"))
+        case e: ImageNotFoundException => retry(3)(docker.pull("mysql:latest"))
       }
     }
   }

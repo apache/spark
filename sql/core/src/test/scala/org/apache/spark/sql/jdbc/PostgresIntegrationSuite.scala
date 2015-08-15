@@ -44,7 +44,7 @@ class PostgresDatabase {
         docker.startContainer(containerId)
         return
       } catch {
-        case e: ImageNotFoundException => retry(3)(docker.pull("postgres"))
+        case e: ImageNotFoundException => retry(3)(docker.pull("postgres:latest"))
       }
     }
   }
