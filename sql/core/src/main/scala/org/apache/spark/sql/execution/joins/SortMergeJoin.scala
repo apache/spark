@@ -23,9 +23,11 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
+import org.apache.spark.sql.types.StructType
 
 /**
  * :: DeveloperApi ::
@@ -44,6 +46,9 @@ case class SortMergeJoin(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = left.output ++ right.output
+
+  private val leftSchema: StructType = StructType.fromAttributes(left.output)
+  private val rightSchema: StructType = StructType.fromAttributes(right.output)
 
   override def outputPartitioning: Partitioning =
     PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
@@ -65,6 +70,8 @@ case class SortMergeJoin(
       && UnsafeProjection.canSupport(rightKeys)
       && UnsafeProjection.canSupport(schema))
   }
+
+  private def canUnsafeJoin: Boolean = left.outputsUnsafeRows && right.outputsUnsafeRows
 
   override def outputsUnsafeRows: Boolean = isUnsafeMode
   override def canProcessUnsafeRows: Boolean = isUnsafeMode
@@ -96,9 +103,37 @@ case class SortMergeJoin(
           RowIterator.fromScala(rightIter),
           numRightRows
         )
-        private[this] val joinRow = new JoinedRow
+
+        private[this] val rowJoiner = new JoinedRow
+        private[this] val unsafeRowJoiner =
+          GenerateUnsafeRowJoiner.create(leftSchema, rightSchema)
+
+        private[this] var joinedRow: InternalRow = _
+        private[this] val joinRow: (InternalRow, InternalRow) => InternalRow = {
+          if (canUnsafeJoin) {
+            (currentLeftRow: InternalRow, currentRightRow: InternalRow) => {
+              unsafeRowJoiner.join(currentLeftRow.asInstanceOf[UnsafeRow],
+                currentRightRow.asInstanceOf[UnsafeRow])
+            }
+          } else {
+            rowJoiner.apply
+          }
+        }
+
+        private[this] val withRight: (InternalRow) => InternalRow = {
+          if (canUnsafeJoin) {
+            (currentRightRow: InternalRow) => {
+              unsafeRowJoiner.withRight(currentRightRow.asInstanceOf[UnsafeRow])
+            }
+          } else {
+            rowJoiner.withRight
+          }
+        }
+
         private[this] val resultProjection: (InternalRow) => InternalRow = {
-          if (isUnsafeMode) {
+          if (canUnsafeJoin) {
+            identity[InternalRow]
+          } else if (isUnsafeMode) {
             UnsafeProjection.create(schema)
           } else {
             identity[InternalRow]
@@ -118,7 +153,11 @@ case class SortMergeJoin(
             }
           }
           if (currentLeftRow != null) {
-            joinRow(currentLeftRow, currentRightMatches(currentMatchIdx))
+            if (currentMatchIdx == 0) {
+              joinedRow = joinRow(currentLeftRow, currentRightMatches(currentMatchIdx))
+            } else {
+              joinedRow = withRight(currentRightMatches(currentMatchIdx))
+            }
             currentMatchIdx += 1
             numOutputRows += 1
             true
@@ -127,7 +166,7 @@ case class SortMergeJoin(
           }
         }
 
-        override def getRow: InternalRow = resultProjection(joinRow)
+        override def getRow: InternalRow = resultProjection(joinedRow)
       }.toScala
     }
   }
