@@ -133,11 +133,11 @@ class DAGSchedulerSuite
   val cacheLocations = new HashMap[(Int, Int), Seq[BlockManagerId]]
   // stub out BlockManagerMaster.getLocations to use our cacheLocations
   val blockManagerMaster = new BlockManagerMaster(null, conf, true) {
-      override def getLocations(blockIds: Array[BlockId]): Seq[Seq[BlockManagerId]] = {
+      override def getLocations(blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
         blockIds.map {
           _.asRDDId.map(id => (id.rddId -> id.splitIndex)).flatMap(key => cacheLocations.get(key)).
             getOrElse(Seq())
-        }.toSeq
+        }.toIndexedSeq
       }
       override def removeExecutor(execId: String) {
         // don't need to propagate to the driver, which we don't have
