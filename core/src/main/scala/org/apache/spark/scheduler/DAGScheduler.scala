@@ -1383,20 +1383,24 @@ class DAGScheduler(
       return rddPrefs.map(TaskLocation(_))
     }
 
+    // If the RDD has narrow dependencies, pick the first partition of the first narrow dependency
+    // that has any placement preferences. Ideally we would choose based on transfer sizes,
+    // but this will do for now.
     rdd.dependencies.foreach {
       case n: NarrowDependency[_] =>
-        // If the RDD has narrow dependencies, pick the first partition of the first narrow dep
-        // that has any placement preferences. Ideally we would choose based on transfer sizes,
-        // but this will do for now.
         for (inPart <- n.getParents(partition)) {
           val locs = getPreferredLocsInternal(n.rdd, inPart, visited)
           if (locs != Nil) {
             return locs
           }
         }
+      case _ =>
+    }
+
+    // If the RDD has shuffle dependencies and shuffle locality is enabled, pick locations that
+    // have at least REDUCER_PREF_LOCS_FRACTION of data as preferred locations
+    rdd.dependencies.foreach {
       case s: ShuffleDependency[_, _, _] =>
-        // For shuffle dependencies, pick locations which have at least REDUCER_PREF_LOCS_FRACTION
-        // of data as preferred locations
         if (shuffleLocalityEnabled &&
             rdd.partitions.size < SHUFFLE_PREF_REDUCE_THRESHOLD &&
             s.rdd.partitions.size < SHUFFLE_PREF_MAP_THRESHOLD) {
@@ -1407,7 +1411,6 @@ class DAGScheduler(
             return topLocsForReducer.get.map(loc => TaskLocation(loc.host, loc.executorId))
           }
         }
-
       case _ =>
     }
     Nil
