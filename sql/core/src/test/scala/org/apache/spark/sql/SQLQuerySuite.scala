@@ -1625,11 +1625,4 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(sql("select count(num) from 1one"), Row(10))
     }
   }
-
-  test("SPARK-9955: correct error message for aggregate") {
-    val e = intercept[AnalysisException] {
-      sql("select key, max(value) from testData where bad_column > 1 group by key")
-    }
-    assert(e.message.contains("cannot resolve 'bad_column'"))
-  }
 }
