@@ -162,7 +162,7 @@ class CodeGenContext {
     case ByteType => JAVA_BYTE
     case ShortType => JAVA_SHORT
     case IntegerType | DateType => JAVA_INT
-    case LongType | TimestampType => JAVA_LONG
+    case LongType | TimestampType | TimeIntervalType => JAVA_LONG
     case FloatType => JAVA_FLOAT
     case DoubleType => JAVA_DOUBLE
     case dt: DecimalType => "Decimal"
@@ -377,6 +377,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       classOf[UTF8String].getName,
       classOf[Decimal].getName,
       classOf[CalendarInterval].getName,
+      classOf[Interval].getName,
       classOf[ArrayData].getName,
       classOf[UnsafeArrayData].getName,
       classOf[MapData].getName,

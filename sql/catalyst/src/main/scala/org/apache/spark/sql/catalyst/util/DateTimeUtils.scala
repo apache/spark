@@ -681,13 +681,24 @@ object DateTimeUtils {
   }
 
   /**
-   * Add timestamp and full interval.
+   * Add timestamp and calendar interval.
    * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
    */
-  def timestampAddInterval(start: SQLTimestamp, months: Int, microseconds: Long): SQLTimestamp = {
+  def timestampAddCalendarInterval(
+      start: SQLTimestamp,
+      months: Int,
+      microseconds: Long): SQLTimestamp = {
     val days = millisToDays(start / 1000L)
     val newDays = dateAddMonths(days, months)
     daysToMillis(newDays) * 1000L + start - daysToMillis(days) * 1000L + microseconds
+  }
+
+  /**
+   * Add timestamp and time interval.
+   * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
+   */
+  def timestampAddTimeInterval(start: SQLTimestamp, microseconds: Long): SQLTimestamp = {
+    start + microseconds
   }
 
   /**

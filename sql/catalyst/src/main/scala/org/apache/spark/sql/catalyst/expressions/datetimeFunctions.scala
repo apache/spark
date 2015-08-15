@@ -600,21 +600,35 @@ case class TimeAdd(start: Expression, interval: Expression)
   override def right: Expression = interval
 
   override def toString: String = s"$left + $right"
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, CalendarIntervalType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TimestampType, TypeCollection(CalendarIntervalType, TimeIntervalType))
 
   override def dataType: DataType = TimestampType
 
-  override def nullSafeEval(start: Any, interval: Any): Any = {
-    val itvl = interval.asInstanceOf[CalendarInterval]
-    DateTimeUtils.timestampAddInterval(
-      start.asInstanceOf[Long], itvl.months, itvl.microseconds)
+  override def nullSafeEval(startValue: Any, intervalValue: Any): Any = {
+    interval.dataType match {
+      case CalendarIntervalType =>
+        val itvl = intervalValue.asInstanceOf[CalendarInterval]
+        DateTimeUtils.timestampAddCalendarInterval(
+          startValue.asInstanceOf[Long], itvl.months, itvl.microseconds)
+      case TimeIntervalType =>
+        val itvl = intervalValue.asInstanceOf[Long]
+        DateTimeUtils.timestampAddTimeInterval(startValue.asInstanceOf[Long], itvl)
+    }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (sd, i) => {
-      s"""$dtu.timestampAddInterval($sd, $i.months, $i.microseconds)"""
-    })
+    interval.dataType match {
+      case CalendarIntervalType =>
+        defineCodeGen(ctx, ev, (sd, i) => {
+          s"""$dtu.timestampAddCalendarInterval($sd, $i.months, $i.microseconds)"""
+        })
+      case TimeIntervalType =>
+        defineCodeGen(ctx, ev, (sd, i) => {
+          s"""$dtu.timestampAddTimeInterval($sd, $i)"""
+        })
+    }
   }
 }
 
@@ -675,21 +689,35 @@ case class TimeSub(start: Expression, interval: Expression)
   override def right: Expression = interval
 
   override def toString: String = s"$left - $right"
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, CalendarIntervalType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TimestampType, TypeCollection(CalendarIntervalType, TimeIntervalType))
 
   override def dataType: DataType = TimestampType
 
-  override def nullSafeEval(start: Any, interval: Any): Any = {
-    val itvl = interval.asInstanceOf[CalendarInterval]
-    DateTimeUtils.timestampAddInterval(
-      start.asInstanceOf[Long], 0 - itvl.months, 0 - itvl.microseconds)
+  override def nullSafeEval(startValue: Any, intervalValue: Any): Any = {
+    interval.dataType match {
+      case CalendarIntervalType =>
+        val itvl = intervalValue.asInstanceOf[CalendarInterval]
+        DateTimeUtils.timestampAddCalendarInterval(
+          startValue.asInstanceOf[Long], 0 - itvl.months, 0 - itvl.microseconds)
+      case TimeIntervalType =>
+        val itvl = intervalValue.asInstanceOf[Long]
+        DateTimeUtils.timestampAddTimeInterval(startValue.asInstanceOf[Long], 0 - itvl)
+    }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (sd, i) => {
-      s"""$dtu.timestampAddInterval($sd, 0 - $i.months, 0 - $i.microseconds)"""
-    })
+    interval.dataType match {
+      case CalendarIntervalType =>
+        defineCodeGen(ctx, ev, (sd, i) => {
+          s"""$dtu.timestampAddCalendarInterval($sd, 0 - $i.months, 0 - $i.microseconds)"""
+        })
+      case TimeIntervalType =>
+        defineCodeGen(ctx, ev, (sd, i) => {
+          s"""$dtu.timestampAddTimeInterval($sd, 0 - $i)"""
+        })
+    }
   }
 }
 

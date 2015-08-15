@@ -52,6 +52,11 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Add(positiveShortLit, negativeShortLit), -1.toShort)
     checkEvaluation(Add(positiveIntLit, negativeIntLit), -1)
     checkEvaluation(Add(positiveLongLit, negativeLongLit), -1L)
+    checkEvaluation(
+      Add(Literal.create(5L, TimeIntervalType), Literal.create(10L, TimeIntervalType)), 15L)
+    checkEvaluation(
+      Add(Literal.create(positiveLong, TimeIntervalType),
+        Literal.create(negativeLong, TimeIntervalType)), -1L)
 
     DataTypeTestUtils.numericAndInterval.foreach { tpe =>
       checkConsistencyBetweenInterpretedAndCodegen(Add, tpe, tpe)
@@ -75,6 +80,9 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(UnaryMinus(negativeIntLit), - negativeInt)
     checkEvaluation(UnaryMinus(positiveLongLit), - positiveLong)
     checkEvaluation(UnaryMinus(negativeLongLit), - negativeLong)
+    checkEvaluation(UnaryMinus(Literal.create(5L, TimeIntervalType)), -5L)
+    checkEvaluation(UnaryMinus(Literal.create(positiveLong, TimeIntervalType)), - positiveLong)
+    checkEvaluation(UnaryMinus(Literal.create(negativeLong, TimeIntervalType)), - negativeLong)
 
     DataTypeTestUtils.numericAndInterval.foreach { tpe =>
       checkConsistencyBetweenInterpretedAndCodegen(UnaryMinus, tpe)
@@ -93,6 +101,11 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       (positiveShort - negativeShort).toShort)
     checkEvaluation(Subtract(positiveIntLit, negativeIntLit), positiveInt - negativeInt)
     checkEvaluation(Subtract(positiveLongLit, negativeLongLit), positiveLong - negativeLong)
+    checkEvaluation(
+      Subtract(Literal.create(5L, TimeIntervalType), Literal.create(10L, TimeIntervalType)), -5L)
+    checkEvaluation(
+      Subtract(Literal.create(positiveLong, TimeIntervalType),
+        Literal.create(negativeLong, TimeIntervalType)), positiveLong - negativeLong)
 
     DataTypeTestUtils.numericAndInterval.foreach { tpe =>
       checkConsistencyBetweenInterpretedAndCodegen(Subtract, tpe, tpe)
@@ -216,6 +229,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(MaxOf("abc", "bcd"), "bcd")
     checkEvaluation(MaxOf(Array(1.toByte, 2.toByte), Array(1.toByte, 3.toByte)),
       Array(1.toByte, 3.toByte))
+    checkEvaluation(MaxOf(Literal.create(1L, TimeIntervalType),
+      Literal.create(-1L, TimeIntervalType)), 1L)
+    checkEvaluation(MaxOf(Literal.create(1L, TimeIntervalType),
+      Literal.create(null, TimeIntervalType)), 1L)
   }
 
   test("MinOf basic") {
@@ -241,6 +258,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(MinOf("abc", "bcd"), "abc")
     checkEvaluation(MinOf(Array(1.toByte, 2.toByte), Array(1.toByte, 3.toByte)),
       Array(1.toByte, 2.toByte))
+    checkEvaluation(MinOf(Literal.create(1L, TimeIntervalType),
+      Literal.create(-1L, TimeIntervalType)), -1L)
+    checkEvaluation(MinOf(Literal.create(1L, TimeIntervalType),
+      Literal.create(null, TimeIntervalType)), 1L)
   }
 
   test("pmod") {

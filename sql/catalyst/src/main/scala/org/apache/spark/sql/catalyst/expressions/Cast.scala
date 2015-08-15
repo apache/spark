@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, Interval, UTF8String}
 
 
 object Cast {
@@ -54,6 +54,9 @@ object Cast {
     case (_, DateType) => true
 
     case (StringType, CalendarIntervalType) => true
+    case (StringType, TimeIntervalType) => true
+    case (CalendarIntervalType, TimeIntervalType) => true
+    case (TimeIntervalType, CalendarIntervalType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -92,6 +95,8 @@ object Cast {
     case (DoubleType, TimestampType) => true
     case (FloatType, TimestampType) => true
     case (StringType, DateType) => true
+    case (StringType, CalendarIntervalType) => true
+    case (StringType, TimeIntervalType) => true
     case (_: NumericType, DateType) => true
     case (BooleanType, DateType) => true
     case (DateType, _: NumericType) => true
@@ -129,6 +134,8 @@ case class Cast(child: Expression, dataType: DataType)
     case DateType => buildCast[Int](_, d => UTF8String.fromString(DateTimeUtils.dateToString(d)))
     case TimestampType => buildCast[Long](_,
       t => UTF8String.fromString(DateTimeUtils.timestampToString(t)))
+    case TimeIntervalType => buildCast[Long](_,
+      t => UTF8String.fromString(Interval.timeIntervalToString(t)))
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -220,10 +227,25 @@ case class Cast(child: Expression, dataType: DataType)
     case _ => _ => null
   }
 
-  // IntervalConverter
-  private[this] def castToInterval(from: DataType): Any => Any = from match {
+  // CalendarIntervalConverter
+  private[this] def castToCalendarInterval(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => CalendarInterval.fromString(s.toString))
+      buildCast[UTF8String](_, s => try Interval.stringToCalendarInterval(s.toString) catch {
+        case _: IllegalArgumentException => null
+      })
+    case TimeIntervalType =>
+      buildCast[Long](_, t => Interval.timeIntervalToCalendarInterval(t))
+    case _ => _ => null
+  }
+
+  // TimeIntervalConverter
+  private[this] def castToTimeInterval(from: DataType): Any => Any = from match {
+    case StringType =>
+      buildCast[UTF8String](_, s => try Interval.stringToTimeInterval(s.toString) catch {
+        case _: IllegalArgumentException => null
+      })
+    case CalendarIntervalType =>
+      buildCast[CalendarInterval](_, ci => Interval.calendarIntervalToTimeInterval(ci))
     case _ => _ => null
   }
 
@@ -409,7 +431,8 @@ case class Cast(child: Expression, dataType: DataType)
     case DateType => castToDate(from)
     case decimal: DecimalType => castToDecimal(from, decimal)
     case TimestampType => castToTimestamp(from)
-    case CalendarIntervalType => castToInterval(from)
+    case CalendarIntervalType => castToCalendarInterval(from)
+    case TimeIntervalType => castToTimeInterval(from)
     case BooleanType => castToBoolean(from)
     case ByteType => castToByte(from)
     case ShortType => castToShort(from)
@@ -449,7 +472,8 @@ case class Cast(child: Expression, dataType: DataType)
     case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal)
     case TimestampType => castToTimestampCode(from, ctx)
-    case CalendarIntervalType => castToIntervalCode(from)
+    case CalendarIntervalType => castToCalendarIntervalCode(from)
+    case TimeIntervalType => castToTimeIntervalCode(from)
     case BooleanType => castToBooleanCode(from)
     case ByteType => castToByteCode(from)
     case ShortType => castToShortCode(from)
@@ -487,6 +511,9 @@ case class Cast(child: Expression, dataType: DataType)
       case TimestampType =>
         (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c));"""
+      case TimeIntervalType =>
+        (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
+          org.apache.spark.unsafe.types.Interval.timeIntervalToString($c));"""
       case _ =>
         (c, evPrim, evNull) => s"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
@@ -627,10 +654,34 @@ case class Cast(child: Expression, dataType: DataType)
         """
   }
 
-  private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
+  private[this] def castToCalendarIntervalCode(from: DataType): CastFunction = from match {
     case StringType =>
       (c, evPrim, evNull) =>
-        s"$evPrim = CalendarInterval.fromString($c.toString());"
+        s"""
+          try {
+            $evPrim = Interval.stringToCalendarInterval($c.toString());;
+          } catch (java.lang.IllegalArgumentException e) {
+            $evNull = true;
+          }
+        """
+    case TimeIntervalType =>
+      (c, evPrim, evNull) =>
+        s"$evPrim = Interval.timeIntervalToCalendarInterval($c);"
+  }
+
+  private[this] def castToTimeIntervalCode(from: DataType): CastFunction = from match {
+    case StringType =>
+      (c, evPrim, evNull) =>
+        s"""
+          try {
+            $evPrim = Interval.stringToTimeInterval($c.toString());
+          } catch (java.lang.IllegalArgumentException e) {
+            $evNull = true;
+          }
+        """
+    case CalendarIntervalType =>
+      (c, evPrim, evNull) =>
+        s"$evPrim = Interval.calendarIntervalToTimeInterval($c)";
   }
 
   private[this] def decimalToTimestampCode(d: String): String =

@@ -204,7 +204,7 @@ final class SpecificMutableRow(val values: Array[MutableValue])
         // We use INT for DATE internally
         case IntegerType | DateType => new MutableInt
         // We use Long for Timestamp internally
-        case LongType | TimestampType => new MutableLong
+        case LongType | TimestampType | TimeIntervalType => new MutableLong
         case FloatType => new MutableFloat
         case DoubleType => new MutableDouble
         case _ => new MutableAny

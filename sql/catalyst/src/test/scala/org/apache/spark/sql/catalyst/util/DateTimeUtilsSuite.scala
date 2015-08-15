@@ -22,7 +22,7 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{Interval, UTF8String}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 
 class DateTimeUtilsSuite extends SparkFunSuite {
@@ -373,7 +373,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(dateAddMonths(days1, -13) === millisToDays(c2.getTimeInMillis))
   }
 
-  test("timestamp add months") {
+  test("timestamp add calendar interval") {
     val c1 = Calendar.getInstance()
     c1.set(1997, 1, 28, 10, 30, 0)
     c1.set(Calendar.MILLISECOND, 0)
@@ -382,7 +382,21 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c2.set(2000, 1, 29, 10, 30, 0)
     c2.set(Calendar.MILLISECOND, 123)
     val ts2 = c2.getTimeInMillis * 1000L
-    assert(timestampAddInterval(ts1, 36, 123000) === ts2)
+    assert(timestampAddCalendarInterval(ts1, 36, 123000) === ts2)
+  }
+
+  test("timestamp add time interval") {
+    val c1 = Calendar.getInstance()
+    c1.set(2000, 0, 1, 0, 0, 0)
+    c1.set(Calendar.MILLISECOND, 0)
+    val ts1 = c1.getTimeInMillis * 1000L
+    val c2 = Calendar.getInstance()
+    c2.set(2000, 0, 15, 5, 10, 30)
+    c2.set(Calendar.MILLISECOND, 321)
+    val ts2 = c2.getTimeInMillis * 1000L
+    assert(timestampAddTimeInterval(ts1,
+      14 * Interval.MICROS_PER_DAY + 5 * Interval.MICROS_PER_HOUR + 10 * Interval.MICROS_PER_MINUTE
+        + 30 * Interval.MICROS_PER_SECOND + 321 * Interval.MICROS_PER_MILLI) === ts2)
   }
 
   test("monthsBetween") {

@@ -96,6 +96,9 @@ object LiteralGenerator {
   lazy val timestampLiteralGen: Gen[Literal] =
     for { t <- Arbitrary.arbLong.arbitrary } yield Literal.create(new Timestamp(t), TimestampType)
 
+  lazy val timeIntervalLiteralGen: Gen[Literal] =
+    for { ti <- Arbitrary.arbLong.arbitrary } yield Literal.create(ti, TimeIntervalType)
+
   lazy val calendarIntervalLiterGen: Gen[Literal] =
     for { m <- Arbitrary.arbInt.arbitrary; s <- Arbitrary.arbLong.arbitrary}
       yield Literal.create(new CalendarInterval(m, s), CalendarIntervalType)
@@ -121,6 +124,7 @@ object LiteralGenerator {
       case BooleanType => booleanLiteralGen
       case StringType => stringLiteralGen
       case BinaryType => binaryLiteralGen
+      case TimeIntervalType => timeIntervalLiteralGen
       case CalendarIntervalType => calendarIntervalLiterGen
       case dt => throw new IllegalArgumentException(s"not supported type $dt")
     }

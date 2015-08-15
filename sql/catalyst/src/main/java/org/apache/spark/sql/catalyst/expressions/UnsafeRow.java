@@ -81,7 +81,8 @@ public final class UnsafeRow extends MutableRow {
           FloatType,
           DoubleType,
           DateType,
-          TimestampType
+          TimestampType,
+          TimeIntervalType
         })));
   }
 
@@ -309,6 +310,8 @@ public final class UnsafeRow extends MutableRow {
     } else if (dataType instanceof DateType) {
       return getInt(ordinal);
     } else if (dataType instanceof TimestampType) {
+      return getLong(ordinal);
+    } else if (dataType instanceof TimeIntervalType) {
       return getLong(ordinal);
     } else if (dataType instanceof BinaryType) {
       return getBinary(ordinal);

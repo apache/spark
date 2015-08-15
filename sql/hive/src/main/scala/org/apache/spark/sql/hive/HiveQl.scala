@@ -45,7 +45,7 @@ import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable, HiveScriptIOSchema}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{Interval, CalendarInterval}
 import org.apache.spark.util.random.RandomSampler
 
 /* Implicit conversions */
@@ -1521,28 +1521,28 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       Literal(BaseSemanticAnalyzer.charSetString(ast.getChild(0).getText, ast.getChild(1).getText))
 
     case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_YEAR_MONTH_LITERAL =>
-      Literal(CalendarInterval.fromYearMonthString(ast.getText))
+      Literal(new CalendarInterval(Interval.fromYearMonthString(ast.getText), 0))
 
     case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_DAY_TIME_LITERAL =>
-      Literal(CalendarInterval.fromDayTimeString(ast.getText))
+      Literal.create(Interval.fromDayTimeString(ast.getText), TimeIntervalType)
 
     case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_YEAR_LITERAL =>
-      Literal(CalendarInterval.fromSingleUnitString("year", ast.getText))
+      Literal(new CalendarInterval(Interval.fromYearMonthUnitString("year", ast.getText), 0))
 
     case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_MONTH_LITERAL =>
-      Literal(CalendarInterval.fromSingleUnitString("month", ast.getText))
+      Literal(new CalendarInterval(Interval.fromYearMonthUnitString("month", ast.getText), 0))
 
     case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_DAY_LITERAL =>
-      Literal(CalendarInterval.fromSingleUnitString("day", ast.getText))
+      Literal.create(Interval.fromDayTimeUnitString("day", ast.getText), TimeIntervalType)
 
     case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_HOUR_LITERAL =>
-      Literal(CalendarInterval.fromSingleUnitString("hour", ast.getText))
+      Literal.create(Interval.fromDayTimeUnitString("hour", ast.getText), TimeIntervalType)
 
     case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_MINUTE_LITERAL =>
-      Literal(CalendarInterval.fromSingleUnitString("minute", ast.getText))
+      Literal.create(Interval.fromDayTimeUnitString("minute", ast.getText), TimeIntervalType)
 
     case ast: ASTNode if ast.getType == HiveParser.TOK_INTERVAL_SECOND_LITERAL =>
-      Literal(CalendarInterval.fromSingleUnitString("second", ast.getText))
+      Literal.create(Interval.fromDayTimeUnitString("second", ast.getText), TimeIntervalType)
 
     case a: ASTNode =>
       throw new NotImplementedError(

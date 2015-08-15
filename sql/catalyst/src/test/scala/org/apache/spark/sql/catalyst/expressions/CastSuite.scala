@@ -73,6 +73,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     atomicTypes.foreach(dt => checkNullCast(dt, DateType))
 
     checkNullCast(StringType, CalendarIntervalType)
+    checkNullCast(StringType, TimeIntervalType)
     numericTypes.foreach(dt => checkNullCast(StringType, dt))
     numericTypes.foreach(dt => checkNullCast(BooleanType, dt))
     numericTypes.foreach(dt => checkNullCast(DateType, dt))
@@ -760,13 +761,20 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("case between string and interval") {
+    import org.apache.spark.unsafe.types.Interval
     import org.apache.spark.unsafe.types.CalendarInterval
 
     checkEvaluation(Cast(Literal("interval -3 month 7 hours"), CalendarIntervalType),
-      new CalendarInterval(-3, 7 * CalendarInterval.MICROS_PER_HOUR))
+      new CalendarInterval(-3, 7 * Interval.MICROS_PER_HOUR))
     checkEvaluation(Cast(Literal.create(
-      new CalendarInterval(15, -3 * CalendarInterval.MICROS_PER_DAY), CalendarIntervalType),
-      StringType),
-      "interval 1 years 3 months -3 days")
+      new CalendarInterval(15, -3 * Interval.MICROS_PER_DAY), CalendarIntervalType),
+      StringType), "interval 1 years 3 months -3 days")
+    checkEvaluation(Cast(Literal("interval"), CalendarIntervalType), null)
+    checkEvaluation(Cast(Literal("interval 5 days 12 hours"), TimeIntervalType),
+      5 * Interval.MICROS_PER_DAY + 12 * Interval.MICROS_PER_HOUR)
+    checkEvaluation(Cast(Literal.create(
+      5 * Interval.MICROS_PER_WEEK + 3 * Interval.MICROS_PER_DAY + 1 * Interval.MICROS_PER_HOUR,
+      TimeIntervalType), StringType), "interval 5 weeks 3 days 1 hours")
+    checkEvaluation(Cast(Literal("5 weeks 3 days"), TimeIntervalType), null)
   }
 }
