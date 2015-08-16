@@ -528,5 +528,82 @@ u = RandomRDDs.uniformRDD(sc, 1000000L, 10)
 v = u.map(lambda x: 1.0 + 2.0 * x)
 {% endhighlight %}
 </div>
+</div>
+
+## Kernel density estimation
+
+[Kernel density estimation](https://en.wikipedia.org/wiki/Kernel_density_estimation) is a technique
+useful for visualizing empirical probability distributions without requiring assumptions about the
+particular distribution that the observed samples are drawn from. It computes an estimate of the
+probability density function of a random variables, evaluated at a given set of points. It achieves
+this estimate by expressing the PDF of the empirical distribution at a particular point as the the
+mean of PDFs of normal distributions centered around each of the samples.
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+[`KernelDensity`](api/scala/index.html#org.apache.spark.mllib.stat.KernelDensity) provides methods
+to compute kernel density estimates from an RDD of samples. The following example demonstrates how
+to do so.
+
+{% highlight scala %}
+import org.apache.spark.mllib.stat.KernelDensity
+import org.apache.spark.rdd.RDD
+
+val data: RDD[Double] = ... // an RDD of sample data
+
+// Construct the density estimator with the sample data and a standard deviation for the Gaussian
+// kernels
+val kd = new KernelDensity()
+  .setSample(data)
+  .setBandwidth(3.0)
+
+// Find density estimates for the given values
+val densities = kd.estimate(Array(-1.0, 2.0, 5.0))
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+[`KernelDensity`](api/java/index.html#org.apache.spark.mllib.stat.KernelDensity) provides methods
+to compute kernel density estimates from an RDD of samples. The following example demonstrates how
+to do so.
+
+{% highlight java %}
+import org.apache.spark.mllib.stat.KernelDensity;
+import org.apache.spark.rdd.RDD;
+
+RDD<Double> data = ... // an RDD of sample data
+
+// Construct the density estimator with the sample data and a standard deviation for the Gaussian
+// kernels
+KernelDensity kd = new KernelDensity()
+  .setSample(data)
+  .setBandwidth(3.0);
+
+// Find density estimates for the given values
+double[] densities = kd.estimate(new double[] {-1.0, 2.0, 5.0});
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+[`KernelDensity`](api/python/pyspark.mllib.html#pyspark.mllib.stat.KernelDensity) provides methods
+to compute kernel density estimates from an RDD of samples. The following example demonstrates how
+to do so.
+
+{% highlight python %}
+from pyspark.mllib.stat import KernelDensity
+
+data = ... # an RDD of sample data
+
+# Construct the density estimator with the sample data and a standard deviation for the Gaussian
+# kernels
+kd = KernelDensity()
+kd.setSample(data)
+kd.setBandwidth(3.0)
+
+# Find density estimates for the given values
+densities = kd.estimate([-1.0, 2.0, 5.0])
+{% endhighlight %}
+</div>
 
 </div>
