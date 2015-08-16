@@ -809,12 +809,9 @@ loss per iteration which will provide an intuition on overfitting and metrics to
 how well the model has performed on training and test data.
 
 [`LogisticRegressionTrainingSummary`](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionTrainingSummary)
-provides an interface to access such relevant information. i.e the objectiveHistory and metrics
+provides an interface to access such relevant information. i.e the `objectiveHistory` and metrics
 to evaluate the performance on the training data directly with very less code to be rewritten by
-the user. In the future, a method would be made available in the fitted
-[`LogisticRegressionModel`](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegressionModel) to obtain
-a [`LogisticRegressionSummary`](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionSummary)
-of the test data as well.
+the user.
 
 This examples illustrates the use of `LogisticRegressionTrainingSummary` on some toy data.
 
@@ -868,12 +865,11 @@ roc.show()
 roc.select("FPR").show()
 println(binarySummary.areaUnderROC)
 
-// Obtain the threshold with the highest fMeasure.
+// Print all threshold, fMeasure pairs.
 val fMeasure = binarySummary.fMeasureByThreshold
-val fScoreRDD = fMeasure.map { case Row(thresh: Double, fscore: Double) => (thresh, fscore) }
-val (highThresh, highFScore) = fScoreRDD.fold((0.0, 0.0))((threshFScore1, threshFScore2) => {
-  if (threshFScore1._2 > threshFScore2._2) threshFScore1 else threshFScore2
-})
+fMeasure.foreach { case Row(thresh: Double, fscore: Double) =>
+  println(s"Threshold: $thresh, F-Measure: $fscore") }
+
 {% endhighlight %}
 </div>
 
@@ -881,7 +877,9 @@ val (highThresh, highFScore) = fScoreRDD.fold((0.0, 0.0))((threshFScore1, thresh
 {% highlight java %}
 import com.google.common.collect.Lists;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.classification.BinaryLogisticRegressionSummary;
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
@@ -890,6 +888,11 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SQLContext;
+
+SparkConf conf = new SparkConf().setAppName("LogisticRegressionSummary");
+JavaSparkContext jsc = new JavaSparkContext(conf);
+SQLContext jsql = new SQLContext(jsc);
 
 // Use some random data for demonstration.
 // Note that the RDD of LabeledPoints can be converted to a dataframe directly.
@@ -929,17 +932,14 @@ roc.show();
 roc.select("FPR").show();
 System.out.println(binarySummary.areaUnderROC());
 
-// Obtain the threshold with the highest fMeasure.
+// Print all threshold, fMeasure pairs.
 DataFrame fMeasure = binarySummary.fMeasureByThreshold();
-
-
-{% highlight %}
+for (Row r: fMeasure.collect()) {
+  System.out.println("Threshold: " + r.get(0) + ", F-Measure: " + r.get(1));
+}
+{% endhighlight %}
 </div>
-
 </div>
-
-
-
 
 # Dependencies
 
