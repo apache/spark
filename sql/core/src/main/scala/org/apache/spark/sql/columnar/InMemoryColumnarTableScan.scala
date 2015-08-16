@@ -121,8 +121,7 @@ private[sql] case class InMemoryRelation(
         def next(): CachedBatch = {
           val columnBuilders = output.map { attribute =>
             val columnType = ColumnType(attribute.dataType)
-            val initialBufferSize = columnType.defaultSize * batchSize
-            ColumnBuilder(attribute.dataType, initialBufferSize, attribute.name, useCompression)
+            ColumnBuilder(attribute.dataType, batchSize, attribute.name, useCompression)
           }.toArray
 
           var rowCount = 0
