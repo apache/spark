@@ -19,7 +19,7 @@ package org.apache.spark
 
 import org.apache.spark.util.NonSerializable
 
-import java.io.NotSerializableException
+import java.io.{IOException, NotSerializableException, ObjectInputStream}
 
 // Common state shared by FailureSuite-launched tasks. We use a global object
 // for this because any local variables used in the task closures will rightfully
@@ -130,7 +130,9 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
 
     // Non-serializable closure in foreach function
     val thrown2 = intercept[SparkException] {
+      // scalastyle:off println
       sc.parallelize(1 to 10, 2).foreach(x => println(a))
+      // scalastyle:on println
     }
     assert(thrown2.getClass === classOf[SparkException])
     assert(thrown2.getMessage.contains("NotSerializableException") ||
@@ -139,5 +141,94 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     FailureSuiteState.clear()
   }
 
+  test("managed memory leak error should not mask other failures (SPARK-9266") {
+    val conf = new SparkConf().set("spark.unsafe.exceptionOnMemoryLeak", "true")
+    sc = new SparkContext("local[1,1]", "test", conf)
+
+    // If a task leaks memory but fails due to some other cause, then make sure that the original
+    // cause is preserved
+    val thrownDueToTaskFailure = intercept[SparkException] {
+      sc.parallelize(Seq(0)).mapPartitions { iter =>
+        TaskContext.get().taskMemoryManager().allocate(128)
+        throw new Exception("intentional task failure")
+        iter
+      }.count()
+    }
+    assert(thrownDueToTaskFailure.getMessage.contains("intentional task failure"))
+
+    // If the task succeeded but memory was leaked, then the task should fail due to that leak
+    val thrownDueToMemoryLeak = intercept[SparkException] {
+      sc.parallelize(Seq(0)).mapPartitions { iter =>
+        TaskContext.get().taskMemoryManager().allocate(128)
+        iter
+      }.count()
+    }
+    assert(thrownDueToMemoryLeak.getMessage.contains("memory leak"))
+  }
+
+  // Run a 3-task map job in which task 1 always fails with a exception message that
+  // depends on the failure number, and check that we get the last failure.
+  test("last failure cause is sent back to driver") {
+    sc = new SparkContext("local[1,2]", "test")
+    val data = sc.makeRDD(1 to 3, 3).map { x =>
+      FailureSuiteState.synchronized {
+        FailureSuiteState.tasksRun += 1
+        if (x == 3) {
+          FailureSuiteState.tasksFailed += 1
+          throw new UserException("oops",
+            new IllegalArgumentException("failed=" + FailureSuiteState.tasksFailed))
+        }
+      }
+      x * x
+    }
+    val thrown = intercept[SparkException] {
+      data.collect()
+    }
+    FailureSuiteState.synchronized {
+      assert(FailureSuiteState.tasksRun === 4)
+    }
+    assert(thrown.getClass === classOf[SparkException])
+    assert(thrown.getCause.getClass === classOf[UserException])
+    assert(thrown.getCause.getMessage === "oops")
+    assert(thrown.getCause.getCause.getClass === classOf[IllegalArgumentException])
+    assert(thrown.getCause.getCause.getMessage === "failed=2")
+    FailureSuiteState.clear()
+  }
+
+  test("failure cause stacktrace is sent back to driver if exception is not serializable") {
+    sc = new SparkContext("local", "test")
+    val thrown = intercept[SparkException] {
+      sc.makeRDD(1 to 3).foreach { _ => throw new NonSerializableUserException }
+    }
+    assert(thrown.getClass === classOf[SparkException])
+    assert(thrown.getCause === null)
+    assert(thrown.getMessage.contains("NonSerializableUserException"))
+    FailureSuiteState.clear()
+  }
+
+  test("failure cause stacktrace is sent back to driver if exception is not deserializable") {
+    sc = new SparkContext("local", "test")
+    val thrown = intercept[SparkException] {
+      sc.makeRDD(1 to 3).foreach { _ => throw new NonDeserializableUserException }
+    }
+    assert(thrown.getClass === classOf[SparkException])
+    assert(thrown.getCause === null)
+    assert(thrown.getMessage.contains("NonDeserializableUserException"))
+    FailureSuiteState.clear()
+  }
+
   // TODO: Need to add tests with shuffle fetch failures.
+}
+
+class UserException(message: String, cause: Throwable)
+  extends RuntimeException(message, cause)
+
+class NonSerializableUserException extends RuntimeException {
+  val nonSerializableInstanceVariable = new NonSerializable
+}
+
+class NonDeserializableUserException extends RuntimeException {
+  private def readObject(in: ObjectInputStream): Unit = {
+    throw new IOException("Intentional exception during deserialization.")
+  }
 }

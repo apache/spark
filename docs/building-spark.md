@@ -7,7 +7,8 @@ redirect_from: "building-with-maven.html"
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-Building Spark using Maven requires Maven 3.0.4 or newer and Java 7+.
+Building Spark using Maven requires Maven 3.3.3 or newer and Java 7+.
+The Spark build can supply a suitable Maven binary; see below.
 
 # Building with `build/mvn`
 
@@ -124,7 +125,7 @@ mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -Dskip
 # Building for Scala 2.11
 To produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` property:
 
-    dev/change-version-to-2.11.sh
+    dev/change-scala-version.sh 2.11
     mvn -Pyarn -Phadoop-2.4 -Dscala-2.11 -DskipTests clean package
 
 Spark does not yet support its JDBC component for Scala 2.11.

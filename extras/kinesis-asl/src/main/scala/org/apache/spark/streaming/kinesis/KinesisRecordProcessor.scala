@@ -18,19 +18,15 @@ package org.apache.spark.streaming.kinesis
 
 import java.util.List
 
-import scala.collection.JavaConversions.asScalaBuffer
 import scala.util.Random
+import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
-
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.InvalidStateException
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.KinesisClientLibDependencyException
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.ShutdownException
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.ThrottlingException
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessor
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
+import com.amazonaws.services.kinesis.clientlibrary.exceptions.{InvalidStateException, KinesisClientLibDependencyException, ShutdownException, ThrottlingException}
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer}
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
+
+import org.apache.spark.Logging
 
 /**
  * Kinesis-specific implementation of the Kinesis Client Library (KCL) IRecordProcessor.
@@ -51,6 +47,7 @@ private[kinesis] class KinesisRecordProcessor(
     checkpointState: KinesisCheckpointState) extends IRecordProcessor with Logging {
 
   // shardId to be populated during initialize()
+  @volatile
   private var shardId: String = _
 
   /**
@@ -75,47 +72,38 @@ private[kinesis] class KinesisRecordProcessor(
   override def processRecords(batch: List[Record], checkpointer: IRecordProcessorCheckpointer) {
     if (!receiver.isStopped()) {
       try {
-        /*
-         * Notes:
-         * 1) If we try to store the raw ByteBuffer from record.getData(), the Spark Streaming
-         *    Receiver.store(ByteBuffer) attempts to deserialize the ByteBuffer using the
-         *    internally-configured Spark serializer (kryo, etc).
-         * 2) This is not desirable, so we instead store a raw Array[Byte] and decouple
-         *    ourselves from Spark's internal serialization strategy.
-         * 3) For performance, the BlockGenerator is asynchronously queuing elements within its
-         *    memory before creating blocks.  This prevents the small block scenario, but requires
-         *    that you register callbacks to know when a block has been generated and stored
-         *    (WAL is sufficient for storage) before can checkpoint back to the source.
-        */
-        batch.foreach(record => receiver.store(record.getData().array()))
-
-        logDebug(s"Stored:  Worker $workerId stored ${batch.size} records for shardId $shardId")
+        receiver.addRecords(shardId, batch)
+        logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
 
         /*
-         * Checkpoint the sequence number of the last record successfully processed/stored
-         *   in the batch.
-         * In this implementation, we're checkpointing after the given checkpointIntervalMillis.
-         * Note that this logic requires that processRecords() be called AND that it's time to
-         *   checkpoint.  I point this out because there is no background thread running the
-         *   checkpointer.  Checkpointing is tested and trigger only when a new batch comes in.
-         * If the worker is shutdown cleanly, checkpoint will happen (see shutdown() below).
-         * However, if the worker dies unexpectedly, a checkpoint may not happen.
-         * This could lead to records being processed more than once.
+         *
+         * Checkpoint the sequence number of the last record successfully stored.
+         * Note that in this current implementation, the checkpointing occurs only when after
+         * checkpointIntervalMillis from the last checkpoint, AND when there is new record
+         * to process. This leads to the checkpointing lagging behind what records have been
+         * stored by the receiver. Ofcourse, this can lead records processed more than once,
+         * under failures and restarts.
+         *
+         * TODO: Instead of checkpointing here, run a separate timer task to perform
+         * checkpointing so that it checkpoints in a timely manner independent of whether
+         * new records are available or not.
          */
         if (checkpointState.shouldCheckpoint()) {
-          /* Perform the checkpoint */
-          KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(), 4, 100)
+          receiver.getLatestSeqNumToCheckpoint(shardId).foreach { latestSeqNum =>
+            /* Perform the checkpoint */
+            KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(latestSeqNum), 4, 100)
 
-          /* Update the next checkpoint time */
-          checkpointState.advanceCheckpoint()
+            /* Update the next checkpoint time */
+            checkpointState.advanceCheckpoint()
 
-          logDebug(s"Checkpoint:  WorkerId $workerId completed checkpoint of ${batch.size}" +
+            logDebug(s"Checkpoint:  WorkerId $workerId completed checkpoint of ${batch.size}" +
               s" records for shardId $shardId")
-          logDebug(s"Checkpoint:  Next checkpoint is at " +
+            logDebug(s"Checkpoint:  Next checkpoint is at " +
               s" ${checkpointState.checkpointClock.getTimeMillis()} for shardId $shardId")
+          }
         }
       } catch {
-        case e: Throwable => {
+        case NonFatal(e) => {
           /*
            *  If there is a failure within the batch, the batch will not be checkpointed.
            *  This will potentially cause records since the last checkpoint to be processed
@@ -130,7 +118,7 @@ private[kinesis] class KinesisRecordProcessor(
       }
     } else {
       /* RecordProcessor has been stopped. */
-      logInfo(s"Stopped:  The Spark KinesisReceiver has stopped for workerId $workerId" +
+      logInfo(s"Stopped:  KinesisReceiver has stopped for workerId $workerId" +
           s" and shardId $shardId.  No more records will be processed.")
     }
   }
@@ -154,7 +142,11 @@ private[kinesis] class KinesisRecordProcessor(
        * It's now OK to read from the new shards that resulted from a resharding event.
        */
       case ShutdownReason.TERMINATE =>
-        KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(), 4, 100)
+        val latestSeqNumToCheckpointOption = receiver.getLatestSeqNumToCheckpoint(shardId)
+        if (latestSeqNumToCheckpointOption.nonEmpty) {
+          KinesisRecordProcessor.retryRandom(
+            checkpointer.checkpoint(latestSeqNumToCheckpointOption.get), 4, 100)
+        }
 
       /*
        * ZOMBIE Use Case.  NoOp.

@@ -19,16 +19,48 @@ package org.apache.spark.sql
 
 import java.util.Random
 
-import org.scalatest.Matchers._
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.test.SharedSQLContext
 
-import org.apache.spark.SparkFunSuite
-
-class DataFrameStatSuite extends SparkFunSuite  {
-
-  private val sqlCtx = org.apache.spark.sql.test.TestSQLContext
-  import sqlCtx.implicits._
+class DataFrameStatSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   private def toLetter(i: Int): String = (i + 97).toChar.toString
+
+  test("sample with replacement") {
+    val n = 100
+    val data = ctx.sparkContext.parallelize(1 to n, 2).toDF("id")
+    checkAnswer(
+      data.sample(withReplacement = true, 0.05, seed = 13),
+      Seq(5, 10, 52, 73).map(Row(_))
+    )
+  }
+
+  test("sample without replacement") {
+    val n = 100
+    val data = ctx.sparkContext.parallelize(1 to n, 2).toDF("id")
+    checkAnswer(
+      data.sample(withReplacement = false, 0.05, seed = 13),
+      Seq(16, 23, 88, 100).map(Row(_))
+    )
+  }
+
+  test("randomSplit") {
+    val n = 600
+    val data = ctx.sparkContext.parallelize(1 to n, 2).toDF("id")
+    for (seed <- 1 to 5) {
+      val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
+      assert(splits.length == 3, "wrong number of splits")
+
+      assert(splits.reduce((a, b) => a.unionAll(b)).sort("id").collect().toList ==
+        data.collect().toList, "incomplete or wrong split")
+
+      val s = splits.map(_.count())
+      assert(math.abs(s(0) - 100) < 50) // std =  9.13
+      assert(math.abs(s(1) - 200) < 50) // std = 11.55
+      assert(math.abs(s(2) - 300) < 50) // std = 12.25
+    }
+  }
 
   test("pearson correlation") {
     val df = Seq.tabulate(10)(i => (i, 2 * i, i * -1.0)).toDF("a", "b", "c")
@@ -85,6 +117,36 @@ class DataFrameStatSuite extends SparkFunSuite  {
     }
   }
 
+  test("special crosstab elements (., '', null, ``)") {
+    val data = Seq(
+      ("a", Double.NaN, "ho"),
+      (null, 2.0, "ho"),
+      ("a.b", Double.NegativeInfinity, ""),
+      ("b", Double.PositiveInfinity, "`ha`"),
+      ("a", 1.0, null)
+    )
+    val df = data.toDF("1", "2", "3")
+    val ct1 = df.stat.crosstab("1", "2")
+    // column fields should be 1 + distinct elements of second column
+    assert(ct1.schema.fields.length === 6)
+    assert(ct1.collect().length === 4)
+    val ct2 = df.stat.crosstab("1", "3")
+    assert(ct2.schema.fields.length === 5)
+    assert(ct2.schema.fieldNames.contains("ha"))
+    assert(ct2.collect().length === 4)
+    val ct3 = df.stat.crosstab("3", "2")
+    assert(ct3.schema.fields.length === 6)
+    assert(ct3.schema.fieldNames.contains("NaN"))
+    assert(ct3.schema.fieldNames.contains("Infinity"))
+    assert(ct3.schema.fieldNames.contains("-Infinity"))
+    assert(ct3.collect().length === 4)
+    val ct4 = df.stat.crosstab("3", "1")
+    assert(ct4.schema.fields.length === 5)
+    assert(ct4.schema.fieldNames.contains("null"))
+    assert(ct4.schema.fieldNames.contains("a.b"))
+    assert(ct4.collect().length === 4)
+  }
+
   test("Frequent Items") {
     val rows = Seq.tabulate(1000) { i =>
       if (i % 3 == 0) (1, toLetter(1), -1.0) else (i, toLetter(i), i * -1.0)
@@ -93,11 +155,37 @@ class DataFrameStatSuite extends SparkFunSuite  {
 
     val results = df.stat.freqItems(Array("numbers", "letters"), 0.1)
     val items = results.collect().head
-    items.getSeq[Int](0) should contain (1)
-    items.getSeq[String](1) should contain (toLetter(1))
+    assert(items.getSeq[Int](0).contains(1))
+    assert(items.getSeq[String](1).contains(toLetter(1)))
 
     val singleColResults = df.stat.freqItems(Array("negDoubles"), 0.1)
     val items2 = singleColResults.collect().head
-    items2.getSeq[Double](0) should contain (-1.0)
+    assert(items2.getSeq[Double](0).contains(-1.0))
+  }
+
+  test("Frequent Items 2") {
+    val rows = ctx.sparkContext.parallelize(Seq.empty[Int], 4)
+    // this is a regression test, where when merging partitions, we omitted values with higher
+    // counts than those that existed in the map when the map was full. This test should also fail
+    // if anything like SPARK-9614 is observed once again
+    val df = rows.mapPartitionsWithIndex { (idx, iter) =>
+      if (idx == 3) { // must come from one of the later merges, therefore higher partition index
+        Iterator("3", "3", "3", "3", "3")
+      } else {
+        Iterator("0", "1", "2", "3", "4")
+      }
+    }.toDF("a")
+    val results = df.stat.freqItems(Array("a"), 0.25)
+    val items = results.collect().head.getSeq[String](0)
+    assert(items.contains("3"))
+    assert(items.length === 1)
+  }
+
+  test("sampleBy") {
+    val df = ctx.range(0, 100).select((col("id") % 3).as("key"))
+    val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
+    checkAnswer(
+      sampled.groupBy("key").count().orderBy("key"),
+      Seq(Row(0, 5), Row(1, 8)))
   }
 }

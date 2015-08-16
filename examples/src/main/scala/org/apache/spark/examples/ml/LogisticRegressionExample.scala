@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scala.collection.mutable
@@ -157,3 +158,4 @@ object LogisticRegressionExample {
     sc.stop()
   }
 }
+// scalastyle:on println

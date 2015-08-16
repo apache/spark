@@ -54,7 +54,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def this(name: String) = this(name match {
     case "*" => UnresolvedStar(None)
     case _ if name.endsWith(".*") => UnresolvedStar(Some(name.substring(0, name.length - 2)))
-    case _ => UnresolvedAttribute(name)
+    case _ => UnresolvedAttribute.quotedString(name)
   })
 
   /** Creates a column based on the given expression. */
@@ -401,6 +401,14 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   }
 
   /**
+   * True if the current expression is NaN.
+   *
+   * @group expr_ops
+   * @since 1.5.0
+   */
+  def isNaN: Column = IsNaN(expr)
+
+  /**
    * True if the current expression is null.
    *
    * @group expr_ops
@@ -619,8 +627,19 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
+  @deprecated("use isin", "1.5.0")
   @scala.annotation.varargs
-  def in(list: Any*): Column = In(expr, list.map(lit(_).expr))
+  def in(list: Any*): Column = isin(list : _*)
+
+  /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the evaluated values of the arguments.
+   *
+   * @group expr_ops
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def isin(list: Any*): Column = In(expr, list.map(lit(_).expr))
 
   /**
    * SQL like expression.
@@ -734,10 +753,16 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *   df.select($"colA".as("colB"))
    * }}}
    *
+   * If the current column has metadata associated with it, this metadata will be propagated
+   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   *
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: String): Column = Alias(expr, alias)()
+  def as(alias: String): Column = expr match {
+    case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
+    case other => Alias(other, alias)()
+  }
 
   /**
    * (Scala-specific) Assigns the given aliases to the results of a table generating function.
@@ -770,10 +795,16 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *   df.select($"colA".as('colB))
    * }}}
    *
+   * If the current column has metadata associated with it, this metadata will be propagated
+   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   *
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: Symbol): Column = Alias(expr, alias.name)()
+  def as(alias: Symbol): Column = expr match {
+    case ne: NamedExpression => Alias(expr, alias.name)(explicitMetadata = Some(ne.metadata))
+    case other => Alias(other, alias.name)()
+  }
 
   /**
    * Gives the column an alias with metadata.
@@ -860,11 +891,13 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def explain(extended: Boolean): Unit = {
+    // scalastyle:off println
     if (extended) {
       println(expr)
     } else {
       println(expr.prettyString)
     }
+    // scalastyle:on println
   }
 
   /**
@@ -986,7 +1019,7 @@ class ColumnName(name: String) extends Column(name) {
    * Creates a new [[StructField]] of type decimal.
    * @since 1.3.0
    */
-  def decimal: StructField = StructField(name, DecimalType.Unlimited)
+  def decimal: StructField = StructField(name, DecimalType.USER_DEFAULT)
 
   /**
    * Creates a new [[StructField]] of type decimal.

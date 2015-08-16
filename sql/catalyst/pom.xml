@@ -66,7 +66,6 @@
     <dependency>
       <groupId>org.codehaus.janino</groupId>
       <artifactId>janino</artifactId>
-      <version>2.7.8</version>
     </dependency>
   </dependencies>
   <build>

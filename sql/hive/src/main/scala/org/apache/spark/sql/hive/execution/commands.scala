@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.execution.datasources.{ResolvedDataSource, LogicalRelation}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -87,7 +88,7 @@ case class AddJar(path: String) extends RunnableCommand {
     val currentClassLoader = Utils.getContextOrSparkClassLoader
 
     // Add jar to current context
-    val jarURL = new java.io.File(path).toURL
+    val jarURL = new java.io.File(path).toURI.toURL
     val newClassLoader = new java.net.URLClassLoader(Array(jarURL), currentClassLoader)
     Thread.currentThread.setContextClassLoader(newClassLoader)
     // We need to explicitly set the class loader associated with the conf in executionHive's

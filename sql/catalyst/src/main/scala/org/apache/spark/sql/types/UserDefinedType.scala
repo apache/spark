@@ -45,6 +45,9 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
   /** Paired Python UDT class, if exists. */
   def pyUDT: String = null
 
+  /** Serialized Python UDT class, if exists. */
+  def serializedPyClass: String = null
+
   /**
    * Convert the user type to a SQL datum
    *
@@ -77,5 +80,34 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
    * For UDT, asNullable will not change the nullability of its internal sqlType and just returns
    * itself.
    */
-  private[spark] override def asNullable: UserDefinedType[UserType] = this
+  override private[spark] def asNullable: UserDefinedType[UserType] = this
+
+  override private[sql] def acceptsType(dataType: DataType) =
+    this.getClass == dataType.getClass
+}
+
+/**
+ * ::DeveloperApi::
+ * The user defined type in Python.
+ *
+ * Note: This can only be accessed via Python UDF, or accessed as serialized object.
+ */
+private[sql] class PythonUserDefinedType(
+    val sqlType: DataType,
+    override val pyUDT: String,
+    override val serializedPyClass: String) extends UserDefinedType[Any] {
+
+  /* The serialization is handled by UDT class in Python */
+  override def serialize(obj: Any): Any = obj
+  override def deserialize(datam: Any): Any = datam
+
+  /* There is no Java class for Python UDT */
+  override def userClass: java.lang.Class[Any] = null
+
+  override private[sql] def jsonValue: JValue = {
+    ("type" -> "udt") ~
+      ("pyClass" -> pyUDT) ~
+      ("serializedClass" -> serializedPyClass) ~
+      ("sqlType" -> sqlType.jsonValue)
+  }
 }
