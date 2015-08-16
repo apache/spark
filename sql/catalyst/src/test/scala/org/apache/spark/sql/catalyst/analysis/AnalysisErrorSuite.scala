@@ -163,6 +163,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     "except" :: "number of columns" :: testRelation2.output.length.toString ::
       testRelation.output.length.toString :: Nil)
 
+  errorTest(
+    "SPARK-9955: correct error message for aggregate",
+    // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
+    testRelation2.where('bad_column > 1).groupBy('a)(UnresolvedAlias(max('b))),
+    "cannot resolve 'bad_column'" :: Nil)
+
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
     val plan =

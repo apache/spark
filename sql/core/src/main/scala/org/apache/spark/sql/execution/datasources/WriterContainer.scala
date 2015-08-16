@@ -287,7 +287,7 @@ private[sql] class DynamicPartitionWriterContainer(
           PartitioningUtils.escapePathName _, StringType, Seq(Cast(c, StringType)), Seq(StringType))
       val str = If(IsNull(c), Literal(defaultPartitionName), escaped)
       val partitionName = Literal(c.name + "=") :: str :: Nil
-      if (i == 0) partitionName else Literal(Path.SEPARATOR_CHAR.toString) :: partitionName
+      if (i == 0) partitionName else Literal(Path.SEPARATOR) :: partitionName
     }
 
     // Returns the partition path given a partition key.

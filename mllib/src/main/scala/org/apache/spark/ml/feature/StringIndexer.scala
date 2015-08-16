@@ -97,14 +97,17 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
 /**
  * :: Experimental ::
  * Model fitted by [[StringIndexer]].
+ *
  * NOTE: During transformation, if the input column does not exist,
  * [[StringIndexerModel.transform]] would return the input dataset unmodified.
  * This is a temporary fix for the case when target labels do not exist during prediction.
+ *
+ * @param labels  Ordered list of labels, corresponding to indices to be assigned
  */
 @Experimental
 class StringIndexerModel (
     override val uid: String,
-    labels: Array[String]) extends Model[StringIndexerModel] with StringIndexerBase {
+    val labels: Array[String]) extends Model[StringIndexerModel] with StringIndexerBase {
 
   def this(labels: Array[String]) = this(Identifiable.randomUID("strIdx"), labels)
 

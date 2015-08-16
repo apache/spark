@@ -408,6 +408,14 @@ test_that("collect() returns a data.frame", {
   expect_equal(names(rdf)[1], "age")
   expect_equal(nrow(rdf), 3)
   expect_equal(ncol(rdf), 2)
+
+  # collect() returns data correctly from a DataFrame with 0 row
+  df0 <- limit(df, 0)
+  rdf <- collect(df0)
+  expect_true(is.data.frame(rdf))
+  expect_equal(names(rdf)[1], "age")
+  expect_equal(nrow(rdf), 0)
+  expect_equal(ncol(rdf), 2)
 })
 
 test_that("limit() returns DataFrame with the correct number of rows", {
@@ -492,6 +500,18 @@ test_that("head() and first() return the correct data", {
 
   testFirst <- first(df)
   expect_equal(nrow(testFirst), 1)
+
+  # head() and first() return the correct data on
+  # a DataFrame with 0 row
+  df0 <- limit(df, 0)
+
+  testHead <- head(df0)
+  expect_equal(nrow(testHead), 0)
+  expect_equal(ncol(testHead), 2)
+
+  testFirst <- first(df0)
+  expect_equal(nrow(testFirst), 0)
+  expect_equal(ncol(testFirst), 2)
 })
 
 test_that("distinct() and unique on DataFrames", {
