@@ -20,17 +20,14 @@ package org.apache.spark.sql.fuzzing
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.sql.catalyst.plans.JoinType
-
-import scala.reflect.runtime
 import scala.reflect.runtime.{universe => ru}
 import scala.util.Random
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -109,16 +106,23 @@ class RandomDataFrameGenerator(seed: Long, sqlContext: SQLContext) {
  * them in order to construct random queries. We don't have a source of truth for these random
  * queries but nevertheless they are still useful for testing that we don't crash in bad ways.
  */
-class DataFrameFuzzingSuite extends SparkFunSuite {
+class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
 
   val tempDir = Utils.createTempDir()
 
-  private val dataGenerator = new RandomDataFrameGenerator(123, TestSQLContext)
+  private var sqlContext: SQLContext = _
+  private var dataGenerator: RandomDataFrameGenerator = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    sqlContext = new SQLContext(sc)
+    dataGenerator = new RandomDataFrameGenerator(123, sqlContext)
+    sqlContext.conf.setConf(SQLConf.SHUFFLE_PARTITIONS, 10)
+  }
 
   def randomChoice[T](values: Seq[T]): T = {
     values(Random.nextInt(values.length))
   }
-
 
   val m = ru.runtimeMirror(this.getClass.getClassLoader)
 
@@ -257,12 +261,6 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
         throw new Exception(e)
     }
   }
-  //TestSQLContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
-  TestSQLContext.conf.setConf(SQLConf.UNSAFE_ENABLED, true)
-  TestSQLContext.conf.setConf(SQLConf.SORTMERGE_JOIN, true)
-  TestSQLContext.conf.setConf(SQLConf.CODEGEN_ENABLED, true)
-
-  TestSQLContext.conf.setConf(SQLConf.SHUFFLE_PARTITIONS, 10)
 
   val ignoredAnalysisExceptionMessages = Seq(
     "can only be performed on tables with the same number of columns",
@@ -277,25 +275,27 @@ class DataFrameFuzzingSuite extends SparkFunSuite {
     "Cannot resolve column name" // TODO: only ignore for join?
   )
 
-  for (_ <- 1 to 1000) {
-    println("-" * 80)
-    try {
-      val df = dataGenerator.randomDataFrame(
-        numCols = Random.nextInt(2) + 1,
-        numRows = 20,
-        allowComplexTypes = false)
-      val df1 = tryToExecute(applyRandomTransformationToDataFrame(df))
-      val df2 = tryToExecute(applyRandomTransformationToDataFrame(df1))
-    } catch {
-      case e: NoDataGeneratorException =>
-        println("skipped due to lack of data generator")
-      case e: UnresolvedException[_] =>
-        println("skipped due to unresolved")
-      case e: Exception
-        if ignoredAnalysisExceptionMessages.exists {
-          m => e.getMessage.toLowerCase.contains(m.toLowerCase)
-        } => println("Skipped due to expected AnalysisException")
-    }
-  }
 
+  test("fuzz test") {
+      for (_ <- 1 to 1000) {
+        println("-" * 80)
+        try {
+          val df = dataGenerator.randomDataFrame(
+            numCols = Random.nextInt(2) + 1,
+            numRows = 20,
+            allowComplexTypes = false)
+          val df1 = tryToExecute(applyRandomTransformationToDataFrame(df))
+          val df2 = tryToExecute(applyRandomTransformationToDataFrame(df1))
+        } catch {
+          case e: NoDataGeneratorException =>
+            println("skipped due to lack of data generator")
+          case e: UnresolvedException[_] =>
+            println("skipped due to unresolved")
+          case e: Exception
+            if ignoredAnalysisExceptionMessages.exists {
+              m => Option(e.getMessage).getOrElse("").toLowerCase.contains(m.toLowerCase)
+            } => println("Skipped due to expected AnalysisException")
+        }
+      }
+    }
 }
