@@ -150,7 +150,6 @@ class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
       .filterNot(_.name.toString == "drop") // since this can lead to a DataFrame with no columns
       .filterNot(_.name.toString == "describe") // since we cannot run all queries on describe output
       .filterNot(_.name.toString == "dropDuplicates")
-      .filter(_.name.toString == "join")
       .toSeq
   }
 
@@ -262,7 +261,11 @@ class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
+  // TODO: make these regexes.
   val ignoredAnalysisExceptionMessages = Seq(
+    // TODO: filter only for binary type:
+    "cannot be used in grouping expression",
+    "cannot be used in join condition",
     "can only be performed on tables with the same number of columns",
     "number of columns doesn't match",
     "unsupported join type",
