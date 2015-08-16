@@ -124,6 +124,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
    * url named table and connection properties.
    *
+   * Note: Options in this reader will be ignored.
+   *
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, properties: Properties): DataFrame = {
@@ -137,6 +139,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
+   *
+   * Note: Options in this reader will be ignored.
    *
    * @param url JDBC database url of the form `jdbc:subprotocol:subname`
    * @param table Name of the table in the external database.
@@ -172,6 +176,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
+   *
+   * Note: Options in this reader will be ignored.
    *
    * @param url JDBC database url of the form `jdbc:subprotocol:subname`
    * @param table Name of the table in the external database.
