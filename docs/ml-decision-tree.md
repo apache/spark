@@ -53,9 +53,9 @@ More details on parameters can be found in the [Scala API documentation](api/sca
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.DecisionTreeClassifier
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
-import org.apache.spark.ml.feature.{StringIndexer, StringIndexerInverse, VectorIndexer}
+import org.apache.spark.ml.feature.{StringIndexer, IndexToString, VectorIndexer}
+import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.Row
 
 // Load and parse the data file, converting it to a DataFrame.
 val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
@@ -66,26 +66,27 @@ val labelIndexer = new StringIndexer()
   .setInputCol("label")
   .setOutputCol("indexedLabel")
   .fit(data)
-
-// Split the data into training and test sets (30% held out for testing)
-val splits = data.randomSplit(Array(0.7, 0.3))
-val (trainingData, testData) = (splits(0), splits(1))
-
 // Automatically identify categorical features, and index them.
 val featureIndexer = new VectorIndexer()
   .setInputCol("features")
   .setOutputCol("indexedFeatures")
   .setMaxCategories(4) // features with > 4 distinct values are treated as continuous
+  .fit(data)
+
+// Split the data into training and test sets (30% held out for testing)
+val splits = data.randomSplit(Array(0.7, 0.3))
+val (trainingData, testData) = (splits(0), splits(1))
 
 // Train a DecisionTree model.
 val dt = new DecisionTreeClassifier()
-  .setLabelCol("indexedLabel") // "label" is the default
+  .setLabelCol("indexedLabel")
   .setFeaturesCol("indexedFeatures") // "features" is the default
 
 // Convert indexed labels back to original labels.
-val labelConverter = new StringIndexerInverse()
+val labelConverter = new IndexToString()
   .setInputCol("prediction")
   .setOutputCol("predictedLabel")
+  .setLabels(labelIndexer.labels)
 
 // Chain indexers and tree in a Pipeline
 val pipeline = new Pipeline()
@@ -97,20 +98,19 @@ val model = pipeline.fit(trainingData)
 // Make predictions.
 val predictions = model.transform(testData)
 
+// Select example rows to display.
+predictions.select("predictedLabel", "label", "features").show(5)
+
 // Select (prediction, true label) and compute test error
-val labelAndPreds = predictions.select("predictedLabel", "label").map {
-  case Row(pred: Double, label: Double) =>
-    (pred, label)
-}
-
-val testErr = new MulticlassClassificationEvaluator()
-  .setPredictionCol("predictedLabel")
-  .setLabelCol("label")
+val evaluator = new MulticlassClassificationEvaluator()
+  .setLabelCol("indexedLabel")
+  .setPredictionCol("prediction")
   .setMetricName("precision")
+val accuracy = evaluator.evaluate(predictions)
+println("Test Error = " + (1.0 - accuracy))
 
-val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.count()
-println("Test Error = " + testErr)
-println("Learned classification tree model:\n" + model.toDebugString)
+val treeModel = model.stages(2).asInstanceOf[DecisionTreeClassificationModel]
+println("Learned classification tree model:\n" + treeModel.toDebugString)
 {% endhighlight %}
 </div>
 
@@ -119,68 +119,75 @@ println("Learned classification tree model:\n" + model.toDebugString)
 More details on parameters can be found in the [Java API documentation](api/java/org/apache/spark/ml/classification/DecisionTreeClassifier.html).
 
 {% highlight java %}
-import scala.Tuple2;
-
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineModel;
 import org.apache.spark.ml.PipelineStage;
 import org.apache.spark.ml.classification.DecisionTreeClassifier;
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel;
-import org.apache.spark.ml.feature.StringIndexer;
-import org.apache.spark.ml.feature.StringIndexerInverse;
-import org.apache.spark.ml.feature.VectorIndexer;
+import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
+import org.apache.spark.ml.feature.*;
+import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.rdd.RDD;
+import org.apache.spark.sql.DataFrame;
 
 // Load and parse the data file, converting it to a DataFrame.
-String datapath = "data/mllib/sample_libsvm_data.txt";
-DataFrame data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toDF();
-// Split the data into training and test sets (30% held out for testing)
-JavaRDD<LabeledPoint>[] splits = data.randomSplit(new double[]{0.7, 0.3});
-JavaRDD<LabeledPoint> trainingData = splits[0];
-JavaRDD<LabeledPoint> testData = splits[1];
+RDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(sc.sc(), "data/mllib/sample_libsvm_data.txt");
+DataFrame data = jsql.createDataFrame(rdd, LabeledPoint.class);
 
+// Index labels, adding metadata to the label column.
+// Fit on whole dataset to include all labels in index.
+StringIndexerModel labelIndexer = new StringIndexer()
+  .setInputCol("label")
+  .setOutputCol("indexedLabel")
+  .fit(data);
 // Automatically identify categorical features, and index them.
-VectorIndexer indexer = new VectorIndexer()
+VectorIndexerModel featureIndexer = new VectorIndexer()
   .setInputCol("features")
-  .setOutputCol("scaledFeatures")
-  .setMaxCategories(4); // features with > 4 distinct values are treated as continuous
+  .setOutputCol("indexedFeatures")
+  .setMaxCategories(4) // features with > 4 distinct values are treated as continuous
+  .fit(data);
+
+// Split the data into training and test sets (30% held out for testing)
+DataFrame[] splits = data.randomSplit(new double[]{0.7, 0.3});
+DataFrame trainingData = splits[0];
+DataFrame testData = splits[1];
 
 // Train a DecisionTree model.
 DecisionTreeClassifier dt = new DecisionTreeClassifier()
-  .setFeaturesCol("scaledFeatures"); // "features" is the default
+  .setLabelCol("indexedLabel")
+  .setFeaturesCol("indexedFeatures"); // "features" is the default
 
-// Chain indexer and tree in a Pipeline
+// Convert indexed labels back to original labels.
+IndexToString labelConverter = new IndexToString()
+  .setInputCol("prediction")
+  .setOutputCol("predictedLabel")
+  .setLabels(labelIndexer.labels());
+
+// Chain indexers and tree in a Pipeline
 Pipeline pipeline = new Pipeline()
-  .setStages(new PipelineStage[]{indexer, dt});
+  .setStages(new PipelineStage[]{labelIndexer, featureIndexer, dt, labelConverter});
 
-// Train model.  This also runs the indexer.
+// Train model.  This also runs the indexers.
 PipelineModel model = pipeline.fit(trainingData);
 
 // Make predictions.
 DataFrame predictions = model.transform(testData);
 
-// Select (prediction, true label) and compute test error
-JavaPairRDD<Double, Double> labelAndPreds =
-  predictions.select("label", "prediction")
-    .mapToPair(new PairFunction<Row, Double, Double>() {
-      @Override
-      public Tuple2<Double, Double> call(Row row) {
-        return new Tuple2<Double, Double>(row.getDouble(0), row.getDouble(1));
-      }
-    });
+// Select example rows to display.
+predictions.select("predictedLabel", "label", "features").show(5);
 
-// Evaluate model on test instances and compute test error
-Double testErr =
-  1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
-    @Override
-    public Boolean call(Tuple2<Double, Double> pl) {
-      return !pl._1().equals(pl._2());
-    }
-  }).count() / testData.count();
-System.out.println("Test Error: " + testErr);
-System.out.println("Learned classification tree model:\n" + model.toDebugString());
+// Select (prediction, true label) and compute test error
+MulticlassClassificationEvaluator evaluator = new MulticlassClassificationEvaluator()
+  .setLabelCol("indexedLabel")
+  .setPredictionCol("prediction")
+  .setMetricName("precision");
+double accuracy = evaluator.evaluate(predictions);
+System.out.println("Test Error = " + (1.0 - accuracy));
+
+DecisionTreeClassificationModel treeModel =
+  (DecisionTreeClassificationModel)(model.stages()[2]);
+System.out.println("Learned classification tree model:\n" + treeModel.toDebugString());
 {% endhighlight %}
 </div>
 
@@ -189,40 +196,47 @@ System.out.println("Learned classification tree model:\n" + model.toDebugString(
 More details on parameters can be found in the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.classification.DecisionTreeClassifier).
 
 {% highlight python %}
-from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.tree import DecisionTree, DecisionTreeModel
+from pyspark.ml import Pipeline
+from pyspark.ml.classification import DecisionTreeClassifier
+from pyspark.ml.feature import StringIndexer, VectorIndexer
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file, converting it to a DataFrame.
-data = MLUtils.loadLibSVMFile(sc, 'data/mllib/sample_libsvm_data.txt').toDF()
+data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+
+# Index labels, adding metadata to the label column.
+# Fit on whole dataset to include all labels in index.
+labelIndexer = StringIndexer(inputCol="label", outputCol="indexedLabel").fit(data)
+# Automatically identify categorical features, and index them.
+# We specify maxCategories so features with > 4 distinct values are treated as continuous.
+featureIndexer = VectorIndexer(inputCol="features", outputCol="indexedFeatures", maxCategories=4).fit(data)
+
 # Split the data into training and test sets (30% held out for testing)
 (trainingData, testData) = data.randomSplit([0.7, 0.3])
 
-# Automatically identify categorical features, and index them.
-# Features with > 4 distinct values are treated as continuous
-indexer = VectorIndexer(inputCol="features",
-                        outputCol="scaledFeatures",
-                        maxCategories=4)
-
 # Train a DecisionTree model.
-dt = DecisionTreeClassifier(featuresCol="scaledFeatures") // "features" is the default
+dt = DecisionTreeClassifier(labelCol="indexedLabel", featuresCol="indexedFeatures") # "features" is the default
 
-# Chain indexer and tree in a Pipeline
-pipeline = Pipeline(stages=[indexer, dt])
+# Chain indexers and tree in a Pipeline
+pipeline = Pipeline(stages=[labelIndexer, featureIndexer, dt])
 
-# Train model.  This also runs the indexer.
+# Train model.  This also runs the indexers.
 model = pipeline.fit(trainingData)
 
 # Make predictions.
 predictions = model.transform(testData)
 
-# Select (prediction, true label) and compute test error
-labelAndPreds = predictions.select("prediction", "label").map(lambda row: (row[0], row[1]))
-testErr = labelAndPreds.filter(lambda (v, p): v != p).count() / float(testData.count())
+# Select example rows to display.
+predictions.select("prediction", "indexedLabel", "features").show(5)
 
-print('Test Error = %g' % testErr)
-print('Learned classification tree model:')
-print(model.toDebugString())
+# Select (prediction, true label) and compute test error
+evaluator = MulticlassClassificationEvaluator(labelCol="indexedLabel", predictionCol="prediction", metricName="precision")
+accuracy = evaluator.evaluate(predictions)
+print "Test Error = %g" % (1.0 - accuracy)
+
+treeModel = model.stages[2]
+print treeModel # summary only
 {% endhighlight %}
 </div>
 
