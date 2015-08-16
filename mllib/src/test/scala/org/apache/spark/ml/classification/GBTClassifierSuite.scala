@@ -22,6 +22,7 @@ import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.LeafNode
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -91,6 +92,9 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setStepSize(0.1)
       .setCheckpointInterval(2)
     val model = gbt.fit(df)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
 
     sc.checkpointDir = None
     Utils.deleteRecursively(tempDir)

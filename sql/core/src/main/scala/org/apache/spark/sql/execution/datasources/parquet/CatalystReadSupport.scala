@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 
 private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with Logging {
+  // Called after `init()` when initializing Parquet record reader.
   override def prepareForRead(
       conf: Configuration,
       keyValueMetaData: JMap[String, String],
@@ -51,19 +52,30 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
           // available if the target file is written by Spark SQL.
           .orElse(metadata.get(CatalystReadSupport.SPARK_METADATA_KEY))
       }.map(StructType.fromString).getOrElse {
-        logDebug("Catalyst schema not available, falling back to Parquet schema")
+        logInfo("Catalyst schema not available, falling back to Parquet schema")
         toCatalyst.convert(parquetRequestedSchema)
       }
 
-    logDebug(s"Catalyst schema used to read Parquet files: $catalystRequestedSchema")
+    logInfo {
+      s"""Going to read the following fields from the Parquet file:
+         |
+         |Parquet form:
+         |$parquetRequestedSchema
+         |
+         |Catalyst form:
+         |$catalystRequestedSchema
+       """.stripMargin
+    }
+
     new CatalystRecordMaterializer(parquetRequestedSchema, catalystRequestedSchema)
   }
 
+  // Called before `prepareForRead()` when initializing Parquet record reader.
   override def init(context: InitContext): ReadContext = {
     val conf = context.getConfiguration
 
     // If the target file was written by Spark SQL, we should be able to find a serialized Catalyst
-    // schema of this file from its the metadata.
+    // schema of this file from its metadata.
     val maybeRowSchema = Option(conf.get(RowWriteSupport.SPARK_ROW_SCHEMA))
 
     // Optional schema of requested columns, in the form of a string serialized from a Catalyst
@@ -141,7 +153,6 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
         maybeRequestedSchema.map(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA -> _) ++
         maybeRowSchema.map(RowWriteSupport.SPARK_ROW_SCHEMA -> _)
 
-    logInfo(s"Going to read Parquet file with these requested columns: $parquetRequestedSchema")
     new ReadContext(parquetRequestedSchema, metadata)
   }
 }

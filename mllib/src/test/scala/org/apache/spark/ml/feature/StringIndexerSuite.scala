@@ -17,18 +17,22 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkException
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.functions.col
 
 class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("params") {
     ParamsSuite.checkParams(new StringIndexer)
     val model = new StringIndexerModel("indexer", Array("a", "b"))
+    val modelWithoutUid = new StringIndexerModel(Array("a", "b"))
     ParamsSuite.checkParams(model)
+    ParamsSuite.checkParams(modelWithoutUid)
   }
 
   test("StringIndexer") {
@@ -38,6 +42,10 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("label")
       .setOutputCol("labelIndex")
       .fit(df)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(indexer)
+
     val transformed = indexer.transform(df)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
@@ -48,19 +56,6 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     // a -> 0, b -> 2, c -> 1
     val expected = Set((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0))
     assert(output === expected)
-    // convert reverse our transform
-    val reversed = indexer.invert("labelIndex", "label2")
-      .transform(transformed)
-      .select("id", "label2")
-    assert(df.collect().map(r => (r.getInt(0), r.getString(1))).toSet ===
-      reversed.collect().map(r => (r.getInt(0), r.getString(1))).toSet)
-    // Check invert using only metadata
-    val inverse2 = new StringIndexerInverse()
-      .setInputCol("labelIndex")
-      .setOutputCol("label2")
-    val reversed2 = inverse2.transform(transformed).select("id", "label2")
-    assert(df.collect().map(r => (r.getInt(0), r.getString(1))).toSet ===
-      reversed2.collect().map(r => (r.getInt(0), r.getString(1))).toSet)
   }
 
   test("StringIndexerUnseen") {
@@ -119,5 +114,55 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("labelIndex")
     val df = sqlContext.range(0L, 10L)
     assert(indexerModel.transform(df).eq(df))
+  }
+
+  test("IndexToString params") {
+    val idxToStr = new IndexToString()
+    ParamsSuite.checkParams(idxToStr)
+  }
+
+  test("IndexToString.transform") {
+    val labels = Array("a", "b", "c")
+    val df0 = sqlContext.createDataFrame(Seq(
+      (0, "a"), (1, "b"), (2, "c"), (0, "a")
+    )).toDF("index", "expected")
+
+    val idxToStr0 = new IndexToString()
+      .setInputCol("index")
+      .setOutputCol("actual")
+      .setLabels(labels)
+    idxToStr0.transform(df0).select("actual", "expected").collect().foreach {
+      case Row(actual, expected) =>
+        assert(actual === expected)
+    }
+
+    val attr = NominalAttribute.defaultAttr.withValues(labels)
+    val df1 = df0.select(col("index").as("indexWithAttr", attr.toMetadata()), col("expected"))
+
+    val idxToStr1 = new IndexToString()
+      .setInputCol("indexWithAttr")
+      .setOutputCol("actual")
+    idxToStr1.transform(df1).select("actual", "expected").collect().foreach {
+      case Row(actual, expected) =>
+        assert(actual === expected)
+    }
+  }
+
+  test("StringIndexer, IndexToString are inverses") {
+    val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
+    val df = sqlContext.createDataFrame(data).toDF("id", "label")
+    val indexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+      .fit(df)
+    val transformed = indexer.transform(df)
+    val idx2str = new IndexToString()
+      .setInputCol("labelIndex")
+      .setOutputCol("sameLabel")
+      .setLabels(indexer.labels)
+    idx2str.transform(transformed).select("label", "sameLabel").collect().foreach {
+      case Row(a: String, b: String) =>
+        assert(a === b)
+    }
   }
 }

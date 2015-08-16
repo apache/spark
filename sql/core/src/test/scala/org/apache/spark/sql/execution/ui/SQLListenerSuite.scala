@@ -25,12 +25,12 @@ import org.apache.spark.sql.execution.metric.LongSQLMetricValue
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 
-class SQLListenerSuite extends SparkFunSuite {
+class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
+  import testImplicits._
 
   private def createTestDataFrame: DataFrame = {
-    import TestSQLContext.implicits._
     Seq(
       (1, 1),
       (2, 2)
@@ -74,7 +74,7 @@ class SQLListenerSuite extends SparkFunSuite {
   }
 
   test("basic") {
-    val listener = new SQLListener(TestSQLContext)
+    val listener = new SQLListener(ctx)
     val executionId = 0
     val df = createTestDataFrame
     val accumulatorIds =
@@ -212,7 +212,7 @@ class SQLListenerSuite extends SparkFunSuite {
   }
 
   test("onExecutionEnd happens before onJobEnd(JobSucceeded)") {
-    val listener = new SQLListener(TestSQLContext)
+    val listener = new SQLListener(ctx)
     val executionId = 0
     val df = createTestDataFrame
     listener.onExecutionStart(
@@ -241,7 +241,7 @@ class SQLListenerSuite extends SparkFunSuite {
   }
 
   test("onExecutionEnd happens before multiple onJobEnd(JobSucceeded)s") {
-    val listener = new SQLListener(TestSQLContext)
+    val listener = new SQLListener(ctx)
     val executionId = 0
     val df = createTestDataFrame
     listener.onExecutionStart(
@@ -281,7 +281,7 @@ class SQLListenerSuite extends SparkFunSuite {
   }
 
   test("onExecutionEnd happens before onJobEnd(JobFailed)") {
-    val listener = new SQLListener(TestSQLContext)
+    val listener = new SQLListener(ctx)
     val executionId = 0
     val df = createTestDataFrame
     listener.onExecutionStart(

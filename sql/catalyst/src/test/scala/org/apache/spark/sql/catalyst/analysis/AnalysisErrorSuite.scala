@@ -17,14 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.scalatest.BeforeAndAfter
-
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.types._
@@ -42,7 +38,7 @@ case class UnresolvedTestPlan() extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }
 
-class AnalysisErrorSuite extends AnalysisTest with BeforeAndAfter {
+class AnalysisErrorSuite extends AnalysisTest {
   import TestRelations._
 
   def errorTest(
@@ -149,6 +145,11 @@ class AnalysisErrorSuite extends AnalysisTest with BeforeAndAfter {
     UnresolvedTestPlan(),
     "unresolved" :: Nil)
 
+  errorTest(
+    "SPARK-9955: correct error message for aggregate",
+    // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
+    testRelation2.where('bad_column > 1).groupBy('a)(UnresolvedAlias(max('b))),
+    "cannot resolve 'bad_column'" :: Nil)
 
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)

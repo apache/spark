@@ -175,7 +175,9 @@ private[spark] object ShuffleMemoryManager {
     val minPageSize = 1L * 1024 * 1024   // 1MB
     val maxPageSize = 64L * minPageSize  // 64MB
     val cores = if (numCores > 0) numCores else Runtime.getRuntime.availableProcessors()
-    val safetyFactor = 8
+    // Because of rounding to next power of 2, we may have safetyFactor as 8 in worst case
+    val safetyFactor = 16
+    // TODO(davies): don't round to next power of 2
     val size = ByteArrayMethods.nextPowerOf2(maxMemory / cores / safetyFactor)
     val default = math.min(maxPageSize, math.max(minPageSize, size))
     conf.getSizeAsBytes("spark.buffer.pageSize", default)
