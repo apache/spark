@@ -865,11 +865,14 @@ roc.show()
 roc.select("FPR").show()
 println(binarySummary.areaUnderROC)
 
-// Print all threshold, fMeasure pairs.
+// Get the threshold corresponding to the maximum F-Measure and rerun LogisticRegression with
+// this selected threshold.
 val fMeasure = binarySummary.fMeasureByThreshold
-fMeasure.foreach { case Row(thresh: Double, fscore: Double) =>
-  println(s"Threshold: $thresh, F-Measure: $fscore") }
-
+val maxFMeasure = fMeasure.select(max("F-Measure")).head().getDouble(0)
+val bestThreshold = fMeasure.where($"F-Measure" === maxFMeasure).
+  select("threshold").head().getDouble(0)
+logReg.setThreshold(bestThreshold)
+logReg.fit(logRegDataFrame)
 {% endhighlight %}
 </div>
 
@@ -889,6 +892,7 @@ import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+import static org.apache.spark.sql.functions.*;
 
 SparkConf conf = new SparkConf().setAppName("LogisticRegressionSummary");
 JavaSparkContext jsc = new JavaSparkContext(conf);
@@ -932,11 +936,14 @@ roc.show();
 roc.select("FPR").show();
 System.out.println(binarySummary.areaUnderROC());
 
-// Print all threshold, fMeasure pairs.
+// Get the threshold corresponding to the maximum F-Measure and rerun LogisticRegression with
+// this selected threshold.
 DataFrame fMeasure = binarySummary.fMeasureByThreshold();
-for (Row r: fMeasure.collect()) {
-  System.out.println("Threshold: " + r.get(0) + ", F-Measure: " + r.get(1));
-}
+double maxFMeasure = fMeasure.select(max("F-Measure")).head().getDouble(0);
+double bestThreshold = fMeasure.where(fMeasure.col("F-Measure").equalTo(maxFMeasure)).
+  select("threshold").head().getDouble(0);
+logReg.setThreshold(bestThreshold);
+logReg.fit(logRegDataFrame);
 {% endhighlight %}
 </div>
 </div>
