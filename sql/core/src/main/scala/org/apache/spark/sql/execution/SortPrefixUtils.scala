@@ -19,9 +19,8 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, PrefixComparator}
 
 
@@ -37,61 +36,53 @@ object SortPrefixUtils {
 
   def getPrefixComparator(sortOrder: SortOrder): PrefixComparator = {
     sortOrder.dataType match {
-      case StringType => PrefixComparators.STRING
-      case BooleanType | ByteType | ShortType | IntegerType | LongType => PrefixComparators.INTEGRAL
-      case FloatType => PrefixComparators.FLOAT
-      case DoubleType => PrefixComparators.DOUBLE
+      case StringType =>
+        if (sortOrder.isAscending) PrefixComparators.STRING else PrefixComparators.STRING_DESC
+      case BinaryType =>
+        if (sortOrder.isAscending) PrefixComparators.BINARY else PrefixComparators.BINARY_DESC
+      case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType =>
+        if (sortOrder.isAscending) PrefixComparators.LONG else PrefixComparators.LONG_DESC
+      case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
+        if (sortOrder.isAscending) PrefixComparators.LONG else PrefixComparators.LONG_DESC
+      case FloatType | DoubleType =>
+        if (sortOrder.isAscending) PrefixComparators.DOUBLE else PrefixComparators.DOUBLE_DESC
+      case dt: DecimalType =>
+        if (sortOrder.isAscending) PrefixComparators.DOUBLE else PrefixComparators.DOUBLE_DESC
       case _ => NoOpPrefixComparator
     }
   }
 
-  def getPrefixComputer(sortOrder: SortOrder): InternalRow => Long = {
-    sortOrder.dataType match {
-      case StringType => (row: InternalRow) => {
-        PrefixComparators.STRING.computePrefix(sortOrder.child.eval(row).asInstanceOf[UTF8String])
+  /**
+   * Creates the prefix comparator for the first field in the given schema, in ascending order.
+   */
+  def getPrefixComparator(schema: StructType): PrefixComparator = {
+    if (schema.nonEmpty) {
+      val field = schema.head
+      getPrefixComparator(SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
+    } else {
+      new PrefixComparator {
+        override def compare(prefix1: Long, prefix2: Long): Int = 0
       }
-      case BooleanType =>
-        (row: InternalRow) => {
-          val exprVal = sortOrder.child.eval(row)
-          if (exprVal == null) PrefixComparators.INTEGRAL.NULL_PREFIX
-          else if (sortOrder.child.eval(row).asInstanceOf[Boolean]) 1
-          else 0
+    }
+  }
+
+  /**
+   * Creates the prefix computer for the first field in the given schema, in ascending order.
+   */
+  def createPrefixGenerator(schema: StructType): UnsafeExternalRowSorter.PrefixComputer = {
+    if (schema.nonEmpty) {
+      val boundReference = BoundReference(0, schema.head.dataType, nullable = true)
+      val prefixProjection = UnsafeProjection.create(
+        SortPrefix(SortOrder(boundReference, Ascending)))
+      new UnsafeExternalRowSorter.PrefixComputer {
+        override def computePrefix(row: InternalRow): Long = {
+          prefixProjection.apply(row).getLong(0)
         }
-      case ByteType =>
-        (row: InternalRow) => {
-          val exprVal = sortOrder.child.eval(row)
-          if (exprVal == null) PrefixComparators.INTEGRAL.NULL_PREFIX
-          else sortOrder.child.eval(row).asInstanceOf[Byte]
-        }
-      case ShortType =>
-        (row: InternalRow) => {
-          val exprVal = sortOrder.child.eval(row)
-          if (exprVal == null) PrefixComparators.INTEGRAL.NULL_PREFIX
-          else sortOrder.child.eval(row).asInstanceOf[Short]
-        }
-      case IntegerType =>
-        (row: InternalRow) => {
-          val exprVal = sortOrder.child.eval(row)
-          if (exprVal == null) PrefixComparators.INTEGRAL.NULL_PREFIX
-          else sortOrder.child.eval(row).asInstanceOf[Int]
-        }
-      case LongType =>
-        (row: InternalRow) => {
-          val exprVal = sortOrder.child.eval(row)
-          if (exprVal == null) PrefixComparators.INTEGRAL.NULL_PREFIX
-          else sortOrder.child.eval(row).asInstanceOf[Long]
-        }
-      case FloatType => (row: InternalRow) => {
-        val exprVal = sortOrder.child.eval(row)
-        if (exprVal == null) PrefixComparators.FLOAT.NULL_PREFIX
-        else PrefixComparators.FLOAT.computePrefix(sortOrder.child.eval(row).asInstanceOf[Float])
       }
-      case DoubleType => (row: InternalRow) => {
-        val exprVal = sortOrder.child.eval(row)
-        if (exprVal == null) PrefixComparators.DOUBLE.NULL_PREFIX
-        else PrefixComparators.DOUBLE.computePrefix(sortOrder.child.eval(row).asInstanceOf[Double])
+    } else {
+      new UnsafeExternalRowSorter.PrefixComputer {
+        override def computePrefix(row: InternalRow): Long = 0
       }
-      case _ => (row: InternalRow) => 0L
     }
   }
 }

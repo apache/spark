@@ -28,14 +28,40 @@ import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.execution.RDDConversions
+import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, PartitionSpec, Partition}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql._
 import org.apache.spark.util.SerializableConfiguration
+
+/**
+ * ::DeveloperApi::
+ * Data sources should implement this trait so that they can register an alias to their data source.
+ * This allows users to give the data source alias as the format type over the fully qualified
+ * class name.
+ *
+ * A new instance of this class with be instantiated each time a DDL call is made.
+ *
+ * @since 1.5.0
+ */
+@DeveloperApi
+trait DataSourceRegister {
+
+  /**
+   * The string that represents the format that this data source provider uses. This is
+   * overridden by children to provide a nice alias for the data source. For example:
+   *
+   * {{{
+   *   override def format(): String = "parquet"
+   * }}}
+   *
+   * @since 1.5.0
+   */
+  def shortName(): String
+}
 
 /**
  * ::DeveloperApi::
@@ -342,6 +368,17 @@ abstract class OutputWriter {
    * @since 1.4.0
    */
   def close(): Unit
+
+  private var converter: InternalRow => Row = _
+
+  protected[sql] def initConverter(dataSchema: StructType) = {
+    converter =
+      CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
+  }
+
+  protected[sql] def writeInternal(row: InternalRow): Unit = {
+    write(converter(row))
+  }
 }
 
 /**
@@ -369,9 +406,9 @@ abstract class OutputWriter {
  */
 @Experimental
 abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec])
-  extends BaseRelation with Logging {
+  extends BaseRelation with FileRelation with Logging {
 
-  logInfo("Constructing HadoopFsRelation")
+  override def toString: String = getClass.getSimpleName + paths.mkString("[", ",", "]")
 
   def this() = this(None)
 
@@ -449,8 +486,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
             val spec = discoverPartitions()
             val partitionColumnTypes = spec.partitionColumns.map(_.dataType)
             val castedPartitions = spec.partitions.map { case p @ Partition(values, path) =>
-              val literals = values.toSeq.zip(partitionColumnTypes).map {
-                case (value, dataType) => Literal.create(value, dataType)
+              val literals = partitionColumnTypes.zipWithIndex.map { case (dt, i) =>
+                Literal.create(values.get(i, dt), dt)
               }
               val castedValues = partitionSchema.zip(literals).map { case (field, literal) =>
                 Cast(literal, field.dataType).eval()
@@ -478,6 +515,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    * @since 1.4.0
    */
   def paths: Array[String]
+
+  override def inputFiles: Array[String] = cachedLeafStatuses().map(_.getPath.toString).toArray
 
   /**
    * Partition columns.  Can be either defined by [[userDefinedPartitionColumns]] or automatically
@@ -523,7 +562,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     })
   }
 
-  private[sql] final def buildScan(
+  private[sql] def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String],
@@ -581,6 +620,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    *
    * @since 1.4.0
    */
+  // TODO Tries to eliminate the extra Catalyst-to-Scala conversion when `needConversion` is true
+  //
+  // PR #7626 separated `Row` and `InternalRow` completely.  One of the consequences is that we can
+  // no longer treat an `InternalRow` containing Catalyst values as a `Row`.  Thus we have to
+  // introduce another row value conversion for data sources whose `needConversion` is true.
   def buildScan(requiredColumns: Array[String], inputFiles: Array[FileStatus]): RDD[Row] = {
     // Yeah, to workaround serialization...
     val dataSchema = this.dataSchema
@@ -592,22 +636,34 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       BoundReference(dataSchema.fieldIndex(col), field.dataType, field.nullable)
     }.toSeq
 
-    val rdd = buildScan(inputFiles)
-    val converted =
+    val rdd: RDD[Row] = buildScan(inputFiles)
+    val converted: RDD[InternalRow] =
       if (needConversion) {
         RDDConversions.rowToRowRdd(rdd, dataSchema.fields.map(_.dataType))
       } else {
-        rdd.map(_.asInstanceOf[InternalRow])
+        rdd.asInstanceOf[RDD[InternalRow]]
       }
+
     converted.mapPartitions { rows =>
       val buildProjection = if (codegenEnabled) {
         GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
       } else {
         () => new InterpretedMutableProjection(requiredOutput, dataSchema.toAttributes)
       }
-      val mutableProjection = buildProjection()
-      rows.map(r => mutableProjection(r).asInstanceOf[Row])
-    }
+
+      val projectedRows = {
+        val mutableProjection = buildProjection()
+        rows.map(r => mutableProjection(r))
+      }
+
+      if (needConversion) {
+        val requiredSchema = StructType(requiredColumns.map(dataSchema(_)))
+        val toScala = CatalystTypeConverters.createToScalaConverter(requiredSchema)
+        projectedRows.map(toScala(_).asInstanceOf[Row])
+      } else {
+        projectedRows
+      }
+    }.asInstanceOf[RDD[Row]]
   }
 
   /**

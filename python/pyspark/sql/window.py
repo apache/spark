@@ -64,7 +64,7 @@ class Window(object):
         Creates a :class:`WindowSpec` with the partitioning defined.
         """
         sc = SparkContext._active_spark_context
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.partitionBy(_to_java_cols(cols))
+        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(_to_java_cols(cols))
         return WindowSpec(jspec)
 
 

@@ -154,9 +154,9 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
         row.setByte(0, 0)
         row.setInt(1, sm.numRows)
         row.setInt(2, sm.numCols)
-        row.update(3, sm.colPtrs.toSeq)
-        row.update(4, sm.rowIndices.toSeq)
-        row.update(5, sm.values.toSeq)
+        row.update(3, new GenericArrayData(sm.colPtrs.map(_.asInstanceOf[Any])))
+        row.update(4, new GenericArrayData(sm.rowIndices.map(_.asInstanceOf[Any])))
+        row.update(5, new GenericArrayData(sm.values.map(_.asInstanceOf[Any])))
         row.setBoolean(6, sm.isTransposed)
 
       case dm: DenseMatrix =>
@@ -165,7 +165,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
         row.setInt(2, dm.numCols)
         row.setNullAt(3)
         row.setNullAt(4)
-        row.update(5, dm.values.toSeq)
+        row.update(5, new GenericArrayData(dm.values.map(_.asInstanceOf[Any])))
         row.setBoolean(6, dm.isTransposed)
     }
     row
@@ -174,17 +174,17 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
   override def deserialize(datum: Any): Matrix = {
     datum match {
       case row: InternalRow =>
-        require(row.length == 7,
-          s"MatrixUDT.deserialize given row with length ${row.length} but requires length == 7")
+        require(row.numFields == 7,
+          s"MatrixUDT.deserialize given row with length ${row.numFields} but requires length == 7")
         val tpe = row.getByte(0)
         val numRows = row.getInt(1)
         val numCols = row.getInt(2)
-        val values = row.getAs[Iterable[Double]](5).toArray
+        val values = row.getArray(5).toDoubleArray()
         val isTransposed = row.getBoolean(6)
         tpe match {
           case 0 =>
-            val colPtrs = row.getAs[Iterable[Int]](3).toArray
-            val rowIndices = row.getAs[Iterable[Int]](4).toArray
+            val colPtrs = row.getArray(3).toIntArray()
+            val rowIndices = row.getArray(4).toIntArray()
             new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
           case 1 =>
             new DenseMatrix(numRows, numCols, values, isTransposed)
@@ -257,8 +257,7 @@ class DenseMatrix(
     this(numRows, numCols, values, false)
 
   override def equals(o: Any): Boolean = o match {
-    case m: DenseMatrix =>
-      m.numRows == numRows && m.numCols == numCols && Arrays.equals(toArray, m.toArray)
+    case m: Matrix => toBreeze == m.toBreeze
     case _ => false
   }
 
@@ -518,6 +517,11 @@ class SparseMatrix(
       colPtrs: Array[Int],
       rowIndices: Array[Int],
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
+
+  override def equals(o: Any): Boolean = o match {
+    case m: Matrix => toBreeze == m.toBreeze
+    case _ => false
+  }
 
   private[mllib] def toBreeze: BM[Double] = {
      if (!isTransposed) {

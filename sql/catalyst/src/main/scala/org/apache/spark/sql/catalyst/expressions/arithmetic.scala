@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.Interval
+import org.apache.spark.unsafe.types.CalendarInterval
 
 
 case class UnaryMinus(child: Expression) extends UnaryExpression with ExpectsInputTypes {
@@ -36,13 +36,20 @@ case class UnaryMinus(child: Expression) extends UnaryExpression with ExpectsInp
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
     case dt: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
-    case dt: NumericType => defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})(-($c))")
-    case dt: IntervalType => defineCodeGen(ctx, ev, c => s"$c.negate()")
+    case dt: NumericType => nullSafeCodeGen(ctx, ev, eval => {
+      val originValue = ctx.freshName("origin")
+      // codegen would fail to compile if we just write (-($c))
+      // for example, we could not write --9223372036854775808L in code
+      s"""
+        ${ctx.javaType(dt)} $originValue = (${ctx.javaType(dt)})($eval);
+        ${ev.primitive} = (${ctx.javaType(dt)})(-($originValue));
+      """})
+    case dt: CalendarIntervalType => defineCodeGen(ctx, ev, c => s"$c.negate()")
   }
 
   protected override def nullSafeEval(input: Any): Any = {
-    if (dataType.isInstanceOf[IntervalType]) {
-      input.asInstanceOf[Interval].negate()
+    if (dataType.isInstanceOf[CalendarIntervalType]) {
+      input.asInstanceOf[CalendarInterval].negate()
     } else {
       numeric.negate(input)
     }
@@ -65,8 +72,10 @@ case class UnaryPositive(child: Expression) extends UnaryExpression with Expects
 /**
  * A function that get the absolute value of the numeric value.
  */
-case class Abs(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with CodegenFallback {
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the absolute value of the numeric value",
+  extended = "> SELECT _FUNC_('-1');\n1")
+case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
@@ -119,8 +128,8 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (dataType.isInstanceOf[IntervalType]) {
-      input1.asInstanceOf[Interval].add(input2.asInstanceOf[Interval])
+    if (dataType.isInstanceOf[CalendarIntervalType]) {
+      input1.asInstanceOf[CalendarInterval].add(input2.asInstanceOf[CalendarInterval])
     } else {
       numeric.plus(input1, input2)
     }
@@ -132,7 +141,7 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
     case ByteType | ShortType =>
       defineCodeGen(ctx, ev,
         (eval1, eval2) => s"(${ctx.javaType(dataType)})($eval1 $symbol $eval2)")
-    case IntervalType =>
+    case CalendarIntervalType =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.add($eval2)")
     case _ =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
@@ -148,8 +157,8 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (dataType.isInstanceOf[IntervalType]) {
-      input1.asInstanceOf[Interval].subtract(input2.asInstanceOf[Interval])
+    if (dataType.isInstanceOf[CalendarIntervalType]) {
+      input1.asInstanceOf[CalendarInterval].subtract(input2.asInstanceOf[CalendarInterval])
     } else {
       numeric.minus(input1, input2)
     }
@@ -161,7 +170,7 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
     case ByteType | ShortType =>
       defineCodeGen(ctx, ev,
         (eval1, eval2) => s"(${ctx.javaType(dataType)})($eval1 $symbol $eval2)")
-    case IntervalType =>
+    case CalendarIntervalType =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.subtract($eval2)")
     case _ =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
@@ -311,7 +320,7 @@ case class MaxOf(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def nullable: Boolean = left.nullable && right.nullable
 
-  private lazy val ordering = TypeUtils.getOrdering(dataType)
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
 
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
@@ -365,7 +374,7 @@ case class MinOf(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def nullable: Boolean = left.nullable && right.nullable
 
-  private lazy val ordering = TypeUtils.getOrdering(dataType)
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
 
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
@@ -502,6 +511,6 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
 
   private def pmod(a: Decimal, n: Decimal): Decimal = {
     val r = a % n
-    if (r.compare(Decimal(0)) < 0) {(r + n) % n} else r
+    if (r.compare(Decimal.ZERO) < 0) {(r + n) % n} else r
   }
 }

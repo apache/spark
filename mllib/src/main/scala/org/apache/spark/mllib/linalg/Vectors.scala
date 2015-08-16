@@ -26,7 +26,7 @@ import scala.collection.JavaConverters._
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
@@ -159,15 +159,13 @@ sealed trait Vector extends Serializable {
 }
 
 /**
- * :: DeveloperApi ::
+ * :: AlphaComponent ::
  *
  * User-defined type for [[Vector]] which allows easy interaction with SQL
  * via [[org.apache.spark.sql.DataFrame]].
- *
- * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
-@DeveloperApi
-private[spark] class VectorUDT extends UserDefinedType[Vector] {
+@AlphaComponent
+class VectorUDT extends UserDefinedType[Vector] {
 
   override def sqlType: StructType = {
     // type: 0 = sparse, 1 = dense
@@ -187,15 +185,15 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
         val row = new GenericMutableRow(4)
         row.setByte(0, 0)
         row.setInt(1, size)
-        row.update(2, indices.toSeq)
-        row.update(3, values.toSeq)
+        row.update(2, new GenericArrayData(indices.map(_.asInstanceOf[Any])))
+        row.update(3, new GenericArrayData(values.map(_.asInstanceOf[Any])))
         row
       case DenseVector(values) =>
         val row = new GenericMutableRow(4)
         row.setByte(0, 1)
         row.setNullAt(1)
         row.setNullAt(2)
-        row.update(3, values.toSeq)
+        row.update(3, new GenericArrayData(values.map(_.asInstanceOf[Any])))
         row
     }
   }
@@ -203,17 +201,17 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
   override def deserialize(datum: Any): Vector = {
     datum match {
       case row: InternalRow =>
-        require(row.length == 4,
-          s"VectorUDT.deserialize given row with length ${row.length} but requires length == 4")
+        require(row.numFields == 4,
+          s"VectorUDT.deserialize given row with length ${row.numFields} but requires length == 4")
         val tpe = row.getByte(0)
         tpe match {
           case 0 =>
             val size = row.getInt(1)
-            val indices = row.getAs[Iterable[Int]](2).toArray
-            val values = row.getAs[Iterable[Double]](3).toArray
+            val indices = row.getArray(2).toIntArray()
+            val values = row.getArray(3).toDoubleArray()
             new SparseVector(size, indices, values)
           case 1 =>
-            val values = row.getAs[Iterable[Double]](3).toArray
+            val values = row.getArray(3).toDoubleArray()
             new DenseVector(values)
         }
     }
@@ -634,6 +632,8 @@ class SparseVector(
   require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
     s" indices match the dimension of the values. You provided ${indices.length} indices and " +
     s" ${values.length} values.")
+  require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
+    s"which exceeds the specified vector size ${size}.")
 
   override def toString: String =
     s"($size,${indices.mkString("[", ",", "]")},${values.mkString("[", ",", "]")})"
@@ -763,6 +763,30 @@ class SparseVector(
 
       maxIdx
     }
+  }
+
+  /**
+   * Create a slice of this vector based on the given indices.
+   * @param selectedIndices Unsorted list of indices into the vector.
+   *                        This does NOT do bound checking.
+   * @return  New SparseVector with values in the order specified by the given indices.
+   *
+   * NOTE: The API needs to be discussed before making this public.
+   *       Also, if we have a version assuming indices are sorted, we should optimize it.
+   */
+  private[spark] def slice(selectedIndices: Array[Int]): SparseVector = {
+    var currentIdx = 0
+    val (sliceInds, sliceVals) = selectedIndices.flatMap { origIdx =>
+      val iIdx = java.util.Arrays.binarySearch(this.indices, origIdx)
+      val i_v = if (iIdx >= 0) {
+        Iterator((currentIdx, this.values(iIdx)))
+      } else {
+        Iterator()
+      }
+      currentIdx += 1
+      i_v
+    }.unzip
+    new SparseVector(selectedIndices.length, sliceInds.toArray, sliceVals.toArray)
   }
 }
 

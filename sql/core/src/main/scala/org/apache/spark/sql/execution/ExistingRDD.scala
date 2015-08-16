@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.{Row, SQLContext}
 
@@ -95,8 +96,21 @@ private[sql] case class LogicalRDD(
 /** Physical plan node for scanning data from an RDD. */
 private[sql] case class PhysicalRDD(
     output: Seq[Attribute],
-    rdd: RDD[InternalRow]) extends LeafNode {
+    rdd: RDD[InternalRow],
+    extraInformation: String) extends LeafNode {
+
   protected override def doExecute(): RDD[InternalRow] = rdd
+
+  override def simpleString: String = "Scan " + extraInformation + output.mkString("[", ",", "]")
+}
+
+private[sql] object PhysicalRDD {
+  def createFromDataSource(
+      output: Seq[Attribute],
+      rdd: RDD[InternalRow],
+      relation: BaseRelation): PhysicalRDD = {
+    PhysicalRDD(output, rdd, relation.toString)
+  }
 }
 
 /** Logical plan node for scanning data from a local collection. */

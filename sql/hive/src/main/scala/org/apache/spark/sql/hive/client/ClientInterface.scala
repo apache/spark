@@ -72,12 +72,10 @@ private[hive] case class HiveTable(
 
   def isPartitioned: Boolean = partitionColumns.nonEmpty
 
-  def getPartitions(predicates: Seq[Expression]): Seq[HivePartition] = {
-    predicates match {
-      case Nil => client.getAllPartitions(this)
-      case _ => client.getPartitionsByFilter(this, predicates)
-    }
-  }
+  def getAllPartitions: Seq[HivePartition] = client.getAllPartitions(this)
+
+  def getPartitions(predicates: Seq[Expression]): Seq[HivePartition] =
+    client.getPartitionsByFilter(this, predicates)
 
   // Hive does not support backticks when passing names to the client.
   def qualifiedName: String = s"$database.$name"
@@ -89,6 +87,13 @@ private[hive] case class HiveTable(
  * shared classes.
  */
 private[hive] trait ClientInterface {
+
+  /** Returns the Hive Version of this client. */
+  def version: HiveVersion
+
+  /** Returns the configuration for the given key in the current session. */
+  def getConf(key: String, defaultValue: String): String
+
   /**
    * Runs a HiveQL command using Hive, returning the results as a list of strings.  Each row will
    * result in one string.

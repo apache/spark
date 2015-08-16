@@ -28,6 +28,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.{Logging, SparkException, SparkFunSuite}
 import org.apache.spark.ml.recommendation.ALS._
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
@@ -374,6 +375,9 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
       }
     logInfo(s"Test RMSE is $rmse.")
     assert(rmse < targetRMSE)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
   }
 
   test("exact rank-1 matrix") {

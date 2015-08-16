@@ -31,7 +31,6 @@ import org.scalatest.BeforeAndAfterAll
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-
 // The data where the partitioning key exists only in the directory structure.
 case class OrcParData(intField: Int, stringField: String)
 
@@ -40,7 +39,7 @@ case class OrcParDataWithKey(intField: Int, pi: Int, stringField: String, ps: St
 
 // TODO This test suite duplicates ParquetPartitionDiscoverySuite a lot
 class OrcPartitionDiscoverySuite extends QueryTest with BeforeAndAfterAll {
-  val defaultPartitionName = ConfVars.DEFAULTPARTITIONNAME.defaultVal
+  val defaultPartitionName = ConfVars.DEFAULTPARTITIONNAME.defaultStrVal
 
   def withTempDir(f: File => Unit): Unit = {
     val dir = Utils.createTempDir().getCanonicalFile

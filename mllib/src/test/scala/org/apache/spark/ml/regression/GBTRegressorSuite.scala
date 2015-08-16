@@ -19,13 +19,15 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.util.Utils
 
 
 /**
@@ -81,11 +83,32 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setMaxDepth(2)
       .setMaxIter(2)
     val model = gbt.fit(df)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
     val preds = model.transform(df)
     val predictions = preds.select("prediction").map(_.getDouble(0))
     // Checks based on SPARK-8736 (to ensure it is not doing classification)
     assert(predictions.max() > 2)
     assert(predictions.min() < -1)
+  }
+
+  test("Checkpointing") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+    sc.setCheckpointDir(path)
+
+    val df = sqlContext.createDataFrame(data)
+    val gbt = new GBTRegressor()
+      .setMaxDepth(2)
+      .setMaxIter(5)
+      .setStepSize(0.1)
+      .setCheckpointInterval(2)
+    val model = gbt.fit(df)
+
+    sc.checkpointDir = None
+    Utils.deleteRecursively(tempDir)
+
   }
 
   // TODO: Reinstate test once runWithValidation is implemented  SPARK-7132

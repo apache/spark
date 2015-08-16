@@ -37,7 +37,7 @@ private[spark] class ShuffleMapStage(
 
   override def toString: String = "ShuffleMapStage " + id
 
-  var numAvailableOutputs: Long = 0
+  var numAvailableOutputs: Int = 0
 
   def isAvailable: Boolean = numAvailableOutputs == numPartitions
 
