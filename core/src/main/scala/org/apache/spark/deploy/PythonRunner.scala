@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 import scala.util.Try
 
-import org.apache.spark.{SparkException, SparkUserAppException}
+import org.apache.spark.SparkUserAppException
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -49,22 +49,18 @@ object PythonRunner {
     val gatewayServer = new py4j.GatewayServer(null, 0)
     val thread = new Thread(new Runnable() {
       override def run(): Unit = Utils.logUncaughtExceptions {
-        gatewayServer.start(false)
+        gatewayServer.start()
       }
     })
-    thread.setName("py4j-gateway")
+    thread.setName("py4j-gateway-init")
     thread.setDaemon(true)
     thread.start()
 
     // Wait until the gateway server has started, so that we know which port is it bound to.
-    // Fail if the thread exits before it's set.
-    while (thread.isAlive() && gatewayServer.getListeningPort() == -1) {
-      thread.join(10)
-    }
-    if (gatewayServer.getListeningPort() == -1) {
-      gatewayServer.shutdown()
-      throw new SparkException("Python GatewayServer failed to start.")
-    }
+    // `gatewayServer.start()` will start a new thread and run the server code there, after
+    // initializing the socket, so the thread started above will end as soon as the server is
+    // ready to serve connections.
+    thread.join()
 
     // Build up a PYTHONPATH that includes the Spark assembly JAR (where this class is), the
     // python directories in SPARK_HOME (if set), and any files in the pyFiles argument
