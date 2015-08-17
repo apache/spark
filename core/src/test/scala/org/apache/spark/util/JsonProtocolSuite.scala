@@ -163,7 +163,8 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   test("ExceptionFailure backward compatibility") {
-    val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, null, None)
+    val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, null,
+      None, None)
     val oldEvent = JsonProtocol.taskEndReasonToJson(exceptionFailure)
       .removeField({ _._1 == "Full Stack Trace" })
     assertEquals(exceptionFailure, JsonProtocol.taskEndReasonFromJson(oldEvent))

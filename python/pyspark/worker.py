@@ -146,5 +146,5 @@ if __name__ == '__main__':
     java_port = int(sys.stdin.readline())
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect(("127.0.0.1", java_port))
-    sock_file = sock.makefile("a+", 65536)
+    sock_file = sock.makefile("rwb", 65536)
     main(sock_file, sock_file)

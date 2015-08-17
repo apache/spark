@@ -22,9 +22,8 @@ import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.{QueryTest, SQLContext, SaveMode}
 
 class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
-  override val sqlContext: SQLContext = TestHive
-
-  import sqlContext.sql
+  override val _sqlContext: SQLContext = TestHive
+  private val sqlContext = _sqlContext
 
   private val df = sqlContext.range(10).coalesce(1)
 

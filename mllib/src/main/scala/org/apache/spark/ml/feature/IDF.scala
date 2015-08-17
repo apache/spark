@@ -114,6 +114,6 @@ class IDFModel private[ml] (
 
   override def copy(extra: ParamMap): IDFModel = {
     val copied = new IDFModel(uid, idfModel)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }
