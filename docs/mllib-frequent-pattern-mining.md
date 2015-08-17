@@ -97,15 +97,15 @@ for (FPGrowth.FreqItemset<String> itemset: model.freqItemsets().toJavaRDD().coll
 </div>
 </div>
 
-## Prefix Span
+## PrefixSpan
 
-Prefix Span is a sequential pattern mining algorithm described in
-[Mortazavi-Asl et al., Mining Sequential Patterns by Pattern-Growth: The
+PrefixSpan is a sequential pattern mining algorithm described in
+[Pei et al., Mining Sequential Patterns by Pattern-Growth: The
 PrefixSpan Approach](http://dx.doi.org/10.1109%2FTKDE.2004.77). We refer
 the reader to the referenced paper for formalizing the sequential
 pattern mining problem.
 
-MLlib's FP-growth implementation takes the following parameters:
+MLlib's PrefixSpan implementation takes the following parameters:
 
 * `minSupport`: the minimum support required to be considered a frequent
   sequential pattern.
@@ -121,11 +121,19 @@ MLlib's FP-growth implementation takes the following parameters:
 
 **Examples**
 
+The following example illustrates PrefixSpan running on the sequences
+(using same notation as Pei et al):
+
+  <(12)3>
+  <1(32)(12)>
+  <(12)5>
+  <6>
+
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
 [`PrefixSpan`](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpan) implements the
-Prefix Span algorithm.
+PrefixSpan algorithm.
 Calling `PrefixSpan.run` returns a
 [`PrefixSpanModel`](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpan)
 that stores the frequent sequences with their frequencies.
@@ -133,17 +141,16 @@ that stores the frequent sequences with their frequencies.
 {% highlight scala %}
 import org.apache.spark.mllib.fpm.PrefixSpan
 
-val sequences = Seq(
-  Array(Array(1, 2), Array(3)),
-  Array(Array(1), Array(3, 2), Array(1, 2)),
-  Array(Array(1, 2), Array(5)),
-  Array(Array(6)))
-val rdd = sc.parallelize(sequences, 2).cache()
-
+val sequences = sc.parallelize(Seq(
+    Array(Array(1, 2), Array(3)),
+    Array(Array(1), Array(3, 2), Array(1, 2)),
+    Array(Array(1, 2), Array(5)),
+    Array(Array(6))
+  ), 2).cache()
 val prefixSpan = new PrefixSpan()
   .setMinSupport(0.5)
   .setMaxPatternLength(5)
-val model = prefixSpan.run(rdd)
+val model = prefixSpan.run(sequences)
 model.freqSequences.collect().foreach { freqSequence =>
 println(
   freqSequence.sequence.map(_.mkString("[", ", ", "]")).mkString("[", ", ", "]") + ", " + freqSequence.freq)
@@ -155,7 +162,7 @@ println(
 <div data-lang="java" markdown="1">
 
 [`PrefixSpan`](api/java/org/apache/spark/mllib/fpm/PrefixSpan.html) implements the
-Prefix Span algorithm.
+PrefixSpan algorithm.
 Calling `PrefixSpan.run` returns a
 [`PrefixSpanModel`](api/java/org/apache/spark/mllib/fpm/PrefixSpanModel.html)
 that stores the frequent sequences with their frequencies.
