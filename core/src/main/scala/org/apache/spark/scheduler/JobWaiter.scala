@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import scala.util.Try
+
 import org.apache.spark.Logging
 
 import sun.misc.{Signal, SignalHandler}
@@ -34,7 +36,7 @@ private[spark] class JobWaiter[T](
 
   private val sigint: Signal = new Signal("INT")
   @volatile
-  private var _originalHandler: SignalHandler = _
+  private var _originalHandler: SignalHandler = null
 
   def attachSigintHandler(): SignalHandler = {
     Signal.handle(sigint, new SignalHandler with Logging {
@@ -49,7 +51,9 @@ private[spark] class JobWaiter[T](
   }
 
   def detachSigintHandler(): Unit = {
-    Signal.handle(sigint, _originalHandler)
+    if (_originalHandler != null) {
+      Signal.handle(sigint, _originalHandler)
+    }
   }
 
   private var finishedTasks = 0
@@ -93,11 +97,11 @@ private[spark] class JobWaiter[T](
   }
 
   def awaitResult(): JobResult = synchronized {
-    _originalHandler = attachSigintHandler()
+    Try(_originalHandler = attachSigintHandler())
     while (!_jobFinished) {
       this.wait()
     }
-    detachSigintHandler()
+    Try(detachSigintHandler())
     return jobResult
   }
 }
