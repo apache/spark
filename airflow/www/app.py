@@ -218,6 +218,7 @@ class DagModelView(wwwutils.SuperUserMixin, ModelView):
     form_widget_args = {
         'last_scheduler_run': {'disabled': True},
         'fileloc': {'disabled': True},
+        'is_paused': {'disabled': True},
         'last_pickled': {'disabled': True},
         'pickle_id': {'disabled': True},
         'last_loaded': {'disabled': True},

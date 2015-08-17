@@ -11,6 +11,7 @@
 {% block body %}
   <h2>DAGs</h2>
 
+  <div id="main_content" style="display:none;">
     <table id="dags" class="table table-striped table-bordered">
         <thead>
             <tr>
@@ -31,7 +32,7 @@
                 <td class="text-center" style="width:10px;">
                     {% if dag_id in orm_dags %}
                     <a href="/admin/dagmodel/edit/?id={{ dag_id }}" title="Info">
-                        <span class="glyphicon glyphicon-edit" aria-hidden="true"></span>
+                        <span class="glyphicon glyphicon-info-sign" aria-hidden="true"></span>
                     </a>
                     {% endif %}
                 </td>
@@ -89,6 +90,7 @@
         {% endfor %}
         </tbody>
     </table>
+  </div>
 {% endblock %}
 
 {% block tail %}
@@ -115,6 +117,7 @@
         "iDisplayLength": 100,
         "bSort": false,
       });
+      $("#main_content").show(250);
       diameter = 25;
       circle_margin = 4;
       stroke_width = 2;
