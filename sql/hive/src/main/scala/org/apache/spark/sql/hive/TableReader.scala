@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
@@ -27,7 +29,7 @@ import org.apache.hadoop.hive.serde2.Deserializer
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.io.Writable
-import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
+import org.apache.hadoop.mapred.{FileInputFormat, FileSplit, InputFormat, InputSplit, JobConf}
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark.Logging
@@ -186,6 +188,46 @@ class HadoopTableReader(
 
     val hivePartitions = verifyPartitionPath(partitionToDeserializer)
 
+    // This map holds input splits per Hive partition path.
+    val inputSplitsCache = collection.mutable.Map[String, ArrayBuffer[InputSplit]]()
+
+    // Compute input splits for all the partitions together if they have the same input format.
+    // This is faster than computing them individually because listing multiple input dirs can be
+    // done in parallel using "mapreduce.input.fileinputformat.list-status.num-threads".
+    if (sc.conf.parallelFileListing) {
+      val inputFormatClass = hivePartitions.head._1.getInputFormatClass
+      val homogeneousInputFormat = hivePartitions.forall {
+        case (part, _) => part.getInputFormatClass == inputFormatClass
+      }
+
+      if (homogeneousInputFormat) {
+        val jobConf = new JobConf(hiveExtraConf)
+        val minPartitions = _minSplitsPerRDD * hivePartitions.size
+        val combinedPaths = hivePartitions.map { case (part, _) =>
+          applyFilterIfNeeded(part.getDataLocation, filterOpt)
+        }.mkString(",")
+        val inputFormat = ReflectionUtils
+          .newInstance(inputFormatClass.asInstanceOf[Class[_]], jobConf)
+          .asInstanceOf[FileInputFormat[_, _]]
+        HadoopTableReader.initializeLocalJobConfFunc(combinedPaths, relation.tableDesc)(jobConf)
+        SparkHadoopUtil.get.addCredentials(jobConf)
+        val inputSplits = inputFormat.getSplits(jobConf, minPartitions)
+        val groupedInputSplits = inputSplits.groupBy(_.asInstanceOf[FileSplit].getPath.getParent)
+        for (path <- combinedPaths.split(",")) {
+          val cache = inputSplitsCache.get(path).getOrElse {
+            val emptyArray: ArrayBuffer[InputSplit] = ArrayBuffer()
+            inputSplitsCache.put(path, emptyArray)
+            emptyArray
+          }
+          for ((key, values) <- groupedInputSplits) {
+            if (key.toString.startsWith(path)) {
+              cache ++= values
+            }
+          }
+        }
+      }
+    }
+
     val hivePartitionRDDs = hivePartitions.map { case (partition, partDeserializer) =>
       val partDesc = Utilities.getPartitionDesc(partition)
       val partPath = partition.getDataLocation
@@ -229,7 +271,9 @@ class HadoopTableReader(
       // Fill all partition keys to the given MutableRow object
       fillPartitionKeys(partValues, mutableRow)
 
-      createHadoopRdd(tableDesc, inputPathStr, ifc).mapPartitions { iter =>
+      val inputSplits = inputSplitsCache.get(inputPathStr).map(_.toArray)
+
+      createHadoopRdd(tableDesc, inputPathStr, ifc, inputSplits).mapPartitions { iter =>
         val hconf = broadcastedHiveConf.value.value
         val deserializer = localDeserializer.newInstance()
         deserializer.initialize(hconf, partProps)
@@ -242,30 +286,6 @@ class HadoopTableReader(
           mutableRow, tableSerDe)
       }
     }.toSeq
-
-    // Compute input splits for all the partitions together if they have the same input format.
-    // This is faster than computing them individually because listing multiple input dirs can be
-    // done in parallel using "mapreduce.input.fileinputformat.list-status.num-threads".
-    if (sc.conf.parallelFileListing) {
-      val homogeneousInputFormat =
-        if (hivePartitions.groupBy { case (part, _) => part.getInputFormatClass }.size == 1) {
-          true
-        } else {
-          false
-        }
-
-      if (homogeneousInputFormat) {
-        val combinedPaths = hivePartitions.map { case (part, _) => part.getLocation }.toSeq
-        val jobConf = new JobConf(hiveExtraConf)
-        val minPartitions = _minSplitsPerRDD * hivePartitions.size
-        val inputFormatClass = hivePartitions.head._1.getInputFormatClass
-        HadoopTableReader.initializeLocalJobConfFunc(combinedPaths, relation.tableDesc)(jobConf)
-        val inputFormat =
-          ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], jobConf)
-            .asInstanceOf[FileInputFormat[_, _]]
-        SparkHadoopUtil.get.computeInputSplits(combinedPaths, jobConf, inputFormat, minPartitions)
-      }
-    }
 
     // Even if we don't use any partitions, we still need an empty RDD
     if (hivePartitionRDDs.size == 0) {
@@ -296,9 +316,10 @@ class HadoopTableReader(
   private def createHadoopRdd(
     tableDesc: TableDesc,
     path: String,
-    inputFormatClass: Class[InputFormat[Writable, Writable]]): RDD[Writable] = {
+    inputFormatClass: Class[InputFormat[Writable, Writable]],
+    inputSplitsCache: Option[Array[InputSplit]] = None): RDD[Writable] = {
 
-    val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(Seq(path), tableDesc) _
+    val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
 
     val rdd = new HadoopRDD(
       sc.sparkContext,
@@ -307,7 +328,8 @@ class HadoopTableReader(
       inputFormatClass,
       classOf[Writable],
       classOf[Writable],
-      _minSplitsPerRDD)
+      _minSplitsPerRDD,
+      inputSplitsCache)
 
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)
@@ -319,8 +341,8 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
    * Curried. After given an argument for 'path', the resulting JobConf => Unit closure is used to
    * instantiate a HadoopRDD.
    */
-  def initializeLocalJobConfFunc(path: Seq[String], tableDesc: TableDesc)(jobConf: JobConf) {
-    FileInputFormat.setInputPaths(jobConf, path.map(new Path(_)): _*)
+  def initializeLocalJobConfFunc(path: String, tableDesc: TableDesc)(jobConf: JobConf) {
+    FileInputFormat.setInputPaths(jobConf, path.split(",").map(new Path(_)): _*)
     if (tableDesc != null) {
       PlanUtils.configureInputJobPropertiesForStorageHandler(tableDesc)
       Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
