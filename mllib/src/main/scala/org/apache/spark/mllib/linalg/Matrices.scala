@@ -891,7 +891,7 @@ object Matrices {
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `Matrix` with size `numRows` x `numCols` and values of zeros
-   * @since 1.3.0
+   * @since 1.2.0
    */
   def zeros(numRows: Int, numCols: Int): Matrix = DenseMatrix.zeros(numRows, numCols)
 
@@ -900,7 +900,7 @@ object Matrices {
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `Matrix` with size `numRows` x `numCols` and values of ones
-   * @since 1.3.0
+   * @since 1.2.0
    */
   def ones(numRows: Int, numCols: Int): Matrix = DenseMatrix.ones(numRows, numCols)
 
@@ -908,7 +908,7 @@ object Matrices {
    * Generate a dense Identity Matrix in `Matrix` format.
    * @param n number of rows and columns of the matrix
    * @return `Matrix` with size `n` x `n` and values of ones on the diagonal
-   * @since 1.3.0
+   * @since 1.2.0
    */
   def eye(n: Int): Matrix = DenseMatrix.eye(n)
 
@@ -971,7 +971,7 @@ object Matrices {
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `Matrix` with size `values.length` x `values.length` and `values`
    *         on the diagonal
-   * @since 1.3.0
+   * @since 1.2.0
    */
   def diag(vector: Vector): Matrix = DenseMatrix.diag(vector)
 
