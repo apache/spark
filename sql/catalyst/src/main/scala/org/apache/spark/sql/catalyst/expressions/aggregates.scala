@@ -650,6 +650,7 @@ case class FirstFunction(expr: Expression, base: AggregateExpression1) extends A
   var result: Any = null
 
   override def update(input: InternalRow): Unit = {
+    // We ignore null values.
     if (result == null) {
       result = expr.eval(input)
     }
@@ -679,10 +680,14 @@ case class LastFunction(expr: Expression, base: AggregateExpression1) extends Ag
   var result: Any = null
 
   override def update(input: InternalRow): Unit = {
-    result = input
+    val value = expr.eval(input)
+    // We ignore null values.
+    if (value != null) {
+      result = value
+    }
   }
 
   override def eval(input: InternalRow): Any = {
-    if (result != null) expr.eval(result.asInstanceOf[InternalRow]) else null
+    result
   }
 }

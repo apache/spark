@@ -480,6 +480,21 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
         Row(0, null, 1, 1, null, 0) :: Nil)
   }
 
+  test("test Last implemented based on AggregateExpression1") {
+    // TODO: Remove this test once we remove AggregateExpression1.
+    import org.apache.spark.sql.functions._
+    val df = Seq((1, 1), (2, 2), (3, 3)).toDF("i", "j").repartition(1)
+    withSQLConf(
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+      SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
+
+      checkAnswer(
+        df.groupBy("i").agg(last("j")),
+        df
+      )
+    }
+  }
+
   test("error handling") {
     withSQLConf("spark.sql.useAggregate2" -> "false") {
       val errorMessage = intercept[AnalysisException] {
