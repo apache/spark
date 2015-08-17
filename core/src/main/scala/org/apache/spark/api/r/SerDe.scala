@@ -181,6 +181,7 @@ private[spark] object SerDe {
   // Boolean -> logical
   // Float -> double
   // Double -> double
+  // Decimal -> double
   // Long -> double
   // Array[Byte] -> raw
   // Date -> Date
@@ -219,6 +220,10 @@ private[spark] object SerDe {
         case "float" | "java.lang.Float" =>
           writeType(dos, "double")
           writeDouble(dos, value.asInstanceOf[Float].toDouble)
+        case "decimal" | "java.math.BigDecimal" =>
+          writeType(dos, "double")
+          val javaDecimal = value.asInstanceOf[java.math.BigDecimal]
+          writeDouble(dos, scala.math.BigDecimal(javaDecimal).toDouble)
         case "double" | "java.lang.Double" =>
           writeType(dos, "double")
           writeDouble(dos, value.asInstanceOf[Double])
