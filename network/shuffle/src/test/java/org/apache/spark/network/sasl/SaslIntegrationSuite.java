@@ -78,8 +78,8 @@ public class SaslIntegrationSuite {
     when(secretKeyHolder.getSecretKey(eq("app-1"))).thenReturn("app-1");
     when(secretKeyHolder.getSaslUser(eq("app-2"))).thenReturn("app-2");
     when(secretKeyHolder.getSecretKey(eq("app-2"))).thenReturn("app-2");
-    when(secretKeyHolder.getSaslUser(anyString())).thenReturn("someUser");
-    when(secretKeyHolder.getSecretKey(anyString())).thenReturn("somePassword");
+    when(secretKeyHolder.getSaslUser(anyString())).thenReturn("other-app");
+    when(secretKeyHolder.getSecretKey(anyString())).thenReturn("correct-password");
 
     TransportServerBootstrap bootstrap = new SaslServerBootstrap(conf, secretKeyHolder);
     server = context.createServer(Arrays.asList(bootstrap));
@@ -113,13 +113,17 @@ public class SaslIntegrationSuite {
 
   @Test
   public void testBadClient() {
+    SecretKeyHolder badKeyHolder = mock(SecretKeyHolder.class);
+    when(badKeyHolder.getSaslUser(anyString())).thenReturn("other-app");
+    when(badKeyHolder.getSecretKey(anyString())).thenReturn("wrong-password");
     clientFactory = context.createClientFactory(
       Lists.<TransportClientBootstrap>newArrayList(
-        new SaslClientBootstrap(conf, "unknown-app", secretKeyHolder)));
+        new SaslClientBootstrap(conf, "unknown-app", badKeyHolder)));
 
     try {
       // Bootstrap should fail on startup.
       clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+      fail("Connection should have failed.");
     } catch (Exception e) {
       assertTrue(e.getMessage(), e.getMessage().contains("Mismatched response"));
     }
@@ -189,7 +193,7 @@ public class SaslIntegrationSuite {
       client1 = clientFactory.createClient(TestUtils.getLocalHost(),
         blockServer.getPort());
 
-      final AtomicBoolean result = new AtomicBoolean(false);
+      final AtomicBoolean gotSecurityException = new AtomicBoolean(false);
 
       BlockFetchingListener listener = new BlockFetchingListener() {
         @Override
@@ -199,7 +203,8 @@ public class SaslIntegrationSuite {
 
         @Override
         public synchronized void onBlockFetchFailure(String blockId, Throwable exception) {
-          result.set(exception.getMessage().contains(SecurityException.class.getName()));
+          gotSecurityException.set(
+            exception.getMessage().contains(SecurityException.class.getName()));
           notifyAll();
         }
       };
@@ -211,7 +216,8 @@ public class SaslIntegrationSuite {
         fetcher.start();
         listener.wait();
       }
-      assertTrue("Should have failed to fetch blocks from non-authorized app.", result.get());
+      assertTrue("Should have failed to fetch blocks from non-authorized app.",
+        gotSecurityException.get());
 
       // Register an executor so that the next steps work.
       ExecutorShuffleInfo executorInfo = new ExecutorShuffleInfo(
@@ -222,7 +228,6 @@ public class SaslIntegrationSuite {
 
       // Make a successful request to fetch blocks, which creates a new stream. But do not actually
       // fetch any blocks, to keep the stream open.
-      result.set(false);
       OpenBlocks openMessage = new OpenBlocks("app-1", "0", blockIds);
       byte[] response = client1.sendRpcSync(openMessage.toByteArray(), 10000);
       StreamHandle stream = (StreamHandle) BlockTransferMessage.Decoder.fromByteArray(response);
@@ -244,17 +249,18 @@ public class SaslIntegrationSuite {
 
         @Override
         public synchronized void onFailure(int chunkIndex, Throwable e) {
-          result.set(e.getMessage().contains(SecurityException.class.getName()));
+          gotSecurityException.set(e.getMessage().contains(SecurityException.class.getName()));
           notifyAll();
         }
       };
 
-      result.set(false);
+      gotSecurityException.set(false);
       synchronized (callback) {
         client2.fetchChunk(streamId, 0, callback);
         callback.wait();
       }
-      assertTrue("Should have failed to fetch blocks from non-authorized stream.", result.get());
+      assertTrue("Should have failed to fetch blocks from non-authorized stream.",
+        gotSecurityException.get());
     } finally {
       if (client1 != null) {
         client1.close();

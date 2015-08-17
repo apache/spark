@@ -88,15 +88,16 @@ public class TransportClient implements Closeable {
   /**
    * Returns the ID used by the client to authenticate itself when authentication is enabled.
    *
-   * @return The client ID.
+   * @return The client ID, or null if authentication is disabled.
    */
   public String getClientId() {
     return clientId;
   }
 
   /**
-   * Sets the authenticated client ID. This is meant to be used by the authentication layer;
-   * trying to set a different client ID after it's been set will result in an exception.
+   * Sets the authenticated client ID. This is meant to be used by the authentication layer.
+   *
+   * Trying to set a different client ID after it's been set will result in an exception.
    */
   public void setClientId(String id) {
     Preconditions.checkState(clientId == null, "Client ID has already been set.");
