@@ -759,6 +759,12 @@ private[sql] object ParquetRelation extends Logging {
     }.toOption
   }
 
+  // JUL loggers must be held by a strong reference, otherwise they may get destroyed by GC.
+  // However, the root JUL logger used by Parquet isn't properly referenced.  Here we keep
+  // references to loggers in both parquet-mr <= 1.6 and >= 1.7
+  val apacheParquetLogger: JLogger = JLogger.getLogger(classOf[ApacheParquetLog].getPackage.getName)
+  val parquetLogger: JLogger = JLogger.getLogger("parquet")
+
   // Parquet initializes its own JUL logger in a static block which always prints to stdout.  Here
   // we redirect the JUL logger via SLF4J JUL bridge handler.
   val redirectParquetLogsViaSLF4J: Unit = {
@@ -772,7 +778,7 @@ private[sql] object ParquetRelation extends Logging {
     // scalastyle:off classforname
     Class.forName(classOf[ApacheParquetLog].getName)
     // scalastyle:on classforname
-    redirect(JLogger.getLogger(classOf[ApacheParquetLog].getName))
+    redirect(JLogger.getLogger(classOf[ApacheParquetLog].getPackage.getName))
 
     // For parquet-mr 1.6.0 and lower versions bundled with Hive, which are under `parquet`
     // namespace.
@@ -780,7 +786,7 @@ private[sql] object ParquetRelation extends Logging {
       // scalastyle:off classforname
       Class.forName("parquet.Log")
       // scalastyle:on classforname
-      redirect(JLogger.getLogger("parquet.Log"))
+      redirect(JLogger.getLogger("parquet"))
     } catch { case _: Throwable =>
       // SPARK-9974: com.twitter:parquet-hadoop-bundle:1.6.0 is not packaged into the assembly jar
       // when Spark is built with SBT. So `parquet.Log` may not be found.  This try/catch block
