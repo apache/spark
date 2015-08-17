@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseVector => BreezeVector}
+import org.apache.spark.broadcast.Broadcast
 
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
@@ -51,6 +52,9 @@ class GaussianMixtureModel(
 
   require(weights.length == gaussians.length, "Length of weight and Gaussian arrays must match")
 
+  private var bcWeights: Option[Broadcast[Array[Double]]] = None
+  private var bcDists: Option[Broadcast[Array[MultivariateGaussian]]] = None
+
   override protected def formatVersion = "1.0"
 
   override def save(sc: SparkContext, path: String): Unit = {
@@ -82,10 +86,16 @@ class GaussianMixtureModel(
    */
   def predictSoft(points: RDD[Vector]): RDD[Array[Double]] = {
     val sc = points.sparkContext
-    val bcDists = sc.broadcast(gaussians)
-    val bcWeights = sc.broadcast(weights)
+    bcDists match {
+      case None => bcDists = Some(sc.broadcast(gaussians))
+      case _ =>
+    }
+    bcWeights match {
+      case None => bcWeights = Some(sc.broadcast(weights))
+      case _ =>
+    }
     points.map { x =>
-      computeSoftAssignments(x.toBreeze.toDenseVector, bcDists.value, bcWeights.value, k)
+      computeSoftAssignments(x.toBreeze.toDenseVector, bcDists.get.value, bcWeights.get.value, k)
     }
   }
 

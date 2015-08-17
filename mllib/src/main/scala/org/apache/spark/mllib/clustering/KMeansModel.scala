@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.clustering
 
+import org.apache.spark.broadcast.Broadcast
+
 import scala.collection.JavaConverters._
 
 import org.json4s._
@@ -38,6 +40,8 @@ import org.apache.spark.sql.Row
 class KMeansModel (
     val clusterCenters: Array[Vector]) extends Saveable with Serializable with PMMLExportable {
 
+  private var bcCentersWithNorm: Option[Broadcast[Iterable[VectorWithNorm]]] = None
+
   /** A Java-friendly constructor that takes an Iterable of Vectors. */
   def this(centers: java.lang.Iterable[Vector]) = this(centers.asScala.toArray)
 
@@ -51,9 +55,14 @@ class KMeansModel (
 
   /** Maps given points to their cluster indices. */
   def predict(points: RDD[Vector]): RDD[Int] = {
-    val centersWithNorm = clusterCentersWithNorm
-    val bcCentersWithNorm = points.context.broadcast(centersWithNorm)
-    points.map(p => KMeans.findClosest(bcCentersWithNorm.value, new VectorWithNorm(p))._1)
+    bcCentersWithNorm match {
+      case None => {
+        val centersWithNorm = clusterCentersWithNorm
+        bcCentersWithNorm = Some(points.context.broadcast(centersWithNorm))
+      }
+      case _ =>
+    }
+    points.map(p => KMeans.findClosest(bcCentersWithNorm.get.value, new VectorWithNorm(p))._1)
   }
 
   /** Maps given points to their cluster indices. */
@@ -65,9 +74,14 @@ class KMeansModel (
    * model on the given data.
    */
   def computeCost(data: RDD[Vector]): Double = {
-    val centersWithNorm = clusterCentersWithNorm
-    val bcCentersWithNorm = data.context.broadcast(centersWithNorm)
-    data.map(p => KMeans.pointCost(bcCentersWithNorm.value, new VectorWithNorm(p))).sum()
+    bcCentersWithNorm match {
+      case None => {
+        val centersWithNorm = clusterCentersWithNorm
+        bcCentersWithNorm = Some(data.context.broadcast(centersWithNorm))
+      }
+      case _ =>
+    }
+    data.map(p => KMeans.pointCost(bcCentersWithNorm.get.value, new VectorWithNorm(p))).sum()
   }
 
   private def clusterCentersWithNorm: Iterable[VectorWithNorm] =
