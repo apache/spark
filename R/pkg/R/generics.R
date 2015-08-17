@@ -740,6 +740,10 @@ setGeneric("levenshtein", function(y, x) { standardGeneric("levenshtein") })
 
 #' @rdname functions
 #' @export
+setGeneric("lit", function(x) { standardGeneric("lit") })
+
+#' @rdname functions
+#' @export
 setGeneric("lower", function(x) { standardGeneric("lower") })
 
 #' @rdname functions

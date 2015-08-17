@@ -69,11 +69,11 @@ createFunctions()
 
 #' @rdname functions
 #' @return Creates a Column class of literal value.
-#' @export
-lit <- function(x) {
-  jc <- callJStatic("org.apache.spark.sql.functions", "lit", ifelse(class(x) == "Column", x@jc, x))
-  column(jc)
-}
+setMethod("lit", signature("ANY"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "lit", ifelse(class(x) == "Column", x@jc, x))
+            column(jc)
+          })
 
 #' Approx Count Distinct
 #'
