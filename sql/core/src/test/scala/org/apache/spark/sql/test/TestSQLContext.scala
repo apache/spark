@@ -28,8 +28,7 @@ private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { sel
 
   def this() {
     this(new SparkContext("local[2]", "test-sql-context",
-      new SparkConf()
-        .set("spark.sql.testkey", "true")))
+      new SparkConf().set("spark.sql.testkey", "true")))
   }
 
   // At here, we make sure we set those test specific confs correctly when we create

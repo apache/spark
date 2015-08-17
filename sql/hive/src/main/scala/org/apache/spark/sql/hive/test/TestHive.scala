@@ -50,10 +50,6 @@ object TestHive
       "TestSQLContext",
       new SparkConf()
         .set("spark.sql.test", "")
-        // Fewer partitions to speed up testing
-        .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
-        .set(SQLConf.DIALECT.key, "hiveql")
-        .set(SQLConf.CASE_SENSITIVE.key, "false")
         .set("spark.sql.hive.metastore.barrierPrefixes",
           "org.apache.spark.sql.hive.execution.PairSerDe")
         // SPARK-8910
