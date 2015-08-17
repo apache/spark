@@ -248,7 +248,7 @@ regexTokenized.select("words", "label").take(3).foreach(println)
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import java.util.Arrays;
+import com.google.common.collect.Lists;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.RegexTokenizer;
@@ -262,7 +262,7 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
+JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
   RowFactory.create(0, "Hi I heard about Spark"),
   RowFactory.create(1, "I wish Java could use case classes"),
   RowFactory.create(2, "Logistic,regression,models,are,neat")
@@ -685,7 +685,7 @@ dctDf.select("featuresDCT").take(3).foreach(println)
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import com.google.common.collect.Lists;
+import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -701,7 +701,7 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
+JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
       RowFactory.create(Vectors.dense(0.0, 1.0, -2.0, 3.0)),
       RowFactory.create(Vectors.dense(-1.0, 2.0, 4.0, -7.0)),
       RowFactory.create(Vectors.dense(14.0, -2.0, -5.0, 1.0))
