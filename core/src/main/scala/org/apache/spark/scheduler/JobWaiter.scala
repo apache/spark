@@ -17,9 +17,9 @@
 
 package org.apache.spark.scheduler
 
-import sun.misc.{Signal, SignalHandler}
-
 import org.apache.spark.Logging
+
+import sun.misc.{Signal, SignalHandler}
 
 /**
  * An object that waits for a DAGScheduler job to complete. As tasks finish, it passes their
