@@ -49,7 +49,7 @@ object PythonRunner {
     val gatewayServer = new py4j.GatewayServer(null, 0)
     val thread = new Thread(new Runnable() {
       override def run(): Unit = Utils.logUncaughtExceptions {
-        gatewayServer.start()
+        gatewayServer.start(false)
       }
     })
     thread.setName("py4j-gateway")
