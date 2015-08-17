@@ -32,10 +32,7 @@ Users should be comfortable using `spark.mllib` features and expect more feature
 Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
 to `spark.ml`.
 
-Guides for sub-packages of `spark.ml` include:
-
-* [Feature Extraction, Transformation, and Selection](ml-features.html): Details on transformers supported in the Pipelines API, including a few not in the lower-level `spark.mllib` API
-* [Ensembles](ml-ensembles.html): Details on ensemble learning methods in the Pipelines API
+See the [Algorithm Guides section](#algorithm-guides) below for guides on sub-packages of `spark.ml`, including feature transformers unique to the Pipelines API, ensembles, and more.
 
 
 **Table of Contents**
@@ -181,9 +178,6 @@ There are now several algorithms in the Pipelines API which are not in the lower
 * [Feature Extraction, Transformation, and Selection](ml-features.html)
 * [Decision Trees for Classification and Regression](ml-decision-tree.html)
 * [Ensembles](ml-ensembles.html)
-
-**Algorithms in `spark.ml`**
-
 * [Linear methods with elastic net regularization](ml-linear-methods.html)
 
 # Code Examples
