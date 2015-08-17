@@ -18,8 +18,8 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.param.{Param, Params, IntParam, DoubleParam, ParamMap}
-import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasMaxIter, HasPredictionCol, HasSeed}
+import org.apache.spark.ml.param.{Param, Params, IntParam, ParamMap}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
@@ -27,14 +27,13 @@ import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.util.Utils
 
 
 /**
  * Common params for KMeans and KMeansModel
  */
-private[clustering] trait KMeansParams
-    extends Params with HasMaxIter with HasFeaturesCol with HasSeed with HasPredictionCol {
+private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFeaturesCol
+  with HasSeed with HasPredictionCol with HasTol {
 
   /**
    * Set the number of clusters to create (k). Must be > 1. Default: 2.
@@ -44,31 +43,6 @@ private[clustering] trait KMeansParams
 
   /** @group getParam */
   def getK: Int = $(k)
-
-  /**
-   * Param the number of runs of the algorithm to execute in parallel. We initialize the algorithm
-   * this many times with random starting conditions (configured by the initialization mode), then
-   * return the best clustering found over any run. Must be >= 1. Default: 1.
-   * @group param
-   */
-  final val runs = new IntParam(this, "runs",
-    "number of runs of the algorithm to execute in parallel", (value: Int) => value >= 1)
-
-  /** @group getParam */
-  def getRuns: Int = $(runs)
-
-  /**
-   * Param the distance threshold within which we've consider centers to have converged.
-   * If all centers move less than this Euclidean distance, we stop iterating one run.
-   * Must be >= 0.0. Default: 1e-4
-   * @group param
-   */
-  final val epsilon = new DoubleParam(this, "epsilon",
-    "distance threshold within which we've consider centers to have converge",
-    (value: Double) => value >= 0.0)
-
-  /** @group getParam */
-  def getEpsilon: Double = $(epsilon)
 
   /**
    * Param for the initialization algorithm. This can be either "random" to choose random points as
@@ -136,9 +110,9 @@ class KMeansModel private[ml] (
 
 /**
  * :: Experimental ::
- * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
- * mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
- * they are executed together with joint passes over the data for efficiency.
+ * K-means clustering with support for k-means|| initialization proposed by Bahmani et al.
+ *
+ * @see [[http://dx.doi.org/10.14778/2180912.2180915 Bahmani et al., Scalable k-means++.]]
  */
 @Experimental
 class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMeansParams {
@@ -146,10 +120,9 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   setDefault(
     k -> 2,
     maxIter -> 20,
-    runs -> 1,
     initMode -> MLlibKMeans.K_MEANS_PARALLEL,
     initSteps -> 5,
-    epsilon -> 1e-4)
+    tol -> 1e-4)
 
   override def copy(extra: ParamMap): KMeans = defaultCopy(extra)
 
@@ -174,10 +147,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /** @group setParam */
-  def setRuns(value: Int): this.type = set(runs, value)
-
-  /** @group setParam */
-  def setEpsilon(value: Double): this.type = set(epsilon, value)
+  def setTol(value: Double): this.type = set(tol, value)
 
   /** @group setParam */
   def setSeed(value: Long): this.type = set(seed, value)
@@ -191,8 +161,7 @@ class KMeans(override val uid: String) extends Estimator[KMeansModel] with KMean
       .setInitializationSteps($(initSteps))
       .setMaxIterations($(maxIter))
       .setSeed($(seed))
-      .setEpsilon($(epsilon))
-      .setRuns($(runs))
+      .setEpsilon($(tol))
     val parentModel = algo.run(rdd)
     val model = new KMeansModel(uid, parentModel)
     copyValues(model)

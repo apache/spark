@@ -84,7 +84,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
   require(
     blockIds.length == walRecordHandles.length,
     s"Number of block Ids (${blockIds.length}) must be " +
-      s" same as number of WAL record handles (${walRecordHandles.length}})")
+      s" same as number of WAL record handles (${walRecordHandles.length})")
 
   require(
     isBlockIdValid.isEmpty || isBlockIdValid.length == blockIds.length,

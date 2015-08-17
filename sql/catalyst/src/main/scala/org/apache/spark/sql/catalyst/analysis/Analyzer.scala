@@ -82,7 +82,9 @@ class Analyzer(
       HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
-      PullOutNondeterministic)
+      PullOutNondeterministic),
+    Batch("Cleanup", fixedPoint,
+      CleanupAliases)
   )
 
   /**
@@ -146,8 +148,6 @@ class Analyzer(
           child match {
             case _: UnresolvedAttribute => u
             case ne: NamedExpression => ne
-            case g: GetStructField => Alias(g, g.field.name)()
-            case g: GetArrayStructFields => Alias(g, g.field.name)()
             case g: Generator if g.resolved && g.elementTypes.size > 1 => MultiAlias(g, Nil)
             case e if !e.resolved => u
             case other => Alias(other, s"_c$i")()
@@ -384,9 +384,7 @@ class Analyzer(
           case u @ UnresolvedAttribute(nameParts) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result =
-              withPosition(u) {
-                q.resolveChildren(nameParts, resolver).map(trimUnresolvedAlias).getOrElse(u)
-              }
+              withPosition(u) { q.resolveChildren(nameParts, resolver).getOrElse(u) }
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
@@ -412,11 +410,6 @@ class Analyzer(
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
   }
 
-  private def trimUnresolvedAlias(ne: NamedExpression) = ne match {
-    case UnresolvedAlias(child) => child
-    case other => other
-  }
-
   private def resolveSortOrders(ordering: Seq[SortOrder], plan: LogicalPlan, throws: Boolean) = {
     ordering.map { order =>
       // Resolve SortOrder in one round.
@@ -426,7 +419,7 @@ class Analyzer(
       try {
         val newOrder = order transformUp {
           case u @ UnresolvedAttribute(nameParts) =>
-            plan.resolve(nameParts, resolver).map(trimUnresolvedAlias).getOrElse(u)
+            plan.resolve(nameParts, resolver).getOrElse(u)
           case UnresolvedExtractValue(child, fieldName) if child.resolved =>
             ExtractValue(child, fieldName, resolver)
         }
@@ -931,6 +924,7 @@ class Analyzer(
    */
   object PullOutNondeterministic extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case p if !p.resolved => p // Skip unresolved nodes.
       case p: Project => p
       case f: Filter => f
 
@@ -966,5 +960,63 @@ class Analyzer(
 object EliminateSubQueries extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Subquery(_, child) => child
+  }
+}
+
+/**
+ * Cleans up unnecessary Aliases inside the plan. Basically we only need Alias as a top level
+ * expression in Project(project list) or Aggregate(aggregate expressions) or
+ * Window(window expressions).
+ */
+object CleanupAliases extends Rule[LogicalPlan] {
+  private def trimAliases(e: Expression): Expression = {
+    var stop = false
+    e.transformDown {
+      // CreateStruct is a special case, we need to retain its top level Aliases as they decide the
+      // name of StructField. We also need to stop transform down this expression, or the Aliases
+      // under CreateStruct will be mistakenly trimmed.
+      case c: CreateStruct if !stop =>
+        stop = true
+        c.copy(children = c.children.map(trimNonTopLevelAliases))
+      case c: CreateStructUnsafe if !stop =>
+        stop = true
+        c.copy(children = c.children.map(trimNonTopLevelAliases))
+      case Alias(child, _) if !stop => child
+    }
+  }
+
+  def trimNonTopLevelAliases(e: Expression): Expression = e match {
+    case a: Alias =>
+      Alias(trimAliases(a.child), a.name)(a.exprId, a.qualifiers, a.explicitMetadata)
+    case other => trimAliases(other)
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case Project(projectList, child) =>
+      val cleanedProjectList =
+        projectList.map(trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+      Project(cleanedProjectList, child)
+
+    case Aggregate(grouping, aggs, child) =>
+      val cleanedAggs = aggs.map(trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+      Aggregate(grouping.map(trimAliases), cleanedAggs, child)
+
+    case w @ Window(projectList, windowExprs, partitionSpec, orderSpec, child) =>
+      val cleanedWindowExprs =
+        windowExprs.map(e => trimNonTopLevelAliases(e).asInstanceOf[NamedExpression])
+      Window(projectList, cleanedWindowExprs, partitionSpec.map(trimAliases),
+        orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
+
+    case other =>
+      var stop = false
+      other transformExpressionsDown {
+        case c: CreateStruct if !stop =>
+          stop = true
+          c.copy(children = c.children.map(trimNonTopLevelAliases))
+        case c: CreateStructUnsafe if !stop =>
+          stop = true
+          c.copy(children = c.children.map(trimNonTopLevelAliases))
+        case Alias(child, _) if !stop => child
+      }
   }
 }

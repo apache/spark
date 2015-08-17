@@ -103,7 +103,7 @@ class BlockManagerMaster(
     val future = driverEndpoint.askWithRetry[Future[Seq[Int]]](RemoveRdd(rddId))
     future.onFailure {
       case e: Exception =>
-        logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}}", e)
+        logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}", e)
     }(ThreadUtils.sameThread)
     if (blocking) {
       timeout.awaitResult(future)
@@ -115,7 +115,7 @@ class BlockManagerMaster(
     val future = driverEndpoint.askWithRetry[Future[Seq[Boolean]]](RemoveShuffle(shuffleId))
     future.onFailure {
       case e: Exception =>
-        logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}}", e)
+        logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}", e)
     }(ThreadUtils.sameThread)
     if (blocking) {
       timeout.awaitResult(future)
@@ -129,7 +129,7 @@ class BlockManagerMaster(
     future.onFailure {
       case e: Exception =>
         logWarning(s"Failed to remove broadcast $broadcastId" +
-          s" with removeFromMaster = $removeFromMaster - ${e.getMessage}}", e)
+          s" with removeFromMaster = $removeFromMaster - ${e.getMessage}", e)
     }(ThreadUtils.sameThread)
     if (blocking) {
       timeout.awaitResult(future)

@@ -29,7 +29,6 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var userArgs: Seq[String] = Nil
   var executorMemory = 1024
   var executorCores = 1
-  var numExecutors = DEFAULT_NUMBER_EXECUTORS
   var propertiesFile: String = null
 
   parseArgs(args.toList)
@@ -61,10 +60,6 @@ class ApplicationMasterArguments(val args: Array[String]) {
 
         case ("--args" | "--arg") :: value :: tail =>
           userArgsBuffer += value
-          args = tail
-
-        case ("--num-workers" | "--num-executors") :: IntParam(value) :: tail =>
-          numExecutors = value
           args = tail
 
         case ("--worker-memory" | "--executor-memory") :: MemoryParam(value) :: tail =>

@@ -119,8 +119,7 @@ final class VectorSlicer(override val uid: String)
         case features: SparseVector => features.slice(inds)
       }
     }
-    dataset.withColumn($(outputCol),
-      slicer(dataset($(inputCol))).as($(outputCol), outputAttr.toMetadata()))
+    dataset.withColumn($(outputCol), slicer(dataset($(inputCol))), outputAttr.toMetadata())
   }
 
   /** Get the feature indices in order: indices, names */

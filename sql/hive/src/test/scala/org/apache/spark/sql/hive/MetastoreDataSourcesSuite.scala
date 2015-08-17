@@ -22,7 +22,6 @@ import java.io.{IOException, File}
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapred.InvalidInputException
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.Logging
@@ -42,7 +41,8 @@ import org.apache.spark.util.Utils
  */
 class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
   with Logging {
-  override val sqlContext = TestHive
+  override def _sqlContext: SQLContext = TestHive
+  private val sqlContext = _sqlContext
 
   var jsonFilePath: String = _
 

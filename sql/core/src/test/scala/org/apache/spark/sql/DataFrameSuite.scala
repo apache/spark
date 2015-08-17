@@ -23,18 +23,12 @@ import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
-import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.execution.datasources.json.JSONRelation
-import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SQLTestUtils}
+import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SharedSQLContext}
 
-class DataFrameSuite extends QueryTest with SQLTestUtils {
-  import org.apache.spark.sql.TestData._
-
-  lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
-  import sqlContext.implicits._
+class DataFrameSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("analysis error should be eagerly reported") {
     // Eager analysis.
@@ -485,21 +479,23 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
   }
 
   test("inputFiles") {
-    val fakeRelation1 = new ParquetRelation(Array("/my/path", "/my/other/path"),
-      Some(testData.schema), None, Map.empty)(sqlContext)
-    val df1 = DataFrame(sqlContext, LogicalRelation(fakeRelation1))
-    assert(df1.inputFiles.toSet == fakeRelation1.paths.toSet)
+    withTempDir { dir =>
+      val df = Seq((1, 22)).toDF("a", "b")
 
-    val fakeRelation2 = new JSONRelation(
-      None, 1, Some(testData.schema), None, None, Array("/json/path"))(sqlContext)
-    val df2 = DataFrame(sqlContext, LogicalRelation(fakeRelation2))
-    assert(df2.inputFiles.toSet == fakeRelation2.paths.toSet)
+      val parquetDir = new File(dir, "parquet").getCanonicalPath
+      df.write.parquet(parquetDir)
+      val parquetDF = sqlContext.read.parquet(parquetDir)
+      assert(parquetDF.inputFiles.nonEmpty)
 
-    val unionDF = df1.unionAll(df2)
-    assert(unionDF.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.paths)
+      val jsonDir = new File(dir, "json").getCanonicalPath
+      df.write.json(jsonDir)
+      val jsonDF = sqlContext.read.json(jsonDir)
+      assert(parquetDF.inputFiles.nonEmpty)
 
-    val filtered = df1.filter("false").unionAll(df2.intersect(df2))
-    assert(filtered.inputFiles.toSet == fakeRelation1.paths.toSet ++ fakeRelation2.paths)
+      val unioned = jsonDF.unionAll(parquetDF).inputFiles.sorted
+      val allFiles = (jsonDF.inputFiles ++ parquetDF.inputFiles).toSet.toArray.sorted
+      assert(unioned === allFiles)
+    }
   }
 
   ignore("show") {
@@ -870,5 +866,16 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     val expected = (1 to 100).map(_ -> random.nextDouble()).sortBy(_._2).map(_._1)
     val actual = df.sort(rand(seed)).collect().map(_.getInt(0))
     assert(expected === actual)
+  }
+
+  test("SPARK-9323: DataFrame.orderBy should support nested column name") {
+    val df = sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+      """{"a": {"b": 1}}""" :: Nil))
+    checkAnswer(df.orderBy("a.b"), Row(Row(1)))
+  }
+
+  test("SPARK-9950: correctly analyze grouping/aggregating on struct fields") {
+    val df = Seq(("x", (1, 1)), ("y", (2, 2))).toDF("a", "b")
+    checkAnswer(df.groupBy("b._1").agg(sum("b._2")), Row(1, 1) :: Row(2, 2) :: Nil)
   }
 }
