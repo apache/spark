@@ -21,6 +21,7 @@ import breeze.linalg.{DenseVector => BDV}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.rdd.RDD
 
@@ -161,6 +162,8 @@ private object IDF {
 @Experimental
 class IDFModel private[spark] (val idf: Vector) extends Serializable {
 
+  private var bcIdf: Option[Broadcast[Vector]] = None
+
   /**
    * Transforms term frequency (TF) vectors to TF-IDF vectors.
    *
@@ -172,8 +175,11 @@ class IDFModel private[spark] (val idf: Vector) extends Serializable {
    * @return an RDD of TF-IDF vectors
    */
   def transform(dataset: RDD[Vector]): RDD[Vector] = {
-    val bcIdf = dataset.context.broadcast(idf)
-    dataset.mapPartitions(iter => iter.map(v => IDFModel.transform(bcIdf.value, v)))
+    bcIdf match {
+      case None => bcIdf = Some(dataset.context.broadcast(idf))
+      case _ =>
+    }
+    dataset.mapPartitions(iter => iter.map(v => IDFModel.transform(bcIdf.get.value, v)))
   }
 
   /**
