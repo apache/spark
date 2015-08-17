@@ -24,61 +24,8 @@ import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 
-// todo: remove this and use AnalysisTest instead.
-object AnalysisSuite {
-  val caseSensitiveConf = new SimpleCatalystConf(true)
-  val caseInsensitiveConf = new SimpleCatalystConf(false)
-
-  val caseSensitiveCatalog = new SimpleCatalog(caseSensitiveConf)
-  val caseInsensitiveCatalog = new SimpleCatalog(caseInsensitiveConf)
-
-  val caseSensitiveAnalyzer =
-    new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitiveConf) {
-      override val extendedResolutionRules = EliminateSubQueries :: Nil
-    }
-  val caseInsensitiveAnalyzer =
-    new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseInsensitiveConf) {
-      override val extendedResolutionRules = EliminateSubQueries :: Nil
-    }
-
-  def caseSensitiveAnalyze(plan: LogicalPlan): Unit =
-    caseSensitiveAnalyzer.checkAnalysis(caseSensitiveAnalyzer.execute(plan))
-
-  def caseInsensitiveAnalyze(plan: LogicalPlan): Unit =
-    caseInsensitiveAnalyzer.checkAnalysis(caseInsensitiveAnalyzer.execute(plan))
-
-  val testRelation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
-  val testRelation2 = LocalRelation(
-    AttributeReference("a", StringType)(),
-    AttributeReference("b", StringType)(),
-    AttributeReference("c", DoubleType)(),
-    AttributeReference("d", DecimalType(10, 2))(),
-    AttributeReference("e", ShortType)())
-
-  val nestedRelation = LocalRelation(
-    AttributeReference("top", StructType(
-      StructField("duplicateField", StringType) ::
-        StructField("duplicateField", StringType) ::
-        StructField("differentCase", StringType) ::
-        StructField("differentcase", StringType) :: Nil
-    ))())
-
-  val nestedRelation2 = LocalRelation(
-    AttributeReference("top", StructType(
-      StructField("aField", StringType) ::
-        StructField("bField", StringType) ::
-        StructField("cField", StringType) :: Nil
-    ))())
-
-  val listRelation = LocalRelation(
-    AttributeReference("list", ArrayType(IntegerType))())
-
-  caseSensitiveCatalog.registerTable(Seq("TaBlE"), testRelation)
-  caseInsensitiveCatalog.registerTable(Seq("TaBlE"), testRelation)
-}
-
-
 class AnalysisSuite extends AnalysisTest {
+  import TestRelations._
 
   test("union project *") {
     val plan = (1 to 100)
@@ -165,39 +112,28 @@ class AnalysisSuite extends AnalysisTest {
 
   test("pull out nondeterministic expressions from Sort") {
     val plan = Sort(Seq(SortOrder(Rand(33), Ascending)), false, testRelation)
-    val analyzed = caseSensitiveAnalyzer.execute(plan)
-    analyzed.transform {
-      case s: Sort if s.expressions.exists(!_.deterministic) =>
-        fail("nondeterministic expressions are not allowed in Sort")
-    }
+    val projected = Alias(Rand(33), "_nondeterministic")()
+    val expected =
+      Project(testRelation.output,
+        Sort(Seq(SortOrder(projected.toAttribute, Ascending)), false,
+          Project(testRelation.output :+ projected, testRelation)))
+    checkAnalysis(plan, expected)
   }
 
-  test("remove still-need-evaluate ordering expressions from sort") {
-    val a = testRelation2.output(0)
-    val b = testRelation2.output(1)
-
-    def makeOrder(e: Expression): SortOrder = SortOrder(e, Ascending)
-
-    val noEvalOrdering = makeOrder(a)
-    val noEvalOrderingWithAlias = makeOrder(Alias(Alias(b, "name1")(), "name2")())
-
-    val needEvalExpr = Coalesce(Seq(a, Literal("1")))
-    val needEvalExpr2 = Coalesce(Seq(a, b))
-    val needEvalOrdering = makeOrder(needEvalExpr)
-    val needEvalOrdering2 = makeOrder(needEvalExpr2)
-
-    val plan = Sort(
-      Seq(noEvalOrdering, noEvalOrderingWithAlias, needEvalOrdering, needEvalOrdering2),
-      false, testRelation2)
-
-    val evaluatedOrdering = makeOrder(AttributeReference("_sortCondition", StringType)())
-    val materializedExprs = Seq(needEvalExpr, needEvalExpr2).map(e => Alias(e, "_sortCondition")())
-
-    val expected =
-      Project(testRelation2.output,
-        Sort(Seq(makeOrder(a), makeOrder(b), evaluatedOrdering, evaluatedOrdering), false,
-          Project(testRelation2.output ++ materializedExprs, testRelation2)))
-
+  test("SPARK-9634: cleanup unnecessary Aliases in LogicalPlan") {
+    val a = testRelation.output.head
+    var plan = testRelation.select(((a + 1).as("a+1") + 2).as("col"))
+    var expected = testRelation.select((a + 1 + 2).as("col"))
     checkAnalysis(plan, expected)
+
+    plan = testRelation.groupBy(a.as("a1").as("a2"))((min(a).as("min_a") + 1).as("col"))
+    expected = testRelation.groupBy(a)((min(a) + 1).as("col"))
+    checkAnalysis(plan, expected)
+
+    // CreateStruct is a special case that we should not trim Alias for it.
+    plan = testRelation.select(CreateStruct(Seq(a, (a + 1).as("a+1"))).as("col"))
+    checkAnalysis(plan, plan)
+    plan = testRelation.select(CreateStructUnsafe(Seq(a, (a + 1).as("a+1"))).as("col"))
+    checkAnalysis(plan, plan)
   }
 }

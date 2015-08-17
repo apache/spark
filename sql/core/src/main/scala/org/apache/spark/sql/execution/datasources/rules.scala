@@ -101,7 +101,8 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           }
         }
 
-      case logical.InsertIntoTable(LogicalRelation(r: HadoopFsRelation), part, _, _, _) =>
+      case logical.InsertIntoTable(
+        LogicalRelation(r: HadoopFsRelation), part, query, overwrite, _) =>
         // We need to make sure the partition columns specified by users do match partition
         // columns of the relation.
         val existingPartitionColumns = r.partitionColumns.fieldNames.toSet
@@ -111,6 +112,19 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
             s"(${specifiedPartitionColumns.mkString(", ")}) " +
             s"do not match the partition columns of the table. Please use " +
             s"(${existingPartitionColumns.mkString(", ")}) as the partition columns.")
+        } else {
+          // OK
+        }
+
+        PartitioningUtils.validatePartitionColumnDataTypes(r.schema, part.keySet.toArray)
+
+        // Get all input data source relations of the query.
+        val srcRelations = query.collect {
+          case LogicalRelation(src: BaseRelation) => src
+        }
+        if (srcRelations.contains(r)) {
+          failAnalysis(
+            "Cannot insert overwrite into table that is also being read from.")
         } else {
           // OK
         }
@@ -126,10 +140,10 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           // OK
         }
 
-      case CreateTableUsingAsSelect(tableName, _, _, _, SaveMode.Overwrite, _, query) =>
+      case CreateTableUsingAsSelect(tableName, _, _, partitionColumns, mode, _, query) =>
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
-        if (catalog.tableExists(Seq(tableName))) {
+        if (mode == SaveMode.Overwrite && catalog.tableExists(Seq(tableName))) {
           // Need to remove SubQuery operator.
           EliminateSubQueries(catalog.lookupRelation(Seq(tableName))) match {
             // Only do the check if the table is a data source table
@@ -151,6 +165,8 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
         } else {
           // OK
         }
+
+        PartitioningUtils.validatePartitionColumnDataTypes(query.schema, partitionColumns)
 
       case _ => // OK
     }

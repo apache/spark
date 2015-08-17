@@ -171,7 +171,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
   import SparkHiveDynamicPartitionWriterContainer._
 
   private val defaultPartName = jobConf.get(
-    ConfVars.DEFAULTPARTITIONNAME.varname, ConfVars.DEFAULTPARTITIONNAME.defaultVal)
+    ConfVars.DEFAULTPARTITIONNAME.varname, ConfVars.DEFAULTPARTITIONNAME.defaultStrVal)
 
   @transient private var writers: mutable.HashMap[String, FileSinkOperator.RecordWriter] = _
 
@@ -211,18 +211,18 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
       }
     }
 
-    val dynamicPartPath = dynamicPartColNames
-      .zip(row.toSeq.takeRight(dynamicPartColNames.length))
-      .map { case (col, rawVal) =>
-        val string = if (rawVal == null) null else convertToHiveRawString(col, rawVal)
-        val colString =
-          if (string == null || string.isEmpty) {
-            defaultPartName
-          } else {
-            FileUtils.escapePathName(string, defaultPartName)
-          }
-        s"/$col=$colString"
-      }.mkString
+    val nonDynamicPartLen = row.numFields - dynamicPartColNames.length
+    val dynamicPartPath = dynamicPartColNames.zipWithIndex.map { case (colName, i) =>
+      val rawVal = row.get(nonDynamicPartLen + i, schema(colName).dataType)
+      val string = if (rawVal == null) null else convertToHiveRawString(colName, rawVal)
+      val colString =
+        if (string == null || string.isEmpty) {
+          defaultPartName
+        } else {
+          FileUtils.escapePathName(string, defaultPartName)
+        }
+      s"/$colName=$colString"
+    }.mkString
 
     def newWriter(): FileSinkOperator.RecordWriter = {
       val newFileSinkDesc = new FileSinkDesc(

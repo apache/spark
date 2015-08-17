@@ -27,8 +27,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.test.SQLTestUtils
 
 private[sql] trait OrcTest extends SQLTestUtils { this: SparkFunSuite =>
-  lazy val sqlContext = org.apache.spark.sql.hive.test.TestHive
-
+  protected override def _sqlContext: SQLContext = org.apache.spark.sql.hive.test.TestHive
+  protected val sqlContext = _sqlContext
   import sqlContext.implicits._
   import sqlContext.sparkContext
 

@@ -51,7 +51,7 @@ import scala.collection.JavaConversions._
  *     java.sql.Date
  *     java.sql.Timestamp
  *  Complex Types =>
- *    Map: scala.collection.immutable.Map
+ *    Map: [[org.apache.spark.sql.types.MapData]]
  *    List: [[org.apache.spark.sql.types.ArrayData]]
  *    Struct: [[org.apache.spark.sql.catalyst.InternalRow]]
  *    Union: NOT SUPPORTED YET
@@ -290,10 +290,10 @@ private[hive] trait HiveInspectors {
       DateTimeUtils.fromJavaDate(poi.getWritableConstantValue.get())
     case mi: StandardConstantMapObjectInspector =>
       // take the value from the map inspector object, rather than the input data
-      mi.getWritableConstantValue.map { case (k, v) =>
-        (unwrap(k, mi.getMapKeyObjectInspector),
-          unwrap(v, mi.getMapValueObjectInspector))
-      }.toMap
+      val map = mi.getWritableConstantValue
+      val keys = map.keysIterator.map(unwrap(_, mi.getMapKeyObjectInspector)).toArray
+      val values = map.valuesIterator.map(unwrap(_, mi.getMapValueObjectInspector)).toArray
+      ArrayBasedMapData(keys, values)
     case li: StandardConstantListObjectInspector =>
       // take the value from the list inspector object, rather than the input data
       val values = li.getWritableConstantValue
@@ -347,12 +347,14 @@ private[hive] trait HiveInspectors {
         }
         .orNull
     case mi: MapObjectInspector =>
-      Option(mi.getMap(data)).map(
-        _.map {
-          case (k, v) =>
-            (unwrap(k, mi.getMapKeyObjectInspector),
-              unwrap(v, mi.getMapValueObjectInspector))
-        }.toMap).orNull
+      val map = mi.getMap(data)
+      if (map == null) {
+        null
+      } else {
+        val keys = map.keysIterator.map(unwrap(_, mi.getMapKeyObjectInspector)).toArray
+        val values = map.valuesIterator.map(unwrap(_, mi.getMapValueObjectInspector)).toArray
+        ArrayBasedMapData(keys, values)
+      }
     // currently, hive doesn't provide the ConstantStructObjectInspector
     case si: StructObjectInspector =>
       val allRefs = si.getAllStructFieldRefs
@@ -365,7 +367,7 @@ private[hive] trait HiveInspectors {
    * Wraps with Hive types based on object inspector.
    * TODO: Consolidate all hive OI/data interface code.
    */
-  protected def wrapperFor(oi: ObjectInspector): Any => Any = oi match {
+  protected def wrapperFor(oi: ObjectInspector, dataType: DataType): Any => Any = oi match {
     case _: JavaHiveVarcharObjectInspector =>
       (o: Any) =>
         val s = o.asInstanceOf[UTF8String].toString
@@ -381,12 +383,17 @@ private[hive] trait HiveInspectors {
       (o: Any) => DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long])
 
     case soi: StandardStructObjectInspector =>
-      val wrappers = soi.getAllStructFieldRefs.map(ref => wrapperFor(ref.getFieldObjectInspector))
+      val schema = dataType.asInstanceOf[StructType]
+      val wrappers = soi.getAllStructFieldRefs.zip(schema.fields).map { case (ref, field) =>
+        wrapperFor(ref.getFieldObjectInspector, field.dataType)
+      }
       (o: Any) => {
         if (o != null) {
           val struct = soi.create()
-          (soi.getAllStructFieldRefs, wrappers, o.asInstanceOf[InternalRow].toSeq).zipped.foreach {
-            (field, wrapper, data) => soi.setStructFieldData(struct, field, wrapper(data))
+          val row = o.asInstanceOf[InternalRow]
+          soi.getAllStructFieldRefs.zip(wrappers).zipWithIndex.foreach {
+            case ((field, wrapper), i) =>
+              soi.setStructFieldData(struct, field, wrapper(row.get(i, schema(i).dataType)))
           }
           struct
         } else {
@@ -395,27 +402,34 @@ private[hive] trait HiveInspectors {
       }
 
     case loi: ListObjectInspector =>
-      val wrapper = wrapperFor(loi.getListElementObjectInspector)
+      val elementType = dataType.asInstanceOf[ArrayType].elementType
+      val wrapper = wrapperFor(loi.getListElementObjectInspector, elementType)
       (o: Any) => {
         if (o != null) {
-          seqAsJavaList(o.asInstanceOf[ArrayData].toArray().map(wrapper))
+          val array = o.asInstanceOf[ArrayData]
+          val values = new java.util.ArrayList[Any](array.numElements())
+          array.foreach(elementType, (_, e) => {
+            values.add(wrapper(e))
+          })
+          values
         } else {
           null
         }
       }
 
     case moi: MapObjectInspector =>
-      // The Predef.Map is scala.collection.immutable.Map.
-      // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
-      import scala.collection.Map
+      val mt = dataType.asInstanceOf[MapType]
+      val keyWrapper = wrapperFor(moi.getMapKeyObjectInspector, mt.keyType)
+      val valueWrapper = wrapperFor(moi.getMapValueObjectInspector, mt.valueType)
 
-      val keyWrapper = wrapperFor(moi.getMapKeyObjectInspector)
-      val valueWrapper = wrapperFor(moi.getMapValueObjectInspector)
       (o: Any) => {
         if (o != null) {
-          mapAsJavaMap(o.asInstanceOf[Map[_, _]].map { case (key, value) =>
-            keyWrapper(key) -> valueWrapper(value)
+          val map = o.asInstanceOf[MapData]
+          val jmap = new java.util.HashMap[Any, Any](map.numElements())
+          map.foreach(mt.keyType, mt.valueType, (k, v) => {
+            jmap.put(keyWrapper(k), valueWrapper(v))
           })
+          jmap
         } else {
           null
         }
@@ -531,18 +545,21 @@ private[hive] trait HiveInspectors {
     case x: ListObjectInspector =>
       val list = new java.util.ArrayList[Object]
       val tpe = dataType.asInstanceOf[ArrayType].elementType
-      a.asInstanceOf[ArrayData].toArray().foreach {
-        v => list.add(wrap(v, x.getListElementObjectInspector, tpe))
-      }
+      a.asInstanceOf[ArrayData].foreach(tpe, (_, e) => {
+        list.add(wrap(e, x.getListElementObjectInspector, tpe))
+      })
       list
     case x: MapObjectInspector =>
       val keyType = dataType.asInstanceOf[MapType].keyType
       val valueType = dataType.asInstanceOf[MapType].valueType
+      val map = a.asInstanceOf[MapData]
+
       // Some UDFs seem to assume we pass in a HashMap.
-      val hashMap = new java.util.HashMap[AnyRef, AnyRef]()
-      hashMap.putAll(a.asInstanceOf[Map[_, _]].map { case (k, v) =>
-        wrap(k, x.getMapKeyObjectInspector, keyType) ->
-          wrap(v, x.getMapValueObjectInspector, valueType)
+      val hashMap = new java.util.HashMap[Any, Any](map.numElements())
+
+      map.foreach(keyType, valueType, (k, v) => {
+        hashMap.put(wrap(k, x.getMapKeyObjectInspector, keyType),
+          wrap(v, x.getMapValueObjectInspector, valueType))
       })
 
       hashMap
@@ -645,8 +662,9 @@ private[hive] trait HiveInspectors {
         ObjectInspectorFactory.getStandardConstantListObjectInspector(listObjectInspector, null)
       } else {
         val list = new java.util.ArrayList[Object]()
-        value.asInstanceOf[ArrayData].toArray()
-          .foreach(v => list.add(wrap(v, listObjectInspector, dt)))
+        value.asInstanceOf[ArrayData].foreach(dt, (_, e) => {
+          list.add(wrap(e, listObjectInspector, dt))
+        })
         ObjectInspectorFactory.getStandardConstantListObjectInspector(listObjectInspector, list)
       }
     case Literal(value, MapType(keyType, valueType, _)) =>
@@ -655,11 +673,14 @@ private[hive] trait HiveInspectors {
       if (value == null) {
         ObjectInspectorFactory.getStandardConstantMapObjectInspector(keyOI, valueOI, null)
       } else {
-        val map = new java.util.HashMap[Object, Object]()
-        value.asInstanceOf[Map[_, _]].foreach (entry => {
-          map.put(wrap(entry._1, keyOI, keyType), wrap(entry._2, valueOI, valueType))
+        val map = value.asInstanceOf[MapData]
+        val jmap = new java.util.HashMap[Any, Any](map.numElements())
+
+        map.foreach(keyType, valueType, (k, v) => {
+          jmap.put(wrap(k, keyOI, keyType), wrap(v, valueOI, valueType))
         })
-        ObjectInspectorFactory.getStandardConstantMapObjectInspector(keyOI, valueOI, map)
+
+        ObjectInspectorFactory.getStandardConstantMapObjectInspector(keyOI, valueOI, jmap)
       }
     // We will enumerate all of the possible constant expressions, throw exception if we missed
     case Literal(_, dt) => sys.error(s"Hive doesn't support the constant type [$dt].")

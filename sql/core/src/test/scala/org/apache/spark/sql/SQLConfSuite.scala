@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.test.SharedSQLContext
 
-class SQLConfSuite extends QueryTest {
 
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-
+class SQLConfSuite extends QueryTest with SharedSQLContext {
   private val testKey = "test.key.0"
   private val testVal = "test.val.0"
 
@@ -52,21 +51,21 @@ class SQLConfSuite extends QueryTest {
 
   test("parse SQL set commands") {
     ctx.conf.clear()
-    ctx.sql(s"set $testKey=$testVal")
+    sql(s"set $testKey=$testVal")
     assert(ctx.getConf(testKey, testVal + "_") === testVal)
     assert(ctx.getConf(testKey, testVal + "_") === testVal)
 
-    ctx.sql("set some.property=20")
+    sql("set some.property=20")
     assert(ctx.getConf("some.property", "0") === "20")
-    ctx.sql("set some.property = 40")
+    sql("set some.property = 40")
     assert(ctx.getConf("some.property", "0") === "40")
 
     val key = "spark.sql.key"
     val vs = "val0,val_1,val2.3,my_table"
-    ctx.sql(s"set $key=$vs")
+    sql(s"set $key=$vs")
     assert(ctx.getConf(key, "0") === vs)
 
-    ctx.sql(s"set $key=")
+    sql(s"set $key=")
     assert(ctx.getConf(key, "0") === "")
 
     ctx.conf.clear()
@@ -74,14 +73,14 @@ class SQLConfSuite extends QueryTest {
 
   test("deprecated property") {
     ctx.conf.clear()
-    ctx.sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
+    sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
     assert(ctx.conf.numShufflePartitions === 10)
   }
 
   test("invalid conf value") {
     ctx.conf.clear()
     val e = intercept[IllegalArgumentException] {
-      ctx.sql(s"set ${SQLConf.CASE_SENSITIVE.key}=10")
+      sql(s"set ${SQLConf.CASE_SENSITIVE.key}=10")
     }
     assert(e.getMessage === s"${SQLConf.CASE_SENSITIVE.key} should be boolean, but was 10")
   }

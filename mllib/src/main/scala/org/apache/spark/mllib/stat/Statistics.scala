@@ -20,7 +20,7 @@ package org.apache.spark.mllib.stat
 import scala.annotation.varargs
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.java.{JavaRDD, JavaDoubleRDD}
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -178,6 +178,9 @@ object Statistics {
     ChiSqTest.chiSquaredFeatures(data)
   }
 
+  /** Java-friendly version of [[chiSqTest()]] */
+  def chiSqTest(data: JavaRDD[LabeledPoint]): Array[ChiSqTestResult] = chiSqTest(data.rdd)
+
   /**
    * Conduct the two-sided Kolmogorov-Smirnov (KS) test for data sampled from a
    * continuous distribution. By comparing the largest difference between the empirical cumulative
@@ -213,6 +216,15 @@ object Statistics {
     KolmogorovSmirnovTest.testOneSample(data, distName, params: _*)
   }
 
+  /** Java-friendly version of [[kolmogorovSmirnovTest()]] */
+  @varargs
+  def kolmogorovSmirnovTest(
+      data: JavaDoubleRDD,
+      distName: String,
+      params: Double*): KolmogorovSmirnovTestResult = {
+    kolmogorovSmirnovTest(data.rdd.asInstanceOf[RDD[Double]], distName, params: _*)
+  }
+
   /**
    * Perform a two-sample, two-sided Kolmogorov-Smirnov test for probability distribution equality
    * The null hypothesis is that both samples come from the same distribution
@@ -225,5 +237,4 @@ object Statistics {
     : KolmogorovSmirnovTestResult = {
     KolmogorovSmirnovTest.testTwoSamples(data1, data2)
   }
-
 }

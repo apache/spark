@@ -26,7 +26,7 @@ import org.apache.spark.annotation.DeveloperApi
  */
 @DeveloperApi
 trait LeaderElectionAgent {
-  val masterActor: LeaderElectable
+  val masterInstance: LeaderElectable
   def stop() {} // to avoid noops in implementations.
 }
 
@@ -37,7 +37,7 @@ trait LeaderElectable {
 }
 
 /** Single-node implementation of LeaderElectionAgent -- we're initially and always the leader. */
-private[spark] class MonarchyLeaderAgent(val masterActor: LeaderElectable)
+private[spark] class MonarchyLeaderAgent(val masterInstance: LeaderElectable)
   extends LeaderElectionAgent {
-  masterActor.electedLeader()
+  masterInstance.electedLeader()
 }

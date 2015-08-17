@@ -20,28 +20,24 @@ package org.apache.spark.sql.hive.test
 import java.io.File
 import java.util.{Set => JavaSet}
 
-import org.apache.hadoop.hive.conf.HiveConf
+import scala.collection.mutable
+import scala.language.implicitConversions
+
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
-import org.apache.hadoop.hive.ql.metadata.Table
-import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 
-import org.apache.spark.sql.catalyst.CatalystConf
+import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
-import org.apache.spark.sql.SQLConf
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.{SparkConf, SparkContext}
-
-import scala.collection.mutable
-import scala.language.implicitConversions
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -56,7 +52,6 @@ object TestHive
         .set("spark.sql.test", "")
         .set("spark.sql.hive.metastore.barrierPrefixes",
           "org.apache.spark.sql.hive.execution.PairSerDe")
-        .set("spark.buffer.pageSize", "4m")
         // SPARK-8910
         .set("spark.ui.enabled", "false")))
 
@@ -83,15 +78,25 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   hiveconf.set("hive.plan.serialization.format", "javaXML")
 
-  lazy val warehousePath = Utils.createTempDir()
+  lazy val warehousePath = Utils.createTempDir(namePrefix = "warehouse-")
+
+  lazy val scratchDirPath = {
+    val dir = Utils.createTempDir(namePrefix = "scratch-")
+    dir.delete()
+    dir
+  }
 
   private lazy val temporaryConfig = newTemporaryConfiguration()
 
   /** Sets up the system initially or after a RESET command */
-  protected override def configure(): Map[String, String] =
-    temporaryConfig ++ Map(
-      ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toString,
-      ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true")
+  protected override def configure(): Map[String, String] = {
+    super.configure() ++ temporaryConfig ++ Map(
+      ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toURI.toString,
+      ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
+      ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,
+      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1"
+    )
+  }
 
   val testTempDir = Utils.createTempDir()
 
@@ -149,7 +154,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
-  Utils.registerShutdownDeleteDir(hiveFilesTemp)
+  ShutdownHookManager.registerShutdownDeleteDir(hiveFilesTemp)
 
   val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
     new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
@@ -244,7 +249,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     }),
     TestTable("src_thrift", () => {
       import org.apache.hadoop.hive.serde2.thrift.ThriftDeserializer
-      import org.apache.hadoop.hive.serde2.thrift.test.Complex
       import org.apache.hadoop.mapred.{SequenceFileInputFormat, SequenceFileOutputFormat}
       import org.apache.thrift.protocol.TBinaryProtocol
 
@@ -253,7 +257,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
          |CREATE TABLE src_thrift(fake INT)
          |ROW FORMAT SERDE '${classOf[ThriftDeserializer].getName}'
          |WITH SERDEPROPERTIES(
-         |  'serialization.class'='${classOf[Complex].getName}',
+         |  'serialization.class'='org.apache.spark.sql.hive.test.Complex',
          |  'serialization.format'='${classOf[TBinaryProtocol].getName}'
          |)
          |STORED AS
@@ -369,7 +373,11 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         INSERT OVERWRITE TABLE episodes_part PARTITION (doctor_pt=1)
         SELECT title, air_date, doctor FROM episodes
       """.cmd
-      )
+      ),
+    TestTable("src_json",
+      s"""CREATE TABLE src_json (json STRING) STORED AS TEXTFILE
+       """.stripMargin.cmd,
+      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/json.txt")}' INTO TABLE src_json".cmd)
   )
 
   hiveQTestUtilTables.foreach(registerTestTable)
@@ -437,6 +445,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         case (k, v) =>
           metadataHive.runSqlHive(s"SET $k=$v")
       }
+      defaultOverides()
 
       runSqlHive("USE default")
 

@@ -60,12 +60,6 @@ operators <- list(
 )
 column_functions1 <- c("asc", "desc", "isNull", "isNotNull")
 column_functions2 <- c("like", "rlike", "startsWith", "endsWith", "getField", "getItem", "contains")
-functions <- c("min", "max", "sum", "avg", "mean", "count", "abs", "sqrt",
-               "first", "last", "lower", "upper", "sumDistinct",
-               "acos", "asin", "atan", "cbrt", "ceiling", "cos", "cosh", "exp",
-               "expm1", "floor", "log", "log10", "log1p", "rint", "sign",
-               "sin", "sinh", "tan", "tanh", "toDegrees", "toRadians")
-binary_mathfunctions<- c("atan2", "hypot")
 
 createOperator <- function(op) {
   setMethod(op,
@@ -111,33 +105,6 @@ createColumnFunction2 <- function(name) {
             })
 }
 
-createStaticFunction <- function(name) {
-  setMethod(name,
-            signature(x = "Column"),
-            function(x) {
-              if (name == "ceiling") {
-                  name <- "ceil"
-              }
-              if (name == "sign") {
-                  name <- "signum"
-              }
-              jc <- callJStatic("org.apache.spark.sql.functions", name, x@jc)
-              column(jc)
-            })
-}
-
-createBinaryMathfunctions <- function(name) {
-  setMethod(name,
-            signature(y = "Column"),
-            function(y, x) {
-              if (class(x) == "Column") {
-                x <- x@jc
-              }
-              jc <- callJStatic("org.apache.spark.sql.functions", name, y@jc, x)
-              column(jc)
-            })
-}
-
 createMethods <- function() {
   for (op in names(operators)) {
     createOperator(op)
@@ -147,12 +114,6 @@ createMethods <- function() {
   }
   for (name in column_functions2) {
     createColumnFunction2(name)
-  }
-  for (x in functions) {
-    createStaticFunction(x)
-  }
-  for (name in binary_mathfunctions) {
-    createBinaryMathfunctions(name)
   }
 }
 
@@ -241,46 +202,4 @@ setMethod("%in%",
             table <- listToSeq(as.list(table))
             jc <- callJMethod(x@jc, "in", table)
             return(column(jc))
-          })
-
-#' Approx Count Distinct
-#'
-#' @rdname column
-#' @return the approximate number of distinct items in a group.
-setMethod("approxCountDistinct",
-          signature(x = "Column"),
-          function(x, rsd = 0.95) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "approxCountDistinct", x@jc, rsd)
-            column(jc)
-          })
-
-#' Count Distinct
-#'
-#' @rdname column
-#' @return the number of distinct items in a group.
-setMethod("countDistinct",
-          signature(x = "Column"),
-          function(x, ...) {
-            jcol <- lapply(list(...), function (x) {
-              x@jc
-            })
-            jc <- callJStatic("org.apache.spark.sql.functions", "countDistinct", x@jc,
-                              listToSeq(jcol))
-            column(jc)
-          })
-
-#' @rdname column
-#' @aliases countDistinct
-setMethod("n_distinct",
-          signature(x = "Column"),
-          function(x, ...) {
-            countDistinct(x, ...)
-          })
-
-#' @rdname column
-#' @aliases count
-setMethod("n",
-          signature(x = "Column"),
-          function(x) {
-            count(x)
           })
