@@ -48,6 +48,8 @@ class RandomDataFrameGenerator(seed: Long, sqlContext: SQLContext) {
   private val arrayTypes: Set[DataType] = {
     DataTypeTestUtils.atomicArrayTypes
       .filter(hasRandomDataGenerator)
+      // Filter until SPARK-10038 is fixed.
+      .filterNot(_.elementType.isInstanceOf[BinaryType])
       // See above comment about DecimalType
       .filterNot(_.elementType.isInstanceOf[DecimalType]).toSet
   }
