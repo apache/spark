@@ -248,7 +248,7 @@ regexTokenized.select("words", "label").take(3).foreach(println)
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import com.google.common.collect.Lists;
+import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.RegexTokenizer;
@@ -262,7 +262,7 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
   RowFactory.create(0, "Hi I heard about Spark"),
   RowFactory.create(1, "I wish Java could use case classes"),
   RowFactory.create(2, "Logistic,regression,models,are,neat")
@@ -651,7 +651,17 @@ for expanded in polyDF.select("polyFeatures").take(3):
 
 ## Discrete Cosine Transform (DCT)
 
-The [Discrete Cosine Transform](https://en.wikipedia.org/wiki/Discrete_cosine_transform) transforms a length $N$ real-valued sequence in the time domain into another length $N$ real-valued sequence in the frequency domain. A [DCT](api/scala/index.html#org.apache.spark.ml.feature.DCT) class provides this functionality, implementing the [DCT-II](https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II) and scaling the result by $1/\sqrt{2}$ such that the representing matrix for the transform is unitary. No shift is applied to the transformed sequence (e.g. the $0$th element of the transformed sequence is the $0$th DCT coefficient and _not_ the $N/2$th).
+The [Discrete Cosine
+Transform](https://en.wikipedia.org/wiki/Discrete_cosine_transform)
+transforms a length $N$ real-valued sequence in the time domain into
+another length $N$ real-valued sequence in the frequency domain. A
+[DCT](api/scala/index.html#org.apache.spark.ml.feature.DCT) class
+provides this functionality, implementing the
+[DCT-II](https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II)
+and scaling the result by $1/\sqrt{2}$ such that the representing matrix
+for the transform is unitary. No shift is applied to the transformed
+sequence (e.g. the $0$th element of the transformed sequence is the
+$0$th DCT coefficient and _not_ the $N/2$th).
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -664,12 +674,12 @@ val data = Seq(
   Vectors.dense(-1.0, 2.0, 4.0, -7.0),
   Vectors.dense(14.0, -2.0, -5.0, 1.0))
 val df = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
-val DCTransform = new DCT()
+val dct = new DCT()
   .setInputCol("features")
   .setOutputCol("featuresDCT")
   .setInverse(false)
-val DCTdf = DCTransform.transform(df)
-DCTdf.select("featuresDCT").take(3).foreach(println)
+val dctDf = dct.transform(df)
+dctDf.select("featuresDCT").take(3).foreach(println)
 {% endhighlight %}
 </div>
 
@@ -700,12 +710,12 @@ StructType schema = new StructType(new StructField[] {
   new StructField("features", new VectorUDT(), false, Metadata.empty()),
 });
 DataFrame df = jsql.createDataFrame(data, schema);
-DCT DCTransform = new DCT()
+DCT dct = new DCT()
   .setInputCol("features")
   .setOutputCol("featuresDCT")
   .setInverse(false);
-DataFrame DCTdf = DCTransform.transform(df);
-Row[] row = DCTdf.select("featuresDCT").take(3);
+DataFrame dctDf = dct.transform(df);
+Row[] row = dctDf.select("featuresDCT").take(3);
 for (Row r : row) {
   System.out.println(r.get(0));
 }
