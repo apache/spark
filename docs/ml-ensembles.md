@@ -11,96 +11,11 @@ displayTitle: <a href="ml-guide.html">ML</a> - Ensembles
 
 An [ensemble method](http://en.wikipedia.org/wiki/Ensemble_learning)
 is a learning algorithm which creates a model composed of a set of other base models.
+The Pipelines API supports the following ensemble algorithms: [`OneVsRest`](api/scala/index.html#org.apache.spark.ml.classifier.OneVsRest)
 
+## OneVsRest
 
-## Random Forests
-
-[Random forests](http://en.wikipedia.org/wiki/Random_forest)
-are ensembles of [decision trees](ml-decision-tree.html).
-Random forests combine many decision trees in order to reduce the risk of overfitting.
-MLlib supports random forests for binary and multiclass classification and for regression,
-using both continuous and categorical features.
-
-This section gives examples of using random forests with the Pipelines API.
-For more information on the algorithm, please see the [main MLlib docs on random forests](mllib-ensembles.html).
-
-### Example: Classification
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classifier.RandomForestClassifier) for more details.
-
-{% highlight scala %}
-
-{% endhighlight %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/RandomForestClassifier.html) for more details.
-
-{% highlight java %}
-
-{% endhighlight %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.RandomForestClassifier) for more details.
-
-{% highlight python %}
-
-{% endhighlight %}
-</div>
-</div>
-
-## Gradient-Boosted Trees (GBTs)
-
-[Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting)
-are ensembles of [decision trees](ml-decision-tree.html).
-GBTs iteratively train decision trees in order to minimize a loss function.
-MLlib supports GBTs for binary classification and for regression,
-using both continuous and categorical features.
-
-This section gives examples of using GBTs with the Pipelines API.
-For more information on the algorithm, please see the [main MLlib docs on GBTs](mllib-ensembles.html).
-
-### Example: Classification
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classifier.GBTClassifier) for more details.
-
-{% highlight scala %}
-
-{% endhighlight %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/GBTClassifier.html) for more details.
-
-{% highlight java %}
-
-{% endhighlight %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.GBTClassifier) for more details.
-
-{% highlight python %}
-
-{% endhighlight %}
-</div>
-</div>
-
-
-## One-vs-Rest (a.k.a. One-vs-All)
-
-[OneVsRest](http://en.wikipedia.org/wiki/Multiclass_classification#One-vs.-rest) is an example of a machine learning reduction for performing multiclass classification given a base classifier that can perform binary classification efficiently.  It is also known as "One-vs-All."
+[OneVsRest](http://en.wikipedia.org/wiki/Multiclass_classification#One-vs.-rest) is an example of a machine learning reduction for performing multiclass classification given a base classifier that can perform binary classification efficiently.
 
 `OneVsRest` is implemented as an `Estimator`. For the base classifier it takes instances of `Classifier` and creates a binary classification problem for each of the k classes. The classifier for class i is trained to predict whether the label is i or not, distinguishing class i from all other classes.
 
@@ -113,9 +28,6 @@ The example below demonstrates how to load the
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classifier.OneVsRest) for more details.
-
 {% highlight scala %}
 import org.apache.spark.ml.classification.{LogisticRegression, OneVsRest}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
@@ -152,12 +64,9 @@ println("label\tfpr\n")
 }
 {% endhighlight %}
 </div>
-
 <div data-lang="java" markdown="1">
-
-Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/OneVsRest.html) for more details.
-
 {% highlight java %}
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.classification.LogisticRegression;
