@@ -482,7 +482,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
       val tempLog4jConf = Utils.createTempDir().getCanonicalPath
 
       Files.write(
-        """log4j.rootCategory=INFO, console
+        """log4j.rootCategory=DEBUG, console
           |log4j.appender.console=org.apache.log4j.ConsoleAppender
           |log4j.appender.console.target=System.err
           |log4j.appender.console.layout=org.apache.log4j.PatternLayout
@@ -491,7 +491,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
         new File(s"$tempLog4jConf/log4j.properties"),
         UTF_8)
 
-      tempLog4jConf // + File.pathSeparator + sys.props("java.class.path")
+      tempLog4jConf
     }
 
     s"""$startScript
