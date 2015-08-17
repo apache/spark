@@ -42,14 +42,14 @@ private[spark] class JobWaiter[T](
         logInfo("Cancelling running job.. This might take some time, so be patient. " +
           "Press Ctrl-C again to kill JVM.")
         // Detach sigint handler so that pressing ctrl-c again will interrupt the jvm.
-        detachSigintHandler(_originalHandler)
+        detachSigintHandler()
         cancel()
       }
     })
   }
 
-  def detachSigintHandler(originalHandler: SignalHandler): Unit = {
-    Signal.handle(sigint, originalHandler)
+  def detachSigintHandler(): Unit = {
+    Signal.handle(sigint, _originalHandler)
   }
 
   private var finishedTasks = 0
@@ -97,7 +97,7 @@ private[spark] class JobWaiter[T](
     while (!_jobFinished) {
       this.wait()
     }
-    detachSigintHandler(_originalHandler)
+    detachSigintHandler()
     return jobResult
   }
 }
