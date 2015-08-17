@@ -51,14 +51,16 @@ class MemoryUIInfo {
   var executorAddress: String = _
   var transportInfo: Option[transportMemSize] = None
 
-  def updateExecutorMetrics (execMetrics: ExecutorMetrics): Unit = {
-    transportInfo = transportInfo match {
-      case Some(transportMemSize) => transportInfo
-      case _ => Some(new transportMemSize)
-    }
-    executorAddress = execMetrics.hostPort
+  def updateExecutorMetrics(execMetrics: ExecutorMetrics): Unit = {
     if (execMetrics.transportMetrics.isDefined) {
-      transportInfo.get.updateTransport(execMetrics.transportMetrics.get)
+      transportInfo = transportInfo match {
+        case Some(transportMemSize) => transportInfo
+        case _ => Some(new transportMemSize)
+      }
+      executorAddress = execMetrics.hostPort
+      if (execMetrics.transportMetrics.isDefined) {
+        transportInfo.get.updateTransport(execMetrics.transportMetrics.get)
+      }
     }
   }
 }
