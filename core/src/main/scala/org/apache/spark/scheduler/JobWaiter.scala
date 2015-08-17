@@ -17,9 +17,9 @@
 
 package org.apache.spark.scheduler
 
-import sun.misc.{Signal, SignalHandler}
+import java.lang.reflect.{InvocationHandler, Method, Proxy}
 
-import org.apache.spark.Logging
+import org.apache.spark.util.Utils
 
 /**
  * An object that waits for a DAGScheduler job to complete. As tasks finish, it passes their
@@ -32,24 +32,55 @@ private[spark] class JobWaiter[T](
     resultHandler: (Int, T) => Unit)
   extends JobListener {
 
-  private val sigint: Signal = new Signal("INT")
+  // Original signal handler that is overridden.
   @volatile
-  private var _originalHandler: SignalHandler = _
+  private var _originalHandler: Object = _
 
-  def attachSigintHandler(): SignalHandler = {
-    Signal.handle(sigint, new SignalHandler with Logging {
-      override def handle(signal: Signal): Unit = {
-        logInfo("Cancelling running job.. This might take some time, so be patient. " +
-          "Press Ctrl-C again to kill JVM.")
-        // Detach sigint handler so that pressing ctrl-c again will interrupt the jvm.
-        detachSigintHandler(_originalHandler)
-        cancel()
-      }
-    })
+  // Override default signal handler for ctrl-c if sun.misc Signal handler classes exist.
+  private def attachSigintHandler(): Object = {
+    try {
+      val signalClazz = Utils.classForName("sun.misc.Signal")
+      val signalHandlerClazz = Utils.classForName("sun.misc.SignalHandler")
+      val newHandler = Proxy.newProxyInstance(Utils.getContextOrSparkClassLoader,
+        Array(signalHandlerClazz), new InvocationHandler {
+          override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef = {
+            // scalastyle:off println
+            println("Cancelling running job.. This might take some time, so be patient.\n" +
+              "Press Ctrl-C again to kill JVM.")
+            // scalastyle:on println
+            // Detach sigint handler so that pressing ctrl-c again will interrupt jvm.
+            detachSigintHandler()
+            cancel()
+            null
+          }
+        })
+      signalClazz.getMethod("handle", signalClazz, signalHandlerClazz)
+        .invoke(
+          null,
+          signalClazz.getConstructor(classOf[String]).newInstance("INT").asInstanceOf[Object],
+          newHandler)
+    } catch {
+      // Ignore. sun.misc Signal handler classes don't exist.
+      case _: ClassNotFoundException => null
+      case e: Exception => throw e
+    }
   }
 
-  def detachSigintHandler(originalHandler: SignalHandler): Unit = {
-    Signal.handle(sigint, originalHandler)
+  // Reset signal handler to default
+  private def detachSigintHandler(): Unit = {
+    try {
+      val signalClazz = Utils.classForName("sun.misc.Signal")
+      val signalHandlerClazz = Utils.classForName("sun.misc.SignalHandler")
+      signalClazz.getMethod("handle", signalClazz, signalHandlerClazz)
+        .invoke(
+          null,
+          signalClazz.getConstructor(classOf[String]).newInstance("INT").asInstanceOf[Object],
+          _originalHandler)
+    } catch {
+      // Ignore. sun.misc Signal handler classes don't exist.
+      case _: ClassNotFoundException =>
+      case e: Exception => throw e
+    }
   }
 
   private var finishedTasks = 0
@@ -97,7 +128,7 @@ private[spark] class JobWaiter[T](
     while (!_jobFinished) {
       this.wait()
     }
-    detachSigintHandler(_originalHandler)
+    detachSigintHandler()
     return jobResult
   }
 }
