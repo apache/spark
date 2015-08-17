@@ -468,7 +468,7 @@ class Analyzer(
         val (withAggsRemoved, aliasedAggregateList) = newOrdering.zipWithIndex.map {
           case (aggOrdering, idx)
             if aggOrdering.collect { case a: AggregateExpression => a }.nonEmpty =>
-            val aliased = Alias(aggOrdering.child, s"_aggOrdering_$idx")()
+            val aliased = Alias(aggOrdering.child, s"${aggOrdering.toString}_$idx")()
             (aggOrdering.copy(child = aliased.toAttribute), Some(aliased))
 
           case (other, _) => (other, None)

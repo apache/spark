@@ -23,6 +23,7 @@ import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.errors.DialectException
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -1632,9 +1633,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         .toDF("key", "value")
         .registerTempTable("mytable")
       checkAnswer(sql(
-        """select max(value) from mytable group by key % 2
+        """select max(value) as _aggOrdering_0 from mytable group by key % 2
           |order by max(concat(value,",", key)), min(substr(value, 0, 4))
           |""".stripMargin), Row("8") :: Row("9") :: Nil)
+
+      checkAnswer(
+        sqlContext.table("mytable").groupBy($"key" % 2).agg(max($"value"))
+          .orderBy(max(concat($"value", lit(","), $"key")), min(substring($"value", 0, 4))),
+        Row(0, "8") :: Row(1, "9") :: Nil)
     }
   }
 }
