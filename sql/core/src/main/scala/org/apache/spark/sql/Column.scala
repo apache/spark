@@ -753,10 +753,16 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *   df.select($"colA".as("colB"))
    * }}}
    *
+   * If the current column has metadata associated with it, this metadata will be propagated
+   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   *
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: String): Column = Alias(expr, alias)()
+  def as(alias: String): Column = expr match {
+    case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
+    case other => Alias(other, alias)()
+  }
 
   /**
    * (Scala-specific) Assigns the given aliases to the results of a table generating function.
@@ -789,10 +795,16 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *   df.select($"colA".as('colB))
    * }}}
    *
+   * If the current column has metadata associated with it, this metadata will be propagated
+   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   *
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: Symbol): Column = Alias(expr, alias.name)()
+  def as(alias: Symbol): Column = expr match {
+    case ne: NamedExpression => Alias(expr, alias.name)(explicitMetadata = Some(ne.metadata))
+    case other => Alias(other, alias.name)()
+  }
 
   /**
    * Gives the column an alias with metadata.

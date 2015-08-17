@@ -331,6 +331,8 @@ object SparkEnv extends Logging {
         case "netty" =>
           new NettyBlockTransferService(conf, securityManager, numUsableCores)
         case "nio" =>
+          logWarning("NIO-based block transfer service is deprecated, " +
+            "and will be removed in Spark 1.6.0.")
           new NioBlockTransferService(conf, securityManager)
       }
 

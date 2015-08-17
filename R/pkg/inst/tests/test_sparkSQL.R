@@ -408,6 +408,14 @@ test_that("collect() returns a data.frame", {
   expect_equal(names(rdf)[1], "age")
   expect_equal(nrow(rdf), 3)
   expect_equal(ncol(rdf), 2)
+
+  # collect() returns data correctly from a DataFrame with 0 row
+  df0 <- limit(df, 0)
+  rdf <- collect(df0)
+  expect_true(is.data.frame(rdf))
+  expect_equal(names(rdf)[1], "age")
+  expect_equal(nrow(rdf), 0)
+  expect_equal(ncol(rdf), 2)
 })
 
 test_that("limit() returns DataFrame with the correct number of rows", {
@@ -492,6 +500,18 @@ test_that("head() and first() return the correct data", {
 
   testFirst <- first(df)
   expect_equal(nrow(testFirst), 1)
+
+  # head() and first() return the correct data on
+  # a DataFrame with 0 row
+  df0 <- limit(df, 0)
+
+  testHead <- head(df0)
+  expect_equal(nrow(testHead), 0)
+  expect_equal(ncol(testHead), 2)
+
+  testFirst <- first(df0)
+  expect_equal(nrow(testFirst), 0)
+  expect_equal(ncol(testFirst), 2)
 })
 
 test_that("distinct() and unique on DataFrames", {
@@ -560,6 +580,11 @@ test_that("select with column", {
   df2 <- select(df, df$age)
   expect_equal(columns(df2), c("age"))
   expect_equal(count(df2), 3)
+
+  df3 <- select(df, lit("x"))
+  expect_equal(columns(df3), c("x"))
+  expect_equal(count(df3), 3)
+  expect_equal(collect(select(df3, "x"))[[1, 1]], "x")
 })
 
 test_that("selectExpr() on a DataFrame", {
@@ -692,6 +717,14 @@ test_that("string operators", {
   expect_equal(count(where(df, startsWith(df$name, "A"))), 1)
   expect_equal(first(select(df, substr(df$name, 1, 2)))[[1]], "Mi")
   expect_equal(collect(select(df, cast(df$age, "string")))[[2, 1]], "30")
+  expect_equal(collect(select(df, concat(df$name, lit(":"), df$age)))[[2, 1]], "Andy:30")
+})
+
+test_that("greatest() and least() on a DataFrame", {
+  l <- list(list(a = 1, b = 2), list(a = 3, b = 4))
+  df <- createDataFrame(sqlContext, l)
+  expect_equal(collect(select(df, greatest(df$a, df$b)))[, 1], c(2, 4))
+  expect_equal(collect(select(df, least(df$a, df$b)))[, 1], c(1, 3))
 })
 
 test_that("group by", {

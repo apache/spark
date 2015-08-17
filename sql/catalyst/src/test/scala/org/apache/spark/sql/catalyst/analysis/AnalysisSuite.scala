@@ -119,4 +119,21 @@ class AnalysisSuite extends AnalysisTest {
           Project(testRelation.output :+ projected, testRelation)))
     checkAnalysis(plan, expected)
   }
+
+  test("SPARK-9634: cleanup unnecessary Aliases in LogicalPlan") {
+    val a = testRelation.output.head
+    var plan = testRelation.select(((a + 1).as("a+1") + 2).as("col"))
+    var expected = testRelation.select((a + 1 + 2).as("col"))
+    checkAnalysis(plan, expected)
+
+    plan = testRelation.groupBy(a.as("a1").as("a2"))((min(a).as("min_a") + 1).as("col"))
+    expected = testRelation.groupBy(a)((min(a) + 1).as("col"))
+    checkAnalysis(plan, expected)
+
+    // CreateStruct is a special case that we should not trim Alias for it.
+    plan = testRelation.select(CreateStruct(Seq(a, (a + 1).as("a+1"))).as("col"))
+    checkAnalysis(plan, plan)
+    plan = testRelation.select(CreateStructUnsafe(Seq(a, (a + 1).as("a+1"))).as("col"))
+    checkAnalysis(plan, plan)
+  }
 }
