@@ -92,12 +92,28 @@
       <artifactId>jetty-servlet</artifactId>
     </dependency>
     <!-- End of shaded deps. -->
-    
+
+    <!--
+      SPARK-10059: Explicitly add JSP dependencies for tests since the MiniYARN cluster needs them.
+    -->
+    <dependency>
+      <groupId>org.eclipse.jetty.orbit</groupId>
+      <artifactId>javax.servlet.jsp</artifactId>
+      <version>2.2.0.v201112011158</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty.orbit</groupId>
+      <artifactId>javax.servlet.jsp.jstl</artifactId>
+      <version>1.2.0.v201105211821</version>
+      <scope>test</scope>
+    </dependency>
+
      <!--
     See SPARK-3710. hadoop-yarn-server-tests in Hadoop 2.2 fails to pull some needed
     dependencies, so they need to be added manually for the tests to work.
     -->
-     
+
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-yarn-server-tests</artifactId>
@@ -137,7 +153,7 @@
        <scope>test</scope>
      </dependency>
   </dependencies>
-  
+
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
