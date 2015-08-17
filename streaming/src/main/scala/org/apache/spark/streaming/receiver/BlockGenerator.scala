@@ -227,16 +227,21 @@ private[streaming] class BlockGenerator(
   def isStopped(): Boolean = state == StoppedAll
 
   /** Change the buffer to which single records are added to. */
-  private def updateCurrentBuffer(time: Long): Unit = synchronized {
+  private def updateCurrentBuffer(time: Long): Unit = {
     try {
-      val newBlockBuffer = currentBuffer
-      currentBuffer = new ArrayBuffer[Any]
-      if (newBlockBuffer.size > 0) {
-        val blockId = StreamBlockId(receiverId, time - blockIntervalMs)
-        val newBlock = new Block(blockId, newBlockBuffer)
-        listener.onGenerateBlock(blockId)
+      var newBlock: Block = null
+      synchronized {
+        if (currentBuffer.nonEmpty) {
+          val newBlockBuffer = currentBuffer
+          currentBuffer = new ArrayBuffer[Any]
+          val blockId = StreamBlockId(receiverId, time - blockIntervalMs)
+          listener.onGenerateBlock(blockId)
+          newBlock = new Block(blockId, newBlockBuffer)
+        }
+      }
+
+      if (newBlock != null) {
         blocksForPushing.put(newBlock)  // put is blocking when queue is full
-        logDebug("Last element in " + blockId + " is " + newBlockBuffer.last)
       }
     } catch {
       case ie: InterruptedException =>
