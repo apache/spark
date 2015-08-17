@@ -20,15 +20,12 @@ package org.apache.spark.network.sasl;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.collect.Lists;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -59,8 +56,6 @@ import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class SaslIntegrationSuite {
-  private final Logger logger = LoggerFactory.getLogger(SaslIntegrationSuite.class);
-
   static TransportServer server;
   static TransportConf conf;
   static TransportContext context;
