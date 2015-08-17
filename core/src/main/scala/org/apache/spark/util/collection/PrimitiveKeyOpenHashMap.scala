@@ -28,7 +28,7 @@ import scala.reflect._
  */
 private[spark]
 class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
-                              @specialized(Long, Int, Double) V: ClassTag](
+                              @specialized(Long, Int, Double, Float) V: ClassTag](
     initialCapacity: Int)
   extends Iterable[(K, V)]
   with Serializable {
