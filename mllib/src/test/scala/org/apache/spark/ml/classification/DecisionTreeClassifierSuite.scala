@@ -261,6 +261,19 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     }
   }
 
+  test("training with 1-category categorical feature") {
+    val data = sc.parallelize(Seq(
+      LabeledPoint(0, Vectors.dense(0, 2, 3)),
+      LabeledPoint(1, Vectors.dense(0, 3, 1)),
+      LabeledPoint(0, Vectors.dense(0, 2, 2)),
+      LabeledPoint(1, Vectors.dense(0, 3, 9)),
+      LabeledPoint(0, Vectors.dense(0, 2, 6))
+    ))
+    val df = TreeTests.setMetadata(data, Map(0 -> 1), 2)
+    val dt = new DecisionTreeClassifier().setMaxDepth(3)
+    val model = dt.fit(df)
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////

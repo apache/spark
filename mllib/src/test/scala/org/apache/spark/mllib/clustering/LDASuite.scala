@@ -581,7 +581,7 @@ private[clustering] object LDASuite {
   def javaToyData: JArrayList[(java.lang.Long, Vector)] = {
     val javaData = new JArrayList[(java.lang.Long, Vector)]
     var i = 0
-    while (i < toyData.size) {
+    while (i < toyData.length) {
       javaData.add((toyData(i)._1, toyData(i)._2))
       i += 1
     }

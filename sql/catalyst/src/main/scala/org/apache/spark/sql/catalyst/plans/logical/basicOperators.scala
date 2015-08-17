@@ -228,7 +228,7 @@ case class Window(
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] =
-    (projectList ++ windowExpressions).map(_.toAttribute)
+    projectList ++ windowExpressions.map(_.toAttribute)
 }
 
 /**
