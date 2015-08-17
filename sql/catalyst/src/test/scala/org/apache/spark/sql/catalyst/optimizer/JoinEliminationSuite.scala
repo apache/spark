@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.RightOuter
@@ -55,7 +56,7 @@ class JoinEliminationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  ignore("collapse right outer join followed by subset project") {
+  test("collapse right outer join followed by subset project") {
     val query = testRelation1K
       .join(testRelation2, RightOuter, Some('a === 'c))
       .select('c, 'd)
@@ -119,5 +120,66 @@ class JoinEliminationSuite extends PlanTest {
     val correctAnswer = query.analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("collapse join preceded by join") {
+    val query1 = testRelation3K
+      .join(testRelation1, LeftOuter, Some('e === 'a)) // will not be eliminated
+    val query2 = query1
+      .join(testRelation2K, LeftOuter, Some('a === 'c)) // should be eliminated
+      .select('a, 'b, 'e, 'f)
+
+    val optimized = Optimize.execute(query2.analyze)
+    val correctAnswer = query1.select('a, 'b, 'e, 'f).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("eliminate inner join - fk on right, no pk columns kept") {
+    val query = testRelation1K
+      .join(testRelation3K, Inner, Some('a === 'e))
+      .select('e, 'f)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation3K.select('e, 'f).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("eliminate inner join - fk on right, pk columns kept") {
+    val query = testRelation1K
+      .join(testRelation3K, Inner, Some('a === 'e))
+      .select('a, 'f)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation3K.select('e.as('a), 'f).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("eliminate inner join - fk on left, pk columns kept") {
+    val query = testRelation3K
+      .join(testRelation1K, Inner, Some('a === 'e))
+      .select('a, 'f)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation3K.select('e.as('a), 'f).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("triangles") {
+    val e0 = LocalRelation('srcId.int, 'dstId.int)
+    val v0 = LocalRelation('id.int, 'attr.int)
+    val e = KeyHint(List(ForeignKey(e0.output.head, v0.output.head), ForeignKey(e0.output.last, v0.output.head)), e0)
+    val v = KeyHint(List(UniqueKey(v0.output.head)), v0)
+
+    val query = e.join(v, LeftOuter, Some('dstId === 'id)).select('srcId, 'id)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = e.select('srcId, 'dstId.as('id)).analyze
+
+    comparePlans(optimized, correctAnswer)
+
   }
 }

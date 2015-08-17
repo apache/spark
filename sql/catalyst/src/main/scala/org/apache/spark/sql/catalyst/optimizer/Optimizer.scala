@@ -274,81 +274,40 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
 }
 
 /**
- * Eliminates keyed equi-joins when followed by a [[Project]] that keeps only columns from one side.
+ * Eliminates keyed equi-joins when followed by a [[Project]] that only keeps columns from one side.
+ *
+ * See [[http://www.info.teradata.com/HTMLPubs/DB_TTU_14_00/index.html#page/SQL_Reference/B035_1142_111A/ch02.124.042.html#ww17434326]].
  */
 object JoinElimination extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Left outer join where only the left columns are kept, and a key from the right is involved in
-    // the join so no duplicates are generated
-    case p @ Project(projectList, ExtractEquiJoinKeys(LeftOuter, leftKeys, rightKeys, _, left, right)) =>
-      // A unique key from the right must be involved in the join so no duplicates are generated
-      val rightUniqueKeys = AttributeSet(right.keys.collect { case UniqueKey(attr) => attr })
-      val noDups = rightUniqueKeys.intersect(AttributeSet(rightKeys)).nonEmpty
+    // Outer join where only the outer table's columns are kept, and a key from the inner table is
+    // involved in the join so no duplicates would be generated
+    case CanEliminateUniqueKeyOuterJoin(outer, projectList) =>
+      Project(projectList, outer)
 
-      // Only the left columns (or right columns that are equal to left columns via an equijoin
-      // predicate) may be kept
-      val onlyLeftCols = AttributeSet(projectList).subsetOf(left.outputSet)
-      val onlyLeftOrEquiCols =
-        AttributeSet(projectList).subsetOf(left.outputSet ++ AttributeSet(rightKeys))
-
-      // If right columns were kept, they must be referenced by a foreign key constraint on the
-      // corresponding left column so no nonexistent values are generated
-      val aliasMap = AttributeMap(rightKeys.zip(leftKeys).collect {
-        case (a: NamedExpression, b: NamedExpression) => (a.toAttribute, b.toAttribute)
-      })
-      val eq = equivalences(right)
-      val foreignKeyConstraintsSatisfied = AttributeSet(projectList).forall(a =>
-        !aliasMap.contains(a) || left.keys.exists {
-          case ForeignKey(leftAttr, referencedAttr)
-              if leftAttr == aliasMap(a) && eq.query(referencedAttr, a) => true
-          case _ => false
-        })
-
-      if (noDups && onlyLeftCols) {
-        Project(projectList, left)
-      } else if (noDups && onlyLeftOrEquiCols && foreignKeyConstraintsSatisfied) {
-        val substitutedProjection = projectList.map(_.transform {
-          case a: Attribute =>
-            if (aliasMap.contains(a)) Alias(aliasMap(a), a.name)(a.exprId)
-            else a
-        }).asInstanceOf[Seq[NamedExpression]]
-        Project(substitutedProjection, left)
-      } else {
-        p
-      }
+    // Any kind of join based on referential integrity
+    case CanEliminateReferentialIntegrityEquiJoin(
+        _, parent, child, primaryForeignMap, projectList) =>
+      Project(substituteParentForChild(projectList, parent, primaryForeignMap), child)
   }
 
-  private def equivalences(plan: LogicalPlan): MutableDisjointSet[Attribute] = {
-    val s = new MutableDisjointSet[Attribute]
-    plan.collect {
-      case Project(projectList, _) => projectList.collect {
-        case a @ Alias(old: Attribute, _) => s.union(old, a.toAttribute)
-      }
-    }
-    s
+  /**
+   * In the given expressions, substitute all references to parent columns with references to the
+   * corresponding child columns. The `primaryForeignMap` contains these equivalences, extracted
+   * from the equality join expressions.
+   */
+  private def substituteParentForChild(
+      expressions: Seq[NamedExpression],
+      parent: LogicalPlan,
+      primaryForeignMap: AttributeMap[Attribute])
+    : Seq[NamedExpression] = {
+    expressions.map(_.transform {
+      case a: Attribute =>
+        if (parent.outputSet.contains(a)) Alias(primaryForeignMap(a), a.name)(a.exprId)
+        else a
+    }.asInstanceOf[NamedExpression])
   }
 
-  private class MutableDisjointSet[A]() {
-    import scala.collection.mutable.Set
-    private var sets = Set[Set[A]]()
-    def add(x: A): Unit = {
-      if (!sets.exists(_.contains(x))) {
-        sets += Set(x)
-      }
-    }
-    def union(x: A, y: A): Unit = {
-      add(x)
-      add(y)
-      val xSet = sets.find(_.contains(x)).get
-      val ySet = sets.find(_.contains(y)).get
-      sets -= xSet
-      sets -= ySet
-      sets += (xSet ++ ySet)
-    }
-    def query(x: A, y: A): Boolean = {
-      x == y || sets.exists(s => s.contains(x) && s.contains(y))
-    }
-  }
 }
 
 object RemoveKeyHints extends Rule[LogicalPlan] {
