@@ -420,7 +420,6 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
       }
       val topicsMat = Matrices.fromBreeze(brzTopics)
 
-      // TODO: initialize with docConcentration, topicConcentration, and gammaShape after SPARK-9940
       new LocalLDAModel(topicsMat, docConcentration, topicConcentration, gammaShape)
     }
   }
