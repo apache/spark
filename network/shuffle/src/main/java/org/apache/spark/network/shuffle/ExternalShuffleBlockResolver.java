@@ -115,8 +115,10 @@ public class ExternalShuffleBlockResolver {
           // one, so we can keep processing new apps
           logger.error("error opening leveldb file {}.  Creating new file, will not be able to " +
             "recover state for existing applications", registeredExecutorFile, e);
-          for (File f: registeredExecutorFile.listFiles()) {
-            f.delete();
+          if (registeredExecutorFile.isDirectory()) {
+            for (File f : registeredExecutorFile.listFiles()) {
+              f.delete();
+            }
           }
           registeredExecutorFile.delete();
           options.createIfMissing(true);
@@ -353,8 +355,10 @@ public class ExternalShuffleBlockResolver {
   }
 
   private static AppExecId parseDbAppExecKey(String s) throws IOException {
-    int p = s.indexOf(';');
-    String json = s.substring(p + 1);
+    if (!s.startsWith(APP_KEY_PREFIX)) {
+      throw new IllegalArgumentException("expected a string starting with " + APP_KEY_PREFIX);
+    }
+    String json = s.substring(APP_KEY_PREFIX.length() + 1);
     AppExecId parsed = mapper.readValue(json, AppExecId.class);
     return parsed;
   }

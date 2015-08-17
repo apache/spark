@@ -17,12 +17,6 @@
 package org.apache.spark.network.yarn
 
 import java.io.File
-import java.util.{List => JList, Map => JMap}
-import java.util.Map.Entry
-
-
-import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver
-import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 
 /**
  * just a cheat to get package-visible members in tests
