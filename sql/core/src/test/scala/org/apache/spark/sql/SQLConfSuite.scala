@@ -32,11 +32,12 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("programmatic ways of basic setting and getting") {
+    // Set a conf first.
+    ctx.setConf(testKey, testVal)
+    // Clear the conf.
     ctx.conf.clear()
-    // The number of confs set after we call clear equals to the number of
-    // confs in TestSQLContext.overrideConfs (we always override these confs
-    // when we use TestSQLContext).
-    assert(ctx.getAllConfs.size === TestSQLContext.overrideConfs.size)
+    // After clear, only overrideConfs used by unit test should be in the SQLConf.
+    assert(ctx.getAllConfs === TestSQLContext.overrideConfs)
 
     ctx.setConf(testKey, testVal)
     assert(ctx.getConf(testKey) === testVal)
