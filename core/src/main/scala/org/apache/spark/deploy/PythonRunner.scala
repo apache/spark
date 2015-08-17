@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 import scala.util.Try
 
+import org.apache.spark.SparkUserAppException
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -46,7 +47,14 @@ object PythonRunner {
     // Launch a Py4J gateway server for the process to connect to; this will let it see our
     // Java system properties and such
     val gatewayServer = new py4j.GatewayServer(null, 0)
-    gatewayServer.start()
+    val thread = new Thread(new Runnable() {
+      override def run(): Unit = Utils.logUncaughtExceptions {
+        gatewayServer.start()
+      }
+    })
+    thread.setName("py4j-gateway")
+    thread.setDaemon(true)
+    thread.start()
 
     // Build up a PYTHONPATH that includes the Spark assembly JAR (where this class is), the
     // python directories in SPARK_HOME (if set), and any files in the pyFiles argument
@@ -64,11 +72,18 @@ object PythonRunner {
     env.put("PYTHONUNBUFFERED", "YES") // value is needed to be set to a non-empty string
     env.put("PYSPARK_GATEWAY_PORT", "" + gatewayServer.getListeningPort)
     builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
-    val process = builder.start()
+    try {
+      val process = builder.start()
 
-    new RedirectThread(process.getInputStream, System.out, "redirect output").start()
+      new RedirectThread(process.getInputStream, System.out, "redirect output").start()
 
-    System.exit(process.waitFor())
+      val exitCode = process.waitFor()
+      if (exitCode != 0) {
+        throw new SparkUserAppException(exitCode)
+      }
+    } finally {
+      gatewayServer.shutdown()
+    }
   }
 
   /**
