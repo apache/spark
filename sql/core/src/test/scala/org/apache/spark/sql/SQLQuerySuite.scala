@@ -1625,4 +1625,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(sql("select count(num) from 1one"), Row(10))
     }
   }
+
+  test("SPARK-10044: resolving reference for sorting with aggregation") {
+    withTempTable("mytable") {
+      sqlContext.sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
+        .toDF("key", "value")
+        .registerTempTable("mytable")
+      checkAnswer(sql(
+        """select max(value) from mytable group by key % 2
+          |order by max(concat(value,",", key)), min(substr(value, 0, 4))
+          |""".stripMargin), Row("8") :: Row("9") :: Nil)
+    }
+  }
 }
