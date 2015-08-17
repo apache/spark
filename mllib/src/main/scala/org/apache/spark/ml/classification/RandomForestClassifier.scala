@@ -18,6 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
@@ -132,6 +133,8 @@ final class RandomForestClassificationModel private[ml] (
 
   require(numTrees > 0, "RandomForestClassificationModel requires at least 1 tree.")
 
+  private var bcastModel: Option[Broadcast[RandomForestClassificationModel]] = None
+
   /**
    * Construct a random forest classification model, with all trees weighted equally.
    * @param trees  Component trees
@@ -150,9 +153,12 @@ final class RandomForestClassificationModel private[ml] (
   override def treeWeights: Array[Double] = _treeWeights
 
   override protected def transformImpl(dataset: DataFrame): DataFrame = {
-    val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
+    bcastModel match {
+      case None => bcastModel = Some(dataset.sqlContext.sparkContext.broadcast(this))
+      case _ =>
+    }
     val predictUDF = udf { (features: Any) =>
-      bcastModel.value.predict(features.asInstanceOf[Vector])
+      bcastModel.get.value.predict(features.asInstanceOf[Vector])
     }
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }

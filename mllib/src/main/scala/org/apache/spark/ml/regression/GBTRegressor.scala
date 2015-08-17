@@ -21,6 +21,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.tree.{DecisionTreeModel, GBTParams, TreeEnsembleModel, TreeRegressorParams}
@@ -165,14 +166,19 @@ final class GBTRegressionModel(
   require(_trees.length == _treeWeights.length, "GBTRegressionModel given trees, treeWeights of" +
     s" non-matching lengths (${_trees.length}, ${_treeWeights.length}, respectively).")
 
+  private var bcastModel: Option[Broadcast[GBTRegressionModel]] = None
+
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   override def treeWeights: Array[Double] = _treeWeights
 
   override protected def transformImpl(dataset: DataFrame): DataFrame = {
-    val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
+    bcastModel match {
+      case None => bcastModel = Some(dataset.sqlContext.sparkContext.broadcast(this))
+      case _ =>
+    }
     val predictUDF = udf { (features: Any) =>
-      bcastModel.value.predict(features.asInstanceOf[Vector])
+      bcastModel.get.value.predict(features.asInstanceOf[Vector])
     }
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
