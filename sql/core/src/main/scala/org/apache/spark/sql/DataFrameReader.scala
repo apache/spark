@@ -197,7 +197,13 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       table: String,
       parts: Array[Partition],
       connectionProperties: Properties): DataFrame = {
-    val relation = JDBCRelation(url, table, parts, connectionProperties)(sqlContext)
+    val props = new Properties()
+    extraOptions.foreach { case (key, value) =>
+      props.put(key, value)
+    }
+    // connectionProperties should override settings in extraOptions
+    props.putAll(connectionProperties)
+    val relation = JDBCRelation(url, table, parts, props)(sqlContext)
     sqlContext.baseRelationToDataFrame(relation)
   }
 

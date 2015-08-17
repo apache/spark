@@ -244,7 +244,13 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *                             should be included.
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
-    val conn = JdbcUtils.createConnection(url, connectionProperties)
+    val props = new Properties()
+    extraOptions.foreach { case (key, value) =>
+      props.put(key, value)
+    }
+    // connectionProperties should override settings in extraOptions
+    props.putAll(connectionProperties)
+    val conn = JdbcUtils.createConnection(url, props)
 
     try {
       var tableExists = JdbcUtils.tableExists(conn, table)
@@ -272,7 +278,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       conn.close()
     }
 
-    JdbcUtils.saveTable(df, url, table, connectionProperties)
+    JdbcUtils.saveTable(df, url, table, props)
   }
 
   /**
