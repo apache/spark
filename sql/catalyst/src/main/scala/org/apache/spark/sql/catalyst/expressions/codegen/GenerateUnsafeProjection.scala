@@ -124,7 +124,7 @@ abstract class AbstractGenerateUnsafeProjection[OutType <: AnyRef]
    */
   private def createCodeForStruct(
       ctx: CodeGenContext,
-      row: String,
+      rowNames: Seq[String],
       inputs: Seq[GeneratedExpressionCode],
       inputTypes: Seq[DataType]): GeneratedExpressionCode = {
 
@@ -185,7 +185,7 @@ abstract class AbstractGenerateUnsafeProjection[OutType <: AnyRef]
     val code = s"""
       $cursor = $fixedSize;
       $output.pointTo($buffer, Platform.BYTE_ARRAY_OFFSET, ${inputTypes.length}, $cursor);
-      ${ctx.splitExpressions(row, convertedFields)}
+      ${ctx.splitExpressions(rowNames, convertedFields)}
       """
     GeneratedExpressionCode(code, "false", output)
   }
@@ -396,7 +396,7 @@ abstract class AbstractGenerateUnsafeProjection[OutType <: AnyRef]
         val fieldIsNull = s"$tmp.isNullAt($i)"
         GeneratedExpressionCode("", fieldIsNull, getFieldCode)
       }
-      val converter = createCodeForStruct(ctx, tmp, fieldEvals, fieldTypes)
+      val converter = createCodeForStruct(ctx, Seq(tmp), fieldEvals, fieldTypes)
       val code = s"""
         ${input.code}
          UnsafeRow $output = null;
@@ -423,7 +423,7 @@ abstract class AbstractGenerateUnsafeProjection[OutType <: AnyRef]
   def createCode(ctx: CodeGenContext, expressions: Seq[Expression]): GeneratedExpressionCode = {
     val exprEvals = expressions.map(e => e.gen(ctx))
     val exprTypes = expressions.map(_.dataType)
-    createCodeForStruct(ctx, "i", exprEvals, exprTypes)
+    createCodeForStruct(ctx, inputNames, exprEvals, exprTypes)
   }
 
   protected def create(expressions: Seq[Expression]): OutType = {

@@ -291,8 +291,13 @@ class CodeGenContext {
       blocks.head
     } else {
       val apply = freshName("apply")
-      val functionParams = row.map("InternalRow " + _).mkString(", ")
-      val functionCall = row.mkString(", ")
+      def useJoinedRow(output: String) = {
+        if (references.nonEmpty && row.size > 1) output
+        else ""
+      }
+      val functionParams = row.map("InternalRow " + _).mkString(", ") +
+        useJoinedRow(", JoinedRow i")
+      val functionCall = row.mkString(", ") + useJoinedRow(", i")
       val functions = blocks.zipWithIndex.map { case (body, i) =>
         val name = s"${apply}_$i"
         val code = s"""

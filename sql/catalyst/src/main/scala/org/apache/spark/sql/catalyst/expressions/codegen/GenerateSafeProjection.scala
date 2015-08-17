@@ -50,7 +50,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
         }
       """
     }
-    val allFields = ctx.splitExpressions(tmp, fieldWriters)
+    val allFields = ctx.splitExpressions(Seq(tmp), fieldWriters)
     val code = s"""
       final InternalRow $tmp = $input;
       this.$values = new Object[${schema.length}];
@@ -139,7 +139,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
             }
           """
     }
-    val allExpressions = ctx.splitExpressions("i", expressionCodes)
+    val allExpressions = ctx.splitExpressions(inputNames, expressionCodes)
     val code = s"""
       public Object generate($exprType[] expr) {
         return new SpecificSafeProjection(expr);

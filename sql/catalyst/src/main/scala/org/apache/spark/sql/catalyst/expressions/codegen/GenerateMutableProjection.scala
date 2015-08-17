@@ -72,7 +72,7 @@ abstract class AbstractGenerateMutableProjection[OutType <: AnyRef]
         return new SpecificMutableProjection(expr);
       }
 
-      class SpecificProjection extends $projectionType {
+      class SpecificMutableProjection extends $projectionType {
 
         private $exprType[] expressions;
         private $mutableRowType mutableRow;
