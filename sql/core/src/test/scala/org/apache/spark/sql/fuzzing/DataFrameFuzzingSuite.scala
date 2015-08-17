@@ -30,6 +30,29 @@ import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
+
+trait DataFrameTransformation extends Function[DataFrame, DataFrame] {
+
+}
+
+case class CallTransform(
+    method: ru.MethodSymbol,
+    args: Seq[Any])(
+    implicit runtimeMirror: ru.Mirror) extends DataFrameTransformation {
+  override def apply(df: DataFrame): DataFrame = {
+    val reflectedMethod: ru.MethodMirror = runtimeMirror.reflect(df).reflectMethod(method)
+    try {
+      println(s"    Applying method $reflectedMethod with args $args")
+      val x = reflectedMethod.apply(args: _*).asInstanceOf[DataFrame]
+      println(s"    Applied method $reflectedMethod with args $args")
+      x
+    } catch {
+      case e: InvocationTargetException => throw e.getCause
+    }
+  }
+}
+
+
 /**
  * This test suite generates random data frames, then applies random sequences of operations to
  * them in order to construct random queries. We don't have a source of truth for these random
@@ -53,7 +76,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
     values(Random.nextInt(values.length))
   }
 
-  val m = ru.runtimeMirror(this.getClass.getClassLoader)
+  implicit val m: ru.Mirror = ru.runtimeMirror(this.getClass.getClassLoader)
 
   val whitelistedParameterTypes = Set(
     m.universe.typeOf[DataFrame],
@@ -149,38 +172,27 @@ class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   def applyRandomTransformationToDataFrame(df: DataFrame): DataFrame = {
-    val method = randomChoice(dataFrameTransformations)
-    val reflectedMethod: ru.MethodMirror = m.reflect(df).reflectMethod(method)
-    def callMethod(paramValues: Seq[Any]): DataFrame = {
-      try {
-        val df2 = reflectedMethod.apply(paramValues: _*).asInstanceOf[DataFrame]
-        println(s"Applied method $method with values $paramValues")
-        df2
-      } catch {
-        case e: InvocationTargetException =>
-          throw e.getCause
-      }
-    }
+    val method: ru.MethodSymbol = randomChoice(dataFrameTransformations)
     try {
-      val paramValues = getParamValues(df, method)
       try {
-        callMethod(paramValues)
+        CallTransform(method, getParamValues(df, method)).apply(df)
       } catch {
         case NonFatal(e) =>
-          println(s"Encountered error when calling $method with values $paramValues")
           println(df.queryExecution)
           throw e
       }
     } catch {
       case e: AnalysisException if e.getMessage.contains("is not a boolean") =>
-        callMethod(getParamValues(df, method, _ == BooleanType))
+        CallTransform(method, getParamValues(df, method, _ == BooleanType)).apply(df)
       case e: AnalysisException if e.getMessage.contains("is not supported for columns of type") =>
-        callMethod(getParamValues(df, method, _.isInstanceOf[AtomicType]))
+        CallTransform(method, getParamValues(df, method, _.isInstanceOf[AtomicType])).apply(df)
     }
   }
 
   def tryToExecute(df: DataFrame): DataFrame = {
     try {
+      println("Before executing:")
+      df.explain(true)
       df.rdd.count()
       df
     } catch {
@@ -193,6 +205,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
   // TODO: make these regexes.
   val ignoredAnalysisExceptionMessages = Seq(
     // TODO: filter only for binary type:
+    "cannot sort data type array<",
     "cannot be used in grouping expression",
     "cannot be used in join condition",
     "can only be performed on tables with the same number of columns",
@@ -215,7 +228,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
           val df = dataGenerator.randomDataFrame(
             numCols = Random.nextInt(2) + 1,
             numRows = 20,
-            allowComplexTypes = false)
+            allowComplexTypes = true)
           val df1 = tryToExecute(applyRandomTransformationToDataFrame(df))
           val df2 = tryToExecute(applyRandomTransformationToDataFrame(df1))
         } catch {
