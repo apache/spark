@@ -83,7 +83,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
-    val executorMetricsUpdate = SparkListenerExecutorMetricsUpdate("exec3", Seq(
+    val executorMetricsUpdate = SparkListenerExecutorMetricsUpdate("exec3", null, Seq(
       (1L, 2, 3, makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800,
         hasHadoopInput = true, hasOutput = true))))
 

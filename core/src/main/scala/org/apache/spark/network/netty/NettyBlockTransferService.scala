@@ -17,10 +17,15 @@
 
 package org.apache.spark.network.netty
 
+import java.util.List
+
 import scala.collection.JavaConversions._
 import scala.concurrent.{Future, Promise}
 
+import io.netty.buffer._
+
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.executor.{TransportMetrics, ExecutorMetrics}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.{TransportClientBootstrap, RpcResponseCallback, TransportClientFactory}
@@ -29,8 +34,9 @@ import org.apache.spark.network.server._
 import org.apache.spark.network.shuffle.{RetryingBlockFetcher, BlockFetchingListener, OneForOneBlockFetcher}
 import org.apache.spark.network.shuffle.protocol.UploadBlock
 import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.SparkEnv
 import org.apache.spark.storage.{BlockId, StorageLevel}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Clock, Utils, SystemClock}
 
 /**
  * A BlockTransferService that uses Netty to fetch a set of blocks at at time.
@@ -47,6 +53,37 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
   private[this] var server: TransportServer = _
   private[this] var clientFactory: TransportClientFactory = _
   private[this] var appId: String = _
+  private[this] var clock: Clock = new SystemClock()
+
+  /**
+   * Use a different clock for this allocation manager. This is mainly used for testing.
+   */
+  def setClock(newClock: Clock): Unit = {
+    clock = newClock
+  }
+
+  override def getMemMetrics(executorMetrics: ExecutorMetrics): Unit = {
+    val currentTime = clock.getTimeMillis()
+    val clientPooledAllocator = clientFactory.getPooledAllocator()
+    val serverAllocator = server.getAllocator()
+    val clientDirectHeapSize: Long = sumOfMetrics(clientPooledAllocator.directArenas())
+    val clientOnHeapSize: Long = sumOfMetrics(clientPooledAllocator.heapArenas())
+    val serverDirectHeapSize: Long = sumOfMetrics(serverAllocator.directArenas())
+    val serverOnHeapSize: Long = sumOfMetrics(serverAllocator.heapArenas())
+    executorMetrics.setTransportMetrics(TransportMetrics(
+      currentTime, clientOnHeapSize, clientDirectHeapSize, serverOnHeapSize, serverDirectHeapSize))
+    logDebug(s"current Netty directHeapSize is $clientDirectHeapSize, heapSize is $clientOnHeapSize, " +
+      s"current server directHeapsize is $serverDirectHeapSize, server heapsize is $serverOnHeapSize, " +
+      s"executer id is ${SparkEnv.get.blockManager.blockManagerId.executorId}")
+  }
+
+  private def sumOfMetrics(arenaMetricList: List[PoolArenaMetric]): Long = {
+    arenaMetricList.map { Arena =>
+      Arena.chunkLists().map { chunk =>
+        chunk.iterator().map(_.chunkSize()).sum
+      }.sum
+    }.sum
+  }
 
   override def init(blockDataManager: BlockDataManager): Unit = {
     val rpcHandler = new NettyBlockRpcServer(serializer, blockDataManager)

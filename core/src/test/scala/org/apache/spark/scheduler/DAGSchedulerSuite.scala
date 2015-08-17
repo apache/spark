@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.CallSite
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -82,8 +82,8 @@ class DAGSchedulerSuite
     override def schedulingMode: SchedulingMode = SchedulingMode.NONE
     override def start() = {}
     override def stop() = {}
-    override def executorHeartbeatReceived(execId: String, taskMetrics: Array[(Long, TaskMetrics)],
-      blockManagerId: BlockManagerId): Boolean = true
+    override def executorHeartbeatReceived(execId: String, executorMetrics: ExecutorMetrics,
+        taskMetrics: Array[(Long, TaskMetrics)], blockManagerId: BlockManagerId): Boolean = true
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
@@ -402,6 +402,7 @@ class DAGSchedulerSuite
       override def defaultParallelism(): Int = 2
       override def executorHeartbeatReceived(
           execId: String,
+          executorMetrics: ExecutorMetrics,
           taskMetrics: Array[(Long, TaskMetrics)],
           blockManagerId: BlockManagerId): Boolean = true
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}

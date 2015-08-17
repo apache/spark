@@ -85,6 +85,10 @@ private[spark] class Executor(
     env.blockManager.initialize(conf.getAppId)
   }
 
+  private val executorMetrics: ExecutorMetrics = new ExecutorMetrics
+  executorMetrics.setHostname(Utils.localHostName)
+  executorMetrics.setPort(env.blockTransferService.port)
+
   // Create an RpcEndpoint for receiving RPCs from the driver
   private val executorEndpoint = env.rpcEnv.setupEndpoint(
     ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME, new ExecutorEndpoint(env.rpcEnv, executorId))
@@ -439,7 +443,16 @@ private[spark] class Executor(
       }
     }
 
-    val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
+    env.blockTransferService.getMemMetrics(this.executorMetrics)
+    val executorMetrics = if (isLocal) {
+      Utils.deserialize[ExecutorMetrics](Utils.serialize(this.executorMetrics))
+    } else {
+      this.executorMetrics
+    }
+
+    val message = Heartbeat(
+      executorId, executorMetrics, tasksMetrics.toArray, env.blockManager.blockManagerId)
+
     try {
       val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](message)
       if (response.reregisterBlockManager) {

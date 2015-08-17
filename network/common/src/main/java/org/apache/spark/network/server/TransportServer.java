@@ -53,7 +53,12 @@ public class TransportServer implements Closeable {
 
   private ServerBootstrap bootstrap;
   private ChannelFuture channelFuture;
+  private PooledByteBufAllocator allocator;
   private int port = -1;
+
+  public PooledByteBufAllocator getAllocator() {
+    return allocator;
+  }
 
   /** Creates a TransportServer that binds to the given port, or to any available if 0. */
   public TransportServer(
@@ -88,7 +93,7 @@ public class TransportServer implements Closeable {
       NettyUtils.createEventLoop(ioMode, conf.serverThreads(), "shuffle-server");
     EventLoopGroup workerGroup = bossGroup;
 
-    PooledByteBufAllocator allocator = NettyUtils.createPooledByteBufAllocator(
+    allocator = NettyUtils.createPooledByteBufAllocator(
       conf.preferDirectBufs(), true /* allowCache */, conf.serverThreads());
 
     bootstrap = new ServerBootstrap()

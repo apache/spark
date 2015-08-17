@@ -33,7 +33,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.util.{ThreadUtils, Utils}
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.storage.BlockManagerId
 
 /**
@@ -373,6 +373,7 @@ private[spark] class TaskSchedulerImpl(
    */
   override def executorHeartbeatReceived(
       execId: String,
+      executorMetrics: ExecutorMetrics,
       taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
       blockManagerId: BlockManagerId): Boolean = {
 
@@ -383,7 +384,8 @@ private[spark] class TaskSchedulerImpl(
         }
       }
     }
-    dagScheduler.executorHeartbeatReceived(execId, metricsWithStageIds, blockManagerId)
+    dagScheduler.executorHeartbeatReceived(
+      execId, executorMetrics, metricsWithStageIds, blockManagerId)
   }
 
   def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long): Unit = synchronized {

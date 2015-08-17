@@ -624,7 +624,7 @@ private[spark] object JsonProtocol {
       val metrics = taskMetricsFromJson(json \ "Task Metrics")
       (taskId, stageId, stageAttemptId, metrics)
     }
-    SparkListenerExecutorMetricsUpdate(execInfo, taskMetrics)
+    SparkListenerExecutorMetricsUpdate(execInfo, null, taskMetrics)
   }
 
   /** --------------------------------------------------------------------- *

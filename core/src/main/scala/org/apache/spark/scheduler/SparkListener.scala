@@ -24,7 +24,7 @@ import scala.collection.mutable
 
 import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
 import org.apache.spark.util.{Distribution, Utils}
@@ -104,11 +104,13 @@ case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends
 /**
  * Periodic updates from executors.
  * @param execId executor id
+ * @param executorMetrics metrics in executor level
  * @param taskMetrics sequence of (task id, stage id, stage attempt, metrics)
  */
 @DeveloperApi
 case class SparkListenerExecutorMetricsUpdate(
     execId: String,
+    executorMetrics: ExecutorMetrics,
     taskMetrics: Seq[(Long, Int, Int, TaskMetrics)])
   extends SparkListenerEvent
 
