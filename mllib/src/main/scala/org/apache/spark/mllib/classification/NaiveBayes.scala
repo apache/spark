@@ -19,6 +19,8 @@ package org.apache.spark.mllib.classification
 
 import java.lang.{Iterable => JIterable}
 
+import org.apache.spark.broadcast.Broadcast
+
 import scala.collection.JavaConverters._
 
 import org.json4s.JsonDSL._
@@ -53,6 +55,7 @@ class NaiveBayesModel private[spark] (
 
   private val piVector = new DenseVector(pi)
   private val thetaMatrix = new DenseMatrix(labels.length, theta(0).length, theta.flatten, true)
+  private var bcModel: Option[Broadcast[NaiveBayesModel]] = None
 
   private[mllib] def this(labels: Array[Double], pi: Array[Double], theta: Array[Array[Double]]) =
     this(labels, pi, theta, NaiveBayes.Multinomial)
@@ -86,9 +89,12 @@ class NaiveBayesModel private[spark] (
 
   @Since("1.0.0")
   override def predict(testData: RDD[Vector]): RDD[Double] = {
-    val bcModel = testData.context.broadcast(this)
+    bcModel match {
+      case None => bcModel = Some(testData.context.broadcast(this))
+      case _ =>
+    }
     testData.mapPartitions { iter =>
-      val model = bcModel.value
+      val model = bcModel.get.value
       iter.map(model.predict)
     }
   }
@@ -112,9 +118,12 @@ class NaiveBayesModel private[spark] (
    */
   @Since("1.5.0")
   def predictProbabilities(testData: RDD[Vector]): RDD[Vector] = {
-    val bcModel = testData.context.broadcast(this)
+    bcModel match {
+      case None => bcModel = Some(testData.context.broadcast(this))
+      case _ =>
+    }
     testData.mapPartitions { iter =>
-      val model = bcModel.value
+      val model = bcModel.get.value
       iter.map(model.predictProbabilities)
     }
   }
