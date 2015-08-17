@@ -71,7 +71,7 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
 
   /**
    * Write an index file with the offsets of each block, plus a final offset at the end for the
-   * end of the output file. This will be used by getBlockLocation to figure out where each block
+   * end of the output file. This will be used by getBlockData to figure out where each block
    * begins and ends.
    * */
   def writeIndexFile(shuffleId: Int, mapId: Int, lengths: Array[Long]): Unit = {
