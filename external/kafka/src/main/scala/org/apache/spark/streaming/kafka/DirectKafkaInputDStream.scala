@@ -140,28 +140,27 @@ class DirectKafkaInputDStream[
     val untilOffsets = clamp(latestLeaderOffsets(maxRetries))
     val rdd = KafkaRDD[K, V, U, T, R](
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
-
-    // Report the record number and metadata of this batch interval to InputInfoTracker.
-    val offsetRanges = currentOffsets.map { case (tp, fo) =>
-      val uo = untilOffsets(tp)
-      OffsetRange(tp.topic, tp.partition, fo, uo.offset)
+    if (rdd.isDefined) {
+      // Report the record number and metadata of this batch interval to InputInfoTracker.
+      val offsetRanges = currentOffsets.map { case (tp, fo) =>
+        val uo = untilOffsets(tp)
+        OffsetRange(tp.topic, tp.partition, fo, uo.offset)
+      }
+      val description = offsetRanges.filter { offsetRange =>
+        // Don't display empty ranges.
+        offsetRange.fromOffset != offsetRange.untilOffset
+      }.map { offsetRange =>
+        s"topic: ${offsetRange.topic}\tpartition: ${offsetRange.partition}\t" +
+          s"offsets: ${offsetRange.fromOffset} to ${offsetRange.untilOffset}"
+      }.mkString("\n")
+      // Copy offsetRanges to immutable.List to prevent from being modified by the user
+      val metadata = Map(
+        "offsets" -> offsetRanges.toList,
+        StreamInputInfo.METADATA_KEY_DESCRIPTION -> description)
+      val inputInfo = StreamInputInfo(id, rdd.get.count, metadata)
+      ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
     }
-    val description = offsetRanges.filter { offsetRange =>
-      // Don't display empty ranges.
-      offsetRange.fromOffset != offsetRange.untilOffset
-    }.map { offsetRange =>
-      s"topic: ${offsetRange.topic}\tpartition: ${offsetRange.partition}\t" +
-        s"offsets: ${offsetRange.fromOffset} to ${offsetRange.untilOffset}"
-    }.mkString("\n")
-    // Copy offsetRanges to immutable.List to prevent from being modified by the user
-    val metadata = Map(
-      "offsets" -> offsetRanges.toList,
-      StreamInputInfo.METADATA_KEY_DESCRIPTION -> description)
-    val inputInfo = StreamInputInfo(id, rdd.count, metadata)
-    ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
-
-    currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)
-    Some(rdd)
+    rdd
   }
 
   override def start(): Unit = {
