@@ -52,6 +52,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Add(positiveShortLit, negativeShortLit), -1.toShort)
     checkEvaluation(Add(positiveIntLit, negativeIntLit), -1)
     checkEvaluation(Add(positiveLongLit, negativeLongLit), -1L)
+
+    DataTypeTestUtils.numericAndInterval.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen(Add, tpe, tpe)
+    }
   }
 
   test("- (UnaryMinus)") {
@@ -71,6 +75,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(UnaryMinus(negativeIntLit), - negativeInt)
     checkEvaluation(UnaryMinus(positiveLongLit), - positiveLong)
     checkEvaluation(UnaryMinus(negativeLongLit), - negativeLong)
+
+    DataTypeTestUtils.numericAndInterval.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen(UnaryMinus, tpe)
+    }
   }
 
   test("- (Minus)") {
@@ -85,6 +93,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       (positiveShort - negativeShort).toShort)
     checkEvaluation(Subtract(positiveIntLit, negativeIntLit), positiveInt - negativeInt)
     checkEvaluation(Subtract(positiveLongLit, negativeLongLit), positiveLong - negativeLong)
+
+    DataTypeTestUtils.numericAndInterval.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen(Subtract, tpe, tpe)
+    }
   }
 
   test("* (Multiply)") {
@@ -99,6 +111,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       (positiveShort * negativeShort).toShort)
     checkEvaluation(Multiply(positiveIntLit, negativeIntLit), positiveInt * negativeInt)
     checkEvaluation(Multiply(positiveLongLit, negativeLongLit), positiveLong * negativeLong)
+
+    DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen(Multiply, tpe, tpe)
+    }
   }
 
   test("/ (Divide) basic") {
@@ -110,6 +126,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Divide(Literal.create(null, dataType), right), null)
       checkEvaluation(Divide(left, Literal.create(null, right.dataType)), null)
       checkEvaluation(Divide(left, Literal(convert(0))), null)  // divide by zero
+    }
+
+    DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen(Divide, tpe, tpe)
     }
   }
 
@@ -144,6 +164,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Remainder(negativeIntLit, negativeIntLit), 0)
     checkEvaluation(Remainder(positiveLongLit, positiveLongLit), 0L)
     checkEvaluation(Remainder(negativeLongLit, negativeLongLit), 0L)
+
+    // TODO: the following lines would fail the test due to inconsistency result of interpret
+    // and codegen for remainder between giant values, seems like a numeric stability issue
+    // DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
+    //  checkConsistencyBetweenInterpretedAndCodegen(Remainder, tpe, tpe)
+    // }
   }
 
   test("Abs") {
@@ -161,6 +187,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Abs(negativeIntLit), - negativeInt)
     checkEvaluation(Abs(positiveLongLit), positiveLong)
     checkEvaluation(Abs(negativeLongLit), - negativeLong)
+
+    DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen(Abs, tpe)
+    }
   }
 
   test("MaxOf basic") {
@@ -175,6 +205,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(MaxOf(positiveShortLit, negativeShortLit), (positiveShort).toShort)
     checkEvaluation(MaxOf(positiveIntLit, negativeIntLit), positiveInt)
     checkEvaluation(MaxOf(positiveLongLit, negativeLongLit), positiveLong)
+
+    DataTypeTestUtils.ordered.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen(MaxOf, tpe, tpe)
+    }
   }
 
   test("MaxOf for atomic type") {
@@ -196,6 +230,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(MinOf(positiveShortLit, negativeShortLit), (negativeShort).toShort)
     checkEvaluation(MinOf(positiveIntLit, negativeIntLit), negativeInt)
     checkEvaluation(MinOf(positiveLongLit, negativeLongLit), negativeLong)
+
+    DataTypeTestUtils.ordered.foreach { tpe =>
+      checkConsistencyBetweenInterpretedAndCodegen(MinOf, tpe, tpe)
+    }
   }
 
   test("MinOf for atomic type") {
@@ -221,5 +259,9 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Pmod(positiveShort, negativeShort), positiveShort.toShort)
     checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
     checkEvaluation(Pmod(positiveLong, negativeLong), positiveLong)
+  }
+
+  DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
+    checkConsistencyBetweenInterpretedAndCodegen(MinOf, tpe, tpe)
   }
 }
