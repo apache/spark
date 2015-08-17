@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.{TestSQLContext, SharedSQLContext}
 
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
@@ -33,7 +33,10 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
 
   test("programmatic ways of basic setting and getting") {
     ctx.conf.clear()
-    assert(ctx.getAllConfs.size === 0)
+    // The number of confs set after we call clear equals to the number of
+    // confs in TestSQLContext.overrideConfs (we always override these confs
+    // when we use TestSQLContext).
+    assert(ctx.getAllConfs.size === TestSQLContext.overrideConfs.size)
 
     ctx.setConf(testKey, testVal)
     assert(ctx.getConf(testKey) === testVal)

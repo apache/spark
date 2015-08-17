@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.SQLConf
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.sql.hive.test.TestHiveContext
 import org.scalatest.BeforeAndAfterAll
@@ -27,11 +26,7 @@ class ConcurrentHiveSuite extends SparkFunSuite with BeforeAndAfterAll {
     test("Multiple Hive Instances") {
       (1 to 10).map { i =>
         val conf = new SparkConf()
-        conf
-          .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
-          .set(SQLConf.DIALECT.key, "hiveql")
-          .set(SQLConf.CASE_SENSITIVE.key, "false")
-          .set("spark.ui.enabled", "false")
+        conf.set("spark.ui.enabled", "false")
         val ts =
           new TestHiveContext(new SparkContext("local", s"TestSQLContext$i", conf))
         ts.executeSql("SHOW TABLES").toRdd.collect()

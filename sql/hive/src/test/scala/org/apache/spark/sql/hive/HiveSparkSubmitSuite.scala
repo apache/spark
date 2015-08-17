@@ -30,7 +30,6 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark._
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
-import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.types.DecimalType
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
@@ -154,11 +153,7 @@ object SparkSubmitClassLoaderTest extends Logging {
   def main(args: Array[String]) {
     Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
-    conf
-      .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
-      .set(SQLConf.DIALECT.key, "hiveql")
-      .set(SQLConf.CASE_SENSITIVE.key, "false")
-      .set("spark.ui.enabled", "false")
+    conf.set("spark.ui.enabled", "false")
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
     val df = hiveContext.createDataFrame((1 to 100).map(i => (i, i))).toDF("i", "j")
@@ -250,11 +245,7 @@ object SparkSQLConfTest extends Logging {
       // For this simple test, we do not really clone this object.
       override def clone: SparkConf = this
     }
-    conf
-      .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
-      .set(SQLConf.DIALECT.key, "hiveql")
-      .set(SQLConf.CASE_SENSITIVE.key, "false")
-      .set("spark.ui.enabled", "false")
+    conf.set("spark.ui.enabled", "false")
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
     // Run a simple command to make sure all lazy vals in hiveContext get instantiated.
@@ -271,9 +262,6 @@ object SPARK_9757 extends QueryTest with Logging {
       new SparkConf()
         .set("spark.sql.hive.metastore.version", "0.13.1")
         .set("spark.sql.hive.metastore.jars", "maven")
-        .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
-        .set(SQLConf.DIALECT.key, "hiveql")
-        .set(SQLConf.CASE_SENSITIVE.key, "false")
         .set("spark.ui.enabled", "false"))
 
     val hiveContext = new TestHiveContext(sparkContext)
