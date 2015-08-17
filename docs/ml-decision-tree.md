@@ -26,8 +26,78 @@ allowing distributed training with millions or even billions of instances.
 
 Users can find more information about the decision tree algorithm in the [MLlib Decision Tree guide](mllib-decision-tree.html).  In this section, we demonstrate the Pipelines API for Decision Trees.
 
+The Pipelines API for Decision Trees offers a bit more functionality than the original API.  In particular, for classification, users can get the predicted probability of each class (a.k.a. class conditional probabilities).
+
 Ensembles of trees (Random Forests and Gradient-Boosted Trees) are described in the [Ensembles guide](ml-ensembles.html).
 
+# Inputs and Outputs (Predictions)
+
+We list the input and output (prediction) column types here.
+All output columns are optional; to exclude an output column, set its corresponding Param to an empty string.
+
+## Input Columns
+
+<table class="table">
+  <thead>
+    <tr>
+      <th align="left">Param name</th>
+      <th align="left">Type(s)</th>
+      <th align="left">Default</th>
+      <th align="left">Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>labelCol</td>
+      <td>Double</td>
+      <td>"label"</td>
+      <td>Label to predict</td>
+    </tr>
+    <tr>
+      <td>featuresCol</td>
+      <td>Vector</td>
+      <td>"features"</td>
+      <td>Feature vector</td>
+    </tr>
+  </tbody>
+</table>
+
+## Output Columns
+
+<table class="table">
+  <thead>
+    <tr>
+      <th align="left">Param name</th>
+      <th align="left">Type(s)</th>
+      <th align="left">Default</th>
+      <th align="left">Description</th>
+      <th align="left">Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>predictionCol</td>
+      <td>Double</td>
+      <td>"prediction"</td>
+      <td>Predicted label</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>rawPredictionCol</td>
+      <td>Vector</td>
+      <td>"rawPrediction"</td>
+      <td>Vector of length # classes, with the counts of training instance labels at the tree node which makes the prediction</td>
+      <td>Classification only</td>
+    </tr>
+    <tr>
+      <td>probabilityCol</td>
+      <td>Vector</td>
+      <td>"probability"</td>
+      <td>Vector of length # classes equal to rawPrediction normalized to a multinomial distribution</td>
+      <td>Classification only</td>
+    </tr>
+  </tbody>
+</table>
 
 # Examples
 
@@ -36,7 +106,6 @@ The below examples demonstrate the Pipelines API for Decision Trees. The main di
 * support for ML Pipelines
 * separation of Decision Trees for classification vs. regression
 * use of DataFrame metadata to distinguish continuous and categorical features
-
 
 
 ## Classification
