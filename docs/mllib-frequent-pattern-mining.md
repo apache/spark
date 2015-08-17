@@ -145,7 +145,8 @@ val prefixSpan = new PrefixSpan()
   .setMaxPatternLength(5)
 val model = prefixSpan.run(rdd)
 model.freqSequences.collect().foreach { freqSequence =>
-  println(freqSequence.sequence.map(_.mkString("(", ",", ")")).mkString("[",",","]") + ", " + freqSequence.freq)
+println(
+  freqSequence.sequence.map(_.mkString("[", ", ", "]")).mkString("[", ", ", "]") + ", " + freqSequence.freq)
 }
 {% endhighlight %}
 
