@@ -16,7 +16,7 @@
         <thead>
             <tr>
                 <th></th>
-                <th width="12"></th>
+                <th width="12"><span id="pause_header"class="glyphicon glyphicon-info-sign" title="Use this toggle to pause a DAG. The scheduler won't schedule new tasks instances for a paused DAG. Tasks already running at pause time won't be affected."></span></th>
                 <th>DAG</th>
                 <th>Owner</th>
                 <th style="padding-left: 5px;">Statuses
@@ -193,6 +193,7 @@
               .style("opacity", 1);
             d3.select("#loading").remove();
         }
+        $("#pause_header").tooltip();
 
         $("circle").tooltip({
           html: true,
