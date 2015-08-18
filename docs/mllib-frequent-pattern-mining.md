@@ -117,17 +117,17 @@ MLlib's PrefixSpan implementation takes the following parameters:
   projected databse begins. This parameter should be tuned with respect
   to the size of your executors.
 
-
-
 **Examples**
 
 The following example illustrates PrefixSpan running on the sequences
 (using same notation as Pei et al):
 
+~~~
   <(12)3>
   <1(32)(12)>
   <(12)5>
   <6>
+~~~
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -135,7 +135,7 @@ The following example illustrates PrefixSpan running on the sequences
 [`PrefixSpan`](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpan) implements the
 PrefixSpan algorithm.
 Calling `PrefixSpan.run` returns a
-[`PrefixSpanModel`](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpan)
+[`PrefixSpanModel`](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpanModel)
 that stores the frequent sequences with their frequencies.
 
 {% highlight scala %}
