@@ -30,7 +30,7 @@ __all__ = ['Binarizer', 'Bucketizer', 'HashingTF', 'IDF', 'IDFModel', 'NGram', '
            'OneHotEncoder', 'PolynomialExpansion', 'RegexTokenizer', 'StandardScaler',
            'StandardScalerModel', 'StringIndexer', 'StringIndexerModel', 'Tokenizer',
            'VectorAssembler', 'VectorIndexer', 'Word2Vec', 'Word2VecModel', 'PCA',
-           'PCAModel', 'RFormula', 'RFormulaModel']
+           'PCAModel', 'RFormula', 'RFormulaModel', 'VectorSlicer']
 
 
 @inherit_doc
@@ -109,6 +109,7 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
         Gets the value of names or its default value.
         """
         return self.getOrDefault(self.names)
+
 
 @inherit_doc
 class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
