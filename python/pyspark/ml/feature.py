@@ -44,14 +44,16 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
     ...     (DenseVector([-2.0, 2.3, 0.0]),)], ["userFeatures"])
     >>> vectorSlicer = VectorSlicer(indices=[1, 2], inputCol="userFeatures", outputCol="features")
     >>> vectorSlicer.transform(df).head().features
-    ???
+    SparseVector(2, {0: 2.3})
     """
 
     # a placeholder to make it appear in the generated doc
     indices = Param(Params._dummy(), "indices",
-                    "An array of indices to select features from a vector column. There can be no overlap with names.")
+                    "An array of indices to select features from a vector column." +
+                    " There can be no overlap with names.")
     names = Param(Params._dummy(), "names",
-                  "An array of feature names to select features from a vector column. There can be no overlap with indices.")
+                  "An array of feature names to select features from a vector column." +
+                  " There can be no overlap with indices.")
 
 
     @keyword_only
@@ -62,10 +64,12 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
         super(VectorSlicer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorSlicer", self.uid)
         self.indices = Param(self, "indices",
-                             "An array of indices to select features from a vector column. There can be no overlap with names.")
+                             "An array of indices to select features from a vector column." +
+                             " There can be no overlap with names.")
         self._setDefault(indices=[])
         self.names = Param(self, "names",
-                           "An array of feature names to select features from a vector column. There can be no overlap with indices.")
+                           "An array of feature names to select features from a vector column." +
+                           " There can be no overlap with indices.")
         self._setDefault(names=[])
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)

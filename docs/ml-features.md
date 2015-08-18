@@ -1430,6 +1430,10 @@ Suppose also that we have a potential input attributes for the `userFeatures`, i
  ["f1", "f2", "f3"] | ["f2", "f3"]
 ~~~
 
+**NOTE**
+
+`VectorSlicer` of Python version does not supprt selecting by names currently.
+
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
@@ -1472,7 +1476,6 @@ println(output.select("userFeatures", "features").first())
 import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
@@ -1511,17 +1514,18 @@ System.out.println(output.select("userFeatures", "features").first());
 [`VectorSlicer`](api/python/pyspark.ml.html#pyspark.ml.feature.VectorSlicer) takes an input column name with specified indices or names and an output column name.
 
 {% highlight python %}
-from pyspark.mllib.linalg import Vectors
-from pyspark.ml.feature import VectorAssembler
+from pyspark.mllib.linalg import DenseVector
+from pyspark.mllib.linalg import SparseVector
+from pyspark.ml.feature import VectorSlicer
 
-dataset = sqlContext.createDataFrame(
-    [(0, 18, 1.0, Vectors.dense([0.0, 10.0, 0.5]), 1.0)],
-    ["id", "hour", "mobile", "userFeatures", "clicked"])
-assembler = VectorAssembler(
-    inputCols=["hour", "mobile", "userFeatures"],
-    outputCol="features")
-output = assembler.transform(dataset)
-print(output.select("features", "clicked").first())
+dataset = sqlContext.createDataFrame([(SparseVector(3, {0: -2.0, 1: 2.3}),),
+    (DenseVector([-2.0, 2.3, 0.0]),)], ["userFeatures"])
+
+vectorSlicer = VectorSlicer(indices=[1, 2], inputCol="userFeatures", outputCol="features")
+
+output = vectorSlicer.transform(dataset)
+
+print(output.select("userFeatures", "features").first())
 {% endhighlight %}
 </div>
 </div>
