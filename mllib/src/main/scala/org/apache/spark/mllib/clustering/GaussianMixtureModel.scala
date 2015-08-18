@@ -90,12 +90,14 @@ class GaussianMixtureModel(
       case None => bcDists = Some(sc.broadcast(gaussians))
       case _ =>
     }
+    val lclBcDists = bcDists
     bcWeights match {
       case None => bcWeights = Some(sc.broadcast(weights))
       case _ =>
     }
+    val lclBcWeights = bcWeights
     points.map { x =>
-      computeSoftAssignments(x.toBreeze.toDenseVector, bcDists.get.value, bcWeights.get.value, k)
+      computeSoftAssignments(x.toBreeze.toDenseVector, lclBcDists.get.value, lclBcWeights.get.value, k)
     }
   }
 

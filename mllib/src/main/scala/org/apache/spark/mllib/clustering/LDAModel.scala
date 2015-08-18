@@ -290,12 +290,13 @@ class LocalLDAModel private[clustering] (
       case None => ElogbetaBc = Some(documents.sparkContext.broadcast(Elogbeta))
       case _ =>
     }
+    val lclElogbetaBc = ElogbetaBc
 
     // Sum bound components for each document:
     //  component for prob(tokens) + component for prob(document-topic distribution)
     val corpusPart =
       documents.filter(_._2.numNonzeros > 0).map { case (id: Long, termCounts: Vector) =>
-        val localElogbeta = ElogbetaBc.get.value
+        val localElogbeta = lclElogbetaBc.get.value
         var docBound = 0.0D
         val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts, exp(localElogbeta), brzAlpha, gammaShape, k)
@@ -342,6 +343,7 @@ class LocalLDAModel private[clustering] (
       case None => expElogbetaBc = Some(documents.sparkContext.broadcast(expElogbeta))
       case _ =>
     }
+    val lclExpElogbetaBc = expElogbetaBc
     val docConcentrationBrz = this.docConcentration.toBreeze
     val gammaShape = this.gammaShape
     val k = this.k
@@ -352,7 +354,7 @@ class LocalLDAModel private[clustering] (
       } else {
         val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts,
-          expElogbetaBc.get.value,
+          lclExpElogbetaBc.get.value,
           docConcentrationBrz,
           gammaShape,
           k)

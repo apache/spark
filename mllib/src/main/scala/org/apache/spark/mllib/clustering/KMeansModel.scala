@@ -62,7 +62,8 @@ class KMeansModel (
       }
       case _ =>
     }
-    points.map(p => KMeans.findClosest(bcCentersWithNorm.get.value, new VectorWithNorm(p))._1)
+    val lclBcCentersWithNorm = bcCentersWithNorm
+    points.map(p => KMeans.findClosest(lclBcCentersWithNorm.get.value, new VectorWithNorm(p))._1)
   }
 
   /** Maps given points to their cluster indices. */
@@ -81,7 +82,8 @@ class KMeansModel (
       }
       case _ =>
     }
-    data.map(p => KMeans.pointCost(bcCentersWithNorm.get.value, new VectorWithNorm(p))).sum()
+    val lclBcCentersWithNorm = bcCentersWithNorm
+    data.map(p => KMeans.pointCost(lclBcCentersWithNorm.get.value, new VectorWithNorm(p))).sum()
   }
 
   private def clusterCentersWithNorm: Iterable[VectorWithNorm] =
