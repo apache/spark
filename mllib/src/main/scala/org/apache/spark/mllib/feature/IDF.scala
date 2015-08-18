@@ -179,7 +179,8 @@ class IDFModel private[spark] (val idf: Vector) extends Serializable {
       case None => bcIdf = Some(dataset.context.broadcast(idf))
       case _ =>
     }
-    dataset.mapPartitions(iter => iter.map(v => IDFModel.transform(bcIdf.get.value, v)))
+    val lclBcIdf = bcIdf
+    dataset.mapPartitions(iter => iter.map(v => IDFModel.transform(lclBcIdf.get.value, v)))
   }
 
   /**
