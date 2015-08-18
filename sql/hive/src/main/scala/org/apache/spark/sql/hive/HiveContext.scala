@@ -447,7 +447,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       HiveCommandStrategy(self),
       HiveDDLStrategy,
       DDLStrategy,
-      TakeOrdered,
+      TakeOrderedAndProject,
       ParquetOperations,
       InMemoryScans,
       ParquetConversion, // Must be before HiveTableScans
