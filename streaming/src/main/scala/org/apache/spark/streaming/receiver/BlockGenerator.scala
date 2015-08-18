@@ -255,9 +255,13 @@ private[streaming] class BlockGenerator(
   private def keepPushingBlocks() {
     logInfo("Started block pushing thread")
 
-    def isGeneratingBlocks = synchronized { state == Active || state == StoppedAddingData }
+    def areBlocksBeingGenerated: Boolean = synchronized {
+      state != StoppedGeneratingBlocks
+    }
+
     try {
-      while (isGeneratingBlocks) {
+      // While blocks are being generated, keep polling for to-be-pushed blocks and push them.
+      while (areBlocksBeingGenerated) {
         Option(blocksForPushing.poll(10, TimeUnit.MILLISECONDS)) match {
           case Some(block) => pushBlock(block)
           case None =>
