@@ -87,5 +87,19 @@ class BinaryClassificationEvaluator(override val uid: String)
     metric
   }
 
+  override def shouldMaximize: Boolean = $(metricName) match {
+    case "areaUnderROC" =>
+    case "areaUnderPR" =>
+    case metric =>
+      throw new IllegalArgumentException("BinaryClassificationEvaluator given unrecognized" +
+        s" metricName $metric.  Supported: ")
+  }
+
   override def copy(extra: ParamMap): BinaryClassificationEvaluator = defaultCopy(extra)
+}
+
+private[ml] object BinaryClassificationEvaluator {
+
+ def supportedMetrics: Array[String] = Array("areaUnderROC", "areaUnderPR")
+
 }
