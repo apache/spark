@@ -55,7 +55,6 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
                   "An array of feature names to select features from a vector column." +
                   " There can be no overlap with indices.")
 
-
     @keyword_only
     def __init__(self, indices=[], names=[], inputCol=None, outputCol=None):
         """
@@ -73,7 +72,6 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
         self._setDefault(names=[])
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
-
 
     @keyword_only
     def setParams(self, indices=[], names=[], inputCol=None, outputCol=None):
