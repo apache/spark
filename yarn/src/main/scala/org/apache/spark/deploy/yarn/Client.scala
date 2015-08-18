@@ -751,7 +751,6 @@ private[spark] class Client(
         userArgs ++ Seq(
           "--executor-memory", args.executorMemory.toString + "m",
           "--executor-cores", args.executorCores.toString,
-          "--num-executors ", args.numExecutors.toString,
           "--properties-file", buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
             LOCALIZED_CONF_DIR, SPARK_CONF_FILE))
 
@@ -960,6 +959,10 @@ object Client extends Logging {
     val sparkConf = new SparkConf
 
     val args = new ClientArguments(argStrings, sparkConf)
+    // to maintain backwards-compatibility
+    if (!Utils.isDynamicAllocationEnabled(sparkConf)) {
+      sparkConf.setIfMissing("spark.executor.instances", args.numExecutors.toString)
+    }
     new Client(args, sparkConf).run()
   }
 

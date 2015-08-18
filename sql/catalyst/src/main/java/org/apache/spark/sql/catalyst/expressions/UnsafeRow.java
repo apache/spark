@@ -27,7 +27,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.apache.spark.sql.types.*;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
@@ -169,7 +169,7 @@ public final class UnsafeRow extends MutableRow {
    * @param sizeInBytes the number of bytes valid in the byte array
    */
   public void pointTo(byte[] buf, int numFields, int sizeInBytes) {
-    pointTo(buf, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
+    pointTo(buf, Platform.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
   }
 
   @Override
@@ -179,7 +179,7 @@ public final class UnsafeRow extends MutableRow {
     // To preserve row equality, zero out the value when setting the column to null.
     // Since this row does does not currently support updates to variable-length values, we don't
     // have to worry about zeroing out that data.
-    PlatformDependent.UNSAFE.putLong(baseObject, getFieldOffset(i), 0);
+    Platform.putLong(baseObject, getFieldOffset(i), 0);
   }
 
   @Override
@@ -191,14 +191,14 @@ public final class UnsafeRow extends MutableRow {
   public void setInt(int ordinal, int value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    PlatformDependent.UNSAFE.putInt(baseObject, getFieldOffset(ordinal), value);
+    Platform.putInt(baseObject, getFieldOffset(ordinal), value);
   }
 
   @Override
   public void setLong(int ordinal, long value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    PlatformDependent.UNSAFE.putLong(baseObject, getFieldOffset(ordinal), value);
+    Platform.putLong(baseObject, getFieldOffset(ordinal), value);
   }
 
   @Override
@@ -208,28 +208,28 @@ public final class UnsafeRow extends MutableRow {
     if (Double.isNaN(value)) {
       value = Double.NaN;
     }
-    PlatformDependent.UNSAFE.putDouble(baseObject, getFieldOffset(ordinal), value);
+    Platform.putDouble(baseObject, getFieldOffset(ordinal), value);
   }
 
   @Override
   public void setBoolean(int ordinal, boolean value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    PlatformDependent.UNSAFE.putBoolean(baseObject, getFieldOffset(ordinal), value);
+    Platform.putBoolean(baseObject, getFieldOffset(ordinal), value);
   }
 
   @Override
   public void setShort(int ordinal, short value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    PlatformDependent.UNSAFE.putShort(baseObject, getFieldOffset(ordinal), value);
+    Platform.putShort(baseObject, getFieldOffset(ordinal), value);
   }
 
   @Override
   public void setByte(int ordinal, byte value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    PlatformDependent.UNSAFE.putByte(baseObject, getFieldOffset(ordinal), value);
+    Platform.putByte(baseObject, getFieldOffset(ordinal), value);
   }
 
   @Override
@@ -239,7 +239,7 @@ public final class UnsafeRow extends MutableRow {
     if (Float.isNaN(value)) {
       value = Float.NaN;
     }
-    PlatformDependent.UNSAFE.putFloat(baseObject, getFieldOffset(ordinal), value);
+    Platform.putFloat(baseObject, getFieldOffset(ordinal), value);
   }
 
   /**
@@ -263,23 +263,23 @@ public final class UnsafeRow extends MutableRow {
       long cursor = getLong(ordinal) >>> 32;
       assert cursor > 0 : "invalid cursor " + cursor;
       // zero-out the bytes
-      PlatformDependent.UNSAFE.putLong(baseObject, baseOffset + cursor, 0L);
-      PlatformDependent.UNSAFE.putLong(baseObject, baseOffset + cursor + 8, 0L);
+      Platform.putLong(baseObject, baseOffset + cursor, 0L);
+      Platform.putLong(baseObject, baseOffset + cursor + 8, 0L);
 
       if (value == null) {
         setNullAt(ordinal);
         // keep the offset for future update
-        PlatformDependent.UNSAFE.putLong(baseObject, getFieldOffset(ordinal), cursor << 32);
+        Platform.putLong(baseObject, getFieldOffset(ordinal), cursor << 32);
       } else {
 
         final BigInteger integer = value.toJavaBigDecimal().unscaledValue();
-        final int[] mag = (int[]) PlatformDependent.UNSAFE.getObjectVolatile(integer,
-          PlatformDependent.BIG_INTEGER_MAG_OFFSET);
+        final int[] mag = (int[]) Platform.getObjectVolatile(integer,
+          Platform.BIG_INTEGER_MAG_OFFSET);
         assert(mag.length <= 4);
 
         // Write the bytes to the variable length portion.
-        PlatformDependent.copyMemory(mag, PlatformDependent.INT_ARRAY_OFFSET,
-          baseObject, baseOffset + cursor, mag.length * 4);
+        Platform.copyMemory(
+          mag, Platform.INT_ARRAY_OFFSET, baseObject, baseOffset + cursor, mag.length * 4);
         setLong(ordinal, (cursor << 32) | ((long) (((integer.signum() + 1) << 8) + mag.length)));
       }
     }
@@ -336,43 +336,43 @@ public final class UnsafeRow extends MutableRow {
   @Override
   public boolean getBoolean(int ordinal) {
     assertIndexIsValid(ordinal);
-    return PlatformDependent.UNSAFE.getBoolean(baseObject, getFieldOffset(ordinal));
+    return Platform.getBoolean(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
   public byte getByte(int ordinal) {
     assertIndexIsValid(ordinal);
-    return PlatformDependent.UNSAFE.getByte(baseObject, getFieldOffset(ordinal));
+    return Platform.getByte(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
   public short getShort(int ordinal) {
     assertIndexIsValid(ordinal);
-    return PlatformDependent.UNSAFE.getShort(baseObject, getFieldOffset(ordinal));
+    return Platform.getShort(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
   public int getInt(int ordinal) {
     assertIndexIsValid(ordinal);
-    return PlatformDependent.UNSAFE.getInt(baseObject, getFieldOffset(ordinal));
+    return Platform.getInt(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
   public long getLong(int ordinal) {
     assertIndexIsValid(ordinal);
-    return PlatformDependent.UNSAFE.getLong(baseObject, getFieldOffset(ordinal));
+    return Platform.getLong(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
   public float getFloat(int ordinal) {
     assertIndexIsValid(ordinal);
-    return PlatformDependent.UNSAFE.getFloat(baseObject, getFieldOffset(ordinal));
+    return Platform.getFloat(baseObject, getFieldOffset(ordinal));
   }
 
   @Override
   public double getDouble(int ordinal) {
     assertIndexIsValid(ordinal);
-    return PlatformDependent.UNSAFE.getDouble(baseObject, getFieldOffset(ordinal));
+    return Platform.getDouble(baseObject, getFieldOffset(ordinal));
   }
 
   private static byte[] EMPTY = new byte[0];
@@ -391,13 +391,13 @@ public final class UnsafeRow extends MutableRow {
       assert signum >=0 && signum <= 2 : "invalid signum " + signum;
       int size = (int) (offsetAndSize & 0xff);
       int[] mag = new int[size];
-      PlatformDependent.copyMemory(baseObject, baseOffset + offset,
-        mag, PlatformDependent.INT_ARRAY_OFFSET, size * 4);
+      Platform.copyMemory(
+        baseObject, baseOffset + offset, mag, Platform.INT_ARRAY_OFFSET, size * 4);
 
       // create a BigInteger using signum and mag
       BigInteger v = new BigInteger(0, EMPTY);  // create the initial object
-      PlatformDependent.UNSAFE.putInt(v, PlatformDependent.BIG_INTEGER_SIGNUM_OFFSET, signum - 1);
-      PlatformDependent.UNSAFE.putObjectVolatile(v, PlatformDependent.BIG_INTEGER_MAG_OFFSET, mag);
+      Platform.putInt(v, Platform.BIG_INTEGER_SIGNUM_OFFSET, signum - 1);
+      Platform.putObjectVolatile(v, Platform.BIG_INTEGER_MAG_OFFSET, mag);
       return Decimal.apply(new BigDecimal(v, scale), precision, scale);
     }
   }
@@ -420,11 +420,11 @@ public final class UnsafeRow extends MutableRow {
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) (offsetAndSize & ((1L << 32) - 1));
       final byte[] bytes = new byte[size];
-      PlatformDependent.copyMemory(
+      Platform.copyMemory(
         baseObject,
         baseOffset + offset,
         bytes,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
+        Platform.BYTE_ARRAY_OFFSET,
         size
       );
       return bytes;
@@ -438,9 +438,8 @@ public final class UnsafeRow extends MutableRow {
     } else {
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
-      final int months = (int) PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset);
-      final long microseconds =
-        PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + offset + 8);
+      final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
+      final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
       return new CalendarInterval(months, microseconds);
     }
   }
@@ -491,14 +490,14 @@ public final class UnsafeRow extends MutableRow {
   public UnsafeRow copy() {
     UnsafeRow rowCopy = new UnsafeRow();
     final byte[] rowDataCopy = new byte[sizeInBytes];
-    PlatformDependent.copyMemory(
+    Platform.copyMemory(
       baseObject,
       baseOffset,
       rowDataCopy,
-      PlatformDependent.BYTE_ARRAY_OFFSET,
+      Platform.BYTE_ARRAY_OFFSET,
       sizeInBytes
     );
-    rowCopy.pointTo(rowDataCopy, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
+    rowCopy.pointTo(rowDataCopy, Platform.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
     return rowCopy;
   }
 
@@ -518,18 +517,13 @@ public final class UnsafeRow extends MutableRow {
    */
   public void copyFrom(UnsafeRow row) {
     // copyFrom is only available for UnsafeRow created from byte array.
-    assert (baseObject instanceof byte[]) && baseOffset == PlatformDependent.BYTE_ARRAY_OFFSET;
+    assert (baseObject instanceof byte[]) && baseOffset == Platform.BYTE_ARRAY_OFFSET;
     if (row.sizeInBytes > this.sizeInBytes) {
       // resize the underlying byte[] if it's not large enough.
       this.baseObject = new byte[row.sizeInBytes];
     }
-    PlatformDependent.copyMemory(
-      row.baseObject,
-      row.baseOffset,
-      this.baseObject,
-      this.baseOffset,
-      row.sizeInBytes
-    );
+    Platform.copyMemory(
+      row.baseObject, row.baseOffset, this.baseObject, this.baseOffset, row.sizeInBytes);
     // update the sizeInBytes.
     this.sizeInBytes = row.sizeInBytes;
   }
@@ -544,19 +538,15 @@ public final class UnsafeRow extends MutableRow {
    */
   public void writeToStream(OutputStream out, byte[] writeBuffer) throws IOException {
     if (baseObject instanceof byte[]) {
-      int offsetInByteArray = (int) (PlatformDependent.BYTE_ARRAY_OFFSET - baseOffset);
+      int offsetInByteArray = (int) (Platform.BYTE_ARRAY_OFFSET - baseOffset);
       out.write((byte[]) baseObject, offsetInByteArray, sizeInBytes);
     } else {
       int dataRemaining = sizeInBytes;
       long rowReadPosition = baseOffset;
       while (dataRemaining > 0) {
         int toTransfer = Math.min(writeBuffer.length, dataRemaining);
-        PlatformDependent.copyMemory(
-          baseObject,
-          rowReadPosition,
-          writeBuffer,
-          PlatformDependent.BYTE_ARRAY_OFFSET,
-          toTransfer);
+        Platform.copyMemory(
+          baseObject, rowReadPosition, writeBuffer, Platform.BYTE_ARRAY_OFFSET, toTransfer);
         out.write(writeBuffer, 0, toTransfer);
         rowReadPosition += toTransfer;
         dataRemaining -= toTransfer;
@@ -584,13 +574,12 @@ public final class UnsafeRow extends MutableRow {
    * Returns the underlying bytes for this UnsafeRow.
    */
   public byte[] getBytes() {
-    if (baseObject instanceof byte[] && baseOffset == PlatformDependent.BYTE_ARRAY_OFFSET
+    if (baseObject instanceof byte[] && baseOffset == Platform.BYTE_ARRAY_OFFSET
       && (((byte[]) baseObject).length == sizeInBytes)) {
       return (byte[]) baseObject;
     } else {
       byte[] bytes = new byte[sizeInBytes];
-      PlatformDependent.copyMemory(baseObject, baseOffset, bytes,
-        PlatformDependent.BYTE_ARRAY_OFFSET, sizeInBytes);
+      Platform.copyMemory(baseObject, baseOffset, bytes, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
       return bytes;
     }
   }
@@ -600,8 +589,7 @@ public final class UnsafeRow extends MutableRow {
   public String toString() {
     StringBuilder build = new StringBuilder("[");
     for (int i = 0; i < sizeInBytes; i += 8) {
-      build.append(java.lang.Long.toHexString(
-        PlatformDependent.UNSAFE.getLong(baseObject, baseOffset + i)));
+      build.append(java.lang.Long.toHexString(Platform.getLong(baseObject, baseOffset + i)));
       build.append(',');
     }
     build.append(']');
@@ -619,12 +607,6 @@ public final class UnsafeRow extends MutableRow {
    * bytes in this string.
    */
   public void writeToMemory(Object target, long targetOffset) {
-    PlatformDependent.copyMemory(
-      baseObject,
-      baseOffset,
-      target,
-      targetOffset,
-      sizeInBytes
-    );
+    Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
   }
 }

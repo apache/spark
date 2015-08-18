@@ -145,12 +145,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           if ($buffer.length < $numBytes) {
             // This will not happen frequently, because the buffer is re-used.
             byte[] $tmp = new byte[$numBytes * 2];
-            PlatformDependent.copyMemory($buffer, PlatformDependent.BYTE_ARRAY_OFFSET,
-              $tmp, PlatformDependent.BYTE_ARRAY_OFFSET, $buffer.length);
+            Platform.copyMemory($buffer, Platform.BYTE_ARRAY_OFFSET,
+              $tmp, Platform.BYTE_ARRAY_OFFSET, $buffer.length);
             $buffer = $tmp;
           }
-          $output.pointTo($buffer, PlatformDependent.BYTE_ARRAY_OFFSET,
-            ${inputTypes.length}, $numBytes);
+          $output.pointTo($buffer, Platform.BYTE_ARRAY_OFFSET, ${inputTypes.length}, $numBytes);
          """
       } else {
         ""
@@ -183,7 +182,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val code = s"""
       $cursor = $fixedSize;
-      $output.pointTo($buffer, PlatformDependent.BYTE_ARRAY_OFFSET, ${inputTypes.length}, $cursor);
+      $output.pointTo($buffer, Platform.BYTE_ARRAY_OFFSET, ${inputTypes.length}, $cursor);
       ${ctx.splitExpressions(row, convertedFields)}
       """
     GeneratedExpressionCode(code, "false", output)
@@ -225,7 +224,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     // go through the input array to calculate how many bytes we need.
     val calculateNumBytes = elementType match {
-      case _ if (ctx.isPrimitiveType(elementType)) =>
+      case _ if ctx.isPrimitiveType(elementType) =>
         // Should we do word align?
         val elementSize = elementType.defaultSize
         s"""
@@ -238,6 +237,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ =>
         val writer = getWriter(elementType)
         val elementSize = s"$writer.getSize($elements[$index])"
+        // TODO(davies): avoid the copy
         val unsafeType = elementType match {
           case _: StructType => "UnsafeRow"
           case _: ArrayType => "UnsafeArrayData"
@@ -250,8 +250,13 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           case _ => ""
         }
 
+        val newElements = if (elementType == BinaryType) {
+          s"new byte[$numElements][]"
+        } else {
+          s"new $unsafeType[$numElements]"
+        }
         s"""
-          final $unsafeType[] $elements = new $unsafeType[$numElements];
+          final $unsafeType[] $elements = $newElements;
           for (int $index = 0; $index < $numElements; $index++) {
             ${convertedElement.code}
             if (!${convertedElement.isNull}) {
@@ -263,21 +268,21 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }
 
     val writeElement = elementType match {
-      case _ if (ctx.isPrimitiveType(elementType)) =>
+      case _ if ctx.isPrimitiveType(elementType) =>
         // Should we do word align?
         val elementSize = elementType.defaultSize
         s"""
-          PlatformDependent.UNSAFE.put${ctx.primitiveTypeName(elementType)}(
+          Platform.put${ctx.primitiveTypeName(elementType)}(
             $buffer,
-            PlatformDependent.BYTE_ARRAY_OFFSET + $cursor,
+            Platform.BYTE_ARRAY_OFFSET + $cursor,
             ${convertedElement.primitive});
           $cursor += $elementSize;
         """
       case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS =>
         s"""
-          PlatformDependent.UNSAFE.putLong(
+          Platform.putLong(
             $buffer,
-            PlatformDependent.BYTE_ARRAY_OFFSET + $cursor,
+            Platform.BYTE_ARRAY_OFFSET + $cursor,
             ${convertedElement.primitive}.toUnscaledLong());
           $cursor += 8;
         """
@@ -286,7 +291,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         s"""
           $cursor += $writer.write(
             $buffer,
-            PlatformDependent.BYTE_ARRAY_OFFSET + $cursor,
+            Platform.BYTE_ARRAY_OFFSET + $cursor,
             $elements[$index]);
         """
     }
@@ -320,23 +325,16 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           for (int $index = 0; $index < $numElements; $index++) {
             if ($checkNull) {
               // If element is null, write the negative value address into offset region.
-              PlatformDependent.UNSAFE.putInt(
-                $buffer,
-                PlatformDependent.BYTE_ARRAY_OFFSET + 4 * $index,
-                -$cursor);
+              Platform.putInt($buffer, Platform.BYTE_ARRAY_OFFSET + 4 * $index, -$cursor);
             } else {
-              PlatformDependent.UNSAFE.putInt(
-                $buffer,
-                PlatformDependent.BYTE_ARRAY_OFFSET + 4 * $index,
-                $cursor);
-
+              Platform.putInt($buffer, Platform.BYTE_ARRAY_OFFSET + 4 * $index, $cursor);
               $writeElement
             }
           }
 
           $output.pointTo(
             $buffer,
-            PlatformDependent.BYTE_ARRAY_OFFSET,
+            Platform.BYTE_ARRAY_OFFSET,
             $numElements,
             $numBytes);
         }

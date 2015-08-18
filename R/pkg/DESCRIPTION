@@ -29,6 +29,7 @@ Collate:
     'client.R'
     'context.R'
     'deserialize.R'
+    'functions.R'
     'mllib.R'
     'serialize.R'
     'sparkR.R'

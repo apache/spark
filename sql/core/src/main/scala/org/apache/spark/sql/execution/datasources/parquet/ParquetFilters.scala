@@ -25,9 +25,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.compat.FilterCompat._
 import org.apache.parquet.filter2.predicate.FilterApi._
-import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Statistics}
-import org.apache.parquet.filter2.predicate.UserDefinedPredicate
+import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.io.api.Binary
+import org.apache.parquet.schema.OriginalType
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.catalyst.expressions._
@@ -197,6 +198,8 @@ private[sql] object ParquetFilters {
   def createFilter(schema: StructType, predicate: sources.Filter): Option[FilterPredicate] = {
     val dataTypeOf = schema.map(f => f.name -> f.dataType).toMap
 
+    relaxParquetValidTypeMap
+
     // NOTE:
     //
     // For any comparison operator `cmp`, both `a cmp NULL` and `NULL cmp a` evaluate to `NULL`,
@@ -237,6 +240,37 @@ private[sql] object ParquetFilters {
 
       case _ => None
     }
+  }
+
+  // !! HACK ALERT !!
+  //
+  // This lazy val is a workaround for PARQUET-201, and should be removed once we upgrade to
+  // parquet-mr 1.8.1 or higher versions.
+  //
+  // In Parquet, not all types of columns can be used for filter push-down optimization.  The set
+  // of valid column types is controlled by `ValidTypeMap`.  Unfortunately, in parquet-mr 1.7.0 and
+  // prior versions, the limitation is too strict, and doesn't allow `BINARY (ENUM)` columns to be
+  // pushed down.
+  //
+  // This restriction is problematic for Spark SQL, because Spark SQL doesn't have a type that maps
+  // to Parquet original type `ENUM` directly, and always converts `ENUM` to `StringType`.  Thus,
+  // a predicate involving a `ENUM` field can be pushed-down as a string column, which is perfectly
+  // legal except that it fails the `ValidTypeMap` check.
+  //
+  // Here we add `BINARY (ENUM)` into `ValidTypeMap` lazily via reflection to workaround this issue.
+  private lazy val relaxParquetValidTypeMap: Unit = {
+    val constructor = Class
+      .forName(classOf[ValidTypeMap].getCanonicalName + "$FullTypeDescriptor")
+      .getDeclaredConstructor(classOf[PrimitiveTypeName], classOf[OriginalType])
+
+    constructor.setAccessible(true)
+    val enumTypeDescriptor = constructor
+      .newInstance(PrimitiveTypeName.BINARY, OriginalType.ENUM)
+      .asInstanceOf[AnyRef]
+
+    val addMethod = classOf[ValidTypeMap].getDeclaredMethods.find(_.getName == "add").get
+    addMethod.setAccessible(true)
+    addMethod.invoke(null, classOf[Binary], enumTypeDescriptor)
   }
 
   /**

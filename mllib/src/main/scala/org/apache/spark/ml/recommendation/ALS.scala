@@ -219,7 +219,7 @@ class ALSModel private[ml] (
 
   override def copy(extra: ParamMap): ALSModel = {
     val copied = new ALSModel(uid, rank, userFactors, itemFactors)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }
 

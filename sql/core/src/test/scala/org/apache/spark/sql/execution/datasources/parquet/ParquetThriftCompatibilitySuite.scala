@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.test.SharedSQLContext
 
-class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest {
+class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest with SharedSQLContext {
   import ParquetCompatibilityTest._
-
-  override val sqlContext: SQLContext = TestSQLContext
 
   private val parquetFilePath =
     Thread.currentThread().getContextClassLoader.getResource("parquet-thrift-compat.snappy.parquet")

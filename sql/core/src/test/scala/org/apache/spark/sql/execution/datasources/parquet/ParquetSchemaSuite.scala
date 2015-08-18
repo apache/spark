@@ -22,13 +22,11 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.parquet.schema.MessageTypeParser
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-abstract class ParquetSchemaTest extends SparkFunSuite with ParquetTest {
-  val sqlContext = TestSQLContext
+abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
 
   /**
    * Checks whether the reflected Parquet message type for product type `T` conforms `messageType`.
@@ -581,6 +579,36 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |    repeated group f1_tuple {
       |      required binary str (UTF8);
       |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: LIST with non-nullable element type 7 - " +
+      "parquet-protobuf primitive lists",
+    new StructType()
+      .add("f1", ArrayType(IntegerType, containsNull = false), nullable = false),
+    """message root {
+      |  repeated int32 f1;
+      |}
+    """.stripMargin)
+
+  testParquetToCatalyst(
+    "Backwards-compatibility: LIST with non-nullable element type 8 - " +
+      "parquet-protobuf non-primitive lists",
+    {
+      val elementType =
+        new StructType()
+          .add("c1", StringType, nullable = true)
+          .add("c2", IntegerType, nullable = false)
+
+      new StructType()
+        .add("f1", ArrayType(elementType, containsNull = false), nullable = false)
+    },
+    """message root {
+      |  repeated group f1 {
+      |    optional binary c1 (UTF8);
+      |    required int32 c2;
       |  }
       |}
     """.stripMargin)

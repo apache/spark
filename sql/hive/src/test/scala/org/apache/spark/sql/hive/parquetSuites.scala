@@ -685,7 +685,8 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
  * A collection of tests for parquet data with various forms of partitioning.
  */
 abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
-  override def sqlContext: SQLContext = TestHive
+  override def _sqlContext: SQLContext = TestHive
+  protected val sqlContext = _sqlContext
 
   var partitionedTableDir: File = null
   var normalTableDir: File = null

@@ -408,6 +408,14 @@ test_that("collect() returns a data.frame", {
   expect_equal(names(rdf)[1], "age")
   expect_equal(nrow(rdf), 3)
   expect_equal(ncol(rdf), 2)
+
+  # collect() returns data correctly from a DataFrame with 0 row
+  df0 <- limit(df, 0)
+  rdf <- collect(df0)
+  expect_true(is.data.frame(rdf))
+  expect_equal(names(rdf)[1], "age")
+  expect_equal(nrow(rdf), 0)
+  expect_equal(ncol(rdf), 2)
 })
 
 test_that("limit() returns DataFrame with the correct number of rows", {
@@ -492,6 +500,18 @@ test_that("head() and first() return the correct data", {
 
   testFirst <- first(df)
   expect_equal(nrow(testFirst), 1)
+
+  # head() and first() return the correct data on
+  # a DataFrame with 0 row
+  df0 <- limit(df, 0)
+
+  testHead <- head(df0)
+  expect_equal(nrow(testHead), 0)
+  expect_equal(ncol(testHead), 2)
+
+  testFirst <- first(df0)
+  expect_equal(nrow(testFirst), 0)
+  expect_equal(ncol(testFirst), 2)
 })
 
 test_that("distinct() and unique on DataFrames", {
@@ -560,6 +580,11 @@ test_that("select with column", {
   df2 <- select(df, df$age)
   expect_equal(columns(df2), c("age"))
   expect_equal(count(df2), 3)
+
+  df3 <- select(df, lit("x"))
+  expect_equal(columns(df3), c("x"))
+  expect_equal(count(df3), 3)
+  expect_equal(collect(select(df3, "x"))[[1, 1]], "x")
 })
 
 test_that("selectExpr() on a DataFrame", {
@@ -640,15 +665,18 @@ test_that("column operators", {
 
 test_that("column functions", {
   c <- SparkR:::col("a")
-  c2 <- min(c) + max(c) + sum(c) + avg(c) + count(c) + abs(c) + sqrt(c)
-  c3 <- lower(c) + upper(c) + first(c) + last(c)
-  c4 <- approxCountDistinct(c) + countDistinct(c) + cast(c, "string")
-  c5 <- n(c) + n_distinct(c)
-  c5 <- acos(c) + asin(c) + atan(c) + cbrt(c)
-  c6 <- ceiling(c) + cos(c) + cosh(c) + exp(c) + expm1(c)
-  c7 <- floor(c) + log(c) + log10(c) + log1p(c) + rint(c)
-  c8 <- sign(c) + sin(c) + sinh(c) + tan(c) + tanh(c)
-  c9 <- toDegrees(c) + toRadians(c)
+  c1 <- abs(c) + acos(c) + approxCountDistinct(c) + ascii(c) + asin(c) + atan(c)
+  c2 <- avg(c) + base64(c) + bin(c) + bitwiseNOT(c) + cbrt(c) + ceil(c) + cos(c)
+  c3 <- cosh(c) + count(c) + crc32(c) + dayofmonth(c) + dayofyear(c) + exp(c)
+  c4 <- explode(c) + expm1(c) + factorial(c) + first(c) + floor(c) + hex(c)
+  c5 <- hour(c) + initcap(c) + isNaN(c) + last(c) + last_day(c) + length(c)
+  c6 <- log(c) + (c) + log1p(c) + log2(c) + lower(c) + ltrim(c) + max(c) + md5(c)
+  c7 <- mean(c) + min(c) + minute(c) + month(c) + negate(c) + quarter(c)
+  c8 <- reverse(c) + rint(c) + round(c) + rtrim(c) + second(c) + sha1(c)
+  c9 <- signum(c) + sin(c) + sinh(c) + size(c) + soundex(c) + sqrt(c) + sum(c)
+  c10 <- sumDistinct(c) + tan(c) + tanh(c) + toDegrees(c) + toRadians(c)
+  c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c) + weekofyear(c)
+  c12 <- year(c)
 
   df <- jsonFile(sqlContext, jsonPath)
   df2 <- select(df, between(df$age, c(20, 30)), between(df$age, c(10, 20)))
@@ -689,6 +717,14 @@ test_that("string operators", {
   expect_equal(count(where(df, startsWith(df$name, "A"))), 1)
   expect_equal(first(select(df, substr(df$name, 1, 2)))[[1]], "Mi")
   expect_equal(collect(select(df, cast(df$age, "string")))[[2, 1]], "30")
+  expect_equal(collect(select(df, concat(df$name, lit(":"), df$age)))[[2, 1]], "Andy:30")
+})
+
+test_that("greatest() and least() on a DataFrame", {
+  l <- list(list(a = 1, b = 2), list(a = 3, b = 4))
+  df <- createDataFrame(sqlContext, l)
+  expect_equal(collect(select(df, greatest(df$a, df$b)))[, 1], c(2, 4))
+  expect_equal(collect(select(df, least(df$a, df$b)))[, 1], c(1, 3))
 })
 
 test_that("group by", {

@@ -349,6 +349,11 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       case expressions.EqualTo(Literal(v, _), a: Attribute) =>
         Some(sources.EqualTo(a.name, v))
 
+      case expressions.EqualNullSafe(a: Attribute, Literal(v, _)) =>
+        Some(sources.EqualNullSafe(a.name, v))
+      case expressions.EqualNullSafe(Literal(v, _), a: Attribute) =>
+        Some(sources.EqualNullSafe(a.name, v))
+
       case expressions.GreaterThan(a: Attribute, Literal(v, _)) =>
         Some(sources.GreaterThan(a.name, v))
       case expressions.GreaterThan(Literal(v, _), a: Attribute) =>

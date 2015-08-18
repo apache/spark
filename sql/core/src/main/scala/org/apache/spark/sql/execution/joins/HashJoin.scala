@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.metric.LongSQLMetric
 
 
 trait HashJoin {
@@ -69,7 +70,9 @@ trait HashJoin {
 
   protected def hashJoin(
       streamIter: Iterator[InternalRow],
-      hashedRelation: HashedRelation): Iterator[InternalRow] =
+      numStreamRows: LongSQLMetric,
+      hashedRelation: HashedRelation,
+      numOutputRows: LongSQLMetric): Iterator[InternalRow] =
   {
     new Iterator[InternalRow] {
       private[this] var currentStreamedRow: InternalRow = _
@@ -98,6 +101,7 @@ trait HashJoin {
           case BuildLeft => joinRow(currentHashMatches(currentMatchPosition), currentStreamedRow)
         }
         currentMatchPosition += 1
+        numOutputRows += 1
         resultProjection(ret)
       }
 
@@ -113,6 +117,7 @@ trait HashJoin {
 
         while (currentHashMatches == null && streamIter.hasNext) {
           currentStreamedRow = streamIter.next()
+          numStreamRows += 1
           val key = joinKeys(currentStreamedRow)
           if (!key.anyNull) {
             currentHashMatches = hashedRelation.get(key)

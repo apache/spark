@@ -209,6 +209,13 @@ private[sql] class ParquetRelation(
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
     val conf = ContextUtil.getConfiguration(job)
 
+    // SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible
+    val committerClassname = conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key)
+    if (committerClassname == "org.apache.spark.sql.parquet.DirectParquetOutputCommitter") {
+      conf.set(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key,
+        classOf[DirectParquetOutputCommitter].getCanonicalName)
+    }
+
     val committerClass =
       conf.getClass(
         SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key,
@@ -671,7 +678,7 @@ private[sql] object ParquetRelation extends Logging {
     val followParquetFormatSpec = sqlContext.conf.followParquetFormatSpec
     val serializedConf = new SerializableConfiguration(sqlContext.sparkContext.hadoopConfiguration)
 
-    // HACK ALERT:
+    // !! HACK ALERT !!
     //
     // Parquet requires `FileStatus`es to read footers.  Here we try to send cached `FileStatus`es
     // to executor side to avoid fetching them again.  However, `FileStatus` is not `Serializable`
