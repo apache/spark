@@ -66,6 +66,7 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                           E.g. 10 means that the cache will get checkpointed every 10 updates. If
  *                           the checkpoint directory is not set in
  *                           [[org.apache.spark.SparkContext]], this setting is ignored.
+ * @since 1.0.0
  */
 @Experimental
 class Strategy (
@@ -83,16 +84,23 @@ class Strategy (
     @BeanProperty var useNodeIdCache: Boolean = false,
     @BeanProperty var checkpointInterval: Int = 10) extends Serializable {
 
+  /**
+   * @since 1.2.0
+   */
   def isMulticlassClassification: Boolean = {
     algo == Classification && numClasses > 2
   }
 
+  /**
+   * @since 1.2.0
+   */
   def isMulticlassWithCategoricalFeatures: Boolean = {
     isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
   }
 
   /**
    * Java-friendly constructor for [[org.apache.spark.mllib.tree.configuration.Strategy]]
+   * @since 1.1.0
    */
   def this(
       algo: Algo,
@@ -107,6 +115,7 @@ class Strategy (
 
   /**
    * Sets Algorithm using a String.
+   * @since 1.2.0
    */
   def setAlgo(algo: String): Unit = algo match {
     case "Classification" => setAlgo(Classification)
@@ -115,6 +124,7 @@ class Strategy (
 
   /**
    * Sets categoricalFeaturesInfo using a Java Map.
+   * @since 1.2.0
    */
   def setCategoricalFeaturesInfo(
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]): Unit = {
@@ -162,7 +172,10 @@ class Strategy (
       s"$subsamplingRate")
   }
 
-  /** Returns a shallow copy of this instance. */
+  /**
+   * Returns a shallow copy of this instance.
+   * @since 1.2.0
+   */
   def copy: Strategy = {
     new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode, minInfoGain,
@@ -170,12 +183,16 @@ class Strategy (
   }
 }
 
+/**
+ * @since 1.2.0
+ */
 @Experimental
 object Strategy {
 
   /**
    * Construct a default set of parameters for [[org.apache.spark.mllib.tree.DecisionTree]]
    * @param algo  "Classification" or "Regression"
+   * @since 1.2.0
    */
   def defaultStrategy(algo: String): Strategy = {
     defaultStrategy(Algo.fromString(algo))
@@ -184,6 +201,7 @@ object Strategy {
   /**
    * Construct a default set of parameters for [[org.apache.spark.mllib.tree.DecisionTree]]
    * @param algo Algo.Classification or Algo.Regression
+   * @since 1.3.0
    */
   def defaultStrategy(algo: Algo): Strategy = algo match {
     case Algo.Classification =>
