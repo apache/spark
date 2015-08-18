@@ -95,6 +95,7 @@ object JdbcUtils extends Logging {
       conn.setAutoCommit(false) // Everything in the same db transaction.
       val stmt = insertStatement(conn, table, rddSchema)
       try {
+        var rowCount = 0
         while (iterator.hasNext) {
           val row = iterator.next()
           val numFields = rddSchema.fields.length
@@ -122,7 +123,15 @@ object JdbcUtils extends Logging {
             }
             i = i + 1
           }
-          stmt.executeUpdate()
+          stmt.addBatch()
+          rowCount += 1
+          if (rowCount % 1000 == 0) {
+            stmt.executeBatch()
+            rowCount = 0
+          }
+        }
+        if (rowCount > 0) {
+          stmt.executeBatch()
         }
       } finally {
         stmt.close()
