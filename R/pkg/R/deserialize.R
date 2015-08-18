@@ -48,6 +48,7 @@ readTypedObject <- function(con, type) {
     "r" = readRaw(con),
     "D" = readDate(con),
     "t" = readTime(con),
+    "a" = readArray(con),
     "l" = readList(con),
     "n" = NULL,
     "j" = getJobj(readString(con)),
@@ -85,14 +86,32 @@ readTime <- function(con) {
   as.POSIXct(t, origin = "1970-01-01")
 }
 
-# We only support lists where all elements are of same type
-readList <- function(con) {
+readArray <- function(con) {
   type <- readType(con)
   len <- readInt(con)
   if (len > 0) {
     l <- vector("list", len)
     for (i in 1:len) {
       l[[i]] <- readTypedObject(con, type)
+    }
+    l
+  } else {
+    list()
+  }
+}
+
+# Read a list. Types of each element may be different.
+# Null objects are read as NA.
+readList <- function(con) {
+  len <- readInt(con)
+  if (len > 0) {
+    l <- vector("list", len)
+    for (i in 1:len) {
+      elem <- readObject(con)
+      if (is.null(elem)) {
+        elem <- NA
+      }
+      l[[i]] <- elem
     }
     l
   } else {
