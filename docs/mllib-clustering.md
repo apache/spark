@@ -566,8 +566,7 @@ public class JavaLDAExample {
 
 <div data-lang="python" markdown="1">
 {% highlight python %}
-from pyspark.mllib.clustering import LDA
-from pyspark.mllib.clustering import LDAModel
+from pyspark.mllib.clustering import LDA, LDAModel
 from pyspark.mllib.linalg import Vectors
 
 # Load and parse the data
@@ -583,9 +582,9 @@ ldaModel = LDA.train(corpus, k=3)
 print("Learned topics (as distributions over vocab of " + str(ldaModel.vocabSize()) + " words):")
 topics = ldaModel.topicsMatrix()
 for topic in range(3):
-	print("Topic " + str(topic) + ":")
-	for word in range(0, ldaModel.vocabSize()):
-		print(" " + str(topics[word][topic]))
+    print("Topic " + str(topic) + ":")
+    for word in range(0, ldaModel.vocabSize()):
+        print(" " + str(topics[word][topic]))
 		
 # Save and load model
 model.save(sc, "myModelPath")
