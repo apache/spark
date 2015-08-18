@@ -473,21 +473,22 @@ class timeout(object):
         signal.alarm(0)
 
 
+def is_container(obj):
+    """
+    Test if an object is a container (iterable) but not a string
+    """
+    return hasattr(obj, '__iter__') and not isinstance(obj, basestring)
+
+
 def as_tuple(obj):
     """
     If obj is a container, returns obj as a tuple.
     Otherwise, returns a tuple containing obj.
     """
-    def _inner_gen():
-        try:
-            for i in obj:
-                yield i
-        except:
-            yield obj
-    if isinstance(obj, basestring):
-        return (obj,)
+    if is_container(obj):
+        return tuple(obj)
     else:
-        return tuple(_inner_gen())
+        return tuple([obj])
 
 
 def round_time(dt, delta):
