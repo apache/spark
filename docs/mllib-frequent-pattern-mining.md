@@ -41,21 +41,23 @@ MLlib's FP-growth implementation takes the following (hyper-)parameters:
 
 [`FPGrowth`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowth) implements the
 FP-growth algorithm.
-It take a `JavaRDD` of transactions, where each transaction is an `Iterable` of items of a generic type.
+It take a `RDD` of transactions, where each transaction is an `Array` of items of a generic type.
 Calling `FPGrowth.run` with transactions returns an
 [`FPGrowthModel`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowthModel)
 that stores the frequent itemsets with their frequencies.
 
 {% highlight scala %}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.fpm.{FPGrowth, FPGrowthModel}
+import org.apache.spark.mllib.fpm.FPGrowth
 
-val transactions: RDD[Array[String]] = ...
+val data = sc.textFile("data/mllib/sample_fpgrowth.txt")
 
-val fpg = new FPGrowth()
+val transactions: RDD[Array[String]] = data.map(s => s.trim.split(' '))
+
+val fpm = new FPGrowth()
   .setMinSupport(0.2)
   .setNumPartitions(10)
-val model = fpg.run(transactions)
+val model = fpm.run(transactions)
 
 model.freqItemsets.collect().foreach { itemset =>
   println(itemset.items.mkString("[", ",", "]") + ", " + itemset.freq)
@@ -68,7 +70,7 @@ model.freqItemsets.collect().foreach { itemset =>
 
 [`FPGrowth`](api/java/org/apache/spark/mllib/fpm/FPGrowth.html) implements the
 FP-growth algorithm.
-It take an `RDD` of transactions, where each transaction is an `Array` of items of a generic type.
+It take an `JavaRDD` of transactions, where each transaction is an `Iterable` of items of a generic type.
 Calling `FPGrowth.run` with transactions returns an
 [`FPGrowthModel`](api/java/org/apache/spark/mllib/fpm/FPGrowthModel.html)
 that stores the frequent itemsets with their frequencies.
@@ -77,22 +79,60 @@ that stores the frequent itemsets with their frequencies.
 import java.util.List;
 
 import com.google.common.base.Joiner;
+import com.google.common.collect.Lists;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.fpm.FPGrowth;
-import org.apache.spark.mllib.fpm.FPGrowthModel;
 
-JavaRDD<List<String>> transactions = ...
+SparkConf conf = new SparkConf().setAppName("FP-growth Example");
+JavaSparkContext sc = new JavaSparkContext(conf);
 
-FPGrowth fpg = new FPGrowth()
+JavaRDD<String> data = sc.textFile("data/mllib/sample_fpgrowth.txt");
+
+JavaRDD<List<String>> transactions = data.map(
+    new Function<String, List<String>>() {
+        public List<String> call(String line) {
+            String[] parts = line.split(" ");
+            return Lists.newArrayList(parts);
+        }
+    }
+);
+
+FPGrowth fpm = new FPGrowth()
   .setMinSupport(0.2)
   .setNumPartitions(10);
-FPGrowthModel<String> model = fpg.run(transactions);
+FPGrowthModel<String> model = fpm.run(transactions);
 
 for (FPGrowth.FreqItemset<String> itemset: model.freqItemsets().toJavaRDD().collect()) {
-   System.out.println("[" + Joiner.on(",").join(s.javaItems()) + "], " + s.freq());
+   System.out.println("[" + Joiner.on(",").join(itemset.javaItems()) + "], " + itemset.freq());
 }
 {% endhighlight %}
 
 </div>
+
+<div data-lang="python" markdown="1">
+
+[`FPGrowth`](api/python/pyspark.mllib.html#pyspark.mllib.fpm.FPGrowth) implements the
+FP-growth algorithm.
+It take an `RDD` of transactions, where each transaction is an `List` of items of a generic type.
+Calling `FPGrowth.train` with transactions returns an
+[`FPGrowthModel`](api/python/pyspark.mllib.html#pyspark.mllib.fpm.FPGrowthModel)
+that stores the frequent itemsets with their frequencies.
+
+{% highlight python %}
+from pyspark.mllib.fpm import FPGrowth
+
+data = sc.textFile("data/mllib/sample_fpgrowth.txt")
+
+transactions = data.map(lambda line: line.strip().split(' '))
+
+model = FPGrowth.train(transactions, 0.2, 10)
+
+result = model.freqItemsets().collect()
+for fi in result:
+    print(fi)
+{% endhighlight %}
+
+</div>
+
 </div>
