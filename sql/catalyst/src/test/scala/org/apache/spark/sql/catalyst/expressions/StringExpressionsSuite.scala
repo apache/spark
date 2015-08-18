@@ -512,11 +512,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row3 = create_row("aaads", null, "zz", 0)
     val row4 = create_row(null, null, null, 0)
 
-    checkEvaluation(new StringLocate(Literal("aa"), Literal("aaads")), 1, row1)
-    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(1)), 2, row1)
-    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(2)), 0, row1)
-    checkEvaluation(new StringLocate(Literal("de"), Literal("aaads")), 0, row1)
-    checkEvaluation(StringLocate(Literal("de"), Literal("aaads"), 1), 0, row1)
+    checkEvaluation(new StringLocate(Literal("aa"), Literal("aaads")), 1)
+    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(1)), 2)
+    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(2)), 0)
+    checkEvaluation(new StringLocate(Literal("de"), Literal("aaads")), 0)
+    checkEvaluation(StringLocate(Literal("de"), Literal("aaads"), 1), 0)
 
     checkEvaluation(new StringLocate(s2, s1), 1, row1)
     checkEvaluation(StringLocate(s2, s1, s4), 2, row1)
@@ -525,6 +525,22 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(new StringLocate(s2, s1), null, row2)
     checkEvaluation(new StringLocate(s2, s1), null, row3)
     checkEvaluation(new StringLocate(s2, s1, Literal.create(null, IntegerType)), 0, row4)
+
+    // str is non-foldable
+    checkEvaluation(StringLocate(Literal("aa"), NonFoldableLiteral("aaads"), Literal(1)), 2)
+    checkEvaluation(
+      StringLocate(Literal("aa"), NonFoldableLiteral.create(null, StringType), Literal(1)), null)
+    // start is non-foldable
+    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), NonFoldableLiteral(1)), 2)
+    checkEvaluation(
+      StringLocate(Literal("aa"), Literal("aaads"),
+        NonFoldableLiteral.create(null, IntegerType)), 0)
+    // str and start are both non-foldable
+    checkEvaluation(
+      StringLocate(Literal("aa"), NonFoldableLiteral("aaads"), NonFoldableLiteral(1)), 2)
+    checkEvaluation(
+      StringLocate(Literal("aa"), NonFoldableLiteral.create(null, StringType),
+        NonFoldableLiteral.create(null, IntegerType)), 0)
   }
 
   test("LPAD/RPAD") {

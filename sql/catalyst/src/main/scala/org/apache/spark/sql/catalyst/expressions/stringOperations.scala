@@ -550,7 +550,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
  * in given string after position pos.
  */
 case class StringLocate(substr: Expression, str: Expression, start: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  extends TernaryExpression with ImplicitCastInputTypes {
 
   def this(substr: Expression, str: Expression) = {
     this(substr, str, Literal(0))
@@ -579,6 +579,109 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
             s.asInstanceOf[Int]) + 1
         }
       }
+    }
+  }
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    if (start.foldable) {
+      val startValue = start.eval()
+      if (startValue != null) {
+        if (str.foldable) { // both start and str are foldable
+          val strValue = str.eval()
+          if (strValue != null) {
+            val strValueString = strValue.asInstanceOf[UTF8String].toString
+            val strUTF8 = ctx.freshName("strUTF8")
+            val substrGen = substr.gen(ctx)
+            s"""
+              ${substrGen.code}
+              boolean ${ev.isNull} = ${substrGen.isNull};
+              ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+              if (!${ev.isNull}) {
+                UTF8String $strUTF8 = UTF8String.fromString("$strValueString");
+                ${ev.primitive} = $strUTF8.indexOf(${substrGen.primitive}, $startValue) + 1;
+              }
+            """
+          } else { // strValue == null
+            s"""
+              boolean ${ev.isNull} = true;
+              ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+            """
+          }
+        } else { // only start is foldable
+          val strGen = str.gen(ctx)
+          val substrGen = substr.gen(ctx)
+          s"""
+            ${substrGen.code}
+            boolean ${ev.isNull} = ${substrGen.isNull};
+            ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+            if (!${ev.isNull}) {
+              ${strGen.code}
+              if (!${strGen.isNull}) {
+                ${ev.primitive} =
+                  ${strGen.primitive}.indexOf(${substrGen.primitive}, $startValue) + 1;
+              } else {
+                ${ev.isNull} = true;
+              }
+            }
+          """
+        }
+      } else { // startValue == null
+        s"""
+          boolean ${ev.isNull} = false;
+          ${ctx.javaType(dataType)} ${ev.primitive} = 0;
+        """
+      }
+    } else if (str.foldable) { // only str is foldable
+      val strValue = str.eval()
+      if (strValue != null) {
+        val substrGen = substr.gen(ctx)
+        val startGen = start.gen(ctx)
+        val strValueString = strValue.asInstanceOf[UTF8String].toString
+        val strUTF8 = ctx.freshName("strUTF8")
+        s"""
+          ${substrGen.code}
+          boolean ${ev.isNull} = ${substrGen.isNull};
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            ${startGen.code}
+            if (!${startGen.isNull}) {
+              UTF8String $strUTF8 = UTF8String.fromString("$strValueString");
+              ${ev.primitive} =
+                $strUTF8.indexOf(${substrGen.primitive}, ${startGen.primitive}) + 1;
+            } else {
+              ${ev.primitive} = 0;
+            }
+          }
+        """
+      } else {
+        s"""
+          boolean ${ev.isNull} = true;
+          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+        """
+      }
+    } else { // neither start nor str is foldable
+      val substrGen = substr.gen(ctx)
+      val strGen = str.gen(ctx)
+      val startGen = start.gen(ctx)
+      s"""
+        ${startGen.code}
+        boolean ${ev.isNull} = true;
+        ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+        if (!${startGen.isNull}) {
+          ${substrGen.code}
+          if (!${substrGen.isNull}) {
+            ${strGen.code}
+            if (!${strGen.isNull}) {
+              ${ev.isNull} = false;
+              ${ev.primitive} =
+                ${strGen.primitive}.indexOf(${substrGen.primitive}, ${startGen.primitive}) + 1;
+            }
+          }
+        } else {
+          ${ev.isNull} = false;
+          ${ev.primitive} = 0;
+        }
+      """
     }
   }
 
