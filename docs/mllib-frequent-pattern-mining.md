@@ -90,12 +90,12 @@ JavaSparkContext sc = new JavaSparkContext(conf);
 JavaRDD<String> data = sc.textFile("data/mllib/sample_fpgrowth.txt");
 
 JavaRDD<List<String>> transactions = data.map(
-    new Function<String, List<String>>() {
-        public List<String> call(String line) {
-            String[] parts = line.split(" ");
-            return Lists.newArrayList(parts);
-        }
+  new Function<String, List<String>>() {
+    public List<String> call(String line) {
+      String[] parts = line.split(" ");
+      return Lists.newArrayList(parts);
     }
+  }
 );
 
 FPGrowth fpm = new FPGrowth()
@@ -103,8 +103,8 @@ FPGrowth fpm = new FPGrowth()
   .setNumPartitions(10);
 FPGrowthModel<String> model = fpm.run(transactions);
 
-for (FPGrowth.FreqItemset<String> itemset: model.freqItemsets().toJavaRDD().collect()) {
-   System.out.println("[" + Joiner.on(",").join(itemset.javaItems()) + "], " + itemset.freq());
+for(FPGrowth.FreqItemset<String> itemset: model.freqItemsets().toJavaRDD().collect()) {
+  System.out.println("[" + Joiner.on(",").join(itemset.javaItems()) + "], " + itemset.freq());
 }
 {% endhighlight %}
 
