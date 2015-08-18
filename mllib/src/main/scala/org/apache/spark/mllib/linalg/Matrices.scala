@@ -282,12 +282,12 @@ class DenseMatrix(
    * @since 1.3.0
    */
   override def apply(i: Int, j: Int): Double = {
-    require(i < numRows && i >=0, s"Expected i to be non-negative and < $numRows, got $i")
-    require(j < numCols && j >=0, s"Expected j to be non-negative and < $numCols, got $j")
     values(index(i, j))
   }
 
   private[mllib] def index(i: Int, j: Int): Int = {
+    require(i < numRows && i >=0, s"Expected 0 <= i < $numRows, got $i")
+    require(j < numCols && j >=0, s"Expected 0 <= j < $numCols, got $j")
     if (!isTransposed) i + numRows * j else j + numCols * i
   }
 
@@ -567,13 +567,13 @@ class SparseMatrix(
    * @since 1.3.0
    */
   override def apply(i: Int, j: Int): Double = {
-    require(i < numRows && i >=0, s"Expected i to be non-negative and < $numRows, got $i")
-    require(j < numCols && j >=0, s"Expected j to be non-negative and < $numCols, got $j")
     val ind = index(i, j)
     if (ind < 0) 0.0 else values(ind)
   }
 
   private[mllib] def index(i: Int, j: Int): Int = {
+    require(i < numRows && i >=0, s"Expected 0 <= i < $numRows, got $i")
+    require(j < numCols && j >=0, s"Expected 0 <= j < $numCols, got $j")
     if (!isTransposed) {
       Arrays.binarySearch(rowIndices, colPtrs(j), colPtrs(j + 1), i)
     } else {
