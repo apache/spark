@@ -483,4 +483,10 @@ class MatricesSuite extends SparkFunSuite {
     assert(sm1.numNonzeros === 1)
     assert(sm1.numActives === 3)
   }
+
+  test("hashCode") {
+    val a = new DenseMatrix(3, 2, Array(0, 3, 1, 4, 2, 5), true)
+    val b = new DenseMatrix(3, 2, Array(0, 1, 2, 3, 4, 5))
+    assert(a.hashCode === b.hashCode)
+  }
 }

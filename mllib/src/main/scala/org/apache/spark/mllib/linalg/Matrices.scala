@@ -264,7 +264,41 @@ class DenseMatrix(
   }
 
   override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(numRows : Integer, numCols: Integer, toArray)
+    var result: Int = 31 + numRows
+    result = 31 * result + numCols
+
+    var i = 0
+    var nnz = 0
+    while (i < values.size && nnz < 64) {
+      val rowInd = i % numRows
+      val colInd = i / numRows
+
+      // We do not hash isTransposed because isTransposed need not be equal
+      // for two Matrices and they can still be equal.
+      // For example,
+      // a = new DenseMatrix(3, 2, Array(0, 3, 1, 4, 2, 5), true)
+      // 0.0  3.0
+      // 1.0  4.0
+      // 2.0  5.0
+      // b = new DenseMatrix(3, 2, Array(0, 1, 2, 3, 4, 5))
+      // 0.0  3.0
+      // 1.0  4.0
+      // 2.0  5.0
+      // The alternative is to hash first 64 values of mat(row_ind, col_ind)
+      // increasing the row-ind first and then the col_ind.
+      // since a(row_ind, col_ind) == b(row_ind, col_ind) for all permissible
+      // values of row_ind and col_ind.
+      val value = if (isTransposed) apply(rowInd, colInd) else values(i)
+      if (value != 0.0) {
+        result = 31 * result + rowInd
+        result = 31 * result + colInd
+        val bits = java.lang.Double.doubleToLongBits(value)
+        result = 31 * result + (bits ^ (bits >>> 32)).toInt
+        nnz += 1
+      }
+      i += 1
+    }
+    result
   }
 
   private[mllib] def toBreeze: BM[Double] = {
