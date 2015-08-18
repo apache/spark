@@ -30,7 +30,7 @@ from airflow.executors import DEFAULT_EXECUTOR, LocalExecutor
 from airflow.configuration import conf
 from airflow.utils import (
     AirflowException, XComException, State, apply_defaults, provide_session,
-    as_tuple)
+    is_container, as_tuple)
 
 Base = declarative_base()
 ID_LEN = 250
@@ -1014,8 +1014,6 @@ class TaskInstance(Base):
             self,
             key,
             value,
-            to_tasks=None,
-            to_dags=None,
             visible_on=None):
         """
         Make an XCom available for tasks to pull.
@@ -1025,15 +1023,6 @@ class TaskInstance(Base):
         :param value: A value for the XCom. The value is pickled and stored
             in the database.
         :type value: any pickleable object
-        :param to_tasks: If provided, only these tasks will be able to pull
-            the XCom. If None (the default), no targets are specified.
-        :type to_tasks: TaskInstance, string (representing task_id), or
-            an iterable of TaskInstances or strings.
-        :param to_dags: If provided, only tasks in these DAGs will be able to
-            pull the XCom. If None (the default), the calling task's DAG is
-            used. To remove the DAG filter entirely, pass [None].
-        :type to_dags: DAG, string (representing dag_id), or an iterable of
-            DAGs or strings.
         :param visible_on: if provided, the XCom will not be visible until
             this date. This can be used, for example, to send a message to a
             task on a future date without it being immediately visible.
@@ -1045,45 +1034,33 @@ class TaskInstance(Base):
                 'visible_on can not be in the past (current execution_date '
                 'is {}; received {})'.format(self.execution_date, visible_on))
 
-        if to_dags is None:
-            to_dags = self.dag_id
-
-        for to_task_i in as_tuple(to_tasks):
-            for to_dag_i in as_tuple(to_dags):
-
-                XCom.set(
-                    key=key,
-                    value=value,
-                    from_task=self.task_id,
-                    from_dag=self.dag_id,
-                    to_task=to_task_i,
-                    to_dag=to_dag_i,
-                    visible_on=visible_on or self.execution_date)
+        XCom.set(
+            key=key,
+            value=value,
+            task=self.task_id,
+            dag=self.dag_id,
+            visible_on=visible_on or self.execution_date)
 
     def xcom_pull(
             self,
             key=None,
-            from_tasks=None,
-            from_dags=None,
+            tasks=None,
+            dags=None,
             include_prior_dates=False,
-            limit=100):
+            limit=None):
         """
-        Pull an XCom that meets certain criteria.
+        Pull an XCom that optionally meets certain criteria.
 
         :param key: A key for the XCom. If provided, only XComs with matching
             keys will be returned. Defaults to None.
         :type key: string
-        :param from_tasks: If None, only XComs that specifically target the
-            calling task can be pulled. If from_tasks is provided, then XComs
-            pushed by those tasks without targets will also be pulled. To clear
-            the task filter entirely, pass [None].
-        :type from_tasks: TaskInstance, string (representing task_id), or
-            an iterable of TaskInstances or strings.
-        :param from_dags: If provided, only XComs from these DAGs will be
-            pulled. Defaults to the DAG of the calling task. To clear the DAG
-            filter entirely, pass [None]
-        :type from_dags: DAG, string (representing dag_id), or an iterable of
-            DAGs or strings.
+        :param tasks: If supplied, only pulls XComs from tasks with matching
+            ids. Defaults to None.
+        :type tasks: string or iterable of strings (representing task_ids)
+        :param dags: If provided, only pulls XComs from dags with matching ids.
+            If None (default), the DAG of the calling task is used. To clear
+            the filter entirely, pass [None].
+        :type dags: string or iterable of strings (representing dag_ids)
         :param include_prior_dates: If False, only XComs from the current
             execution_date are returned. If True, XComs from previous dates
             are returned as well.
@@ -1093,26 +1070,21 @@ class TaskInstance(Base):
         :type limit: int
         """
 
-        if from_dags is None:
-            from_dags = self.dag_id
+        if dags is None:
+            dags = self.dag_id
 
-        # pull XComs pushed to this task/DAG
-        to_tasks, to_dags = [self.task_id], [self.dag_id]
-
-        # ...unless we are pulling from specific tasks,
-        # in which case include XComs with no targets
-        if from_tasks:
-            to_tasks.append(None)
-
-        return XCom.get(
+        pull_fn = lambda tasks: XCom.get(
             visible_on=self.execution_date,
             key=key,
-            from_tasks=from_tasks,
-            from_dags=from_dags,
-            to_tasks=to_tasks,
-            to_dags=to_dags,
+            tasks=tasks,
+            dags=dags,
             include_prior_dates=include_prior_dates,
             limit=limit)
+
+        if limit is None and is_container(tasks):
+            return [pull_fn(t) for t in tasks]
+        else:
+            return pull_fn(tasks)
 
 
 class Log(Base):
@@ -1585,8 +1557,6 @@ class BaseOperator(object):
             context,
             key,
             value,
-            to_tasks=None,
-            to_dags=None,
             visible_on=None):
         """
         See TaskInstance.xcom_push()
@@ -1594,25 +1564,23 @@ class BaseOperator(object):
         context['ti'].xcom_push(
             key=key,
             value=value,
-            to_tasks=to_tasks,
-            to_dags=to_dags,
             visible_on=visible_on)
 
     def xcom_pull(
             self,
             context,
-            key,
-            from_tasks=None,
-            from_dags=None,
+            key=None,
+            tasks=None,
+            dags=None,
             include_prior_dates=None,
-            limit=100):
+            limit=None):
         """
         See TaskInstance.xcom_pull()
         """
         return context['ti'].xcom_pull(
             key=key,
-            from_tasks=from_tasks,
-            from_dags=from_dags,
+            tasks=tasks,
+            dags=dags,
             include_prior_dates=include_prior_dates,
             limit=limit)
 
@@ -2174,37 +2142,14 @@ class XCom(Base):
     visible_on = Column(DateTime, nullable=False)
 
     # source information
-    from_task = Column(
-        String,
-        ForeignKey('task_instance.task_id'),
-        nullable=False)
-    from_dag = Column(
-        String,
-        ForeignKey('task_instance.dag_id'),
-        nullable=False)
-
-    # target information (optional)
-    to_task = Column(String, ForeignKey('task_instance.task_id'))
-    to_dag = Column(String, ForeignKey('task_instance.dag_id'))
+    task = Column(String, nullable=False)
+    dag = Column(String, nullable=False)
 
     def __repr__(self):
-        return '<XCom "{key}" ({from_task} -> {to_task})>'.format(
+        return '<XCom "{key}" ({task} @ {visible_on})>'.format(
             key=self.key,
-            from_task=self.from_task,
-            to_task=self.to_task)
-
-    @classmethod
-    def resolve_args(cls, tasks, dags):
-        tasks_dags = []
-        for t in as_tuple(tasks):
-            for d in as_tuple(dags):
-                if isinstance(t, TaskInstance):
-                    t, d = t.task_id, t.dag_id
-                elif isinstance(d, DAG):
-                    d = d.dag_id
-            tasks_dags.append((t, d))
-        tasks, dags = zip(*tasks_dags)
-        return tasks, dags
+            task=self.task,
+            visible_on=self.visible_on)
 
     @classmethod
     @provide_session
@@ -2213,27 +2158,23 @@ class XCom(Base):
             key,
             value,
             visible_on,
-            from_task,
-            from_dag,
-            to_task=None,
-            to_dag=None,
+            task,
+            dag,
             session=None):
         """
         Store an XCom value.
         """
 
-        from_task, from_dag = cls.resolve_args(from_task, from_dag)
-        to_task, to_dag = cls.resolve_args(to_task, to_dag)
+        if not isinstance(task, basestring) or not isinstance(dag, basestring):
+            raise TypeError('Expected string; received {}'.format(type(task)))
 
         session.expunge_all()
         session.add(XCom(
             key=key,
             value=value,
             visible_on=visible_on,
-            from_task=from_task[0],
-            from_dag=from_dag[0],
-            to_task=to_task[0],
-            to_dag=to_dag[0]))
+            task=task,
+            dag=dag))
         session.commit()
 
     @classmethod
@@ -2242,34 +2183,21 @@ class XCom(Base):
             cls,
             visible_on,
             key=None,
-            from_tasks=None,
-            from_dags=None,
-            to_tasks=None,
-            to_dags=None,
+            tasks=None,
+            dags=None,
             include_prior_dates=False,
-            limit=100,
+            limit=None,
             session=None):
         """
         Retrieve an XCom value, optionally meeting certain criteria
         """
-        from_tasks, from_dags = cls.resolve_args(from_tasks, from_dags)
-        to_tasks, to_dags = cls.resolve_args(to_tasks, to_dags)
-
-        filter_map = zip(
-            (cls.from_task, cls.from_dag, cls.to_task, cls.to_dag),
-            (from_tasks, from_dags, to_tasks, to_dags))
-
         filters = []
         if key:
             filters.append(cls.key == key)
-
-        for column, values in filter_map:
-            if any(v is not None for v in values):
-                non_null_values = [v for v in values if v is not None]
-                filters.append(or_(
-                    column.in_(non_null_values) if non_null_values else False,
-                    (column == None) if None in values else False))
-
+        if tasks:
+            filters.append(cls.task.in_(as_tuple(tasks)))
+        if dags:
+            filters.append(cls.dag.in_(as_tuple(dags)))
         if include_prior_dates:
             filters.append(cls.visible_on <= visible_on)
         else:
@@ -2278,8 +2206,8 @@ class XCom(Base):
         query = (
             session.query(cls)
             .filter(and_(*filters))
-            .order_by(cls.timestamp.desc())
-            .limit(limit))
+            .order_by(cls.visible_on.desc(), cls.timestamp.desc())
+            .limit(limit or 1))
 
         result = pd.read_sql(
             sql=query.statement,
@@ -2288,13 +2216,16 @@ class XCom(Base):
             parse_dates=['timestamp', 'visible_on'])
 
         result.drop_duplicates(
-            subset=['key', 'visible_on',
-                    'from_task', 'from_dag', 'to_task', 'to_dag'],
+            subset=['key', 'visible_on', 'task', 'dag'],
             inplace=True)
 
         if result.empty:
             raise XComException('No XCom values found.')
-        return result
+
+        if limit is None:
+            return result.iloc[0].value
+        else:
+            return result
 
 
 class Pool(Base):
