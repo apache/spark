@@ -67,9 +67,10 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
       }
       case _ =>
     }
+    val localBcWeights = bcWeights
     val localIntercept = intercept
     testData.mapPartitions { iter =>
-      val w = bcWeights.get.value
+      val w = localBcWeights.get.value
       iter.map(v => predictPoint(v, w, localIntercept))
     }
   }
