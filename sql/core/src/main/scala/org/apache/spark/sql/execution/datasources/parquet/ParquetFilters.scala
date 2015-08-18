@@ -205,6 +205,14 @@ private[sql] object ParquetFilters {
     // For any comparison operator `cmp`, both `a cmp NULL` and `NULL cmp a` evaluate to `NULL`,
     // which can be casted to `false` implicitly. Please refer to the `eval` method of these
     // operators and the `SimplifyFilters` rule for details.
+
+    // Hyukjin: I added [[EqualNullSafe]] with [[org.apache.parquet.filter2.predicate.Operators.Eq]].
+    // So, it performs equality comparison identically when given [[sources.Filter]] is [[EqualTo]].
+    // The reason why I did this is, that the actual Parquet filter checks null-safe equality comparison.
+    // So I added this and maybe [[EqualTo]] should be changed. It still seems fine though, because
+    // physical planning does not set `NULL` to [[EqualTo]] but changes it to [[IsNull]] and etc.
+    // Probably I missed something and obviously this should be changed.
+
     predicate match {
       case sources.IsNull(name) =>
         makeEq.lift(dataTypeOf(name)).map(_(name, null))
@@ -214,6 +222,11 @@ private[sql] object ParquetFilters {
       case sources.EqualTo(name, value) =>
         makeEq.lift(dataTypeOf(name)).map(_(name, value))
       case sources.Not(sources.EqualTo(name, value)) =>
+        makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
+
+      case sources.EqualNullSafe(name, value) =>
+        makeEq.lift(dataTypeOf(name)).map(_(name, value))
+      case sources.Not(sources.EqualNullSafe(name, value)) =>
         makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
 
       case sources.LessThan(name, value) =>
