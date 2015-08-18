@@ -519,7 +519,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
    */
   val THRIFT_HTTP_SERVICE_LIVE = "Started ThriftHttpCLIService in http"
 
-  val SERVER_STARTUP_TIMEOUT = 1.minute
+  val SERVER_STARTUP_TIMEOUT = 3.minutes
 
   private def startThriftServer(port: Int, attempt: Int) = {
     warehousePath = Utils.createTempDir()
