@@ -155,16 +155,10 @@ extensiblity when multiclass classification is supported in the future.
 This example illustrates the use of `LogisticRegressionTrainingSummary` on some toy data.
 
 {% highlight scala %}
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.classification.{LogisticRegression, BinaryLogisticRegressionSummary}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.sql.{Row, SQLContext}
-
-val conf = new SparkConf().setAppName("LogisticRegressionSummary")
-val sc = new SparkContext(conf)
-val sqlContext = new SQLContext(sc)
-import sqlContext.implicits._
+import org.apache.spark.sql.Row
 
 // Use some random data for demonstration.
 // Note that the RDD of LabeledPoints can be converted to a dataframe directly.
@@ -228,9 +222,7 @@ This example illustrates the use of `LogisticRegressionTrainingSummary` on some 
 {% highlight java %}
 import com.google.common.collect.Lists;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.classification.BinaryLogisticRegressionSummary;
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
@@ -239,12 +231,7 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
 import static org.apache.spark.sql.functions.*;
-
-SparkConf conf = new SparkConf().setAppName("LogisticRegressionSummary");
-JavaSparkContext jsc = new JavaSparkContext(conf);
-SQLContext jsql = new SQLContext(jsc);
 
 // Use some random data for demonstration.
 // Note that the RDD of LabeledPoints can be converted to a dataframe directly.
