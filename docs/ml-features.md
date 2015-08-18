@@ -679,7 +679,7 @@ val dct = new DCT()
   .setOutputCol("featuresDCT")
   .setInverse(false)
 val dctDf = dct.transform(df)
-dctDf.select("featuresDCT").take(3).foreach(println)
+dctDf.select("featuresDCT").show(3)
 {% endhighlight %}
 </div>
 
@@ -702,9 +702,9 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
 JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
-      RowFactory.create(Vectors.dense(0.0, 1.0, -2.0, 3.0)),
-      RowFactory.create(Vectors.dense(-1.0, 2.0, 4.0, -7.0)),
-      RowFactory.create(Vectors.dense(14.0, -2.0, -5.0, 1.0))
+  RowFactory.create(Vectors.dense(0.0, 1.0, -2.0, 3.0)),
+  RowFactory.create(Vectors.dense(-1.0, 2.0, 4.0, -7.0)),
+  RowFactory.create(Vectors.dense(14.0, -2.0, -5.0, 1.0))
 ));
 StructType schema = new StructType(new StructField[] {
   new StructField("features", new VectorUDT(), false, Metadata.empty()),
@@ -715,10 +715,7 @@ DCT dct = new DCT()
   .setOutputCol("featuresDCT")
   .setInverse(false);
 DataFrame dctDf = dct.transform(df);
-Row[] row = dctDf.select("featuresDCT").take(3);
-for (Row r : row) {
-  System.out.println(r.get(0));
-}
+dctDf.select("featuresDCT").take(3).show(3);
 {% endhighlight %}
 </div>
 </div>

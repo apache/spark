@@ -17,6 +17,22 @@
 
 package org.apache.spark.ml.feature;
 
+
+import java.util.Arrays;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.ml.feature.DCT;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.VectorUDT;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 import com.google.common.collect.Lists;
 import edu.emory.mathcs.jtransforms.dct.DoubleDCT_1D;
 import org.junit.After;
@@ -55,24 +71,21 @@ public class JavaDCTSuite {
 
   @Test
   public void javaCompatibilityTest() {
-    double[] input = new double[] {1D, 2D, 3D, 4D};
-    JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
-      RowFactory.create(Vectors.dense(input))
+
+    JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
+      RowFactory.create(Vectors.dense(0.0, 1.0, -2.0, 3.0)),
+      RowFactory.create(Vectors.dense(-1.0, 2.0, 4.0, -7.0)),
+      RowFactory.create(Vectors.dense(14.0, -2.0, -5.0, 1.0))
     ));
-    DataFrame dataset = jsql.createDataFrame(data, new StructType(new StructField[]{
-      new StructField("vec", (new VectorUDT()), false, Metadata.empty())
-    }));
-
-    double[] expectedResult = input.clone();
-    (new DoubleDCT_1D(input.length)).forward(expectedResult, true);
-
+    StructType schema = new StructType(new StructField[] {
+      new StructField("features", new VectorUDT(), false, Metadata.empty()),
+    });
+    DataFrame df = jsql.createDataFrame(data, schema);
     DCT dct = new DCT()
-      .setInputCol("vec")
-      .setOutputCol("resultVec");
-
-    Row[] result = dct.transform(dataset).select("resultVec").collect();
-    Vector resultVec = result[0].getAs("resultVec");
-
-    Assert.assertArrayEquals(expectedResult, resultVec.toArray(), 1e-6);
+      .setInputCol("features")
+      .setOutputCol("featuresDCT")
+      .setInverse(false);
+    DataFrame dctDf = dct.transform(df);
+    dctDf.select("featuresDCT").show(3);
   }
 }
