@@ -432,7 +432,7 @@
         <version>${commons-lang3.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.commons</groupId>
+        <groupId>commons-lang</groupId>
         <artifactId>commons-lang</artifactId>
         <version>${commons-lang2.version}</version>
       </dependency>
