@@ -715,7 +715,7 @@ DCT dct = new DCT()
   .setOutputCol("featuresDCT")
   .setInverse(false);
 DataFrame dctDf = dct.transform(df);
-dctDf.select("featuresDCT").take(3).show(3);
+dctDf.select("featuresDCT").show(3);
 {% endhighlight %}
 </div>
 </div>
