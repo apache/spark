@@ -165,3 +165,11 @@ setMethod("n", signature(x = "Column"),
           function(x) {
             count(x)
           })
+
+setMethod("when", signature(x = "Column", y = "ANY"),
+          function(x, y) {
+              condition <- x@jc
+              value <- ifelse(class(y) == "Column", y@jc, y)
+              jc <- callJStatic("org.apache.spark.sql.functions", "when", condition, value)
+              column(jc)
+          })

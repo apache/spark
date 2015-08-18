@@ -727,6 +727,14 @@ test_that("greatest() and least() on a DataFrame", {
   expect_equal(collect(select(df, least(df$a, df$b)))[, 1], c(1, 3))
 })
 
+test_that("when() and otherwise() on a DataFrame", {
+  l <- list(list(a = 1, b = 2), list(a = 3, b = 4))
+  df <- createDataFrame(sqlContext, l)
+  expect_equal(collect(select(df, when(df$a > 1 & df$b > 2, 1)))[, 1], c(NA, 1))
+  expect_equal(collect(select(df, otherwise(when(df$a > 1, 1), 0)))[, 1], c(0, 1))
+  expect_equal(collect(select(df, when(df$a > 1, 1) %otherwise% 0))[, 1], c(0, 1))
+})
+
 test_that("group by", {
   df <- jsonFile(sqlContext, jsonPath)
   df1 <- agg(df, name = "max", age = "sum")

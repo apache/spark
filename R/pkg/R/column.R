@@ -203,3 +203,45 @@ setMethod("%in%",
             jc <- callJMethod(x@jc, "in", table)
             return(column(jc))
           })
+
+
+#' when
+#'
+#' Evaluates a list of conditions and returns one of multiple possible result expressions.
+#' If otherwise is not defined at the end, null is returned for unmatched conditions.
+#'
+#' @rdname column
+setMethod("when",
+          signature(x = "Column", y = "character", z = "ANY"),
+          function(x, y, z) {
+            condition <- y
+            value <- z
+            jc <- callJMethod(x@jc, "when", condition, value)
+            column(jc)
+          })
+
+#' otherwise
+#' 
+#' Evaluates a list of conditions and returns one of multiple possible result expressions.
+#' If otherwise is not defined at the end, null is returned for unmatched conditions.
+#'
+#' @rdname column
+setMethod("otherwise",
+          signature(x = "Column", value = "ANY"),
+          function(x, value) {
+            value <- ifelse(class(value) == "Column", value@jc, value)
+            jc <- callJMethod(x@jc, "otherwise", value)
+            column(jc)
+          })
+
+#' otherwise
+#'
+#' This is an alias of `otherwise` as an infix operator.
+#'
+#' @rdname column
+#' @aliases otherwise
+setMethod("%otherwise%",
+          signature(x = "Column", value = "ANY"),
+          function(x, value) {
+            otherwise(x, value)
+          })

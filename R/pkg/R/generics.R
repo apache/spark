@@ -651,6 +651,18 @@ setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
 #' @export
 setGeneric("startsWith", function(x, ...) { standardGeneric("startsWith") })
 
+#' @rdname column
+#' @export
+setGeneric("when", function(x, y, z) { standardGeneric("when") })
+
+#' @rdname column
+#' @export
+setGeneric("otherwise", function(x, value) { standardGeneric("otherwise") })
+
+#' @rdname column
+#' @export
+setGeneric("%otherwise%", function(x, value) { standardGeneric("%otherwise%") })
+
 
 ###################### Expression Function Methods ##########################
 
