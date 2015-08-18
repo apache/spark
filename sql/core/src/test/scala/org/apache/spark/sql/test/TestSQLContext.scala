@@ -31,13 +31,24 @@ private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { sel
       new SparkConf().set("spark.sql.testkey", "true")))
   }
 
-  // Use fewer partitions to speed up testing
+  // At here, we make sure we set those test specific confs correctly when we create
+  // the SQLConf as well as when we call clear.
   protected[sql] override def createSession(): SQLSession = new this.SQLSession()
 
-  /** A special [[SQLSession]] that uses fewer shuffle partitions than normal. */
   protected[sql] class SQLSession extends super.SQLSession {
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
-      override def numShufflePartitions: Int = this.getConf(SQLConf.SHUFFLE_PARTITIONS, 5)
+
+      TestSQLContext.overrideConfs.map {
+        case (key, value) => setConfString(key, value)
+      }
+
+      override def clear(): Unit = {
+        super.clear()
+
+        TestSQLContext.overrideConfs.map {
+          case (key, value) => setConfString(key, value)
+        }
+      }
     }
   }
 
@@ -49,4 +60,15 @@ private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { sel
   private object testData extends SQLTestData {
     protected override def _sqlContext: SQLContext = self
   }
+}
+
+private[sql] object TestSQLContext {
+
+  /**
+   * A map used to store all confs that need to be overridden in sql/core unit tests.
+   */
+  val overrideConfs: Map[String, String] =
+    Map(
+      // Fewer shuffle partitions to speed up testing.
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5")
 }
