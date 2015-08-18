@@ -17,40 +17,36 @@
 
 package org.apache.spark.sql.test
 
-import scala.language.implicitConversions
-
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.{SQLConf, SQLContext}
 
-/** A SQLContext that can be used for local testing. */
-class LocalSQLContext
-  extends SQLContext(
-    new SparkContext("local[2]", "TestSQLContext", new SparkConf()
-      .set("spark.sql.testkey", "true")
-      // SPARK-8910
-      .set("spark.ui.enabled", "false"))) {
 
-  override protected[sql] def createSession(): SQLSession = {
-    new this.SQLSession()
+/**
+ * A special [[SQLContext]] prepared for testing.
+ */
+private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { self =>
+
+  def this() {
+    this(new SparkContext("local[2]", "test-sql-context",
+      new SparkConf().set("spark.sql.testkey", "true")))
   }
 
+  // Use fewer partitions to speed up testing
+  protected[sql] override def createSession(): SQLSession = new this.SQLSession()
+
+  /** A special [[SQLSession]] that uses fewer shuffle partitions than normal. */
   protected[sql] class SQLSession extends super.SQLSession {
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
-      /** Fewer partitions to speed up testing. */
       override def numShufflePartitions: Int = this.getConf(SQLConf.SHUFFLE_PARTITIONS, 5)
     }
   }
 
-  /**
-   * Turn a logical plan into a [[DataFrame]]. This should be removed once we have an easier way to
-   * construct [[DataFrame]] directly out of local data without relying on implicits.
-   */
-  protected[sql] implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
-    DataFrame(this, plan)
+  // Needed for Java tests
+  def loadTestData(): Unit = {
+    testData.loadTestData()
   }
 
+  private object testData extends SQLTestData {
+    protected override def _sqlContext: SQLContext = self
+  }
 }
-
-object TestSQLContext extends LocalSQLContext
-

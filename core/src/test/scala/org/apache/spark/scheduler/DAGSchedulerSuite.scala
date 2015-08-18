@@ -926,7 +926,7 @@ class DAGSchedulerSuite
     assertLocations(reduceTaskSet, Seq(Seq("hostA")))
     complete(reduceTaskSet, Seq((Success, 42)))
     assert(results === Map(0 -> 42))
-    assertDataStructuresEmpty
+    assertDataStructuresEmpty()
   }
 
   test("reduce task locality preferences should only include machines with largest map outputs") {
@@ -950,7 +950,29 @@ class DAGSchedulerSuite
     assertLocations(reduceTaskSet, Seq(hosts))
     complete(reduceTaskSet, Seq((Success, 42)))
     assert(results === Map(0 -> 42))
-    assertDataStructuresEmpty
+    assertDataStructuresEmpty()
+  }
+
+  test("stages with both narrow and shuffle dependencies use narrow ones for locality") {
+    // Create an RDD that has both a shuffle dependency and a narrow dependency (e.g. for a join)
+    val rdd1 = new MyRDD(sc, 1, Nil)
+    val rdd2 = new MyRDD(sc, 1, Nil, locations = Seq(Seq("hostB")))
+    val shuffleDep = new ShuffleDependency(rdd1, null)
+    val narrowDep = new OneToOneDependency(rdd2)
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep, narrowDep))
+    submit(reduceRdd, Array(0))
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 1))))
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
+      HashSet(makeBlockManagerId("hostA")))
+
+    // Reducer should run where RDD 2 has preferences, even though though it also has a shuffle dep
+    val reduceTaskSet = taskSets(1)
+    assertLocations(reduceTaskSet, Seq(Seq("hostB")))
+    complete(reduceTaskSet, Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty()
   }
 
   test("Spark exceptions should include call site in stack trace") {

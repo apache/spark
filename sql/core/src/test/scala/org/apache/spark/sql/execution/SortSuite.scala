@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.test.SharedSQLContext
 
-class SortSuite extends SparkPlanTest {
+class SortSuite extends SparkPlanTest with SharedSQLContext {
 
   // This test was originally added as an example of how to use [[SparkPlanTest]];
   // it's not designed to be a comprehensive test of ExternalSort.

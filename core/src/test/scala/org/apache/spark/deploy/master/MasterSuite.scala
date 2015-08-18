@@ -40,6 +40,7 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     conf.set("spark.deploy.recoveryMode", "CUSTOM")
     conf.set("spark.deploy.recoveryMode.factory",
       classOf[CustomRecoveryModeFactory].getCanonicalName)
+    conf.set("spark.master.rest.enabled", "false")
 
     val instantiationAttempts = CustomRecoveryModeFactory.instantiationAttempts
 

@@ -224,7 +224,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     // go through the input array to calculate how many bytes we need.
     val calculateNumBytes = elementType match {
-      case _ if (ctx.isPrimitiveType(elementType)) =>
+      case _ if ctx.isPrimitiveType(elementType) =>
         // Should we do word align?
         val elementSize = elementType.defaultSize
         s"""
@@ -237,6 +237,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ =>
         val writer = getWriter(elementType)
         val elementSize = s"$writer.getSize($elements[$index])"
+        // TODO(davies): avoid the copy
         val unsafeType = elementType match {
           case _: StructType => "UnsafeRow"
           case _: ArrayType => "UnsafeArrayData"
@@ -249,8 +250,13 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           case _ => ""
         }
 
+        val newElements = if (elementType == BinaryType) {
+          s"new byte[$numElements][]"
+        } else {
+          s"new $unsafeType[$numElements]"
+        }
         s"""
-          final $unsafeType[] $elements = new $unsafeType[$numElements];
+          final $unsafeType[] $elements = $newElements;
           for (int $index = 0; $index < $numElements; $index++) {
             ${convertedElement.code}
             if (!${convertedElement.isNull}) {
@@ -262,7 +268,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }
 
     val writeElement = elementType match {
-      case _ if (ctx.isPrimitiveType(elementType)) =>
+      case _ if ctx.isPrimitiveType(elementType) =>
         // Should we do word align?
         val elementSize = elementType.defaultSize
         s"""
