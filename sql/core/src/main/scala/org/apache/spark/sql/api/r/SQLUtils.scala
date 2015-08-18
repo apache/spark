@@ -106,38 +106,17 @@ private[r] object SQLUtils {
     bos.toByteArray()
   }
 
-  def dfToCols(df: DataFrame): Array[Array[Byte]] = {
+  def dfToCols(df: DataFrame): Array[Array[Any]] = {
     // localDF is Array[Row]
     val localDF = df.collect()
     val numCols = df.columns.length
-    // dfCols is Array[Array[Any]]
-    val dfCols = convertRowsToColumns(localDF, numCols)
 
-    dfCols.map { col =>
-      colToRBytes(col)
-    }
-  }
-
-  def convertRowsToColumns(localDF: Array[Row], numCols: Int): Array[Array[Any]] = {
+    // result is Array[Array[Any]]
     (0 until numCols).map { colIdx =>
       localDF.map { row =>
         row(colIdx)
       }
     }.toArray
-  }
-
-  def colToRBytes(col: Array[Any]): Array[Byte] = {
-    val numRows = col.length
-    val bos = new ByteArrayOutputStream()
-    val dos = new DataOutputStream(bos)
-
-    SerDe.writeInt(dos, numRows)
-
-    col.map { item =>
-      val obj: Object = item.asInstanceOf[Object]
-      SerDe.writeObject(dos, obj)
-    }
-    bos.toByteArray()
   }
 
   def saveMode(mode: String): SaveMode = {
