@@ -116,36 +116,38 @@ private[spark] abstract class YarnSchedulerBackend(
      */
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       addressToExecutorId.get(rpcAddress).foreach({ executorId =>
-        pendingDisconnectedExecutors.synchronized {
-          // onDisconnected could be fired multiple times from the same executor while we're
-          // asynchronously contacting the AM. So keep track of the executors we're trying to
-          // find loss reasons for and don't duplicate the work
-          if (!pendingDisconnectedExecutors.contains(executorId)) {
-            pendingDisconnectedExecutors.add(executorId)
-            handleDisconnectedExecutorThreadPool.submit(new Runnable() {
-              override def run(): Unit = {
-                val executorLossReason =
-                // Check for the loss reason and pass the loss reason to driverEndpoint
-                  yarnSchedulerEndpoint.askWithRetry[Option[ExecutorLossReason]](
-                      GetExecutorLossReason(executorId))
-                executorLossReason match {
-                  case Some(reason) =>
-                    driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
-                  case None =>
-                    logWarning(s"Attempted to get executor loss reason" +
-                      s" for $rpcAddress but got no response. Marking as slave lost.")
-                    driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, SlaveLost()))
-                }
-                pendingDisconnectedExecutors.synchronized {
-                  pendingDisconnectedExecutors.remove(executorId)
-                }
+        // onDisconnected could be fired multiple times from the same executor while we're
+        // asynchronously contacting the AM. So keep track of the executors we're trying to
+        // find loss reasons for and don't duplicate the work
+        if (!pendingDisconnectedExecutors.contains(executorId)) {
+          pendingDisconnectedExecutors.add(executorId)
+          handleDisconnectedExecutorThreadPool.submit(new Runnable() {
+            override def run(): Unit = {
+              val executorLossReason =
+              // Check for the loss reason and pass the loss reason to driverEndpoint
+                yarnSchedulerEndpoint.askWithRetry[Option[ExecutorLossReason]](
+                    GetExecutorLossReason(executorId))
+              executorLossReason match {
+                case Some(reason) =>
+                  driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
+                case None =>
+                  logWarning(s"Attempted to get executor loss reason" +
+                    s" for $rpcAddress but got no response. Marking as slave lost.")
+                  driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, SlaveLost()))
               }
-            })
-          }
+              driverEndpoint.askWithRetry(AcknowledgeExecutorRemoved(executorId))
+            }
+          })
         }
       })
     }
+
+    override def acknowledgeExecutorRemoved(executorId: String): Boolean = {
+      pendingDisconnectedExecutors.remove(executorId)
+      true
+    }
   }
+
 
   override def createDriverEndpoint(properties: ArrayBuffer[(String, String)]): DriverEndpoint = {
     new YarnDriverEndpoint(rpcEnv, properties)
