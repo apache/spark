@@ -130,10 +130,10 @@ class CountVectorizer(override val uid: String)
     transformSchema(dataset.schema, logging = true)
     val vocSize = $(vocabSize)
     val input = dataset.select($(inputCol)).map(_.getAs[Seq[String]](0))
-    val minDf: Long = if ($(minDF) >= 1.0) {
-      $(minDF).toLong
+    val minDf = if ($(minDF) >= 1.0) {
+      $(minDF)
     } else {
-      math.ceil($(minDF) * input.cache().count()).toLong
+      $(minDF) * input.cache().count()
     }
     val wordCounts: RDD[(String, Long)] = input.flatMap { case (tokens) =>
       val wc = new OpenHashMap[String, Long]
