@@ -166,6 +166,13 @@ setMethod("n", signature(x = "Column"),
             count(x)
           })
 
+#' when
+#'
+#' Evaluates a list of conditions and returns one of multiple possible result expressions.
+#' If otherwise is not defined at the end, null is returned for unmatched conditions.
+#'
+#' @rdname column
+#' @aliases otherwise
 setMethod("when", signature(x = "Column", y = "ANY"),
           function(x, y) {
               condition <- x@jc
