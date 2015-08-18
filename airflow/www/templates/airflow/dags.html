@@ -37,7 +37,9 @@
                     {% endif %}
                 </td>
                 <td>
-                  <input id="toggle-{{ dag_id }}" dag_id="{{ dag_id }}" type="checkbox" {{ "checked" if not orm_dags[dag_id].is_paused else "" }} data-toggle="toggle" data-size="mini">
+                  {% if dag_id in orm_dags %}
+                    <input id="toggle-{{ dag_id }}" dag_id="{{ dag_id }}" type="checkbox" {{ "checked" if not orm_dags[dag_id].is_paused else "" }} data-toggle="toggle" data-size="mini">
+                  {% endif %}
                 </td>
                 <td>
                     {% if dag %}
