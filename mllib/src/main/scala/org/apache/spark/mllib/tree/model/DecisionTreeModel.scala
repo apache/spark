@@ -17,8 +17,6 @@
 
 package org.apache.spark.mllib.tree.model
 
-import org.apache.spark.mllib.pmml.PMMLExportable
-
 import scala.collection.mutable
 
 import org.json4s._
@@ -29,6 +27,7 @@ import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.util.{Loader, Saveable}

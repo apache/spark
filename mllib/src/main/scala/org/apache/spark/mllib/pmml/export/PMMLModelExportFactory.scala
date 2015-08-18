@@ -17,15 +17,12 @@
 
 package org.apache.spark.mllib.pmml.export
 
-import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.dmg.pmml.RegressionNormalizationMethodType
 
-import org.apache.spark.mllib.classification.LogisticRegressionModel
-import org.apache.spark.mllib.classification.SVMModel
+import org.apache.spark.mllib.classification.{LogisticRegressionModel, SVMModel}
 import org.apache.spark.mllib.clustering.KMeansModel
-import org.apache.spark.mllib.regression.LassoModel
-import org.apache.spark.mllib.regression.LinearRegressionModel
-import org.apache.spark.mllib.regression.RidgeRegressionModel
+import org.apache.spark.mllib.regression.{LassoModel, LinearRegressionModel, RidgeRegressionModel}
+import org.apache.spark.mllib.tree.model.DecisionTreeModel
 
 private[mllib] object PMMLModelExportFactory {
 
