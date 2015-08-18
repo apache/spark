@@ -50,15 +50,15 @@ MLPC employes backpropagation for learning the model. We use logistic loss funct
 <div data-lang="scala" markdown="1">
 
 {% highlight scala %}
-
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
+import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.Row
 
 // Load training data
-val data = MLUtils.loadLibSVMFile(sc, "c:/ulanov/dev/spark/data/mllib/sample_multiclass_classification_data.txt").toDF()
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_multiclass_classification_data.txt").toDF()
 // Split the data into train and test
-val splits = data.randomSplit(Array(0.6, 0.4), seed = 11L)
+val splits = data.randomSplit(Array(0.6, 0.4), seed = 1234L)
 val train = splits(0)
 val test = splits(1)
 // specify layers for the neural network: 
@@ -66,13 +66,13 @@ val test = splits(1)
 val layers = Array[Int](4, 5, 4, 3)
 // create the trainer and set its parameters
 val trainer = new MultilayerPerceptronClassifier().setLayers(layers).setBlockSize(128).setSeed(1234L).setMaxIter(100)
-// fit the model to the data
+// train the model
 val model = trainer.fit(train)
+// compute precision on the test set
 val result = model.transform(test)
-val predictionAndLabels = result.select("prediction", "label")
-// compute accuracy on the test set
-val accuracy = predictionAndLabels.map{ case Row(p: Double, l: Double) => if (p == l) 1 else 0}.sum / predictionAndLabels.count
-println("Accuracy:" + accuracy)
+val predictionAndLabels = result.select("prediction", "label").map { case Row(p: Double, l: Double) => (p, l) }
+val metrics = new MulticlassMetrics(predictionAndLabels)
+println("Precision:" + metrics.precision)
 {% endhighlight %}
 
 </div>
@@ -81,33 +81,49 @@ println("Accuracy:" + accuracy)
 
 {% highlight java %}
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel;
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier;
+import org.apache.spark.mllib.evaluation.MulticlassMetrics;
+import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.SQLContext;
 
-public class Example {
-  public static void main(String[] args) {
-    SparkConf conf = new SparkConf()
-      .setAppName("Multilayer perceptron classifier");
+public class MultilayerPerceptronClassifierTest {
 
-    SparkContext sc = new SparkContext(conf);
-    SQLContext sql = new SQLContext(sc);
-    String path = "sample_libsvm_data.txt";
-
-    // Load training data
-    DataFrame training = sql.createDataFrame(MLUtils.loadLibSVMFile(sc, path).toJavaRDD(), LabeledPoint.class);
-
-  }
+    public static void main( String[] args )
+    {
+        SparkConf conf = new SparkConf().setAppName("Multilayer perceptron classifier example").setMaster("local");
+        SparkContext sc = new SparkContext(conf);
+        SQLContext sql = new SQLContext(sc);
+        String path = "data/mllib/sample_multiclass_classification_data.txt";
+        // Load training data
+        JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc, path).toJavaRDD();
+        // Split the data into train and test
+        JavaRDD<LabeledPoint>[] splits = data.randomSplit(new double[]{0.6, 0.4}, 1234L);
+        DataFrame train = sql.createDataFrame(splits[0], LabeledPoint.class);
+        DataFrame test = sql.createDataFrame(splits[1], LabeledPoint.class);
+        // specify layers for the neural network:
+        // input layer of size 4 (features), two intermediate of size 5 and 4 and output of size 3 (classes)
+        int[] layers = new int[] {4, 5, 4, 3};
+        // create the trainer and set its parameters
+        MultilayerPerceptronClassifier trainer = new MultilayerPerceptronClassifier();
+        trainer.setLayers(layers).setBlockSize(128).setSeed(1234L).setMaxIter(100);
+        // train the model
+        MultilayerPerceptronClassificationModel model = trainer.fit(train);
+        // compute precision on the test set
+        DataFrame result = model.transform(test);
+        DataFrame predictionAndLabels = result.select("prediction", "label");
+        MulticlassMetrics metrics = new MulticlassMetrics(predictionAndLabels);
+        System.out.println("Precision = " + metrics.precision());
+    }
 }
-{% endhighlight %}
-</div>
 
-<div data-lang="python" markdown="1">
-
-{% highlight python %}
-Sorry, Python example is not available yet
 
 {% endhighlight %}
-
 </div>
 
 </div>
