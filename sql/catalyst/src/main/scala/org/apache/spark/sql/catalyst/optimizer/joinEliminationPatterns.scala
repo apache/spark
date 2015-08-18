@@ -19,9 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.JoinType
-import org.apache.spark.sql.catalyst.plans.LeftOuter
-import org.apache.spark.sql.catalyst.plans.RightOuter
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
@@ -58,33 +56,43 @@ object CanEliminateUniqueKeyOuterJoin {
 
 /**
  * Finds equijoins based on foreign-key referential integrity, followed by [[Project]]s that
- * reference no columns from the parent table other than the referenced unique keys.
+ * reference no columns from the parent table other than the referenced unique keys. Such equijoins
+ * can be eliminated and replaced by the child table.
  *
  * The table containing the foreign key is referred to as the child table, while the table
- * containing the referenced unique key is referred to as the parent table. Such equijoins can be
- * eliminated and replaced by the child table.
+ * containing the referenced unique key is referred to as the parent table.
+ *
+ * For inner joins, all involved foreign keys must be non-nullable.
  *
  * See [[http://www.info.teradata.com/HTMLPubs/DB_TTU_14_00/index.html#page/SQL_Reference/B035_1142_111A/ch02.124.045.html]].
  */
-object CanEliminateReferentialIntegrityEquiJoin {
-  /** (joinType, parent, child, primaryForeignMap, projectList) */
+object CanEliminateReferentialIntegrityJoin {
+  /** (parent, child, primaryForeignMap, projectList) */
   type ReturnType =
-    (JoinType, LogicalPlan, LogicalPlan, AttributeMap[Attribute], Seq[NamedExpression])
+    (LogicalPlan, LogicalPlan, AttributeMap[Attribute], Seq[NamedExpression])
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case Project(projectList,
-      ExtractEquiJoinKeys(joinType, leftJoinExprs, rightJoinExprs, _, left, right)) =>
+    case p @ Project(projectList, ExtractEquiJoinKeys(
+        joinType @ (Inner | LeftOuter | RightOuter),
+        leftJoinExprs, rightJoinExprs, _, left, right)) =>
+      val innerJoin = joinType == Inner
+
       val leftParentPFM = getPrimaryForeignMap(left, right, leftJoinExprs, rightJoinExprs)
+      val rightForeignKeysAreNonNullable = leftParentPFM.values.forall(!_.nullable)
       val leftIsParent =
-        leftParentPFM.nonEmpty && onlyPrimaryKeysKept(projectList, leftParentPFM, left)
+        (leftParentPFM.nonEmpty && onlyPrimaryKeysKept(projectList, leftParentPFM, left)
+          && (!innerJoin || rightForeignKeysAreNonNullable))
+
       val rightParentPFM = getPrimaryForeignMap(right, left, rightJoinExprs, leftJoinExprs)
+      val leftForeignKeysAreNonNullable = rightParentPFM.values.forall(!_.nullable)
       val rightIsParent =
-        rightParentPFM.nonEmpty && onlyPrimaryKeysKept(projectList, rightParentPFM, right)
+        (rightParentPFM.nonEmpty && onlyPrimaryKeysKept(projectList, rightParentPFM, right)
+          && (!innerJoin || leftForeignKeysAreNonNullable))
 
       if (leftIsParent) {
-        Some((joinType, left, right, leftParentPFM, projectList))
+        Some((left, right, leftParentPFM, projectList))
       } else if (rightIsParent) {
-        Some((joinType, right, left, rightParentPFM, projectList))
+        Some((right, left, rightParentPFM, projectList))
       } else {
         None
       }
@@ -137,7 +145,8 @@ private class ForeignKeyFinder(plan: LogicalPlan, referencedPlan: LogicalPlan) {
 
   def foreignKeyExists(attr: Attribute, referencedAttr: Attribute): Boolean = {
     plan.keys.exists {
-      case ForeignKey(attr2, referencedAttr2) if attr == attr2 && equivalent.query(referencedAttr, referencedAttr2) => true
+      case ForeignKey(attr2, referencedAttr2)
+          if attr == attr2 && equivalent.query(referencedAttr, referencedAttr2) => true
       case _ => false
     }
   }

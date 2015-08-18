@@ -672,6 +672,13 @@ class DataFrame private[sql](
   def foreignKey(col: String, referencedTable: DataFrame, referencedCol: String): DataFrame = {
     val colAttr = logicalPlan.output.find(_.name == col).get
     val referencedAttr = referencedTable.logicalPlan.output.find(_.name == referencedCol).get
+    val referencedAttrIsUnique = referencedTable.logicalPlan.keys.exists {
+      case UniqueKey(attr) if attr == referencedAttr => true
+      case _ => false
+    }
+    require(referencedAttrIsUnique,
+      s"Foreign keys can only reference unique keys, but $referencedAttr is not unique.\n" +
+        "Try calling referencedTable.uniqueKey(\""  + referencedAttr + "\").")
     KeyHint(List(ForeignKey(colAttr, referencedAttr)), logicalPlan)
   }
 

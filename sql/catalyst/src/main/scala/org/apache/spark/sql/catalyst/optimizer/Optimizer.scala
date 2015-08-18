@@ -280,14 +280,9 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
  */
 object JoinElimination extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Outer join where only the outer table's columns are kept, and a key from the inner table is
-    // involved in the join so no duplicates would be generated
     case CanEliminateUniqueKeyOuterJoin(outer, projectList) =>
       Project(projectList, outer)
-
-    // Any kind of join based on referential integrity
-    case CanEliminateReferentialIntegrityEquiJoin(
-        _, parent, child, primaryForeignMap, projectList) =>
+    case CanEliminateReferentialIntegrityJoin(parent, child, primaryForeignMap, projectList) =>
       Project(substituteParentForChild(projectList, parent, primaryForeignMap), child)
   }
 
