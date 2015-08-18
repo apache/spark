@@ -306,7 +306,7 @@ class Connection(Base):
     def __init__(
             self, conn_id=None, conn_type=None,
             host=None, login=None, password=None,
-            schema=None, port=None):
+            schema=None, port=None, extra=None):
         self.conn_id = conn_id
         self.conn_type = conn_type
         self.host = host
@@ -314,6 +314,7 @@ class Connection(Base):
         self.password = password
         self.schema = schema
         self.port = port
+        self.extra = extra
 
     def get_hook(self):
         from airflow import hooks
