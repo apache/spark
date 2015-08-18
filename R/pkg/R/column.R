@@ -240,6 +240,10 @@ setMethod("otherwise",
 #'
 #' @rdname column
 #' @aliases otherwise
+#' @examples
+#' \dontrun{
+#'   when(df$x > 1 & df$y < 10, 0) %otherwise% 1
+#' }
 setMethod("%otherwise%",
           signature(x = "Column", value = "ANY"),
           function(x, value) {
