@@ -169,8 +169,7 @@ labels and real labels in the test set.
 
 {% highlight python %}
 import math
-from pyspark.mllib.regression import IsotonicRegression
-from pyspark.mllib.regression import IsotonicRegressionModel
+from pyspark.mllib.regression import IsotonicRegression, IsotonicRegressionModel
 
 data = sc.textFile("data/mllib/sample_isotonic_regression_data.txt")
 
