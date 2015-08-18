@@ -131,7 +131,7 @@ final class OneVsRestModel private[ml] (
 
     // output label and label metadata as prediction
     aggregatedDataset
-      .withColumn($(predictionCol), labelUDF(col(accColName)).as($(predictionCol), labelMetadata))
+      .withColumn($(predictionCol), labelUDF(col(accColName)), labelMetadata)
       .drop(accColName)
   }
 
@@ -203,8 +203,8 @@ final class OneVsRest(override val uid: String)
       // TODO: use when ... otherwise after SPARK-7321 is merged
       val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
       val labelColName = "mc2b$" + index
-      val labelUDFWithNewMeta = labelUDF(col($(labelCol))).as(labelColName, newLabelMeta)
-      val trainingDataset = multiclassLabeled.withColumn(labelColName, labelUDFWithNewMeta)
+      val trainingDataset =
+        multiclassLabeled.withColumn(labelColName, labelUDF(col($(labelCol))), newLabelMeta)
       val classifier = getClassifier
       val paramMap = new ParamMap()
       paramMap.put(classifier.labelCol -> labelColName)

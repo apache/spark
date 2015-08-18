@@ -221,9 +221,7 @@ object Statistics {
   def kolmogorovSmirnovTest(
       data: JavaDoubleRDD,
       distName: String,
-      params: java.lang.Double*): KolmogorovSmirnovTestResult = {
-    val javaParams = params.asInstanceOf[Seq[Double]]
-    KolmogorovSmirnovTest.testOneSample(data.rdd.asInstanceOf[RDD[Double]],
-      distName, javaParams: _*)
+      params: Double*): KolmogorovSmirnovTestResult = {
+    kolmogorovSmirnovTest(data.rdd.asInstanceOf[RDD[Double]], distName, params: _*)
   }
 }
