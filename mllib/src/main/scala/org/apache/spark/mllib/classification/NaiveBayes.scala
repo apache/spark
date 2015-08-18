@@ -93,8 +93,9 @@ class NaiveBayesModel private[spark] (
       case None => bcModel = Some(testData.context.broadcast(this))
       case _ =>
     }
+    val lclBcModel = bcModel
     testData.mapPartitions { iter =>
-      val model = bcModel.get.value
+      val model = lclBcModel.get.value
       iter.map(model.predict)
     }
   }
@@ -122,8 +123,9 @@ class NaiveBayesModel private[spark] (
       case None => bcModel = Some(testData.context.broadcast(this))
       case _ =>
     }
+    val lclBcModel = bcModel
     testData.mapPartitions { iter =>
-      val model = bcModel.get.value
+      val model = lclBcModel.get.value
       iter.map(model.predictProbabilities)
     }
   }
