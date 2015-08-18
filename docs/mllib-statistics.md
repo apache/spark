@@ -460,24 +460,26 @@ run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstra
 and interpret the hypothesis tests.
 
 {% highlight java %}
-import com.google.common.collect.Lists;
+import java.util.Arrays;
+
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+
 import org.apache.spark.mllib.stat.Statistics;
 import org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult;
 
 JavaSparkContext jsc = ...
-JavaDoubleRDD data = jsc.parallelizeDoubles(Lists.newArrayList(0.2, 1.0, ...));
+JavaDoubleRDD data = jsc.parallelizeDoubles(Arrays.asList(0.2, 1.0, ...));
 KolmogorovSmirnovTestResult testResult = Statistics.kolmogorovSmirnovTest(data, "norm", 0.0, 1.0);
 // summary of the test including the p-value, test statistic,
 // and null hypothesis
 // if our p-value indicates significance, we can reject the null hypothesis
-System.out.println(testResult1);
+System.out.println(testResult);
 {% endhighlight %}
 </div>
 
 <div data-lang="python" markdown="1">
-[`Statistics`](api/python/index.html#pyspark.mllib.stat.Statistics$) provides methods to
+[`Statistics`](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) provides methods to
 run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstrates how to run
 and interpret the hypothesis tests.
 
