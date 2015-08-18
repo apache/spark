@@ -28,6 +28,8 @@ import org.apache.spark.SparkException
  *
  * @param label Label for this data point.
  * @param features List of features for this data point.
+ *
+ * @since 0.8.0
  */
 @BeanInfo
 case class LabeledPoint(label: Double, features: Vector) {
@@ -38,11 +40,15 @@ case class LabeledPoint(label: Double, features: Vector) {
 
 /**
  * Parser for [[org.apache.spark.mllib.regression.LabeledPoint]].
+ *
+ * @since 1.1.0
  */
 object LabeledPoint {
   /**
    * Parses a string resulted from `LabeledPoint#toString` into
    * an [[org.apache.spark.mllib.regression.LabeledPoint]].
+   *
+   * @since 1.1.0
    */
   def parse(s: String): LabeledPoint = {
     if (s.startsWith("(")) {

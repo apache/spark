@@ -164,7 +164,7 @@ object HiveTypeCoercion {
               // Leave the same if the dataTypes match.
               case Some(newType) if a.dataType == newType.dataType => a
               case Some(newType) =>
-                logDebug(s"Promoting $a to $newType in ${q.simpleString}}")
+                logDebug(s"Promoting $a to $newType in ${q.simpleString}")
                 newType
             }
         }
