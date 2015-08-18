@@ -139,8 +139,8 @@ print("Intercept: " + str(lrModel.intercept))
 
 The `spark.ml` implementation of logistic regression also supports
 extracting a summary of the model over the training set. Note that the
-predictions and metrics which are stored as `Datafram`s in
-`BinaryLogisticRegressionSummary` are annoted `@transient` and hence
+predictions and metrics which are stored as `Dataframe` in
+`BinaryLogisticRegressionSummary` are annotated `@transient` and hence
 only available on the driver.
 
 <div class="codetabs">
