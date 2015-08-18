@@ -1863,14 +1863,15 @@ object functions {
   def substring_index(str: Column, delim: String, count: Int): Column =
     SubstringIndex(str.expr, lit(delim).expr, lit(count).expr)
 
-  /* Translate any character in the src by a character in replaceString.
-  * The characters in replaceString is corresponding to the characters in matchingString.
-  * The translate will happen when any character in the string matching with the character
-  * in the matchingString.
-  *
-  * @group string_funcs
-  * @since 1.5.0
-  */
+  /**
+   * Translate any character in the src by a character in replaceString.
+   * The characters in replaceString is corresponding to the characters in matchingString.
+   * The translate will happen when any character in the string matching with the character
+   * in the matchingString.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
   def translate(src: Column, matchingString: String, replaceString: String): Column =
     StringTranslate(src.expr, lit(matchingString).expr, lit(replaceString).expr)
 
