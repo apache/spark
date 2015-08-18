@@ -48,6 +48,8 @@ This lists functionality included in `spark.mllib`, the main MLlib API.
 * [Feature extraction and transformation](mllib-feature-extraction.html)
 * [Frequent pattern mining](mllib-frequent-pattern-mining.html)
   * [FP-growth](mllib-frequent-pattern-mining.html#fp-growth)
+  * [association rules](mllib-frequent-pattern-mining.html#association-rules)
+  * [PrefixSpan](mllib-frequent-pattern-mining.html#prefix-span)
 * [Evaluation Metrics](mllib-evaluation-metrics.html)
 * [Optimization (developer)](mllib-optimization.html)
   * [stochastic gradient descent](mllib-optimization.html#stochastic-gradient-descent-sgd)

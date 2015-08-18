@@ -49,7 +49,7 @@ public class JavaAssociationRulesSuite implements Serializable {
     JavaRDD<FPGrowth.FreqItemset<String>> freqItemsets = sc.parallelize(Lists.newArrayList(
       new FreqItemset<String>(new String[] {"a"}, 15L),
       new FreqItemset<String>(new String[] {"b"}, 35L),
-      new FreqItemset<String>(new String[] {"a", "b"}, 18L)
+      new FreqItemset<String>(new String[] {"a", "b"}, 12L)
     ));
 
     JavaRDD<AssociationRules.Rule<String>> results = (new AssociationRules()).run(freqItemsets);
