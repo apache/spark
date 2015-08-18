@@ -177,8 +177,9 @@ final class GBTRegressionModel(
       case None => bcastModel = Some(dataset.sqlContext.sparkContext.broadcast(this))
       case _ =>
     }
+    val lclBcastModel = bcastModel
     val predictUDF = udf { (features: Any) =>
-      bcastModel.get.value.predict(features.asInstanceOf[Vector])
+      lclBcastModel.get.value.predict(features.asInstanceOf[Vector])
     }
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
