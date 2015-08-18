@@ -40,19 +40,19 @@ class KMeansModel (
     val clusterCenters: Array[Vector]) extends Saveable with Serializable with PMMLExportable {
 
   /**
-   * A Java-friendly constructor that takes an Iterable of Vectors. 
+   * A Java-friendly constructor that takes an Iterable of Vectors.
    * @since 1.4.0
    */
   def this(centers: java.lang.Iterable[Vector]) = this(centers.asScala.toArray)
 
   /**
-   * Total number of clusters. 
+   * Total number of clusters.
    * @since 0.8.0
    */
   def k: Int = clusterCenters.length
 
   /**
-   * Returns the cluster index that a given point belongs to. 
+   * Returns the cluster index that a given point belongs to.
    * @since 0.8.0
    */
   def predict(point: Vector): Int = {
@@ -60,7 +60,7 @@ class KMeansModel (
   }
 
   /**
-   * Maps given points to their cluster indices. 
+   * Maps given points to their cluster indices.
    * @since 1.0.0
    */
   def predict(points: RDD[Vector]): RDD[Int] = {
@@ -70,7 +70,7 @@ class KMeansModel (
   }
 
   /**
-   * Maps given points to their cluster indices. 
+   * Maps given points to their cluster indices.
    * @since 1.0.0
    */
   def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =

@@ -72,7 +72,7 @@ class StreamingKMeansModel(
     val clusterWeights: Array[Double]) extends KMeansModel(clusterCenters) with Logging {
 
   /**
-   * Perform a k-means update on a batch of data. 
+   * Perform a k-means update on a batch of data.
    * @since 1.2.0
    */
   def update(data: RDD[Vector], decayFactor: Double, timeUnit: String): StreamingKMeansModel = {
@@ -92,7 +92,7 @@ class StreamingKMeansModel(
       (p1._1, p1._2 + p2._2)
     }
     val dim = clusterCenters(0).size
-    
+
     /**
      * @since 1.2.0
      */
@@ -201,7 +201,7 @@ class StreamingKMeans(
   protected var model: StreamingKMeansModel = new StreamingKMeansModel(null, null)
 
   /**
-   * Set the number of clusters. 
+   * Set the number of clusters.
    * @since 1.2.0
    */
   def setK(k: Int): this.type = {
@@ -210,7 +210,7 @@ class StreamingKMeans(
   }
 
   /**
-   * Set the decay factor directly (for forgetful algorithms). 
+   * Set the decay factor directly (for forgetful algorithms).
    * @since 1.2.0
    */
   def setDecayFactor(a: Double): this.type = {
@@ -219,7 +219,7 @@ class StreamingKMeans(
   }
 
   /**
-   * Set the half life and time unit ("batches" or "points") for forgetful algorithms. 
+   * Set the half life and time unit ("batches" or "points") for forgetful algorithms.
    * @since 1.2.0
    */
   def setHalfLife(halfLife: Double, timeUnit: String): this.type = {
@@ -233,7 +233,7 @@ class StreamingKMeans(
   }
 
   /**
-   * Specify initial centers directly. 
+   * Specify initial centers directly.
    * @since 1.2.0
    */
   def setInitialCenters(centers: Array[Vector], weights: Array[Double]): this.type = {
@@ -258,7 +258,7 @@ class StreamingKMeans(
   }
 
   /**
-   * Return the latest model. 
+   * Return the latest model.
    * @since 1.2.0
    */
   def latestModel(): StreamingKMeansModel = {
@@ -282,7 +282,7 @@ class StreamingKMeans(
   }
 
   /**
-   * Java-friendly version of `trainOn`. 
+   * Java-friendly version of `trainOn`.
    * @since 1.4.0
    */
   def trainOn(data: JavaDStream[Vector]): Unit = trainOn(data.dstream)
@@ -300,7 +300,7 @@ class StreamingKMeans(
   }
 
   /**
-   * Java-friendly version of `predictOn`. 
+   * Java-friendly version of `predictOn`.
    * @since 1.4.0
    */
   def predictOn(data: JavaDStream[Vector]): JavaDStream[java.lang.Integer] = {
@@ -319,9 +319,9 @@ class StreamingKMeans(
     assertInitialized()
     data.mapValues(model.predict)
   }
-  
+
   /**
-   * Java-friendly version of `predictOnValues`. 
+   * Java-friendly version of `predictOnValues`.
    * @since 1.4.0
    */
   def predictOnValues[K](

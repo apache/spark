@@ -135,9 +135,9 @@ class LDA private (
     this
   }
 
-  /**  
+  /**
    * Replicates a [[Double]] docConcentration to create a symmetric prior.
-   * @since 1.3.0   
+   * @since 1.3.0
    */
   def setDocConcentration(docConcentration: Double): this.type = {
     this.docConcentration = Vectors.dense(docConcentration)
@@ -145,25 +145,25 @@ class LDA private (
   }
 
   /**
-   * Alias for [[getAsymmetricDocConcentration]] 
+   * Alias for [[getAsymmetricDocConcentration]]
    * @since 1.5.0
    */
   def getAsymmetricAlpha: Vector = getAsymmetricDocConcentration
 
   /**
-   * Alias for [[getDocConcentration]] 
+   * Alias for [[getDocConcentration]]
    * @since 1.3.0
    */
   def getAlpha: Double = getDocConcentration
 
   /**
-   * Alias for [[setDocConcentration()]] 
+   * Alias for [[setDocConcentration()]]
    * @since 1.5.0
    */
   def setAlpha(alpha: Vector): this.type = setDocConcentration(alpha)
 
   /**
-   * Alias for [[setDocConcentration()]] 
+   * Alias for [[setDocConcentration()]]
    * @since 1.3.0
    */
   def setAlpha(alpha: Double): this.type = setDocConcentration(alpha)
@@ -209,13 +209,13 @@ class LDA private (
   }
 
   /**
-   * Alias for [[getTopicConcentration]] 
+   * Alias for [[getTopicConcentration]]
    * @since 1.3.0
    */
   def getBeta: Double = getTopicConcentration
 
   /**
-   * Alias for [[setTopicConcentration()]] 
+   * Alias for [[setTopicConcentration()]]
    * @since 1.3.0
    */
   def setBeta(beta: Double): this.type = setTopicConcentration(beta)
@@ -237,13 +237,13 @@ class LDA private (
   }
 
   /**
-   * Random seed 
+   * Random seed
    * @since 1.3.0
    */
   def getSeed: Long = seed
 
   /**
-   * Random seed 
+   * Random seed
    * @since 1.3.0
    */
   def setSeed(seed: Long): this.type = {
@@ -334,7 +334,7 @@ class LDA private (
   }
 
   /**
-   * Java-friendly version of [[run()]] 
+   * Java-friendly version of [[run()]]
    * @since 1.3.0
    */
   def run(documents: JavaPairRDD[java.lang.Long, Vector]): LDAModel = {

@@ -62,13 +62,13 @@ class GaussianMixtureModel(
   }
 
   /**
-   * Number of gaussians in mixture 
+   * Number of gaussians in mixture
    * @since 1.3.0
    */
   def k: Int = weights.length
 
   /**
-   * Maps given points to their cluster indices. 
+   * Maps given points to their cluster indices.
    * @since 1.3.0
    */
   def predict(points: RDD[Vector]): RDD[Int] = {
@@ -77,7 +77,7 @@ class GaussianMixtureModel(
   }
 
   /**
-   * Maps given point to its cluster index. 
+   * Maps given point to its cluster index.
    * @since 1.4.0
    */
   def predict(point: Vector): Int = {
@@ -86,7 +86,7 @@ class GaussianMixtureModel(
   }
 
   /**
-   * Java-friendly version of [[predict()]] 
+   * Java-friendly version of [[predict()]]
    * @since 1.4.0
    */
   def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
