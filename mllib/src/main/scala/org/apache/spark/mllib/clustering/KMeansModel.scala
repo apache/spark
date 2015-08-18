@@ -97,7 +97,6 @@ class KMeansModel (
     KMeansModel.SaveLoadV1_0.save(sc, this, path)
   }
 
-  /** @since 1.4.0 */
   override protected def formatVersion: String = "1.0"
 }
 

@@ -77,32 +77,20 @@ class StreamingKMeansModel(
    */
   def update(data: RDD[Vector], decayFactor: Double, timeUnit: String): StreamingKMeansModel = {
 
-    /**
-     * find nearest cluster to each point
-     * @since 1.2.0
-     */
+    // find nearest cluster to each point
     val closest = data.map(point => (this.predict(point), (point, 1L)))
 
-    /**
-     * get sums and counts for updating each cluster
-     * @since 1.2.0
-     */
+    // get sums and counts for updating each cluster
     val mergeContribs: ((Vector, Long), (Vector, Long)) => (Vector, Long) = (p1, p2) => {
       BLAS.axpy(1.0, p2._1, p1._1)
       (p1._1, p1._2 + p2._2)
     }
     val dim = clusterCenters(0).size
 
-    /**
-     * @since 1.2.0
-     */
     val pointStats: Array[(Int, (Vector, Long))] = closest
       .aggregateByKey((Vectors.zeros(dim), 0L))(mergeContribs, mergeContribs)
       .collect()
 
-    /**
-     * @since 1.2.0
-     */
     val discount = timeUnit match {
       case StreamingKMeans.BATCHES => decayFactor
       case StreamingKMeans.POINTS =>
@@ -112,16 +100,10 @@ class StreamingKMeansModel(
         math.pow(decayFactor, numNewPoints)
     }
 
-    /**
-     * apply discount to weights
-     * @since 1.2.0
-     */
+    // apply discount to weights
     BLAS.scal(discount, Vectors.dense(clusterWeights))
 
-    /**
-     * implement update rule
-     * @since 1.2.0
-     */
+    // implement update rule
     pointStats.foreach { case (label, (sum, count)) =>
       val centroid = clusterCenters(label)
 
@@ -141,10 +123,7 @@ class StreamingKMeansModel(
       logInfo(s"Cluster $label updated with weight $updatedWeight and centroid: $display")
     }
 
-    /**
-     * Check whether the smallest cluster is dying. If so, split the largest cluster.
-     * @since 1.2.0
-     */
+    // Check whether the smallest cluster is dying. If so, split the largest cluster.
     val weightsWithIndex = clusterWeights.view.zipWithIndex
     val (maxWeight, largest) = weightsWithIndex.maxBy(_._1)
     val (minWeight, smallest) = weightsWithIndex.minBy(_._1)
@@ -197,7 +176,7 @@ class StreamingKMeans(
 
   /** @since 1.2.0 */
   def this() = this(2, 1.0, StreamingKMeans.BATCHES)
-  /** @since 1.2.0 */
+
   protected var model: StreamingKMeansModel = new StreamingKMeansModel(null, null)
 
   /**
