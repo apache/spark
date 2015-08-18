@@ -148,7 +148,7 @@ val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3))
 // Train a DecisionTree model.
 val dt = new DecisionTreeClassifier()
   .setLabelCol("indexedLabel")
-  .setFeaturesCol("indexedFeatures") // "features" is the default
+  .setFeaturesCol("indexedFeatures")
 
 // Convert indexed labels back to original labels.
 val labelConverter = new IndexToString()
@@ -217,14 +217,14 @@ VectorIndexerModel featureIndexer = new VectorIndexer()
   .fit(data);
 
 // Split the data into training and test sets (30% held out for testing)
-DataFrame[] splits = data.randomSplit(new double[]{0.7, 0.3});
+DataFrame[] splits = data.randomSplit(new double[] {0.7, 0.3});
 DataFrame trainingData = splits[0];
 DataFrame testData = splits[1];
 
 // Train a DecisionTree model.
 DecisionTreeClassifier dt = new DecisionTreeClassifier()
   .setLabelCol("indexedLabel")
-  .setFeaturesCol("indexedFeatures"); // "features" is the default
+  .setFeaturesCol("indexedFeatures");
 
 // Convert indexed labels back to original labels.
 IndexToString labelConverter = new IndexToString()
@@ -278,13 +278,14 @@ data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
 labelIndexer = StringIndexer(inputCol="label", outputCol="indexedLabel").fit(data)
 # Automatically identify categorical features, and index them.
 # We specify maxCategories so features with > 4 distinct values are treated as continuous.
-featureIndexer = VectorIndexer(inputCol="features", outputCol="indexedFeatures", maxCategories=4).fit(data)
+featureIndexer =\
+    VectorIndexer(inputCol="features", outputCol="indexedFeatures", maxCategories=4).fit(data)
 
 # Split the data into training and test sets (30% held out for testing)
 (trainingData, testData) = data.randomSplit([0.7, 0.3])
 
 # Train a DecisionTree model.
-dt = DecisionTreeClassifier(labelCol="indexedLabel", featuresCol="indexedFeatures") # "features" is the default
+dt = DecisionTreeClassifier(labelCol="indexedLabel", featuresCol="indexedFeatures")
 
 # Chain indexers and tree in a Pipeline
 pipeline = Pipeline(stages=[labelIndexer, featureIndexer, dt])
@@ -299,7 +300,8 @@ predictions = model.transform(testData)
 predictions.select("prediction", "indexedLabel", "features").show(5)
 
 # Select (prediction, true label) and compute test error
-evaluator = MulticlassClassificationEvaluator(labelCol="indexedLabel", predictionCol="prediction", metricName="precision")
+evaluator = MulticlassClassificationEvaluator(
+    labelCol="indexedLabel", predictionCol="prediction", metricName="precision")
 accuracy = evaluator.evaluate(predictions)
 print "Test Error = %g" % (1.0 - accuracy)
 
@@ -343,7 +345,7 @@ val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3))
 // Train a DecisionTree model.
 val dt = new DecisionTreeRegressor()
   .setLabelCol("label")
-  .setFeaturesCol("indexedFeatures") // "features" is the default
+  .setFeaturesCol("indexedFeatures")
 
 // Chain indexers and tree in a Pipeline
 val pipeline = new Pipeline()
@@ -408,14 +410,14 @@ VectorIndexerModel featureIndexer = new VectorIndexer()
   .fit(data);
 
 // Split the data into training and test sets (30% held out for testing)
-DataFrame[] splits = data.randomSplit(new double[]{0.7, 0.3});
+DataFrame[] splits = data.randomSplit(new double[] {0.7, 0.3});
 DataFrame trainingData = splits[0];
 DataFrame testData = splits[1];
 
 // Train a DecisionTree model.
 DecisionTreeRegressor dt = new DecisionTreeRegressor()
   .setLabelCol("indexedLabel")
-  .setFeaturesCol("indexedFeatures"); // "features" is the default
+  .setFeaturesCol("indexedFeatures");
 
 // Convert indexed labels back to original labels.
 IndexToString labelConverter = new IndexToString()
@@ -471,13 +473,14 @@ data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
 labelIndexer = StringIndexer(inputCol="label", outputCol="indexedLabel").fit(data)
 # Automatically identify categorical features, and index them.
 # We specify maxCategories so features with > 4 distinct values are treated as continuous.
-featureIndexer = VectorIndexer(inputCol="features", outputCol="indexedFeatures", maxCategories=4).fit(data)
+featureIndexer =\
+    VectorIndexer(inputCol="features", outputCol="indexedFeatures", maxCategories=4).fit(data)
 
 # Split the data into training and test sets (30% held out for testing)
 (trainingData, testData) = data.randomSplit([0.7, 0.3])
 
 # Train a DecisionTree model.
-dt = DecisionTreeRegressor(labelCol="indexedLabel", featuresCol="indexedFeatures") # "features" is the default
+dt = DecisionTreeRegressor(labelCol="indexedLabel", featuresCol="indexedFeatures")
 
 # Chain indexers and tree in a Pipeline
 pipeline = Pipeline(stages=[labelIndexer, featureIndexer, dt])
@@ -492,7 +495,8 @@ predictions = model.transform(testData)
 predictions.select("prediction", "indexedLabel", "features").show(5)
 
 # Select (prediction, true label) and compute test error
-evaluator = RegressionEvaluator(labelCol="indexedLabel", predictionCol="prediction", metricName="rmse")
+evaluator = RegressionEvaluator(
+    labelCol="indexedLabel", predictionCol="prediction", metricName="rmse")
 # We negate the RMSE value since RegressionEvalutor returns negated RMSE
 # (since evaluation metrics are meant to be maximized by CrossValidator).
 rmse = -evaluator.evaluate(predictions)
