@@ -691,6 +691,38 @@ class SparseMatrix(
    */
   override def numActives: Int = values.length
 
+  override def hashCode: Int = {
+
+    var result: Int = 31 + numRows
+    result = 31 * result + numCols
+
+    var i = 0
+    var nnz = 0
+    var col_ind = 0
+    var ptr = 0
+    while (i < values.size && nnz < 64) {
+      while (col_ind < numCols) {
+        val startptr = colPtrs(col_ind)
+        val endptr = colPtrs(col_ind + 1)
+        ptr = startptr
+        while (ptr < endptr) {
+          val row_ind = rowIndices(ptr)
+          val value = values(ptr)
+          ptr += 1
+          if (value != 0.0) {
+            result = 31 * result + row_ind
+            result = 31 * result + col_ind
+            val bits = java.lang.Double.doubleToLongBits(value)
+            result = 31 * result + (bits ^ (bits >>> 32)).toInt
+            nnz += 1
+          }
+        }
+        col_ind += 1
+      }
+      i += 1
+    }
+    result
+  }
 }
 
 /**
