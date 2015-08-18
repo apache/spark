@@ -21,7 +21,8 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.{TransportMetrics, ExecutorMetrics}
-import org.apache.spark.scheduler.{SparkListenerExecutorMetricsUpdate, SparkListener}
+import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.ui.{SparkUITab, SparkUI}
 
 private[ui] class MemoryTab(parent: SparkUI) extends SparkUITab(parent, "memory") {
@@ -38,18 +39,37 @@ class MemoryListener extends SparkListener {
   type ExecutorId = String
   val executorIdToMem = new HashMap[ExecutorId, MemoryUIInfo]
 
-  override def onExecutorMetricsUpdate(
-      executorMetricsUpdate: SparkListenerExecutorMetricsUpdate) {
-    val executorId = executorMetricsUpdate.execId
-    val executorMetrics = executorMetricsUpdate.executorMetrics
+  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
+    val executorId = event.execId
+    val executorMetrics = event.executorMetrics
     val memoryInfo = executorIdToMem.getOrElseUpdate(executorId, new MemoryUIInfo)
     memoryInfo.updateExecutorMetrics(executorMetrics)
+  }
+
+  override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
+    val executorId = event.executorId
+    executorIdToMem.put(executorId, new MemoryUIInfo(event.executorInfo))
+  }
+
+  override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
+    val executorId = event.executorId
+    executorIdToMem.remove(executorId)
+  }
+
+  override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved): Unit = {
+    val executorId = event.blockManagerId.executorId
+    executorIdToMem.remove(executorId)
   }
 }
 
 class MemoryUIInfo {
   var executorAddress: String = _
   var transportInfo: Option[transportMemSize] = None
+
+  def this(execInfo: ExecutorInfo) = {
+    this()
+    executorAddress = execInfo.executorHost
+  }
 
   def updateExecutorMetrics(execMetrics: ExecutorMetrics): Unit = {
     if (execMetrics.transportMetrics.isDefined) {
@@ -70,6 +90,7 @@ class transportMemSize {
   var directheapSize: Long = _
   var peakOnheapSizeTime: MemTime = new MemTime()
   var peakDirectheapSizeTime: MemTime = new MemTime()
+
   def updateTransport(transportMetrics: TransportMetrics): Unit = {
     val updatedOnheapSize = transportMetrics.clientOnheapSize +
       transportMetrics.serverOnheapSize
