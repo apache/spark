@@ -655,10 +655,10 @@ for expanded in polyDF.select("polyFeatures").take(3):
 The indices are in `[0, numLabels)`, ordered by label frequencies.
 So the most frequent label gets index `0`.
 If the input column is numeric, we cast it to string and index the string 
-values. When following pipeline components such as `Estimator` or 
-`Transformer` use this string indexed label, you must set input column of 
-the component to this string indexed column name. (In many cases, you can set 
-with `setInputCol`.)
+values. When downstream pipeline components such as `Estimator` or 
+`Transformer` make use of this string-indexed label, you must set the input 
+column of the component to this string-indexed column name. In many cases, 
+you can set the input column with `setInputCol`.
 
 **Examples**
 
