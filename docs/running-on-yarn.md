@@ -362,7 +362,7 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.tokens.${service}.enabled</code></td>
+  <td><code>spark.yarn.security.tokens.${service}.enabled</code></td>
   <td>true</td>
   <td>
   Controls whether to retrieve delegation tokens for non-HDFS services when security is enabled.

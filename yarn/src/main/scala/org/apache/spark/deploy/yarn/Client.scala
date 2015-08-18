@@ -1392,7 +1392,7 @@ object Client extends Logging {
    * a service-specific configuration.
    */
   def shouldGetTokens(conf: SparkConf, service: String): Boolean = {
-    conf.getBoolean(s"spark.yarn.tokens.${service}.enabled", true)
+    conf.getBoolean(s"spark.yarn.security.tokens.${service}.enabled", true)
   }
 
 }
