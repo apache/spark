@@ -90,14 +90,14 @@ class KMeansModel (
   private def clusterCentersWithNorm: Iterable[VectorWithNorm] =
     clusterCenters.map(new VectorWithNorm(_))
 
-	/**
-	 * @since 1.4.0
-	 */
+  /**
+   * @since 1.4.0
+   */
   override def save(sc: SparkContext, path: String): Unit = {
     KMeansModel.SaveLoadV1_0.save(sc, this, path)
   }
 
-	/** @since 1.4.0 */
+  /** @since 1.4.0 */
   override protected def formatVersion: String = "1.0"
 }
 

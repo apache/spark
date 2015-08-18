@@ -94,15 +94,15 @@ class StreamingKMeansModel(
     val dim = clusterCenters(0).size
     
     /**
-		 * @since 1.2.0
-		 */
+     * @since 1.2.0
+     */
     val pointStats: Array[(Int, (Vector, Long))] = closest
       .aggregateByKey((Vectors.zeros(dim), 0L))(mergeContribs, mergeContribs)
       .collect()
 
-		/**
-		 * @since 1.2.0
-		 */
+    /**
+     * @since 1.2.0
+     */
     val discount = timeUnit match {
       case StreamingKMeans.BATCHES => decayFactor
       case StreamingKMeans.POINTS =>
@@ -143,8 +143,8 @@ class StreamingKMeansModel(
 
     /**
      * Check whether the smallest cluster is dying. If so, split the largest cluster.
-		 * @since 1.2.0
-		 */
+     * @since 1.2.0
+     */
     val weightsWithIndex = clusterWeights.view.zipWithIndex
     val (maxWeight, largest) = weightsWithIndex.maxBy(_._1)
     val (minWeight, smallest) = weightsWithIndex.minBy(_._1)
@@ -195,9 +195,9 @@ class StreamingKMeans(
     var decayFactor: Double,
     var timeUnit: String) extends Logging with Serializable {
 
-	/** @since 1.2.0 */
+  /** @since 1.2.0 */
   def this() = this(2, 1.0, StreamingKMeans.BATCHES)
-	/** @since 1.2.0 */
+  /** @since 1.2.0 */
   protected var model: StreamingKMeansModel = new StreamingKMeansModel(null, null)
 
   /**
@@ -319,7 +319,7 @@ class StreamingKMeans(
     assertInitialized()
     data.mapValues(model.predict)
   }
-
+  
   /**
    * Java-friendly version of `predictOnValues`. 
    * @since 1.4.0

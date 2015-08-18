@@ -54,41 +54,41 @@ class GaussianMixtureModel(
 
   override protected def formatVersion = "1.0"
 
-	/**
-	* @since 1.4.0
-	*/
+  /**
+   * @since 1.4.0
+   */
   override def save(sc: SparkContext, path: String): Unit = {
     GaussianMixtureModel.SaveLoadV1_0.save(sc, path, weights, gaussians)
   }
 
   /**
-  * Number of gaussians in mixture 
-  * @since 1.3.0
-  */
+   * Number of gaussians in mixture 
+   * @since 1.3.0
+   */
   def k: Int = weights.length
 
   /**
-  * Maps given points to their cluster indices. 
-  * @since 1.3.0
-  */
+   * Maps given points to their cluster indices. 
+   * @since 1.3.0
+   */
   def predict(points: RDD[Vector]): RDD[Int] = {
     val responsibilityMatrix = predictSoft(points)
     responsibilityMatrix.map(r => r.indexOf(r.max))
   }
 
   /**
-  * Maps given point to its cluster index. 
-  * @since 1.4.0
-  */
+   * Maps given point to its cluster index. 
+   * @since 1.4.0
+   */
   def predict(point: Vector): Int = {
     val r = computeSoftAssignments(point.toBreeze.toDenseVector, gaussians, weights, k)
     r.indexOf(r.max)
   }
 
   /**
-  * Java-friendly version of [[predict()]] 
-  * @since 1.4.0
-  */
+   * Java-friendly version of [[predict()]] 
+   * @since 1.4.0
+   */
   def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
     predict(points.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Integer]]
 
@@ -168,9 +168,9 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       sc.parallelize(dataArray, 1).toDF().write.parquet(Loader.dataPath(path))
     }
 
-		/**
-		 * @since 1.4.0
-		 */
+    /**
+     * @since 1.4.0
+     */
     def load(sc: SparkContext, path: String): GaussianMixtureModel = {
       val dataPath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
@@ -189,9 +189,9 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
     }
   }
 
-	/**
-	 * @since 1.4.0
-	 */
+  /**
+   * @since 1.4.0
+   */
   override def load(sc: SparkContext, path: String) : GaussianMixtureModel = {
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
     implicit val formats = DefaultFormats

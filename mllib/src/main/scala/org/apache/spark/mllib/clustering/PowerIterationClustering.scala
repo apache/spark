@@ -46,9 +46,9 @@ class PowerIterationClusteringModel(
     val k: Int,
     val assignments: RDD[PowerIterationClustering.Assignment]) extends Saveable with Serializable {
 
-	/**
-	 * @since 1.4.0
-	 */
+  /**
+   * @since 1.4.0
+   */
   override def save(sc: SparkContext, path: String): Unit = {
     PowerIterationClusteringModel.SaveLoadV1_0.save(sc, this, path)
   }
@@ -72,9 +72,9 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
     private[clustering]
     val thisClassName = "org.apache.spark.mllib.clustering.PowerIterationClusteringModel"
 
-		/**
-		 * @since 1.4.0
-		 */
+    /**
+     * @since 1.4.0
+     */
     def save(sc: SparkContext, model: PowerIterationClusteringModel, path: String): Unit = {
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
@@ -87,9 +87,9 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
       dataRDD.write.parquet(Loader.dataPath(path))
     }
 
-		/**
-		 * @since 1.4.0
-		 */
+    /**
+     * @since 1.4.0
+     */
     def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {
       implicit val formats = DefaultFormats
       val sqlContext = new SQLContext(sc)
