@@ -17,15 +17,15 @@
 
 package org.apache.spark.mllib.pmml.export
 
-import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
-import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node}
-
-import org.dmg.pmml.{Node => PMMLNode, _}
-
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable.MutableList
+
+import org.dmg.pmml.{Node => PMMLNode, _}
+
+import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
+import org.apache.spark.mllib.tree.configuration.Algo._
+import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node}
 
 private[mllib] object TreeModelUtils {
 
@@ -35,13 +35,13 @@ private[mllib] object TreeModelUtils {
     val miningFunctionType = getPMMLMiningFunctionType(mllibTreeModel.algo)
 
     val miningSchema = new MiningSchema()
-    .withMiningFields(getMiningFieldsForTree(mllibTreeModel).asJava)
+      .withMiningFields(getMiningFieldsForTree(mllibTreeModel).asJava)
 
     val treeModel = new org.dmg.pmml.TreeModel()
-    .withModelName(modelName)
-    .withFunctionName(miningFunctionType)
-    .withNode(buildStub(mllibTreeModel.topNode))
-    .withMiningSchema(miningSchema)
+      .withModelName(modelName)
+      .withFunctionName(miningFunctionType)
+      .withNode(buildStub(mllibTreeModel.topNode))
+      .withMiningSchema(miningSchema)
 
     treeModel
 
@@ -81,7 +81,7 @@ private[mllib] object TreeModelUtils {
           val value = split.threshold.toString
           Some(
             new SimplePredicate(fieldName, SimplePredicate.Operator.LESS_OR_EQUAL)
-            .withValue(value)
+              .withValue(value)
           )
         }
         case FeatureType.Categorical => {
@@ -90,11 +90,11 @@ private[mllib] object TreeModelUtils {
               for (category <- split.categories)
                 yield
                 new SimplePredicate(fieldName, SimplePredicate.Operator.EQUAL)
-                .withValue(category.toString)
+                  .withValue(category.toString)
 
             val compoundPredicate = new CompoundPredicate()
-            .withBooleanOperator(CompoundPredicate.BooleanOperator.OR)
-            .withPredicates(predicates.asJava)
+              .withBooleanOperator(CompoundPredicate.BooleanOperator.OR)
+              .withPredicates(predicates.asJava)
 
             Some(compoundPredicate)
 
@@ -115,8 +115,8 @@ private[mllib] object TreeModelUtils {
   /** Create equivalent PMML node for given mlLib node. */
   private def createNode(mlLibNode: Node): PMMLNode = {
     val node = new PMMLNode()
-    .withId(mlLibNode.id.toString)
-    .withScore(mlLibNode.predict.predict.toString)
+      .withId(mlLibNode.id.toString)
+      .withScore(mlLibNode.predict.predict.toString)
 
     val predicate = getPredicate(mlLibNode)
     if (predicate.isDefined) {
@@ -139,16 +139,16 @@ private[mllib] object TreeModelUtils {
     if (!mllibNode.isLeaf && mllibNode.split.isDefined) {
       val split = mllibNode.split.get
       val dataField = new DataField()
-      .withName(FieldName.create("field_" + split.feature.toString))
-      .withDataType(DataType.fromValue(split.threshold.getClass.getSimpleName.toLowerCase))
-      .withOpType(OpType.fromValue(split.featureType.toString.toLowerCase))
+        .withName(FieldName.create("field_" + split.feature.toString))
+        .withDataType(DataType.fromValue(split.threshold.getClass.getSimpleName.toLowerCase))
+        .withOpType(OpType.fromValue(split.featureType.toString.toLowerCase))
 
       split.featureType match {
         case FeatureType.Continuous => dataField.withOpType(OpType.CONTINUOUS)
         case FeatureType.Categorical => {
           dataField.withOpType(OpType.CATEGORICAL)
           val categories = split.categories
-          .map(category => new org.dmg.pmml.Value(category.toString)).asJava
+            .map(category => new org.dmg.pmml.Value(category.toString)).asJava
           dataField.withValues(categories)
         }
       }
@@ -166,8 +166,8 @@ private[mllib] object TreeModelUtils {
       val split = mllibNode.split.get
 
       val miningField = new MiningField()
-      .withName(FieldName.create("field_" + split.feature.toString))
-      .withUsageType(FieldUsageType.ACTIVE)
+        .withName(FieldName.create("field_" + split.feature.toString))
+        .withUsageType(FieldUsageType.ACTIVE)
 
       Some(miningField)
     }
@@ -182,8 +182,8 @@ private[mllib] object TreeModelUtils {
 
     @tailrec
     def getMiningFieldsForTreeRec(
-      nodeList: List[Node],
-      miningFlds: List[MiningField]): List[MiningField] = {
+                                   nodeList: List[Node],
+                                   miningFlds: List[MiningField]): List[MiningField] = {
 
       nodeList match {
         case Nil => miningFlds
@@ -208,8 +208,8 @@ private[mllib] object TreeModelUtils {
     // the miningfields collected from the different nodes could have duplicate.
     // get the distinct fields.
     val distinctFields = miningFields
-    .groupBy(dField => dField.getName.getValue)
-    .map { case (name, fields) => fields(0) }
+      .groupBy(dField => dField.getName.getValue)
+      .map { case (name, fields) => fields(0) }
 
     distinctFields.toList
   }
@@ -219,8 +219,8 @@ private[mllib] object TreeModelUtils {
 
     @tailrec
     def getDataFieldsForTreeRec(
-      nodeList: List[Node],
-      dataFlds: List[DataField]): List[DataField] = {
+                                 nodeList: List[Node],
+                                 dataFlds: List[DataField]): List[DataField] = {
 
       nodeList match {
         case Nil => dataFlds
@@ -256,15 +256,15 @@ private[mllib] object TreeModelUtils {
             val values = (a.getValues.asScala.toList ++ b.getValues.asScala.toList).groupBy(v =>
               v.getValue)
             val distinctValues = values.map { case (string, valueList) => valueList(0) }.toList
-            .asJava
+              .asJava
 
             new DataField().withName(a.getName)
-            .withOpType(a.getOpType)
-            .withValues(distinctValues)
+              .withOpType(a.getOpType)
+              .withValues(distinctValues)
           })
 
           case _ => throw new RuntimeException("Only continuous and catigorical datatypes are " +
-          "supported now.")
+            "supported now.")
         }
         dataField
       }
