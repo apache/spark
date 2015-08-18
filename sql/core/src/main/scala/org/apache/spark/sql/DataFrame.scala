@@ -634,6 +634,7 @@ class DataFrame private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
+   * Note that the column name can also reference to a nested column like `a.b`.
    * @group dfops
    * @since 1.3.0
    */
@@ -641,6 +642,7 @@ class DataFrame private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
+   * Note that the column name can also reference to a nested column like `a.b`.
    * @group dfops
    * @since 1.3.0
    */
@@ -1146,6 +1148,23 @@ class DataFrame private[sql](
       select(colNames : _*)
     } else {
       select(Column("*"), col.as(colName))
+    }
+  }
+
+  /**
+   * Returns a new [[DataFrame]] by adding a column with metadata.
+   */
+  private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
+    val replaced = schema.exists(f => resolver(f.name, colName))
+    if (replaced) {
+      val colNames = schema.map { field =>
+        val name = field.name
+        if (resolver(name, colName)) col.as(colName, metadata) else Column(name)
+      }
+      select(colNames : _*)
+    } else {
+      select(Column("*"), col.as(colName, metadata))
     }
   }
 

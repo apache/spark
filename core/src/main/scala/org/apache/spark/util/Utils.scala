@@ -1366,7 +1366,7 @@ private[spark] object Utils extends Logging {
           file.getAbsolutePath, effectiveStartIndex, effectiveEndIndex))
       }
       sum += fileToLength(file)
-      logDebug(s"After processing file $file, string built is ${stringBuffer.toString}}")
+      logDebug(s"After processing file $file, string built is ${stringBuffer.toString}")
     }
     stringBuffer.toString
   }

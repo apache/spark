@@ -75,8 +75,6 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override lazy val resolved: Boolean = childrenResolved
-
   override lazy val dataType: StructType = {
     val fields = children.zipWithIndex.map { case (child, idx) =>
       child match {

@@ -25,11 +25,11 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
 /**
  * Special command builder for handling a CLI invocation of SparkSubmit.
- * <p/>
+ * <p>
  * This builder adds command line parsing compatible with SparkSubmit. It handles setting
  * driver-side options and special parsing behavior needed for the special-casing certain internal
  * Spark applications.
- * <p/>
+ * <p>
  * This class has also some special features to aid launching pyspark.
  */
 class SparkSubmitCommandBuilder extends AbstractCommandBuilder {

@@ -155,10 +155,17 @@ private[streaming] class BlockGenerator(
   /**
    * Push a single data item into the buffer.
    */
-  def addData(data: Any): Unit = synchronized {
+  def addData(data: Any): Unit = {
     if (state == Active) {
       waitToPush()
-      currentBuffer += data
+      synchronized {
+        if (state == Active) {
+          currentBuffer += data
+        } else {
+          throw new SparkException(
+            "Cannot add data as BlockGenerator has not been started or has been stopped")
+        }
+      }
     } else {
       throw new SparkException(
         "Cannot add data as BlockGenerator has not been started or has been stopped")
@@ -169,11 +176,18 @@ private[streaming] class BlockGenerator(
    * Push a single data item into the buffer. After buffering the data, the
    * `BlockGeneratorListener.onAddData` callback will be called.
    */
-  def addDataWithCallback(data: Any, metadata: Any): Unit = synchronized {
+  def addDataWithCallback(data: Any, metadata: Any): Unit = {
     if (state == Active) {
       waitToPush()
-      currentBuffer += data
-      listener.onAddData(data, metadata)
+      synchronized {
+        if (state == Active) {
+          currentBuffer += data
+          listener.onAddData(data, metadata)
+        } else {
+          throw new SparkException(
+            "Cannot add data as BlockGenerator has not been started or has been stopped")
+        }
+      }
     } else {
       throw new SparkException(
         "Cannot add data as BlockGenerator has not been started or has been stopped")
@@ -185,13 +199,23 @@ private[streaming] class BlockGenerator(
    * `BlockGeneratorListener.onAddData` callback will be called. Note that all the data items
    * are atomically added to the buffer, and are hence guaranteed to be present in a single block.
    */
-  def addMultipleDataWithCallback(dataIterator: Iterator[Any], metadata: Any): Unit = synchronized {
+  def addMultipleDataWithCallback(dataIterator: Iterator[Any], metadata: Any): Unit = {
     if (state == Active) {
+      // Unroll iterator into a temp buffer, and wait for pushing in the process
+      val tempBuffer = new ArrayBuffer[Any]
       dataIterator.foreach { data =>
         waitToPush()
-        currentBuffer += data
+        tempBuffer += data
       }
-      listener.onAddData(dataIterator, metadata)
+      synchronized {
+        if (state == Active) {
+          currentBuffer ++= tempBuffer
+          listener.onAddData(tempBuffer, metadata)
+        } else {
+          throw new SparkException(
+            "Cannot add data as BlockGenerator has not been started or has been stopped")
+        }
+      }
     } else {
       throw new SparkException(
         "Cannot add data as BlockGenerator has not been started or has been stopped")
