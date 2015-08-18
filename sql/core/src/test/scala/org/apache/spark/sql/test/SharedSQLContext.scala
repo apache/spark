@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.test
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{ColumnName, SQLContext}
 
 
 /**
@@ -65,4 +65,14 @@ private[sql] trait SharedSQLContext extends SQLTestUtils {
     }
   }
 
+  /**
+   * Converts $"col name" into an [[Column]].
+   * @since 1.3.0
+   */
+  // This must be duplicated here to preserve binary compatibility with Spark < 1.5.
+  implicit class StringToColumn(val sc: StringContext) {
+    def $(args: Any*): ColumnName = {
+      new ColumnName(sc.s(args: _*))
+    }
+  }
 }
