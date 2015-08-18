@@ -281,9 +281,7 @@ class DenseMatrix(
   /**
    * @since 1.3.0
    */
-  override def apply(i: Int, j: Int): Double = {
-    values(index(i, j))
-  }
+  override def apply(i: Int, j: Int): Double = values(index(i, j))
 
   private[mllib] def index(i: Int, j: Int): Int = {
     require(i < numRows && i >=0, s"Expected 0 <= i < $numRows, got $i")
