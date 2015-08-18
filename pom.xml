@@ -1598,7 +1598,7 @@
         <groupId>com.twitter</groupId>
         <artifactId>parquet-hadoop-bundle</artifactId>
         <version>${hive.parquet.version}</version>
-        <scope>runtime</scope>
+        <scope>compile</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.flume</groupId>
