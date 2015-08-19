@@ -208,8 +208,9 @@ private[spark] class DiskBlockObjectWriter(
 
     if (numRecordsWritten % 32 == 0) {
       updateBytesWritten()
-      if (reportedPosition > LargeByteBufferHelper.MAX_CHUNK_SIZE) {
-        throw new ShuffleBlockSizeLimitException(reportedPosition)
+      val length = reportedPosition - initialPosition
+      if (length > LargeByteBufferHelper.MAX_CHUNK_SIZE) {
+        throw new ShuffleBlockSizeLimitException(length)
       }
     }
   }
