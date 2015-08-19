@@ -202,11 +202,12 @@ case class Max(child: Expression) extends AlgebraicAggregate {
   )
 
   override val updateExpressions = Seq(
-    /* max = */ If(Or(IsNull(max), LessThan(max, child)), child, max)
+    /* max = */ If(IsNull(max), child, If(LessThan(max, child), child, max))
   )
 
   override val mergeExpressions = Seq(
-    /* max = */ If(Or(IsNull(max.right), LessThan(max.right, max.left)), max.left, max.right)
+    /* max = */
+    If(IsNull(max.right), max.left, If(LessThan(max.right, max.left), max.left, max.right))
   )
 
   override val evaluateExpression = max
@@ -233,11 +234,12 @@ case class Min(child: Expression) extends AlgebraicAggregate {
   )
 
   override val updateExpressions = Seq(
-    /* min = */  If(Or(IsNull(min), GreaterThan(min, child)), child, min)
+    /* min = */  If(IsNull(min), child, If(GreaterThan(min, child), child, min))
   )
 
   override val mergeExpressions = Seq(
-    /* min = */ If(Or(IsNull(min.right), GreaterThan(min.right, min.left)), min.left, min.right)
+    /* min = */
+    If(IsNull(min.right), min.left, If(GreaterThan(min.right, min.left), min.left, min.right))
   )
 
   override val evaluateExpression = min
