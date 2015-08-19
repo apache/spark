@@ -1386,119 +1386,99 @@ print(output.select("features", "clicked").first())
 {% endhighlight %}
 </div>
 </div>
-
 ## RFormula
 
-`RFormula` encodes a string column of labels to a column of label indices.
-The indices are in `[0, numLabels)`, ordered by label frequencies.
-So the most frequent label gets index `0`.
-If the input column is numeric, we cast it to string and index the string values.
+`RFormula` selects columns specified by an [R model formula](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/formula.html). It produces a vector column of features and a numeric column of labels. Like when formulas are used in R for linear regression, string input columns will be one-hot encoded, and numeric columns will be cast to doubles. If not already present in the DataFrame, the output label column will be created from the specified response variable in the formula.
 
 **Examples**
 
-Assume that we have the following DataFrame with columns `id` and `category`:
+Assume that we have a DataFrame with the columns `id`, `country`, `hour`, and `clicked`:
 
-~~~~
- id | category
-----|----------
- 0  | a
- 1  | b
- 2  | c
- 3  | a
- 4  | a
- 5  | c
-~~~~
+~~~
+id | country | hour | clicked
+---|---------|------|---------
+ 7 | "US"    | 18   | 1.0
+~~~
 
-`category` is a string column with three labels: "a", "b", and "c".
-Applying `RFormula` with `category` as the input column and `categoryIndex` as the output
-column, we should get the following:
+If we use `RFormula` with a formula string of `clicked ~ country + hour`, which indicates that we want to
+predict `clicked` based on `country` and `hour`, after transformation we should get the following DataFrame:
 
-~~~~
- id | category | categoryIndex
-----|----------|---------------
- 0  | a        | 0.0
- 1  | b        | 2.0
- 2  | c        | 1.0
- 3  | a        | 0.0
- 4  | a        | 0.0
- 5  | c        | 1.0
-~~~~
-
-"a" gets index `0` because it is the most frequent, followed by "c" with index `1` and "b" with
-index `2`.
+~~~
+id | country | hour | clicked | label | features
+---|---------|------|---------|-------|-----------------------------
+ 7 | "US"    | 18   | 1.0     | 1.0   | [0.0, 1.0, 18.0]
+~~~
 
 <div class="codetabs">
-
 <div data-lang="scala" markdown="1">
 
-[`RFormula`](api/scala/index.html#org.apache.spark.ml.feature.RFormula) takes an input
-column name and an output column name.
+[`RFormula`](api/scala/index.html#org.apache.spark.ml.feature.RFormula) takes an R formula string, and optional parameters for the names of its output columns.
 
 {% highlight scala %}
 import org.apache.spark.ml.feature.RFormula
 
-val df = sqlContext.createDataFrame(
-  Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c"))
-).toDF("id", "category")
-val indexer = new RFormula()
-  .setInputCol("category")
-  .setOutputCol("categoryIndex")
-val indexed = indexer.fit(df).transform(df)
-indexed.show()
+val dataset = sqlContext.createDataFrame(
+  Seq((7, "US", 18, 1.0))
+).toDF("id", "country", "hour", "clicked")
+val formula = new RFormula()
+  .setFormula("clicked ~ country + hour")
+  .setFeaturesCol("features")
+  .setLabelCol("label")
+val output = formula.fit(dataset).transform(dataset)
+println(output.select("features", "label").first())
 {% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
-[`RFormula`](api/java/org/apache/spark/ml/feature/RFormula.html) takes an input column
-name and an output column name.
+
+[`RFormula`](api/java/org/apache/spark/ml/feature/RFormula.html) takes an R formula string, and optional parameters for the names of its output columns.
 
 {% highlight java %}
 import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.RFormula;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.*;
 import static org.apache.spark.sql.types.DataTypes.*;
 
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-  RowFactory.create(0, "a"),
-  RowFactory.create(1, "b"),
-  RowFactory.create(2, "c"),
-  RowFactory.create(3, "a"),
-  RowFactory.create(4, "a"),
-  RowFactory.create(5, "c")
-));
-StructType schema = new StructType(new StructField[] {
-  createStructField("id", DoubleType, false),
-  createStructField("category", StringType, false)
+StructType schema = createStructType(new StructField[] {
+  createStructField("id", IntegerType, false),
+  createStructField("country", StringType, false),
+  createStructField("hour", IntegerType, false),
+  createStructField("clicked", DoubleType, false)
 });
-DataFrame df = sqlContext.createDataFrame(jrdd, schema);
-RFormula indexer = new RFormula()
-  .setInputCol("category")
-  .setOutputCol("categoryIndex");
-DataFrame indexed = indexer.fit(df).transform(df);
-indexed.show();
+Row row = RowFactory.create(7, "US", 18, 1.0);
+JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(row));
+DataFrame dataset = sqlContext.createDataFrame(rdd, schema);
+
+RFormula formula = new RFormula()
+  .setFormula("clicked ~ country + hour")
+  .setFeaturesCol("features")
+  .setLabelCol("label")
+
+DataFrame output = formula.fit(dataset).transform(dataset);
+System.out.println(output.select("features", "label").first());
 {% endhighlight %}
 </div>
 
 <div data-lang="python" markdown="1">
 
-[`RFormula`](api/python/pyspark.ml.html#pyspark.ml.feature.RFormula) takes an input
-column name and an output column name.
+[`RFormula`](api/python/pyspark.ml.html#pyspark.ml.feature.RFormula) takes an R formula string, and optional parameters for the names of its output columns.
 
 {% highlight python %}
 from pyspark.ml.feature import RFormula
 
-df = sqlContext.createDataFrame(
-    [(0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")],
-    ["id", "category"])
-indexer = RFormula(inputCol="category", outputCol="categoryIndex")
-indexed = indexer.fit(df).transform(df)
-indexed.show()
+dataset = sqlContext.createDataFrame(
+    [(7, "US", 18, 1.0)],
+    ["id", "country", "hour", "clicked"])
+formula = RFormula(
+    formula="clicked ~ country + hour",
+    featuresCol="features",
+    labelCol="label")
+output = formula.fit(dataset).transform(dataset)
+print(output.select("features", "label").first())
 {% endhighlight %}
 </div>
 </div>
