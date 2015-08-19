@@ -75,7 +75,7 @@ private[sql] trait SQLTestUtils
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     if (loadTestDataBeforeTests) {
-      loadTestData()
+      //loadTestData()
     }
   }
 
