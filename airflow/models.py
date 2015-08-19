@@ -1014,7 +1014,7 @@ class TaskInstance(Base):
             self,
             key,
             value,
-            visible_on=None):
+            execution_date=None):
         """
         Make an XCom available for tasks to pull.
 
@@ -1023,23 +1023,24 @@ class TaskInstance(Base):
         :param value: A value for the XCom. The value is pickled and stored
             in the database.
         :type value: any pickleable object
-        :param visible_on: if provided, the XCom will not be visible until
+        :param execution_date: if provided, the XCom will not be visible until
             this date. This can be used, for example, to send a message to a
             task on a future date without it being immediately visible.
-        :type visible_on: datetime
+        :type execution_date: datetime
         """
 
-        if visible_on and visible_on < self.execution_date:
+        if execution_date and execution_date < self.execution_date:
             raise ValueError(
-                'visible_on can not be in the past (current execution_date '
-                'is {}; received {})'.format(self.execution_date, visible_on))
+                'execution_date can not be in the past (current '
+                'execution_date is {}; received {})'.format(
+                    self.execution_date, execution_date))
 
         XCom.set(
             key=key,
             value=value,
             task=self.task_id,
             dag=self.dag_id,
-            visible_on=visible_on or self.execution_date)
+            execution_date=execution_date or self.execution_date)
 
     def xcom_pull(
             self,
@@ -1074,12 +1075,12 @@ class TaskInstance(Base):
             dags = self.dag_id
 
         pull_fn = lambda tasks: XCom.get(
-            visible_on=self.execution_date,
             key=key,
             tasks=tasks,
             dags=dags,
             include_prior_dates=include_prior_dates,
             limit=limit)
+                execution_date=self.execution_date,
 
         if limit is None and is_container(tasks):
             return [pull_fn(t) for t in tasks]
@@ -1557,14 +1558,14 @@ class BaseOperator(object):
             context,
             key,
             value,
-            visible_on=None):
+            execution_date=None):
         """
         See TaskInstance.xcom_push()
         """
         context['ti'].xcom_push(
             key=key,
             value=value,
-            visible_on=visible_on)
+            execution_date=execution_date)
 
     def xcom_pull(
             self,
@@ -2139,17 +2140,17 @@ class XCom(Base):
     key = Column(String)
     value = Column(PickleType(pickler=dill))
     timestamp = Column(DateTime, server_default=func.current_timestamp())
-    visible_on = Column(DateTime, nullable=False)
+    execution_date = Column(DateTime, nullable=False)
 
     # source information
     task = Column(String, nullable=False)
     dag = Column(String, nullable=False)
 
     def __repr__(self):
-        return '<XCom "{key}" ({task} @ {visible_on})>'.format(
+        return '<XCom "{key}" ({task} @ {execution_date})>'.format(
             key=self.key,
             task=self.task,
-            visible_on=self.visible_on)
+            execution_date=self.execution_date)
 
     @classmethod
     @provide_session
@@ -2157,9 +2158,9 @@ class XCom(Base):
             cls,
             key,
             value,
-            visible_on,
             task,
             dag,
+            execution_date,
             session=None):
         """
         Store an XCom value.
@@ -2167,15 +2168,15 @@ class XCom(Base):
         session.add(XCom(
             key=key,
             value=value,
-            visible_on=visible_on,
             task=task,
             dag=dag))
+            execution_date=execution_date,
 
     @classmethod
     @provide_session
     def get(
             cls,
-            visible_on,
+            execution_date,
             key=None,
             tasks=None,
             dags=None,
@@ -2193,24 +2194,24 @@ class XCom(Base):
         if dags:
             filters.append(cls.dag.in_(as_tuple(dags)))
         if include_prior_dates:
-            filters.append(cls.visible_on <= visible_on)
+            filters.append(cls.execution_date <= execution_date)
         else:
-            filters.append(cls.visible_on == visible_on)
+            filters.append(cls.execution_date == execution_date)
 
         query = (
             session.query(cls)
             .filter(and_(*filters))
-            .order_by(cls.visible_on.desc(), cls.timestamp.desc())
+            .order_by(cls.execution_date.desc(), cls.timestamp.desc())
             .limit(limit or 1))
 
         result = pd.read_sql(
             sql=query.statement,
             con=query.session.bind,
             index_col='id',
-            parse_dates=['timestamp', 'visible_on'])
+            parse_dates=['timestamp', 'execution_date'])
 
         result.drop_duplicates(
-            subset=['key', 'visible_on', 'task', 'dag'],
+            subset=['key', 'execution_date', 'task', 'dag'],
             inplace=True)
 
         if result.empty:
