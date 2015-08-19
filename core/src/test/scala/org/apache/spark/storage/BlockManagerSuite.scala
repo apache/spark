@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
 
-import org.apache.spark.network.buffer.{WrappedLargeByteBuffer, LargeByteBufferHelper, LargeByteBuffer}
+import org.apache.spark.network.buffer.{LargeByteBufferTestHelper, WrappedLargeByteBuffer, LargeByteBufferHelper, LargeByteBuffer}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
@@ -830,11 +830,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val notMapped = diskStoreNotMapped.getBytes(blockId).get.asInstanceOf[WrappedLargeByteBuffer]
 
     // Not possible to do isInstanceOf due to visibility of HeapByteBuffer
-    // TODO fix me
-//    assert(notMapped.nioBuffers().get(0).getClass.getName.endsWith("HeapByteBuffer"),
-//      "Expected HeapByteBuffer for un-mapped read")
-//    assert(mapped.nioBuffers().get(0).isInstanceOf[MappedByteBuffer],
-//      "Expected MappedByteBuffer for mapped read")
+    assert(LargeByteBufferTestHelper.nioBuffers(mapped).get(0).getClass.getName
+      .endsWith("HeapByteBuffer"), "Expected HeapByteBuffer for un-mapped read")
+    assert(LargeByteBufferTestHelper.nioBuffers(notMapped).get(0).isInstanceOf[MappedByteBuffer],
+      "Expected MappedByteBuffer for mapped read")
 
     def arrayFromByteBuffer(in: LargeByteBuffer): Array[Byte] = {
       val array = new Array[Byte](in.remaining().toInt)
