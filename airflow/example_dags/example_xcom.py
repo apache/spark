@@ -22,7 +22,7 @@ def puller(**kwargs):
     ti = kwargs['ti']
 
     # get value_1
-    v1 = ti.xcom_pull(tasks='push')
+    v1 = ti.xcom_pull(task_ids='push')
     assert v1 == value_1
 
     # get value 1 by key
@@ -30,11 +30,11 @@ def puller(**kwargs):
     assert v1 == value_1
 
     # get value_2
-    v2 = ti.xcom_pull(tasks='push_by_returning')
+    v2 = ti.xcom_pull(task_ids='push_by_returning')
     assert v2 == value_2
 
     # get both value_1 and value_2
-    v1, v2 = ti.xcom_pull(tasks=['push', 'push_by_returning'])
+    v1, v2 = ti.xcom_pull(task_ids=['push', 'push_by_returning'])
     assert (v1, v2) == (value_1, value_2)
 
 push1 = airflow.operators.PythonOperator(
