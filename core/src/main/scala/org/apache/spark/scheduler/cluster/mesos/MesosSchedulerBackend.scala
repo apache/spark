@@ -89,9 +89,7 @@ private[spark] class MesosSchedulerBackend(
     }
     val environment = Environment.newBuilder()
 
-    val userClassPath = sc.conf.getExecutorExtraClassPath()
-
-    userClassPath.foreach { cp =>
+    sc.conf.getExecutorExtraClassPath().foreach { cp =>
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }

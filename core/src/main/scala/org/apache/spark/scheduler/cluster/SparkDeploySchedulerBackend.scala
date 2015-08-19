@@ -62,8 +62,8 @@ private[spark] class SparkDeploySchedulerBackend(
     val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
       .map(Utils.splitCommandString).getOrElse(Seq.empty)
 
-    val classPathEntries = sc.conf.getExecutorExtraClassPath().map(_.split(java.io.File
-      .pathSeparator).toSeq).getOrElse(Nil)
+    val classPathEntries = sc.conf.getExecutorExtraClassPath()
+      .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
 
     val libraryPathEntries = sc.conf.getOption("spark.executor.extraLibraryPath")
       .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)

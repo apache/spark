@@ -67,11 +67,11 @@ private class ClientEndpoint(
         //       people call `addJar` assuming the jar is in the same directory.
         val mainClass = "org.apache.spark.deploy.worker.DriverWrapper"
 
-        val classPathConf = "spark.driver.extraClassPath"
+        val driverClassPathConf = "spark.driver.extraClassPath"
         val commonClassPathConf = "spark.common.extraClassPath"
 
         val driverClassPath = Option((sys.props.get(commonClassPathConf) ++
-          sys.props.get(classPathConf)).mkString(java.io.File.pathSeparator)).filter(_.nonEmpty)
+          sys.props.get(driverClassPathConf)).mkString(java.io.File.pathSeparator)).filter(_.nonEmpty)
 
         val classPathEntries = driverClassPath.toSeq.flatMap { cp =>
           cp.split(java.io.File.pathSeparator)

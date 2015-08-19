@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy.rest
 
-import java.io.File
-
 import scala.util.Try
 
 import org.apache.spark.util.Utils
