@@ -1585,6 +1585,3 @@ output.select("features", "label").show()
 {% endhighlight %}
 </div>
 </div>
-
-# Feature Selectors
-
