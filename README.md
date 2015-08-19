@@ -28,6 +28,8 @@ As the Airflow community grows, we'd like to keep track of who is using
 the platform. Please send a PR with your company name and @githubhandle 
 if you may.
 
+Currently **officialy** using Airflow:
+
 * Airbnb [@mistercrunch]
 * Agari [@r39132]
 * [Cotap](https://github.com/cotap/) [[@maraca](https://github.com/maraca) & [@richardchew](https://github.com/richardchew)]
