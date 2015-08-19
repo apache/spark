@@ -15,17 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.configuration
+package org.apache.spark.sql.test
 
-import org.apache.spark.annotation.Experimental
+import java.io.{IOException, InputStream}
 
-/**
- * :: Experimental ::
- * Enum to describe whether a feature is "continuous" or "categorical"
- * @since 1.0.0
- */
-@Experimental
-object FeatureType extends Enumeration {
-  type FeatureType = Value
-  val Continuous, Categorical = Value
+import scala.sys.process.BasicIO
+
+object ProcessTestUtils {
+  class ProcessOutputCapturer(stream: InputStream, capture: String => Unit) extends Thread {
+    this.setDaemon(true)
+
+    override def run(): Unit = {
+      try {
+        BasicIO.processFully(capture)(stream)
+      } catch { case _: IOException =>
+        // Ignores the IOException thrown when the process termination, which closes the input
+        // stream abruptly.
+      }
+    }
+  }
 }

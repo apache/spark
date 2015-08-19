@@ -39,18 +39,30 @@ MLlib's FP-growth implementation takes the following (hyper-)parameters:
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`FPGrowth`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowth) implements the
-FP-growth algorithm.
-It take a `JavaRDD` of transactions, where each transaction is an `Iterable` of items of a generic type.
+[`FPGrowth`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowth)
+implements the FP-growth algorithm.  It take an `RDD` of transactions,
+where each transaction is an `Iterable` of items of a generic type.
 Calling `FPGrowth.run` with transactions returns an
 [`FPGrowthModel`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowthModel)
-that stores the frequent itemsets with their frequencies.
+that stores the frequent itemsets with their frequencies.  The following
+example illustrates how to mine frequent itemsets and association rules
+(see [Association
+Rules](mllib-frequent-pattern-mining.html#association-rules) for
+details) from `transactions`.
+
 
 {% highlight scala %}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.fpm.{FPGrowth, FPGrowthModel}
 
-val transactions: RDD[Array[String]] = ...
+val transactions: RDD[Array[String]] = sc.parallelize(Seq(
+  "r z h k p",
+  "z y x w v u t s",
+  "s x o n r",
+  "x z y m t s q e",
+  "z",
+  "x z y r q t p")
+  .map(_.split(" ")))
 
 val fpg = new FPGrowth()
   .setMinSupport(0.2)
@@ -60,29 +72,48 @@ val model = fpg.run(transactions)
 model.freqItemsets.collect().foreach { itemset =>
   println(itemset.items.mkString("[", ",", "]") + ", " + itemset.freq)
 }
+
+val minConfidence = 0.8
+model.generateAssociationRules(minConfidence).collect().foreach { rule =>
+  println(
+    rule.antecedent.mkString("[", ",", "]")
+      + " => " + rule.consequent .mkString("[", ",", "]")
+      + ", " + rule.confidence)
+}
 {% endhighlight %}
 
 </div>
 
 <div data-lang="java" markdown="1">
 
-[`FPGrowth`](api/java/org/apache/spark/mllib/fpm/FPGrowth.html) implements the
-FP-growth algorithm.
-It take an `RDD` of transactions, where each transaction is an `Array` of items of a generic type.
-Calling `FPGrowth.run` with transactions returns an
+[`FPGrowth`](api/java/org/apache/spark/mllib/fpm/FPGrowth.html)
+implements the FP-growth algorithm.  It take a `JavaRDD` of
+transactions, where each transaction is an `Array` of items of a generic
+type.  Calling `FPGrowth.run` with transactions returns an
 [`FPGrowthModel`](api/java/org/apache/spark/mllib/fpm/FPGrowthModel.html)
-that stores the frequent itemsets with their frequencies.
+that stores the frequent itemsets with their frequencies.  The following
+example illustrates how to mine frequent itemsets and association rules
+(see [Association
+Rules](mllib-frequent-pattern-mining.html#association-rules) for
+details) from `transactions`.
 
 {% highlight java %}
+import java.util.Arrays;
 import java.util.List;
 
-import com.google.common.base.Joiner;
-
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.fpm.AssociationRules;
 import org.apache.spark.mllib.fpm.FPGrowth;
 import org.apache.spark.mllib.fpm.FPGrowthModel;
 
-JavaRDD<List<String>> transactions = ...
+JavaRDD<List<String>> transactions = sc.parallelize(Arrays.asList(
+  Arrays.asList("r z h k p".split(" ")),
+  Arrays.asList("z y x w v u t s".split(" ")),
+  Arrays.asList("s x o n r".split(" ")),
+  Arrays.asList("x z y m t s q e".split(" ")),
+  Arrays.asList("z".split(" ")),
+  Arrays.asList("x z y r q t p".split(" "))), 2);
 
 FPGrowth fpg = new FPGrowth()
   .setMinSupport(0.2)
@@ -90,7 +121,78 @@ FPGrowth fpg = new FPGrowth()
 FPGrowthModel<String> model = fpg.run(transactions);
 
 for (FPGrowth.FreqItemset<String> itemset: model.freqItemsets().toJavaRDD().collect()) {
-   System.out.println("[" + Joiner.on(",").join(s.javaItems()) + "], " + s.freq());
+  System.out.println("[" + itemset.javaItems() + "], " + itemset.freq());
+}
+
+double minConfidence = 0.8;
+for (AssociationRules.Rule<String> rule
+    : model.generateAssociationRules(minConfidence).toJavaRDD().collect()) {
+  System.out.println(
+    rule.javaAntecedent() + " => " + rule.javaConsequent() + ", " + rule.confidence());
+}
+{% endhighlight %}
+
+</div>
+</div>
+
+## Association Rules
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+[AssociationRules](api/scala/index.html#org.apache.spark.mllib.fpm.AssociationRules)
+implements a parallel rule generation algorithm for constructing rules
+that have a single item as the consequent.
+
+{% highlight scala %}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.fpm.AssociationRules
+import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
+
+val freqItemsets = sc.parallelize(Seq(
+  new FreqItemset(Array("a"), 15L),
+  new FreqItemset(Array("b"), 35L),
+  new FreqItemset(Array("a", "b"), 12L)
+));
+
+val ar = new AssociationRules()
+  .setMinConfidence(0.8)
+val results = ar.run(freqItemsets)
+
+results.collect().foreach { rule =>
+  println("[" + rule.antecedent.mkString(",")
+    + "=>"
+    + rule.consequent.mkString(",") + "]," + rule.confidence)
+}
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java" markdown="1">
+[AssociationRules](api/java/org/apache/spark/mllib/fpm/AssociationRules.html)
+implements a parallel rule generation algorithm for constructing rules
+that have a single item as the consequent.
+
+{% highlight java %}
+import java.util.Arrays;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.fpm.AssociationRules;
+import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset;
+
+JavaRDD<FPGrowth.FreqItemset<String>> freqItemsets = sc.parallelize(Arrays.asList(
+  new FreqItemset<String>(new String[] {"a"}, 15L),
+  new FreqItemset<String>(new String[] {"b"}, 35L),
+  new FreqItemset<String>(new String[] {"a", "b"}, 12L)
+));
+
+AssociationRules arules = new AssociationRules()
+  .setMinConfidence(0.8);
+JavaRDD<AssociationRules.Rule<String>> results = arules.run(freqItemsets);
+
+for (AssociationRules.Rule<String> rule: results.collect()) {
+  System.out.println(
+    rule.javaAntecedent() + " => " + rule.javaConsequent() + ", " + rule.confidence());
 }
 {% endhighlight %}
 

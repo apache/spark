@@ -52,9 +52,15 @@ object PythonRunner {
         gatewayServer.start()
       }
     })
-    thread.setName("py4j-gateway")
+    thread.setName("py4j-gateway-init")
     thread.setDaemon(true)
     thread.start()
+
+    // Wait until the gateway server has started, so that we know which port is it bound to.
+    // `gatewayServer.start()` will start a new thread and run the server code there, after
+    // initializing the socket, so the thread started above will end as soon as the server is
+    // ready to serve connections.
+    thread.join()
 
     // Build up a PYTHONPATH that includes the Spark assembly JAR (where this class is), the
     // python directories in SPARK_HOME (if set), and any files in the pyFiles argument
