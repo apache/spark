@@ -2164,15 +2164,12 @@ class XCom(Base):
         """
         Store an XCom value.
         """
-
-        session.expunge_all()
         session.add(XCom(
             key=key,
             value=value,
             visible_on=visible_on,
             task=task,
             dag=dag))
-        session.commit()
 
     @classmethod
     @provide_session
