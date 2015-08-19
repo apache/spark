@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, DriverManager, PreparedStatement}
+import java.sql.{Connection, PreparedStatement}
 import java.util.Properties
 
 import scala.util.Try
@@ -36,7 +36,7 @@ object JdbcUtils extends Logging {
    * Establishes a JDBC connection.
    */
   def createConnection(url: String, connectionProperties: Properties): Connection = {
-    DriverManager.getConnection(url, connectionProperties)
+    JDBCRDD.getConnector(connectionProperties.getProperty("driver"), url, connectionProperties)()
   }
 
   /**

@@ -16,6 +16,7 @@
  */
 package org.apache.spark.mllib.fpm
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
@@ -95,8 +96,10 @@ object AssociationRules {
    * :: Experimental ::
    *
    * An association rule between sets of items.
-   * @param antecedent hypotheses of the rule
-   * @param consequent conclusion of the rule
+   * @param antecedent hypotheses of the rule. Java users should call [[Rule#javaAntecedent]]
+   *                   instead.
+   * @param consequent conclusion of the rule. Java users should call [[Rule#javaConsequent]]
+   *                   instead.
    * @tparam Item item type
    *
    * @since 1.5.0
@@ -108,6 +111,11 @@ object AssociationRules {
       freqUnion: Double,
       freqAntecedent: Double) extends Serializable {
 
+    /**
+     * Returns the confidence of the rule.
+     *
+     * @since 1.5.0
+     */
     def confidence: Double = freqUnion.toDouble / freqAntecedent
 
     require(antecedent.toSet.intersect(consequent.toSet).isEmpty, {
@@ -115,5 +123,23 @@ object AssociationRules {
       s"A valid association rule must have disjoint antecedent and " +
         s"consequent but ${sharedItems} is present in both."
     })
+
+    /**
+     * Returns antecedent in a Java List.
+     *
+     * @since 1.5.0
+     */
+    def javaAntecedent: java.util.List[Item] = {
+      antecedent.toList.asJava
+    }
+
+    /**
+     * Returns consequent in a Java List.
+     *
+     * @since 1.5.0
+     */
+    def javaConsequent: java.util.List[Item] = {
+      consequent.toList.asJava
+    }
   }
 }

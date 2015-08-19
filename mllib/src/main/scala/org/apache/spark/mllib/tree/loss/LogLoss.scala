@@ -31,6 +31,7 @@ import org.apache.spark.mllib.util.MLUtils
  * The log loss is defined as:
  *   2 log(1 + exp(-2 y F(x)))
  * where y is a label in {-1, 1} and F(x) is the model prediction for features x.
+ * @since 1.2.0
  */
 @DeveloperApi
 object LogLoss extends Loss {
@@ -42,6 +43,7 @@ object LogLoss extends Loss {
    * @param prediction Predicted label.
    * @param label True label.
    * @return Loss gradient
+   * @since 1.2.0
    */
   override def gradient(prediction: Double, label: Double): Double = {
     - 4.0 * label / (1.0 + math.exp(2.0 * label * prediction))

@@ -217,6 +217,8 @@ private[sql] class DefaultWriterContainer(
     val writer = outputWriterFactory.newInstance(getWorkPath, dataSchema, taskAttemptContext)
     writer.initConverter(dataSchema)
 
+    var writerClosed = false
+
     // If anything below fails, we should abort the task.
     try {
       while (iterator.hasNext) {
@@ -235,7 +237,10 @@ private[sql] class DefaultWriterContainer(
     def commitTask(): Unit = {
       try {
         assert(writer != null, "OutputWriter instance should have been initialized")
-        writer.close()
+        if (!writerClosed) {
+          writer.close()
+          writerClosed = true
+        }
         super.commitTask()
       } catch {
         case cause: Throwable =>
@@ -247,7 +252,10 @@ private[sql] class DefaultWriterContainer(
 
     def abortTask(): Unit = {
       try {
-        writer.close()
+        if (!writerClosed) {
+          writer.close()
+          writerClosed = true
+        }
       } finally {
         super.abortTask()
       }
@@ -274,6 +282,8 @@ private[sql] class DynamicPartitionWriterContainer(
   def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
     val outputWriters = new java.util.HashMap[InternalRow, OutputWriter]
     executorSideSetup(taskContext)
+
+    var outputWritersCleared = false
 
     // Returns the partition key given an input row
     val getPartitionKey = UnsafeProjection.create(partitionColumns, inputSchema)
@@ -379,8 +389,11 @@ private[sql] class DynamicPartitionWriterContainer(
     }
 
     def clearOutputWriters(): Unit = {
-      outputWriters.asScala.values.foreach(_.close())
-      outputWriters.clear()
+      if (!outputWritersCleared) {
+        outputWriters.asScala.values.foreach(_.close())
+        outputWriters.clear()
+        outputWritersCleared = true
+      }
     }
 
     def commitTask(): Unit = {

@@ -651,6 +651,14 @@ setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
 #' @export
 setGeneric("startsWith", function(x, ...) { standardGeneric("startsWith") })
 
+#' @rdname column
+#' @export
+setGeneric("when", function(condition, value) { standardGeneric("when") })
+
+#' @rdname column
+#' @export
+setGeneric("otherwise", function(x, value) { standardGeneric("otherwise") })
+
 
 ###################### Expression Function Methods ##########################
 
@@ -684,6 +692,10 @@ setGeneric("ceil", function(x) { standardGeneric("ceil") })
 
 #' @rdname functions
 #' @export
+setGeneric("concat", function(x, ...) { standardGeneric("concat") })
+
+#' @rdname functions
+#' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
 #' @rdname functions
@@ -701,6 +713,10 @@ setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 #' @rdname functions
 #' @export
 setGeneric("explode", function(x) { standardGeneric("explode") })
+
+#' @rdname functions
+#' @export
+setGeneric("greatest", function(x, ...) { standardGeneric("greatest") })
 
 #' @rdname functions
 #' @export
@@ -724,7 +740,15 @@ setGeneric("last_day", function(x) { standardGeneric("last_day") })
 
 #' @rdname functions
 #' @export
+setGeneric("least", function(x, ...) { standardGeneric("least") })
+
+#' @rdname functions
+#' @export
 setGeneric("levenshtein", function(y, x) { standardGeneric("levenshtein") })
+
+#' @rdname functions
+#' @export
+setGeneric("lit", function(x) { standardGeneric("lit") })
 
 #' @rdname functions
 #' @export
