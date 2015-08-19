@@ -238,7 +238,7 @@ class LocalLDAModel private[clustering] (
    *
    * @param documents test corpus to use for calculating log likelihood
    * @return variational lower bound on the log likelihood of the entire corpus
-   * @since 1.3.0
+   * @since 1.5.0
    */
   def logLikelihood(documents: RDD[(Long, Vector)]): Double = logLikelihoodBound(documents,
     docConcentration, topicConcentration, topicsMatrix.toBreeze.toDenseMatrix, gammaShape, k,
@@ -376,7 +376,7 @@ class LocalLDAModel private[clustering] (
 
   /**
    * Java-friendly version of [[topicDistributions]]
-   * @since 1.5.0
+   * @since 1.4.1
    */
   def topicDistributions(
       documents: JavaPairRDD[java.lang.Long, Vector]): JavaPairRDD[java.lang.Long, Vector] = {
@@ -691,7 +691,7 @@ class DistributedLDAModel private[clustering] (
 
   /**
    * Java-friendly version of [[topicDistributions]]
-   * @since 1.5.0
+   * @since 1.4.1
    */
   def javaTopicDistributions: JavaPairRDD[java.lang.Long, Vector] = {
     JavaPairRDD.fromRDD(topicDistributions.asInstanceOf[RDD[(java.lang.Long, Vector)]])
