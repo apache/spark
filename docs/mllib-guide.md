@@ -73,11 +73,14 @@ Users should be comfortable using `spark.mllib` features and expect more feature
 Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
 to `spark.ml`.
 
-More detailed guides for `spark.ml` include:
+Guides for `spark.ml` include:
 
 * **[spark.ml programming guide](ml-guide.html)**: overview of the Pipelines API and major concepts
-* [Feature transformers](ml-features.html): Details on transformers supported in the Pipelines API, including a few not in the lower-level `spark.mllib` API
-* [Ensembles](ml-ensembles.html): Details on ensemble learning methods in the Pipelines API
+* Guides on using algorithms within the Pipelines API:
+  * [Feature transformers](ml-features.html), including a few not in the lower-level `spark.mllib` API
+  * [Decision trees](ml-decision-tree.html)
+  * [Ensembles](ml-ensembles.html)
+  * [Linear methods](ml-linear-methods.html)
 
 # Dependencies
 
