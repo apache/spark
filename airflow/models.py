@@ -4,6 +4,7 @@ from past.builtins import basestring
 from builtins import object
 import copy
 from datetime import datetime, timedelta
+import functools
 import getpass
 import imp
 import jinja2
@@ -1046,11 +1047,15 @@ class TaskInstance(Base):
             self,
             key=None,
             task_ids=None,
-            dag_ids=None,
+            dag_id=None,
             include_prior_dates=False,
             limit=None):
         """
-        Pull an XCom that optionally meets certain criteria.
+        Pull XComs that optionally meet certain criteria. If a single task_id
+        string is provided, the result is the value of the most recent matching
+        XCom from that task_id. If multiple task_ids are provided, a tuple of
+        matching values is returned. None is returned whenever no matches are
+        found.
 
         :param key: A key for the XCom. If provided, only XComs with matching
             keys will be returned. Defaults to None.
@@ -1058,10 +1063,9 @@ class TaskInstance(Base):
         :param task_ids: If supplied, only pulls XComs from tasks with matching
             ids. Defaults to None.
         :type task_ids: string or iterable of strings (representing task_ids)
-        :param dag_ids: If provided, only pulls XComs from dags with matching
-            ids. If None (default), the DAG of the calling task is used. To
-            clear the filter entirely, pass [None].
-        :type dag_ids: string or iterable of strings (representing dag_ids)
+        :param dag_id: If provided, only pulls XComs from this DAG.
+            If None (default), the DAG of the calling task is used.
+        :type dag_id: string
         :param include_prior_dates: If False, only XComs from the current
             execution_date are returned. If True, XComs from previous dates
             are returned as well.
@@ -1071,22 +1075,20 @@ class TaskInstance(Base):
         :type limit: int
         """
 
-        if dag_ids is None:
-            dag_ids = self.dag_id
+        if dag_id is None:
+            dag_id = self.dag_id
 
-        def pull_fn(t_ids):
-            return XCom.get(
-                execution_date=self.execution_date,
-                key=key,
-                task_ids=t_ids,
-                dag_ids=dag_ids,
-                include_prior_dates=include_prior_dates,
-                limit=limit)
+        pull_fn = functools.partial(
+            XCom.get_one,
+            execution_date=self.execution_date,
+            key=key,
+            dag_id=dag_id,
+            include_prior_dates=include_prior_dates)
 
-        if limit is None and is_container(task_ids):
-            return [pull_fn(t) for t in task_ids]
+        if is_container(task_ids):
+            return tuple(pull_fn(task_id=t) for t in task_ids)
         else:
-            return pull_fn(task_ids)
+            return pull_fn(task_id=task_ids)
 
 
 class Log(Base):
@@ -1573,18 +1575,16 @@ class BaseOperator(object):
             context,
             key=None,
             task_ids=None,
-            dag_ids=None,
-            include_prior_dates=None,
-            limit=None):
+            dag_id=None,
+            include_prior_dates=None):
         """
         See TaskInstance.xcom_pull()
         """
         return context['ti'].xcom_pull(
             key=key,
             task_ids=task_ids,
-            dag_ids=dag_ids,
-            include_prior_dates=include_prior_dates,
-            limit=limit)
+            dag_id=dag_id,
+            include_prior_dates=include_prior_dates)
 
 
 class DagModel(Base):
@@ -2184,16 +2184,52 @@ class XCom(Base):
             dag_id=dag_id))
 
         session.commit()
+
     @classmethod
     @provide_session
-    def get(
+    def get_one(
+            cls,
+            execution_date,
+            key=None,
+            task_id=None,
+            dag_id=None,
+            include_prior_dates=False,
+            session=None):
+        """
+        Retrieve an XCom value, optionally meeting certain criteria
+        """
+        filters = []
+        if key is not None:
+            filters.append(cls.key == key)
+        if task_id is not None:
+            filters.append(cls.task_id == task_id)
+        if dag_id is not None:
+            filters.append(cls.dag_id == dag_id)
+        if include_prior_dates:
+            filters.append(cls.execution_date <= execution_date)
+        else:
+            filters.append(cls.execution_date == execution_date)
+
+        query = (
+            session.query(cls.value)
+            .filter(and_(*filters))
+            .order_by(cls.execution_date.desc(), cls.timestamp.desc())
+            .limit(1))
+
+        result = query.first()
+        if result:
+            return result.value
+
+    @classmethod
+    @provide_session
+    def get_many(
             cls,
             execution_date,
             key=None,
             task_ids=None,
             dag_ids=None,
             include_prior_dates=False,
-            limit=None,
+            limit=100,
             session=None):
         """
         Retrieve an XCom value, optionally meeting certain criteria
@@ -2214,25 +2250,9 @@ class XCom(Base):
             session.query(cls)
             .filter(and_(*filters))
             .order_by(cls.execution_date.desc(), cls.timestamp.desc())
-            .limit(limit or 1))
+            .limit(limit))
 
-        result = pd.read_sql(
-            sql=query.statement,
-            con=query.session.bind,
-            index_col='id',
-            parse_dates=['timestamp', 'execution_date'])
-
-        result.drop_duplicates(
-            subset=['key', 'execution_date', 'task_id', 'dag_id'],
-            inplace=True)
-
-        if result.empty:
-            return None
-
-        if limit is None:
-            return result.iloc[0].value
-        else:
-            return result
+        return query.all()
 
 
 class Pool(Base):
