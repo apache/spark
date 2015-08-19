@@ -1298,16 +1298,25 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
     statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
     feature E is calculated as,
 
-    Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
+    Rescaled(e_i) = (e_i - E_min) / (E_max - E_min) * (max - min) + min
 
-    For the case E_{max} == E_{min}, Rescaled(e_i) = 0.5 * (max + min)
+    For the case E_max == E_min, Rescaled(e_i) = 0.5 * (max + min)
+
+    Note that since zero values will probably be transformed to non-zero values, output of the
+    transformer will be DenseVector even for sparse input.
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> mmScaler = MinMaxScaler(inputCol="a", outputCol="scaled")
     >>> model = mmScaler.fit(df)
-    >>> model.transform(df).collect()[1].scaled
-    DenseVector([1.0])
+    >>> model.transform(df).show()
+    +-----+------+
+    |    a|scaled|
+    +-----+------+
+    |[0.0]| [0.0]|
+    |[2.0]| [1.0]|
+    +-----+------+
+    ...
     """
 
     # a placeholder to make it appear in the generated doc
