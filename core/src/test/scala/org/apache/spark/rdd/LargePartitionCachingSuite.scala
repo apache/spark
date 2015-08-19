@@ -29,13 +29,13 @@ class LargePartitionCachingSuite extends FunSuite with SharedSparkContext with M
     largePartitionRdd.persist(StorageLevel.MEMORY_ONLY_SER).count() should be (1e6.toInt)
   }
 
-  test("disk cache large partitions") {
+  ignore("disk cache large partitions") {
     largePartitionRdd.persist(StorageLevel.DISK_ONLY).count() should be (1e6.toInt)
   }
 
-  test("disk cache large partitions with replications") {
+  ignore("disk cache large partitions with replications") {
     val conf = new SparkConf()
-      .setMaster("local-cluster[2, 1, 512]")
+      .setMaster("local-cluster[2, 1, 1024]")
       .setAppName("test-cluster")
       .set("spark.task.maxFailures", "1")
       .set("spark.akka.frameSize", "1") // set to 1MB to detect direct serialization of data

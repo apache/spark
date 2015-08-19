@@ -283,7 +283,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     rdd.count()
   }
 
-  test("shuffle total > 2GB ok if each block is small") {
+  ignore("shuffle total > 2GB ok if each block is small") {
     sc = new SparkContext("local", "test", conf)
     val rdd = sc.parallelize(1 to 1e6.toInt, 1).map{ i =>
       val n = 3e3.toInt
@@ -295,7 +295,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     rdd.partitionBy(new HashPartitioner(100)).count()
   }
 
-  test("shuffle blocks > 2GB fail with sane exception") {
+  ignore("shuffle blocks > 2GB fail with sane exception") {
     //  note that this *could* succeed in local mode, b/c local shuffles actually don't
     //  have a limit at 2GB.  BUT, we make them fail in any case, b/c its better to have
     //  a consistent failure, and not have success depend on where tasks get scheduled
