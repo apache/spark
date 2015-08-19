@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
- * Finds outer joins where only the outer table's columns are kept, and a key from the inner table
- * is involved in the join so no duplicates would be generated.
+ * Finds left or right outer joins where only the outer table's columns are kept, and a key from the
+ * inner table is involved in the join so no duplicates would be generated.
  */
 object CanEliminateUniqueKeyOuterJoin {
   /** (outer, projectList) */
@@ -55,9 +55,9 @@ object CanEliminateUniqueKeyOuterJoin {
 }
 
 /**
- * Finds equijoins based on foreign-key referential integrity, followed by [[Project]]s that
- * reference no columns from the parent table other than the referenced unique keys. Such equijoins
- * can be eliminated and replaced by the child table.
+ * Finds joins based on foreign-key referential integrity, followed by [[Project]]s that reference
+ * no columns from the parent table other than the referenced unique keys. Such joins can be
+ * eliminated and replaced by the child table.
  *
  * The table containing the foreign key is referred to as the child table, while the table
  * containing the referenced unique key is referred to as the parent table.

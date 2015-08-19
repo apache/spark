@@ -370,7 +370,23 @@ class Analyzer(
                 case a: Attribute => attributeRewrites.get(a).getOrElse(a)
               }
             }
-            j.copy(right = newRight)
+            // In case there are foreign keys on the left side that reference attributes on the
+            // right, duplicate them so they also refer to the new attributes
+            val newLeft =
+              if (left.keys.nonEmpty) {
+                left.transform {
+                  case KeyHint(keys, child) =>
+                    val newKeys = keys.collect {
+                      case ForeignKey(attr, referencedAttr) =>
+                        ForeignKey(attr, attributeRewrites.get(referencedAttr).getOrElse(referencedAttr))
+                      case other => other
+                    }
+                    KeyHint((keys ++ newKeys).distinct, child)
+                }
+              } else {
+                left
+              }
+            j.copy(left = newLeft, right = newRight)
         }
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
@@ -378,6 +394,41 @@ class Analyzer(
       case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
         val newOrdering = resolveSortOrders(ordering, child, throws = false)
         Sort(newOrdering, global, child)
+
+      // Special handling for foreign key references - look them up in the catalog
+      case h @ KeyHint(keys, child) if child.resolved && !h.foreignKeyReferencesResolved =>
+        KeyHint(keys.map {
+          case ForeignKey(k, u @ UnresolvedAttribute(nameParts)) =>
+            ForeignKey(k, withPosition(u) {
+              // Resolve the target u of the foreign key as a column of this table or a table from
+              // the catalog
+              val (relation, referencedAttr) =
+                if (nameParts.length > 1) {
+                  val relationName = nameParts.init
+                  val referencedAttrName = nameParts.last
+                  val relation = catalog.lookupRelation(relationName)
+                  val referencedAttr =
+                    relation.resolve(Seq(referencedAttrName), resolver).getOrElse(u).toAttribute
+                  (relation, referencedAttr)
+                } else {
+                  (h, h.resolve(nameParts, resolver).getOrElse(u).toAttribute)
+                }
+
+              // Enforce the constraint that foreign keys can only reference unique keys
+              val referencedAttrIsUnique = relation.keys.exists {
+                case UniqueKey(attr) if attr == referencedAttr => true
+                case _ => false
+              }
+              if (referencedAttr.resolved && !referencedAttrIsUnique) {
+                failAnalysis("Foreign keys can only reference unique keys, but " +
+                  s"$k references $u which is not unique.")
+              }
+
+              referencedAttr
+            })
+
+          case otherKey => otherKey
+        }, child)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")

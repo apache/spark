@@ -43,6 +43,7 @@ object DefaultOptimizer extends Optimizer {
       ColumnPruning,
       // Operator combine
       ProjectCollapsing,
+      KeyHintCollapsing,
       JoinElimination,
       CombineFilters,
       CombineLimits,
@@ -270,6 +271,13 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
 
         Project(substitutedProjection, child)
       }
+  }
+}
+
+object KeyHintCollapsing extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case KeyHint(keys1, KeyHint(keys2, child)) =>
+      KeyHint((keys1 ++ keys2).distinct, child)
   }
 }
 

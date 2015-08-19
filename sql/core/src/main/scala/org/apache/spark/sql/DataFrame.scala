@@ -36,6 +36,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.KeyHintCollapsing
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
@@ -666,21 +667,22 @@ class DataFrame private[sql](
    */
   def as(alias: Symbol): DataFrame = as(alias.name)
 
-  def uniqueKey(col: String): DataFrame =
-    KeyHint(List(UniqueKey(logicalPlan.output.find(_.name == col).get)), logicalPlan)
-
-  def foreignKey(col: String, referencedTable: DataFrame, referencedCol: String): DataFrame = {
-    val colAttr = logicalPlan.output.find(_.name == col).get
-    val referencedAttr = referencedTable.logicalPlan.output.find(_.name == referencedCol).get
-    val referencedAttrIsUnique = referencedTable.logicalPlan.keys.exists {
-      case UniqueKey(attr) if attr == referencedAttr => true
-      case _ => false
-    }
-    require(referencedAttrIsUnique,
-      s"Foreign keys can only reference unique keys, but $referencedAttr is not unique.\n" +
-        "Try calling referencedTable.uniqueKey(\""  + referencedAttr + "\").")
-    KeyHint(List(ForeignKey(colAttr, referencedAttr)), logicalPlan)
+  def uniqueKey(col: String): DataFrame = {
+    KeyHintCollapsing(KeyHint(List(UniqueKey(UnresolvedAttribute(col))), logicalPlan))
   }
+
+  /**
+   * Declares a foreign key referencing a key from this or another DataFrame. The referenced key
+   * must be declared as a unique key.
+   * {{{
+   *   department.uniqueKey("id").registerTempTable("department")
+   *   employee.foreignKey("departmentId", "department.id")
+   * }}}
+   */
+  def foreignKey(col: String, referencedCol: String): DataFrame =
+    KeyHintCollapsing(
+      KeyHint(List(ForeignKey(UnresolvedAttribute(col), UnresolvedAttribute(referencedCol))),
+      logicalPlan))
 
   /**
    * Selects a set of column based expressions.

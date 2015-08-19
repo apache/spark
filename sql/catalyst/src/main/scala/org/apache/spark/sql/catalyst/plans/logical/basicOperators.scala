@@ -27,6 +27,25 @@ case class KeyHint(newKeys: Seq[Key], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override def keys: Seq[Key] = newKeys ++ child.keys
+
+  override lazy val resolved: Boolean = newKeys.forall(_.resolved) && childrenResolved
+
+  def foreignKeyReferencesResolved: Boolean = newKeys.forall {
+    case ForeignKey(_, referencedAttr) => referencedAttr.resolved
+    case _ => true
+  }
+
+  override def transformExpressionsDown(
+      rule: PartialFunction[Expression, Expression]): this.type = {
+    KeyHint(newKeys.map(_.transformAttribute(rule.andThen(_.asInstanceOf[Attribute]))), child)
+      .asInstanceOf[this.type]
+  }
+
+  override def transformExpressionsUp(
+      rule: PartialFunction[Expression, Expression]): this.type = {
+    KeyHint(newKeys.map(_.transformAttribute(rule.andThen(_.asInstanceOf[Attribute]))), child)
+    .asInstanceOf[this.type]
+  }
 }
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
@@ -418,6 +437,7 @@ case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
 
 case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
+  override def keys: Seq[Key] = child.keys
 }
 
 /**

@@ -27,6 +27,7 @@ private object KeyHintTestData {
   case class Employee(id: Int, name: String)
   case class Order(id: Int, customerId: Int, employeeId: Option[Int])
   case class Manager(managerId: Int, subordinateId: Int)
+  case class BestFriend(id: Int, friendId: Int)
   case class BannedCustomer(name: String)
 
   val customer = ctx.sparkContext.parallelize(Seq(
@@ -34,19 +35,30 @@ private object KeyHintTestData {
     Customer(1, "bob"),
     Customer(2, "alice"))).toDF()
     .uniqueKey("id")
+  customer.registerTempTable("customer")
   val employee = ctx.sparkContext.parallelize(Seq(
     Employee(0, "charlie"),
     Employee(1, "dan"))).toDF()
     .uniqueKey("id")
+  employee.registerTempTable("employee")
   val order = ctx.sparkContext.parallelize(Seq(
     Order(0, 0, Some(0)),
     Order(1, 1, None))).toDF()
-    .foreignKey("customerId", customer, "id")
-    .foreignKey("employeeId", employee, "id")
+    .foreignKey("customerId", "customer.id")
+    .foreignKey("employeeId", "employee.id")
   val manager = ctx.sparkContext.parallelize(Seq(
     Manager(0, 1))).toDF()
-    .foreignKey("managerId", employee, "id")
-    .foreignKey("subordinateId", employee, "id")
+    .foreignKey("managerId", "employee.id")
+    .foreignKey("subordinateId", "employee.id")
+  ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, false)
+  val bestFriend = ctx.sparkContext.parallelize(Seq(
+    BestFriend(0, 1),
+    BestFriend(1, 2),
+    BestFriend(2, 0))).toDF()
+    .uniqueKey("id")
+    .foreignKey("friendId", "bestFriend.id")
+  bestFriend.registerTempTable("bestFriend")
+  ctx.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, true)
   val bannedCustomer = ctx.sparkContext.parallelize(Seq(
     BannedCustomer("alice"),
     BannedCustomer("eve"))).toDF()
@@ -71,6 +83,13 @@ private object KeyHintTestData {
   val orderEmployeeFullOuterJoinView = order
     .join(employee, order("employeeId") === employee("id"), "full_outer")
 
+  val managerInnerJoinView = manager
+    .join(employee.as("emp_manager"), manager("managerId") === $"emp_manager.id")
+    .join(employee.as("emp_subordinate"), manager("subordinateId") === $"emp_subordinate.id")
+
+  val bestFriendInnerJoinView = bestFriend
+    .join(bestFriend.as("bestFriend2"), bestFriend("friendId") === $"bestFriend2.id")
+
   // Joins involving only a unique key
   val bannedCustomerInnerJoinView = customer
     .join(bannedCustomer, bannedCustomer("name") === customer("name"))
@@ -85,6 +104,7 @@ private object KeyHintTestData {
 class KeyHintSuite extends QueryTest {
 
   import KeyHintTestData._
+  import KeyHintTestData.ctx.implicits._
 
   def checkJoinCount(df: DataFrame, joinCount: Int): Unit = {
     val joins = df.queryExecution.optimizedPlan.collect {
@@ -130,6 +150,19 @@ class KeyHintSuite extends QueryTest {
       Row(1, null, null),
       Row(null, 1, "dan")))
 
+    val managerInnerJoin = managerInnerJoinView
+      .select(manager("managerId"), $"emp_manager.name",
+        manager("subordinateId"), $"emp_subordinate.name")
+    checkAnswer(managerInnerJoin, Seq(
+      Row(0, "charlie", 1, "dan")))
+
+    val bestFriendInnerJoin = bestFriendInnerJoinView
+      .select(bestFriend("id"), $"bestFriend2.id", $"bestFriend2.friendId")
+    checkAnswer(bestFriendInnerJoin, Seq(
+      Row(0, 1, 2),
+      Row(1, 2, 0),
+      Row(2, 0, 1)))
+
     val bannedCustomerInnerJoin = bannedCustomerInnerJoinView
       .select(customer("id"), bannedCustomer("name"))
     checkAnswer(bannedCustomerInnerJoin, Seq(
@@ -153,8 +186,8 @@ class KeyHintSuite extends QueryTest {
   }
 
   test("can't create foreign key referencing non-unique column") {
-    intercept[IllegalArgumentException] {
-      bannedCustomer.foreignKey("name", customer, "name")
+    intercept[AnalysisException] {
+      bannedCustomer.foreignKey("name", "customer.name")
     }
   }
 
@@ -223,10 +256,22 @@ class KeyHintSuite extends QueryTest {
       Row(null, null, 1)))
   }
 
-  test("do not eliminate non-unique key outer joins") {}
+  test("eliminate referential integrity join despite multiple foreign keys with same referent") {
+    val managerInnerJoinEliminated = managerInnerJoinView
+      .select($"emp_manager.id", $"emp_subordinate.id")
+    checkAnswer(managerInnerJoinEliminated, manager)
+    checkJoinsEliminated(managerInnerJoinEliminated)
+  }
 
-  test("self joins") {}
+  test("eliminate referential integrity self-join") {
+    val bestFriendInnerJoinEliminated = bestFriendInnerJoinView
+      .select(bestFriend("id"), $"bestFriend2.id")
+    checkAnswer(bestFriendInnerJoinEliminated, Seq(
+      Row(0, 1),
+      Row(1, 2),
+      Row(2, 0)))
+    checkJoinsEliminated(bestFriendInnerJoinEliminated)
+  }
 
-  test("multiple foreign keys with same referent") {}
-
+  test("join followed by join") {}
 }

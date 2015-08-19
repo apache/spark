@@ -19,6 +19,22 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
-sealed trait Key
-case class UniqueKey(attr: Attribute) extends Key
-case class ForeignKey(attr: Attribute, referencedAttr: Attribute) extends Key
+sealed abstract class Key {
+  def transformAttribute(rule: PartialFunction[Attribute, Attribute]): Key
+  def resolved: Boolean
+}
+
+case class UniqueKey(attr: Attribute) extends Key {
+  override def transformAttribute(rule: PartialFunction[Attribute, Attribute]): Key =
+    UniqueKey(rule.applyOrElse(attr, identity[Attribute]))
+
+  override def resolved: Boolean = attr.resolved
+}
+
+/** Referenced column must be unique. */
+case class ForeignKey(attr: Attribute, referencedAttr: Attribute) extends Key {
+  override def transformAttribute(rule: PartialFunction[Attribute, Attribute]): Key =
+    ForeignKey(rule.applyOrElse(attr, identity[Attribute]), referencedAttr)
+
+  override def resolved: Boolean = attr.resolved && referencedAttr.resolved
+}
