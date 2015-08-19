@@ -1306,8 +1306,8 @@ case class FormatNumber(x: Expression, d: Expression)
             $df $dFormat = new $df($pattern.toString());
             $lastDValue = $d;
             $numberFormat.applyPattern($dFormat.toPattern());
-            ${ev.primitive} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
           }
+          ${ev.primitive} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
         } else {
           ${ev.primitive} = null;
           ${ev.isNull} = true;
