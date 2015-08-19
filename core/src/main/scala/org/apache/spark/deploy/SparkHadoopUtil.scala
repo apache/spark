@@ -76,7 +76,7 @@ class SparkHadoopUtil extends Logging {
     }
   }
 
-  @Deprecated
+  @deprecated("use newConfiguration with SparkConf argument", "1.2.0")
   def newConfiguration(): Configuration = newConfiguration(null)
 
   /**
