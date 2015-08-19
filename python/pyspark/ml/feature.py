@@ -788,6 +788,8 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)]
+    >>> type(model.labels)
+    (u'a', u'c', u'b')
     """
 
     @keyword_only
@@ -817,6 +819,13 @@ class StringIndexerModel(JavaModel):
     """
     Model fitted by StringIndexer.
     """
+
+    @property
+    def labels(self):
+        """
+        Ordered list of labels, corresponding to indices to be assigned.
+        """
+        return self._call_java("labels")
 
 
 @inherit_doc
@@ -1005,6 +1014,22 @@ class VectorIndexerModel(JavaModel):
     """
     Model fitted by VectorIndexer.
     """
+
+    @property
+    def numFeatures(self):
+        """
+        Number of features, i.e., length of Vectors which this transforms.
+        """
+        return self._call_java("numFeatures")
+
+    @property
+    def categoryMaps(self):
+        """
+        Feature value index.  Keys are categorical feature indices (column indices).
+        Values are maps from original features values to 0-based category indices.
+        If a feature is not in this map, it is treated as continuous.
+        """
+        return self._call_java("javaCategoryMaps")
 
 
 @inherit_doc
