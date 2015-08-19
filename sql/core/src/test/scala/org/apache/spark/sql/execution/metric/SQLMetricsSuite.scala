@@ -102,6 +102,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
+  val person = Seq((0, "mike", 30), (1, "jim", 20)).toDF("id", "name", "age")
+
   test("Project metrics") {
     withSQLConf(
       SQLConf.UNSAFE_ENABLED.key -> "false",
@@ -142,6 +144,10 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
         "number of output rows" -> 1L)))
     )
   }
+
+  val testData2 = (for { a <- 1 to 3; b <- 1 to 2 } yield (a, b))
+    .map(t => (t._1, t._2))
+    .toDF("a", "b")
 
   test("Aggregate metrics") {
     withSQLConf(
