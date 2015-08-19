@@ -18,6 +18,7 @@ package org.apache.spark.network.buffer;
 
 import java.io.*;
 import java.nio.channels.FileChannel;
+import java.util.Random;
 
 import org.junit.Test;
 
@@ -32,11 +33,10 @@ public class LargeByteBufferHelperSuite {
       testFile.deleteOnExit();
       OutputStream out = new FileOutputStream(testFile);
       byte[] buffer = new byte[1 << 16];
+      Random rng = new XORShiftRandom(0L);
       long len = ((long)buffer.length) + Integer.MAX_VALUE + 1;
-      for (int i = 0; i < buffer.length; i++) {
-        buffer[i] = (byte) i;
-      }
       for (int i = 0; i < len / buffer.length; i++) {
+        rng.nextBytes(buffer);
         out.write(buffer);
       }
       out.close();
@@ -59,11 +59,14 @@ public class LargeByteBufferHelperSuite {
       LargeByteBuffer buf = LargeByteBufferHelper.mapFile(in, FileChannel.MapMode.READ_ONLY, 0, len);
       assertEquals(len, buf.size());
       byte[] read = new byte[buffer.length];
+      byte[] expected = new byte[buffer.length];
+      Random rngExpected = new XORShiftRandom(0L);
       for (int i = 0; i < len / buffer.length; i++) {
         buf.get(read, 0, buffer.length);
         // assertArrayEquals() is really slow
+        rngExpected.nextBytes(expected);
         for (int j = 0; j < buffer.length; j++) {
-          if (read[j] != (byte) (j))
+          if (read[j] !=  expected[j])
             fail("bad byte at (i,j) = (" + i + "," + j + ")");
         }
       }
@@ -81,4 +84,27 @@ public class LargeByteBufferHelperSuite {
     }
     assertEquals(5, buf.underlying[9].capacity());
   }
+
+
+  private class XORShiftRandom extends Random {
+
+    XORShiftRandom(long init) {
+      super(init);
+      seed = new Random(init).nextLong();
+    }
+
+    long seed;
+
+    // we need to just override next - this will be called by nextInt, nextDouble,
+    // nextGaussian, nextLong, etc.
+    @Override
+    protected int next(int bits) {
+      long nextSeed = seed ^ (seed << 21);
+      nextSeed ^= (nextSeed >>> 35);
+      nextSeed ^= (nextSeed << 4);
+      seed = nextSeed;
+      return (int) (nextSeed & ((1L << bits) -1));
+    }
+  }
+
 }
