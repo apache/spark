@@ -20,6 +20,8 @@ package org.apache.spark.mllib.util
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 
+import scala.reflect.ClassTag
+
 private[mllib] trait Broadcastable {
 
   /**
@@ -30,8 +32,9 @@ private[mllib] trait Broadcastable {
    * @param modelToBc model object to broadcast
    * @return an Option object containing the broadcast model
    */
-  def getBroadcastModel[T,V](bcReference: Option[Broadcast[T]], rdd: RDD[V],
-    modelToBc:T) : Option[Broadcast[T]] = {
+  def getBroadcastModel[T: ClassTag, V: ClassTag](bcReference: Option[Broadcast[T]],
+    rdd: RDD[V],
+    modelToBc: T) : Option[Broadcast[T]] = {
     bcReference match {
       case None => Some(rdd.context.broadcast(modelToBc))
       case _ => bcReference

@@ -87,7 +87,7 @@ class NaiveBayesModel private[spark] (
 
   @Since("1.0.0")
   override def predict(testData: RDD[Vector]): RDD[Double] = {
-    bcModel = getBroadcastModel(bcModel,testData,this)
+    bcModel = getBroadcastModel(bcModel, testData, this)
     val lclBcModel = bcModel
     testData.mapPartitions { iter =>
       val model = lclBcModel.get.value
@@ -114,7 +114,7 @@ class NaiveBayesModel private[spark] (
    */
   @Since("1.5.0")
   def predictProbabilities(testData: RDD[Vector]): RDD[Vector] = {
-    bcModel = getBroadcastModel(bcModel,testData,this)
+    bcModel = getBroadcastModel(bcModel, testData, this)
     val lclBcModel = bcModel
     testData.mapPartitions { iter =>
       val model = lclBcModel.get.value
