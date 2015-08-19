@@ -142,11 +142,7 @@ FP-growth algorithm.
 It take an `RDD` of transactions, where each transaction is an `List` of items of a generic type.
 Calling `FPGrowth.train` with transactions returns an
 [`FPGrowthModel`](api/python/pyspark.mllib.html#pyspark.mllib.fpm.FPGrowthModel)
-that stores the frequent itemsets with their frequencies. The following
-example illustrates how to mine frequent itemsets and association rules
-(see [Association
-Rules](mllib-frequent-pattern-mining.html#association-rules) for
-details) from `transactions`.
+that stores the frequent itemsets with their frequencies.
 
 {% highlight python %}
 from pyspark.mllib.fpm import FPGrowth
@@ -155,7 +151,7 @@ data = sc.textFile("data/mllib/sample_fpgrowth.txt")
 
 transactions = data.map(lambda line: line.strip().split(' '))
 
-model = FPGrowth.train(transactions, 0.2, 10)
+model = FPGrowth.train(transactions, minSupport=0.2, numPartitions=10)
 
 result = model.freqItemsets().collect()
 for fi in result:
