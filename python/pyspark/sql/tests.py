@@ -1035,6 +1035,10 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertRaisesRegexp(IllegalArgumentException, "1024 is not in the permitted values",
                                 lambda: df.select(sha2(df.a, 1024)).collect())
 
+    def test_with_column_with_existing_name(self):
+        keys = self.df.withColumn("key", self.df.key).select("key").collect()
+        self.assertEqual([r.key for r in keys], list(range(100)))
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
