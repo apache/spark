@@ -45,7 +45,7 @@ if (os.environ.get("SPARK_HOME", "not found") == "not found"):
     raise ImportError("Environment variable SPARK_HOME is undefined.")
 
 spark_home = os.environ['SPARK_HOME']
-pom_xml_file_path = spark_home + '/pom.xml'
+pom_xml_file_path = os.path.join(spark_home, 'pom.xml')
 
 try:
     tree = ET.parse(pom_xml_file_path)
@@ -60,8 +60,6 @@ from pyspark.pyspark_version import __version__
 if (snapshot_version != __version__):
     raise ImportError("Incompatible version of Spark(%s) and PySpark(%s)." %
                       (snapshot_version, __version__))
-
-sys.path.insert(0, os.path.join(os.environ["SPARK_HOME"], "python/lib/py4j-0.8.1-src.zip"))
 
 
 from pyspark.conf import SparkConf
