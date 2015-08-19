@@ -43,7 +43,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.SQLConf.SQLConfEntry._
-import org.apache.spark.sql.catalyst.{TableIdentifier, ParserDialect}
+import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier, ParserDialect}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUDFs, SetCommand}
@@ -189,6 +189,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
     // We instantiate a HiveConf here to read in the hive-site.xml file and then pass the options
     // into the isolated client loader
     val metadataConf = new HiveConf()
+
+    val defaltWarehouseLocation = metadataConf.get("hive.metastore.warehouse.dir")
+    logInfo("defalt warehouse location is " + defaltWarehouseLocation)
+
     // `configure` goes second to override other settings.
     val allConfig = metadataConf.iterator.map(e => e.getKey -> e.getValue).toMap ++ configure
 
@@ -288,12 +292,13 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
    * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
-    val tableIdent = TableIdentifier(tableName).withDatabase(catalog.client.currentDatabase)
+    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
     catalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
-    catalog.invalidateTable(catalog.client.currentDatabase, tableName)
+    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    catalog.invalidateTable(tableIdent)
   }
 
   /**
@@ -307,7 +312,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
    */
   @Experimental
   def analyze(tableName: String) {
-    val relation = EliminateSubQueries(catalog.lookupRelation(Seq(tableName)))
+    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    val relation = EliminateSubQueries(catalog.lookupRelation(tableIdent.toSeq))
 
     relation match {
       case relation: MetastoreRelation =>

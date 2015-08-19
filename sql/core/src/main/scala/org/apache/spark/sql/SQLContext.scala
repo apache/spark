@@ -573,9 +573,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
+    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
-        tableName,
+        tableIdent,
         userSpecifiedSchema = None,
         source,
         temporary = false,
@@ -583,7 +584,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         allowExisting = false,
         managedIfNoPath = false)
     executePlan(cmd).toRdd
-    table(tableName)
+    table(tableIdent)
   }
 
   /**
@@ -618,9 +619,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
+    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
-        tableName,
+        tableIdent,
         userSpecifiedSchema = Some(schema),
         source,
         temporary = false,
@@ -628,7 +630,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         allowExisting = false,
         managedIfNoPath = false)
     executePlan(cmd).toRdd
-    table(tableName)
+    table(tableIdent)
   }
 
   /**
@@ -713,7 +715,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   def table(tableName: String): DataFrame = {
-    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
+    table(new SqlParser().parseTableIdentifier(tableName))
+  }
+
+  private def table(tableIdent: TableIdentifier): DataFrame = {
     DataFrame(this, catalog.lookupRelation(tableIdent.toSeq))
   }
 
