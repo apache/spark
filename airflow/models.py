@@ -2166,6 +2166,15 @@ class XCom(Base):
         """
         Store an XCom value.
         """
+
+        # remove any duplicate XComs
+        session.query(cls).filter(
+            cls.key == key,
+            cls.execution_date == execution_date,
+            cls.task_id == task_id,
+            cls.dag_id == dag_id).delete()
+
+        # insert new XCom
         session.add(XCom(
             key=key,
             value=value,
