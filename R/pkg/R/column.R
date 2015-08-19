@@ -203,3 +203,17 @@ setMethod("%in%",
             jc <- callJMethod(x@jc, "in", table)
             return(column(jc))
           })
+
+#' otherwise
+#'
+#' If values in the specified column are null, returns the value. 
+#' Can be used in conjunction with `when` to specify a default value for expressions.
+#'
+#' @rdname column
+setMethod("otherwise",
+          signature(x = "Column", value = "ANY"),
+          function(x, value) {
+            value <- ifelse(class(value) == "Column", value@jc, value)
+            jc <- callJMethod(x@jc, "otherwise", value)
+            column(jc)
+          })

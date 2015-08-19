@@ -152,6 +152,7 @@ exportMethods("abs",
               "n_distinct",
               "nanvl",
               "negate",
+              "otherwise",
               "pmod",
               "quarter",
               "reverse",
@@ -182,6 +183,7 @@ exportMethods("abs",
               "unhex",
               "upper",
               "weekofyear",
+              "when",
               "year")
 
 exportClasses("GroupedData")

@@ -165,3 +165,17 @@ setMethod("n", signature(x = "Column"),
           function(x) {
             count(x)
           })
+
+#' when
+#'
+#' Evaluates a list of conditions and returns one of multiple possible result expressions.
+#' For unmatched expressions null is returned.
+#'
+#' @rdname column
+setMethod("when", signature(condition = "Column", value = "ANY"),
+          function(condition, value) {
+              condition <- condition@jc
+              value <- ifelse(class(value) == "Column", value@jc, value)
+              jc <- callJStatic("org.apache.spark.sql.functions", "when", condition, value)
+              column(jc)
+          })
