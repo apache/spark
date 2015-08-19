@@ -179,3 +179,22 @@ setMethod("when", signature(condition = "Column", value = "ANY"),
               jc <- callJStatic("org.apache.spark.sql.functions", "when", condition, value)
               column(jc)
           })
+
+#' ifelse
+#'
+#' Evaluates a list of conditions and returns `yes` if the conditions are satisfied.
+#' Otherwise `no` is returned for unmatched conditions.
+#'
+#' @rdname column
+setMethod("ifelse",
+          signature(test = "Column", yes = "ANY", no = "ANY"),
+          function(test, yes, no) {
+              test <- test@jc
+              yes <- ifelse(class(yes) == "Column", yes@jc, yes)
+              no <- ifelse(class(no) == "Column", no@jc, no)
+              jc <- callJMethod(callJStatic("org.apache.spark.sql.functions",
+                                            "when",
+                                            test, yes),
+                                "otherwise", no)
+              column(jc)
+          })
