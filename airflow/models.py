@@ -36,7 +36,7 @@ Base = declarative_base()
 ID_LEN = 250
 SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
 DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
-RETURN_XCOM = '<XCom from return>'
+RETURN_XCOM = '<Returned XCom>'
 
 
 if 'mysql' in SQL_ALCHEMY_CONN:
