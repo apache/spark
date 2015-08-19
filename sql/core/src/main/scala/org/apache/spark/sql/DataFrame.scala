@@ -1133,7 +1133,8 @@ class DataFrame private[sql](
   /////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns a new [[DataFrame]] by adding a column.
+   * Returns a new [[DataFrame]] by adding a column or replacing the existing column that has
+   * the same name.
    * @group dfops
    * @since 1.3.0
    */
