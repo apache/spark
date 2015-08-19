@@ -166,6 +166,17 @@ setMethod("n", signature(x = "Column"),
             count(x)
           })
 
+#' date_format
+#'
+#' Converts a date/timestamp/string to a value of string in the format specified by the date
+#' format given by the second argument.
+#'
+#' A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
+#' pattern letters of `java.text.SimpleDateFormat` can be used.
+#'
+#' NOTE: Use when ever possible specialized functions like `year`. These benefit from a
+#' specialized implementation.
+#'
 #' @rdname functions
 setMethod("date_format", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -173,6 +184,10 @@ setMethod("date_format", signature(y = "Column", x = "character"),
             column(jc)
           })
 
+#' from_utc_timestamp
+#'
+#' Assumes given timestamp is UTC and converts to given timezone.
+#'
 #' @rdname functions
 setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -180,6 +195,14 @@ setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
             column(jc)
           })
 
+#' instr
+#'
+#' Locate the position of the first occurrence of substr column in the given string.
+#' Returns null if either of the arguments are null.
+#'
+#' NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+#' could not be found in str.
+#'
 #' @rdname functions
 setMethod("instr", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -187,6 +210,17 @@ setMethod("instr", signature(y = "Column", x = "character"),
             column(jc)
           })
 
+#' next_day
+#'
+#' Given a date column, returns the first date which is later than the value of the date column
+#' that is on the specified day of the week.
+#'
+#' For example, `next <- day('2015-07-27', "Sunday")` returns 2015-08-02 because that is the first
+#' Sunday after 2015-07-27.
+#'
+#' Day of the week parameter is case insensitive, and accepts:
+#' "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
+#'
 #' @rdname functions
 setMethod("next_day", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -194,6 +228,10 @@ setMethod("next_day", signature(y = "Column", x = "character"),
             column(jc)
           })
 
+#' to_utc_timestamp
+#'
+#' Assumes given timestamp is in given timezone and converts to UTC.
+#'
 #' @rdname functions
 setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -201,6 +239,10 @@ setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
             column(jc)
           })
 
+#' add_months
+#'
+#' Returns the date that is numMonths after startDate.
+#'
 #' @rdname functions
 setMethod("add_months", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -208,6 +250,10 @@ setMethod("add_months", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
+#' date_add
+#'
+#' Returns the date that is `days` days after `start`
+#'
 #' @rdname functions
 setMethod("date_add", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -215,6 +261,10 @@ setMethod("date_add", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
+#' date_sub
+#'
+#' Returns the date that is `days` days before `start`
+#'
 #' @rdname functions
 setMethod("date_sub", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -222,6 +272,14 @@ setMethod("date_sub", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
+#' format_number
+#'
+#' Formats numeric column x to a format like '#,###,###.##', rounded to d decimal places,
+#' and returns the result as a string column.
+#'
+#' If d is 0, the result has no decimal point or fractional part.
+#' If d < 0, the result will be null.'
+#'
 #' @rdname functions
 setMethod("format_number", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -231,6 +289,11 @@ setMethod("format_number", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
+#' sha2
+#'
+#' Calculates the SHA-2 family of hash functions of a binary column and
+#' returns the value as a hex string.
+#'
 #' @rdname functions
 #' @param y column to compute SHA-2 on.
 #' @param x one of 224, 256, 384, or 512.
@@ -240,6 +303,11 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
+#' shiftLeft
+#'
+#' Shift the the given value numBits left. If the given value is a long value, this function
+#' will return a long value else it will return an integer value.
+#'
 #' @rdname functions
 setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -249,6 +317,11 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
+#' shiftRight
+#'
+#' Shift the the given value numBits right. If the given value is a long value, it will return
+#' a long value else it will return an integer value.
+#'
 #' @rdname functions
 setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -258,6 +331,11 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
+#' shiftRightUnsigned
+#'
+#' Unsigned shift the the given value numBits right. If the given value is a long value,
+#' it will return a long value else it will return an integer value.
+#'
 #' @rdname functions
 setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
           function(y, x) {
