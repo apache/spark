@@ -313,6 +313,17 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    */
   def getAs[T](i: Int): T = get(i).asInstanceOf[T]
+  
+   /**
+   * Returns the value of a given fieldName in Option.
+   * Some if the value exist
+   * None if the value dosent exist
+   * 
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws ClassCastException when data type does not match.
+   */
+  def getAsOpt[T](i: Int): Option[T] = Option(getAs[T](i))
 
   /**
    * Returns the value of a given fieldName.
@@ -322,6 +333,17 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    */
   def getAs[T](fieldName: String): T = getAs[T](fieldIndex(fieldName))
+  
+   /**
+   * Returns the value of a given fieldName in Option.
+   * Some if the value exist
+   * None if the value dosent exist
+   * 
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws ClassCastException when data type does not match.
+   */
+  def getAsOpt[T](fieldName: String): Option[T] = Option(getAs[T](fieldName))
 
   /**
    * Returns the index of a given field name.
