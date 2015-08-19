@@ -98,11 +98,11 @@ private[r] object SQLUtils {
     val bos = new ByteArrayOutputStream()
     val dos = new DataOutputStream(bos)
 
-    SerDe.writeInt(dos, row.length)
-    (0 until row.length).map { idx =>
-      val obj: Object = row(idx).asInstanceOf[Object]
-      SerDe.writeObject(dos, obj)
-    }
+    val cols =
+      (0 until row.length).map { idx =>
+        row(idx).asInstanceOf[Object]
+      }.toArray
+    SerDe.writeObject(dos, cols)
     bos.toByteArray()
   }
 

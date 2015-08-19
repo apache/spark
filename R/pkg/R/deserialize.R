@@ -151,18 +151,19 @@ readDeserialize <- function(con) {
   }
 }
 
-readDeserializeRows <- function(inputCon) {
-  # readDeserializeRows will deserialize a DataOutputStream composed of
-  # a list of lists. Since the DOS is one continuous stream and
-  # the number of rows varies, we put the readRow function in a while loop
-  # that termintates when the next row is empty.
+readMultipleObjects <- function(inputCon) {
+  # readMultipleObjects will read multiple continuous objects from
+  # a DataOutputStream. There is no preceding field telling the count
+  # of the objects, so the number of objects varies, we try to read
+  # all objects in a loop until the end of the stream.
   data <- list()
   while(TRUE) {
-    row <- readRow(inputCon)
-    if (length(row) == 0) {
+    # If reaching the end of the stream, type returned should be "".
+    type <- readType(inputCon)
+    if (type == "") {
       break
     }
-    data[[length(data) + 1L]] <- row
+    data[[length(data) + 1L]] <- readTypedObject(inputCon, type)
   }
   data # this is a list of named lists now
 }
@@ -174,21 +175,5 @@ readRowList <- function(obj) {
   # deserialize the row.
   rawObj <- rawConnection(obj, "r+")
   on.exit(close(rawObj))
-  readRow(rawObj)
-}
-
-readRow <- function(inputCon) {
-  numCols <- readInt(inputCon)
-  if (length(numCols) > 0 && numCols > 0) {
-    lapply(1:numCols, function(x) {
-      obj <- readObject(inputCon)
-      if (is.null(obj)) {
-        NA
-      } else {
-        obj
-      }
-    }) # each row is a list now
-  } else {
-    list()
-  }
+  readObject(rawObj)
 }
