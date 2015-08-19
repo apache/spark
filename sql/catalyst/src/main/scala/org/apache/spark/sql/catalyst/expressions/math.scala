@@ -165,69 +165,29 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
  * @param toBaseExpr to which base
  */
 case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
-  extends Expression with ImplicitCastInputTypes {
-
-  override def foldable: Boolean = numExpr.foldable && fromBaseExpr.foldable && toBaseExpr.foldable
-
-  override def nullable: Boolean = numExpr.nullable || fromBaseExpr.nullable || toBaseExpr.nullable
+  extends TernaryExpression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(numExpr, fromBaseExpr, toBaseExpr)
-
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType)
-
   override def dataType: DataType = StringType
 
-  /** Returns the result of evaluating this expression on a given input Row */
-  override def eval(input: InternalRow): Any = {
-    val num = numExpr.eval(input)
-    if (num != null) {
-      val fromBase = fromBaseExpr.eval(input)
-      if (fromBase != null) {
-        val toBase = toBaseExpr.eval(input)
-        if (toBase != null) {
-          NumberConverter.convert(
-            num.asInstanceOf[UTF8String].getBytes,
-            fromBase.asInstanceOf[Int],
-            toBase.asInstanceOf[Int])
-        } else {
-          null
-        }
-      } else {
-        null
-      }
-    } else {
-      null
-    }
+  override def nullSafeEval(num: Any, fromBase: Any, toBase: Any): Any = {
+    NumberConverter.convert(
+      num.asInstanceOf[UTF8String].getBytes,
+      fromBase.asInstanceOf[Int],
+      toBase.asInstanceOf[Int])
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val numGen = numExpr.gen(ctx)
-    val from = fromBaseExpr.gen(ctx)
-    val to = toBaseExpr.gen(ctx)
-
     val numconv = NumberConverter.getClass.getName.stripSuffix("$")
-    s"""
-       ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-       ${numGen.code}
-       boolean ${ev.isNull} = ${numGen.isNull};
-       if (!${ev.isNull}) {
-         ${from.code}
-         if (!${from.isNull}) {
-           ${to.code}
-           if (!${to.isNull}) {
-             ${ev.primitive} = $numconv.convert(${numGen.primitive}.getBytes(),
-               ${from.primitive}, ${to.primitive});
-             if (${ev.primitive} == null) {
-               ${ev.isNull} = true;
-             }
-           } else {
-             ${ev.isNull} = true;
-           }
-         } else {
-           ${ev.isNull} = true;
-         }
+    nullSafeCodeGen(ctx, ev, (num, from, to) =>
+      s"""
+       ${ev.primitive} = $numconv.convert($num.getBytes(), $from, $to);
+       if (${ev.primitive} == null) {
+         ${ev.isNull} = true;
        }
-     """
+       """
+    )
   }
 }
 
@@ -646,19 +606,19 @@ case class Logarithm(left: Expression, right: Expression)
 /**
  * Round the `child`'s result to `scale` decimal place when `scale` >= 0
  * or round at integral part when `scale` < 0.
- * For example, round(31.415, 2) would eval to 31.42 and round(31.415, -1) would eval to 30.
+ * For example, round(31.415, 2) = 31.42 and round(31.415, -1) = 30.
  *
- * Child of IntegralType would eval to itself when `scale` >= 0.
- * Child of FractionalType whose value is NaN or Infinite would always eval to itself.
+ * Child of IntegralType would round to itself when `scale` >= 0.
+ * Child of FractionalType whose value is NaN or Infinite would always round to itself.
  *
- * Round's dataType would always equal to `child`'s dataType except for [[DecimalType.Fixed]],
- * which leads to scale update in DecimalType's [[PrecisionInfo]]
+ * Round's dataType would always equal to `child`'s dataType except for DecimalType,
+ * which would lead scale decrease from the origin DecimalType.
  *
  * @param child expr to be round, all [[NumericType]] is allowed as Input
  * @param scale new scale to be round to, this should be a constant int at runtime
  */
 case class Round(child: Expression, scale: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   import BigDecimal.RoundingMode.HALF_UP
 
@@ -838,6 +798,4 @@ case class Round(child: Expression, scale: Expression)
       """
     }
   }
-
-  override def prettyName: String = "round"
 }

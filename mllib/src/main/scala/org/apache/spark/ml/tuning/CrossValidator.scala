@@ -160,6 +160,6 @@ class CrossValidatorModel private[ml] (
       uid,
       bestModel.copy(extra).asInstanceOf[Model[_]],
       avgMetrics.clone())
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }

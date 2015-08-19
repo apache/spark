@@ -179,7 +179,7 @@ private class MyLogisticRegressionModel(
    * This is used for the default implementation of [[transform()]].
    */
   override def copy(extra: ParamMap): MyLogisticRegressionModel = {
-    copyValues(new MyLogisticRegressionModel(uid, weights), extra)
+    copyValues(new MyLogisticRegressionModel(uid, weights), extra).setParent(parent)
   }
 }
 // scalastyle:on println

@@ -48,9 +48,12 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
         case DoubleType => input.getDouble(ordinal)
         case StringType => input.getUTF8String(ordinal)
         case BinaryType => input.getBinary(ordinal)
-        case IntervalType => input.getInterval(ordinal)
+        case CalendarIntervalType => input.getInterval(ordinal)
+        case t: DecimalType => input.getDecimal(ordinal, t.precision, t.scale)
         case t: StructType => input.getStruct(ordinal, t.size)
-        case dataType => input.get(ordinal, dataType)
+        case _: ArrayType => input.getArray(ordinal)
+        case _: MapType => input.getMap(ordinal)
+        case _ => input.get(ordinal, dataType)
       }
     }
   }
@@ -64,10 +67,11 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   override def exprId: ExprId = throw new UnsupportedOperationException
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val javaType = ctx.javaType(dataType)
+    val value = ctx.getValue("i", dataType, ordinal.toString)
     s"""
-        boolean ${ev.isNull} = i.isNullAt($ordinal);
-        ${ctx.javaType(dataType)} ${ev.primitive} = ${ev.isNull} ?
-            ${ctx.defaultValue(dataType)} : (${ctx.getColumn("i", dataType, ordinal)});
+      boolean ${ev.isNull} = i.isNullAt($ordinal);
+      $javaType ${ev.primitive} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
     """
   }
 }

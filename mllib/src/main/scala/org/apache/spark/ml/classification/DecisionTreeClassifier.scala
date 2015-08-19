@@ -18,12 +18,11 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeClassifierParams}
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
@@ -39,7 +38,7 @@ import org.apache.spark.sql.DataFrame
  */
 @Experimental
 final class DecisionTreeClassifier(override val uid: String)
-  extends Predictor[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
+  extends ProbabilisticClassifier[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
   with DecisionTreeParams with TreeClassifierParams {
 
   def this() = this(Identifiable.randomUID("dtc"))
@@ -106,8 +105,9 @@ object DecisionTreeClassifier {
 @Experimental
 final class DecisionTreeClassificationModel private[ml] (
     override val uid: String,
-    override val rootNode: Node)
-  extends PredictionModel[Vector, DecisionTreeClassificationModel]
+    override val rootNode: Node,
+    override val numClasses: Int)
+  extends ProbabilisticClassificationModel[Vector, DecisionTreeClassificationModel]
   with DecisionTreeModel with Serializable {
 
   require(rootNode != null,
@@ -117,14 +117,31 @@ final class DecisionTreeClassificationModel private[ml] (
    * Construct a decision tree classification model.
    * @param rootNode  Root node of tree, with other nodes attached.
    */
-  def this(rootNode: Node) = this(Identifiable.randomUID("dtc"), rootNode)
+  private[ml] def this(rootNode: Node, numClasses: Int) =
+    this(Identifiable.randomUID("dtc"), rootNode, numClasses)
 
   override protected def predict(features: Vector): Double = {
-    rootNode.predict(features)
+    rootNode.predictImpl(features).prediction
+  }
+
+  override protected def predictRaw(features: Vector): Vector = {
+    Vectors.dense(rootNode.predictImpl(features).impurityStats.stats.clone())
+  }
+
+  override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
+    rawPrediction match {
+      case dv: DenseVector =>
+        ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(dv)
+        dv
+      case sv: SparseVector =>
+        throw new RuntimeException("Unexpected error in DecisionTreeClassificationModel:" +
+          " raw2probabilityInPlace encountered SparseVector")
+    }
   }
 
   override def copy(extra: ParamMap): DecisionTreeClassificationModel = {
-    copyValues(new DecisionTreeClassificationModel(uid, rootNode), extra)
+    copyValues(new DecisionTreeClassificationModel(uid, rootNode, numClasses), extra)
+      .setParent(parent)
   }
 
   override def toString: String = {
@@ -149,6 +166,6 @@ private[ml] object DecisionTreeClassificationModel {
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtc")
-    new DecisionTreeClassificationModel(uid, rootNode)
+    new DecisionTreeClassificationModel(uid, rootNode, -1)
   }
 }

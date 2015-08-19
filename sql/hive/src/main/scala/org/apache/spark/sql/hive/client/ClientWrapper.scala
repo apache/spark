@@ -32,12 +32,13 @@ import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.ql.{Driver, metadata}
+import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
+import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.util.{CircularBuffer, Utils}
-
 
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
@@ -57,11 +58,79 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  *                        this ClientWrapper.
  */
 private[hive] class ClientWrapper(
-    version: HiveVersion,
+    override val version: HiveVersion,
     config: Map[String, String],
     initClassLoader: ClassLoader)
   extends ClientInterface
   with Logging {
+
+  overrideHadoopShims()
+
+  // !! HACK ALERT !!
+  //
+  // Internally, Hive `ShimLoader` tries to load different versions of Hadoop shims by checking
+  // major version number gathered from Hadoop jar files:
+  //
+  // - For major version number 1, load `Hadoop20SShims`, where "20S" stands for Hadoop 0.20 with
+  //   security.
+  // - For major version number 2, load `Hadoop23Shims`, where "23" stands for Hadoop 0.23.
+  //
+  // However, APIs in Hadoop 2.0.x and 2.1.x versions were in flux due to historical reasons. It
+  // turns out that Hadoop 2.0.x versions should also be used together with `Hadoop20SShims`, but
+  // `Hadoop23Shims` is chosen because the major version number here is 2.
+  //
+  // To fix this issue, we try to inspect Hadoop version via `org.apache.hadoop.utils.VersionInfo`
+  // and load `Hadoop20SShims` for Hadoop 1.x and 2.0.x versions.  If Hadoop version information is
+  // not available, we decide whether to override the shims or not by checking for existence of a
+  // probe method which doesn't exist in Hadoop 1.x or 2.0.x versions.
+  private def overrideHadoopShims(): Unit = {
+    val hadoopVersion = VersionInfo.getVersion
+    val VersionPattern = """(\d+)\.(\d+).*""".r
+
+    hadoopVersion match {
+      case null =>
+        logError("Failed to inspect Hadoop version")
+
+        // Using "Path.getPathWithoutSchemeAndAuthority" as the probe method.
+        val probeMethod = "getPathWithoutSchemeAndAuthority"
+        if (!classOf[Path].getDeclaredMethods.exists(_.getName == probeMethod)) {
+          logInfo(
+            s"Method ${classOf[Path].getCanonicalName}.$probeMethod not found, " +
+              s"we are probably using Hadoop 1.x or 2.0.x")
+          loadHadoop20SShims()
+        }
+
+      case VersionPattern(majorVersion, minorVersion) =>
+        logInfo(s"Inspected Hadoop version: $hadoopVersion")
+
+        // Loads Hadoop20SShims for 1.x and 2.0.x versions
+        val (major, minor) = (majorVersion.toInt, minorVersion.toInt)
+        if (major < 2 || (major == 2 && minor == 0)) {
+          loadHadoop20SShims()
+        }
+    }
+
+    // Logs the actual loaded Hadoop shims class
+    val loadedShimsClassName = ShimLoader.getHadoopShims.getClass.getCanonicalName
+    logInfo(s"Loaded $loadedShimsClassName for Hadoop version $hadoopVersion")
+  }
+
+  private def loadHadoop20SShims(): Unit = {
+    val hadoop20SShimsClassName = "org.apache.hadoop.hive.shims.Hadoop20SShims"
+    logInfo(s"Loading Hadoop shims $hadoop20SShimsClassName")
+
+    try {
+      val shimsField = classOf[ShimLoader].getDeclaredField("hadoopShims")
+      // scalastyle:off classforname
+      val shimsClass = Class.forName(hadoop20SShimsClassName)
+      // scalastyle:on classforname
+      val shims = classOf[HadoopShims].cast(shimsClass.newInstance())
+      shimsField.setAccessible(true)
+      shimsField.set(null, shims)
+    } catch { case cause: Throwable =>
+      throw new RuntimeException(s"Failed to load $hadoop20SShimsClassName", cause)
+    }
+  }
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   private val outputBuffer = new CircularBuffer()
@@ -91,7 +160,11 @@ private[hive] class ClientWrapper(
         // this action explicit.
         initialConf.setClassLoader(initClassLoader)
         config.foreach { case (k, v) =>
-          logDebug(s"Hive Config: $k=$v")
+          if (k.toLowerCase.contains("password")) {
+            logDebug(s"Hive Config: $k=xxx")
+          } else {
+            logDebug(s"Hive Config: $k=$v")
+          }
           initialConf.set(k, v)
         }
         val newState = new SessionState(initialConf)
@@ -110,6 +183,10 @@ private[hive] class ClientWrapper(
 
   /** Returns the configuration for the current session. */
   def conf: HiveConf = SessionState.get().getConf
+
+  override def getConf(key: String, defaultValue: String): String = {
+    conf.get(key, defaultValue)
+  }
 
   // TODO: should be a def?s
   // When we create this val client, the HiveConf of it (conf) is the one associated with state.

@@ -384,19 +384,29 @@ private object YarnClusterDriver extends Logging with Matchers {
 
 }
 
-private object YarnClasspathTest {
+private object YarnClasspathTest extends Logging {
+
+  var exitCode = 0
+
+  def error(m: String, ex: Throwable = null): Unit = {
+    logError(m, ex)
+    // scalastyle:off println
+    System.out.println(m)
+    if (ex != null) {
+      ex.printStackTrace(System.out)
+    }
+    // scalastyle:on println
+  }
 
   def main(args: Array[String]): Unit = {
     if (args.length != 2) {
-      // scalastyle:off println
-      System.err.println(
+      error(
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
         |Usage: YarnClasspathTest [driver result file] [executor result file]
         """.stripMargin)
       // scalastyle:on println
-      System.exit(1)
     }
 
     readResource(args(0))
@@ -406,6 +416,7 @@ private object YarnClasspathTest {
     } finally {
       sc.stop()
     }
+    System.exit(exitCode)
   }
 
   private def readResource(resultPath: String): Unit = {
@@ -415,6 +426,11 @@ private object YarnClasspathTest {
       val resource = ccl.getResourceAsStream("test.resource")
       val bytes = ByteStreams.toByteArray(resource)
       result = new String(bytes, 0, bytes.length, UTF_8)
+    } catch {
+      case t: Throwable =>
+        error(s"loading test.resource to $resultPath", t)
+        // set the exit code if not yet set
+        exitCode = 2
     } finally {
       Files.write(result, new File(resultPath), UTF_8)
     }

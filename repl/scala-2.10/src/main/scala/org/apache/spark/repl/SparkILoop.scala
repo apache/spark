@@ -981,7 +981,7 @@ class SparkILoop(
     // which spins off a separate thread, then print the prompt and try
     // our best to look ready.  The interlocking lazy vals tend to
     // inter-deadlock, so we break the cycle with a single asynchronous
-    // message to an actor.
+    // message to an rpcEndpoint.
     if (isAsync) {
       intp initialize initializedCallback()
       createAsyncListener() // listens for signal to run postInitialization

@@ -22,6 +22,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 /**
  * :: Experimental ::
  * Class for calculating variance during regression
+ * @since 1.0.0
  */
 @Experimental
 object Variance extends Impurity {
@@ -32,6 +33,7 @@ object Variance extends Impurity {
    * @param counts Array[Double] with counts for each label
    * @param totalCount sum of counts for all labels
    * @return information value, or 0 if totalCount = 0
+   * @since 1.1.0
    */
   @DeveloperApi
   override def calculate(counts: Array[Double], totalCount: Double): Double =
@@ -44,6 +46,7 @@ object Variance extends Impurity {
    * @param sum sum of labels
    * @param sumSquares summation of squares of the labels
    * @return information value, or 0 if count = 0
+   * @since 1.0.0
    */
   @DeveloperApi
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double = {
@@ -57,6 +60,7 @@ object Variance extends Impurity {
   /**
    * Get this impurity instance.
    * This is useful for passing impurity parameters to a Strategy in Java.
+   * @since 1.0.0
    */
   def instance: this.type = this
 
@@ -98,7 +102,7 @@ private[tree] class VarianceAggregator()
  * (node, feature, bin).
  * @param stats  Array of sufficient statistics for a (node, feature, bin).
  */
-private[tree] class VarianceCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
+private[spark] class VarianceCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
 
   require(stats.size == 3,
     s"VarianceCalculator requires sufficient statistics array stats to be of length 3," +
