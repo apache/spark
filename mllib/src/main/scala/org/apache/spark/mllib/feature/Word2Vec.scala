@@ -479,8 +479,6 @@ class Word2VecModel private[mllib] (
 
   override protected def formatVersion = "1.0"
 
-  /**
-   */
   @Since("1.4.0")
   def save(sc: SparkContext, path: String): Unit = {
     Word2VecModel.SaveLoadV1_0.save(sc, path, getVectors)
@@ -558,8 +556,6 @@ class Word2VecModel private[mllib] (
   }
 }
 
-/**
- */
 @Since("1.4.0")
 @Experimental
 object Word2VecModel extends Loader[Word2VecModel] {
@@ -620,8 +616,6 @@ object Word2VecModel extends Loader[Word2VecModel] {
     }
   }
 
-  /**
-   */
   @Since("1.4.0")
   override def load(sc: SparkContext, path: String): Word2VecModel = {
 
