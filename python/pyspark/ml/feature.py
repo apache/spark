@@ -29,7 +29,8 @@ from pyspark.mllib.linalg import _convert_to_vector
 __all__ = ['Binarizer', 'HashingTF', 'IDF', 'IDFModel', 'NGram', 'Normalizer', 'OneHotEncoder',
            'PolynomialExpansion', 'RegexTokenizer', 'StandardScaler', 'StandardScalerModel',
            'StringIndexer', 'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer',
-           'Word2Vec', 'Word2VecModel', 'PCA', 'PCAModel', 'RFormula', 'RFormulaModel']
+           'VectorSlicer', 'Word2Vec', 'Word2VecModel', 'PCA', 'PCAModel', 'RFormula',
+           'RFormulaModel']
 
 
 @inherit_doc
@@ -969,40 +970,39 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
     ...     (Vectors.dense([-2.0, 2.3, 0.0, 0.0, 1.0]),),
     ...     (Vectors.dense([0.0, 0.0, 0.0, 0.0, 0.0]),),
     ...     (Vectors.dense([0.6, -1.1, -3.0, 4.5, 3.3]),)], ["features"])
-    >>> vs = VectorSlicer(inputCol="features", outputCol="expected", indices=[1, 4])
-    >>> vs.transform(df).head().expected
+    >>> vs = VectorSlicer(inputCol="features", outputCol="sliced", indices=[1, 4])
+    >>> vs.transform(df).head().sliced
     DenseVector([2.3, 1.0])
     """
 
     # a placeholder to make it appear in the generated doc
     indices = Param(Params._dummy(), "indices", "An array of indices to select features from " +
-                    "a vector column. There can be no overlap with `names`.")
+                    "a vector column. There can be no overlap with names.")
     names = Param(Params._dummy(), "names", "An array of feature names to select features from " +
                   "a vector column. These names must be specified by ML " +
-                  "`org.apache.spark.ml.attribute.Attribute`s. There can be no overlap with " +
-                  "`indices`.")
+                  "org.apache.spark.ml.attribute.Attribute. There can be no overlap with " +
+                  "indices.")
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, indices=[], names=[]):
+    def __init__(self, inputCol=None, outputCol=None, indices=None, names=None):
         """
-        __init__(self, inputCol=None, outputCol=None, indices=[], names=[])
+        __init__(self, inputCol=None, outputCol=None, indices=None, names=None)
         """
         super(VectorSlicer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorSlicer", self.uid)
         self.indices = Param(self, "indices", "An array of indices to select features from " +
-                             "a vector column. There can be no overlap with `names`.")
+                             "a vector column. There can be no overlap with names.")
         self.names = Param(self, "names", "An array of feature names to select features from " +
                            "a vector column. These names must be specified by ML " +
-                           "`org.apache.spark.ml.attribute.Attribute`s. There can be no overlap " +
-                           "with `indices`.")
-        self._setDefault(indices=[], names=[])
+                           "org.apache.spark.ml.attribute.Attribute. There can be no overlap " +
+                           "with indices.")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, inputCol=None, outputCol=None, indices=[], names=[]):
+    def setParams(self, inputCol=None, outputCol=None, indices=None, names=None):
         """
-        setParams(self, inputCol=None, outputCol=None, indices=[], names=[]):
+        setParams(self, inputCol=None, outputCol=None, indices=None, names=None):
         Sets params for this VectorSlicer.
         """
         kwargs = self.setParams._input_kwargs
