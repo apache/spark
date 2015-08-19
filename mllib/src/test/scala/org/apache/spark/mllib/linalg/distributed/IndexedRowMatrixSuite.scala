@@ -135,6 +135,17 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(closeToZero(U * brzDiag(s) * V.t - localA))
   }
 
+  test("validate matrix sizes of svd") {
+    val k = 2
+    val A = new IndexedRowMatrix(indexedRows)
+    val svd = A.computeSVD(k, computeU = true)
+    assert(svd.U.numRows() === m)
+    assert(svd.U.numCols() === k)
+    assert(svd.s.size === k)
+    assert(svd.V.numRows === n)
+    assert(svd.V.numCols === k)
+  }
+
   test("validate k in svd") {
     val A = new IndexedRowMatrix(indexedRows)
     intercept[IllegalArgumentException] {

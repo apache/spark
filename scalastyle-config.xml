@@ -141,18 +141,29 @@ This file is divided into 3 sections:
     <customMessage>Tests must extend org.apache.spark.SparkFunSuite instead.</customMessage>
   </check>
 
-  <!-- ================================================================================ -->
-  <!--       rules we'd like to enforce, but haven't cleaned up the codebase yet        -->
-  <!-- ================================================================================ -->
-
-  <!-- SPARK-7977 We should turn this on, but we'd need to add whitelist to files that are using it first. -->
-  <check customId="println" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="false">
+  <!-- As of SPARK-7977 all printlns need to be wrapped in '// scalastyle:off/on println' -->
+  <check customId="println" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">^println$</parameter></parameters>
     <customMessage><![CDATA[Are you sure you want to println? If yes, wrap the code block with
       // scalastyle:off println
       println(...)
       // scalastyle:on println]]></customMessage>
   </check>
+
+  <check customId="classforname" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">Class\.forName</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to use Class.forName? In most cases, you should use Utils.classForName instead.
+      If you must use Class.forName, wrap the code block with
+      // scalastyle:off classforname
+      Class.forName(...)
+      // scalastyle:on classforname
+    ]]></customMessage>
+  </check>
+
+  <!-- ================================================================================ -->
+  <!--       rules we'd like to enforce, but haven't cleaned up the codebase yet        -->
+  <!-- ================================================================================ -->
 
   <!-- We cannot turn the following two on, because it'd fail a lot of string interpolation use cases. -->
   <!-- Ideally the following two rules should be configurable to rule out string interpolation. -->

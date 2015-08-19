@@ -6,7 +6,7 @@ SparkR is an R package that provides a light-weight frontend to use Spark from R
 
 #### Build Spark
 
-Build Spark with [Maven](http://spark.apache.org/docs/latest/building-spark.html#building-with-buildmvn) and include the `-PsparkR` profile to build the R package. For example to use the default Hadoop versions you can run
+Build Spark with [Maven](http://spark.apache.org/docs/latest/building-spark.html#building-with-buildmvn) and include the `-Psparkr` profile to build the R package. For example to use the default Hadoop versions you can run
 ```
   build/mvn -DskipTests -Psparkr package
 ```

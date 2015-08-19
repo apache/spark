@@ -144,7 +144,7 @@ private[streaming] class ActorReceiver[T: ClassTag](
     receiverSupervisorStrategy: SupervisorStrategy
   ) extends Receiver[T](storageLevel) with Logging {
 
-  protected lazy val supervisor = SparkEnv.get.actorSystem.actorOf(Props(new Supervisor),
+  protected lazy val actorSupervisor = SparkEnv.get.actorSystem.actorOf(Props(new Supervisor),
     "Supervisor" + streamId)
 
   class Supervisor extends Actor {
@@ -191,11 +191,11 @@ private[streaming] class ActorReceiver[T: ClassTag](
   }
 
   def onStart(): Unit = {
-    supervisor
-    logInfo("Supervision tree for receivers initialized at:" + supervisor.path)
+    actorSupervisor
+    logInfo("Supervision tree for receivers initialized at:" + actorSupervisor.path)
   }
 
   def onStop(): Unit = {
-    supervisor ! PoisonPill
+    actorSupervisor ! PoisonPill
   }
 }

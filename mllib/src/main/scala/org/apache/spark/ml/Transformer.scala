@@ -67,9 +67,7 @@ abstract class Transformer extends PipelineStage {
    */
   def transform(dataset: DataFrame): DataFrame
 
-  override def copy(extra: ParamMap): Transformer = {
-    super.copy(extra).asInstanceOf[Transformer]
-  }
+  override def copy(extra: ParamMap): Transformer
 }
 
 /**
@@ -120,4 +118,6 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
     dataset.withColumn($(outputCol),
       callUDF(this.createTransformFunc, outputDataType, dataset($(inputCol))))
   }
+
+  override def copy(extra: ParamMap): T = defaultCopy(extra)
 }

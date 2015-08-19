@@ -27,6 +27,7 @@ import com.esotericsoftware.kryo.{Kryo, KryoException}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
 import com.twitter.chill.{AllScalaRegistrar, EmptyScalaKryoInstantiator}
+import org.apache.avro.generic.{GenericData, GenericRecord}
 import org.roaringbitmap.{ArrayContainer, BitmapContainer, RoaringArray, RoaringBitmap}
 
 import org.apache.spark._
@@ -36,7 +37,7 @@ import org.apache.spark.network.nio.{GetBlock, GotBlock, PutBlock}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
-import org.apache.spark.util.BoundedPriorityQueue
+import org.apache.spark.util.{BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf}
 import org.apache.spark.util.collection.CompactBuffer
 
 /**
@@ -73,6 +74,8 @@ class KryoSerializer(conf: SparkConf)
     .split(',')
     .filter(!_.isEmpty)
 
+  private val avroSchemas = conf.getAvroSchema
+
   def newKryoOutput(): KryoOutput = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
 
   def newKryo(): Kryo = {
@@ -94,12 +97,18 @@ class KryoSerializer(conf: SparkConf)
     // For results returned by asJavaIterable. See JavaIterableWrapperSerializer.
     kryo.register(JavaIterableWrapperSerializer.wrapperClass, new JavaIterableWrapperSerializer)
 
-    // Allow sending SerializableWritable
+    // Allow sending classes with custom Java serializers
     kryo.register(classOf[SerializableWritable[_]], new KryoJavaSerializer())
+    kryo.register(classOf[SerializableConfiguration], new KryoJavaSerializer())
+    kryo.register(classOf[SerializableJobConf], new KryoJavaSerializer())
     kryo.register(classOf[HttpBroadcast[_]], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
 
+    kryo.register(classOf[GenericRecord], new GenericAvroSerializer(avroSchemas))
+    kryo.register(classOf[GenericData.Record], new GenericAvroSerializer(avroSchemas))
+
     try {
+      // scalastyle:off classforname
       // Use the default classloader when calling the user registrator.
       Thread.currentThread.setContextClassLoader(classLoader)
       // Register classes given through spark.kryo.classesToRegister.
@@ -109,6 +118,7 @@ class KryoSerializer(conf: SparkConf)
       userRegistrator
         .map(Class.forName(_, true, classLoader).newInstance().asInstanceOf[KryoRegistrator])
         .foreach { reg => reg.registerClasses(kryo) }
+      // scalastyle:on classforname
     } catch {
       case e: Exception =>
         throw new SparkException(s"Failed to register classes with Kryo", e)

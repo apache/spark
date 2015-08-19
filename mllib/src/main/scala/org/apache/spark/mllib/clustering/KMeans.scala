@@ -85,9 +85,7 @@ class KMeans private (
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
    */
   def setInitializationMode(initializationMode: String): this.type = {
-    if (initializationMode != KMeans.RANDOM && initializationMode != KMeans.K_MEANS_PARALLEL) {
-      throw new IllegalArgumentException("Invalid initialization mode: " + initializationMode)
-    }
+    KMeans.validateInitMode(initializationMode)
     this.initializationMode = initializationMode
     this
   }
@@ -156,6 +154,21 @@ class KMeans private (
     this
   }
 
+  // Initial cluster centers can be provided as a KMeansModel object rather than using the
+  // random or k-means|| initializationMode
+  private var initialModel: Option[KMeansModel] = None
+
+  /**
+   * Set the initial starting point, bypassing the random initialization or k-means||
+   * The condition model.k == this.k must be met, failure results
+   * in an IllegalArgumentException.
+   */
+  def setInitialModel(model: KMeansModel): this.type = {
+    require(model.k == k, "mismatched cluster count")
+    initialModel = Some(model)
+    this
+  }
+
   /**
    * Train a K-means model on the given set of points; `data` should be cached for high
    * performance, because this is an iterative algorithm.
@@ -193,20 +206,34 @@ class KMeans private (
 
     val initStartTime = System.nanoTime()
 
-    val centers = if (initializationMode == KMeans.RANDOM) {
-      initRandom(data)
+    // Only one run is allowed when initialModel is given
+    val numRuns = if (initialModel.nonEmpty) {
+      if (runs > 1) logWarning("Ignoring runs; one run is allowed when initialModel is given.")
+      1
     } else {
-      initKMeansParallel(data)
+      runs
     }
 
+    val centers = initialModel match {
+      case Some(kMeansCenters) => {
+        Array(kMeansCenters.clusterCenters.map(s => new VectorWithNorm(s)))
+      }
+      case None => {
+        if (initializationMode == KMeans.RANDOM) {
+          initRandom(data)
+        } else {
+          initKMeansParallel(data)
+        }
+      }
+    }
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
     logInfo(s"Initialization with $initializationMode took " + "%.3f".format(initTimeInSeconds) +
       " seconds.")
 
-    val active = Array.fill(runs)(true)
-    val costs = Array.fill(runs)(0.0)
+    val active = Array.fill(numRuns)(true)
+    val costs = Array.fill(numRuns)(0.0)
 
-    var activeRuns = new ArrayBuffer[Int] ++ (0 until runs)
+    var activeRuns = new ArrayBuffer[Int] ++ (0 until numRuns)
     var iteration = 0
 
     val iterationStartTime = System.nanoTime()
@@ -520,6 +547,14 @@ object KMeans {
       v1: VectorWithNorm,
       v2: VectorWithNorm): Double = {
     MLUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
+  }
+
+  private[spark] def validateInitMode(initMode: String): Boolean = {
+    initMode match {
+      case KMeans.RANDOM => true
+      case KMeans.K_MEANS_PARALLEL => true
+      case _ => false
+    }
   }
 }
 

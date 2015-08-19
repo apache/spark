@@ -32,7 +32,10 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 
 /** Trait that represents the metadata related to storage of blocks */
 private[streaming] trait ReceivedBlockStoreResult {
-  def blockId: StreamBlockId  // Any implementation of this trait will store a block id
+  // Any implementation of this trait will store a block id
+  def blockId: StreamBlockId
+  // Any implementation of this trait will have to return the number of records
+  def numRecords: Option[Long]
 }
 
 /** Trait that represents a class that handles the storage of blocks received by receiver */
@@ -51,7 +54,8 @@ private[streaming] trait ReceivedBlockHandler {
  * that stores the metadata related to storage of blocks using
  * [[org.apache.spark.streaming.receiver.BlockManagerBasedBlockHandler]]
  */
-private[streaming] case class BlockManagerBasedStoreResult(blockId: StreamBlockId)
+private[streaming] case class BlockManagerBasedStoreResult(
+      blockId: StreamBlockId, numRecords: Option[Long])
   extends ReceivedBlockStoreResult
 
 
@@ -64,11 +68,20 @@ private[streaming] class BlockManagerBasedBlockHandler(
   extends ReceivedBlockHandler with Logging {
 
   def storeBlock(blockId: StreamBlockId, block: ReceivedBlock): ReceivedBlockStoreResult = {
+
+    var numRecords = None: Option[Long]
+
     val putResult: Seq[(BlockId, BlockStatus)] = block match {
       case ArrayBufferBlock(arrayBuffer) =>
-        blockManager.putIterator(blockId, arrayBuffer.iterator, storageLevel, tellMaster = true)
+        numRecords = Some(arrayBuffer.size.toLong)
+        blockManager.putIterator(blockId, arrayBuffer.iterator, storageLevel,
+          tellMaster = true)
       case IteratorBlock(iterator) =>
-        blockManager.putIterator(blockId, iterator, storageLevel, tellMaster = true)
+        val countIterator = new CountingIterator(iterator)
+        val putResult = blockManager.putIterator(blockId, countIterator, storageLevel,
+          tellMaster = true)
+        numRecords = countIterator.count
+        putResult
       case ByteBufferBlock(byteBuffer) =>
         blockManager.putBytes(blockId, byteBuffer, storageLevel, tellMaster = true)
       case o =>
@@ -79,7 +92,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
       throw new SparkException(
         s"Could not store $blockId to block manager with storage level $storageLevel")
     }
-    BlockManagerBasedStoreResult(blockId)
+    BlockManagerBasedStoreResult(blockId, numRecords)
   }
 
   def cleanupOldBlocks(threshTime: Long) {
@@ -96,6 +109,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
  */
 private[streaming] case class WriteAheadLogBasedStoreResult(
     blockId: StreamBlockId,
+    numRecords: Option[Long],
     walRecordHandle: WriteAheadLogRecordHandle
   ) extends ReceivedBlockStoreResult
 
@@ -151,12 +165,17 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
    */
   def storeBlock(blockId: StreamBlockId, block: ReceivedBlock): ReceivedBlockStoreResult = {
 
+    var numRecords = None: Option[Long]
     // Serialize the block so that it can be inserted into both
     val serializedBlock = block match {
       case ArrayBufferBlock(arrayBuffer) =>
+        numRecords = Some(arrayBuffer.size.toLong)
         blockManager.dataSerialize(blockId, arrayBuffer.iterator)
       case IteratorBlock(iterator) =>
-        blockManager.dataSerialize(blockId, iterator)
+        val countIterator = new CountingIterator(iterator)
+        val serializedBlock = blockManager.dataSerialize(blockId, countIterator)
+        numRecords = countIterator.count
+        serializedBlock
       case ByteBufferBlock(byteBuffer) =>
         byteBuffer
       case _ =>
@@ -181,7 +200,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     // Combine the futures, wait for both to complete, and return the write ahead log record handle
     val combinedFuture = storeInBlockManagerFuture.zip(storeInWriteAheadLogFuture).map(_._2)
     val walRecordHandle = Await.result(combinedFuture, blockStoreTimeout)
-    WriteAheadLogBasedStoreResult(blockId, walRecordHandle)
+    WriteAheadLogBasedStoreResult(blockId, numRecords, walRecordHandle)
   }
 
   def cleanupOldBlocks(threshTime: Long) {
@@ -198,4 +217,24 @@ private[streaming] object WriteAheadLogBasedBlockHandler {
   def checkpointDirToLogDir(checkpointDir: String, streamId: Int): String = {
     new Path(checkpointDir, new Path("receivedData", streamId.toString)).toString
   }
+}
+
+/**
+ * A utility that will wrap the Iterator to get the count
+ */
+private class CountingIterator[T](iterator: Iterator[T]) extends Iterator[T] {
+   private var _count = 0
+
+   private def isFullyConsumed: Boolean = !iterator.hasNext
+
+   def hasNext(): Boolean = iterator.hasNext
+
+   def count(): Option[Long] = {
+     if (isFullyConsumed) Some(_count) else None
+   }
+
+   def next(): T = {
+    _count += 1
+    iterator.next()
+   }
 }

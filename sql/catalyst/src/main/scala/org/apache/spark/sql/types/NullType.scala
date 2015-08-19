@@ -23,8 +23,6 @@ import org.apache.spark.annotation.DeveloperApi
 /**
  * :: DeveloperApi ::
  * The data type representing `NULL` values. Please use the singleton [[DataTypes.NullType]].
- *
- * @group dataType
  */
 @DeveloperApi
 class NullType private() extends DataType {

@@ -46,14 +46,15 @@ private[spark] abstract class YarnSchedulerBackend(
   private val yarnSchedulerEndpoint = rpcEnv.setupEndpoint(
     YarnSchedulerBackend.ENDPOINT_NAME, new YarnSchedulerEndpoint(rpcEnv))
 
-  private implicit val askTimeout = RpcUtils.askTimeout(sc.conf)
+  private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
 
   /**
    * Request executors from the ApplicationMaster by specifying the total number desired.
    * This includes executors already pending or running.
    */
   override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
-    yarnSchedulerEndpoint.askWithRetry[Boolean](RequestExecutors(requestedTotal))
+    yarnSchedulerEndpoint.askWithRetry[Boolean](
+      RequestExecutors(requestedTotal, localityAwareTasks, hostToLocalTaskCount))
   }
 
   /**
@@ -108,6 +109,8 @@ private[spark] abstract class YarnSchedulerBackend(
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)
 
+      case RemoveExecutor(executorId, reason) =>
+        removeExecutor(executorId, reason)
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

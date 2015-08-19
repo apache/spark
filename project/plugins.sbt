@@ -29,6 +29,8 @@ addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.3.3")
 
 addSbtPlugin("com.cavorite" % "sbt-avro" % "0.3.2")
 
+addSbtPlugin("io.spray" % "sbt-revolver" % "0.7.2")
+
 libraryDependencies += "org.ow2.asm"  % "asm" % "5.0.3"
 
 libraryDependencies += "org.ow2.asm"  % "asm-commons" % "5.0.3"

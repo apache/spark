@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import scala.collection.JavaConversions._
@@ -46,3 +47,4 @@ object DriverSubmissionTest {
     }
   }
 }
+// scalastyle:on println

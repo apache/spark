@@ -87,6 +87,8 @@ public class JavaLogisticRegressionSuite implements Serializable {
     LogisticRegression parent = (LogisticRegression) model.parent();
     assert(parent.getMaxIter() == 10);
     assert(parent.getRegParam() == 1.0);
+    assert(parent.getThresholds()[0] == 0.4);
+    assert(parent.getThresholds()[1] == 0.6);
     assert(parent.getThreshold() == 0.6);
     assert(model.getThreshold() == 0.6);
 
@@ -146,5 +148,14 @@ public class JavaLogisticRegressionSuite implements Serializable {
         assert(probOfPred >= prob.apply(i));
       }
     }
+  }
+
+  @Test
+  public void logisticRegressionTrainingSummary() {
+    LogisticRegression lr = new LogisticRegression();
+    LogisticRegressionModel model = lr.fit(dataset);
+
+    LogisticRegressionTrainingSummary summary = model.summary();
+    assert(summary.totalIterations() == summary.objectiveHistory().length);
   }
 }

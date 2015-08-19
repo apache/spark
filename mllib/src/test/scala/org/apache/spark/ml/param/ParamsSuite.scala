@@ -199,25 +199,44 @@ class ParamsSuite extends SparkFunSuite {
 
     val inArray = ParamValidators.inArray[Int](Array(1, 2))
     assert(inArray(1) && inArray(2) && !inArray(0))
+
+    val arrayLengthGt = ParamValidators.arrayLengthGt[Int](2.0)
+    assert(arrayLengthGt(Array(0, 1, 2)) && !arrayLengthGt(Array(0, 1)))
+  }
+
+  test("Params.copyValues") {
+    val t = new TestParams()
+    val t2 = t.copy(ParamMap.empty)
+    assert(!t2.isSet(t2.maxIter))
+    val t3 = t.copy(ParamMap(t.maxIter -> 20))
+    assert(t3.isSet(t3.maxIter))
   }
 }
 
 object ParamsSuite extends SparkFunSuite {
 
   /**
-   * Checks common requirements for [[Params.params]]: 1) number of params; 2) params are ordered
-   * by names; 3) param parent has the same UID as the object's UID; 4) param name is the same as
-   * the param method name.
+   * Checks common requirements for [[Params.params]]:
+   *   - params are ordered by names
+   *   - param parent has the same UID as the object's UID
+   *   - param name is the same as the param method name
+   *   - obj.copy should return the same type as the obj
    */
-  def checkParams(obj: Params, expectedNumParams: Int): Unit = {
+  def checkParams(obj: Params): Unit = {
+    val clazz = obj.getClass
+
     val params = obj.params
-    require(params.length === expectedNumParams,
-      s"Expect $expectedNumParams params but got ${params.length}: ${params.map(_.name).toSeq}.")
     val paramNames = params.map(_.name)
-    require(paramNames === paramNames.sorted)
+    require(paramNames === paramNames.sorted, "params must be ordered by names")
     params.foreach { p =>
       assert(p.parent === obj.uid)
       assert(obj.getParam(p.name) === p)
+      // TODO: Check that setters return self, which needs special handling for generic types.
     }
+
+    val copyMethod = clazz.getMethod("copy", classOf[ParamMap])
+    val copyReturnType = copyMethod.getReturnType
+    require(copyReturnType === obj.getClass,
+      s"${clazz.getName}.copy should return ${clazz.getName} instead of ${copyReturnType.getName}.")
   }
 }

@@ -19,8 +19,8 @@ package org.apache.spark.api.python
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SerializableWritable, SparkException}
+import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.{Logging, SparkException}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io._
 import scala.util.{Failure, Success, Try}
@@ -61,7 +61,7 @@ private[python] object Converter extends Logging {
  * Other objects are passed through without conversion.
  */
 private[python] class WritableToJavaConverter(
-    conf: Broadcast[SerializableWritable[Configuration]]) extends Converter[Any, Any] {
+    conf: Broadcast[SerializableConfiguration]) extends Converter[Any, Any] {
 
   /**
    * Converts a [[org.apache.hadoop.io.Writable]] to the underlying primitive, String or

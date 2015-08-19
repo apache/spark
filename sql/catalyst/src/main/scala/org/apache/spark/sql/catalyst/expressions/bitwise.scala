@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 
@@ -29,10 +27,10 @@ import org.apache.spark.sql.types._
  * Code generation inherited from BinaryArithmetic.
  */
 case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
-  override def symbol: String = "&"
 
-  protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForBitwiseExpr(t, "operator " + symbol)
+  override def inputType: AbstractDataType = IntegralType
+
+  override def symbol: String = "&"
 
   private lazy val and: (Any, Any) => Any = dataType match {
     case ByteType =>
@@ -45,7 +43,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
       ((evalE1: Long, evalE2: Long) => evalE1 & evalE2).asInstanceOf[(Any, Any) => Any]
   }
 
-  protected override def evalInternal(evalE1: Any, evalE2: Any) = and(evalE1, evalE2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = and(input1, input2)
 }
 
 /**
@@ -54,10 +52,10 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
  * Code generation inherited from BinaryArithmetic.
  */
 case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
-  override def symbol: String = "|"
 
-  protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForBitwiseExpr(t, "operator " + symbol)
+  override def inputType: AbstractDataType = IntegralType
+
+  override def symbol: String = "|"
 
   private lazy val or: (Any, Any) => Any = dataType match {
     case ByteType =>
@@ -70,7 +68,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
       ((evalE1: Long, evalE2: Long) => evalE1 | evalE2).asInstanceOf[(Any, Any) => Any]
   }
 
-  protected override def evalInternal(evalE1: Any, evalE2: Any) = or(evalE1, evalE2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = or(input1, input2)
 }
 
 /**
@@ -79,10 +77,10 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
  * Code generation inherited from BinaryArithmetic.
  */
 case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
-  override def symbol: String = "^"
 
-  protected def checkTypesInternal(t: DataType) =
-    TypeUtils.checkForBitwiseExpr(t, "operator " + symbol)
+  override def inputType: AbstractDataType = IntegralType
+
+  override def symbol: String = "^"
 
   private lazy val xor: (Any, Any) => Any = dataType match {
     case ByteType =>
@@ -95,17 +93,19 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
       ((evalE1: Long, evalE2: Long) => evalE1 ^ evalE2).asInstanceOf[(Any, Any) => Any]
   }
 
-  protected override def evalInternal(evalE1: Any, evalE2: Any): Any = xor(evalE1, evalE2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = xor(input1, input2)
 }
 
 /**
  * A function that calculates bitwise not(~) of a number.
  */
-case class BitwiseNot(child: Expression) extends UnaryArithmetic {
-  override def toString: String = s"~$child"
+case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForBitwiseExpr(child.dataType, "operator ~")
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
+
+  override def dataType: DataType = child.dataType
+
+  override def toString: String = s"~$child"
 
   private lazy val not: (Any) => Any = dataType match {
     case ByteType =>
@@ -122,5 +122,5 @@ case class BitwiseNot(child: Expression) extends UnaryArithmetic {
     defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dataType)}) ~($c)")
   }
 
-  protected override def evalInternal(evalE: Any) = not(evalE)
+  protected override def nullSafeEval(input: Any): Any = not(input)
 }

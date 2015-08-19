@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import com.twitter.algebird.HyperLogLogMonoid
@@ -90,3 +91,4 @@ object TwitterAlgebirdHLL {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

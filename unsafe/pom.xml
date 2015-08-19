@@ -67,7 +67,17 @@
     </dependency>
     <dependency>
       <groupId>org.mockito</groupId>
-      <artifactId>mockito-all</artifactId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.scalacheck</groupId>
+      <artifactId>scalacheck_${scala.binary.version}</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-lang3</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -80,7 +90,7 @@
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
           <configuration>
-            <javacArgs>
+            <javacArgs combine.children="append">
               <!-- This option is needed to suppress warnings from sun.misc.Unsafe usage -->
               <javacArg>-XDignore.symbol.file</javacArg>
             </javacArgs>

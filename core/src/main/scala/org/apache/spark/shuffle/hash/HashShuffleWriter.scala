@@ -22,7 +22,7 @@ import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle._
-import org.apache.spark.storage.BlockObjectWriter
+import org.apache.spark.storage.DiskBlockObjectWriter
 
 private[spark] class HashShuffleWriter[K, V](
     shuffleBlockResolver: FileShuffleBlockResolver,
@@ -102,7 +102,7 @@ private[spark] class HashShuffleWriter[K, V](
 
   private def commitWritesAndBuildStatus(): MapStatus = {
     // Commit the writes. Get the size of each bucket block (total block size).
-    val sizes: Array[Long] = shuffle.writers.map { writer: BlockObjectWriter =>
+    val sizes: Array[Long] = shuffle.writers.map { writer: DiskBlockObjectWriter =>
       writer.commitAndClose()
       writer.fileSegment().length
     }

@@ -85,8 +85,8 @@ import org.apache.spark.SparkConf
 
 <div data-lang="python"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} works with Python 2.6 or higher (but not Python 3). It uses the standard CPython interpreter,
-so C libraries like NumPy can be used.
+Spark {{site.SPARK_VERSION}} works with Python 2.6+ or Python 3.4+. It can use the standard CPython interpreter,
+so C libraries like NumPy can be used. It also works with PyPy 2.3+.
 
 To run Spark applications in Python, use the `bin/spark-submit` script located in the Spark directory.
 This script will load Spark's Java/Scala libraries and allow you to submit applications to a cluster.
@@ -102,6 +102,14 @@ Finally, you need to import some Spark classes into your program. Add the follow
 
 {% highlight python %}
 from pyspark import SparkContext, SparkConf
+{% endhighlight %}
+
+PySpark requires the same minor version of Python in both driver and workers. It uses the default python version in PATH,
+you can specify which version of Python you want to use by `PYSPARK_PYTHON`, for example:
+
+{% highlight bash %}
+$ PYSPARK_PYTHON=python3.4 bin/pyspark
+$ PYSPARK_PYTHON=/opt/pypy-2.5/bin/pypy bin/spark-submit examples/src/main/python/pi.py
 {% endhighlight %}
 
 </div>
@@ -1144,9 +1152,11 @@ generate these on the reduce side. When data does not fit in memory Spark will s
 to disk, incurring the additional overhead of disk I/O and increased garbage collection.
 
 Shuffle also generates a large number of intermediate files on disk. As of Spark 1.3, these files
-are not cleaned up from Spark's temporary storage until Spark is stopped, which means that
-long-running Spark jobs may consume available disk space. This is done so the shuffle doesn't need
-to be re-computed if the lineage is re-computed. The temporary storage directory is specified by the
+are preserved until the corresponding RDDs are no longer used and are garbage collected. 
+This is done so the shuffle files don't need to be re-created if the lineage is re-computed. 
+Garbage collection may happen only after a long period time, if the application retains references 
+to these RDDs or if GC does not kick in frequently. This means that long-running Spark jobs may 
+consume a large amount of disk space. The temporary storage directory is specified by the
 `spark.local.dir` configuration parameter when configuring the Spark context.
 
 Shuffle behavior can be tuned by adjusting a variety of configuration parameters. See the
