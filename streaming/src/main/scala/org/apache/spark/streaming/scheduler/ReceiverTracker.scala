@@ -20,7 +20,7 @@ package org.apache.spark.streaming.scheduler
 import java.util.concurrent.{CountDownLatch, ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.HashMap
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, TimeoutException}
 import scala.language.existentials
 import scala.util.{Failure, Success}
 
@@ -150,10 +150,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   private val receiverPreferredLocations = new HashMap[Int, Option[String]]
 
   /**
-   * The max timeout to launch a receiver. If a receiver cannot register in time, StreamingContext
+   * Timeout to launch a receiver. If a receiver cannot register in time, StreamingContext
    * will be stopped.
    */
-  private val RECEIVER_LAUNCHING_MAX_TIMEOUT =
+  private val RECEIVER_LAUNCHING_TIMEOUT =
     ssc.conf.getTimeAsMs("spark.streaming.receiver.launching.timeout", "600s")
 
   /**
@@ -474,15 +474,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
             setDaemon(true)
 
             override def run(): Unit = {
-              if (isTrackerStarted) {
-                val stopSparkContext =
-                  ssc.conf.getBoolean("spark.streaming.stopSparkContextByDefault", true)
-                logError(s"Receiver $receiverId cannot be started in " +
-                  s"$RECEIVER_LAUNCHING_MAX_TIMEOUT milliseconds.Stopping StreamingContext.")
-                ssc.stop(stopSparkContext, stopGracefully = true)
-              } else {
-                // If the tracker has not started, we don't need to call "stop"
-              }
+              val errorMessage =
+                s"Receiver $receiverId cannot start in $RECEIVER_LAUNCHING_TIMEOUT milliseconds"
+              ssc.scheduler.reportError(errorMessage, new TimeoutException(errorMessage))
             }
           }.start()
         }
@@ -567,7 +561,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           // avoid NPE.
           Option(endpoint).foreach(_.send(ReceiverLaunchingTimeout(receiverId)))
         }
-      }, RECEIVER_LAUNCHING_MAX_TIMEOUT, TimeUnit.MILLISECONDS)
+      }, RECEIVER_LAUNCHING_TIMEOUT, TimeUnit.MILLISECONDS)
       receiverTimeoutFutures(receiverId) = timeoutFuture
       logInfo(s"Receiver ${receiver.streamId} started")
     }

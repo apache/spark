@@ -21,6 +21,7 @@ import java.util.concurrent.{TimeUnit, CountDownLatch}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.TimeoutException
 
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -80,11 +81,12 @@ class ReceiverTrackerSuite extends TestSuiteBase {
         }
       }
       ssc.start()
-      // We have 2 receivers but only 1 executor, so ReceiverTracker should stop StreamingContext
+      // We have 2 receivers but only 1 executor, so ReceiverTracker should throw TimeoutException
       // after 10ms.
-      eventually(timeout(30.seconds), interval(100.millis)) {
-        assert(ssc.getState() === StreamingContextState.STOPPED)
+      val e = intercept[TimeoutException] {
+        ssc.awaitTerminationOrTimeout(30000)
       }
+      assert(e.getMessage.contains("cannot start in 10 milliseconds"))
     }
   }
 
@@ -135,24 +137,23 @@ class ReceiverTrackerSuite extends TestSuiteBase {
           Thread.sleep(10)
         }
       }
-      // Make sure the Spark job has been started. Note: although it has been started, but all tasks
-      // should be waiting for idle executors.
-      jobStarted.await(10, TimeUnit.SECONDS)
+      try {
+        // Make sure the Spark job has been started. Note: although it has been started, but all
+        // tasks should be waiting for idle executors.
+        jobStarted.await(10, TimeUnit.SECONDS)
 
-      // Cancel the receiver so that ReceiverTracker can restart it and release the executor for
-      // the long running Spark job
-      CancellableTestReceiver.cancel()
-      // However, because there is only one executor and it's occupied by the running job, the
-      // receiver should not be able to start in 10 seconds. Then ReceiverTracker should stop
-      // StreamingContext.
-      eventually(timeout(30.seconds), interval(100.millis)) {
-        assert(ssc.scheduler.receiverTracker.isTrackerStarted === false)
-        // Note: after checking "ssc.scheduler.receiverTracker.isTrackerStarted", we can cancel
-        // the Spark job now. We should cancel it before checking "ssc.getState()", because
-        // "ssc.getState()" won't be changed to STOPPED until SparkContext has been stopped.
-        // Otherwise, we need more time for this test case.
+        // Cancel the receiver so that ReceiverTracker can restart it and release the executor for
+        // the long running Spark job
+        CancellableTestReceiver.cancel()
+        // However, because there is only one executor and it's occupied by the running job, the
+        // receiver should not be able to start in 10 seconds. Then ReceiverTracker should throw
+        // TimeoutException.
+        val e = intercept[TimeoutException] {
+          ssc.awaitTerminationOrTimeout(30000)
+        }
+        assert(e.getMessage.contains("cannot start in 10000 milliseconds"))
+      } finally {
         RestartReceiverTimeoutHelper.exitJob()
-        assert(ssc.getState() === StreamingContextState.STOPPED)
       }
     }
   }
