@@ -337,6 +337,13 @@ def flower(args):
     sp.wait()
 
 
+def kerberos(args):
+    print(settings.HEADER)
+    log_to_stdout()
+    import airflow.kt_renewer
+    airflow.kt_renewer.run()
+
+
 def get_parser():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(help='sub-command help')
@@ -543,5 +550,15 @@ def get_parser():
 
     parser_version = subparsers.add_parser('version', help="Show version")
     parser_version.set_defaults(func=version)
+
+    ht = "Start a kerberos ticket renewer"
+    parser_kerberos = subparsers.add_parser('kerberos', help=ht)
+    parser_kerberos.add_argument(
+        "-kt", "--keytab", help="keytab",
+        nargs='?', default=conf.get('security', 'keytab'))
+    parser_kerberos.add_argument(
+        "principal", help="kerberos principal",
+        nargs='?', default=conf.get('security', 'principal'))
+    parser_kerberos.set_defaults(func=kerberos)
 
     return parser
