@@ -18,17 +18,20 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans.logical.Join
+import org.apache.spark.sql.test.TestSQLContext
 
 private object KeyHintTestData {
-  val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
-
   case class Customer(id: Int, name: String)
   case class Employee(id: Int, name: String)
   case class Order(id: Int, customerId: Int, employeeId: Option[Int])
   case class Manager(managerId: Int, subordinateId: Int)
   case class BestFriend(id: Int, friendId: Int)
   case class BannedCustomer(name: String)
+}
+
+private class KeyHintTestData(ctx: SQLContext) {
+  import ctx.implicits._
+  import KeyHintTestData._
 
   val customer = ctx.sparkContext.parallelize(Seq(
     Customer(0, "alice"),
@@ -103,8 +106,11 @@ private object KeyHintTestData {
 
 class KeyHintSuite extends QueryTest {
 
-  import KeyHintTestData._
-  import KeyHintTestData.ctx.implicits._
+  val ctx = new TestSQLContext()
+  private val data = new KeyHintTestData(ctx)
+
+  import data._
+  import ctx.implicits._
 
   def checkJoinCount(df: DataFrame, joinCount: Int): Unit = {
     val joins = df.queryExecution.optimizedPlan.collect {
