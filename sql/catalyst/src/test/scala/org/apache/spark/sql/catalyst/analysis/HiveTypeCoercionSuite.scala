@@ -419,26 +419,51 @@ class HiveTypeCoercionSuite extends PlanTest {
     val dateTimeOperations = HiveTypeCoercion.DateTimeOperations
     val date = Literal(new java.sql.Date(0L))
     val timestamp = Literal(new Timestamp(0L))
-    val interval = Literal(new CalendarInterval(0, 0))
+    val cInterval = Literal(new CalendarInterval(0, 0))
+    val tInterval = Literal.create(0L, TimeIntervalType)
     val str = Literal("2015-01-01")
 
-    ruleTest(dateTimeOperations, Add(date, interval), Cast(TimeAdd(date, interval), DateType))
-    ruleTest(dateTimeOperations, Add(interval, date), Cast(TimeAdd(date, interval), DateType))
-    ruleTest(dateTimeOperations, Add(timestamp, interval),
-      Cast(TimeAdd(timestamp, interval), TimestampType))
-    ruleTest(dateTimeOperations, Add(interval, timestamp),
-      Cast(TimeAdd(timestamp, interval), TimestampType))
-    ruleTest(dateTimeOperations, Add(str, interval), Cast(TimeAdd(str, interval), StringType))
-    ruleTest(dateTimeOperations, Add(interval, str), Cast(TimeAdd(str, interval), StringType))
+    // CalendarInterval Test
+    ruleTest(dateTimeOperations, Add(date, cInterval), Cast(TimeAdd(date, cInterval), DateType))
+    ruleTest(dateTimeOperations, Add(cInterval, date), Cast(TimeAdd(date, cInterval), DateType))
+    ruleTest(dateTimeOperations, Add(timestamp, cInterval),
+      Cast(TimeAdd(timestamp, cInterval), TimestampType))
+    ruleTest(dateTimeOperations, Add(cInterval, timestamp),
+      Cast(TimeAdd(timestamp, cInterval), TimestampType))
+    ruleTest(dateTimeOperations, Add(str, cInterval), Cast(TimeAdd(str, cInterval), StringType))
+    ruleTest(dateTimeOperations, Add(cInterval, str), Cast(TimeAdd(str, cInterval), StringType))
 
-    ruleTest(dateTimeOperations, Subtract(date, interval), Cast(TimeSub(date, interval), DateType))
-    ruleTest(dateTimeOperations, Subtract(timestamp, interval),
-      Cast(TimeSub(timestamp, interval), TimestampType))
-    ruleTest(dateTimeOperations, Subtract(str, interval), Cast(TimeSub(str, interval), StringType))
+    ruleTest(dateTimeOperations, Subtract(date, cInterval),
+      Cast(TimeSub(date, cInterval), DateType))
+    ruleTest(dateTimeOperations, Subtract(timestamp, cInterval),
+      Cast(TimeSub(timestamp, cInterval), TimestampType))
+    ruleTest(dateTimeOperations, Subtract(str, cInterval),
+      Cast(TimeSub(str, cInterval), StringType))
 
     // interval operations should not be effected
-    ruleTest(dateTimeOperations, Add(interval, interval), Add(interval, interval))
-    ruleTest(dateTimeOperations, Subtract(interval, interval), Subtract(interval, interval))
+    ruleTest(dateTimeOperations, Add(cInterval, cInterval), Add(cInterval, cInterval))
+    ruleTest(dateTimeOperations, Subtract(cInterval, cInterval), Subtract(cInterval, cInterval))
+
+    // TimeInterval Test
+    ruleTest(dateTimeOperations, Add(date, tInterval), Cast(TimeAdd(date, tInterval), DateType))
+    ruleTest(dateTimeOperations, Add(tInterval, date), Cast(TimeAdd(date, tInterval), DateType))
+    ruleTest(dateTimeOperations, Add(timestamp, tInterval),
+      Cast(TimeAdd(timestamp, tInterval), TimestampType))
+    ruleTest(dateTimeOperations, Add(tInterval, timestamp),
+      Cast(TimeAdd(timestamp, tInterval), TimestampType))
+    ruleTest(dateTimeOperations, Add(str, tInterval), Cast(TimeAdd(str, tInterval), StringType))
+    ruleTest(dateTimeOperations, Add(tInterval, str), Cast(TimeAdd(str, tInterval), StringType))
+
+    ruleTest(dateTimeOperations, Subtract(date, tInterval),
+      Cast(TimeSub(date, tInterval), DateType))
+    ruleTest(dateTimeOperations, Subtract(timestamp, tInterval),
+      Cast(TimeSub(timestamp, tInterval), TimestampType))
+    ruleTest(dateTimeOperations, Subtract(str, tInterval),
+      Cast(TimeSub(str, tInterval), StringType))
+
+    // interval operations should not be effected
+    ruleTest(dateTimeOperations, Add(tInterval, tInterval), Add(tInterval, tInterval))
+    ruleTest(dateTimeOperations, Subtract(tInterval, tInterval), Subtract(tInterval, tInterval))
   }
 
 

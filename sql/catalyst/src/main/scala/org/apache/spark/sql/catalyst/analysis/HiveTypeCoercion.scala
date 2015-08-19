@@ -662,9 +662,15 @@ object HiveTypeCoercion {
 
       case Add(l @ CalendarIntervalType(), r) if acceptedTypes.contains(r.dataType) =>
         Cast(TimeAdd(r, l), r.dataType)
+      case Add(l @ TimeIntervalType(), r) if acceptedTypes.contains(r.dataType) =>
+        Cast(TimeAdd(r, l), r.dataType)
       case Add(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
         Cast(TimeAdd(l, r), l.dataType)
+      case Add(l, r @ TimeIntervalType()) if acceptedTypes.contains(l.dataType) =>
+        Cast(TimeAdd(l, r), l.dataType)
       case Subtract(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
+        Cast(TimeSub(l, r), l.dataType)
+      case Subtract(l, r @ TimeIntervalType()) if acceptedTypes.contains(l.dataType) =>
         Cast(TimeSub(l, r), l.dataType)
     }
   }

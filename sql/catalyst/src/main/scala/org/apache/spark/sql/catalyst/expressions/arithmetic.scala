@@ -36,22 +36,25 @@ case class UnaryMinus(child: Expression) extends UnaryExpression with ExpectsInp
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = dataType match {
     case dt: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
-    case dt: NumericType => nullSafeCodeGen(ctx, ev, eval => {
+    case _: NumericType | TimeIntervalType => nullSafeCodeGen(ctx, ev, eval => {
       val originValue = ctx.freshName("origin")
       // codegen would fail to compile if we just write (-($c))
       // for example, we could not write --9223372036854775808L in code
       s"""
-        ${ctx.javaType(dt)} $originValue = (${ctx.javaType(dt)})($eval);
-        ${ev.primitive} = (${ctx.javaType(dt)})(-($originValue));
+        ${ctx.javaType(dataType)} $originValue = (${ctx.javaType(dataType)})($eval);
+        ${ev.primitive} = (${ctx.javaType(dataType)})(-($originValue));
       """})
     case dt: CalendarIntervalType => defineCodeGen(ctx, ev, c => s"$c.negate()")
   }
 
   protected override def nullSafeEval(input: Any): Any = {
-    if (dataType.isInstanceOf[CalendarIntervalType]) {
-      input.asInstanceOf[CalendarInterval].negate()
-    } else {
-      numeric.negate(input)
+    dataType match {
+      case CalendarIntervalType =>
+        input.asInstanceOf[CalendarInterval].negate()
+      case TimeIntervalType =>
+        - input.asInstanceOf[Long]
+      case _ =>
+        numeric.negate(input)
     }
   }
 }
@@ -128,10 +131,13 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (dataType.isInstanceOf[CalendarIntervalType]) {
-      input1.asInstanceOf[CalendarInterval].add(input2.asInstanceOf[CalendarInterval])
-    } else {
-      numeric.plus(input1, input2)
+    dataType match {
+      case CalendarIntervalType =>
+        input1.asInstanceOf[CalendarInterval].add(input2.asInstanceOf[CalendarInterval])
+      case TimeIntervalType =>
+        input1.asInstanceOf[Long] + input2.asInstanceOf[Long]
+      case _ =>
+        numeric.plus(input1, input2)
     }
   }
 
@@ -157,10 +163,13 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (dataType.isInstanceOf[CalendarIntervalType]) {
-      input1.asInstanceOf[CalendarInterval].subtract(input2.asInstanceOf[CalendarInterval])
-    } else {
-      numeric.minus(input1, input2)
+    dataType match {
+      case CalendarIntervalType =>
+        input1.asInstanceOf[CalendarInterval].subtract(input2.asInstanceOf[CalendarInterval])
+      case TimeIntervalType =>
+        input1.asInstanceOf[Long] - input2.asInstanceOf[Long]
+      case _ =>
+        numeric.minus(input1, input2)
     }
   }
 

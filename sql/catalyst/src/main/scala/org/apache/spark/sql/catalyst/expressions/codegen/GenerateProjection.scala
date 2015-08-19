@@ -126,7 +126,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       val nonNull = e.dataType match {
         case BooleanType => s"$col ? 0 : 1"
         case ByteType | ShortType | IntegerType | DateType => s"$col"
-        case LongType | TimestampType => s"$col ^ ($col >>> 32)"
+        case LongType | TimestampType | TimeIntervalType => s"$col ^ ($col >>> 32)"
         case FloatType => s"Float.floatToIntBits($col)"
         case DoubleType =>
             s"(int)(Double.doubleToLongBits($col) ^ (Double.doubleToLongBits($col) >>> 32))"

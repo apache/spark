@@ -24,7 +24,7 @@ import java.util.Calendar
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{Interval, CalendarInterval}
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -265,7 +265,26 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       TimeAdd(Literal.create(null, TimestampType), Literal.create(null, CalendarIntervalType)),
       null)
+
+    checkEvaluation(
+      TimeAdd(Literal(Timestamp.valueOf("2016-01-29 10:00:00")),
+        Literal.create(Interval.MICROS_PER_DAY * 15 + Interval.MICROS_PER_HOUR * 12,
+          TimeIntervalType)),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-02-13 22:00:00.000")))
+
+    checkEvaluation(
+      TimeAdd(Literal.create(null, TimestampType), Literal.create(1000L, TimeIntervalType)),
+      null)
+    checkEvaluation(
+      TimeAdd(Literal(Timestamp.valueOf("2016-01-29 10:00:00")),
+        Literal.create(null, TimeIntervalType)),
+      null)
+    checkEvaluation(
+      TimeAdd(Literal.create(null, TimestampType), Literal.create(null, TimeIntervalType)),
+      null)
+
     checkConsistencyBetweenInterpretedAndCodegen(TimeAdd, TimestampType, CalendarIntervalType)
+
   }
 
   test("time_sub") {
@@ -289,6 +308,23 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       TimeSub(Literal.create(null, TimestampType), Literal.create(null, CalendarIntervalType)),
       null)
+
+    checkEvaluation(
+      TimeSub(Literal(Timestamp.valueOf("2016-03-31 10:00:00")),
+        Literal.create(Interval.MICROS_PER_DAY * 15, TimeIntervalType)),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-03-16 10:00:00")))
+
+    checkEvaluation(
+      TimeSub(Literal.create(null, TimestampType), Literal.create(123000L, TimeIntervalType)),
+      null)
+    checkEvaluation(
+      TimeSub(Literal(Timestamp.valueOf("2016-01-29 10:00:00")),
+        Literal.create(null, TimeIntervalType)),
+      null)
+    checkEvaluation(
+      TimeSub(Literal.create(null, TimestampType), Literal.create(null, TimeIntervalType)),
+      null)
+
     checkConsistencyBetweenInterpretedAndCodegen(TimeSub, TimestampType, CalendarIntervalType)
   }
 

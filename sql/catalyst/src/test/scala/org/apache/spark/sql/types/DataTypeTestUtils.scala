@@ -50,9 +50,10 @@ object DataTypeTestUtils {
   val numericTypeWithoutDecimal: Set[DataType] = integralType ++ Set(DoubleType, FloatType)
 
   /**
-   * Instances of all [[NumericType]]s and [[CalendarIntervalType]]
+   * Instances of all [[NumericType]]s, [[CalendarIntervalType]] and [[TimeIntervalType]]
    */
-  val numericAndInterval: Set[DataType] = numericTypeWithoutDecimal + CalendarIntervalType
+  val numericAndInterval: Set[DataType] =
+    numericTypeWithoutDecimal + CalendarIntervalType + TimeIntervalType
 
   /**
    * All the types that support ordering

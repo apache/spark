@@ -53,7 +53,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
   }
 
   test("check types for unary arithmetic") {
-    assertError(UnaryMinus('stringField), "(numeric or calendarinterval) type")
+    assertError(UnaryMinus('stringField), "(numeric or calendarinterval or timeinterval) type")
     assertError(Abs('stringField), "requires numeric type")
     assertError(BitwiseNot('stringField), "requires integral type")
   }
@@ -78,9 +78,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(MaxOf('intField, 'booleanField))
     assertErrorForDifferingTypes(MinOf('intField, 'booleanField))
 
-    assertError(Add('booleanField, 'booleanField), "requires (numeric or calendarinterval) type")
+    assertError(Add('booleanField, 'booleanField),
+      "requires (numeric or calendarinterval or timeinterval) type")
     assertError(Subtract('booleanField, 'booleanField),
-      "requires (numeric or calendarinterval) type")
+      "requires (numeric or calendarinterval or timeinterval) type")
     assertError(Multiply('booleanField, 'booleanField), "requires numeric type")
     assertError(Divide('booleanField, 'booleanField), "requires numeric type")
     assertError(Remainder('booleanField, 'booleanField), "requires numeric type")
