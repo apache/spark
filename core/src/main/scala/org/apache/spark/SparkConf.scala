@@ -488,16 +488,16 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     // Concatenate common and driver classpath in that order
     val commonExtraClassPath = getOption("spark.common.extraClassPath")
     val driverExtraClassPath = getOption("spark.driver.extraClassPath")
-    Some((commonExtraClassPath ++ driverExtraClassPath).mkString(File.pathSeparator)).filter(_
-      .nonEmpty)
+    Option((commonExtraClassPath ++ driverExtraClassPath).mkString(File.pathSeparator))
+      .filter(_.nonEmpty)
   }
 
   def getExecutorExtraClassPath() : Option[String] = {
     // Concatenate common and executor classpath in that order
     val commonExtraClassPath = getOption("spark.common.extraClassPath")
     val executorExtraClassPath = getOption("spark.executor.extraClassPath")
-    Some((commonExtraClassPath ++ executorExtraClassPath).mkString(File.pathSeparator)).filter(_
-      .nonEmpty)
+    Option((commonExtraClassPath ++ executorExtraClassPath).mkString(File.pathSeparator))
+      .filter(_.nonEmpty)
   }
 
 
