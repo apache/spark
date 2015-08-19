@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql
 
+import java.math.MathContext
 import java.sql.Timestamp
 
 import org.apache.spark.AccumulatorSuite
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.DefaultParserDialect
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 /** A SQL Dialect for testing purpose, and it can not be nested type */
@@ -1606,6 +1607,24 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           (1 to 100).map(i => Row(i, 1)))
       }
     }
+  }
+
+  test("decimal precision with multiply/division") {
+    checkAnswer(sql("select 10.3 * 3.0"), Row(BigDecimal("30.90")))
+    checkAnswer(sql("select 10.3000 * 3.0"), Row(BigDecimal("30.90000")))
+    checkAnswer(sql("select 10.30000 * 30.0"), Row(BigDecimal("309.000000")))
+    checkAnswer(sql("select 10.300000000000000000 * 3.000000000000000000"),
+      Row(BigDecimal("30.900000000000000000000000000000000000", new MathContext(38))))
+    checkAnswer(sql("select 10.300000000000000000 * 3.0000000000000000000"),
+      Row(null))
+
+    checkAnswer(sql("select 10.3 / 3.0"), Row(BigDecimal("3.433333")))
+    checkAnswer(sql("select 10.3000 / 3.0"), Row(BigDecimal("3.4333333")))
+    checkAnswer(sql("select 10.30000 / 30.0"), Row(BigDecimal("0.343333333")))
+    checkAnswer(sql("select 10.300000000000000000 / 3.00000000000000000"),
+      Row(BigDecimal("3.4333333333333333333333333333333333333", new MathContext(38))))
+    checkAnswer(sql("select 10.3000000000000000000 / 3.00000000000000000"),
+      Row(null))
   }
 
   test("external sorting updates peak execution memory") {
