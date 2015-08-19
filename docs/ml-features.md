@@ -1386,6 +1386,7 @@ print(output.select("features", "clicked").first())
 {% endhighlight %}
 </div>
 </div>
+
 ## RFormula
 
 `RFormula` selects columns specified by an [R model formula](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/formula.html). It produces a vector column of features and a double column of labels. Like when formulas are used in R for linear regression, string input columns will be one-hot encoded, and numeric columns will be cast to doubles. If not already present in the DataFrame, the output label column will be created from the specified response variable in the formula.
@@ -1398,6 +1399,7 @@ Assume that we have a DataFrame with the columns `id`, `country`, `hour`, and `c
 id | country | hour | clicked
 ---|---------|------|---------
  7 | "US"    | 18   | 1.0
+ 8 | "CA"    | 12   | 0.0
 ~~~
 
 If we use `RFormula` with a formula string of `clicked ~ country + hour`, which indicates that we want to
@@ -1407,6 +1409,7 @@ predict `clicked` based on `country` and `hour`, after transformation we should 
 id | country | hour | clicked | label | features
 ---|---------|------|---------|-------|-----------------------------
  7 | "US"    | 18   | 1.0     | 1.0   | [0.0, 1.0, 18.0]
+ 8 | "CA"    | 12   | 0.0     | 0.0   | [1.0, 0.0, 12.0]
 ~~~
 
 <div class="codetabs">
@@ -1418,7 +1421,8 @@ id | country | hour | clicked | label | features
 import org.apache.spark.ml.feature.RFormula
 
 val dataset = sqlContext.createDataFrame(
-  Seq((7, "US", 18, 1.0))
+  Seq((7, "US", 18, 1.0)),
+  Seq((8, "CA", 12, 0.0))
 ).toDF("id", "country", "hour", "clicked")
 val formula = new RFormula()
   .setFormula("clicked ~ country + hour")
@@ -1449,14 +1453,15 @@ StructType schema = createStructType(new StructField[] {
   createStructField("hour", IntegerType, false),
   createStructField("clicked", DoubleType, false)
 });
-Row row = RowFactory.create(7, "US", 18, 1.0);
-JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(row));
+Row row1 = RowFactory.create(7, "US", 18, 1.0);
+Row row2 = RowFactory.create(8, "CA", 12, 0.0);
+JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(row1, row2));
 DataFrame dataset = sqlContext.createDataFrame(rdd, schema);
 
 RFormula formula = new RFormula()
   .setFormula("clicked ~ country + hour")
   .setFeaturesCol("features")
-  .setLabelCol("label")
+  .setLabelCol("label");
 
 DataFrame output = formula.fit(dataset).transform(dataset);
 System.out.println(output.select("features", "label").first());
@@ -1472,6 +1477,7 @@ from pyspark.ml.feature import RFormula
 
 dataset = sqlContext.createDataFrame(
     [(7, "US", 18, 1.0)],
+    [(8, "CA", 12, 0.0)],
     ["id", "country", "hour", "clicked"])
 formula = RFormula(
     formula="clicked ~ country + hour",
