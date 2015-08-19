@@ -62,6 +62,9 @@ unit-tests.log
 ec2/lib/
 rat-results.txt
 scalastyle.txt
+conf/spark-defaults.conf.bak
+conf/*.conf
+conf/conf.cloudera.yarn
 scalastyle-output.xml
 R-unit-tests.log
 R/unit-tests.out

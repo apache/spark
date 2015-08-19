@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+set -x
+set -e
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+CONFIG_PATH=$DIR/../conf/conf.cloudera.yarn
+
+rm -rf $CONFIG_PATH
+mkdir $CONFIG_PATH
+curl -o /tmp/cloudera_configs.zip http://util-ng.chi.shopify.com:7180/cmf/services/47/client-config
+unzip -j /tmp/cloudera_configs.zip -d $CONFIG_PATH
+
+# The topology script isn't available locally so we just don't run it
+perl -0777 -i -pe 's/\s*<property>\n\s*<name>net.topology.script.file.name<\/name>\n\s*<value>[^<]+?<\/value>\n\s*<\/property>//igs' $CONFIG_PATH/core-site.xml
