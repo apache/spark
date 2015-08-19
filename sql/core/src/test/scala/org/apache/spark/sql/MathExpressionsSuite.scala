@@ -19,18 +19,16 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
+import org.apache.spark.sql.test.SharedSQLContext
 
 private object MathExpressionsTestData {
   case class DoubleData(a: java.lang.Double, b: java.lang.Double)
   case class NullDoubles(a: java.lang.Double)
 }
 
-class MathExpressionsSuite extends QueryTest {
-
+class MathExpressionsSuite extends QueryTest with SharedSQLContext {
   import MathExpressionsTestData._
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
+  import testImplicits._
 
   private lazy val doubleData = (1 to 10).map(i => DoubleData(i * 0.2 - 1, i * -0.2 + 1)).toDF()
 
@@ -149,7 +147,7 @@ class MathExpressionsSuite extends QueryTest {
   test("toDegrees") {
     testOneToOneMathFunction(toDegrees, math.toDegrees)
     checkAnswer(
-      ctx.sql("SELECT degrees(0), degrees(1), degrees(1.5)"),
+      sql("SELECT degrees(0), degrees(1), degrees(1.5)"),
       Seq((1, 2)).toDF().select(toDegrees(lit(0)), toDegrees(lit(1)), toDegrees(lit(1.5)))
     )
   }
@@ -157,7 +155,7 @@ class MathExpressionsSuite extends QueryTest {
   test("toRadians") {
     testOneToOneMathFunction(toRadians, math.toRadians)
     checkAnswer(
-      ctx.sql("SELECT radians(0), radians(1), radians(1.5)"),
+      sql("SELECT radians(0), radians(1), radians(1.5)"),
       Seq((1, 2)).toDF().select(toRadians(lit(0)), toRadians(lit(1)), toRadians(lit(1.5)))
     )
   }
@@ -169,7 +167,7 @@ class MathExpressionsSuite extends QueryTest {
   test("ceil and ceiling") {
     testOneToOneMathFunction(ceil, math.ceil)
     checkAnswer(
-      ctx.sql("SELECT ceiling(0), ceiling(1), ceiling(1.5)"),
+      sql("SELECT ceiling(0), ceiling(1), ceiling(1.5)"),
       Row(0.0, 1.0, 2.0))
   }
 
@@ -214,7 +212,7 @@ class MathExpressionsSuite extends QueryTest {
 
     val pi = 3.1415
     checkAnswer(
-      ctx.sql(s"SELECT round($pi, -3), round($pi, -2), round($pi, -1), " +
+      sql(s"SELECT round($pi, -3), round($pi, -2), round($pi, -1), " +
         s"round($pi, 0), round($pi, 1), round($pi, 2), round($pi, 3)"),
       Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
         BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
@@ -233,7 +231,7 @@ class MathExpressionsSuite extends QueryTest {
     testOneToOneMathFunction[Double](signum, math.signum)
 
     checkAnswer(
-      ctx.sql("SELECT sign(10), signum(-11)"),
+      sql("SELECT sign(10), signum(-11)"),
       Row(1, -1))
   }
 
@@ -241,7 +239,7 @@ class MathExpressionsSuite extends QueryTest {
     testTwoToOneMathFunction(pow, pow, math.pow)
 
     checkAnswer(
-      ctx.sql("SELECT pow(1, 2), power(2, 1)"),
+      sql("SELECT pow(1, 2), power(2, 1)"),
       Seq((1, 2)).toDF().select(pow(lit(1), lit(2)), pow(lit(2), lit(1)))
     )
   }
@@ -280,7 +278,7 @@ class MathExpressionsSuite extends QueryTest {
   test("log / ln") {
     testOneToOneNonNegativeMathFunction(org.apache.spark.sql.functions.log, math.log)
     checkAnswer(
-      ctx.sql("SELECT ln(0), ln(1), ln(1.5)"),
+      sql("SELECT ln(0), ln(1), ln(1.5)"),
       Seq((1, 2)).toDF().select(logarithm(lit(0)), logarithm(lit(1)), logarithm(lit(1.5)))
     )
   }
@@ -375,7 +373,7 @@ class MathExpressionsSuite extends QueryTest {
       df.select(log2("b") + log2("a")),
       Row(1))
 
-    checkAnswer(ctx.sql("SELECT LOG2(8), LOG2(null)"), Row(3, null))
+    checkAnswer(sql("SELECT LOG2(8), LOG2(null)"), Row(3, null))
   }
 
   test("sqrt") {
@@ -384,13 +382,13 @@ class MathExpressionsSuite extends QueryTest {
       df.select(sqrt("a"), sqrt("b")),
       Row(1.0, 2.0))
 
-    checkAnswer(ctx.sql("SELECT SQRT(4.0), SQRT(null)"), Row(2.0, null))
+    checkAnswer(sql("SELECT SQRT(4.0), SQRT(null)"), Row(2.0, null))
     checkAnswer(df.selectExpr("sqrt(a)", "sqrt(b)", "sqrt(null)"), Row(1.0, 2.0, null))
   }
 
   test("negative") {
     checkAnswer(
-      ctx.sql("SELECT negative(1), negative(0), negative(-1)"),
+      sql("SELECT negative(1), negative(0), negative(-1)"),
       Row(-1, 0, 1))
   }
 

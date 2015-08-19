@@ -27,18 +27,16 @@ import org.apache.avro.generic.IndexedRecord
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.avro.AvroParquetWriter
 
-import org.apache.spark.sql.execution.datasources.parquet.test.avro.{Nested, ParquetAvroCompat, ParquetEnum, Suit}
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.execution.datasources.parquet.test.avro._
+import org.apache.spark.sql.test.SharedSQLContext
 
-class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest {
+class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with SharedSQLContext {
   import ParquetCompatibilityTest._
-
-  override val sqlContext: SQLContext = TestSQLContext
 
   private def withWriter[T <: IndexedRecord]
       (path: String, schema: Schema)
-      (f: AvroParquetWriter[T] => Unit) = {
+      (f: AvroParquetWriter[T] => Unit): Unit = {
     val writer = new AvroParquetWriter[T](new Path(path), schema)
     try f(writer) finally writer.close()
   }
@@ -129,7 +127,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest {
   }
 
   test("SPARK-9407 Don't push down predicates involving Parquet ENUM columns") {
-    import sqlContext.implicits._
+    import testImplicits._
 
     withTempPath { dir =>
       val path = dir.getCanonicalPath

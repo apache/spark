@@ -28,17 +28,15 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.{SQLTestUtils, TestSQLContext}
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
-class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
 
-  override val sqlContext = TestSQLContext
-
-  import sqlContext.implicits._
+class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
+  import testImplicits._
 
   test("LongSQLMetric should not box Long") {
-    val l = SQLMetrics.createLongMetric(TestSQLContext.sparkContext, "long")
+    val l = SQLMetrics.createLongMetric(ctx.sparkContext, "long")
     val f = () => {
       l += 1L
       l.add(1L)
@@ -52,7 +50,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
 
   test("Normal accumulator should do boxing") {
     // We need this test to make sure BoxingFinder works.
-    val l = TestSQLContext.sparkContext.accumulator(0L)
+    val l = ctx.sparkContext.accumulator(0L)
     val f = () => { l += 1L }
     BoxingFinder.getClassReader(f.getClass).foreach { cl =>
       val boxingFinder = new BoxingFinder()
@@ -73,19 +71,19 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
       df: DataFrame,
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
-    val previousExecutionIds = TestSQLContext.listener.executionIdToData.keySet
+    val previousExecutionIds = ctx.listener.executionIdToData.keySet
     df.collect()
-    TestSQLContext.sparkContext.listenerBus.waitUntilEmpty(10000)
-    val executionIds = TestSQLContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
+    ctx.sparkContext.listenerBus.waitUntilEmpty(10000)
+    val executionIds = ctx.listener.executionIdToData.keySet.diff(previousExecutionIds)
     assert(executionIds.size === 1)
     val executionId = executionIds.head
-    val jobs = TestSQLContext.listener.getExecution(executionId).get.jobs
+    val jobs = ctx.listener.getExecution(executionId).get.jobs
     // Use "<=" because there is a race condition that we may miss some jobs
     // TODO Change it to "=" once we fix the race condition that missing the JobStarted event.
     assert(jobs.size <= expectedNumOfJobs)
     if (jobs.size == expectedNumOfJobs) {
       // If we can track all jobs, check the metric values
-      val metricValues = TestSQLContext.listener.getExecutionMetrics(executionId)
+      val metricValues = ctx.listener.getExecutionMetrics(executionId)
       val actualMetrics = SparkPlanGraph(df.queryExecution.executedPlan).nodes.filter { node =>
         expectedMetrics.contains(node.id)
       }.map { node =>
@@ -111,7 +109,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
       SQLConf.TUNGSTEN_ENABLED.key -> "false") {
       // Assume the execution plan is
       // PhysicalRDD(nodeId = 1) -> Project(nodeId = 0)
-      val df = TestData.person.select('name)
+      val df = person.select('name)
       testSparkPlanMetrics(df, 1, Map(
         0L ->("Project", Map(
           "number of rows" -> 2L)))
@@ -126,7 +124,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
       SQLConf.TUNGSTEN_ENABLED.key -> "true") {
       // Assume the execution plan is
       // PhysicalRDD(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = TestData.person.select('name)
+      val df = person.select('name)
       testSparkPlanMetrics(df, 1, Map(
         0L ->("TungstenProject", Map(
           "number of rows" -> 2L)))
@@ -137,7 +135,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
   test("Filter metrics") {
     // Assume the execution plan is
     // PhysicalRDD(nodeId = 1) -> Filter(nodeId = 0)
-    val df = TestData.person.filter('age < 25)
+    val df = person.filter('age < 25)
     testSparkPlanMetrics(df, 1, Map(
       0L -> ("Filter", Map(
         "number of input rows" -> 2L,
@@ -152,7 +150,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
       SQLConf.TUNGSTEN_ENABLED.key -> "false") {
       // Assume the execution plan is
       // ... -> Aggregate(nodeId = 2) -> TungstenExchange(nodeId = 1) -> Aggregate(nodeId = 0)
-      val df = TestData.testData2.groupBy().count() // 2 partitions
+      val df = testData2.groupBy().count() // 2 partitions
       testSparkPlanMetrics(df, 1, Map(
         2L -> ("Aggregate", Map(
           "number of input rows" -> 6L,
@@ -163,7 +161,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
       )
 
       // 2 partitions and each partition contains 2 keys
-      val df2 = TestData.testData2.groupBy('a).count()
+      val df2 = testData2.groupBy('a).count()
       testSparkPlanMetrics(df2, 1, Map(
         2L -> ("Aggregate", Map(
           "number of input rows" -> 6L,
@@ -185,7 +183,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
       // Assume the execution plan is
       // ... -> SortBasedAggregate(nodeId = 2) -> TungstenExchange(nodeId = 1) ->
       // SortBasedAggregate(nodeId = 0)
-      val df = TestData.testData2.groupBy().count() // 2 partitions
+      val df = testData2.groupBy().count() // 2 partitions
       testSparkPlanMetrics(df, 1, Map(
         2L -> ("SortBasedAggregate", Map(
           "number of input rows" -> 6L,
@@ -199,7 +197,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
       // ... -> SortBasedAggregate(nodeId = 3) -> TungstenExchange(nodeId = 2)
       // -> ExternalSort(nodeId = 1)-> SortBasedAggregate(nodeId = 0)
       // 2 partitions and each partition contains 2 keys
-      val df2 = TestData.testData2.groupBy('a).count()
+      val df2 = testData2.groupBy('a).count()
       testSparkPlanMetrics(df2, 1, Map(
         3L -> ("SortBasedAggregate", Map(
           "number of input rows" -> 6L,
@@ -219,7 +217,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
       // Assume the execution plan is
       // ... -> TungstenAggregate(nodeId = 2) -> Exchange(nodeId = 1)
       // -> TungstenAggregate(nodeId = 0)
-      val df = TestData.testData2.groupBy().count() // 2 partitions
+      val df = testData2.groupBy().count() // 2 partitions
       testSparkPlanMetrics(df, 1, Map(
         2L -> ("TungstenAggregate", Map(
           "number of input rows" -> 6L,
@@ -230,7 +228,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
       )
 
       // 2 partitions and each partition contains 2 keys
-      val df2 = TestData.testData2.groupBy('a).count()
+      val df2 = testData2.groupBy('a).count()
       testSparkPlanMetrics(df2, 1, Map(
         2L -> ("TungstenAggregate", Map(
           "number of input rows" -> 6L,
@@ -246,7 +244,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
     // Because SortMergeJoin may skip different rows if the number of partitions is different, this
     // test should use the deterministic number of partitions.
     withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true") {
-      val testDataForJoin = TestData.testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+      val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
       testDataForJoin.registerTempTable("testDataForJoin")
       withTempTable("testDataForJoin") {
         // Assume the execution plan is
@@ -268,7 +266,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
     // Because SortMergeOuterJoin may skip different rows if the number of partitions is different,
     // this test should use the deterministic number of partitions.
     withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true") {
-      val testDataForJoin = TestData.testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+      val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
       testDataForJoin.registerTempTable("testDataForJoin")
       withTempTable("testDataForJoin") {
         // Assume the execution plan is
@@ -314,7 +312,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
 
   test("ShuffledHashJoin metrics") {
     withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
-      val testDataForJoin = TestData.testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+      val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
       testDataForJoin.registerTempTable("testDataForJoin")
       withTempTable("testDataForJoin") {
         // Assume the execution plan is
@@ -390,7 +388,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
 
   test("BroadcastNestedLoopJoin metrics") {
     withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true") {
-      val testDataForJoin = TestData.testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+      val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
       testDataForJoin.registerTempTable("testDataForJoin")
       withTempTable("testDataForJoin") {
         // Assume the execution plan is
@@ -458,7 +456,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   test("CartesianProduct metrics") {
-    val testDataForJoin = TestData.testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+    val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.registerTempTable("testDataForJoin")
     withTempTable("testDataForJoin") {
       // Assume the execution plan is
@@ -476,19 +474,19 @@ class SQLMetricsSuite extends SparkFunSuite with SQLTestUtils {
 
   test("save metrics") {
     withTempPath { file =>
-      val previousExecutionIds = TestSQLContext.listener.executionIdToData.keySet
+      val previousExecutionIds = ctx.listener.executionIdToData.keySet
       // Assume the execution plan is
       // PhysicalRDD(nodeId = 0)
-      TestData.person.select('name).write.format("json").save(file.getAbsolutePath)
-      TestSQLContext.sparkContext.listenerBus.waitUntilEmpty(10000)
-      val executionIds = TestSQLContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
+      person.select('name).write.format("json").save(file.getAbsolutePath)
+      ctx.sparkContext.listenerBus.waitUntilEmpty(10000)
+      val executionIds = ctx.listener.executionIdToData.keySet.diff(previousExecutionIds)
       assert(executionIds.size === 1)
       val executionId = executionIds.head
-      val jobs = TestSQLContext.listener.getExecution(executionId).get.jobs
+      val jobs = ctx.listener.getExecution(executionId).get.jobs
       // Use "<=" because there is a race condition that we may miss some jobs
       // TODO Change "<=" to "=" once we fix the race condition that missing the JobStarted event.
       assert(jobs.size <= 1)
-      val metricValues = TestSQLContext.listener.getExecutionMetrics(executionId)
+      val metricValues = ctx.listener.getExecutionMetrics(executionId)
       // Because "save" will create a new DataFrame internally, we cannot get the real metric id.
       // However, we still can check the value.
       assert(metricValues.values.toSeq === Seq(2L))

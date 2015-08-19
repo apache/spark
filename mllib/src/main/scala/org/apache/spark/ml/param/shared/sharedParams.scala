@@ -139,7 +139,7 @@ private[ml] trait HasProbabilityCol extends Params {
 }
 
 /**
- * Trait for shared param threshold.
+ * Trait for shared param threshold (default: 0.5).
  */
 private[ml] trait HasThreshold extends Params {
 
@@ -148,6 +148,8 @@ private[ml] trait HasThreshold extends Params {
    * @group param
    */
   final val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in binary classification prediction, in range [0, 1]", ParamValidators.inRange(0, 1))
+
+  setDefault(threshold, 0.5)
 
   /** @group getParam */
   def getThreshold: Double = $(threshold)
@@ -165,7 +167,7 @@ private[ml] trait HasThresholds extends Params {
   final val thresholds: DoubleArrayParam = new DoubleArrayParam(this, "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.", (t: Array[Double]) => t.forall(_ >= 0))
 
   /** @group getParam */
-  final def getThresholds: Array[Double] = $(thresholds)
+  def getThresholds: Array[Double] = $(thresholds)
 }
 
 /**
@@ -339,5 +341,20 @@ private[ml] trait HasStepSize extends Params {
 
   /** @group getParam */
   final def getStepSize: Double = $(stepSize)
+}
+
+/**
+ * Trait for shared param weightCol.
+ */
+private[ml] trait HasWeightCol extends Params {
+
+  /**
+   * Param for weight column name. If this is not set or empty, we treat all instance weights as 1.0..
+   * @group param
+   */
+  final val weightCol: Param[String] = new Param[String](this, "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
+
+  /** @group getParam */
+  final def getWeightCol: String = $(weightCol)
 }
 // scalastyle:on

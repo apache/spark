@@ -729,6 +729,17 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 inputFormat = Option("org.apache.hadoop.mapred.SequenceFileInputFormat"),
                 outputFormat = Option("org.apache.hadoop.mapred.SequenceFileOutputFormat"))
 
+            case "avro" =>
+              tableDesc = tableDesc.copy(
+                inputFormat =
+                  Option("org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat"),
+                outputFormat =
+                  Option("org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat"))
+              if (tableDesc.serde.isEmpty) {
+                tableDesc = tableDesc.copy(
+                  serde = Option("org.apache.hadoop.hive.serde2.avro.AvroSerDe"))
+              }
+
             case _ =>
               throw new SemanticException(
                 s"Unrecognized file format in STORED AS clause: ${child.getText}")

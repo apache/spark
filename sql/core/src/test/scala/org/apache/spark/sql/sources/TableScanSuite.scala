@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 class DefaultSource extends SimpleScanSource
@@ -95,8 +96,8 @@ case class AllDataTypesScan(
   }
 }
 
-class TableScanSuite extends DataSourceTest {
-  import caseInsensitiveContext.sql
+class TableScanSuite extends DataSourceTest with SharedSQLContext {
+  protected override lazy val sql = caseInsensitiveContext.sql _
 
   private lazy val tableWithSchemaExpected = (1 to 10).map { i =>
     Row(
@@ -122,7 +123,8 @@ class TableScanSuite extends DataSourceTest {
       Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))))
   }.toSeq
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     sql(
       """
         |CREATE TEMPORARY TABLE oneToTen
@@ -303,9 +305,10 @@ class TableScanSuite extends DataSourceTest {
       sql("SELECT i * 2 FROM oneToTen"),
       (1 to 10).map(i => Row(i * 2)).toSeq)
 
-    assertCached(sql("SELECT a.i, b.i FROM oneToTen a JOIN oneToTen b ON a.i = b.i + 1"), 2)
-    checkAnswer(
-      sql("SELECT a.i, b.i FROM oneToTen a JOIN oneToTen b ON a.i = b.i + 1"),
+    assertCached(sql(
+      "SELECT a.i, b.i FROM oneToTen a JOIN oneToTen b ON a.i = b.i + 1"), 2)
+    checkAnswer(sql(
+      "SELECT a.i, b.i FROM oneToTen a JOIN oneToTen b ON a.i = b.i + 1"),
       (2 to 10).map(i => Row(i, i - 1)).toSeq)
 
     // Verify uncaching

@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.clustering
 
+import java.util.{ArrayList => JArrayList}
+
 import breeze.linalg.{DenseMatrix => BDM, argtopk, max, argmax}
 
 import org.apache.spark.SparkFunSuite
@@ -574,6 +576,17 @@ private[clustering] object LDASuite {
     Vectors.sparse(6, Array(3, 5), Array(1, 1)),
     Vectors.sparse(6, Array(4, 5), Array(1, 1))
   ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
+
+  /** Used in the Java Test Suite */
+  def javaToyData: JArrayList[(java.lang.Long, Vector)] = {
+    val javaData = new JArrayList[(java.lang.Long, Vector)]
+    var i = 0
+    while (i < toyData.length) {
+      javaData.add((toyData(i)._1, toyData(i)._2))
+      i += 1
+    }
+    javaData
+  }
 
   def toyModel: LocalLDAModel = {
     val k = 2

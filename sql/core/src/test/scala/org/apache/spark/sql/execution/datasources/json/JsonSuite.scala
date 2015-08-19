@@ -24,22 +24,16 @@ import com.fasterxml.jackson.core.JsonFactory
 import org.apache.spark.rdd.RDD
 import org.scalactic.Tolerance._
 
-import org.apache.spark.sql.{SQLContext, QueryTest, Row, SQLConf}
-import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.{ResolvedDataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.InferSchema.compatibleType
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
-class JsonSuite extends QueryTest with SQLTestUtils with TestJsonData {
-
-  protected lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  override def sqlContext: SQLContext = ctx // used by SQLTestUtils
-
-  import ctx.sql
-  import ctx.implicits._
+class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
+  import testImplicits._
 
   test("Type promotion") {
     def checkTypePromotion(expected: Any, actual: Any) {
@@ -596,7 +590,8 @@ class JsonSuite extends QueryTest with SQLTestUtils with TestJsonData {
 
     val schema = StructType(StructField("a", LongType, true) :: Nil)
     val logicalRelation =
-      ctx.read.schema(schema).json(path).queryExecution.analyzed.asInstanceOf[LogicalRelation]
+      ctx.read.schema(schema).json(path)
+        .queryExecution.analyzed.asInstanceOf[LogicalRelation]
     val relationWithSchema = logicalRelation.relation.asInstanceOf[JSONRelation]
     assert(relationWithSchema.paths === Array(path))
     assert(relationWithSchema.schema === schema)
@@ -1040,31 +1035,29 @@ class JsonSuite extends QueryTest with SQLTestUtils with TestJsonData {
   }
 
   test("JSONRelation equality test") {
-    val context = org.apache.spark.sql.test.TestSQLContext
-
     val relation0 = new JSONRelation(
       Some(empty),
       1.0,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      None, None)(context)
+      None, None)(ctx)
     val logicalRelation0 = LogicalRelation(relation0)
     val relation1 = new JSONRelation(
       Some(singleRow),
       1.0,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      None, None)(context)
+      None, None)(ctx)
     val logicalRelation1 = LogicalRelation(relation1)
     val relation2 = new JSONRelation(
       Some(singleRow),
       0.5,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      None, None)(context)
+      None, None)(ctx)
     val logicalRelation2 = LogicalRelation(relation2)
     val relation3 = new JSONRelation(
       Some(singleRow),
       1.0,
       Some(StructType(StructField("b", IntegerType, true) :: Nil)),
-      None, None)(context)
+      None, None)(ctx)
     val logicalRelation3 = LogicalRelation(relation3)
 
     assert(relation0 !== relation1)
@@ -1089,14 +1082,14 @@ class JsonSuite extends QueryTest with SQLTestUtils with TestJsonData {
         .map(i => s"""{"a": 1, "b": "str$i"}""").saveAsTextFile(path)
 
       val d1 = ResolvedDataSource(
-        context,
+        ctx,
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
         provider = classOf[DefaultSource].getCanonicalName,
         options = Map("path" -> path))
 
       val d2 = ResolvedDataSource(
-        context,
+        ctx,
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
         provider = classOf[DefaultSource].getCanonicalName,
@@ -1162,11 +1155,12 @@ class JsonSuite extends QueryTest with SQLTestUtils with TestJsonData {
         "abd")
 
         ctx.read.json(root.getAbsolutePath).registerTempTable("test_myjson_with_part")
-        checkAnswer(
-          sql("SELECT count(a) FROM test_myjson_with_part where d1 = 1 and col1='abc'"), Row(4))
-        checkAnswer(
-          sql("SELECT count(a) FROM test_myjson_with_part where d1 = 1 and col1='abd'"), Row(5))
-        checkAnswer(sql("SELECT count(a) FROM test_myjson_with_part where d1 = 1"), Row(9))
+        checkAnswer(sql(
+          "SELECT count(a) FROM test_myjson_with_part where d1 = 1 and col1='abc'"), Row(4))
+        checkAnswer(sql(
+          "SELECT count(a) FROM test_myjson_with_part where d1 = 1 and col1='abd'"), Row(5))
+        checkAnswer(sql(
+          "SELECT count(a) FROM test_myjson_with_part where d1 = 1"), Row(9))
     })
   }
 }
