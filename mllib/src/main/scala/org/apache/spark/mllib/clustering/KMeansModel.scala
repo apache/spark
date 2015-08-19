@@ -104,6 +104,10 @@ class KMeansModel (
  * @since 1.4.0
  */
 object KMeansModel extends Loader[KMeansModel] {
+
+  /**
+   * @since 1.4.0
+   */
   override def load(sc: SparkContext, path: String): KMeansModel = {
     KMeansModel.SaveLoadV1_0.load(sc, path)
   }
