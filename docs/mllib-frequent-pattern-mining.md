@@ -54,10 +54,10 @@ val data = sc.textFile("data/mllib/sample_fpgrowth.txt")
 
 val transactions: RDD[Array[String]] = data.map(s => s.trim.split(' '))
 
-val fpm = new FPGrowth()
+val fpg = new FPGrowth()
   .setMinSupport(0.2)
   .setNumPartitions(10)
-val model = fpm.run(transactions)
+val model = fpg.run(transactions)
 
 model.freqItemsets.collect().foreach { itemset =>
   println(itemset.items.mkString("[", ",", "]") + ", " + itemset.freq)
@@ -77,9 +77,7 @@ that stores the frequent itemsets with their frequencies.
 
 {% highlight java %}
 import java.util.List;
-
-import com.google.common.base.Joiner;
-import com.google.common.collect.Lists;
+import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.fpm.FPGrowth;
@@ -93,18 +91,18 @@ JavaRDD<List<String>> transactions = data.map(
   new Function<String, List<String>>() {
     public List<String> call(String line) {
       String[] parts = line.split(" ");
-      return Lists.newArrayList(parts);
+      return Arrays.asList(parts);
     }
   }
 );
 
-FPGrowth fpm = new FPGrowth()
+FPGrowth fpg = new FPGrowth()
   .setMinSupport(0.2)
   .setNumPartitions(10);
-FPGrowthModel<String> model = fpm.run(transactions);
+FPGrowthModel<String> model = fpg.run(transactions);
 
 for(FPGrowth.FreqItemset<String> itemset: model.freqItemsets().toJavaRDD().collect()) {
-  System.out.println("[" + Joiner.on(",").join(itemset.javaItems()) + "], " + itemset.freq());
+  System.out.println(itemset.javaItems() + " , " + itemset.freq());
 }
 {% endhighlight %}
 
