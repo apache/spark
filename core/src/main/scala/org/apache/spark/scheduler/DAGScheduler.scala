@@ -138,7 +138,7 @@ class DAGScheduler(
 
   // Flag to control if reduce tasks are assigned preferred locations
   private val shuffleLocalityEnabled =
-    sc.getConf.getBoolean("spark.shuffle.reduceLocality.enabled", true)
+    sc.getConf.getBoolean("spark.shuffle.reduceLocality.enabled", false)
   // Number of map, reduce tasks above which we do not assign preferred locations
   // based on map output sizes. We limit the size of jobs for which assign preferred locations
   // as computing the top locations by size becomes expensive.
