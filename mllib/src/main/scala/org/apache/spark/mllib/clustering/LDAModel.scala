@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argtopk, normalize, sum}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax, argtopk, normalize, sum}
 import breeze.numerics.{exp, lgamma}
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
@@ -27,7 +27,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
-import org.apache.spark.graphx.{Edge, EdgeContext, Graph, VertexId}
+import org.apache.spark.graphx._
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -412,7 +412,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
       Loader.checkSchema[Data](dataFrame.schema)
       val topics = dataFrame.collect()
       val vocabSize = topics(0).getAs[Vector](0).size
-      val k = topics.size
+      val k = topics.length
 
       val brzTopics = BDM.zeros[Double](vocabSize, k)
       topics.foreach { case Row(vec: Vector, ind: Int) =>
@@ -572,6 +572,42 @@ class DistributedLDAModel private[clustering] (
     topicsInQueues.map { q =>
       val (docTopics, docs) = q.toArray.sortBy(-_._1).unzip
       (docs.toArray, docTopics.toArray)
+    }
+  }
+
+  /**
+   * Return the top topic for each (doc, term) pair.  I.e., for each document, what is the most
+   * likely topic generating each term?
+   *
+   * @return RDD of (doc ID, assignment of top topic index for each term),
+   *         where the assignment is specified via a pair of zippable arrays
+   *         (term indices, topic indices).  Note that terms will be omitted if not present in
+   *         the document.
+   */
+  lazy val topTopicAssignments: RDD[(Long, Array[Int], Array[Int])] = {
+    // For reference, compare the below code with the core part of EMLDAOptimizer.next().
+    val eta = topicConcentration
+    val W = vocabSize
+    val alpha = docConcentration(0)
+    val N_k = globalTopicTotals
+    val sendMsg: EdgeContext[TopicCounts, TokenCount, (Array[Int], Array[Int])] => Unit =
+      (edgeContext) => {
+        // E-STEP: Compute gamma_{wjk} (smoothed topic distributions).
+        val scaledTopicDistribution: TopicCounts =
+          computePTopic(edgeContext.srcAttr, edgeContext.dstAttr, N_k, W, eta, alpha)
+        // For this (doc j, term w), send top topic k to doc vertex.
+        val topTopic: Int = argmax(scaledTopicDistribution)
+        val term: Int = edgeContext.dstId.toInt // ok to assume # terms < Int.MaxValue
+        edgeContext.sendToSrc((Array(term), Array(topTopic)))
+      }
+    val mergeMsg: ((Array[Int], Array[Int]), (Array[Int], Array[Int])) => (Array[Int], Array[Int]) =
+      (terms_topics0, terms_topics1) => {
+        (terms_topics0._1 ++ terms_topics1._1, terms_topics0._2 ++ terms_topics1._2)
+      }
+    // M-STEP: Aggregation computes new N_{kj}, N_{wk} counts.
+    graph.aggregateMessages[(Array[Int], Array[Int])](sendMsg, mergeMsg).filter(isDocumentVertex)
+        .map { case (docID: Long, (terms: Array[Int], topics: Array[Int])) =>
+      (docID, terms, topics)
     }
   }
 
@@ -797,10 +833,9 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
     val classNameV1_0 = SaveLoadV1_0.thisClassName
 
     val model = (loadedClassName, loadedVersion) match {
-      case (className, "1.0") if className == classNameV1_0 => {
+      case (className, "1.0") if className == classNameV1_0 =>
         DistributedLDAModel.SaveLoadV1_0.load(sc, path, vocabSize, docConcentration,
           topicConcentration, iterationTimes.toArray, gammaShape)
-      }
       case _ => throw new Exception(
         s"DistributedLDAModel.load did not recognize model with (className, format version):" +
           s"($loadedClassName, $loadedVersion).  Supported: ($classNameV1_0, 1.0)")
