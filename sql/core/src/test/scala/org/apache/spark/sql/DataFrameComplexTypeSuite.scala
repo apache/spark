@@ -20,6 +20,9 @@ package org.apache.spark.sql
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
+/**
+ * A test suite to test DataFrame/SQL functionalities with complex types (i.e. array, struct, map).
+ */
 class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
