@@ -169,7 +169,7 @@ setMethod("n", signature(x = "Column"),
 #' when
 #'
 #' Evaluates a list of conditions and returns one of multiple possible result expressions.
-#' If otherwise is not defined at the end, null is returned for unmatched conditions.
+#' For unmatched expressions null is returned.
 #'
 #' @rdname column
 setMethod("when", signature(condition = "Column", value = "ANY"),

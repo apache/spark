@@ -206,8 +206,8 @@ setMethod("%in%",
 
 #' otherwise
 #'
-#' Evaluates a list of conditions and returns one of multiple possible result expressions.
-#' If otherwise is not defined at the end, null is returned for unmatched conditions.
+#' If values in the specified column are null, returns the value. 
+#' Can be used in conjunction with `when` to specify a default value for expressions.
 #'
 #' @rdname column
 setMethod("otherwise",
