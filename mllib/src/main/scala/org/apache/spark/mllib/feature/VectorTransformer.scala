@@ -25,8 +25,8 @@ import org.apache.spark.rdd.RDD
 /**
  * :: DeveloperApi ::
  * Trait for transformation of a vector
- * @since 1.1.0
  */
+@Since("1.1.0")
 @DeveloperApi
 trait VectorTransformer extends Serializable {
 
@@ -35,8 +35,8 @@ trait VectorTransformer extends Serializable {
    *
    * @param vector vector to be transformed.
    * @return transformed vector.
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def transform(vector: Vector): Vector
 
   /**
@@ -44,8 +44,8 @@ trait VectorTransformer extends Serializable {
    *
    * @param data RDD[Vector] to be transformed.
    * @return transformed RDD[Vector].
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def transform(data: RDD[Vector]): RDD[Vector] = {
     // Later in #1498 , all RDD objects are sent via broadcasting instead of akka.
     // So it should be no longer necessary to explicitly broadcast `this` object.
@@ -57,8 +57,8 @@ trait VectorTransformer extends Serializable {
    *
    * @param data JavaRDD[Vector] to be transformed.
    * @return transformed JavaRDD[Vector].
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def transform(data: JavaRDD[Vector]): JavaRDD[Vector] = {
     transform(data.rdd)
   }
