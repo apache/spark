@@ -18,27 +18,27 @@
 package org.apache.spark.mllib.util
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext
 
 import scala.reflect.ClassTag
 
-private[mllib] trait Broadcastable {
+private[mllib] trait Broadcastable[T] {
 
+  private var bcModel: Option[Broadcast[T]] = None
   /**
    * Checks whether the model object is already broadcast and returns the reference.
    * If not, then broadcasts the model and returns a reference
-   * @param bcReference Option containing the broadcast ref
-   * @param rdd RDD that will be used for the broadcast
-   * @param modelToBc model object to broadcast
-   * @return an Option object containing the broadcast model
+   * @param sc SparkContext that will be used for the broadcast
+   * @param modelToBc Model object to broadcast
+   * @return the broadcast model
    */
-  def getBroadcastModel[T: ClassTag, V: ClassTag](bcReference: Option[Broadcast[T]],
-    rdd: RDD[V],
-    modelToBc: T) : Option[Broadcast[T]] = {
-    bcReference match {
-      case None => Some(rdd.context.broadcast(modelToBc))
-      case _ => bcReference
+  def getBroadcastModel(sc: SparkContext, modelToBc: T)
+                       (implicit ev: ClassTag[T]) : Broadcast[T] = {
+    bcModel match {
+      case None => bcModel = Some(sc.broadcast(modelToBc))
+      case _ =>
     }
+    bcModel.get
   }
 
 }

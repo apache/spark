@@ -53,7 +53,6 @@ class NaiveBayesModel private[spark] (
 
   private val piVector = new DenseVector(pi)
   private val thetaMatrix = new DenseMatrix(labels.length, theta(0).length, theta.flatten, true)
-  private var bcModel: Option[Broadcast[NaiveBayesModel]] = None
 
   private[mllib] def this(labels: Array[Double], pi: Array[Double], theta: Array[Array[Double]]) =
     this(labels, pi, theta, NaiveBayes.Multinomial)
@@ -87,10 +86,10 @@ class NaiveBayesModel private[spark] (
 
   @Since("1.0.0")
   override def predict(testData: RDD[Vector]): RDD[Double] = {
-    bcModel = getBroadcastModel(bcModel, testData, this)
-    val lclBcModel = bcModel
+    val sc = testData.sparkContext
+    val lclBcModel = getBroadcastModel(sc, this)
     testData.mapPartitions { iter =>
-      val model = lclBcModel.get.value
+      val model = lclBcModel.value
       iter.map(model.predict)
     }
   }
@@ -114,10 +113,10 @@ class NaiveBayesModel private[spark] (
    */
   @Since("1.5.0")
   def predictProbabilities(testData: RDD[Vector]): RDD[Vector] = {
-    bcModel = getBroadcastModel(bcModel, testData, this)
-    val lclBcModel = bcModel
+    val sc = testData.sparkContext
+    val lclBcModel = getBroadcastModel(sc, this)
     testData.mapPartitions { iter =>
-      val model = lclBcModel.get.value
+      val model = lclBcModel.value
       iter.map(model.predictProbabilities)
     }
   }
