@@ -71,7 +71,9 @@ createFunctions()
 #' @return Creates a Column class of literal value.
 setMethod("lit", signature("ANY"),
           function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "lit", ifelse(class(x) == "Column", x@jc, x))
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "lit",
+                              ifelse(class(x) == "Column", x@jc, x))
             column(jc)
           })
 
