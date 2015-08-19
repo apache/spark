@@ -19,8 +19,6 @@ package org.apache.spark.mllib.classification
 
 import java.lang.{Iterable => JIterable}
 
-import org.apache.spark.broadcast.Broadcast
-
 import scala.collection.JavaConverters._
 
 import org.json4s.JsonDSL._
@@ -30,7 +28,7 @@ import org.apache.spark.{Logging, SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.{Loader, Saveable}
+import org.apache.spark.mllib.util.{Broadcastable, Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
@@ -89,10 +87,7 @@ class NaiveBayesModel private[spark] (
 
   @Since("1.0.0")
   override def predict(testData: RDD[Vector]): RDD[Double] = {
-    bcModel match {
-      case None => bcModel = Some(testData.context.broadcast(this))
-      case _ =>
-    }
+    bcModel = getBroadcastModel(bcModel,testData,this)
     val lclBcModel = bcModel
     testData.mapPartitions { iter =>
       val model = lclBcModel.get.value
@@ -119,10 +114,7 @@ class NaiveBayesModel private[spark] (
    */
   @Since("1.5.0")
   def predictProbabilities(testData: RDD[Vector]): RDD[Vector] = {
-    bcModel match {
-      case None => bcModel = Some(testData.context.broadcast(this))
-      case _ =>
-    }
+    bcModel = getBroadcastModel(bcModel,testData,this)
     val lclBcModel = bcModel
     testData.mapPartitions { iter =>
       val model = lclBcModel.get.value
