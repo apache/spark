@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import scala.collection.mutable.{ArrayBuffer, HashSet}
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Future, ExecutionContext}
 
 import org.apache.spark.{Logging, SparkContext}
@@ -99,9 +99,9 @@ private[spark] abstract class YarnSchedulerBackend(
   private class YarnDriverEndpoint(rpcEnv: RpcEnv, sparkProperties: ArrayBuffer[(String, String)])
       extends DriverEndpoint(rpcEnv, sparkProperties) {
 
-    private val pendingDisconnectedExecutors = new HashSet[String]
     private val handleDisconnectedExecutorThreadPool =
       ThreadUtils.newDaemonCachedThreadPool("yarn-driver-handle-lost-executor-thread-pool")
+    implicit val askSchedulerExecutor = ExecutionContext.fromExecutor(handleDisconnectedExecutorThreadPool)
 
     /**
      * When onDisconnected is received at the driver endpoint, the superclass DriverEndpoint
@@ -116,35 +116,19 @@ private[spark] abstract class YarnSchedulerBackend(
      */
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       addressToExecutorId.get(rpcAddress).foreach({ executorId =>
-        // onDisconnected could be fired multiple times from the same executor while we're
-        // asynchronously contacting the AM. So keep track of the executors we're trying to
-        // find loss reasons for and don't duplicate the work
-        if (!pendingDisconnectedExecutors.contains(executorId)) {
-          pendingDisconnectedExecutors.add(executorId)
-          handleDisconnectedExecutorThreadPool.submit(new Runnable() {
-            override def run(): Unit = {
-              val executorLossReason =
-              // Check for the loss reason and pass the loss reason to driverEndpoint
-                yarnSchedulerEndpoint.askWithRetry[Option[ExecutorLossReason]](
-                    GetExecutorLossReason(executorId))
-              executorLossReason match {
-                case Some(reason) =>
-                  driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
-                case None =>
-                  logWarning(s"Attempted to get executor loss reason" +
-                    s" for $rpcAddress but got no response. Marking as slave lost.")
-                  driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, SlaveLost()))
-              }
-              driverEndpoint.askWithRetry(AcknowledgeExecutorRemoved(executorId))
-            }
-          })
+        val future = yarnSchedulerEndpoint.ask[ExecutorLossReason](GetExecutorLossReason(executorId), askTimeout)
+        future onSuccess {
+          case reason: ExecutorLossReason =>
+            driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
+        }
+
+        future onFailure {
+          case NonFatal(e) =>
+            logWarning(s"Attempted to get executor loss reason" +
+              s" for $rpcAddress but got no response. Marking as slave lost.", e)
+            driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, SlaveLost()))
         }
       })
-    }
-
-    override def acknowledgeExecutorRemoved(executorId: String): Boolean = {
-      pendingDisconnectedExecutors.remove(executorId)
-      true
     }
   }
 
@@ -210,9 +194,11 @@ private[spark] abstract class YarnSchedulerBackend(
       case c: GetExecutorLossReason =>
         amEndpoint match {
           case Some(am) =>
-            Future {
-              context.reply(am.askWithRetry[Option[ExecutorLossReason]](c))
-            } onFailure {
+            val future = am.ask[ExecutorLossReason](c, askTimeout)
+            future onSuccess {
+              case reason: ExecutorLossReason => context.reply(reason)
+            }
+            future onFailure {
               case NonFatal(e) =>
                 logError(s"Finding the executor loss reason was unsuccessful", e)
                 context.sendFailure(e)

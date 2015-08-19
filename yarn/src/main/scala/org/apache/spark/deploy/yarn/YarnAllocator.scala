@@ -104,7 +104,6 @@ private[yarn] class YarnAllocator(
 
   private var numUnexpectedContainerRelease = 0L
   private val containerIdToExecutorId = new HashMap[ContainerId, String]
-  private val completedExecutorExitReasons = new HashMap[String, ExecutorLossReason]
 
   // Executor memory in MB.
   protected val executorMemory = args.executorMemory
@@ -211,25 +210,17 @@ private[yarn] class YarnAllocator(
   }
 
   /**
-   * Gets the executor loss reason for a disconnected executor.
-   * Note that this method is expected to be called exactly once per executor ID.
-   */
-  def getExecutorLossReason(executorId: String): ExecutorLossReason = synchronized {
-    allocateResources()
-    // Expect to be asked for a loss reason once and exactly once.
-    assert(completedExecutorExitReasons.contains(executorId))
-    completedExecutorExitReasons.remove(executorId).getOrElse(UNKNOWN_CONTAINER_EXIT_STATUS)
-  }
-
-  /**
    * Request resources such that, if YARN gives us all we ask for, we'll have a number of containers
    * equal to maxExecutors.
    *
    * Deal with any containers YARN has granted to us by possibly launching executors in them.
    *
    * This must be synchronized because variables read in this method are mutated by other methods.
+   *
+   * Returns a list of executor loss reasons discovered by the allocator, which can then be forwarded
+   * to the driver by the calling ApplicationMaster.
    */
-  def allocateResources(): Unit = synchronized {
+  def allocateResources(): Option[Map[String, ExecutorLossReason]] = synchronized {
     updateResourceRequests()
 
     val progressIndicator = 0.1f
@@ -253,10 +244,14 @@ private[yarn] class YarnAllocator(
     if (completedContainers.size > 0) {
       logDebug("Completed %d containers".format(completedContainers.size))
 
-      processCompletedContainers(completedContainers)
+      val discoveredLossReasons = processCompletedContainers(completedContainers)
 
       logDebug("Finished processing %d completed containers. Current running executor count: %d."
         .format(completedContainers.size, numExecutorsRunning))
+      Some(discoveredLossReasons)
+    } else {
+      // No completed containers, so no reasons to report
+      None
     }
   }
 
@@ -441,7 +436,9 @@ private[yarn] class YarnAllocator(
   }
 
   // Visible for testing.
-  private[yarn] def processCompletedContainers(completedContainers: Seq[ContainerStatus]): Unit = {
+  private[yarn] def processCompletedContainers(completedContainers: Seq[ContainerStatus])
+      : Map[String, ExecutorLossReason] = {
+    val discoveredLossReasons = new HashMap[String, ExecutorLossReason]
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
       val alreadyReleased = releasedContainers.remove(containerId)
@@ -512,7 +509,7 @@ private[yarn] class YarnAllocator(
 
       containerIdToExecutorId.remove(containerId).foreach { eid =>
         executorIdToContainer.remove(eid)
-        completedExecutorExitReasons.put(eid, exitReason)
+        discoveredLossReasons.put(eid, exitReason)
 
         if (!alreadyReleased) {
           // The executor could have gone away (like no route to host, node failure, etc)
@@ -522,6 +519,7 @@ private[yarn] class YarnAllocator(
         }
       }
     }
+    discoveredLossReasons.toMap
   }
 
   private def internalReleaseContainer(container: Container): Unit = {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
+import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap}
 import scala.util.control.NonFatal
 
 import java.io.{File, IOException}
@@ -66,6 +67,11 @@ private[spark] class ApplicationMaster(
   private val maxNumExecutorFailures = sparkConf.getInt("spark.yarn.max.executor.failures",
     sparkConf.getInt("spark.yarn.max.worker.failures",
       math.max(sparkConf.getInt("spark.executor.instances", 0) *  2, 3)))
+
+  // Executor loss reason requests that are pending - maps from executor ID for inquiry to a
+  // list of requesters that should be responded to once we find out why the given executor
+  // was lost.
+  private val pendingLossReasonRequests = new HashMap[String, Buffer[RpcCallContext]]
 
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
@@ -348,7 +354,16 @@ private[spark] class ApplicationMaster(
                 "Max number of executor failures reached")
             } else {
               logDebug("Sending progress")
-              allocator.allocateResources()
+              allocator.allocateResources().foreach { discoveredLossReasons =>
+                pendingLossReasonRequests.synchronized {
+                  discoveredLossReasons.foreach { executorIdAndReason =>
+                    pendingLossReasonRequests.remove(executorIdAndReason._1).foreach { pendingRequests =>
+                      pendingRequests.foreach(_.reply(executorIdAndReason._2))
+                      pendingRequests.clear()
+                    }
+                  }
+                }
+              }
             }
             failureCount = 0
           } catch {
@@ -588,13 +603,18 @@ private[spark] class ApplicationMaster(
         context.reply(true)
 
       case GetExecutorLossReason(executorId) =>
-        val executorLossReason = Option(allocator) match {
-          case Some(a) => Some(a.getExecutorLossReason(executorId))
+        Option(allocator) match {
+          case Some(a) =>
+            pendingLossReasonRequests.synchronized {
+              if (!pendingLossReasonRequests.contains(executorId)) {
+                pendingLossReasonRequests.put(executorId, new ArrayBuffer[RpcCallContext])
+              }
+              pendingLossReasonRequests(executorId) += context
+            }
           case None =>
             logWarning("Container allocator was not ready to report on executor status.")
-            None
+            context.reply(None)
         }
-        context.reply(executorLossReason)
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
