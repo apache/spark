@@ -30,7 +30,7 @@ import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
-import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -66,7 +66,8 @@ class MyDialect extends DefaultParserDialect
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest with SQLTestUtils {
-  override def sqlContext: SQLContext = TestHive
+  override def _sqlContext: SQLContext = TestHive
+  private val sqlContext = _sqlContext
 
   test("UDTF") {
     sql(s"ADD JAR ${TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath()}")

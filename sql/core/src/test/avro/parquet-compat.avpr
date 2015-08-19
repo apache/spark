@@ -1,7 +1,18 @@
 {
   "protocol" : "CompatibilityTest",
-  "namespace" : "org.apache.spark.sql.parquet.test.avro",
+  "namespace" : "org.apache.spark.sql.execution.datasources.parquet.test.avro",
   "types" : [ {
+    "type" : "enum",
+    "name" : "Suit",
+    "symbols" : [ "SPADES", "HEARTS", "DIAMONDS", "CLUBS" ]
+  }, {
+    "type" : "record",
+    "name" : "ParquetEnum",
+    "fields" : [ {
+      "name" : "suit",
+      "type" : "Suit"
+    } ]
+  }, {
     "type" : "record",
     "name" : "Nested",
     "fields" : [ {

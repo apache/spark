@@ -30,7 +30,9 @@ except ImportError:
 
 class StatCounter(object):
 
-    def __init__(self, values=[]):
+    def __init__(self, values=None):
+        if values is None:
+            values = list()
         self.n = 0    # Running count of our values
         self.mu = 0.0  # Running mean of our values
         self.m2 = 0.0  # Running variance numerator (sum of (x - mean)^2)

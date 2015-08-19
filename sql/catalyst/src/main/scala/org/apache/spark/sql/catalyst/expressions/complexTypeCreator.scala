@@ -75,8 +75,6 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override lazy val resolved: Boolean = childrenResolved
-
   override lazy val dataType: StructType = {
     val fields = children.zipWithIndex.map { case (child, idx) =>
       child match {
@@ -208,7 +206,9 @@ case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = false
 
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+  override def eval(input: InternalRow): Any = {
+    InternalRow(children.map(_.eval(input)): _*)
+  }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = GenerateUnsafeProjection.createCode(ctx, children)
@@ -246,7 +246,9 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
 
   override def nullable: Boolean = false
 
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+  override def eval(input: InternalRow): Any = {
+    InternalRow(valExprs.map(_.eval(input)): _*)
+  }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)

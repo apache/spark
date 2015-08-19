@@ -31,7 +31,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.execution.RDDConversions
+import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, PartitionSpec, Partition}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql._
@@ -43,19 +43,24 @@ import org.apache.spark.util.SerializableConfiguration
  * This allows users to give the data source alias as the format type over the fully qualified
  * class name.
  *
- * ex: parquet.DefaultSource.format = "parquet".
- *
  * A new instance of this class with be instantiated each time a DDL call is made.
+ *
+ * @since 1.5.0
  */
 @DeveloperApi
 trait DataSourceRegister {
 
   /**
    * The string that represents the format that this data source provider uses. This is
-   * overridden by children to provide a nice alias for the data source,
-   * ex: override def format(): String = "parquet"
+   * overridden by children to provide a nice alias for the data source. For example:
+   *
+   * {{{
+   *   override def format(): String = "parquet"
+   * }}}
+   *
+   * @since 1.5.0
    */
-  def format(): String
+  def shortName(): String
 }
 
 /**
@@ -401,7 +406,7 @@ abstract class OutputWriter {
  */
 @Experimental
 abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec])
-  extends BaseRelation with Logging {
+  extends BaseRelation with FileRelation with Logging {
 
   override def toString: String = getClass.getSimpleName + paths.mkString("[", ",", "]")
 
@@ -511,6 +516,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    */
   def paths: Array[String]
 
+  override def inputFiles: Array[String] = cachedLeafStatuses().map(_.getPath.toString).toArray
+
   /**
    * Partition columns.  Can be either defined by [[userDefinedPartitionColumns]] or automatically
    * discovered.  Note that they should always be nullable.
@@ -555,7 +562,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     })
   }
 
-  private[sql] final def buildScan(
+  private[sql] def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String],

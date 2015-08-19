@@ -125,6 +125,6 @@ class PCAModel private[ml] (
 
   override def copy(extra: ParamMap): PCAModel = {
     val copied = new PCAModel(uid, pcaModel)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }

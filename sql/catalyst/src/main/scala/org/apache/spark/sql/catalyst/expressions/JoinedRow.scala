@@ -37,20 +37,20 @@ class JoinedRow extends InternalRow {
   }
 
   /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: InternalRow, r2: InternalRow): InternalRow = {
+  def apply(r1: InternalRow, r2: InternalRow): JoinedRow = {
     row1 = r1
     row2 = r2
     this
   }
 
   /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: InternalRow): InternalRow = {
+  def withLeft(newLeft: InternalRow): JoinedRow = {
     row1 = newLeft
     this
   }
 
   /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: InternalRow): InternalRow = {
+  def withRight(newRight: InternalRow): JoinedRow = {
     row2 = newRight
     this
   }

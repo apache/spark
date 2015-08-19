@@ -21,6 +21,8 @@ import java.util.Collections
 import java.util.concurrent._
 import java.util.regex.Pattern
 
+import org.apache.spark.util.Utils
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
@@ -86,7 +88,12 @@ private[yarn] class YarnAllocator(
   private var executorIdCounter = 0
   @volatile private var numExecutorsFailed = 0
 
-  @volatile private var targetNumExecutors = args.numExecutors
+  @volatile private var targetNumExecutors =
+    if (Utils.isDynamicAllocationEnabled(sparkConf)) {
+      sparkConf.getInt("spark.dynamicAllocation.initialExecutors", 0)
+    } else {
+      sparkConf.getInt("spark.executor.instances", YarnSparkHadoopUtil.DEFAULT_NUMBER_EXECUTORS)
+    }
 
   // Keep track of which container is running which executor to remove the executors later
   // Visible for testing.
