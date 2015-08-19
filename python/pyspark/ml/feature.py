@@ -775,7 +775,7 @@ class StandardScalerModel(JavaModel):
 
 
 @inherit_doc
-class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
+class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid):
     """
     A label indexer that maps a string column of labels to an ML column of label indices.
     If the input column is numeric, we cast it to string and index the string values.
@@ -788,24 +788,23 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)]
-    >>> type(model.labels)
-    (u'a', u'c', u'b')
     """
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None):
+    def __init__(self, inputCol=None, outputCol=None, handleInvalid="error"):
         """
-        __init__(self, inputCol=None, outputCol=None)
+        __init__(self, inputCol=None, outputCol=None, handleInvalid="error")
         """
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
+        self._setDefault(handleInvalid="error")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, inputCol=None, outputCol=None):
+    def setParams(self, inputCol=None, outputCol=None, handleInvalid="error"):
         """
-        setParams(self, inputCol=None, outputCol=None)
+        setParams(self, inputCol=None, outputCol=None, handleInvalid="error")
         Sets params for this StringIndexer.
         """
         kwargs = self.setParams._input_kwargs
