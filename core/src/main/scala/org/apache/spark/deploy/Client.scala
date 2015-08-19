@@ -70,7 +70,7 @@ private class ClientEndpoint(
         val driverClassPathConf = "spark.driver.extraClassPath"
         val commonClassPathConf = "spark.common.extraClassPath"
 
-        val driverClassPath = Option(
+        val driverClassPath = Some(
           (sys.props.get(commonClassPathConf) ++ sys.props.get(driverClassPathConf))
           .mkString(java.io.File.pathSeparator)
           ).filter(_.nonEmpty)
