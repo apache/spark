@@ -725,7 +725,11 @@ dctDf.select("featuresDCT").show(3);
 `StringIndexer` encodes a string column of labels to a column of label indices.
 The indices are in `[0, numLabels)`, ordered by label frequencies.
 So the most frequent label gets index `0`.
-If the input column is numeric, we cast it to string and index the string values.
+If the input column is numeric, we cast it to string and index the string 
+values. When downstream pipeline components such as `Estimator` or 
+`Transformer` make use of this string-indexed label, you must set the input 
+column of the component to this string-indexed column name. In many cases, 
+you can set the input column with `setInputCol`.
 
 **Examples**
 
