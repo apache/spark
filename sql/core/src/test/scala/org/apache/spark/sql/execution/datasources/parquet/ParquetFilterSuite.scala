@@ -63,9 +63,9 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       assert(selectedFilters.nonEmpty)
 
       selectedFilters.foreach { pred =>
-        val filter = ParquetFilters.createFilter(df.schema, pred)
-        assert(filter.isDefined, s"Couldn't generate filter predicate for $pred")
-        filter.foreach { f =>
+        val maybeFilter = ParquetFilters.createFilter(df.schema, pred)
+        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
+        maybeFilter.foreach { f =>
           // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
           assert(f.getClass === filterClass)
         }
