@@ -19,7 +19,7 @@ package org.apache.spark.ui.memory
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.Node
+import scala.xml.{Node, NodeSeq}
 
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
@@ -29,32 +29,80 @@ private[ui] class MemoryPage(parent: MemoryTab) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
 
-    val executorIdToMem = listener.executorIdToMem
-    val memInfoSorted = executorIdToMem.toSeq.sortBy(_._1)
+    val activeExecutorIdToMem = listener.activeExecutorIdToMem
+    val removedExecutorIdToMem = listener.removedExecutorIdToMem
+    val activeMemInfoSorted = activeExecutorIdToMem.toSeq.sortBy(_._1)
+    val removedMemInfoSorted = removedExecutorIdToMem.toSeq.sortBy(_._1)
+    val shouldShowActiveExecutors = activeExecutorIdToMem.nonEmpty
+    val shouldShowRemovedExecutors = removedExecutorIdToMem.nonEmpty
 
-    val memTable =
-      <table class={UIUtils.TABLE_CLASS_STRIPED}>
-        <thead>
-          <th>Executor ID</th>
-          <th>Address</th>
-          <th>Net Memory (on-heap)</th>
-          <th>Net Memory (direct-heap)</th>
-          <th>Peak Net Memory (on-heap) / Happen Time</th>
-          <th>Peak Net Read (direct-heap) / Happen Time</th>
-        </thead>
-        <tbody>
-          {memInfoSorted.map(showRow(_))}
-        </tbody>
-      </table>
+    val activeExecMemTable = new MemTableBase(activeMemInfoSorted, listener)
+    val removedExecMemTable = new MemTableBase(removedMemInfoSorted, listener)
 
-    val content =
-      <div class = "row">
-        <div class="span12">
-          {memTable}
-        </div>
-      </div>;
+    val summary: NodeSeq =
+      <div>
+        <ul class="unstyled">
+          {
+            if (shouldShowActiveExecutors) {
+              <li>
+                <a href="#activeExec"><strong>Active Executors:</strong></a>
+                {activeExecutorIdToMem.size}
+              </li>
+            }
+          }
+          {
+          if (shouldShowRemovedExecutors) {
+            <li>
+              <a href="#removedExec"><strong>Active Executors:</strong></a>
+              {removedExecutorIdToMem.size}
+            </li>
+          }
+          }
+        </ul>
+      </div>
+
+    var content = summary
+    if (shouldShowActiveExecutors) {
+      content ++= <h4 id="activeExec">Active Executors ({activeExecutorIdToMem.size})</h4> ++
+      activeExecMemTable.toNodeSeq
+    }
+    if (shouldShowRemovedExecutors) {
+      content ++= <h4 id="activeExec">Active Executors ({removedMemInfoSorted.size})</h4> ++
+      removedExecMemTable.toNodeSeq
+    }
 
     UIUtils.headerSparkPage("Memory Usage", content, parent)
+  }
+
+
+}
+
+private[ui] class MemTableBase(
+    memInfos: Seq[(String, MemoryUIInfo)],
+    listener: MemoryListener) {
+
+  protected def columns: Seq[Node] = {
+    <th>Executor ID</th>
+    <th>Address</th>
+    <th>Net Memory (on-heap)</th>
+    <th>Net Memory (direct-heap)</th>
+    <th>Peak Net Memory (on-heap) / Happen Time</th>
+    <th>Peak Net Read (direct-heap) / Happen Time</th>
+  }
+
+  def toNodeSeq: Seq[Node] = {
+    listener.synchronized {
+      memTable(showRow, memInfos)
+    }
+  }
+
+  protected def memTable[T](makeRow: T => Seq[Node], rows: Seq[T]): Seq[Node] = {
+    <table class={UIUtils.TABLE_CLASS_STRIPED}>
+      <thead>{columns}</thead>
+      <tbody>
+        {rows.map(r => makeRow(r))}
+      </tbody>
+    </table>
   }
 
   /** Render an HTML row representing an executor */
@@ -63,7 +111,7 @@ private[ui] class MemoryPage(parent: MemoryTab) extends WebUIPage("") {
       <td>{info._1}</td>
       <td>{info._2.executorAddress}</td>
       {if (info._2.transportInfo.isDefined) {
-        <td>{Utils.bytesToString(info._2.transportInfo.get.onheapSize)}</td>
+      <td>{Utils.bytesToString(info._2.transportInfo.get.onheapSize)}</td>
         <td>{Utils.bytesToString(info._2.transportInfo.get.directheapSize)}</td>
         <td>
           {Utils.bytesToString(info._2.transportInfo.get.peakOnheapSizeTime.memorySize)} /
@@ -73,12 +121,12 @@ private[ui] class MemoryPage(parent: MemoryTab) extends WebUIPage("") {
           {Utils.bytesToString(info._2.transportInfo.get.peakDirectheapSizeTime.memorySize)} /
           {UIUtils.formatDate(info._2.transportInfo.get.peakDirectheapSizeTime.timeStamp)}
         </td>
-      } else {
+    } else {
+      <td>N/A</td>
         <td>N/A</td>
         <td>N/A</td>
         <td>N/A</td>
-        <td>N/A</td>
-      }}
+    }}
     </tr>
   }
 }

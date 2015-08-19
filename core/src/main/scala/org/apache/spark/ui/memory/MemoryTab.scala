@@ -37,28 +37,31 @@ private[ui] class MemoryTab(parent: SparkUI) extends SparkUITab(parent, "memory"
 @DeveloperApi
 class MemoryListener extends SparkListener {
   type ExecutorId = String
-  val executorIdToMem = new HashMap[ExecutorId, MemoryUIInfo]
+  val activeExecutorIdToMem = new HashMap[ExecutorId, MemoryUIInfo]
+  val removedExecutorIdToMem = new HashMap[ExecutorId, MemoryUIInfo]
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
     val executorId = event.execId
     val executorMetrics = event.executorMetrics
-    val memoryInfo = executorIdToMem.getOrElseUpdate(executorId, new MemoryUIInfo)
+    val memoryInfo = activeExecutorIdToMem.getOrElseUpdate(executorId, new MemoryUIInfo)
     memoryInfo.updateExecutorMetrics(executorMetrics)
   }
 
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
     val executorId = event.executorId
-    executorIdToMem.put(executorId, new MemoryUIInfo(event.executorInfo))
+    activeExecutorIdToMem.put(executorId, new MemoryUIInfo(event.executorInfo))
   }
 
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
     val executorId = event.executorId
-    executorIdToMem.remove(executorId)
+    val info = activeExecutorIdToMem.remove(executorId)
+    removedExecutorIdToMem.getOrElseUpdate(executorId, info.getOrElse(new MemoryUIInfo))
   }
 
   override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved): Unit = {
     val executorId = event.blockManagerId.executorId
-    executorIdToMem.remove(executorId)
+    val info = activeExecutorIdToMem.remove(executorId)
+    removedExecutorIdToMem.getOrElseUpdate(executorId, info.getOrElse(new MemoryUIInfo))
   }
 }
 
