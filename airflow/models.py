@@ -13,7 +13,6 @@ import logging
 import os
 import dill
 import re
-import pandas as pd
 import signal
 import socket
 import sys
