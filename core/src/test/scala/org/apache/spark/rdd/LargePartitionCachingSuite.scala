@@ -18,13 +18,15 @@ package org.apache.spark.rdd
 
 import org.apache.spark._
 import org.apache.spark.storage.{ReplicationBlockSizeLimitException, StorageLevel}
-import org.scalatest.{Matchers, FunSuite}
+import org.scalatest.Matchers
 
-class LargePartitionCachingSuite extends FunSuite with SharedSparkContext with Matchers {
+class LargePartitionCachingSuite extends SparkFunSuite with SharedSparkContext with Matchers {
 
-  def largePartitionRdd = sc.parallelize(1 to 1e6.toInt, 1).map{i => new Array[Byte](2.2e3.toInt)}
+  def largePartitionRdd: RDD[Array[Byte]] = {
+    sc.parallelize(1 to 1e6.toInt, 1).map{i => new Array[Byte](2.2e3.toInt)}
+  }
 
-  //just don't want to kill the test server
+  // just don't want to kill the test server
   ignore("memory serialized cache large partitions") {
     largePartitionRdd.persist(StorageLevel.MEMORY_ONLY_SER).count() should be (1e6.toInt)
   }

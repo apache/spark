@@ -137,7 +137,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     val is = file.getInStream(ReadType.CACHE)
     try {
       val size = file.length
-      //TODO get tachyon to support large blocks
+      // TODO get tachyon to support large blocks
       val bs = new Array[Byte](size.asInstanceOf[Int])
       ByteStreams.readFully(is, bs)
       Some(LargeByteBufferHelper.asLargeByteBuffer(bs))

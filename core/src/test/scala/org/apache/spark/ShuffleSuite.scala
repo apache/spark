@@ -288,7 +288,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val rdd = sc.parallelize(1 to 1e6.toInt, 1).map{ i =>
       val n = 3e3.toInt
       val arr = new Array[Byte](n)
-      //need to make sure the array doesn't compress to something small
+      // need to make sure the array doesn't compress to something small
       scala.util.Random.nextBytes(arr)
       (i, arr)
     }
@@ -304,7 +304,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val rdd = sc.parallelize(1 to 1e6.toInt, 1).map{ i =>
       val n = 3e3.toInt
       val arr = new Array[Byte](n)
-      //need to make sure the array doesn't compress to something small
+      // need to make sure the array doesn't compress to something small
       scala.util.Random.nextBytes(arr)
       (2 * i, arr)
     }
