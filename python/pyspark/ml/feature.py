@@ -15,16 +15,22 @@
 # limitations under the License.
 #
 
+import sys
+if sys.version > '3':
+    basestring = str
+
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer
 from pyspark.mllib.common import inherit_doc
+from pyspark.mllib.linalg import _convert_to_vector
 
-__all__ = ['Binarizer', 'HashingTF', 'IDF', 'IDFModel', 'NGram', 'Normalizer', 'OneHotEncoder',
-           'PolynomialExpansion', 'RegexTokenizer', 'StandardScaler', 'StandardScalerModel',
-           'StringIndexer', 'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer',
-           'Word2Vec', 'Word2VecModel', 'PCA', 'PCAModel', 'RFormula', 'RFormulaModel']
+__all__ = ['Binarizer', 'Bucketizer', 'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel',
+           'NGram', 'Normalizer', 'OneHotEncoder', 'PolynomialExpansion', 'RegexTokenizer',
+           'StandardScaler', 'StandardScalerModel', 'StringIndexer', 'StringIndexerModel',
+           'Tokenizer', 'VectorAssembler', 'VectorIndexer', 'Word2Vec', 'Word2VecModel',
+           'PCA', 'PCAModel', 'RFormula', 'RFormulaModel']
 
 
 @inherit_doc
@@ -158,6 +164,63 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
         Gets the value of threshold or its default value.
         """
         return self.getOrDefault(self.splits)
+
+
+@inherit_doc
+class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
+    """
+    Outputs the Hadamard product (i.e., the element-wise product) of each input vector
+    with a provided "weight" vector. In other words, it scales each column of the dataset
+    by a scalar multiplier.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame([(Vectors.dense([2.0, 1.0, 3.0]),)], ["values"])
+    >>> ep = ElementwiseProduct(scalingVec=Vectors.dense([1.0, 2.0, 3.0]),
+    ...     inputCol="values", outputCol="eprod")
+    >>> ep.transform(df).head().eprod
+    DenseVector([2.0, 2.0, 9.0])
+    >>> ep.setParams(scalingVec=Vectors.dense([2.0, 3.0, 5.0])).transform(df).head().eprod
+    DenseVector([4.0, 3.0, 15.0])
+    """
+
+    # a placeholder to make it appear in the generated doc
+    scalingVec = Param(Params._dummy(), "scalingVec", "vector for hadamard product, " +
+                       "it must be MLlib Vector type.")
+
+    @keyword_only
+    def __init__(self, scalingVec=None, inputCol=None, outputCol=None):
+        """
+        __init__(self, scalingVec=None, inputCol=None, outputCol=None)
+        """
+        super(ElementwiseProduct, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ElementwiseProduct",
+                                            self.uid)
+        self.scalingVec = Param(self, "scalingVec", "vector for hadamard product, " +
+                                "it must be MLlib Vector type.")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, scalingVec=None, inputCol=None, outputCol=None):
+        """
+        setParams(self, scalingVec=None, inputCol=None, outputCol=None)
+        Sets params for this ElementwiseProduct.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setScalingVec(self, value):
+        """
+        Sets the value of :py:attr:`scalingVec`.
+        """
+        self._paramMap[self.scalingVec] = value
+        return self
+
+    def getScalingVec(self):
+        """
+        Gets the value of scalingVec or its default value.
+        """
+        return self.getOrDefault(self.scalingVec)
 
 
 @inherit_doc
@@ -954,6 +1017,23 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     >>> sent = ("a b " * 100 + "a c " * 10).split(" ")
     >>> doc = sqlContext.createDataFrame([(sent,), (sent,)], ["sentence"])
     >>> model = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model").fit(doc)
+    >>> model.getVectors().show()
+    +----+--------------------+
+    |word|              vector|
+    +----+--------------------+
+    |   a|[-0.3511952459812...|
+    |   b|[0.29077222943305...|
+    |   c|[0.02315592765808...|
+    +----+--------------------+
+    ...
+    >>> model.findSynonyms("a", 2).show()
+    +----+-------------------+
+    |word|         similarity|
+    +----+-------------------+
+    |   b|0.29255685145799626|
+    |   c|-0.5414068302988307|
+    +----+-------------------+
+    ...
     >>> model.transform(doc).head().model
     DenseVector([-0.0422, -0.5138, -0.2546, 0.6885, 0.276])
     """
@@ -1046,6 +1126,24 @@ class Word2VecModel(JavaModel):
     """
     Model fitted by Word2Vec.
     """
+
+    def getVectors(self):
+        """
+        Returns the vector representation of the words as a dataframe
+        with two fields, word and vector.
+        """
+        return self._call_java("getVectors")
+
+    def findSynonyms(self, word, num):
+        """
+        Find "num" number of words closest in similarity to "word".
+        word can be a string or vector representation.
+        Returns a dataframe with two fields word and similarity (which
+        gives the cosine similarity).
+        """
+        if not isinstance(word, basestring):
+            word = _convert_to_vector(word)
+        return self._call_java("findSynonyms", word, num)
 
 
 @inherit_doc

@@ -39,8 +39,8 @@ import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{FileSystemResolver, ChainResolver, IBiblioResolver}
 
+import org.apache.spark.{SparkUserAppException, SPARK_VERSION}
 import org.apache.spark.api.r.RUtils
-import org.apache.spark.SPARK_VERSION
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
@@ -284,12 +284,18 @@ object SparkSubmit {
         Nil
       }
     val resolvedMavenCoordinates = SparkSubmitUtils.resolveMavenCoordinates(args.packages,
-      Some(args.repositories), Some(args.ivyRepoPath), exclusions = exclusions)
+      Option(args.repositories), Option(args.ivyRepoPath), exclusions = exclusions)
     if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
       args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
       if (args.isPython) {
         args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
       }
+    }
+
+    // install any R packages that may have been passed through --jars or --packages.
+    // Spark Packages may contain R source code inside the jar.
+    if (args.isR && !StringUtils.isBlank(args.jars)) {
+      RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
     }
 
     // Require all python files to be local, so we can add them to the PYTHONPATH
@@ -361,7 +367,8 @@ object SparkSubmit {
       if (rPackagePath.isEmpty) {
         printErrorAndExit("SPARK_HOME does not exist for R application in YARN mode.")
       }
-      val rPackageFile = new File(rPackagePath.get, SPARKR_PACKAGE_ARCHIVE)
+      val rPackageFile =
+        RPackageUtils.zipRLibraries(new File(rPackagePath.get), SPARKR_PACKAGE_ARCHIVE)
       if (!rPackageFile.exists()) {
         printErrorAndExit(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in YARN mode.")
       }
@@ -417,7 +424,8 @@ object SparkSubmit {
 
       // Yarn client only
       OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
-      OptionAssigner(args.numExecutors, YARN, CLIENT, sysProp = "spark.executor.instances"),
+      OptionAssigner(args.numExecutors, YARN, ALL_DEPLOY_MODES,
+        sysProp = "spark.executor.instances"),
       OptionAssigner(args.files, YARN, CLIENT, sysProp = "spark.yarn.dist.files"),
       OptionAssigner(args.archives, YARN, CLIENT, sysProp = "spark.yarn.dist.archives"),
       OptionAssigner(args.principal, YARN, CLIENT, sysProp = "spark.yarn.principal"),
@@ -428,7 +436,6 @@ object SparkSubmit {
       OptionAssigner(args.driverMemory, YARN, CLUSTER, clOption = "--driver-memory"),
       OptionAssigner(args.driverCores, YARN, CLUSTER, clOption = "--driver-cores"),
       OptionAssigner(args.queue, YARN, CLUSTER, clOption = "--queue"),
-      OptionAssigner(args.numExecutors, YARN, CLUSTER, clOption = "--num-executors"),
       OptionAssigner(args.executorMemory, YARN, CLUSTER, clOption = "--executor-memory"),
       OptionAssigner(args.executorCores, YARN, CLUSTER, clOption = "--executor-cores"),
       OptionAssigner(args.files, YARN, CLUSTER, clOption = "--files"),
@@ -667,7 +674,13 @@ object SparkSubmit {
       mainMethod.invoke(null, childArgs.toArray)
     } catch {
       case t: Throwable =>
-        throw findCause(t)
+        findCause(t) match {
+          case SparkUserAppException(exitCode) =>
+            System.exit(exitCode)
+
+          case t: Throwable =>
+            throw t
+        }
     }
   }
 
@@ -989,11 +1002,9 @@ private[spark] object SparkSubmitUtils {
         addExclusionRules(ivySettings, ivyConfName, md)
         // add all supplied maven artifacts as dependencies
         addDependenciesToIvy(md, artifacts, ivyConfName)
-
         exclusions.foreach { e =>
           md.addExcludeRule(createExclusion(e + ":*", ivySettings, ivyConfName))
         }
-
         // resolve dependencies
         val rr: ResolveReport = ivy.resolve(md, resolveOptions)
         if (rr.hasError) {

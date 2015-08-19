@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.scalatest.BeforeAndAfterAll
+
+import org.apache.spark.sql._
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.sql.{SQLConf, AnalysisException, QueryTest, Row}
-import org.scalatest.BeforeAndAfterAll
-import test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
+import _root_.test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 
 abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
-
-  override val sqlContext = TestHive
+  override def _sqlContext: SQLContext = TestHive
+  protected val sqlContext = _sqlContext
   import sqlContext.implicits._
 
   var originalUseAggregate2: Boolean = _
@@ -73,8 +74,8 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
     emptyDF.registerTempTable("emptyTable")
 
     // Register UDAFs
-    sqlContext.udaf.register("mydoublesum", new MyDoubleSum)
-    sqlContext.udaf.register("mydoubleavg", new MyDoubleAvg)
+    sqlContext.udf.register("mydoublesum", new MyDoubleSum)
+    sqlContext.udf.register("mydoubleavg", new MyDoubleAvg)
   }
 
   override def afterAll(): Unit = {
@@ -139,6 +140,22 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
           |GROUP BY key
         """.stripMargin),
       Nil)
+  }
+
+  test("null literal") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  AVG(null),
+          |  COUNT(null),
+          |  FIRST(null),
+          |  LAST(null),
+          |  MAX(null),
+          |  MIN(null),
+          |  SUM(null)
+        """.stripMargin),
+      Row(null, 0, null, null, null, null, null) :: Nil)
   }
 
   test("only do grouping") {
@@ -266,13 +283,6 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
           |SELECT avg(value) FROM agg1
         """.stripMargin),
       Row(11.125) :: Nil)
-
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT avg(null)
-        """.stripMargin),
-      Row(null) :: Nil)
   }
 
   test("udaf") {
@@ -364,7 +374,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
           |  max(distinct value1)
           |FROM agg2
         """.stripMargin),
-      Row(-60, 70.0, 101.0/9.0, 5.6, 100.0))
+      Row(-60, 70.0, 101.0/9.0, 5.6, 100))
 
     checkAnswer(
       sqlContext.sql(
@@ -402,6 +412,23 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
         Row(2, 100.0, 3.0, 0.0, 100.0, 1.0/3.0 + 100.0) ::
         Row(3, null, 3.0, null, null, null) ::
         Row(null, 110.0, 60.0, 30.0, 110.0, 110.0) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  count(value1),
+          |  count(*),
+          |  count(1),
+          |  count(DISTINCT value1),
+          |  key
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(3, 3, 3, 2, 1) ::
+        Row(3, 4, 4, 2, 2) ::
+        Row(0, 2, 2, 0, 3) ::
+        Row(3, 4, 4, 3, null) :: Nil)
   }
 
   test("test count") {
@@ -453,6 +480,21 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
         Row(0, null, 1, 1, null, 0) :: Nil)
   }
 
+  test("test Last implemented based on AggregateExpression1") {
+    // TODO: Remove this test once we remove AggregateExpression1.
+    import org.apache.spark.sql.functions._
+    val df = Seq((1, 1), (2, 2), (3, 3)).toDF("i", "j").repartition(1)
+    withSQLConf(
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+      SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
+
+      checkAnswer(
+        df.groupBy("i").agg(last("j")),
+        df
+      )
+    }
+  }
+
   test("error handling") {
     withSQLConf("spark.sql.useAggregate2" -> "false") {
       val errorMessage = intercept[AnalysisException] {
@@ -496,7 +538,8 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
           |FROM agg1
           |GROUP BY key
         """.stripMargin).queryExecution.executedPlan.collect {
-        case agg: aggregate.Aggregate => agg
+        case agg: aggregate.SortBasedAggregate => agg
+        case agg: aggregate.TungstenAggregate => agg
       }
       val message =
         "We should fallback to the old aggregation code path if " +
@@ -535,5 +578,60 @@ class TungstenAggregationQuerySuite extends AggregationQuerySuite {
   override def afterAll(): Unit = {
     super.afterAll()
     sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+  }
+}
+
+class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
+
+  var originalUnsafeEnabled: Boolean = _
+
+  override def beforeAll(): Unit = {
+    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "true")
+    super.beforeAll()
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
+    sqlContext.conf.unsetConf("spark.sql.TungstenAggregate.testFallbackStartsAt")
+  }
+
+  override protected def checkAnswer(actual: DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    (0 to 2).foreach { fallbackStartsAt =>
+      sqlContext.setConf(
+        "spark.sql.TungstenAggregate.testFallbackStartsAt",
+        fallbackStartsAt.toString)
+
+      // Create a new df to make sure its physical operator picks up
+      // spark.sql.TungstenAggregate.testFallbackStartsAt.
+      val newActual = DataFrame(sqlContext, actual.logicalPlan)
+
+      QueryTest.checkAnswer(newActual, expectedAnswer) match {
+        case Some(errorMessage) =>
+          val newErrorMessage =
+            s"""
+              |The following aggregation query failed when using TungstenAggregate with
+              |controlled fallback (it falls back to sort-based aggregation once it has processed
+              |$fallbackStartsAt input rows). The query is
+              |${actual.queryExecution}
+              |
+              |$errorMessage
+            """.stripMargin
+
+          fail(newErrorMessage)
+        case None =>
+      }
+    }
+  }
+
+  // Override it to make sure we call the actually overridden checkAnswer.
+  override protected def checkAnswer(df: DataFrame, expectedAnswer: Row): Unit = {
+    checkAnswer(df, Seq(expectedAnswer))
+  }
+
+  // Override it to make sure we call the actually overridden checkAnswer.
+  override protected def checkAnswer(df: DataFrame, expectedAnswer: DataFrame): Unit = {
+    checkAnswer(df, expectedAnswer.collect())
   }
 }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
@@ -27,7 +28,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.PlatformDependent
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
 
 
@@ -265,6 +266,45 @@ class CodeGenContext {
   def isPrimitiveType(jt: String): Boolean = primitiveTypes.contains(jt)
 
   def isPrimitiveType(dt: DataType): Boolean = isPrimitiveType(javaType(dt))
+
+  /**
+   * Splits the generated code of expressions into multiple functions, because function has
+   * 64kb code size limit in JVM
+   *
+   * @param row the variable name of row that is used by expressions
+   */
+  def splitExpressions(row: String, expressions: Seq[String]): String = {
+    val blocks = new ArrayBuffer[String]()
+    val blockBuilder = new StringBuilder()
+    for (code <- expressions) {
+      // We can't know how many byte code will be generated, so use the number of bytes as limit
+      if (blockBuilder.length > 64 * 1000) {
+        blocks.append(blockBuilder.toString())
+        blockBuilder.clear()
+      }
+      blockBuilder.append(code)
+    }
+    blocks.append(blockBuilder.toString())
+
+    if (blocks.length == 1) {
+      // inline execution if only one block
+      blocks.head
+    } else {
+      val apply = freshName("apply")
+      val functions = blocks.zipWithIndex.map { case (body, i) =>
+        val name = s"${apply}_$i"
+        val code = s"""
+           |private void $name(InternalRow $row) {
+           |  $body
+           |}
+         """.stripMargin
+         addNewFunction(name, code)
+         name
+      }
+
+      functions.map(name => s"$name($row);").mkString("\n")
+    }
+  }
 }
 
 /**
@@ -289,15 +329,15 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected def declareMutableStates(ctx: CodeGenContext): String = {
     ctx.mutableStates.map { case (javaType, variableName, _) =>
       s"private $javaType $variableName;"
-    }.mkString
+    }.mkString("\n")
   }
 
   protected def initMutableStates(ctx: CodeGenContext): String = {
-    ctx.mutableStates.map(_._3).mkString
+    ctx.mutableStates.map(_._3).mkString("\n")
   }
 
   protected def declareAddedFunctions(ctx: CodeGenContext): String = {
-    ctx.addedFuntions.map { case (funcName, funcCode) => funcCode }.mkString
+    ctx.addedFuntions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
   }
 
   /**
@@ -328,8 +368,10 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(getClass.getClassLoader)
+    // Cannot be under package codegen, or fail with java.lang.InstantiationException
+    evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
     evaluator.setDefaultImports(Array(
-      classOf[PlatformDependent].getName,
+      classOf[Platform].getName,
       classOf[InternalRow].getName,
       classOf[UnsafeRow].getName,
       classOf[UTF8String].getName,

@@ -21,7 +21,8 @@ import scala.collection.immutable.HashSet
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{Decimal, DoubleType, IntegerType, BooleanType}
+import org.apache.spark.sql.RandomDataGenerator
+import org.apache.spark.sql.types._
 
 
 class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -72,6 +73,16 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     notTrueTable.foreach { case (v, answer) =>
       checkEvaluation(Not(Literal.create(v, BooleanType)), answer)
     }
+    checkConsistencyBetweenInterpretedAndCodegen(Not, BooleanType)
+  }
+
+  test("AND, OR, EqualTo, EqualNullSafe consistency check") {
+    checkConsistencyBetweenInterpretedAndCodegen(And, BooleanType, BooleanType)
+    checkConsistencyBetweenInterpretedAndCodegen(Or, BooleanType, BooleanType)
+    DataTypeTestUtils.propertyCheckSupported.foreach { dt =>
+      checkConsistencyBetweenInterpretedAndCodegen(EqualTo, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(EqualNullSafe, dt, dt)
+    }
   }
 
   booleanLogicTest("AND", And,
@@ -118,6 +129,23 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("^Ba*n"))), true)
     checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^Ba*n"))), true)
     checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^n"))), false)
+
+    val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
+      LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
+    primitiveTypes.map { t =>
+      val dataGen = RandomDataGenerator.forType(t, nullable = false).get
+      val inputData = Seq.fill(10) {
+        val value = dataGen.apply()
+        value match {
+          case d: Double if d.isNaN => 0.0d
+          case f: Float if f.isNaN => 0.0f
+          case _ => value
+        }
+      }
+      val input = inputData.map(Literal(_))
+      checkEvaluation(In(input(0), input.slice(1, 10)),
+        inputData.slice(1, 10).contains(inputData(0)))
+    }
   }
 
   test("INSET") {
@@ -134,6 +162,23 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(InSet(three, hS), false)
     checkEvaluation(InSet(three, nS), false)
     checkEvaluation(And(InSet(one, hS), InSet(two, hS)), true)
+
+    val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
+      LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
+    primitiveTypes.map { t =>
+      val dataGen = RandomDataGenerator.forType(t, nullable = false).get
+      val inputData = Seq.fill(10) {
+        val value = dataGen.apply()
+        value match {
+          case d: Double if d.isNaN => 0.0d
+          case f: Float if f.isNaN => 0.0f
+          case _ => value
+        }
+      }
+      val input = inputData.map(Literal(_))
+      checkEvaluation(InSet(input(0), inputData.slice(1, 10).toSet),
+        inputData.slice(1, 10).contains(inputData(0)))
+    }
   }
 
   private val smallValues = Seq(1, Decimal(1), Array(1.toByte), "a", 0f, 0d, false).map(Literal(_))
@@ -144,6 +189,15 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(1, Decimal(1), Array(1.toByte), "a", Float.NaN, Double.NaN, true).map(Literal(_))
   private val equalValues2 =
     Seq(1, Decimal(1), Array(1.toByte), "a", Float.NaN, Double.NaN, true).map(Literal(_))
+
+  test("BinaryComparison consistency check") {
+    DataTypeTestUtils.ordered.foreach { dt =>
+      checkConsistencyBetweenInterpretedAndCodegen(LessThan, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(LessThanOrEqual, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(GreaterThan, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(GreaterThanOrEqual, dt, dt)
+    }
+  }
 
   test("BinaryComparison: lessThan") {
     for (i <- 0 until smallValues.length) {

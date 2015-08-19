@@ -18,13 +18,12 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.Decimal
 
 
-class StringFunctionsSuite extends QueryTest {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
+class StringFunctionsSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("string concat") {
     val df = Seq[(String, String, String)](("a", "b", null)).toDF("a", "b", "c")
@@ -126,6 +125,12 @@ class StringFunctionsSuite extends QueryTest {
       df.selectExpr("encode(a, 'utf-8')", "decode(c, 'utf-8')"),
       Row(bytes, "大千世界"))
     // scalastyle:on
+  }
+
+  test("string translate") {
+    val df = Seq(("translate", "")).toDF("a", "b")
+    checkAnswer(df.select(translate($"a", "rnlt", "123")), Row("1a2s3ae"))
+    checkAnswer(df.selectExpr("""translate(a, "rnlt", "")"""), Row("asae"))
   }
 
   test("string trim functions") {

@@ -860,7 +860,7 @@ private[ui] class TaskDataSource(
     }
     val peakExecutionMemoryUsed = taskInternalAccumulables
       .find { acc => acc.name == InternalAccumulator.PEAK_EXECUTION_MEMORY }
-      .map { acc => acc.value.toLong }
+      .map { acc => acc.update.getOrElse("0").toLong }
       .getOrElse(0L)
 
     val maybeInput = metrics.flatMap(_.inputMetrics)

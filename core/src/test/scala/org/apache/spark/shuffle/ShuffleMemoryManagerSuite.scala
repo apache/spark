@@ -24,7 +24,7 @@ import org.mockito.Mockito._
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkFunSuite, TaskContext}
+import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext}
 
 class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
 
@@ -50,7 +50,7 @@ class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
   }
 
   test("single task requesting memory") {
-    val manager = new ShuffleMemoryManager(1000L)
+    val manager = ShuffleMemoryManager.createForTesting(maxMemory = 1000L)
 
     assert(manager.tryToAcquire(100L) === 100L)
     assert(manager.tryToAcquire(400L) === 400L)
@@ -72,7 +72,7 @@ class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
     // Two threads request 500 bytes first, wait for each other to get it, and then request
     // 500 more; we should immediately return 0 as both are now at 1 / N
 
-    val manager = new ShuffleMemoryManager(1000L)
+    val manager = ShuffleMemoryManager.createForTesting(maxMemory = 1000L)
 
     class State {
       var t1Result1 = -1L
@@ -124,7 +124,7 @@ class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
     // Two tasks request 250 bytes first, wait for each other to get it, and then request
     // 500 more; we should only grant 250 bytes to each of them on this second request
 
-    val manager = new ShuffleMemoryManager(1000L)
+    val manager = ShuffleMemoryManager.createForTesting(maxMemory = 1000L)
 
     class State {
       var t1Result1 = -1L
@@ -176,7 +176,7 @@ class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
     // for a bit and releases 250 bytes, which should then be granted to t2. Further requests
     // by t2 will return false right away because it now has 1 / 2N of the memory.
 
-    val manager = new ShuffleMemoryManager(1000L)
+    val manager = ShuffleMemoryManager.createForTesting(maxMemory = 1000L)
 
     class State {
       var t1Requested = false
@@ -241,7 +241,7 @@ class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
     // t1 grabs 1000 bytes and then waits until t2 is ready to make a request. It sleeps
     // for a bit and releases all its memory. t2 should now be able to grab all the memory.
 
-    val manager = new ShuffleMemoryManager(1000L)
+    val manager = ShuffleMemoryManager.createForTesting(maxMemory = 1000L)
 
     class State {
       var t1Requested = false
@@ -307,7 +307,7 @@ class ShuffleMemoryManagerSuite extends SparkFunSuite with Timeouts {
   }
 
   test("tasks should not be granted a negative size") {
-    val manager = new ShuffleMemoryManager(1000L)
+    val manager = ShuffleMemoryManager.createForTesting(maxMemory = 1000L)
     manager.tryToAcquire(700L)
 
     val latch = new CountDownLatch(1)

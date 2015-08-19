@@ -316,7 +316,7 @@ private[sql] case class ScalaUDAF(
 
   override lazy val cloneBufferAttributes = bufferAttributes.map(_.newInstance())
 
-  private[this] val childrenSchema: StructType = {
+  private[this] lazy val childrenSchema: StructType = {
     val inputFields = children.zipWithIndex.map {
       case (child, index) =>
         StructField(s"input$index", child.dataType, child.nullable, Metadata.empty)
@@ -337,16 +337,16 @@ private[sql] case class ScalaUDAF(
     }
   }
 
-  private[this] val inputToScalaConverters: Any => Any =
+  private[this] lazy val inputToScalaConverters: Any => Any =
     CatalystTypeConverters.createToScalaConverter(childrenSchema)
 
-  private[this] val bufferValuesToCatalystConverters: Array[Any => Any] = {
+  private[this] lazy val bufferValuesToCatalystConverters: Array[Any => Any] = {
     bufferSchema.fields.map { field =>
       CatalystTypeConverters.createToCatalystConverter(field.dataType)
     }
   }
 
-  private[this] val bufferValuesToScalaConverters: Array[Any => Any] = {
+  private[this] lazy val bufferValuesToScalaConverters: Array[Any => Any] = {
     bufferSchema.fields.map { field =>
       CatalystTypeConverters.createToScalaConverter(field.dataType)
     }

@@ -179,6 +179,21 @@ class SQLTests(ReusedPySparkTestCase):
         ReusedPySparkTestCase.tearDownClass()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
 
+    def test_row_should_be_read_only(self):
+        row = Row(a=1, b=2)
+        self.assertEqual(1, row.a)
+
+        def foo():
+            row.a = 3
+        self.assertRaises(Exception, foo)
+
+        row2 = self.sqlCtx.range(10).first()
+        self.assertEqual(0, row2.id)
+
+        def foo2():
+            row2.id = 2
+        self.assertRaises(Exception, foo2)
+
     def test_range(self):
         self.assertEqual(self.sqlCtx.range(1, 1).count(), 0)
         self.assertEqual(self.sqlCtx.range(1, 0, -1).count(), 1)
@@ -629,6 +644,16 @@ class SQLTests(ReusedPySparkTestCase):
         for row in rndn:
             assert row[1] >= -4.0 and row[1] <= 4.0, "got: %s" % row[1]
 
+        # If the specified seed is 0, we should use it.
+        # https://issues.apache.org/jira/browse/SPARK-9691
+        rnd1 = df.select('key', functions.rand(0)).collect()
+        rnd2 = df.select('key', functions.rand(0)).collect()
+        self.assertEqual(sorted(rnd1), sorted(rnd2))
+
+        rndn1 = df.select('key', functions.randn(0)).collect()
+        rndn2 = df.select('key', functions.randn(0)).collect()
+        self.assertEqual(sorted(rndn1), sorted(rndn2))
+
     def test_between_function(self):
         df = self.sc.parallelize([
             Row(a=1, b=2, c=3),
@@ -745,7 +770,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(isinstance(df['key'], Column))
         self.assertTrue(isinstance(df[0], Column))
         self.assertRaises(IndexError, lambda: df[2])
-        self.assertRaises(IndexError, lambda: df["bad_key"])
+        self.assertRaises(AnalysisException, lambda: df["bad_key"])
         self.assertRaises(TypeError, lambda: df[{}])
 
     def test_column_name_with_non_ascii(self):
@@ -769,7 +794,9 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.sc.parallelize([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})]).toDF()
         self.assertEqual(1, df.select(df.l[0]).first()[0])
         self.assertEqual(1, df.select(df.r["a"]).first()[0])
+        self.assertEqual(1, df.select(df["r.a"]).first()[0])
         self.assertEqual("b", df.select(df.r["b"]).first()[0])
+        self.assertEqual("b", df.select(df["r.b"]).first()[0])
         self.assertEqual("v", df.select(df.d["k"]).first()[0])
 
     def test_infer_long_type(self):
@@ -1098,6 +1125,29 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         ]
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[:len(r)])
+
+    def test_window_functions_without_partitionBy(self):
+        df = self.sqlCtx.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
+        w = Window.orderBy("key", df.value)
+        from pyspark.sql import functions as F
+        sel = df.select(df.value, df.key,
+                        F.max("key").over(w.rowsBetween(0, 1)),
+                        F.min("key").over(w.rowsBetween(0, 1)),
+                        F.count("key").over(w.rowsBetween(float('-inf'), float('inf'))),
+                        F.rowNumber().over(w),
+                        F.rank().over(w),
+                        F.denseRank().over(w),
+                        F.ntile(2).over(w))
+        rs = sorted(sel.collect())
+        expected = [
+            ("1", 1, 1, 1, 4, 1, 1, 1, 1),
+            ("2", 1, 1, 1, 4, 2, 2, 2, 1),
+            ("2", 1, 2, 1, 4, 3, 2, 2, 2),
+            ("2", 2, 2, 2, 4, 4, 4, 3, 2)
+        ]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
+
 
 if __name__ == "__main__":
     unittest.main()

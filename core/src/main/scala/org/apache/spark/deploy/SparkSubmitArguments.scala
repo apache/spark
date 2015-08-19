@@ -616,5 +616,4 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       System.setErr(currentErr)
     }
   }
-
 }

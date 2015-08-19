@@ -45,8 +45,7 @@ private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
   /**
    * Return the current rate limit. If no limit has been set so far, it returns {{{Long.MaxValue}}}.
    */
-  def getCurrentLimit: Long =
-    rateLimiter.getRate.toLong
+  def getCurrentLimit: Long = rateLimiter.getRate.toLong
 
   /**
    * Set the rate limit to `newRate`. The new rate will not exceed the maximum rate configured by

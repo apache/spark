@@ -159,7 +159,6 @@ class SparkSubmitSuite
     childArgsStr should include ("--executor-cores 5")
     childArgsStr should include ("--arg arg1 --arg arg2")
     childArgsStr should include ("--queue thequeue")
-    childArgsStr should include ("--num-executors 6")
     childArgsStr should include regex ("--jar .*thejar.jar")
     childArgsStr should include regex ("--addJars .*one.jar,.*two.jar,.*three.jar")
     childArgsStr should include regex ("--files .*file1.txt,.*file2.txt")
@@ -325,6 +324,8 @@ class SparkSubmitSuite
       "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
       "--master", "local",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -338,6 +339,8 @@ class SparkSubmitSuite
       "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
       "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       "--jars", jarsString,
       unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
     runSparkSubmit(args)
@@ -356,10 +359,35 @@ class SparkSubmitSuite
         "--packages", Seq(main, dep).mkString(","),
         "--repositories", repo,
         "--conf", "spark.ui.enabled=false",
+        "--conf", "spark.master.rest.enabled=false",
         unusedJar.toString,
         "my.great.lib.MyLib", "my.great.dep.MyLib")
       runSparkSubmit(args)
     }
+  }
+
+  test("correctly builds R packages included in a jar with --packages") {
+    // TODO(SPARK-9603): Building a package to $SPARK_HOME/R/lib is unavailable on Jenkins.
+    // It's hard to write the test in SparkR (because we can't create the repository dynamically)
+    /*
+    assume(RUtils.isRInstalled, "R isn't installed on this machine.")
+    val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
+    val rScriptDir =
+      Seq(sparkHome, "R", "pkg", "inst", "tests", "packageInAJarTest.R").mkString(File.separator)
+    assert(new File(rScriptDir).exists)
+    IvyTestUtils.withRepository(main, None, None, withR = true) { repo =>
+      val args = Seq(
+        "--name", "testApp",
+        "--master", "local-cluster[2,1,1024]",
+        "--packages", main.toString,
+        "--repositories", repo,
+        "--verbose",
+        "--conf", "spark.ui.enabled=false",
+        rScriptDir)
+      runSparkSubmit(args)
+    }
+    */
   }
 
   test("resolves command line argument paths correctly") {
@@ -477,6 +505,8 @@ class SparkSubmitSuite
       "--master", "local",
       "--conf", "spark.driver.extraClassPath=" + systemJar,
       "--conf", "spark.driver.userClassPathFirst=true",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       userJar.toString)
     runSparkSubmit(args)
   }

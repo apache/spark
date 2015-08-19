@@ -324,13 +324,15 @@ object SparkEnv extends Logging {
     val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
 
-    val shuffleMemoryManager = new ShuffleMemoryManager(conf)
+    val shuffleMemoryManager = ShuffleMemoryManager.create(conf, numUsableCores)
 
     val blockTransferService =
       conf.get("spark.shuffle.blockTransferService", "netty").toLowerCase match {
         case "netty" =>
           new NettyBlockTransferService(conf, securityManager, numUsableCores)
         case "nio" =>
+          logWarning("NIO-based block transfer service is deprecated, " +
+            "and will be removed in Spark 1.6.0.")
           new NioBlockTransferService(conf, securityManager)
       }
 

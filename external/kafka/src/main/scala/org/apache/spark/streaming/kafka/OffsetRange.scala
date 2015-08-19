@@ -42,16 +42,16 @@ trait HasOffsetRanges {
  * :: Experimental ::
  * Represents a range of offsets from a single Kafka TopicAndPartition. Instances of this class
  * can be created with `OffsetRange.create()`.
+ * @param topic Kafka topic name
+ * @param partition Kafka partition id
+ * @param fromOffset Inclusive starting offset
+ * @param untilOffset Exclusive ending offset
  */
 @Experimental
 final class OffsetRange private(
-    /** Kafka topic name */
     val topic: String,
-    /** Kafka partition id */
     val partition: Int,
-    /** inclusive starting offset */
     val fromOffset: Long,
-    /** exclusive ending offset */
     val untilOffset: Long) extends Serializable {
   import OffsetRange.OffsetRangeTuple
 

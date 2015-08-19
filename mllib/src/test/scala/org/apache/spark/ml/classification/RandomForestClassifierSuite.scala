@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.LeafNode
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
@@ -134,6 +135,9 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
 
     val df: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
     val model = rf.fit(df)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
 
     val predictions = model.transform(df)
       .select(rf.getPredictionCol, rf.getRawPredictionCol, rf.getProbabilityCol)

@@ -28,7 +28,7 @@ import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.DiskBlockObjectWriter;
 import org.apache.spark.storage.TempLocalBlockId;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 
 /**
  * Spills a list of sorted records to disk. Spill files have the following format:
@@ -117,11 +117,11 @@ final class UnsafeSorterSpillWriter {
     long recordReadPosition = baseOffset;
     while (dataRemaining > 0) {
       final int toTransfer = Math.min(freeSpaceInWriteBuffer, dataRemaining);
-      PlatformDependent.copyMemory(
+      Platform.copyMemory(
         baseObject,
         recordReadPosition,
         writeBuffer,
-        PlatformDependent.BYTE_ARRAY_OFFSET + (DISK_WRITE_BUFFER_SIZE - freeSpaceInWriteBuffer),
+        Platform.BYTE_ARRAY_OFFSET + (DISK_WRITE_BUFFER_SIZE - freeSpaceInWriteBuffer),
         toTransfer);
       writer.write(writeBuffer, 0, (DISK_WRITE_BUFFER_SIZE - freeSpaceInWriteBuffer) + toTransfer);
       recordReadPosition += toTransfer;

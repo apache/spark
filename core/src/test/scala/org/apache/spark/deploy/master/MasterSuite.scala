@@ -40,6 +40,7 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     conf.set("spark.deploy.recoveryMode", "CUSTOM")
     conf.set("spark.deploy.recoveryMode.factory",
       classOf[CustomRecoveryModeFactory].getCanonicalName)
+    conf.set("spark.master.rest.enabled", "false")
 
     val instantiationAttempts = CustomRecoveryModeFactory.instantiationAttempts
 
@@ -93,8 +94,8 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
       publicAddress = ""
     )
 
-    val (rpcEnv, uiPort, restPort) =
-      Master.startRpcEnvAndEndpoint("127.0.0.1", 7077, 8080, conf)
+    val (rpcEnv, _, _) =
+      Master.startRpcEnvAndEndpoint("127.0.0.1", 0, 0, conf)
 
     try {
       rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, rpcEnv.address, Master.ENDPOINT_NAME)
@@ -149,6 +150,14 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
 
   test("basic scheduling - no spread out") {
     basicScheduling(spreadOut = false)
+  }
+
+  test("basic scheduling with more memory - spread out") {
+    basicSchedulingWithMoreMemory(spreadOut = true)
+  }
+
+  test("basic scheduling with more memory - no spread out") {
+    basicSchedulingWithMoreMemory(spreadOut = false)
   }
 
   test("scheduling with max cores - spread out") {
@@ -210,6 +219,13 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
   private def basicScheduling(spreadOut: Boolean): Unit = {
     val master = makeMaster()
     val appInfo = makeAppInfo(1024)
+    val scheduledCores = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    assert(scheduledCores === Array(10, 10, 10))
+  }
+
+  private def basicSchedulingWithMoreMemory(spreadOut: Boolean): Unit = {
+    val master = makeMaster()
+    val appInfo = makeAppInfo(3072)
     val scheduledCores = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     assert(scheduledCores === Array(10, 10, 10))
   }
@@ -343,8 +359,8 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
 
   private def makeMaster(conf: SparkConf = new SparkConf): Master = {
     val securityMgr = new SecurityManager(conf)
-    val rpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 7077, conf, securityMgr)
-    val master = new Master(rpcEnv, rpcEnv.address, 8080, securityMgr, conf)
+    val rpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityMgr)
+    val master = new Master(rpcEnv, rpcEnv.address, 0, securityMgr, conf)
     master
   }
 

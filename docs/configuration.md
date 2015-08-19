@@ -398,7 +398,8 @@ Apart from these, the following properties are also available, and may be useful
     Implementation to use for transferring shuffle and cached blocks between executors. There
     are two implementations available: <code>netty</code> and <code>nio</code>. Netty-based
     block transfer is intended to be simpler but equally efficient and is the default option
-    starting in 1.2.
+    starting in 1.2, and <code>nio</code> block transfer is deprecated in Spark 1.5.0 and will
+    be removed in Spark 1.6.0.
   </td>
 </tr>
 <tr>
@@ -480,6 +481,25 @@ Apart from these, the following properties are also available, and may be useful
     all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
     begin to spill to disk. If spills are often, consider increasing this value at the expense of
     <code>spark.storage.memoryFraction</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enables the external shuffle service. This service preserves the shuffle files written by 
+    executors so the executors can be safely removed. This must be enabled if 
+    <code>spark.dynamicAllocation.enabled</code> is "true". The external shuffle service
+    must be set up in order to enable it. See
+    <a href="job-scheduling.html#configuration-and-setup">dynamic allocation 
+    configuration and setup documentation</a> for more information.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.port</code></td>
+  <td>7337</td>
+  <td>
+    Port on which the external shuffle service will run.
   </td>
 </tr>
 <tr>
@@ -1550,7 +1570,11 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>PYSPARK_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark.</td>
+    <td>Python binary executable to use for PySpark in both driver and workers (default is `python`).</td>
+  </tr>
+  <tr>
+    <td><code>PYSPARK_DRIVER_PYTHON</code></td>
+    <td>Python binary executable to use for PySpark in driver only (default is PYSPARK_PYTHON).</td>
   </tr>
   <tr>
     <td><code>SPARK_LOCAL_IP</code></td>

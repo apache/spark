@@ -283,6 +283,26 @@ class StandaloneDynamicAllocationSuite
     assert(master.apps.head.getExecutorLimit === 1000)
   }
 
+  test("kill the same executor twice (SPARK-9795)") {
+    sc = new SparkContext(appConf)
+    val appId = sc.applicationId
+    assert(master.apps.size === 1)
+    assert(master.apps.head.id === appId)
+    assert(master.apps.head.executors.size === 2)
+    assert(master.apps.head.getExecutorLimit === Int.MaxValue)
+    // sync executors between the Master and the driver, needed because
+    // the driver refuses to kill executors it does not know about
+    syncExecutors(sc)
+    // kill the same executor twice
+    val executors = getExecutorIds(sc)
+    assert(executors.size === 2)
+    assert(sc.killExecutor(executors.head))
+    assert(sc.killExecutor(executors.head))
+    assert(master.apps.head.executors.size === 1)
+    // The limit should not be lowered twice
+    assert(master.apps.head.getExecutorLimit === 1)
+  }
+
   // ===============================
   // | Utility methods for testing |
   // ===============================

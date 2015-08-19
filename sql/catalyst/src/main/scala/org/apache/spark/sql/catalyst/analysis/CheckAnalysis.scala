@@ -47,6 +47,7 @@ trait CheckAnalysis {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
+      case p if p.analyzed => // Skip already analyzed sub-plans
 
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
@@ -179,5 +180,7 @@ trait CheckAnalysis {
         }
     }
     extendedCheckRules.foreach(_(plan))
+
+    plan.foreach(_.setAnalyzed())
   }
 }

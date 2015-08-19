@@ -118,9 +118,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Can be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
    * from a list of input files or InputFormats for the application.
    */
+  @deprecated("Passing in preferred locations has no effect at all, see SPARK-8949", "1.5.0")
   @DeveloperApi
   def this(config: SparkConf, preferredNodeLocationData: Map[String, Set[SplitInfo]]) = {
     this(config)
+    logWarning("Passing in preferred locations has no effect at all, see SPARK-8949")
     this.preferredNodeLocationData = preferredNodeLocationData
   }
 
@@ -153,6 +155,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()) =
   {
     this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment))
+    if (preferredNodeLocationData.nonEmpty) {
+      logWarning("Passing in preferred locations has no effect at all, see SPARK-8949")
+    }
     this.preferredNodeLocationData = preferredNodeLocationData
   }
 
@@ -528,7 +533,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
 
     // Optionally scale number of executors dynamically based on workload. Exposed for testing.
-    val dynamicAllocationEnabled = _conf.getBoolean("spark.dynamicAllocation.enabled", false)
+    val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(_conf)
+    if (!dynamicAllocationEnabled && _conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
+      logInfo("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
+    }
+
     _executorAllocationManager =
       if (dynamicAllocationEnabled) {
         Some(new ExecutorAllocationManager(this, listenerBus, _conf))
@@ -559,7 +568,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Make sure the context is stopped if the user forgets about it. This avoids leaving
     // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
     // is killed, though.
-    _shutdownHookRef = Utils.addShutdownHook(Utils.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
+    _shutdownHookRef = ShutdownHookManager.addShutdownHook(
+      ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
       logInfo("Invoking stop() from shutdown hook")
       stop()
     }
@@ -629,7 +639,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * [[org.apache.spark.SparkContext.setLocalProperty]].
    */
   def getLocalProperty(key: String): String =
-    Option(localProperties.get).map(_.getProperty(key)).getOrElse(null)
+    Option(localProperties.get).map(_.getProperty(key)).orNull
 
   /** Set a human readable description of the current job. */
   def setJobDescription(value: String) {
@@ -866,7 +876,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * }}}
    *
    * Do
-   * `val rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")`,
+   * `val rdd = sparkContext.binaryFiles("hdfs://a-hdfs-path")`,
    *
    * then `rdd` contains
    * {{{
@@ -1667,7 +1677,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       return
     }
     if (_shutdownHookRef != null) {
-      Utils.removeShutdownHook(_shutdownHookRef)
+      ShutdownHookManager.removeShutdownHook(_shutdownHookRef)
     }
 
     Utils.tryLogNonFatalError {
