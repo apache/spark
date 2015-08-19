@@ -682,14 +682,6 @@ object functions {
    * Generate a random column with i.i.d. samples from U[0.0, 1.0].
    *
    * @group normal_funcs
-   * @since 1.5.0
-   */
-  def rand(seed: Int): Column = rand(Int.int2long(seed))
-
-  /**
-   * Generate a random column with i.i.d. samples from U[0.0, 1.0].
-   *
-   * @group normal_funcs
    * @since 1.4.0
    */
   def rand(): Column = rand(Utils.random.nextLong)
@@ -701,14 +693,6 @@ object functions {
    * @since 1.4.0
    */
   def randn(seed: Long): Column = Randn(seed)
-
-  /**
-   * Generate a column with i.i.d. samples from the standard normal distribution.
-   *
-   * @group normal_funcs
-   * @since 1.5.0
-   */
-  def randn(seed: Int): Column = randn(Int.int2long(seed))
 
   /**
    * Generate a column with i.i.d. samples from the standard normal distribution.
