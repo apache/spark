@@ -88,7 +88,8 @@ object JdbcUtils extends Logging {
       table: String,
       iterator: Iterator[Row],
       rddSchema: StructType,
-      nullTypes: Array[Int]): Iterator[Byte] = {
+      nullTypes: Array[Int],
+      batchSize: Int): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
     try {
@@ -125,7 +126,7 @@ object JdbcUtils extends Logging {
           }
           stmt.addBatch()
           rowCount += 1
-          if (rowCount % 10000 == 0) {
+          if (rowCount % batchSize == 0) {
             stmt.executeBatch()
             rowCount = 0
           }
@@ -220,8 +221,9 @@ object JdbcUtils extends Logging {
     val rddSchema = df.schema
     val driver: String = DriverRegistry.getDriverClassName(url)
     val getConnection: () => Connection = JDBCRDD.getConnector(driver, url, properties)
+    val batchSize = properties.getProperty("jdbc.batchsize", "1000").toInt
     df.foreachPartition { iterator =>
-      savePartition(getConnection, table, iterator, rddSchema, nullTypes)
+      savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize)
     }
   }
 
