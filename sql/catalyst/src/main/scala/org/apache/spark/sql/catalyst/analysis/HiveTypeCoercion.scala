@@ -605,7 +605,7 @@ object HiveTypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case c: CaseWhenLike if c.childrenResolved && !c.valueTypesEqual =>
         logDebug(s"Input values for null casting ${c.valueTypes.mkString(",")}")
-        val maybeCommonType = findTightestCommonTypeAndPromoteToString(c.valueTypes)
+        val maybeCommonType = findWiderCommonType(c.valueTypes)
         maybeCommonType.map { commonType =>
           val castedBranches = c.branches.grouped(2).map {
             case Seq(when, value) if value.dataType != commonType =>
@@ -622,7 +622,7 @@ object HiveTypeCoercion {
 
       case c: CaseKeyWhen if c.childrenResolved && !c.resolved =>
         val maybeCommonType =
-          findTightestCommonTypeAndPromoteToString((c.key +: c.whenList).map(_.dataType))
+          findWiderCommonType((c.key +: c.whenList).map(_.dataType))
         maybeCommonType.map { commonType =>
           val castedBranches = c.branches.grouped(2).map {
             case Seq(whenExpr, thenExpr) if whenExpr.dataType != commonType =>
