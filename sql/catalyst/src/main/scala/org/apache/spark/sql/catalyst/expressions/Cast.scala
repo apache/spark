@@ -154,7 +154,7 @@ case class Cast(child: Expression, dataType: DataType)
       buildCast[Short](_, _ != 0)
     case ByteType =>
       buildCast[Byte](_, _ != 0)
-    case t: DecimalType =>
+    case DecimalType() =>
       buildCast[Decimal](_, !_.isZero)
     case DoubleType =>
       buildCast[Double](_, _ != 0)
@@ -179,7 +179,7 @@ case class Cast(child: Expression, dataType: DataType)
     case DateType =>
       buildCast[Int](_, d => DateTimeUtils.daysToMillis(d) * 1000)
     // TimestampWritable.decimalToTimestamp
-    case t: DecimalType =>
+    case DecimalType() =>
       buildCast[Decimal](_, d => decimalToTimestamp(d))
     // TimestampWritable.doubleToTimestamp
     case DoubleType =>
@@ -403,7 +403,7 @@ case class Cast(child: Expression, dataType: DataType)
   }
 
   private[this] def cast(from: DataType, to: DataType): Any => Any = to match {
-    case dt if dt == child.dataType && !dt.isInstanceOf[DecimalType] => identity[Any]
+    case dt if dt == child.dataType => identity[Any]
     case StringType => castToString(from)
     case BinaryType => castToBinary(from)
     case DateType => castToDate(from)
@@ -443,11 +443,11 @@ case class Cast(child: Expression, dataType: DataType)
       ctx: CodeGenContext): CastFunction = to match {
 
     case _ if from == NullType => (c, evPrim, evNull) => s"$evNull = true;"
-    case _ if to == from && !to.isInstanceOf[DecimalType] => (c, evPrim, evNull) => s"$evPrim = $c;"
+    case _ if to == from => (c, evPrim, evNull) => s"$evPrim = $c;"
     case StringType => castToStringCode(from, ctx)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
-    case decimal: DecimalType => castToDecimalCode(from, decimal)
+    case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
     case TimestampType => castToTimestampCode(from, ctx)
     case CalendarIntervalType => castToIntervalCode(from)
     case BooleanType => castToBooleanCode(from)
@@ -528,14 +528,18 @@ case class Cast(child: Expression, dataType: DataType)
       }
     """
 
-  private[this] def castToDecimalCode(from: DataType, target: DecimalType): CastFunction = {
+  private[this] def castToDecimalCode(
+      from: DataType,
+      target: DecimalType,
+      ctx: CodeGenContext): CastFunction = {
+    val tmp = ctx.freshName("tmpDecimal")
     from match {
       case StringType =>
         (c, evPrim, evNull) =>
           s"""
             try {
-              Decimal tmpDecimal = Decimal.apply(new java.math.BigDecimal($c.toString()));
-              ${changePrecision("tmpDecimal", target, evPrim, evNull)}
+              Decimal $tmp = Decimal.apply(new java.math.BigDecimal($c.toString()));
+              ${changePrecision(tmp, target, evPrim, evNull)}
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
             }
@@ -543,8 +547,8 @@ case class Cast(child: Expression, dataType: DataType)
       case BooleanType =>
         (c, evPrim, evNull) =>
           s"""
-            Decimal tmpDecimal = $c ? Decimal.apply(1) : Decimal.apply(0);
-            ${changePrecision("tmpDecimal", target, evPrim, evNull)}
+            Decimal $tmp = $c ? Decimal.apply(1) : Decimal.apply(0);
+            ${changePrecision(tmp, target, evPrim, evNull)}
           """
       case DateType =>
         // date can't cast to decimal in Hive
@@ -553,29 +557,29 @@ case class Cast(child: Expression, dataType: DataType)
         // Note that we lose precision here.
         (c, evPrim, evNull) =>
           s"""
-            Decimal tmpDecimal = Decimal.apply(
+            Decimal $tmp = Decimal.apply(
               scala.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
-            ${changePrecision("tmpDecimal", target, evPrim, evNull)}
+            ${changePrecision(tmp, target, evPrim, evNull)}
           """
-      case t: DecimalType =>
+      case DecimalType() =>
         (c, evPrim, evNull) =>
           s"""
-            Decimal tmpDecimal = $c.clone();
-            ${changePrecision("tmpDecimal", target, evPrim, evNull)}
+            Decimal $tmp = $c.clone();
+            ${changePrecision(tmp, target, evPrim, evNull)}
           """
       case x: IntegralType =>
         (c, evPrim, evNull) =>
           s"""
-            Decimal tmpDecimal = Decimal.apply((long) $c);
-            ${changePrecision("tmpDecimal", target, evPrim, evNull)}
+            Decimal $tmp = Decimal.apply((long) $c);
+            ${changePrecision(tmp, target, evPrim, evNull)}
           """
       case x: FractionalType =>
         // All other numeric types can be represented precisely as Doubles
         (c, evPrim, evNull) =>
           s"""
             try {
-              Decimal tmpDecimal = Decimal.apply(scala.math.BigDecimal.valueOf((double) $c));
-              ${changePrecision("tmpDecimal", target, evPrim, evNull)}
+              Decimal $tmp = Decimal.apply(scala.math.BigDecimal.valueOf((double) $c));
+              ${changePrecision(tmp, target, evPrim, evNull)}
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
             }
@@ -605,7 +609,7 @@ case class Cast(child: Expression, dataType: DataType)
     case DateType =>
       (c, evPrim, evNull) =>
         s"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMillis($c) * 1000;"
-    case t: DecimalType =>
+    case DecimalType() =>
       (c, evPrim, evNull) => s"$evPrim = ${decimalToTimestampCode(c)};"
     case DoubleType =>
       (c, evPrim, evNull) =>
@@ -648,7 +652,7 @@ case class Cast(child: Expression, dataType: DataType)
     case DateType =>
       // Hive would return null when cast from date to boolean
       (c, evPrim, evNull) => s"$evNull = true;"
-    case t: DecimalType =>
+    case DecimalType() =>
       (c, evPrim, evNull) => s"$evPrim = !$c.isZero();"
     case n: NumericType =>
       (c, evPrim, evNull) => s"$evPrim = $c != 0;"
@@ -670,7 +674,7 @@ case class Cast(child: Expression, dataType: DataType)
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
       (c, evPrim, evNull) => s"$evPrim = (byte) ${timestampToIntegerCode(c)};"
-    case t: DecimalType =>
+    case DecimalType() =>
       (c, evPrim, evNull) => s"$evPrim = $c.toByte();"
     case x: NumericType =>
       (c, evPrim, evNull) => s"$evPrim = (byte) $c;"
@@ -692,7 +696,7 @@ case class Cast(child: Expression, dataType: DataType)
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
       (c, evPrim, evNull) => s"$evPrim = (short) ${timestampToIntegerCode(c)};"
-    case t: DecimalType =>
+    case DecimalType() =>
       (c, evPrim, evNull) => s"$evPrim = $c.toShort();"
     case x: NumericType =>
       (c, evPrim, evNull) => s"$evPrim = (short) $c;"
@@ -714,7 +718,7 @@ case class Cast(child: Expression, dataType: DataType)
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
       (c, evPrim, evNull) => s"$evPrim = (int) ${timestampToIntegerCode(c)};"
-    case t: DecimalType =>
+    case DecimalType() =>
       (c, evPrim, evNull) => s"$evPrim = $c.toInt();"
     case x: NumericType =>
       (c, evPrim, evNull) => s"$evPrim = (int) $c;"
@@ -736,7 +740,7 @@ case class Cast(child: Expression, dataType: DataType)
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
       (c, evPrim, evNull) => s"$evPrim = (long) ${timestampToIntegerCode(c)};"
-    case t: DecimalType =>
+    case DecimalType() =>
       (c, evPrim, evNull) => s"$evPrim = $c.toLong();"
     case x: NumericType =>
       (c, evPrim, evNull) => s"$evPrim = (long) $c;"
@@ -758,7 +762,7 @@ case class Cast(child: Expression, dataType: DataType)
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
       (c, evPrim, evNull) => s"$evPrim = (float) (${timestampToDoubleCode(c)});"
-    case t: DecimalType =>
+    case DecimalType() =>
       (c, evPrim, evNull) => s"$evPrim = $c.toFloat();"
     case x: NumericType =>
       (c, evPrim, evNull) => s"$evPrim = (float) $c;"
@@ -780,7 +784,7 @@ case class Cast(child: Expression, dataType: DataType)
       (c, evPrim, evNull) => s"$evNull = true;"
     case TimestampType =>
       (c, evPrim, evNull) => s"$evPrim = ${timestampToDoubleCode(c)};"
-    case t: DecimalType =>
+    case DecimalType() =>
       (c, evPrim, evNull) => s"$evPrim = $c.toDouble();"
     case x: NumericType =>
       (c, evPrim, evNull) => s"$evPrim = (double) $c;"

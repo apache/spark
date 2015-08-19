@@ -717,7 +717,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
  */
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case Cast(e, dataType) if e.dataType == dataType && !dataType.isInstanceOf[DecimalType] => e
+    case Cast(e, dataType) if e.dataType == dataType => e
   }
 }
 
