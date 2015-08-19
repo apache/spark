@@ -125,7 +125,7 @@ object JdbcUtils extends Logging {
           }
           stmt.addBatch()
           rowCount += 1
-          if (rowCount % 1000 == 0) {
+          if (rowCount % 10000 == 0) {
             stmt.executeBatch()
             rowCount = 0
           }
