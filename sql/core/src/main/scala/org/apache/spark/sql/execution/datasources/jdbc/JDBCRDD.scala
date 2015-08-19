@@ -118,7 +118,7 @@ private[sql] object JDBCRDD extends Logging {
    */
   def resolveTable(url: String, table: String, properties: Properties): StructType = {
     val dialect = JdbcDialects.get(url)
-    val conn: Connection = DriverManager.getConnection(url, properties)
+    val conn: Connection = getConnector(properties.getProperty("driver"), url, properties)()
     try {
       val rs = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0").executeQuery()
       try {
@@ -171,7 +171,8 @@ private[sql] object JDBCRDD extends Logging {
    * getConnector is run on the driver code, while the function it returns
    * is run on the executor.
    *
-   * @param driver - The class name of the JDBC driver for the given url.
+   * @param driver - The class name of the JDBC driver for the given url, or null if the class name
+   *                 is not necessary.
    * @param url - The JDBC url to connect to.
    *
    * @return A function that loads the driver and connects to the url.

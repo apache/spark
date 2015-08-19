@@ -468,8 +468,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
      * Start a receiver along with its scheduled executors
      */
     private def startReceiver(receiver: Receiver[_], scheduledExecutors: Seq[String]): Unit = {
+      def shouldStartReceiver: Boolean = {
+        // It's okay to start when trackerState is Initialized or Started
+        !(isTrackerStopping || isTrackerStopped)
+      }
+
       val receiverId = receiver.streamId
-      if (!isTrackerStarted) {
+      if (!shouldStartReceiver) {
         onReceiverJobFinish(receiverId)
         return
       }
@@ -494,14 +499,14 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // We will keep restarting the receiver job until ReceiverTracker is stopped
       future.onComplete {
         case Success(_) =>
-          if (!isTrackerStarted) {
+          if (!shouldStartReceiver) {
             onReceiverJobFinish(receiverId)
           } else {
             logInfo(s"Restarting Receiver $receiverId")
             self.send(RestartReceiver(receiver))
           }
         case Failure(e) =>
-          if (!isTrackerStarted) {
+          if (!shouldStartReceiver) {
             onReceiverJobFinish(receiverId)
           } else {
             logError("Receiver has been stopped. Try to restart it.", e)

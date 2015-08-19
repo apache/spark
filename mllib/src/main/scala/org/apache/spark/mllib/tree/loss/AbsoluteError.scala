@@ -29,6 +29,7 @@ import org.apache.spark.mllib.tree.model.TreeEnsembleModel
  * The absolute (L1) error is defined as:
  *  |y - F(x)|
  * where y is the label and F(x) is the model prediction for features x.
+ * @since 1.2.0
  */
 @DeveloperApi
 object AbsoluteError extends Loss {
@@ -40,6 +41,7 @@ object AbsoluteError extends Loss {
    * @param prediction Predicted label.
    * @param label True label.
    * @return Loss gradient
+   * @since 1.2.0
    */
   override def gradient(prediction: Double, label: Double): Double = {
     if (label - prediction < 0) 1.0 else -1.0

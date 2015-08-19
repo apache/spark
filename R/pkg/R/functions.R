@@ -67,6 +67,16 @@ createFunctions <- function() {
 
 createFunctions()
 
+#' @rdname functions
+#' @return Creates a Column class of literal value.
+setMethod("lit", signature("ANY"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "lit",
+                              ifelse(class(x) == "Column", x@jc, x))
+            column(jc)
+          })
+
 #' Approx Count Distinct
 #'
 #' @rdname functions
@@ -90,6 +100,40 @@ setMethod("countDistinct",
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "countDistinct", x@jc,
                               listToSeq(jcol))
+            column(jc)
+          })
+
+#' @rdname functions
+#' @return Concatenates multiple input string columns together into a single string column.
+setMethod("concat",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function(x) { x@jc })
+            jc <- callJStatic("org.apache.spark.sql.functions", "concat", listToSeq(jcols))
+            column(jc)
+          })
+
+#' @rdname functions
+#' @return Returns the greatest value of the list of column names, skipping null values.
+#'         This function takes at least 2 parameters. It will return null if all parameters are null.
+setMethod("greatest",
+          signature(x = "Column"),
+          function(x, ...) {
+            stopifnot(length(list(...)) > 0)
+            jcols <- lapply(list(x, ...), function(x) { x@jc })
+            jc <- callJStatic("org.apache.spark.sql.functions", "greatest", listToSeq(jcols))
+            column(jc)
+          })
+
+#' @rdname functions
+#' @return Returns the least value of the list of column names, skipping null values.
+#'         This function takes at least 2 parameters. It will return null iff all parameters are null.
+setMethod("least",
+          signature(x = "Column"),
+          function(x, ...) {
+            stopifnot(length(list(...)) > 0)
+            jcols <- lapply(list(x, ...), function(x) { x@jc })
+            jc <- callJStatic("org.apache.spark.sql.functions", "least", listToSeq(jcols))
             column(jc)
           })
 
@@ -120,4 +164,18 @@ setMethod("n_distinct", signature(x = "Column"),
 setMethod("n", signature(x = "Column"),
           function(x) {
             count(x)
+          })
+
+#' when
+#'
+#' Evaluates a list of conditions and returns one of multiple possible result expressions.
+#' For unmatched expressions null is returned.
+#'
+#' @rdname column
+setMethod("when", signature(condition = "Column", value = "ANY"),
+          function(condition, value) {
+              condition <- condition@jc
+              value <- ifelse(class(value) == "Column", value@jc, value)
+              jc <- callJStatic("org.apache.spark.sql.functions", "when", condition, value)
+              column(jc)
           })
