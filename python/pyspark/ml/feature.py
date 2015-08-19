@@ -817,6 +817,12 @@ class StringIndexerModel(JavaModel):
     """
     Model fitted by StringIndexer.
     """
+    @property
+    def labels(self):
+        """
+        Labels of StringIndexerModel
+        """
+        return self._call_java("labels")
 
 
 @inherit_doc
