@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.{SparkEnv, TaskContextImpl, TaskContext}
+import org.apache.spark.{Accumulator, SparkEnv, TaskContextImpl, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.unsafe.memory.TaskMemoryManager
@@ -47,7 +47,8 @@ import org.apache.spark.util.Utils
 private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
-    var partitionId: Int) extends Serializable {
+    val partitionId: Int,
+    internalAccumulators: Seq[Accumulator[Long]]) extends Serializable {
 
   /**
    * The key of the Map is the accumulator id and the value of the Map is the latest accumulator
@@ -68,12 +69,13 @@ private[spark] abstract class Task[T](
     metricsSystem: MetricsSystem)
   : (T, AccumulatorUpdates) = {
     context = new TaskContextImpl(
-      stageId = stageId,
-      partitionId = partitionId,
-      taskAttemptId = taskAttemptId,
-      attemptNumber = attemptNumber,
-      taskMemoryManager = taskMemoryManager,
-      metricsSystem = metricsSystem,
+      stageId,
+      partitionId,
+      taskAttemptId,
+      attemptNumber,
+      taskMemoryManager,
+      metricsSystem,
+      internalAccumulators,
       runningLocally = false)
     TaskContext.setTaskContext(context)
     context.taskMetrics.setHostname(Utils.localHostName())

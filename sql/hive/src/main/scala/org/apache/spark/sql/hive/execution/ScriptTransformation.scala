@@ -27,11 +27,10 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
+import org.apache.hadoop.io.Writable
 
-import org.apache.spark.{TaskContext, Logging}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
@@ -39,6 +38,7 @@ import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, RedirectThread, Utils}
+import org.apache.spark.{Logging, TaskContext}
 
 /**
  * Transforms the input by forking and running the specified script.
@@ -88,6 +88,7 @@ case class ScriptTransformation(
       // external process. That process's output will be read by this current thread.
       val writerThread = new ScriptTransformationWriterThread(
         inputIterator,
+        input.map(_.dataType),
         outputProjection,
         inputSerde,
         inputSoi,
@@ -106,9 +107,15 @@ case class ScriptTransformation(
 
       val reader = new BufferedReader(new InputStreamReader(inputStream))
       val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] with HiveInspectors {
-        var cacheRow: InternalRow = null
         var curLine: String = null
-        var eof: Boolean = false
+        val scriptOutputStream = new DataInputStream(inputStream)
+        var scriptOutputWritable: Writable = null
+        val reusedWritableObject: Writable = if (null != outputSerde) {
+          outputSerde.getSerializedClass().newInstance
+        } else {
+          null
+        }
+        val mutableRow = new SpecificMutableRow(output.map(_.dataType))
 
         override def hasNext: Boolean = {
           if (outputSerde == null) {
@@ -125,45 +132,20 @@ case class ScriptTransformation(
             } else {
               true
             }
-          } else {
-            if (eof) {
-              if (writerThread.exception.isDefined) {
-                throw writerThread.exception.get
-              }
-              false
-            } else {
+          } else if (scriptOutputWritable == null) {
+            scriptOutputWritable = reusedWritableObject
+            try {
+              scriptOutputWritable.readFields(scriptOutputStream)
               true
+            } catch {
+              case _: EOFException =>
+                if (writerThread.exception.isDefined) {
+                  throw writerThread.exception.get
+                }
+                false
             }
-          }
-        }
-
-        def deserialize(): InternalRow = {
-          if (cacheRow != null) return cacheRow
-
-          val mutableRow = new SpecificMutableRow(output.map(_.dataType))
-          try {
-            val dataInputStream = new DataInputStream(inputStream)
-            val writable = outputSerde.getSerializedClass().newInstance
-            writable.readFields(dataInputStream)
-
-            val raw = outputSerde.deserialize(writable)
-            val dataList = outputSoi.getStructFieldsDataAsList(raw)
-            val fieldList = outputSoi.getAllStructFieldRefs()
-
-            var i = 0
-            dataList.foreach( element => {
-              if (element == null) {
-                mutableRow.setNullAt(i)
-              } else {
-                mutableRow(i) = unwrap(element, fieldList(i).getFieldObjectInspector)
-              }
-              i += 1
-            })
-            mutableRow
-          } catch {
-            case e: EOFException =>
-              eof = true
-              null
+          } else {
+            true
           }
         }
 
@@ -171,7 +153,6 @@ case class ScriptTransformation(
           if (!hasNext) {
             throw new NoSuchElementException
           }
-
           if (outputSerde == null) {
             val prevLine = curLine
             curLine = reader.readLine()
@@ -185,12 +166,20 @@ case class ScriptTransformation(
                   .map(CatalystTypeConverters.convertToCatalyst))
             }
           } else {
-            val ret = deserialize()
-            if (!eof) {
-              cacheRow = null
-              cacheRow = deserialize()
+            val raw = outputSerde.deserialize(scriptOutputWritable)
+            scriptOutputWritable = null
+            val dataList = outputSoi.getStructFieldsDataAsList(raw)
+            val fieldList = outputSoi.getAllStructFieldRefs()
+            var i = 0
+            while (i < dataList.size()) {
+              if (dataList(i) == null) {
+                mutableRow.setNullAt(i)
+              } else {
+                mutableRow(i) = unwrap(dataList(i), fieldList(i).getFieldObjectInspector)
+              }
+              i += 1
             }
-            ret
+            mutableRow
           }
         }
       }
@@ -213,6 +202,7 @@ case class ScriptTransformation(
 
 private class ScriptTransformationWriterThread(
     iter: Iterator[InternalRow],
+    inputSchema: Seq[DataType],
     outputProjection: Projection,
     @Nullable inputSerde: AbstractSerDe,
     @Nullable inputSoi: ObjectInspector,
@@ -238,16 +228,29 @@ private class ScriptTransformationWriterThread(
     // We can't use Utils.tryWithSafeFinally here because we also need a `catch` block, so
     // let's use a variable to record whether the `finally` block was hit due to an exception
     var threwException: Boolean = true
+    val len = inputSchema.length
     try {
       iter.map(outputProjection).foreach { row =>
         if (inputSerde == null) {
-          val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
-            ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
-          outputStream.write(data)
+          val data = if (len == 0) {
+            ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")
+          } else {
+            val sb = new StringBuilder
+            sb.append(row.get(0, inputSchema(0)))
+            var i = 1
+            while (i < len) {
+              sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
+              sb.append(row.get(i, inputSchema(i)))
+              i += 1
+            }
+            sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES"))
+            sb.toString()
+          }
+          outputStream.write(data.getBytes("utf-8"))
         } else {
           val writable = inputSerde.serialize(
             row.asInstanceOf[GenericInternalRow].values, inputSoi)
-          prepareWritable(writable).write(dataOutputStream)
+          prepareWritable(writable, ioschema.outputSerdeProps).write(dataOutputStream)
         }
       }
       outputStream.close()
@@ -320,18 +323,8 @@ case class HiveScriptIOSchema (
   }
 
   private def parseAttrs(attrs: Seq[Expression]): (Seq[String], Seq[DataType]) = {
-    val columns = attrs.map {
-      case aref: AttributeReference => aref.name
-      case e: NamedExpression => e.name
-      case _ => null
-    }
-
-    val columnTypes = attrs.map {
-      case aref: AttributeReference => aref.dataType
-      case e: NamedExpression => e.dataType
-      case _ => null
-    }
-
+    val columns = attrs.zipWithIndex.map(e => s"${e._1.prettyName}_${e._2}")
+    val columnTypes = attrs.map(_.dataType)
     (columns, columnTypes)
   }
 
@@ -345,9 +338,7 @@ case class HiveScriptIOSchema (
 
     val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
 
-    var propsMap = serdeProps.map(kv => {
-      (kv._1.split("'")(1), kv._2.split("'")(1))
-    }).toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
+    var propsMap = serdeProps.toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
     propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
 
     val properties = new Properties()

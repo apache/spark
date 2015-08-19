@@ -789,7 +789,8 @@ class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging 
   }
 
   def onStop() {
-    // no clean to be done, the receiving thread should stop on it own
+    // no clean to be done, the receiving thread should stop on it own, so just wait for it.
+    receivingThreadOption.foreach(_.join())
   }
 }
 

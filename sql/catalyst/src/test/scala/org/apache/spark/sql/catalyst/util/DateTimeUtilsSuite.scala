@@ -398,4 +398,26 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c2.set(1996, 2, 31, 0, 0, 0)
     assert(monthsBetween(c1.getTimeInMillis * 1000L, c2.getTimeInMillis * 1000L) === 11)
   }
+
+  test("from UTC timestamp") {
+    def test(utc: String, tz: String, expected: String): Unit = {
+      assert(toJavaTimestamp(fromUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
+        === expected)
+    }
+    test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
+    test("2011-12-25 09:00:00.123456", "JST", "2011-12-25 18:00:00.123456")
+    test("2011-12-25 09:00:00.123456", "PST", "2011-12-25 01:00:00.123456")
+    test("2011-12-25 09:00:00.123456", "Asia/Shanghai", "2011-12-25 17:00:00.123456")
+  }
+
+  test("to UTC timestamp") {
+    def test(utc: String, tz: String, expected: String): Unit = {
+      assert(toJavaTimestamp(toUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
+        === expected)
+    }
+    test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
+    test("2011-12-25 18:00:00.123456", "JST", "2011-12-25 09:00:00.123456")
+    test("2011-12-25 01:00:00.123456", "PST", "2011-12-25 09:00:00.123456")
+    test("2011-12-25 17:00:00.123456", "Asia/Shanghai", "2011-12-25 09:00:00.123456")
+  }
 }

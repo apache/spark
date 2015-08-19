@@ -331,4 +331,10 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       sc.executorMemory
   }
 
+  def setupUris(uris: String, builder: CommandInfo.Builder): Unit = {
+    uris.split(",").foreach { uri =>
+      builder.addUris(CommandInfo.URI.newBuilder().setValue(uri.trim()))
+    }
+  }
+
 }

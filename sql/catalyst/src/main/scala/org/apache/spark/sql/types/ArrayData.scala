@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.types
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 
 abstract class ArrayData extends SpecializedGetters with Serializable {
   def numElements(): Int
+
+  def copy(): ArrayData
 
   def toBooleanArray(): Array[Boolean] = {
     val size = numElements()
@@ -99,19 +103,19 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
     values
   }
 
-  def toArray[T](elementType: DataType): Array[T] = {
+  def toArray[T: ClassTag](elementType: DataType): Array[T] = {
     val size = numElements()
-    val values = new Array[Any](size)
+    val values = new Array[T](size)
     var i = 0
     while (i < size) {
       if (isNullAt(i)) {
-        values(i) = null
+        values(i) = null.asInstanceOf[T]
       } else {
-        values(i) = get(i, elementType)
+        values(i) = get(i, elementType).asInstanceOf[T]
       }
       i += 1
     }
-    values.asInstanceOf[Array[T]]
+    values
   }
 
   // todo: specialize this.

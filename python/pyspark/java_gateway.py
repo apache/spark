@@ -54,7 +54,6 @@ def launch_gateway():
         if os.environ.get("SPARK_TESTING"):
             submit_args = ' '.join([
                 "--conf spark.ui.enabled=false",
-                "--conf spark.buffer.pageSize=4mb",
                 submit_args
             ])
         command = [os.path.join(SPARK_HOME, script)] + shlex.split(submit_args)

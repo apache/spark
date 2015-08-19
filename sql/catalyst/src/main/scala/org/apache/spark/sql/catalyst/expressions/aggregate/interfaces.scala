@@ -93,7 +93,7 @@ private[sql] case class AggregateExpression2(
     AttributeSet(childReferences)
   }
 
-  override def toString: String = s"(${aggregateFunction}2,mode=$mode,isDistinct=$isDistinct)"
+  override def toString: String = s"(${aggregateFunction},mode=$mode,isDistinct=$isDistinct)"
 }
 
 abstract class AggregateFunction2
@@ -110,7 +110,11 @@ abstract class AggregateFunction2
    * buffer value of `avg(x)` will be 0 and the position of the first buffer value of `avg(y)`
    * will be 2.
    */
-  var mutableBufferOffset: Int = 0
+  protected var mutableBufferOffset: Int = 0
+
+  def withNewMutableBufferOffset(newMutableBufferOffset: Int): Unit = {
+    mutableBufferOffset = newMutableBufferOffset
+  }
 
   /**
    * The offset of this function's start buffer value in the
@@ -126,7 +130,11 @@ abstract class AggregateFunction2
    * buffer value of `avg(x)` will be 1 and the position of the first buffer value of `avg(y)`
    * will be 3 (position 0 is used for the value of key`).
    */
-  var inputBufferOffset: Int = 0
+  protected var inputBufferOffset: Int = 0
+
+  def withNewInputBufferOffset(newInputBufferOffset: Int): Unit = {
+    inputBufferOffset = newInputBufferOffset
+  }
 
   /** The schema of the aggregation buffer. */
   def bufferSchema: StructType
@@ -195,11 +203,8 @@ abstract class AlgebraicAggregate extends AggregateFunction2 with Serializable w
   override def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
 
   override def initialize(buffer: MutableRow): Unit = {
-    var i = 0
-    while (i < bufferAttributes.size) {
-      buffer(i + mutableBufferOffset) = initialValues(i).eval()
-      i += 1
-    }
+    throw new UnsupportedOperationException(
+      "AlgebraicAggregate's initialize should not be called directly")
   }
 
   override final def update(buffer: MutableRow, input: InternalRow): Unit = {

@@ -19,7 +19,9 @@ package org.apache.spark.unsafe.types;
 
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
+import java.util.HashMap;
 
+import com.google.common.collect.ImmutableMap;
 import org.junit.Test;
 
 import static junit.framework.Assert.*;
@@ -112,6 +114,14 @@ public class UTF8StringSuite {
     testUpperandLower("ABCXYZ", "abcxyz");
     testUpperandLower("ЀЁЂѺΏỀ", "ѐёђѻώề");
     testUpperandLower("大千世界 数据砖头", "大千世界 数据砖头");
+  }
+
+  @Test
+  public void titleCase() {
+    assertEquals(fromString(""), fromString("").toTitleCase());
+    assertEquals(fromString("Ab Bc Cd"), fromString("ab bc cd").toTitleCase());
+    assertEquals(fromString("Ѐ Ё Ђ Ѻ Ώ Ề"), fromString("ѐ ё ђ ѻ ώ ề").toTitleCase());
+    assertEquals(fromString("大千世界 数据砖头"), fromString("大千世界 数据砖头").toTitleCase());
   }
 
   @Test
@@ -384,11 +394,52 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void translate() {
+    assertEquals(
+      fromString("1a2s3ae"),
+      fromString("translate").translate(ImmutableMap.of(
+        'r', '1',
+        'n', '2',
+        'l', '3',
+        't', '\0'
+      )));
+    assertEquals(
+      fromString("translate"),
+      fromString("translate").translate(new HashMap<Character, Character>()));
+    assertEquals(
+      fromString("asae"),
+      fromString("translate").translate(ImmutableMap.of(
+        'r', '\0',
+        'n', '\0',
+        'l', '\0',
+        't', '\0'
+      )));
+    assertEquals(
+      fromString("aa世b"),
+      fromString("花花世界").translate(ImmutableMap.of(
+        '花', 'a',
+        '界', 'b'
+      )));
+  }
+
+  @Test
   public void createBlankString() {
     assertEquals(fromString(" "), blankString(1));
     assertEquals(fromString("  "), blankString(2));
     assertEquals(fromString("   "), blankString(3));
     assertEquals(fromString(""), blankString(0));
+  }
+
+  @Test
+  public void findInSet() {
+    assertEquals(fromString("ab").findInSet(fromString("ab")), 1);
+    assertEquals(fromString("a,b").findInSet(fromString("b")), 2);
+    assertEquals(fromString("abc,b,ab,c,def").findInSet(fromString("ab")), 3);
+    assertEquals(fromString("ab,abc,b,ab,c,def").findInSet(fromString("ab")), 1);
+    assertEquals(fromString(",,,ab,abc,b,ab,c,def").findInSet(fromString("ab")), 4);
+    assertEquals(fromString(",ab,abc,b,ab,c,def").findInSet(fromString("")), 1);
+    assertEquals(fromString("数据砖头,abc,b,ab,c,def").findInSet(fromString("ab")), 4);
+    assertEquals(fromString("数据砖头,abc,b,ab,c,def").findInSet(fromString("def")), 6);
   }
 
   @Test

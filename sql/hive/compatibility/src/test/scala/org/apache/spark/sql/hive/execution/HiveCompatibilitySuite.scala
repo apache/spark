@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.util.{Locale, TimeZone}
 
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.SQLConf
@@ -50,6 +51,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, 5)
     // Enable in-memory partition pruning for testing purposes
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
+    RuleExecutor.resetTime()
   }
 
   override def afterAll() {
@@ -58,6 +60,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     Locale.setDefault(originalLocale)
     TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
+
+    // For debugging dump some statistics about how much time was spent in various optimizer rules.
+    logWarning(RuleExecutor.dumpTimeSpent())
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
@@ -263,8 +268,41 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "timestamp_2",
     "timestamp_udf",
 
+    // Hive returns string from UTC formatted timestamp, spark returns timestamp type
+    "date_udf",
+
+    // Can't compare the result that have newline in it
+    "udf_get_json_object",
+
     // Unlike Hive, we do support log base in (0, 1.0], therefore disable this
-    "udf7"
+    "udf7",
+
+    // Trivial changes to DDL output
+    "compute_stats_empty_table",
+    "compute_stats_long",
+    "create_view_translate",
+    "show_create_table_serde",
+    "show_tblproperties",
+
+    // Odd changes to output
+    "merge4",
+
+    // Thift is broken...
+    "inputddl8",
+
+    // Hive changed ordering of ddl:
+    "varchar_union1",
+
+    // Parser changes in Hive 1.2
+    "input25",
+    "input26",
+
+    // Uses invalid table name
+    "innerjoin",
+
+    // classpath problems
+    "compute_stats.*",
+    "udf_bitmap_.*"
   )
 
   /**
@@ -397,7 +435,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "date_comparison",
     "date_join1",
     "date_serde",
-    "date_udf",
     "decimal_1",
     "decimal_4",
     "decimal_join",

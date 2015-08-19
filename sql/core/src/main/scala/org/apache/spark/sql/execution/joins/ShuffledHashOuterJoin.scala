@@ -23,9 +23,10 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{Distribution, ClusteredDistribution}
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * :: DeveloperApi ::
@@ -41,41 +42,65 @@ case class ShuffledHashOuterJoin(
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode with HashOuterJoin {
 
+  override private[sql] lazy val metrics = Map(
+    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
+    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
+  override def outputPartitioning: Partitioning = joinType match {
+    case LeftOuter => left.outputPartitioning
+    case RightOuter => right.outputPartitioning
+    case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
+    case x =>
+      throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
+    val numLeftRows = longMetric("numLeftRows")
+    val numRightRows = longMetric("numRightRows")
+    val numOutputRows = longMetric("numOutputRows")
+
     val joinedRow = new JoinedRow()
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       // TODO this probably can be replaced by external sort (sort merged join?)
       joinType match {
         case LeftOuter =>
-          val hashed = HashedRelation(rightIter, buildKeyGenerator)
+          val hashed = HashedRelation(rightIter, numRightRows, buildKeyGenerator)
           val keyGenerator = streamedKeyGenerator
+          val resultProj = resultProjection
           leftIter.flatMap( currentRow => {
+            numLeftRows += 1
             val rowKey = keyGenerator(currentRow)
             joinedRow.withLeft(currentRow)
-            leftOuterIterator(rowKey, joinedRow, hashed.get(rowKey))
+            leftOuterIterator(rowKey, joinedRow, hashed.get(rowKey), resultProj, numOutputRows)
           })
 
         case RightOuter =>
-          val hashed = HashedRelation(leftIter, buildKeyGenerator)
+          val hashed = HashedRelation(leftIter, numLeftRows, buildKeyGenerator)
           val keyGenerator = streamedKeyGenerator
+          val resultProj = resultProjection
           rightIter.flatMap ( currentRow => {
+            numRightRows += 1
             val rowKey = keyGenerator(currentRow)
             joinedRow.withRight(currentRow)
-            rightOuterIterator(rowKey, hashed.get(rowKey), joinedRow)
+            rightOuterIterator(rowKey, hashed.get(rowKey), joinedRow, resultProj, numOutputRows)
           })
 
         case FullOuter =>
           // TODO(davies): use UnsafeRow
-          val leftHashTable = buildHashTable(leftIter, newProjection(leftKeys, left.output))
-          val rightHashTable = buildHashTable(rightIter, newProjection(rightKeys, right.output))
+          val leftHashTable =
+            buildHashTable(leftIter, numLeftRows, newProjection(leftKeys, left.output))
+          val rightHashTable =
+            buildHashTable(rightIter, numRightRows, newProjection(rightKeys, right.output))
           (leftHashTable.keySet ++ rightHashTable.keySet).iterator.flatMap { key =>
             fullOuterIterator(key,
               leftHashTable.getOrElse(key, EMPTY_LIST),
               rightHashTable.getOrElse(key, EMPTY_LIST),
-              joinedRow)
+              joinedRow,
+              numOutputRows)
           }
 
         case x =>

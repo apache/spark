@@ -11,7 +11,8 @@ title: SparkR (R on Spark)
 SparkR is an R package that provides a light-weight frontend to use Apache Spark from R.
 In Spark {{site.SPARK_VERSION}}, SparkR provides a distributed data frame implementation that
 supports operations like selection, filtering, aggregation etc. (similar to R data frames,
-[dplyr](https://github.com/hadley/dplyr)) but on large datasets.
+[dplyr](https://github.com/hadley/dplyr)) but on large datasets. SparkR also supports distributed
+machine learning using MLlib.
 
 # SparkR DataFrames
 
@@ -228,5 +229,39 @@ head(teenagers)
 ##    name
 ##1 Justin
 
+{% endhighlight %}
+</div>
+
+# Machine Learning
+
+SparkR allows the fitting of generalized linear models over DataFrames using the [glm()](api/R/glm.html) function. Under the hood, SparkR uses MLlib to train a model of the specified family. Currently the gaussian and binomial families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', '+', and '-'. The example below shows the use of building a gaussian GLM model using SparkR.
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+# Create the DataFrame
+df <- createDataFrame(sqlContext, iris)
+
+# Fit a linear model over the dataset.
+model <- glm(Sepal_Length ~ Sepal_Width + Species, data = df, family = "gaussian")
+
+# Model coefficients are returned in a similar format to R's native glm().
+summary(model)
+##$coefficients
+##                    Estimate
+##(Intercept)        2.2513930
+##Sepal_Width        0.8035609
+##Species_versicolor 1.4587432
+##Species_virginica  1.9468169
+
+# Make predictions based on the model.
+predictions <- predict(model, newData = df)
+head(select(predictions, "Sepal_Length", "prediction"))
+##  Sepal_Length prediction
+##1          5.1   5.063856
+##2          4.9   4.662076
+##3          4.7   4.822788
+##4          4.6   4.742432
+##5          5.0   5.144212
+##6          5.4   5.385281
 {% endhighlight %}
 </div>

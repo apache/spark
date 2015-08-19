@@ -422,16 +422,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       logWarning(s"Executor to kill $id does not exist!")
     }
 
+    // If an executor is already pending to be removed, do not kill it again (SPARK-9795)
+    val executorsToKill = knownExecutors.filter { id => !executorsPendingToRemove.contains(id) }
+    executorsPendingToRemove ++= executorsToKill
+
     // If we do not wish to replace the executors we kill, sync the target number of executors
     // with the cluster manager to avoid allocating new ones. When computing the new target,
     // take into account executors that are pending to be added or removed.
     if (!replace) {
-      doRequestTotalExecutors(numExistingExecutors + numPendingExecutors
-        - executorsPendingToRemove.size - knownExecutors.size)
+      doRequestTotalExecutors(
+        numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size)
     }
 
-    executorsPendingToRemove ++= knownExecutors
-    doKillExecutors(knownExecutors)
+    doKillExecutors(executorsToKill)
   }
 
   /**

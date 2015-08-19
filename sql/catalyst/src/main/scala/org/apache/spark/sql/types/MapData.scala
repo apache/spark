@@ -25,6 +25,8 @@ abstract class MapData extends Serializable {
 
   def valueArray(): ArrayData
 
+  def copy(): MapData
+
   def foreach(keyType: DataType, valueType: DataType, f: (Any, Any) => Unit): Unit = {
     val length = numElements()
     val keys = keyArray()

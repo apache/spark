@@ -23,11 +23,21 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.PlatformDependent
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.memory.MemoryAllocator
 import org.apache.spark.unsafe.types.UTF8String
 
 class UnsafeRowSuite extends SparkFunSuite {
+
+  test("bitset width calculation") {
+    assert(UnsafeRow.calculateBitSetWidthInBytes(0) === 0)
+    assert(UnsafeRow.calculateBitSetWidthInBytes(1) === 8)
+    assert(UnsafeRow.calculateBitSetWidthInBytes(32) === 8)
+    assert(UnsafeRow.calculateBitSetWidthInBytes(64) === 8)
+    assert(UnsafeRow.calculateBitSetWidthInBytes(65) === 16)
+    assert(UnsafeRow.calculateBitSetWidthInBytes(128) === 16)
+  }
+
   test("writeToStream") {
     val row = InternalRow.apply(UTF8String.fromString("hello"), UTF8String.fromString("world"), 123)
     val arrayBackedUnsafeRow: UnsafeRow =
@@ -41,7 +51,7 @@ class UnsafeRowSuite extends SparkFunSuite {
     val bytesFromOffheapRow: Array[Byte] = {
       val offheapRowPage = MemoryAllocator.UNSAFE.allocate(arrayBackedUnsafeRow.getSizeInBytes)
       try {
-        PlatformDependent.copyMemory(
+        Platform.copyMemory(
           arrayBackedUnsafeRow.getBaseObject,
           arrayBackedUnsafeRow.getBaseOffset,
           offheapRowPage.getBaseObject,
@@ -81,5 +91,43 @@ class UnsafeRowSuite extends SparkFunSuite {
     for (dataType <- DataTypeTestUtils.atomicTypes) {
       assert(unsafeRow.get(0, dataType) === null)
     }
+  }
+
+  test("createFromByteArray and copyFrom") {
+    val row = InternalRow(1, UTF8String.fromString("abc"))
+    val converter = UnsafeProjection.create(Array[DataType](IntegerType, StringType))
+    val unsafeRow = converter.apply(row)
+
+    val emptyRow = UnsafeRow.createFromByteArray(64, 2)
+    val buffer = emptyRow.getBaseObject
+
+    emptyRow.copyFrom(unsafeRow)
+    assert(emptyRow.getSizeInBytes() === unsafeRow.getSizeInBytes)
+    assert(emptyRow.getInt(0) === unsafeRow.getInt(0))
+    assert(emptyRow.getUTF8String(1) === unsafeRow.getUTF8String(1))
+    // make sure we reuse the buffer.
+    assert(emptyRow.getBaseObject === buffer)
+
+    // make sure we really copied the input row.
+    unsafeRow.setInt(0, 2)
+    assert(emptyRow.getInt(0) === 1)
+
+    val longString = UTF8String.fromString((1 to 100).map(_ => "abc").reduce(_ + _))
+    val row2 = InternalRow(3, longString)
+    val unsafeRow2 = converter.apply(row2)
+
+    // make sure we can resize.
+    emptyRow.copyFrom(unsafeRow2)
+    assert(emptyRow.getSizeInBytes() === unsafeRow2.getSizeInBytes)
+    assert(emptyRow.getInt(0) === 3)
+    assert(emptyRow.getUTF8String(1) === longString)
+    // make sure we really resized.
+    assert(emptyRow.getBaseObject != buffer)
+
+    // make sure we can still handle small rows after resize.
+    emptyRow.copyFrom(unsafeRow)
+    assert(emptyRow.getSizeInBytes() === unsafeRow.getSizeInBytes)
+    assert(emptyRow.getInt(0) === unsafeRow.getInt(0))
+    assert(emptyRow.getUTF8String(1) === unsafeRow.getUTF8String(1))
   }
 }

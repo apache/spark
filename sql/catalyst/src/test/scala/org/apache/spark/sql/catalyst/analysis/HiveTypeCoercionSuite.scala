@@ -251,6 +251,18 @@ class HiveTypeCoercionSuite extends PlanTest {
         :: Nil))
   }
 
+  test("nanvl casts") {
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+      NaNvl(Literal.create(1.0, FloatType), Literal.create(1.0, DoubleType)),
+      NaNvl(Cast(Literal.create(1.0, FloatType), DoubleType), Literal.create(1.0, DoubleType)))
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+      NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, FloatType)),
+      NaNvl(Literal.create(1.0, DoubleType), Cast(Literal.create(1.0, FloatType), DoubleType)))
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+      NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, DoubleType)),
+      NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, DoubleType)))
+  }
+
   test("type coercion for If") {
     val rule = HiveTypeCoercion.IfCoercion
     ruleTest(rule,

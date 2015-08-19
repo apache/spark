@@ -95,10 +95,8 @@ final class EMLDAOptimizer extends LDAOptimizer {
    * Compute bipartite term/doc graph.
    */
   override private[clustering] def initialize(docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer = {
-    val docConcentration = lda.getDocConcentration(0)
-    require({
-      lda.getDocConcentration.toArray.forall(_ == docConcentration)
-    }, "EMLDAOptimizer currently only supports symmetric document-topic priors")
+    // EMLDAOptimizer currently only supports symmetric document-topic priors
+    val docConcentration = lda.getDocConcentration
 
     val topicConcentration = lda.getTopicConcentration
     val k = lda.getK
@@ -209,11 +207,11 @@ final class EMLDAOptimizer extends LDAOptimizer {
   override private[clustering] def getLDAModel(iterationTimes: Array[Double]): LDAModel = {
     require(graph != null, "graph is null, EMLDAOptimizer not initialized.")
     this.graphCheckpointer.deleteAllCheckpoints()
-    // This assumes gammaShape = 100 in OnlineLDAOptimizer to ensure equivalence in LDAModel.toLocal
-    // conversion
+    // The constructor's default arguments assume gammaShape = 100 to ensure equivalence in
+    // LDAModel.toLocal conversion
     new DistributedLDAModel(this.graph, this.globalTopicTotals, this.k, this.vocabSize,
       Vectors.dense(Array.fill(this.k)(this.docConcentration)), this.topicConcentration,
-      100, iterationTimes)
+      iterationTimes)
   }
 }
 
@@ -378,18 +376,20 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     this.k = lda.getK
     this.corpusSize = docs.count()
     this.vocabSize = docs.first()._2.size
-    this.alpha = if (lda.getDocConcentration.size == 1) {
-      if (lda.getDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
+    this.alpha = if (lda.getAsymmetricDocConcentration.size == 1) {
+      if (lda.getAsymmetricDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
       else {
-        require(lda.getDocConcentration(0) >= 0, s"all entries in alpha must be >=0, got: $alpha")
-        Vectors.dense(Array.fill(k)(lda.getDocConcentration(0)))
+        require(lda.getAsymmetricDocConcentration(0) >= 0,
+          s"all entries in alpha must be >=0, got: $alpha")
+        Vectors.dense(Array.fill(k)(lda.getAsymmetricDocConcentration(0)))
       }
     } else {
-      require(lda.getDocConcentration.size == k, s"alpha must have length k, got: $alpha")
-      lda.getDocConcentration.foreachActive { case (_, x) =>
+      require(lda.getAsymmetricDocConcentration.size == k,
+        s"alpha must have length k, got: $alpha")
+      lda.getAsymmetricDocConcentration.foreachActive { case (_, x) =>
         require(x >= 0, s"all entries in alpha must be >= 0, got: $alpha")
       }
-      lda.getDocConcentration
+      lda.getAsymmetricDocConcentration
     }
     this.eta = if (lda.getTopicConcentration == -1) 1.0 / k else lda.getTopicConcentration
     this.randomGenerator = new Random(lda.getSeed)
@@ -419,6 +419,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val k = this.k
     val vocabSize = this.vocabSize
     val expElogbeta = exp(LDAUtils.dirichletExpectation(lambda)).t
+    val expElogbetaBc = batch.sparkContext.broadcast(expElogbeta)
     val alpha = this.alpha.toBreeze
     val gammaShape = this.gammaShape
 
@@ -433,13 +434,14 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
           case v: SparseVector => v.indices.toList
         }
         val (gammad, sstats) = OnlineLDAOptimizer.variationalTopicInference(
-          termCounts, expElogbeta, alpha, gammaShape, k)
+          termCounts, expElogbetaBc.value, alpha, gammaShape, k)
         stat(::, ids) := stat(::, ids).toDenseMatrix + sstats
         gammaPart = gammad :: gammaPart
       }
       Iterator((stat, gammaPart))
     }
     val statsSum: BDM[Double] = stats.map(_._1).reduce(_ += _)
+    expElogbetaBc.unpersist()
     val gammat: BDM[Double] = breeze.linalg.DenseMatrix.vertcat(
       stats.map(_._2).reduce(_ ++ _).map(_.toDenseMatrix): _*)
     val batchResult = statsSum :* expElogbeta.t
@@ -540,21 +542,22 @@ private[clustering] object OnlineLDAOptimizer {
     val expElogthetad: BDV[Double] = exp(LDAUtils.dirichletExpectation(gammad))  // K
     val expElogbetad = expElogbeta(ids, ::).toDenseMatrix                        // ids * K
 
-    val phinorm: BDV[Double] = expElogbetad * expElogthetad :+ 1e-100            // ids
-    var meanchange = 1D
+    val phiNorm: BDV[Double] = expElogbetad * expElogthetad :+ 1e-100            // ids
+    var meanGammaChange = 1D
     val ctsVector = new BDV[Double](cts)                                         // ids
 
     // Iterate between gamma and phi until convergence
-    while (meanchange > 1e-3) {
+    while (meanGammaChange > 1e-3) {
       val lastgamma = gammad.copy
       //        K                  K * ids               ids
-      gammad := (expElogthetad :* (expElogbetad.t * (ctsVector :/ phinorm))) :+ alpha
+      gammad := (expElogthetad :* (expElogbetad.t * (ctsVector :/ phiNorm))) :+ alpha
       expElogthetad := exp(LDAUtils.dirichletExpectation(gammad))
-      phinorm := expElogbetad * expElogthetad :+ 1e-100
-      meanchange = sum(abs(gammad - lastgamma)) / k
+      // TODO: Keep more values in log space, and only exponentiate when needed.
+      phiNorm := expElogbetad * expElogthetad :+ 1e-100
+      meanGammaChange = sum(abs(gammad - lastgamma)) / k
     }
 
-    val sstatsd = expElogthetad.asDenseMatrix.t * (ctsVector :/ phinorm).asDenseMatrix
+    val sstatsd = expElogthetad.asDenseMatrix.t * (ctsVector :/ phiNorm).asDenseMatrix
     (gammad, sstatsd)
   }
 }

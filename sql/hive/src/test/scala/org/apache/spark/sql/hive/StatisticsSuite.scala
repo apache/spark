@@ -54,6 +54,9 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
       }
     }
 
+    // Ensure session state is initialized.
+    ctx.parseSql("use default")
+
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 COMPUTE STATISTICS",
       classOf[HiveNativeCommand])

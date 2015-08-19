@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConversions._
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
@@ -429,7 +429,7 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       isSkewedStoreAsSubdir: Boolean): Unit = {
     loadPartitionMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       holdDDLTime: JBoolean, inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean,
-      JBoolean.TRUE, JBoolean.FALSE)
+      isSrcLocal(loadPath, hive.getConf()): JBoolean, JBoolean.FALSE)
   }
 
   override def loadTable(
@@ -439,7 +439,7 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       replace: Boolean,
       holdDDLTime: Boolean): Unit = {
     loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, holdDDLTime: JBoolean,
-      JBoolean.TRUE, JBoolean.FALSE, JBoolean.FALSE)
+      isSrcLocal(loadPath, hive.getConf()): JBoolean, JBoolean.FALSE, JBoolean.FALSE)
   }
 
   override def loadDynamicPartitions(
@@ -461,6 +461,13 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY,
       TimeUnit.MILLISECONDS).asInstanceOf[Long]
   }
+
+  protected def isSrcLocal(path: Path, conf: HiveConf): Boolean = {
+    val localFs = FileSystem.getLocal(conf)
+    val pathFs = FileSystem.get(path.toUri(), conf)
+    localFs.getUri() == pathFs.getUri()
+  }
+
 }
 
 private[client] class Shim_v1_0 extends Shim_v0_14 {
@@ -512,7 +519,7 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
       listBucketingEnabled: Boolean): Unit = {
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, holdDDLTime: JBoolean, listBucketingEnabled: JBoolean, JBoolean.FALSE,
-      0: JLong)
+      0L: JLong)
   }
 
 }
