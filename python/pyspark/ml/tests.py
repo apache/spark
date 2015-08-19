@@ -263,6 +263,27 @@ class FeatureTests(PySparkTestCase):
         transformedDF = ngram0.transform(dataset)
         self.assertEquals(transformedDF.head().output, ["a b c d", "b c d e"])
 
+    def test_string_indexer(self):
+        sqlContext = SQLContext(self.sc)
+        dataset1 = sqlContext.createDataFrame([(0, "a"), (1, "b"), (4, "b")], ["id", "label"])
+        dataset2 = sqlContext.createDataFrame([(0, "a"), (1, "b"), (2, "c")], ["id", "label"])
+        stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
+        self.assertEqual(stringIndexer.getHandleInvalid(), "error")
+        model = stringIndexer.fit(dataset1)
+        try:
+            model.transform(dataset2).collect()
+            self.fail("StringIndexer validation is default.")
+        except:
+            pass
+
+        stringIndexer = StringIndexer(handleInvalid="skip", inputCol="label", outputCol="indexed")
+        model = stringIndexer.fit(dataset1)
+        try:
+            model.transform(dataset2).collect()
+            pass
+        except:
+            self.fail("StringIndexer validation is default.")
+
 
 if __name__ == "__main__":
     unittest.main()
