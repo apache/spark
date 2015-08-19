@@ -1038,15 +1038,15 @@ class TaskInstance(Base):
         XCom.set(
             key=key,
             value=value,
-            task=self.task_id,
-            dag=self.dag_id,
+            task_id=self.task_id,
+            dag_id=self.dag_id,
             execution_date=execution_date or self.execution_date)
 
     def xcom_pull(
             self,
             key=None,
-            tasks=None,
-            dags=None,
+            task_ids=None,
+            dag_ids=None,
             include_prior_dates=False,
             limit=None):
         """
@@ -1055,13 +1055,13 @@ class TaskInstance(Base):
         :param key: A key for the XCom. If provided, only XComs with matching
             keys will be returned. Defaults to None.
         :type key: string
-        :param tasks: If supplied, only pulls XComs from tasks with matching
+        :param task_ids: If supplied, only pulls XComs from tasks with matching
             ids. Defaults to None.
-        :type tasks: string or iterable of strings (representing task_ids)
-        :param dags: If provided, only pulls XComs from dags with matching ids.
-            If None (default), the DAG of the calling task is used. To clear
-            the filter entirely, pass [None].
-        :type dags: string or iterable of strings (representing dag_ids)
+        :type task_ids: string or iterable of strings (representing task_ids)
+        :param dag_ids: If provided, only pulls XComs from dags with matching
+            ids. If None (default), the DAG of the calling task is used. To
+            clear the filter entirely, pass [None].
+        :type dag_ids: string or iterable of strings (representing dag_ids)
         :param include_prior_dates: If False, only XComs from the current
             execution_date are returned. If True, XComs from previous dates
             are returned as well.
@@ -1071,21 +1071,22 @@ class TaskInstance(Base):
         :type limit: int
         """
 
-        if dags is None:
-            dags = self.dag_id
+        if dag_ids is None:
+            dag_ids = self.dag_id
 
-        pull_fn = lambda tasks: XCom.get(
-            key=key,
-            tasks=tasks,
-            dags=dags,
-            include_prior_dates=include_prior_dates,
-            limit=limit)
+        def pull_fn(t_ids):
+            return XCom.get(
                 execution_date=self.execution_date,
+                key=key,
+                task_ids=t_ids,
+                dag_ids=dag_ids,
+                include_prior_dates=include_prior_dates,
+                limit=limit)
 
-        if limit is None and is_container(tasks):
-            return [pull_fn(t) for t in tasks]
+        if limit is None and is_container(task_ids):
+            return [pull_fn(t) for t in task_ids]
         else:
-            return pull_fn(tasks)
+            return pull_fn(task_ids)
 
 
 class Log(Base):
@@ -1571,8 +1572,8 @@ class BaseOperator(object):
             self,
             context,
             key=None,
-            tasks=None,
-            dags=None,
+            task_ids=None,
+            dag_ids=None,
             include_prior_dates=None,
             limit=None):
         """
@@ -1580,8 +1581,8 @@ class BaseOperator(object):
         """
         return context['ti'].xcom_pull(
             key=key,
-            tasks=tasks,
-            dags=dags,
+            task_ids=task_ids,
+            dag_ids=dag_ids,
             include_prior_dates=include_prior_dates,
             limit=limit)
 
@@ -2143,13 +2144,13 @@ class XCom(Base):
     execution_date = Column(DateTime, nullable=False)
 
     # source information
-    task = Column(String, nullable=False)
-    dag = Column(String, nullable=False)
+    task_id = Column(String(ID_LEN), nullable=False)
+    dag_id = Column(String(ID_LEN), nullable=False)
 
     def __repr__(self):
-        return '<XCom "{key}" ({task} @ {execution_date})>'.format(
+        return '<XCom "{key}" ({task_id} @ {execution_date})>'.format(
             key=self.key,
-            task=self.task,
+            task_id=self.task_id,
             execution_date=self.execution_date)
 
     @classmethod
@@ -2158,9 +2159,9 @@ class XCom(Base):
             cls,
             key,
             value,
-            task,
-            dag,
             execution_date,
+            task_id,
+            dag_id,
             session=None):
         """
         Store an XCom value.
@@ -2168,9 +2169,9 @@ class XCom(Base):
         session.add(XCom(
             key=key,
             value=value,
-            task=task,
-            dag=dag))
             execution_date=execution_date,
+            task_id=task_id,
+            dag_id=dag_id))
 
     @classmethod
     @provide_session
@@ -2178,8 +2179,8 @@ class XCom(Base):
             cls,
             execution_date,
             key=None,
-            tasks=None,
-            dags=None,
+            task_ids=None,
+            dag_ids=None,
             include_prior_dates=False,
             limit=None,
             session=None):
@@ -2189,10 +2190,10 @@ class XCom(Base):
         filters = []
         if key:
             filters.append(cls.key == key)
-        if tasks:
-            filters.append(cls.task.in_(as_tuple(tasks)))
-        if dags:
-            filters.append(cls.dag.in_(as_tuple(dags)))
+        if task_ids:
+            filters.append(cls.task_id.in_(as_tuple(task_ids)))
+        if dag_ids:
+            filters.append(cls.dag_id.in_(as_tuple(dag_ids)))
         if include_prior_dates:
             filters.append(cls.execution_date <= execution_date)
         else:
@@ -2211,7 +2212,7 @@ class XCom(Base):
             parse_dates=['timestamp', 'execution_date'])
 
         result.drop_duplicates(
-            subset=['key', 'execution_date', 'task', 'dag'],
+            subset=['key', 'execution_date', 'task_id', 'dag_id'],
             inplace=True)
 
         if result.empty:
