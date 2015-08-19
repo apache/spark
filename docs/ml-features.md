@@ -1477,17 +1477,25 @@ print(output.select("features", "clicked").first())
 
 ## VectorSlicer
 
-`VectorSlicer` is a transformer that takes a feature vector and outputs a new feature vector with a sub-array of the original features. It is useful for extracting features from a vector column.
+`VectorSlicer` is a transformer that takes a feature vector and outputs a new feature vector with a
+sub-array of the original features. It is useful for extracting features from a vector column.
 
-`VectorSlicer` accepts a vector column with a specified indices, then outputs a new vector column whose values are selected via those indices. There are two types of indices, 
+`VectorSlicer` accepts a vector column with a specified indices, then outputs a new vector column
+whose values are selected via those indices. There are two types of indices, 
 
- 1. Integer indices that represents the real indices in the vector, `setIndices()`;
+ 1. Integer indices that represents the indices into the vector, `setIndices()`;
 
- 2. String indices that represents the names of features in the vector, `setNames()`.
+ 2. String indices that represents the names of features into the vector, `setNames()`. 
+ *This requires the vector column to have an `AttributeGroup` since the implementation matches on
+ the name field of an `Attribute`.*
 
-Specify by integer and string are both acceptable, moreover, you can use integer index and string name simultaneously. At least one feature must be selected. Duplicate features are not allowed, so there can be no overlap between selected indices and names. Note that if names of features are selected, an exception will be threw out when encountering with empty input attributes.
+Specification by integer and string are both acceptable. Moreover, you can use integer index and 
+string name simultaneously. At least one feature must be selected. Duplicate features are not
+allowed, so there can be no overlap between selected indices and names. Note that if names of
+features are selected, an exception will be threw out when encountering with empty input attributes.
 
-The output vector will order features with the selected indices first (in the order given), followed by the selected names (in the order given).
+The output vector will order features with the selected indices first (in the order given),
+followed by the selected names (in the order given).
 
 **Examples**
 
@@ -1499,7 +1507,10 @@ Suppose that we have a DataFrame with the column `userFeatures`:
  [0.0, 10.0, 0.5] 
 ~~~
 
-`userFeatures` is a vector column that contains three user features. Assuming that the first column of `userFeatures` are all zeros, so we want to remove it and only the last two columns are selected. The `VectorSlicer` selects the last two elements with `setIndices(1, 2)` then produces a new vector column named `features`:
+`userFeatures` is a vector column that contains three user features. Assuming that the first column
+of `userFeatures` are all zeros, so we want to remove it and only the last two columns are selected.
+The `VectorSlicer` selects the last two elements with `setIndices(1, 2)` then produces a new vector
+column named `features`:
 
 ~~~
  userFeatures     | features
@@ -1507,7 +1518,8 @@ Suppose that we have a DataFrame with the column `userFeatures`:
  [0.0, 10.0, 0.5] | [10.0, 0.5]
 ~~~
 
-Suppose also that we have a potential input attributes for the `userFeatures`, i.e. `["f1", "f2", "f3"]`, then we can use `setNames("f2", "f3")` to select them.
+Suppose also that we have a potential input attributes for the `userFeatures`, i.e. 
+`["f1", "f2", "f3"]`, then we can use `setNames("f2", "f3")` to select them.
 
 ~~~
  userFeatures     | features
@@ -1518,12 +1530,13 @@ Suppose also that we have a potential input attributes for the `userFeatures`, i
 
 **NOTE**
 
-`VectorSlicer` of Python version does not supprt selecting by names currently.
+The Python version of `VectorSlicer` does not support selecting by names currently.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`VectorSlicer`](api/scala/index.html#org.apache.spark.ml.feature.VectorSlicer) takes an input column name with specified indices or names and an output column name.
+[`VectorSlicer`](api/scala/index.html#org.apache.spark.ml.feature.VectorSlicer) takes an input
+column name with specified indices or names and an output column name.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Vectors
@@ -1556,7 +1569,8 @@ println(output.select("userFeatures", "features").first())
 
 <div data-lang="java" markdown="1">
 
-[`VectorSlicer`](api/java/org/apache/spark/ml/feature/VectorSlicer.html) takes an input column name with specified indices or names and an output column name.
+[`VectorSlicer`](api/java/org/apache/spark/ml/feature/VectorSlicer.html) takes an input column name
+with specified indices or names and an output column name.
 
 {% highlight java %}
 import java.util.Arrays;
@@ -1597,7 +1611,8 @@ System.out.println(output.select("userFeatures", "features").first());
 
 <div data-lang="python" markdown="1">
 
-[`VectorSlicer`](api/python/pyspark.ml.html#pyspark.ml.feature.VectorSlicer) takes an input column name with specified indices or names and an output column name.
+[`VectorSlicer`](api/python/pyspark.ml.html#pyspark.ml.feature.VectorSlicer) takes an input column
+name with specified indices or names and an output column name.
 
 {% highlight python %}
 from pyspark.mllib.linalg import DenseVector
