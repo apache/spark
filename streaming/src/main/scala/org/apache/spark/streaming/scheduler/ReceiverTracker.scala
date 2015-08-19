@@ -424,7 +424,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Check if tracker has been marked for starting */
-  private[streaming] def isTrackerStarted: Boolean = trackerState == Started
+  private def isTrackerStarted: Boolean = trackerState == Started
 
   /** Check if tracker has been marked for stopping */
   private def isTrackerStopping: Boolean = trackerState == Stopping
