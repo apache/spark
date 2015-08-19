@@ -406,22 +406,28 @@ class Analyzer(
                 if (nameParts.length > 1) {
                   val relationName = nameParts.init
                   val referencedAttrName = nameParts.last
-                  val relation = catalog.lookupRelation(relationName)
-                  val referencedAttr =
-                    relation.resolve(Seq(referencedAttrName), resolver).getOrElse(u).toAttribute
-                  (relation, referencedAttr)
+                  if (catalog.tableExists(relationName)) {
+                    val relation = catalog.lookupRelation(relationName)
+                    val referencedAttr =
+                      relation.resolve(Seq(referencedAttrName), resolver).getOrElse(u).toAttribute
+                    (relation, referencedAttr)
+                  } else {
+                    (UnresolvedRelation(relationName), u)
+                  }
                 } else {
                   (h, h.resolve(nameParts, resolver).getOrElse(u).toAttribute)
                 }
 
               // Enforce the constraint that foreign keys can only reference unique keys
-              val referencedAttrIsUnique = relation.keys.exists {
-                case UniqueKey(attr) if attr == referencedAttr => true
-                case _ => false
-              }
-              if (referencedAttr.resolved && !referencedAttrIsUnique) {
-                failAnalysis("Foreign keys can only reference unique keys, but " +
-                  s"$k references $u which is not unique.")
+              if (referencedAttr.resolved) {
+                val referencedAttrIsUnique = relation.keys.exists {
+                  case UniqueKey(attr) if attr == referencedAttr => true
+                  case _ => false
+                }
+                if (!referencedAttrIsUnique) {
+                  failAnalysis("Foreign keys can only reference unique keys, but " +
+                    s"$k references $u which is not unique.")
+                }
               }
 
               referencedAttr
