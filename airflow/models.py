@@ -2165,9 +2165,6 @@ class XCom(Base):
         Store an XCom value.
         """
 
-        if not isinstance(task, basestring) or not isinstance(dag, basestring):
-            raise TypeError('Expected string; received {}'.format(type(task)))
-
         session.expunge_all()
         session.add(XCom(
             key=key,
