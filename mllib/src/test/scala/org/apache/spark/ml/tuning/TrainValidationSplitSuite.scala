@@ -132,7 +132,7 @@ object TrainValidationSplitSuite {
       throw new UnsupportedOperationException
     }
 
-    override def shouldMaximize: Boolean = true
+    override def isLargerBetter: Boolean = true
 
     override val uid: String = "eval"
 

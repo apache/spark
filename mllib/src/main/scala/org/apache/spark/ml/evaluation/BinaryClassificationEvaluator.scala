@@ -86,7 +86,7 @@ class BinaryClassificationEvaluator(override val uid: String)
     metric
   }
 
-  override def shouldMaximize: Boolean = $(metricName) match {
+  override def isLargerBetter: Boolean = $(metricName) match {
     case "areaUnderROC" => true
     case "areaUnderPR" => true
   }

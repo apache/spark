@@ -100,7 +100,7 @@ class TrainValidationSplit(override val uid: String) extends Estimator[TrainVali
 
     logInfo(s"Train validation split metrics: ${metrics.toSeq}")
     val (bestMetric, bestIndex) =
-      if (eval.shouldMaximize) metrics.zipWithIndex.maxBy(_._1)
+      if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
       else metrics.zipWithIndex.minBy(_._1)
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best train validation split metric: $bestMetric.")

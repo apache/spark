@@ -81,7 +81,7 @@ final class RegressionEvaluator(override val uid: String)
     metric
   }
 
-  override def shouldMaximize: Boolean = $(metricName) match {
+  override def isLargerBetter: Boolean = $(metricName) match {
     case "rmse" => false
     case "mse" => false
     case "r2" => true

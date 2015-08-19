@@ -81,7 +81,7 @@ class MulticlassClassificationEvaluator (override val uid: String)
     metric
   }
 
-  override def shouldMaximize: Boolean = $(metricName) match {
+  override def isLargerBetter: Boolean = $(metricName) match {
     case "f1" => true
     case "precision" => true
     case "recall" => true

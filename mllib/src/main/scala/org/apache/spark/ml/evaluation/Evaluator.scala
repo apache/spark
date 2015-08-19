@@ -47,11 +47,11 @@ abstract class Evaluator extends Params {
   def evaluate(dataset: DataFrame): Double
 
   /**
-   * Indicates whether the metric returned by [[evaluate()]] should be maximized (true)
+   * Indicates whether the metric returned by [[evaluate()]] should be maximized (true, default)
    * or minimized (false).
    * A given evaluator may support multiple metrics which may be maximized or minimized.
    */
-  def shouldMaximize: Boolean
+  def isLargerBetter: Boolean = true
 
   override def copy(extra: ParamMap): Evaluator
 }
