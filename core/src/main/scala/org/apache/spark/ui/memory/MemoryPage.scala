@@ -22,22 +22,31 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.{Node, NodeSeq}
 
 import org.apache.spark.ui.{UIUtils, WebUIPage}
-import org.apache.spark.util.Utils
 
 private[ui] class MemoryPage(parent: MemoryTab) extends WebUIPage("") {
-  private val listener = parent.listener
+  private val memoryListener = parent.memoryListener
+  private val progressListener = parent.progressListener
 
   def render(request: HttpServletRequest): Seq[Node] = {
 
-    val activeExecutorIdToMem = listener.activeExecutorIdToMem
-    val removedExecutorIdToMem = listener.removedExecutorIdToMem
+    val activeExecutorIdToMem = memoryListener.activeExecutorIdToMem
+    val removedExecutorIdToMem = memoryListener.removedExecutorIdToMem
+    val completedStages = progressListener.completedStages.reverse.toSeq
+    val failedStages = progressListener.failedStages.reverse.toSeq
+    val numberCompletedStages = progressListener.numCompletedStages
+    val numberFailedStages = progressListener.numFailedStages
     val activeMemInfoSorted = activeExecutorIdToMem.toSeq.sortBy(_._1)
     val removedMemInfoSorted = removedExecutorIdToMem.toSeq.sortBy(_._1)
     val shouldShowActiveExecutors = activeExecutorIdToMem.nonEmpty
     val shouldShowRemovedExecutors = removedExecutorIdToMem.nonEmpty
+    val shouldShowCompletedStages = completedStages.nonEmpty
+    val shouldShowFailedStages = failedStages.nonEmpty
 
-    val activeExecMemTable = new MemTableBase(activeMemInfoSorted, listener)
-    val removedExecMemTable = new MemTableBase(removedMemInfoSorted, listener)
+    val activeExecMemTable = new MemTableBase(activeMemInfoSorted, memoryListener)
+    val removedExecMemTable = new MemTableBase(removedMemInfoSorted, memoryListener)
+    val completedStagesTable = new stagesTableBase(
+      completedStages, parent.basePath, progressListener)
+    val failedStagesTable = new stagesTableBase(failedStages, parent.basePath, progressListener)
 
     val summary: NodeSeq =
       <div>
@@ -51,12 +60,28 @@ private[ui] class MemoryPage(parent: MemoryTab) extends WebUIPage("") {
             }
           }
           {
-          if (shouldShowRemovedExecutors) {
-            <li>
-              <a href="#removedExec"><strong>Active Executors:</strong></a>
-              {removedExecutorIdToMem.size}
-            </li>
+            if (shouldShowRemovedExecutors) {
+              <li>
+                <a href="#removedExec"><strong>Removed Executors:</strong></a>
+                {removedExecutorIdToMem.size}
+              </li>
+            }
           }
+          {
+            if (shouldShowCompletedStages) {
+              <li>
+                <a href="#completedStages"><strong>Completed Stages:</strong></a>
+                {numberCompletedStages}
+              </li>
+            }
+          }
+          {
+            if (shouldShowFailedStages) {
+              <li>
+                <a href="#failedStages"><strong>Failed Stages:</strong></a>
+                {numberFailedStages}
+              </li>
+            }
           }
         </ul>
       </div>
@@ -67,8 +92,16 @@ private[ui] class MemoryPage(parent: MemoryTab) extends WebUIPage("") {
       activeExecMemTable.toNodeSeq
     }
     if (shouldShowRemovedExecutors) {
-      content ++= <h4 id="activeExec">Active Executors ({removedMemInfoSorted.size})</h4> ++
+      content ++= <h4 id="RemovedExec">Removed Executors ({removedMemInfoSorted.size})</h4> ++
       removedExecMemTable.toNodeSeq
+    }
+    if (shouldShowCompletedStages) {
+      content ++= <h4 id="completedStages">Completed Stages ({numberCompletedStages})</h4> ++
+      completedStagesTable.toNodeSeq
+    }
+    if (shouldShowFailedStages) {
+      content ++= <h4 id="failedStages">Failed Stages ({numberFailedStages})</h4> ++
+      failedStagesTable.toNodeSeq
     }
 
     UIUtils.headerSparkPage("Memory Usage", content, parent)
@@ -77,56 +110,3 @@ private[ui] class MemoryPage(parent: MemoryTab) extends WebUIPage("") {
 
 }
 
-private[ui] class MemTableBase(
-    memInfos: Seq[(String, MemoryUIInfo)],
-    listener: MemoryListener) {
-
-  protected def columns: Seq[Node] = {
-    <th>Executor ID</th>
-    <th>Address</th>
-    <th>Net Memory (on-heap)</th>
-    <th>Net Memory (direct-heap)</th>
-    <th>Peak Net Memory (on-heap) / Happen Time</th>
-    <th>Peak Net Read (direct-heap) / Happen Time</th>
-  }
-
-  def toNodeSeq: Seq[Node] = {
-    listener.synchronized {
-      memTable(showRow, memInfos)
-    }
-  }
-
-  protected def memTable[T](makeRow: T => Seq[Node], rows: Seq[T]): Seq[Node] = {
-    <table class={UIUtils.TABLE_CLASS_STRIPED}>
-      <thead>{columns}</thead>
-      <tbody>
-        {rows.map(r => makeRow(r))}
-      </tbody>
-    </table>
-  }
-
-  /** Render an HTML row representing an executor */
-  private def showRow(info: (String, MemoryUIInfo)): Seq[Node] = {
-    <tr>
-      <td>{info._1}</td>
-      <td>{info._2.executorAddress}</td>
-      {if (info._2.transportInfo.isDefined) {
-      <td>{Utils.bytesToString(info._2.transportInfo.get.onheapSize)}</td>
-        <td>{Utils.bytesToString(info._2.transportInfo.get.directheapSize)}</td>
-        <td>
-          {Utils.bytesToString(info._2.transportInfo.get.peakOnheapSizeTime.memorySize)} /
-          {UIUtils.formatDate(info._2.transportInfo.get.peakOnheapSizeTime.timeStamp)}
-        </td>
-        <td>
-          {Utils.bytesToString(info._2.transportInfo.get.peakDirectheapSizeTime.memorySize)} /
-          {UIUtils.formatDate(info._2.transportInfo.get.peakDirectheapSizeTime.timeStamp)}
-        </td>
-    } else {
-      <td>N/A</td>
-        <td>N/A</td>
-        <td>N/A</td>
-        <td>N/A</td>
-    }}
-    </tr>
-  }
-}
