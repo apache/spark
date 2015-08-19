@@ -20,8 +20,6 @@ package org.apache.spark.scheduler
 import java.nio.ByteBuffer
 import java.util.concurrent.RejectedExecutionException
 
-import org.apache.spark.network.buffer.WrappedLargeByteBuffer
-
 import scala.language.existentials
 import scala.util.control.NonFatal
 

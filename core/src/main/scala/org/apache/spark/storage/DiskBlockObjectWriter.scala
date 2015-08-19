@@ -110,7 +110,7 @@ private[spark] class DiskBlockObjectWriter(
         objOut.close()
       }
 
-      if (length > LargeByteBufferHelper.MAX_CHUNK) {
+      if (length > LargeByteBufferHelper.MAX_CHUNK_SIZE) {
         throw new ShuffleBlockSizeLimitException(length)
       }
 
@@ -207,7 +207,7 @@ private[spark] class DiskBlockObjectWriter(
 
     if (numRecordsWritten % 32 == 0) {
       updateBytesWritten()
-      if (reportedPosition > LargeByteBufferHelper.MAX_CHUNK) {
+      if (reportedPosition > LargeByteBufferHelper.MAX_CHUNK_SIZE) {
         throw new ShuffleBlockSizeLimitException(reportedPosition)
       }
     }

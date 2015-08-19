@@ -746,129 +746,133 @@ private[spark] class BlockManager(
     // The level we actually use to put the block
     val putLevel = effectiveStorageLevel.getOrElse(level)
 
-    // If we're storing bytes, then initiate the replication before storing them locally.
-    // This is faster as data is already serialized and ready to send.
-    val replicationFuture = data match {
-      case b: ByteBufferValues if putLevel.replication > 1 =>
-        // Duplicate doesn't copy the bytes, but just creates a wrapper
-        val bufferView = try {
-          b.buffer.asByteBuffer()
-        } catch {
-          case ex: BufferTooLargeException =>
-            throw new ReplicationBlockSizeLimitException(ex)
-        }
-        Future {
-          // This is a blocking action and should run in futureExecutionContext which is a cached
-          // thread pool
-          replicate(blockId, bufferView, putLevel)
-        }(futureExecutionContext)
-      case _ => null
-    }
-
-    putBlockInfo.synchronized {
-      logTrace("Put for block %s took %s to get into synchronized block"
-        .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
-
-      var marked = false
-      try {
-        // returnValues - Whether to return the values put
-        // blockStore - The type of storage to put these values into
-        val (returnValues, blockStore: BlockStore) = {
-          if (putLevel.useMemory) {
-            // Put it in memory first, even if it also has useDisk set to true;
-            // We will drop it to disk later if the memory store can't hold it.
-            (true, memoryStore)
-          } else if (putLevel.useOffHeap) {
-            // Use external block store
-            (false, externalBlockStore)
-          } else if (putLevel.useDisk) {
-            // Don't get back the bytes from put unless we replicate them
-            (putLevel.replication > 1, diskStore)
-          } else {
-            assert(putLevel == StorageLevel.NONE)
-            throw new BlockException(
-              blockId, s"Attempted to put block $blockId without specifying storage level!")
-          }
-        }
-
-        // Actually put the values
-        val result = data match {
-          case IteratorValues(iterator) =>
-            blockStore.putIterator(blockId, iterator, putLevel, returnValues)
-          case ArrayValues(array) =>
-            blockStore.putArray(blockId, array, putLevel, returnValues)
-          case ByteBufferValues(bytes) =>
-            bytes.rewind()
-            blockStore.putBytes(blockId, bytes, putLevel)
-        }
-        size = result.size
-        result.data match {
-          case Left (newIterator) if putLevel.useMemory => valuesAfterPut = newIterator
-          case Right (newBytes) => bytesAfterPut = newBytes
-          case _ =>
-        }
-
-        // Keep track of which blocks are dropped from memory
-        if (putLevel.useMemory) {
-          result.droppedBlocks.foreach { updatedBlocks += _ }
-        }
-
-        val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
-        if (putBlockStatus.storageLevel != StorageLevel.NONE) {
-          // Now that the block is in either the memory, externalBlockStore, or disk store,
-          // let other threads read it, and tell the master about it.
-          marked = true
-          putBlockInfo.markReady(size)
-          if (tellMaster) {
-            reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
-          }
-          updatedBlocks += ((blockId, putBlockStatus))
-        }
-      } finally {
-        // If we failed in putting the block to memory/disk, notify other possible readers
-        // that it has failed, and then remove it from the block info map.
-        if (!marked) {
-          // Note that the remove must happen before markFailure otherwise another thread
-          // could've inserted a new BlockInfo before we remove it.
-          blockInfo.remove(blockId)
-          putBlockInfo.markFailure()
-          logWarning(s"Putting block $blockId failed")
-        }
-      }
-    }
-    logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
-
-    // Either we're storing bytes and we asynchronously started replication, or we're storing
-    // values and need to serialize and replicate them now:
-    if (putLevel.replication > 1) {
-      data match {
-        case ByteBufferValues(bytes) =>
-          if (replicationFuture != null) {
-            Await.ready(replicationFuture, Duration.Inf)
-          }
-        case _ =>
-          val remoteStartTime = System.currentTimeMillis
-          // Serialize the block if not already done
-          if (bytesAfterPut == null) {
-            if (valuesAfterPut == null) {
-              throw new SparkException(
-                "Underlying put returned neither an Iterator nor bytes! This shouldn't happen.")
-            }
-            bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
-          }
-          try {
-            replicate(blockId, bytesAfterPut.asByteBuffer(), putLevel)
+    try {
+      // If we're storing bytes, then initiate the replication before storing them locally.
+      // This is faster as data is already serialized and ready to send.
+      val replicationFuture = data match {
+        case b: ByteBufferValues if putLevel.replication > 1 =>
+          // Duplicate doesn't copy the bytes, but just creates a wrapper
+          val bufferView = try {
+            b.buffer.asByteBuffer()
           } catch {
             case ex: BufferTooLargeException =>
               throw new ReplicationBlockSizeLimitException(ex)
           }
-          logDebug("Put block %s remotely took %s"
-            .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
+          Future {
+            // This is a blocking action and should run in futureExecutionContext which is a cached
+            // thread pool
+            replicate(blockId, bufferView, putLevel)
+          }(futureExecutionContext)
+        case _ => null
       }
-    }
 
-    if (bytesAfterPut != null) {
-      bytesAfterPut.dispose()
+      putBlockInfo.synchronized {
+        logTrace("Put for block %s took %s to get into synchronized block"
+          .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
+
+        var marked = false
+        try {
+          // returnValues - Whether to return the values put
+          // blockStore - The type of storage to put these values into
+          val (returnValues, blockStore: BlockStore) = {
+            if (putLevel.useMemory) {
+              // Put it in memory first, even if it also has useDisk set to true;
+              // We will drop it to disk later if the memory store can't hold it.
+              (true, memoryStore)
+            } else if (putLevel.useOffHeap) {
+              // Use external block store
+              (false, externalBlockStore)
+            } else if (putLevel.useDisk) {
+              // Don't get back the bytes from put unless we replicate them
+              (putLevel.replication > 1, diskStore)
+            } else {
+              assert(putLevel == StorageLevel.NONE)
+              throw new BlockException(
+                blockId, s"Attempted to put block $blockId without specifying storage level!")
+            }
+          }
+
+          // Actually put the values
+          val result = data match {
+            case IteratorValues(iterator) =>
+              blockStore.putIterator(blockId, iterator, putLevel, returnValues)
+            case ArrayValues(array) =>
+              blockStore.putArray(blockId, array, putLevel, returnValues)
+            case ByteBufferValues(bytes) =>
+              bytes.rewind()
+              blockStore.putBytes(blockId, bytes, putLevel)
+          }
+          size = result.size
+          result.data match {
+            case Left(newIterator) if putLevel.useMemory => valuesAfterPut = newIterator
+            case Right(newBytes) => bytesAfterPut = newBytes
+            case _ =>
+          }
+
+          // Keep track of which blocks are dropped from memory
+          if (putLevel.useMemory) {
+            result.droppedBlocks.foreach {
+              updatedBlocks += _
+            }
+          }
+
+          val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
+          if (putBlockStatus.storageLevel != StorageLevel.NONE) {
+            // Now that the block is in either the memory, externalBlockStore, or disk store,
+            // let other threads read it, and tell the master about it.
+            marked = true
+            putBlockInfo.markReady(size)
+            if (tellMaster) {
+              reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
+            }
+            updatedBlocks += ((blockId, putBlockStatus))
+          }
+        } finally {
+          // If we failed in putting the block to memory/disk, notify other possible readers
+          // that it has failed, and then remove it from the block info map.
+          if (!marked) {
+            // Note that the remove must happen before markFailure otherwise another thread
+            // could've inserted a new BlockInfo before we remove it.
+            blockInfo.remove(blockId)
+            putBlockInfo.markFailure()
+            logWarning(s"Putting block $blockId failed")
+          }
+        }
+      }
+      logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
+
+      // Either we're storing bytes and we asynchronously started replication, or we're storing
+      // values and need to serialize and replicate them now:
+      if (putLevel.replication > 1) {
+        data match {
+          case ByteBufferValues(bytes) =>
+            if (replicationFuture != null) {
+              Await.ready(replicationFuture, Duration.Inf)
+            }
+          case _ =>
+            val remoteStartTime = System.currentTimeMillis
+            // Serialize the block if not already done
+            if (bytesAfterPut == null) {
+              if (valuesAfterPut == null) {
+                throw new SparkException(
+                  "Underlying put returned neither an Iterator nor bytes! This shouldn't happen.")
+              }
+              bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
+            }
+            try {
+              replicate(blockId, bytesAfterPut.asByteBuffer(), putLevel)
+            } catch {
+              case ex: BufferTooLargeException =>
+                throw new ReplicationBlockSizeLimitException(ex)
+            }
+            logDebug("Put block %s remotely took %s"
+              .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
+        }
+      }
+    } finally {
+      if (bytesAfterPut != null) {
+        bytesAfterPut.dispose()
+      }
     }
 
     if (putLevel.replication > 1) {
@@ -956,7 +960,7 @@ private[spark] class BlockManager(
         case Some(peer) =>
           try {
             val onePeerStartTime = System.currentTimeMillis
-            data.position(0)
+            data.rewind()
             logTrace(s"Trying to replicate $blockId of ${data.limit()} bytes to $peer")
             blockTransferService.uploadBlockSync(
               peer.host, peer.port, peer.executorId, blockId, new NioManagedBuffer(data), tLevel)
@@ -1339,7 +1343,7 @@ class TachyonBlockSizeLimitException(cause: BufferTooLargeException)
 class ShuffleBlockSizeLimitException(size: Long)
   extends SparkException("Spark cannot shuffle partitions that are greater than 2GB.  " +
     "You tried to shuffle a block that was at least " + Utils.bytesToString(size) + ".  " +
-    "You should try to increase the number of partitions of this shuffle, and / or increase the " +
+    "You should try to increase the number of partitions of this shuffle, and / or " +
     "figure out which stage created the partitions before the shuffle, and increase the number " +
     "of partitions for that stage.  You may want to make both of these numbers easily " +
     "configurable parameters so you can continue to update as needed.")

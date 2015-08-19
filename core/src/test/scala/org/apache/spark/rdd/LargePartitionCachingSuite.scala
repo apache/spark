@@ -46,7 +46,7 @@ class LargePartitionCachingSuite extends FunSuite with SharedSparkContext with M
           .persist(StorageLevel.DISK_ONLY_2)
         myRDD.count()
       }
-      exc.getMessage() should include (classOf[ReplicationBlockSizeLimitException].getSimpleName)
+      exc.getCause() shouldBe a [ReplicationBlockSizeLimitException]
     } finally {
       clusterSc.stop()
     }
