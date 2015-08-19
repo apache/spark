@@ -172,11 +172,10 @@ setMethod("n", signature(x = "Column"),
 #' If otherwise is not defined at the end, null is returned for unmatched conditions.
 #'
 #' @rdname column
-#' @aliases otherwise
-setMethod("when", signature(x = "Column", y = "ANY"),
-          function(x, y) {
-              condition <- x@jc
-              value <- ifelse(class(y) == "Column", y@jc, y)
+setMethod("when", signature(condition = "Column", value = "ANY"),
+          function(condition, value) {
+              condition <- condition@jc
+              value <- ifelse(class(value) == "Column", value@jc, value)
               jc <- callJStatic("org.apache.spark.sql.functions", "when", condition, value)
               column(jc)
           })

@@ -732,7 +732,6 @@ test_that("when() and otherwise() on a DataFrame", {
   df <- createDataFrame(sqlContext, l)
   expect_equal(collect(select(df, when(df$a > 1 & df$b > 2, 1)))[, 1], c(NA, 1))
   expect_equal(collect(select(df, otherwise(when(df$a > 1, 1), 0)))[, 1], c(0, 1))
-  expect_equal(collect(select(df, when(df$a > 1, 1) %otherwise% 0))[, 1], c(0, 1))
 })
 
 test_that("group by", {
