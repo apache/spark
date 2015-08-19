@@ -43,6 +43,7 @@ import org.apache.spark.sql.{SQLContext, Row}
  *                the weight for Gaussian i, and weights.sum == 1
  * @param gaussians Array of MultivariateGaussian where gaussians(i) represents
  *                  the Multivariate Gaussian (Normal) Distribution for Gaussian i
+ * @since 1.3.0
  */
 @Experimental
 class GaussianMixtureModel(
@@ -53,32 +54,48 @@ class GaussianMixtureModel(
 
   override protected def formatVersion = "1.0"
 
+  /**
+   * @since 1.4.0
+   */
   override def save(sc: SparkContext, path: String): Unit = {
     GaussianMixtureModel.SaveLoadV1_0.save(sc, path, weights, gaussians)
   }
 
-  /** Number of gaussians in mixture */
+  /**
+   * Number of gaussians in mixture
+   * @since 1.3.0
+   */
   def k: Int = weights.length
 
-  /** Maps given points to their cluster indices. */
+  /**
+   * Maps given points to their cluster indices.
+   * @since 1.3.0
+   */
   def predict(points: RDD[Vector]): RDD[Int] = {
     val responsibilityMatrix = predictSoft(points)
     responsibilityMatrix.map(r => r.indexOf(r.max))
   }
 
-  /** Maps given point to its cluster index. */
+  /**
+   * Maps given point to its cluster index.
+   * @since 1.5.0
+   */
   def predict(point: Vector): Int = {
     val r = computeSoftAssignments(point.toBreeze.toDenseVector, gaussians, weights, k)
     r.indexOf(r.max)
   }
 
-  /** Java-friendly version of [[predict()]] */
+  /**
+   * Java-friendly version of [[predict()]]
+   * @since 1.4.0
+   */
   def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
     predict(points.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Integer]]
 
   /**
    * Given the input vectors, return the membership value of each vector
    * to all mixture components.
+   * @since 1.3.0
    */
   def predictSoft(points: RDD[Vector]): RDD[Array[Double]] = {
     val sc = points.sparkContext
@@ -91,6 +108,7 @@ class GaussianMixtureModel(
 
   /**
    * Given the input vector, return the membership values to all mixture components.
+   * @since 1.4.0
    */
   def predictSoft(point: Vector): Array[Double] = {
     computeSoftAssignments(point.toBreeze.toDenseVector, gaussians, weights, k)
@@ -115,6 +133,9 @@ class GaussianMixtureModel(
   }
 }
 
+/**
+ * @since 1.4.0
+ */
 @Experimental
 object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
 
@@ -165,6 +186,9 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
     }
   }
 
+  /**
+   * @since 1.4.0
+   */
   override def load(sc: SparkContext, path: String) : GaussianMixtureModel = {
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
     implicit val formats = DefaultFormats

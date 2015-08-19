@@ -26,11 +26,11 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer
 from pyspark.mllib.common import inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 
-__all__ = ['Binarizer', 'Bucketizer', 'HashingTF', 'IDF', 'IDFModel', 'NGram', 'Normalizer',
-           'OneHotEncoder', 'PolynomialExpansion', 'RegexTokenizer', 'StandardScaler',
-           'StandardScalerModel', 'StringIndexer', 'StringIndexerModel', 'Tokenizer',
-           'VectorAssembler', 'VectorIndexer', 'Word2Vec', 'Word2VecModel', 'PCA',
-           'PCAModel', 'RFormula', 'RFormulaModel']
+__all__ = ['Binarizer', 'Bucketizer', 'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel',
+           'NGram', 'Normalizer', 'OneHotEncoder', 'PolynomialExpansion', 'RegexTokenizer',
+           'StandardScaler', 'StandardScalerModel', 'StringIndexer', 'StringIndexerModel',
+           'Tokenizer', 'VectorAssembler', 'VectorIndexer', 'Word2Vec', 'Word2VecModel',
+           'PCA', 'PCAModel', 'RFormula', 'RFormulaModel']
 
 
 @inherit_doc
@@ -164,6 +164,63 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
         Gets the value of threshold or its default value.
         """
         return self.getOrDefault(self.splits)
+
+
+@inherit_doc
+class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
+    """
+    Outputs the Hadamard product (i.e., the element-wise product) of each input vector
+    with a provided "weight" vector. In other words, it scales each column of the dataset
+    by a scalar multiplier.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame([(Vectors.dense([2.0, 1.0, 3.0]),)], ["values"])
+    >>> ep = ElementwiseProduct(scalingVec=Vectors.dense([1.0, 2.0, 3.0]),
+    ...     inputCol="values", outputCol="eprod")
+    >>> ep.transform(df).head().eprod
+    DenseVector([2.0, 2.0, 9.0])
+    >>> ep.setParams(scalingVec=Vectors.dense([2.0, 3.0, 5.0])).transform(df).head().eprod
+    DenseVector([4.0, 3.0, 15.0])
+    """
+
+    # a placeholder to make it appear in the generated doc
+    scalingVec = Param(Params._dummy(), "scalingVec", "vector for hadamard product, " +
+                       "it must be MLlib Vector type.")
+
+    @keyword_only
+    def __init__(self, scalingVec=None, inputCol=None, outputCol=None):
+        """
+        __init__(self, scalingVec=None, inputCol=None, outputCol=None)
+        """
+        super(ElementwiseProduct, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ElementwiseProduct",
+                                            self.uid)
+        self.scalingVec = Param(self, "scalingVec", "vector for hadamard product, " +
+                                "it must be MLlib Vector type.")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, scalingVec=None, inputCol=None, outputCol=None):
+        """
+        setParams(self, scalingVec=None, inputCol=None, outputCol=None)
+        Sets params for this ElementwiseProduct.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setScalingVec(self, value):
+        """
+        Sets the value of :py:attr:`scalingVec`.
+        """
+        self._paramMap[self.scalingVec] = value
+        return self
+
+    def getScalingVec(self):
+        """
+        Gets the value of scalingVec or its default value.
+        """
+        return self.getOrDefault(self.scalingVec)
 
 
 @inherit_doc

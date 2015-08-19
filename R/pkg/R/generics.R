@@ -651,8 +651,20 @@ setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
 #' @export
 setGeneric("startsWith", function(x, ...) { standardGeneric("startsWith") })
 
+#' @rdname column
+#' @export
+setGeneric("when", function(condition, value) { standardGeneric("when") })
+
+#' @rdname column
+#' @export
+setGeneric("otherwise", function(x, value) { standardGeneric("otherwise") })
+
 
 ###################### Expression Function Methods ##########################
+
+#' @rdname functions
+#' @export
+setGeneric("add_months", function(y, x) { standardGeneric("add_months") })
 
 #' @rdname functions
 #' @export
@@ -684,11 +696,35 @@ setGeneric("ceil", function(x) { standardGeneric("ceil") })
 
 #' @rdname functions
 #' @export
+setGeneric("concat", function(x, ...) { standardGeneric("concat") })
+
+#' @rdname functions
+#' @export
+setGeneric("concat_ws", function(sep, x, ...) { standardGeneric("concat_ws") })
+
+#' @rdname functions
+#' @export
+setGeneric("conv", function(x, fromBase, toBase) { standardGeneric("conv") })
+
+#' @rdname functions
+#' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
 #' @rdname functions
 #' @export
 setGeneric("datediff", function(y, x) { standardGeneric("datediff") })
+
+#' @rdname functions
+#' @export
+setGeneric("date_add", function(y, x) { standardGeneric("date_add") })
+
+#' @rdname functions
+#' @export
+setGeneric("date_format", function(y, x) { standardGeneric("date_format") })
+
+#' @rdname functions
+#' @export
+setGeneric("date_sub", function(y, x) { standardGeneric("date_sub") })
 
 #' @rdname functions
 #' @export
@@ -704,6 +740,30 @@ setGeneric("explode", function(x) { standardGeneric("explode") })
 
 #' @rdname functions
 #' @export
+setGeneric("expr", function(x) { standardGeneric("expr") })
+
+#' @rdname functions
+#' @export
+setGeneric("from_utc_timestamp", function(y, x) { standardGeneric("from_utc_timestamp") })
+
+#' @rdname functions
+#' @export
+setGeneric("format_number", function(y, x) { standardGeneric("format_number") })
+
+#' @rdname functions
+#' @export
+setGeneric("format_string", function(format, x, ...) { standardGeneric("format_string") })
+
+#' @rdname functions
+#' @export
+setGeneric("from_unixtime", function(x, ...) { standardGeneric("from_unixtime") })
+
+#' @rdname functions
+#' @export
+setGeneric("greatest", function(x, ...) { standardGeneric("greatest") })
+
+#' @rdname functions
+#' @export
 setGeneric("hex", function(x) { standardGeneric("hex") })
 
 #' @rdname functions
@@ -716,6 +776,10 @@ setGeneric("initcap", function(x) { standardGeneric("initcap") })
 
 #' @rdname functions
 #' @export
+setGeneric("instr", function(y, x) { standardGeneric("instr") })
+
+#' @rdname functions
+#' @export
 setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
 
 #' @rdname functions
@@ -724,11 +788,27 @@ setGeneric("last_day", function(x) { standardGeneric("last_day") })
 
 #' @rdname functions
 #' @export
+setGeneric("least", function(x, ...) { standardGeneric("least") })
+
+#' @rdname functions
+#' @export
 setGeneric("levenshtein", function(y, x) { standardGeneric("levenshtein") })
 
 #' @rdname functions
 #' @export
+setGeneric("lit", function(x) { standardGeneric("lit") })
+
+#' @rdname functions
+#' @export
+setGeneric("locate", function(substr, str, ...) { standardGeneric("locate") })
+
+#' @rdname functions
+#' @export
 setGeneric("lower", function(x) { standardGeneric("lower") })
+
+#' @rdname functions
+#' @export
+setGeneric("lpad", function(x, len, pad) { standardGeneric("lpad") })
 
 #' @rdname functions
 #' @export
@@ -760,6 +840,10 @@ setGeneric("negate", function(x) { standardGeneric("negate") })
 
 #' @rdname functions
 #' @export
+setGeneric("next_day", function(y, x) { standardGeneric("next_day") })
+
+#' @rdname functions
+#' @export
 setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
 
 #' @rdname functions
@@ -768,7 +852,28 @@ setGeneric("quarter", function(x) { standardGeneric("quarter") })
 
 #' @rdname functions
 #' @export
+setGeneric("rand", function(seed) { standardGeneric("rand") })
+
+#' @rdname functions
+#' @export
+setGeneric("randn", function(seed) { standardGeneric("randn") })
+
+#' @rdname functions
+#' @export
+setGeneric("regexp_extract", function(x, pattern, idx) { standardGeneric("regexp_extract") })
+
+#' @rdname functions
+#' @export
+setGeneric("regexp_replace",
+           function(x, pattern, replacement) { standardGeneric("regexp_replace") })
+
+#' @rdname functions
+#' @export
 setGeneric("reverse", function(x) { standardGeneric("reverse") })
+
+#' @rdname functions
+#' @export
+setGeneric("rpad", function(x, len, pad) { standardGeneric("rpad") })
 
 #' @rdname functions
 #' @export
@@ -784,6 +889,22 @@ setGeneric("sha1", function(x) { standardGeneric("sha1") })
 
 #' @rdname functions
 #' @export
+setGeneric("sha2", function(y, x) { standardGeneric("sha2") })
+
+#' @rdname functions
+#' @export
+setGeneric("shiftLeft", function(y, x) { standardGeneric("shiftLeft") })
+
+#' @rdname functions
+#' @export
+setGeneric("shiftRight", function(y, x) { standardGeneric("shiftRight") })
+
+#' @rdname functions
+#' @export
+setGeneric("shiftRightUnsigned", function(y, x) { standardGeneric("shiftRightUnsigned") })
+
+#' @rdname functions
+#' @export
 setGeneric("signum", function(x) { standardGeneric("signum") })
 
 #' @rdname functions
@@ -793,6 +914,10 @@ setGeneric("size", function(x) { standardGeneric("size") })
 #' @rdname functions
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
+
+#' @rdname functions
+#' @export
+setGeneric("substring_index", function(x, delim, count) { standardGeneric("substring_index") })
 
 #' @rdname functions
 #' @export
@@ -812,6 +937,14 @@ setGeneric("to_date", function(x) { standardGeneric("to_date") })
 
 #' @rdname functions
 #' @export
+setGeneric("to_utc_timestamp", function(y, x) { standardGeneric("to_utc_timestamp") })
+
+#' @rdname functions
+#' @export
+setGeneric("translate", function(x, matchingString, replaceString) { standardGeneric("translate") })
+
+#' @rdname functions
+#' @export
 setGeneric("trim", function(x) { standardGeneric("trim") })
 
 #' @rdname functions
@@ -821,6 +954,10 @@ setGeneric("unbase64", function(x) { standardGeneric("unbase64") })
 #' @rdname functions
 #' @export
 setGeneric("unhex", function(x) { standardGeneric("unhex") })
+
+#' @rdname functions
+#' @export
+setGeneric("unix_timestamp", function(x, format) { standardGeneric("unix_timestamp") })
 
 #' @rdname functions
 #' @export
