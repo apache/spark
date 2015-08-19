@@ -32,15 +32,50 @@ class ColumnPruningSuite extends PlanTest {
       ColumnPruning) :: Nil
   }
 
-  test("Column pruning for Generate") {
+  test("Column pruning for Generate when Generate.join = false") {
     val input = LocalRelation('a.int, 'b.array(StringType))
 
-    val query = Generate(Explode('b), false, false, None, 'b.string :: Nil, input).analyze
+    val query = Generate(Explode('b), false, false, None, 's.string :: Nil, input).analyze
     val optimized = Optimize.execute(query)
 
     val correctAnswer =
-      Generate(Explode('b), false, false, None, 'b.string :: Nil,
+      Generate(Explode('b), false, false, None, 's.string :: Nil,
         Project('b.attr :: Nil, input)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Column pruning for Generate when Generate.join = true") {
+    val input = LocalRelation('a.int, 'b.int, 'c.array(StringType))
+
+    val query =
+      Project(Seq('a, 's),
+        Generate(Explode('c), true, false, None, 's.string :: Nil,
+          input)).analyze
+    val optimized = Optimize.execute(query)
+
+    val correctAnswer =
+      Project(Seq('a, 's),
+        Generate(Explode('c), true, false, None, 's.string :: Nil,
+          Project(Seq('a, 'c),
+            input))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Turn Generate.join to false if possible") {
+    val input = LocalRelation('b.array(StringType))
+
+    val query =
+      Project(('s + 1).as("s+1") :: Nil,
+        Generate(Explode('b), true, false, None, 's.string :: Nil,
+          input)).analyze
+    val optimized = Optimize.execute(query)
+
+    val correctAnswer =
+      Project(('s + 1).as("s+1") :: Nil,
+        Generate(Explode('b), false, false, None, 's.string :: Nil,
+          input)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
