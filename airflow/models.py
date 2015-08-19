@@ -2166,6 +2166,7 @@ class XCom(Base):
         """
         Store an XCom value.
         """
+        session.expunge_all()
 
         # remove any duplicate XComs
         session.query(cls).filter(
@@ -2182,6 +2183,7 @@ class XCom(Base):
             task_id=task_id,
             dag_id=dag_id))
 
+        session.commit()
     @classmethod
     @provide_session
     def get(
