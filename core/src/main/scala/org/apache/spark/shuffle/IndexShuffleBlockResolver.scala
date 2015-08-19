@@ -71,7 +71,7 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
 
   /**
    * Write an index file with the offsets of each block, plus a final offset at the end for the
-   * end of the output file. This will be used by getBlockLocation to figure out where each block
+   * end of the output file. This will be used by getBlockData to figure out where each block
    * begins and ends.
    * */
   def writeIndexFile(shuffleId: Int, mapId: Int, lengths: Array[Long]): Unit = {
@@ -114,7 +114,7 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
 }
 
 private[spark] object IndexShuffleBlockResolver {
-  // No-op reduce ID used in interactions with disk store and BlockObjectWriter.
+  // No-op reduce ID used in interactions with disk store and DiskBlockObjectWriter.
   // The disk store currently expects puts to relate to a (map, reduce) pair, but in the sort
   // shuffle outputs for several reduces are glommed into a single file.
   // TODO: Avoid this entirely by having the DiskBlockObjectWriter not require a BlockId.

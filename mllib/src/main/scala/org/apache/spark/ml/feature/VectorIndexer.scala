@@ -341,7 +341,7 @@ class VectorIndexerModel private[ml] (
     val newField = prepOutputField(dataset.schema)
     val transformUDF = udf { (vector: Vector) => transformFunc(vector) }
     val newCol = transformUDF(dataset($(inputCol)))
-    dataset.withColumn($(outputCol), newCol.as($(outputCol), newField.metadata))
+    dataset.withColumn($(outputCol), newCol, newField.metadata)
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -405,6 +405,6 @@ class VectorIndexerModel private[ml] (
 
   override def copy(extra: ParamMap): VectorIndexerModel = {
     val copied = new VectorIndexerModel(uid, numFeatures, categoryMaps)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 }

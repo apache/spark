@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scala.collection.mutable
@@ -236,3 +237,4 @@ object GBTExample {
     sc.stop()
   }
 }
+// scalastyle:on println

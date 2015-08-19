@@ -56,7 +56,7 @@ object Partitioner {
    */
   def defaultPartitioner(rdd: RDD[_], others: RDD[_]*): Partitioner = {
     val bySize = (Seq(rdd) ++ others).sortBy(_.partitions.size).reverse
-    for (r <- bySize if r.partitioner.isDefined) {
+    for (r <- bySize if r.partitioner.isDefined && r.partitioner.get.numPartitions > 0) {
       return r.partitioner.get
     }
     if (rdd.context.conf.contains("spark.default.parallelism")) {
@@ -76,6 +76,8 @@ object Partitioner {
  * produce an unexpected or incorrect result.
  */
 class HashPartitioner(partitions: Int) extends Partitioner {
+  require(partitions >= 0, s"Number of partitions ($partitions) cannot be negative.")
+
   def numPartitions: Int = partitions
 
   def getPartition(key: Any): Int = key match {

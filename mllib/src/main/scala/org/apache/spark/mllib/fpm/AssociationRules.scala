@@ -16,6 +16,7 @@
  */
 package org.apache.spark.mllib.fpm
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
@@ -31,6 +32,8 @@ import org.apache.spark.rdd.RDD
  *
  * Generates association rules from a [[RDD[FreqItemset[Item]]]. This method only generates
  * association rules which have a single item as the consequent.
+ *
+ * @since 1.5.0
  */
 @Experimental
 class AssociationRules private[fpm] (
@@ -38,11 +41,15 @@ class AssociationRules private[fpm] (
 
   /**
    * Constructs a default instance with default parameters {minConfidence = 0.8}.
+   *
+   * @since 1.5.0
    */
   def this() = this(0.8)
 
   /**
    * Sets the minimal confidence (default: `0.8`).
+   *
+   * @since 1.5.0
    */
   def setMinConfidence(minConfidence: Double): this.type = {
     require(minConfidence >= 0.0 && minConfidence <= 1.0)
@@ -54,6 +61,8 @@ class AssociationRules private[fpm] (
    * Computes the association rules with confidence above [[minConfidence]].
    * @param freqItemsets frequent itemset model obtained from [[FPGrowth]]
    * @return a [[Set[Rule[Item]]] containing the assocation rules.
+   *
+   * @since 1.5.0
    */
   def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
     // For candidate rule X => Y, generate (X, (Y, freq(X union Y)))
@@ -87,9 +96,13 @@ object AssociationRules {
    * :: Experimental ::
    *
    * An association rule between sets of items.
-   * @param antecedent hypotheses of the rule
-   * @param consequent conclusion of the rule
+   * @param antecedent hypotheses of the rule. Java users should call [[Rule#javaAntecedent]]
+   *                   instead.
+   * @param consequent conclusion of the rule. Java users should call [[Rule#javaConsequent]]
+   *                   instead.
    * @tparam Item item type
+   *
+   * @since 1.5.0
    */
   @Experimental
   class Rule[Item] private[fpm] (
@@ -98,6 +111,11 @@ object AssociationRules {
       freqUnion: Double,
       freqAntecedent: Double) extends Serializable {
 
+    /**
+     * Returns the confidence of the rule.
+     *
+     * @since 1.5.0
+     */
     def confidence: Double = freqUnion.toDouble / freqAntecedent
 
     require(antecedent.toSet.intersect(consequent.toSet).isEmpty, {
@@ -105,5 +123,23 @@ object AssociationRules {
       s"A valid association rule must have disjoint antecedent and " +
         s"consequent but ${sharedItems} is present in both."
     })
+
+    /**
+     * Returns antecedent in a Java List.
+     *
+     * @since 1.5.0
+     */
+    def javaAntecedent: java.util.List[Item] = {
+      antecedent.toList.asJava
+    }
+
+    /**
+     * Returns consequent in a Java List.
+     *
+     * @since 1.5.0
+     */
+    def javaConsequent: java.util.List[Item] = {
+      consequent.toList.asJava
+    }
   }
 }

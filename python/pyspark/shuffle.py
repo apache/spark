@@ -606,7 +606,7 @@ class ExternalList(object):
         if not os.path.exists(d):
             os.makedirs(d)
         p = os.path.join(d, str(id(self)))
-        self._file = open(p, "wb+", 65536)
+        self._file = open(p, "w+b", 65536)
         self._ser = BatchedSerializer(CompressedSerializer(PickleSerializer()), 1024)
         os.unlink(p)
 

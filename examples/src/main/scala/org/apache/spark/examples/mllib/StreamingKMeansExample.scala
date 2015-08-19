@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.SparkConf
@@ -75,3 +76,4 @@ object StreamingKMeansExample {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

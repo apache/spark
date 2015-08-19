@@ -800,7 +800,7 @@ import org.apache.spark.graphx._
 // Import random graph generation library
 import org.apache.spark.graphx.util.GraphGenerators
 // A graph with edge attributes containing distances
-val graph: Graph[Int, Double] =
+val graph: Graph[Long, Double] =
   GraphGenerators.logNormalGraph(sc, numVertices = 100).mapEdges(e => e.attr.toDouble)
 val sourceId: VertexId = 42 // The ultimate source
 // Initialize the graph such that all vertices except the root have distance infinity.

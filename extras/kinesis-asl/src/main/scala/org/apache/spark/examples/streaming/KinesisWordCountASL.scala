@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import java.nio.ByteBuffer
@@ -272,3 +273,4 @@ private[streaming] object StreamingExamples extends Logging {
     }
   }
 }
+// scalastyle:on println

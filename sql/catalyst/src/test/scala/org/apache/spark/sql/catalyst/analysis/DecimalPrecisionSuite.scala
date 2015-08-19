@@ -34,7 +34,7 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
     AttributeReference("i", IntegerType)(),
     AttributeReference("d1", DecimalType(2, 1))(),
     AttributeReference("d2", DecimalType(5, 2))(),
-    AttributeReference("u", DecimalType.Unlimited)(),
+    AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
     AttributeReference("f", FloatType)(),
     AttributeReference("b", DoubleType)()
   )
@@ -92,11 +92,11 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Comparison operations") {
-    checkComparison(EqualTo(i, d1), DecimalType(10, 1))
+    checkComparison(EqualTo(i, d1), DecimalType(11, 1))
     checkComparison(EqualNullSafe(d2, d1), DecimalType(5, 2))
-    checkComparison(LessThan(i, d1), DecimalType(10, 1))
+    checkComparison(LessThan(i, d1), DecimalType(11, 1))
     checkComparison(LessThanOrEqual(d1, d2), DecimalType(5, 2))
-    checkComparison(GreaterThan(d2, u), DecimalType.Unlimited)
+    checkComparison(GreaterThan(d2, u), DecimalType.SYSTEM_DEFAULT)
     checkComparison(GreaterThanOrEqual(d1, f), DoubleType)
     checkComparison(GreaterThan(d2, d2), DecimalType(5, 2))
   }
@@ -106,12 +106,12 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
     checkUnion(i, d2, DecimalType(12, 2))
     checkUnion(d1, d2, DecimalType(5, 2))
     checkUnion(d2, d1, DecimalType(5, 2))
-    checkUnion(d1, f, DecimalType(8, 7))
-    checkUnion(f, d2, DecimalType(10, 7))
-    checkUnion(d1, b, DecimalType(16, 15))
-    checkUnion(b, d2, DecimalType(18, 15))
-    checkUnion(d1, u, DecimalType.Unlimited)
-    checkUnion(u, d2, DecimalType.Unlimited)
+    checkUnion(d1, f, DoubleType)
+    checkUnion(f, d2, DoubleType)
+    checkUnion(d1, b, DoubleType)
+    checkUnion(b, d2, DoubleType)
+    checkUnion(d1, u, DecimalType.SYSTEM_DEFAULT)
+    checkUnion(u, d2, DecimalType.SYSTEM_DEFAULT)
   }
 
   test("bringing in primitive types") {
@@ -125,13 +125,59 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
     checkType(Add(d1, Cast(i, DoubleType)), DoubleType)
   }
 
-  test("unlimited decimals make everything else cast up") {
-    for (expr <- Seq(d1, d2, i, f, u)) {
-      checkType(Add(expr, u), DecimalType.Unlimited)
-      checkType(Subtract(expr, u), DecimalType.Unlimited)
-      checkType(Multiply(expr, u), DecimalType.Unlimited)
-      checkType(Divide(expr, u), DecimalType.Unlimited)
-      checkType(Remainder(expr, u), DecimalType.Unlimited)
+  test("maximum decimals") {
+    for (expr <- Seq(d1, d2, i, u)) {
+      checkType(Add(expr, u), DecimalType.SYSTEM_DEFAULT)
+      checkType(Subtract(expr, u), DecimalType.SYSTEM_DEFAULT)
     }
+
+    checkType(Multiply(d1, u), DecimalType(38, 19))
+    checkType(Multiply(d2, u), DecimalType(38, 20))
+    checkType(Multiply(i, u), DecimalType(38, 18))
+    checkType(Multiply(u, u), DecimalType(38, 36))
+
+    checkType(Divide(u, d1), DecimalType(38, 21))
+    checkType(Divide(u, d2), DecimalType(38, 24))
+    checkType(Divide(u, i), DecimalType(38, 29))
+    checkType(Divide(u, u), DecimalType(38, 38))
+
+    checkType(Remainder(d1, u), DecimalType(19, 18))
+    checkType(Remainder(d2, u), DecimalType(21, 18))
+    checkType(Remainder(i, u), DecimalType(28, 18))
+    checkType(Remainder(u, u), DecimalType.SYSTEM_DEFAULT)
+
+    for (expr <- Seq(f, b)) {
+      checkType(Add(expr, u), DoubleType)
+      checkType(Subtract(expr, u), DoubleType)
+      checkType(Multiply(expr, u), DoubleType)
+      checkType(Divide(expr, u), DoubleType)
+      checkType(Remainder(expr, u), DoubleType)
+    }
+  }
+
+  test("DecimalType.isWiderThan") {
+    val d0 = DecimalType(2, 0)
+    val d1 = DecimalType(2, 1)
+    val d2 = DecimalType(5, 2)
+    val d3 = DecimalType(15, 3)
+    val d4 = DecimalType(25, 4)
+
+    assert(d0.isWiderThan(d1) === false)
+    assert(d1.isWiderThan(d0) === false)
+    assert(d1.isWiderThan(d2) === false)
+    assert(d2.isWiderThan(d1) === true)
+    assert(d2.isWiderThan(d3) === false)
+    assert(d3.isWiderThan(d2) === true)
+    assert(d4.isWiderThan(d3) === true)
+
+    assert(d1.isWiderThan(ByteType) === false)
+    assert(d2.isWiderThan(ByteType) === true)
+    assert(d2.isWiderThan(ShortType) === false)
+    assert(d3.isWiderThan(ShortType) === true)
+    assert(d3.isWiderThan(IntegerType) === true)
+    assert(d3.isWiderThan(LongType) === false)
+    assert(d4.isWiderThan(LongType) === true)
+    assert(d4.isWiderThan(FloatType) === false)
+    assert(d4.isWiderThan(DoubleType) === false)
   }
 }

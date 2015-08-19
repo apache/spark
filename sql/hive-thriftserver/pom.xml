@@ -62,19 +62,29 @@
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
+      <artifactId>hive-service</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
       <artifactId>hive-beeline</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.sun.jersey</groupId>
+      <artifactId>jersey-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.sun.jersey</groupId>
+      <artifactId>jersey-json</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.sun.jersey</groupId>
+      <artifactId>jersey-server</artifactId>
     </dependency>
     <!-- Added for selenium: -->
     <dependency>
       <groupId>org.seleniumhq.selenium</groupId>
       <artifactId>selenium-java</artifactId>
       <scope>test</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>io.netty</groupId>
-          <artifactId>netty</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
   </dependencies>
   <build>

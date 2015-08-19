@@ -140,8 +140,8 @@ writeType <- function(con, class) {
                  jobj = "j",
                  environment = "e",
                  Date = "D",
-                 POSIXlt = 't',
-                 POSIXct = 't',
+                 POSIXlt = "t",
+                 POSIXct = "t",
                  stop(paste("Unsupported type for serialization", class)))
   writeBin(charToRaw(type), con)
 }

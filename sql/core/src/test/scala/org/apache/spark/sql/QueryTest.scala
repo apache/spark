@@ -71,12 +71,6 @@ class QueryTest extends PlanTest {
     checkAnswer(df, expectedAnswer.collect())
   }
 
-  def sqlTest(sqlString: String, expectedAnswer: Seq[Row])(implicit sqlContext: SQLContext) {
-    test(sqlString) {
-      checkAnswer(sqlContext.sql(sqlString), expectedAnswer)
-    }
-  }
-
   /**
    * Asserts that a given [[DataFrame]] will be executed using the given number of cached results.
    */

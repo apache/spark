@@ -33,7 +33,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, LongType), null)
     checkEvaluation(Literal.create(null, StringType), null)
     checkEvaluation(Literal.create(null, BinaryType), null)
-    checkEvaluation(Literal.create(null, DecimalType()), null)
+    checkEvaluation(Literal.create(null, DecimalType.USER_DEFAULT), null)
     checkEvaluation(Literal.create(null, ArrayType(ByteType, true)), null)
     checkEvaluation(Literal.create(null, MapType(StringType, IntegerType)), null)
     checkEvaluation(Literal.create(null, StructType(Seq.empty)), null)

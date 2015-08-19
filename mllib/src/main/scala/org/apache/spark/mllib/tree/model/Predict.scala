@@ -23,6 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
  * Predicted value for a node
  * @param predict predicted value
  * @param prob probability of the label (classification only)
+ * @since 1.2.0
  */
 @DeveloperApi
 class Predict(

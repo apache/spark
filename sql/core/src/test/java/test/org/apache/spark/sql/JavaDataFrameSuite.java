@@ -17,45 +17,45 @@
 
 package test.org.apache.spark.sql;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.primitives.Ints;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.*;
-import org.apache.spark.sql.test.TestSQLContext;
-import org.apache.spark.sql.test.TestSQLContext$;
-import org.apache.spark.sql.types.*;
-import org.junit.*;
-
-import scala.collection.JavaConversions;
-import scala.collection.Seq;
-import scala.collection.mutable.Buffer;
-
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
+import scala.collection.JavaConversions;
+import scala.collection.Seq;
+
+import com.google.common.collect.ImmutableMap;
+import com.google.common.primitives.Ints;
+import org.junit.*;
+
+import org.apache.spark.SparkContext;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.*;
 import static org.apache.spark.sql.functions.*;
+import org.apache.spark.sql.test.TestSQLContext;
+import org.apache.spark.sql.types.*;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext jsc;
-  private transient SQLContext context;
+  private transient TestSQLContext context;
 
   @Before
   public void setUp() {
     // Trigger static initializer of TestData
-    TestData$.MODULE$.testData();
-    jsc = new JavaSparkContext(TestSQLContext.sparkContext());
-    context = TestSQLContext$.MODULE$;
+    SparkContext sc = new SparkContext("local[*]", "testing");
+    jsc = new JavaSparkContext(sc);
+    context = new TestSQLContext(sc);
+    context.loadTestData();
   }
 
   @After
   public void tearDown() {
-    jsc = null;
+    context.sparkContext().stop();
     context = null;
+    jsc = null;
   }
 
   @Test
@@ -168,10 +168,11 @@ public class JavaDataFrameSuite {
     for (int i = 0; i < result.length(); i++) {
       Assert.assertEquals(bean.getB()[i], result.apply(i));
     }
-    Buffer<Integer> outputBuffer = (Buffer<Integer>) first.getJavaMap(2).get("hello");
+    @SuppressWarnings("unchecked")
+    Seq<Integer> outputBuffer = (Seq<Integer>) first.getJavaMap(2).get("hello");
     Assert.assertArrayEquals(
       bean.getC().get("hello"),
-      Ints.toArray(JavaConversions.bufferAsJavaList(outputBuffer)));
+      Ints.toArray(JavaConversions.seqAsJavaList(outputBuffer)));
     Seq<String> d = first.getAs(3);
     Assert.assertEquals(bean.getD().size(), d.length());
     for (int i = 0; i < d.length(); i++) {
@@ -226,5 +227,14 @@ public class JavaDataFrameSuite {
     DataFrame df = context.table("testData2");
     Double result = df.stat().cov("a", "b");
     Assert.assertTrue(Math.abs(result) < 1e-6);
+  }
+
+  @Test
+  public void testSampleBy() {
+    DataFrame df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
+    DataFrame sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
+    Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
+    Row[] expected = new Row[] {RowFactory.create(0, 5), RowFactory.create(1, 8)};
+    Assert.assertArrayEquals(expected, actual);
   }
 }

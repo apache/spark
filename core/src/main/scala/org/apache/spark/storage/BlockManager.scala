@@ -222,7 +222,7 @@ private[spark] class BlockManager(
         return
       } catch {
         case e: Exception if i < MAX_ATTEMPTS =>
-          logError(s"Failed to connect to external shuffle server, will retry ${MAX_ATTEMPTS - i}}"
+          logError(s"Failed to connect to external shuffle server, will retry ${MAX_ATTEMPTS - i}"
             + s" more times after waiting $SLEEP_TIME_SECS seconds...", e)
           Thread.sleep(SLEEP_TIME_SECS * 1000)
       }
@@ -648,7 +648,7 @@ private[spark] class BlockManager(
       file: File,
       serializerInstance: SerializerInstance,
       bufferSize: Int,
-      writeMetrics: ShuffleWriteMetrics): BlockObjectWriter = {
+      writeMetrics: ShuffleWriteMetrics): DiskBlockObjectWriter = {
     val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
     val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
     new DiskBlockObjectWriter(blockId, file, serializerInstance, bufferSize, compressStream,

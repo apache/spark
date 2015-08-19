@@ -37,16 +37,17 @@ trait CheckAnalysis {
     throw new AnalysisException(msg)
   }
 
-  def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
+  protected def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
     exprs.flatMap(_.collect {
-      case e: Generator => true
-    }).nonEmpty
+      case e: Generator => e
+    }).length > 1
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
+      case p if p.analyzed => // Skip already analyzed sub-plans
 
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
@@ -82,6 +83,26 @@ trait CheckAnalysis {
               s"filter expression '${f.condition.prettyString}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
+          case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
+            failAnalysis(
+              s"join condition '${condition.prettyString}' " +
+                s"of type ${condition.dataType.simpleString} is not a boolean.")
+
+          case j @ Join(_, _, _, Some(condition)) =>
+            def checkValidJoinConditionExprs(expr: Expression): Unit = expr match {
+              case p: Predicate =>
+                p.asInstanceOf[Expression].children.foreach(checkValidJoinConditionExprs)
+              case e if e.dataType.isInstanceOf[BinaryType] =>
+                failAnalysis(s"binary type expression ${e.prettyString} cannot be used " +
+                  "in join conditions")
+              case e if e.dataType.isInstanceOf[MapType] =>
+                failAnalysis(s"map type expression ${e.prettyString} cannot be used " +
+                  "in join conditions")
+              case _ => // OK
+            }
+
+            checkValidJoinConditionExprs(condition)
+
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
               case _: AggregateExpression => // OK
@@ -95,7 +116,26 @@ trait CheckAnalysis {
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
+            def checkValidGroupingExprs(expr: Expression): Unit = expr.dataType match {
+              case BinaryType =>
+                failAnalysis(s"binary type expression ${expr.prettyString} cannot be used " +
+                  "in grouping expression")
+              case m: MapType =>
+                failAnalysis(s"map type expression ${expr.prettyString} cannot be used " +
+                  "in grouping expression")
+              case _ => // OK
+            }
+
             aggregateExprs.foreach(checkValidAggregateExpression)
+            groupingExprs.foreach(checkValidGroupingExprs)
+
+          case Sort(orders, _, _) =>
+            orders.foreach { order =>
+              if (!RowOrdering.isOrderable(order.dataType)) {
+                failAnalysis(
+                  s"sorting is not supported for columns of type ${order.dataType.simpleString}")
+              }
+            }
 
           case _ => // Fallbacks to the following checks
         }
@@ -109,30 +149,38 @@ trait CheckAnalysis {
               s"resolved attribute(s) $missingAttributes missing from $input " +
                 s"in operator ${operator.simpleString}")
 
-          case o if !o.resolved =>
-            failAnalysis(
-              s"unresolved operator ${operator.simpleString}")
-
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(
               s"""Only a single table generating function is allowed in a SELECT clause, found:
                  | ${exprs.map(_.prettyString).mkString(",")}""".stripMargin)
 
+          // Special handling for cases when self-join introduce duplicate expression ids.
+          case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
+            val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in Join:
+                 |$plan
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                 |""".stripMargin)
+
+          case o if !o.resolved =>
+            failAnalysis(
+              s"unresolved operator ${operator.simpleString}")
+
+          case o if o.expressions.exists(!_.deterministic) &&
+            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] =>
+            failAnalysis(
+              s"""nondeterministic expressions are only allowed in Project or Filter, found:
+                 | ${o.expressions.map(_.prettyString).mkString(",")}
+                 |in operator ${operator.simpleString}
+             """.stripMargin)
 
           case _ => // Analysis successful!
         }
-
-      // Special handling for cases when self-join introduce duplicate expression ids.
-      case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
-        val conflictingAttributes = left.outputSet.intersect(right.outputSet)
-        failAnalysis(
-          s"""
-             |Failure when resolving conflicting references in Join:
-             |$plan
-             |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-             |""".stripMargin)
-
     }
     extendedCheckRules.foreach(_(plan))
+
+    plan.foreach(_.setAnalyzed())
   }
 }

@@ -21,9 +21,8 @@ import java.io.InputStream
 import java.nio.IntBuffer
 import java.util.Comparator
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.serializer.{JavaSerializerInstance, SerializerInstance}
-import org.apache.spark.storage.BlockObjectWriter
+import org.apache.spark.storage.DiskBlockObjectWriter
 import org.apache.spark.util.collection.PartitionedSerializedPairBuffer._
 
 /**
@@ -136,7 +135,7 @@ private[spark] class PartitionedSerializedPairBuffer[K, V](
       // current position in the meta buffer in ints
       var pos = 0
 
-      def writeNext(writer: BlockObjectWriter): Unit = {
+      def writeNext(writer: DiskBlockObjectWriter): Unit = {
         val keyStart = getKeyStartPos(metaBuffer, pos)
         val keyValLen = metaBuffer.get(pos + KEY_VAL_LEN)
         pos += RECORD_SIZE

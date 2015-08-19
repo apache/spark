@@ -207,6 +207,7 @@ private[spark] class PythonRDD(
 
     override def run(): Unit = Utils.logUncaughtExceptions {
       try {
+        TaskContext.setTaskContext(context)
         val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
         val dataOut = new DataOutputStream(stream)
         // Partition index
@@ -263,11 +264,6 @@ private[spark] class PythonRDD(
           if (!worker.isClosed) {
             Utils.tryLog(worker.shutdownOutput())
           }
-      } finally {
-        // Release memory used by this thread for shuffles
-        env.shuffleMemoryManager.releaseMemoryForThisThread()
-        // Release memory used by this thread for unrolling blocks
-        env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
       }
     }
   }
@@ -358,12 +354,11 @@ private[spark] object PythonRDD extends Logging {
   def runJob(
       sc: SparkContext,
       rdd: JavaRDD[Array[Byte]],
-      partitions: JArrayList[Int],
-      allowLocal: Boolean): Int = {
+      partitions: JArrayList[Int]): Int = {
     type ByteArray = Array[Byte]
     type UnrolledPartition = Array[ByteArray]
     val allPartitions: Array[UnrolledPartition] =
-      sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions, allowLocal)
+      sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions)
     val flattenedPartition: UnrolledPartition = Array.concat(allPartitions: _*)
     serveIterator(flattenedPartition.iterator,
       s"serve RDD ${rdd.id} with partitions ${partitions.mkString(",")}")
@@ -799,7 +794,7 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
 
   /**
    * We try to reuse a single Socket to transfer accumulator updates, as they are all added
-   * by the DAGScheduler's single-threaded actor anyway.
+   * by the DAGScheduler's single-threaded RpcEndpoint anyway.
    */
   @transient var socket: Socket = _
 

@@ -55,8 +55,10 @@ import org.apache.spark.rdd.RDD
 object MFDataGenerator {
   def main(args: Array[String]) {
     if (args.length < 2) {
+      // scalastyle:off println
       println("Usage: MFDataGenerator " +
         "<master> <outputDir> [m] [n] [rank] [trainSampFact] [noise] [sigma] [test] [testSampFact]")
+      // scalastyle:on println
       System.exit(1)
     }
 

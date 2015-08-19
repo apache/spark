@@ -169,15 +169,19 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { (features: Any) =>
-        predict(features.asInstanceOf[FeaturesType])
-      }
-      dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+      transformImpl(dataset)
     } else {
       this.logWarning(s"$uid: Predictor.transform() was called as NOOP" +
         " since no output columns were set.")
       dataset
     }
+  }
+
+  protected def transformImpl(dataset: DataFrame): DataFrame = {
+    val predictUDF = udf { (features: Any) =>
+      predict(features.asInstanceOf[FeaturesType])
+    }
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
   /**

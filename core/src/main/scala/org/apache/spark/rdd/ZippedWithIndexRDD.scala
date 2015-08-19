@@ -50,8 +50,7 @@ class ZippedWithIndexRDD[T: ClassTag](@transient prev: RDD[T]) extends RDD[(T, L
       prev.context.runJob(
         prev,
         Utils.getIteratorSize _,
-        0 until n - 1, // do not need to count the last partition
-        allowLocal = false
+        0 until n - 1 // do not need to count the last partition
       ).scanLeft(0L)(_ + _)
     }
   }

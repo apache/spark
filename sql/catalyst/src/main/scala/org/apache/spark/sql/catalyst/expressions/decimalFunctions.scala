@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.types._
 
@@ -54,9 +55,21 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, eval => {
       s"""
-        ${ev.primitive} = (new ${ctx.decimalType}()).setOrNull($eval, $precision, $scale);
+        ${ev.primitive} = (new Decimal()).setOrNull($eval, $precision, $scale);
         ${ev.isNull} = ${ev.primitive} == null;
       """
     })
   }
+}
+
+/**
+ * An expression used to wrap the children when promote the precision of DecimalType to avoid
+ * promote multiple times.
+ */
+case class ChangeDecimalPrecision(child: Expression) extends UnaryExpression {
+  override def dataType: DataType = child.dataType
+  override def eval(input: InternalRow): Any = child.eval(input)
+  override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = ""
+  override def prettyName: String = "change_decimal_precision"
 }

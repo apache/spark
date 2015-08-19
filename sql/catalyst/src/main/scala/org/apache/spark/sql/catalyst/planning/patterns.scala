@@ -129,10 +129,10 @@ object PartialAggregation {
     case logical.Aggregate(groupingExpressions, aggregateExpressions, child) =>
       // Collect all aggregate expressions.
       val allAggregates =
-        aggregateExpressions.flatMap(_ collect { case a: AggregateExpression => a})
+        aggregateExpressions.flatMap(_ collect { case a: AggregateExpression1 => a})
       // Collect all aggregate expressions that can be computed partially.
       val partialAggregates =
-        aggregateExpressions.flatMap(_ collect { case p: PartialAggregate => p})
+        aggregateExpressions.flatMap(_ collect { case p: PartialAggregate1 => p})
 
       // Only do partial aggregation if supported by all aggregate expressions.
       if (allAggregates.size == partialAggregates.size) {
@@ -144,14 +144,14 @@ object PartialAggregation {
         // time. However some of them might be unnamed so we alias them allowing them to be
         // referenced in the second aggregation.
         val namedGroupingExpressions: Seq[(Expression, NamedExpression)] =
-          groupingExpressions.filter(!_.isInstanceOf[Literal]).map {
+          groupingExpressions.map {
             case n: NamedExpression => (n, n)
             case other => (other, Alias(other, "PartialGroup")())
           }
 
         // Replace aggregations with a new expression that computes the result from the already
         // computed partial evaluations and grouping values.
-        val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
+        val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformDown {
           case e: Expression if partialEvaluations.contains(new TreeNodeRef(e)) =>
             partialEvaluations(new TreeNodeRef(e)).finalEvaluation
 
@@ -184,7 +184,7 @@ object PartialAggregation {
  * A pattern that finds joins with equality conditions that can be evaluated using equi-join.
  */
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
-  /** (joinType, rightKeys, leftKeys, condition, leftChild, rightChild) */
+  /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild) */
   type ReturnType =
     (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
 
