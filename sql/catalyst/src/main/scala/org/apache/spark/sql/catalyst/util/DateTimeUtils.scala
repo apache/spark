@@ -129,7 +129,7 @@ object DateTimeUtils {
       }
     } else {
       // ISO8601 with GMT insert
-      val ISO8601GMT: SimpleDateFormat = new SimpleDateFormat( "yyyy-MM-dd'T'HH:mm:ss.SSSz" )
+      val ISO8601GMT: SimpleDateFormat = new SimpleDateFormat( "yyyy-MM-dd'T'HH:mm:ssz" )
       ISO8601GMT.parse(s)
     }
   }
