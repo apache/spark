@@ -168,9 +168,6 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       sc.parallelize(dataArray, 1).toDF().write.parquet(Loader.dataPath(path))
     }
 
-    /**
-     * @since 1.4.0
-     */
     def load(sc: SparkContext, path: String): GaussianMixtureModel = {
       val dataPath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
