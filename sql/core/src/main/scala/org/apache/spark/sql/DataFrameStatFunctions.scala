@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql
 
+import java.{util => ju, lang => jl}
+
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.execution.stat._
 
@@ -77,7 +81,10 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * pair frequencies will be returned.
    * The first column of each row will be the distinct values of `col1` and the column names will
    * be the distinct values of `col2`. The name of the first column will be `$col1_$col2`. Counts
-   * will be returned as `Long`s. Pairs that have no occurrences will have `null` as their counts.
+   * will be returned as `Long`s. Pairs that have no occurrences will have zero as their counts.
+   * Null elements will be replaced by "null", and back ticks will be dropped from elements if they
+   * exist.
+   *
    *
    * @param col1 The name of the first column. Distinct items will make the first item of
    *             each row.
@@ -162,5 +169,43 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    */
   def freqItems(cols: Seq[String]): DataFrame = {
     FrequentItems.singlePassFreqItems(df, cols, 0.01)
+  }
+
+  /**
+   * Returns a stratified sample without replacement based on the fraction given on each stratum.
+   * @param col column that defines strata
+   * @param fractions sampling fraction for each stratum. If a stratum is not specified, we treat
+   *                  its fraction as zero.
+   * @param seed random seed
+   * @tparam T stratum type
+   * @return a new [[DataFrame]] that represents the stratified sample
+   *
+   * @since 1.5.0
+   */
+  def sampleBy[T](col: String, fractions: Map[T, Double], seed: Long): DataFrame = {
+    require(fractions.values.forall(p => p >= 0.0 && p <= 1.0),
+      s"Fractions must be in [0, 1], but got $fractions.")
+    import org.apache.spark.sql.functions.{rand, udf}
+    val c = Column(col)
+    val r = rand(seed)
+    val f = udf { (stratum: Any, x: Double) =>
+      x < fractions.getOrElse(stratum.asInstanceOf[T], 0.0)
+    }
+    df.filter(f(c, r))
+  }
+
+  /**
+   * Returns a stratified sample without replacement based on the fraction given on each stratum.
+   * @param col column that defines strata
+   * @param fractions sampling fraction for each stratum. If a stratum is not specified, we treat
+   *                  its fraction as zero.
+   * @param seed random seed
+   * @tparam T stratum type
+   * @return a new [[DataFrame]] that represents the stratified sample
+   *
+   * @since 1.5.0
+   */
+  def sampleBy[T](col: String, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame = {
+    sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)
   }
 }

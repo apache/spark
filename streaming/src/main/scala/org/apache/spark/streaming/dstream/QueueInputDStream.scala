@@ -17,12 +17,13 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.UnionRDD
-import scala.collection.mutable.Queue
-import scala.collection.mutable.ArrayBuffer
-import org.apache.spark.streaming.{Time, StreamingContext}
+import java.io.{NotSerializableException, ObjectOutputStream}
+
+import scala.collection.mutable.{ArrayBuffer, Queue}
 import scala.reflect.ClassTag
+
+import org.apache.spark.rdd.{RDD, UnionRDD}
+import org.apache.spark.streaming.{Time, StreamingContext}
 
 private[streaming]
 class QueueInputDStream[T: ClassTag](
@@ -35,6 +36,10 @@ class QueueInputDStream[T: ClassTag](
   override def start() { }
 
   override def stop() { }
+
+  private def writeObject(oos: ObjectOutputStream): Unit = {
+    throw new NotSerializableException("queueStream doesn't support checkpointing")
+  }
 
   override def compute(validTime: Time): Option[RDD[T]] = {
     val buffer = new ArrayBuffer[RDD[T]]()

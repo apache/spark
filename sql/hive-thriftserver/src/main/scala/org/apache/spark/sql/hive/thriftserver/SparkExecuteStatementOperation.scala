@@ -32,8 +32,7 @@ import org.apache.hive.service.cli._
 import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.shims.ShimLoader
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
@@ -146,7 +145,7 @@ private[hive] class SparkExecuteStatementOperation(
     } else {
       val parentSessionState = SessionState.get()
       val hiveConf = getConfigForOperation()
-      val sparkServiceUGI = ShimLoader.getHadoopShims.getUGIForConf(hiveConf)
+      val sparkServiceUGI = Utils.getUGI()
       val sessionHive = getCurrentHive()
       val currentSqlSession = hiveContext.currentSession
 
@@ -174,7 +173,7 @@ private[hive] class SparkExecuteStatementOperation(
           }
 
           try {
-            ShimLoader.getHadoopShims().doAs(sparkServiceUGI, doAsAction)
+            sparkServiceUGI.doAs(doAsAction)
           } catch {
             case e: Exception =>
               setOperationException(new HiveSQLException(e))
@@ -201,7 +200,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  private def runInternal(): Unit = {
+  override def runInternal(): Unit = {
     statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)
@@ -219,7 +218,7 @@ private[hive] class SparkExecuteStatementOperation(
       result = hiveContext.sql(statement)
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
-        case SetCommand(Some((SQLConf.THRIFTSERVER_POOL, Some(value))), _) =>
+        case SetCommand(Some((SQLConf.THRIFTSERVER_POOL.key, Some(value)))) =>
           sessionToActivePool(parentSession.getSessionHandle) = value
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>

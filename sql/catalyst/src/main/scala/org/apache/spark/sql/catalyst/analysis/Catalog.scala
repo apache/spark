@@ -23,8 +23,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.catalyst.EmptyConf
+import org.apache.spark.sql.catalyst.{TableIdentifier, CatalystConf, EmptyConf}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 
 /**
@@ -54,7 +53,7 @@ trait Catalog {
    */
   def getTables(databaseName: Option[String]): Seq[(String, Boolean)]
 
-  def refreshTable(databaseName: String, tableName: String): Unit
+  def refreshTable(tableIdent: TableIdentifier): Unit
 
   def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit
 
@@ -132,7 +131,7 @@ class SimpleCatalog(val conf: CatalystConf) extends Catalog {
     result
   }
 
-  override def refreshTable(databaseName: String, tableName: String): Unit = {
+  override def refreshTable(tableIdent: TableIdentifier): Unit = {
     throw new UnsupportedOperationException
   }
 }
@@ -241,7 +240,7 @@ object EmptyCatalog extends Catalog {
 
   override def unregisterAllTables(): Unit = {}
 
-  override def refreshTable(databaseName: String, tableName: String): Unit = {
+  override def refreshTable(tableIdent: TableIdentifier): Unit = {
     throw new UnsupportedOperationException
   }
 }

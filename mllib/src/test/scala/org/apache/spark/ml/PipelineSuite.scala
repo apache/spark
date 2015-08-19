@@ -24,7 +24,9 @@ import org.mockito.Mockito.when
 import org.scalatest.mock.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.feature.HashingTF
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.sql.DataFrame
 
 class PipelineSuite extends SparkFunSuite {
@@ -64,6 +66,8 @@ class PipelineSuite extends SparkFunSuite {
       .setStages(Array(estimator0, transformer1, estimator2, transformer3))
     val pipelineModel = pipeline.fit(dataset0)
 
+    MLTestingUtils.checkCopy(pipelineModel)
+
     assert(pipelineModel.stages.length === 4)
     assert(pipelineModel.stages(0).eq(model0))
     assert(pipelineModel.stages(1).eq(transformer1))
@@ -82,6 +86,15 @@ class PipelineSuite extends SparkFunSuite {
     intercept[IllegalArgumentException] {
       pipeline.fit(dataset)
     }
+  }
+
+  test("PipelineModel.copy") {
+    val hashingTF = new HashingTF()
+      .setNumFeatures(100)
+    val model = new PipelineModel("pipeline", Array[Transformer](hashingTF))
+    val copied = model.copy(ParamMap(hashingTF.numFeatures -> 10))
+    require(copied.stages(0).asInstanceOf[HashingTF].getNumFeatures === 10,
+      "copy should handle extra stage params")
   }
 
   test("pipeline model constructors") {

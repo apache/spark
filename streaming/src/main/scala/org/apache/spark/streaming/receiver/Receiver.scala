@@ -116,12 +116,12 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * being pushed into Spark's memory.
    */
   def store(dataItem: T) {
-    executor.pushSingle(dataItem)
+    supervisor.pushSingle(dataItem)
   }
 
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def store(dataBuffer: ArrayBuffer[T]) {
-    executor.pushArrayBuffer(dataBuffer, None, None)
+    supervisor.pushArrayBuffer(dataBuffer, None, None)
   }
 
   /**
@@ -130,12 +130,12 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * for being used in the corresponding InputDStream.
    */
   def store(dataBuffer: ArrayBuffer[T], metadata: Any) {
-    executor.pushArrayBuffer(dataBuffer, Some(metadata), None)
+    supervisor.pushArrayBuffer(dataBuffer, Some(metadata), None)
   }
 
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store(dataIterator: Iterator[T]) {
-    executor.pushIterator(dataIterator, None, None)
+    supervisor.pushIterator(dataIterator, None, None)
   }
 
   /**
@@ -144,12 +144,12 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * for being used in the corresponding InputDStream.
    */
   def store(dataIterator: java.util.Iterator[T], metadata: Any) {
-    executor.pushIterator(dataIterator, Some(metadata), None)
+    supervisor.pushIterator(dataIterator, Some(metadata), None)
   }
 
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store(dataIterator: java.util.Iterator[T]) {
-    executor.pushIterator(dataIterator, None, None)
+    supervisor.pushIterator(dataIterator, None, None)
   }
 
   /**
@@ -158,7 +158,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * for being used in the corresponding InputDStream.
    */
   def store(dataIterator: Iterator[T], metadata: Any) {
-    executor.pushIterator(dataIterator, Some(metadata), None)
+    supervisor.pushIterator(dataIterator, Some(metadata), None)
   }
 
   /**
@@ -167,7 +167,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * that Spark is configured to use.
    */
   def store(bytes: ByteBuffer) {
-    executor.pushBytes(bytes, None, None)
+    supervisor.pushBytes(bytes, None, None)
   }
 
   /**
@@ -176,12 +176,12 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * for being used in the corresponding InputDStream.
    */
   def store(bytes: ByteBuffer, metadata: Any) {
-    executor.pushBytes(bytes, Some(metadata), None)
+    supervisor.pushBytes(bytes, Some(metadata), None)
   }
 
   /** Report exceptions in receiving data. */
   def reportError(message: String, throwable: Throwable) {
-    executor.reportError(message, throwable)
+    supervisor.reportError(message, throwable)
   }
 
   /**
@@ -193,7 +193,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * The `message` will be reported to the driver.
    */
   def restart(message: String) {
-    executor.restartReceiver(message)
+    supervisor.restartReceiver(message)
   }
 
   /**
@@ -205,7 +205,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * The `message` and `exception` will be reported to the driver.
    */
   def restart(message: String, error: Throwable) {
-    executor.restartReceiver(message, Some(error))
+    supervisor.restartReceiver(message, Some(error))
   }
 
   /**
@@ -215,22 +215,22 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * in a background thread.
    */
   def restart(message: String, error: Throwable, millisecond: Int) {
-    executor.restartReceiver(message, Some(error), millisecond)
+    supervisor.restartReceiver(message, Some(error), millisecond)
   }
 
   /** Stop the receiver completely. */
   def stop(message: String) {
-    executor.stop(message, None)
+    supervisor.stop(message, None)
   }
 
   /** Stop the receiver completely due to an exception */
   def stop(message: String, error: Throwable) {
-    executor.stop(message, Some(error))
+    supervisor.stop(message, Some(error))
   }
 
   /** Check if the receiver has started or not. */
   def isStarted(): Boolean = {
-    executor.isReceiverStarted()
+    supervisor.isReceiverStarted()
   }
 
   /**
@@ -238,7 +238,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * the receiving of data should be stopped.
    */
   def isStopped(): Boolean = {
-    executor.isReceiverStopped()
+    supervisor.isReceiverStopped()
   }
 
   /**
@@ -257,7 +257,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
   private var id: Int = -1
 
   /** Handler object that runs the receiver. This is instantiated lazily in the worker. */
-  private[streaming] var executor_ : ReceiverSupervisor = null
+  @transient private var _supervisor : ReceiverSupervisor = null
 
   /** Set the ID of the DStream that this receiver is associated with. */
   private[streaming] def setReceiverId(id_ : Int) {
@@ -265,15 +265,17 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
   }
 
   /** Attach Network Receiver executor to this receiver. */
-  private[streaming] def attachExecutor(exec: ReceiverSupervisor) {
-    assert(executor_ == null)
-    executor_ = exec
+  private[streaming] def attachSupervisor(exec: ReceiverSupervisor) {
+    assert(_supervisor == null)
+    _supervisor = exec
   }
 
-  /** Get the attached executor. */
-  private def executor = {
-    assert(executor_ != null, "Executor has not been attached to this receiver")
-    executor_
+  /** Get the attached supervisor. */
+  private[streaming] def supervisor: ReceiverSupervisor = {
+    assert(_supervisor != null,
+      "A ReceiverSupervisor have not been attached to the receiver yet. Maybe you are starting " +
+        "some computation in the receiver before the Receiver.onStart() has been called.")
+    _supervisor
   }
 }
 

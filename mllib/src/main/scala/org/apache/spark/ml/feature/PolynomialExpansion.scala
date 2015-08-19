@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.param.{IntParam, ParamValidators}
+import org.apache.spark.ml.param.{ParamMap, IntParam, ParamValidators}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.types.DataType
@@ -61,6 +61,8 @@ class PolynomialExpansion(override val uid: String)
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
+
+  override def copy(extra: ParamMap): PolynomialExpansion = defaultCopy(extra)
 }
 
 /**

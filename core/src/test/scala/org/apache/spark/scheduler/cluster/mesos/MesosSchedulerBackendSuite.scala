@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 import java.util
 import java.util.Collections
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -60,14 +61,17 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
 
     val mesosSchedulerBackend = new MesosSchedulerBackend(taskScheduler, sc, "master")
 
+    val resources = List(
+      mesosSchedulerBackend.createResource("cpus", 4),
+      mesosSchedulerBackend.createResource("mem", 1024))
     // uri is null.
-    val executorInfo = mesosSchedulerBackend.createExecutorInfo("test-id")
+    val (executorInfo, _) = mesosSchedulerBackend.createExecutorInfo(resources, "test-id")
     assert(executorInfo.getCommand.getValue ===
       s" /mesos-home/bin/spark-class ${classOf[MesosExecutorBackend].getName}")
 
     // uri exists.
     conf.set("spark.executor.uri", "hdfs:///test-app-1.0.0.tgz")
-    val executorInfo1 = mesosSchedulerBackend.createExecutorInfo("test-id")
+    val (executorInfo1, _) = mesosSchedulerBackend.createExecutorInfo(resources, "test-id")
     assert(executorInfo1.getCommand.getValue ===
       s"cd test-app-1*;  ./bin/spark-class ${classOf[MesosExecutorBackend].getName}")
   }
@@ -93,7 +97,8 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
 
     val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
 
-    val execInfo = backend.createExecutorInfo("mockExecutor")
+    val (execInfo, _) = backend.createExecutorInfo(
+      List(backend.createResource("cpus", 4)), "mockExecutor")
     assert(execInfo.getContainer.getDocker.getImage.equals("spark/mock"))
     val portmaps = execInfo.getContainer.getDocker.getPortMappingsList
     assert(portmaps.get(0).getHostPort.equals(80))
@@ -149,15 +154,15 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     when(sc.conf).thenReturn(new SparkConf)
     when(sc.listenerBus).thenReturn(listenerBus)
 
-    val minMem = MemoryUtils.calculateTotalMemory(sc).toInt
+    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
+
+    val minMem = backend.calculateTotalMemory(sc)
     val minCpu = 4
 
     val mesosOffers = new java.util.ArrayList[Offer]
     mesosOffers.add(createOffer(1, minMem, minCpu))
     mesosOffers.add(createOffer(2, minMem - 1, minCpu))
     mesosOffers.add(createOffer(3, minMem, minCpu))
-
-    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
 
     val expectedWorkerOffers = new ArrayBuffer[WorkerOffer](2)
     expectedWorkerOffers.append(new WorkerOffer(
@@ -194,7 +199,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     )
     verify(driver, times(1)).declineOffer(mesosOffers.get(1).getId)
     verify(driver, times(1)).declineOffer(mesosOffers.get(2).getId)
-    assert(capture.getValue.size() == 1)
+    assert(capture.getValue.size() === 1)
     val taskInfo = capture.getValue.iterator().next()
     assert(taskInfo.getName.equals("n1"))
     val cpus = taskInfo.getResourcesList.get(0)
@@ -213,5 +218,98 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
 
     backend.resourceOffers(driver, mesosOffers2)
     verify(driver, times(1)).declineOffer(mesosOffers2.get(0).getId)
+  }
+
+  test("can handle multiple roles") {
+    val driver = mock[SchedulerDriver]
+    val taskScheduler = mock[TaskSchedulerImpl]
+
+    val listenerBus = mock[LiveListenerBus]
+    listenerBus.post(
+      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+
+    val sc = mock[SparkContext]
+    when(sc.executorMemory).thenReturn(100)
+    when(sc.getSparkHome()).thenReturn(Option("/path"))
+    when(sc.executorEnvs).thenReturn(new mutable.HashMap[String, String])
+    when(sc.conf).thenReturn(new SparkConf)
+    when(sc.listenerBus).thenReturn(listenerBus)
+
+    val id = 1
+    val builder = Offer.newBuilder()
+    builder.addResourcesBuilder()
+      .setName("mem")
+      .setType(Value.Type.SCALAR)
+      .setRole("prod")
+      .setScalar(Scalar.newBuilder().setValue(500))
+    builder.addResourcesBuilder()
+      .setName("cpus")
+      .setRole("prod")
+      .setType(Value.Type.SCALAR)
+      .setScalar(Scalar.newBuilder().setValue(1))
+    builder.addResourcesBuilder()
+      .setName("mem")
+      .setRole("dev")
+      .setType(Value.Type.SCALAR)
+      .setScalar(Scalar.newBuilder().setValue(600))
+    builder.addResourcesBuilder()
+      .setName("cpus")
+      .setRole("dev")
+      .setType(Value.Type.SCALAR)
+      .setScalar(Scalar.newBuilder().setValue(2))
+    val offer = builder.setId(OfferID.newBuilder().setValue(s"o${id.toString}").build())
+      .setFrameworkId(FrameworkID.newBuilder().setValue("f1"))
+      .setSlaveId(SlaveID.newBuilder().setValue(s"s${id.toString}"))
+      .setHostname(s"host${id.toString}").build()
+
+
+    val mesosOffers = new java.util.ArrayList[Offer]
+    mesosOffers.add(offer)
+
+    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
+
+    val expectedWorkerOffers = new ArrayBuffer[WorkerOffer](1)
+    expectedWorkerOffers.append(new WorkerOffer(
+      mesosOffers.get(0).getSlaveId.getValue,
+      mesosOffers.get(0).getHostname,
+      2 // Deducting 1 for executor
+    ))
+
+    val taskDesc = new TaskDescription(1L, 0, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
+    when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq(taskDesc)))
+    when(taskScheduler.CPUS_PER_TASK).thenReturn(1)
+
+    val capture = ArgumentCaptor.forClass(classOf[util.Collection[TaskInfo]])
+    when(
+      driver.launchTasks(
+        Matchers.eq(Collections.singleton(mesosOffers.get(0).getId)),
+        capture.capture(),
+        any(classOf[Filters])
+      )
+    ).thenReturn(Status.valueOf(1))
+
+    backend.resourceOffers(driver, mesosOffers)
+
+    verify(driver, times(1)).launchTasks(
+      Matchers.eq(Collections.singleton(mesosOffers.get(0).getId)),
+      capture.capture(),
+      any(classOf[Filters])
+    )
+
+    assert(capture.getValue.size() === 1)
+    val taskInfo = capture.getValue.iterator().next()
+    assert(taskInfo.getName.equals("n1"))
+    assert(taskInfo.getResourcesCount === 1)
+    val cpusDev = taskInfo.getResourcesList.get(0)
+    assert(cpusDev.getName.equals("cpus"))
+    assert(cpusDev.getScalar.getValue.equals(1.0))
+    assert(cpusDev.getRole.equals("dev"))
+    val executorResources = taskInfo.getExecutor.getResourcesList
+    assert(executorResources.exists { r =>
+      r.getName.equals("mem") && r.getScalar.getValue.equals(484.0) && r.getRole.equals("prod")
+    })
+    assert(executorResources.exists { r =>
+      r.getName.equals("cpus") && r.getScalar.getValue.equals(1.0) && r.getRole.equals("prod")
+    })
   }
 }

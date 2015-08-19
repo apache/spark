@@ -82,16 +82,16 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
     Seq.empty)
 
   createPruningTest("Column pruning - non-trivial top project with aliases",
-    "SELECT c1 * 2 AS double FROM (SELECT key AS c1 FROM src WHERE key > 10) t1 LIMIT 3",
-    Seq("double"),
+    "SELECT c1 * 2 AS dbl FROM (SELECT key AS c1 FROM src WHERE key > 10) t1 LIMIT 3",
+    Seq("dbl"),
     Seq("key"),
     Seq.empty)
 
   // Partition pruning tests
 
   createPruningTest("Partition pruning - non-partitioned, non-trivial project",
-    "SELECT key * 2 AS double FROM src WHERE value IS NOT NULL",
-    Seq("double"),
+    "SELECT key * 2 AS dbl FROM src WHERE value IS NOT NULL",
+    Seq("dbl"),
     Seq("key", "value"),
     Seq.empty)
 
@@ -151,7 +151,7 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
         case p @ HiveTableScan(columns, relation, _) =>
           val columnNames = columns.map(_.name)
           val partValues = if (relation.table.isPartitioned) {
-            p.prunePartitions(relation.hiveQlPartitions).map(_.getValues)
+            p.prunePartitions(relation.getHiveQlPartitions()).map(_.getValues)
           } else {
             Seq.empty
           }

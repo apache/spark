@@ -54,6 +54,9 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
       }
     }
 
+    // Ensure session state is initialized.
+    ctx.parseSql("use default")
+
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 COMPUTE STATISTICS",
       classOf[HiveNativeCommand])
@@ -167,16 +170,16 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
       ctx.conf.settings.synchronized {
         val tmp = ctx.conf.autoBroadcastJoinThreshold
 
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1""")
+        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1""")
         df = sql(query)
         bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoin => j }
         assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
 
-        val shj = df.queryExecution.sparkPlan.collect { case j: ShuffledHashJoin => j }
+        val shj = df.queryExecution.sparkPlan.collect { case j: SortMergeJoin => j }
         assert(shj.size === 1,
           "ShuffledHashJoin should be planned when BroadcastHashJoin is turned off")
 
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")
+        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp""")
       }
 
       after()
@@ -225,7 +228,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
     ctx.conf.settings.synchronized {
       val tmp = ctx.conf.autoBroadcastJoinThreshold
 
-      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1")
+      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1")
       df = sql(leftSemiJoinQuery)
       bhj = df.queryExecution.sparkPlan.collect {
         case j: BroadcastLeftSemiJoinHash => j
@@ -238,7 +241,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
       assert(shj.size === 1,
         "LeftSemiJoinHash should be planned when BroadcastHashJoin is turned off")
 
-      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp")
+      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp")
     }
 
   }

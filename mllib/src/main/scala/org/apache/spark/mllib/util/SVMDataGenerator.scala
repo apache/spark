@@ -37,8 +37,10 @@ object SVMDataGenerator {
 
   def main(args: Array[String]) {
     if (args.length < 2) {
+      // scalastyle:off println
       println("Usage: SVMGenerator " +
         "<master> <output_dir> [num_examples] [num_features] [num_partitions]")
+      // scalastyle:on println
       System.exit(1)
     }
 

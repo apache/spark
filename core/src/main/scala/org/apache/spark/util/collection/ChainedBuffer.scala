@@ -37,7 +37,7 @@ private[spark] class ChainedBuffer(chunkSize: Int) {
   private var _size: Long = 0
 
   /**
-   * Feed bytes from this buffer into a BlockObjectWriter.
+   * Feed bytes from this buffer into a DiskBlockObjectWriter.
    *
    * @param pos Offset in the buffer to read from.
    * @param os OutputStream to read into.

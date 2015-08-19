@@ -120,11 +120,11 @@ object KMeansModel extends Loader[KMeansModel] {
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
       val k = (metadata \ "k").extract[Int]
-      val centriods = sqlContext.read.parquet(Loader.dataPath(path))
-      Loader.checkSchema[Cluster](centriods.schema)
-      val localCentriods = centriods.map(Cluster.apply).collect()
-      assert(k == localCentriods.size)
-      new KMeansModel(localCentriods.sortBy(_.id).map(_.point))
+      val centroids = sqlContext.read.parquet(Loader.dataPath(path))
+      Loader.checkSchema[Cluster](centroids.schema)
+      val localCentroids = centroids.map(Cluster.apply).collect()
+      assert(k == localCentroids.size)
+      new KMeansModel(localCentroids.sortBy(_.id).map(_.point))
     }
   }
 }

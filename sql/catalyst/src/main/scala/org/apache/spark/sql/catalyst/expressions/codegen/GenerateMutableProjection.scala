@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
+import org.apache.spark.sql.types.DecimalType
 
 // MutableProjection is not accessible in Java
-abstract class BaseMutableProjection extends MutableProjection {}
+abstract class BaseMutableProjection extends MutableProjection
 
 /**
  * Generates byte code that produces a [[MutableRow]] object that can update itself based on a new
- * input [[Row]] for a fixed set of [[Expression Expressions]].
+ * input [[InternalRow]] for a fixed set of [[Expression Expressions]].
  */
 object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => MutableProjection] {
 
@@ -36,31 +40,49 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
   protected def create(expressions: Seq[Expression]): (() => MutableProjection) = {
     val ctx = newCodeGenContext()
-    val projectionCode = expressions.zipWithIndex.map { case (e, i) =>
-      val evaluationCode = e.gen(ctx)
-      evaluationCode.code +
-        s"""
-          if(${evaluationCode.isNull})
-            mutableRow.setNullAt($i);
-          else
-            mutableRow.${ctx.setColumn(e.dataType, i, evaluationCode.primitive)};
-        """
-    }.mkString("\n")
-    val code = s"""
-      import org.apache.spark.sql.Row;
+    val projectionCodes = expressions.zipWithIndex.map {
+      case (NoOp, _) => ""
+      case (e, i) =>
+        val evaluationCode = e.gen(ctx)
+        if (e.dataType.isInstanceOf[DecimalType]) {
+          // Can't call setNullAt on DecimalType, because we need to keep the offset
+          s"""
+            ${evaluationCode.code}
+            if (${evaluationCode.isNull}) {
+              ${ctx.setColumn("mutableRow", e.dataType, i, null)};
+            } else {
+              ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
+            }
+          """
+        } else {
+          s"""
+            ${evaluationCode.code}
+            if (${evaluationCode.isNull}) {
+              mutableRow.setNullAt($i);
+            } else {
+              ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
+            }
+          """
+        }
+    }
+    val allProjections = ctx.splitExpressions("i", projectionCodes)
 
-      public SpecificProjection generate($exprType[] expr) {
-        return new SpecificProjection(expr);
+    val code = s"""
+      public Object generate($exprType[] expr) {
+        return new SpecificMutableProjection(expr);
       }
 
-      class SpecificProjection extends ${classOf[BaseMutableProjection].getName} {
+      class SpecificMutableProjection extends ${classOf[BaseMutableProjection].getName} {
 
-        private $exprType[] expressions = null;
-        private $mutableRowType mutableRow = null;
+        private $exprType[] expressions;
+        private $mutableRowType mutableRow;
+        ${declareMutableStates(ctx)}
+        ${declareAddedFunctions(ctx)}
 
-        public SpecificProjection($exprType[] expr) {
+        public SpecificMutableProjection($exprType[] expr) {
           expressions = expr;
           mutableRow = new $genericMutableRowType(${expressions.size});
+          ${initMutableStates(ctx)}
         }
 
         public ${classOf[BaseMutableProjection].getName} target($mutableRowType row) {
@@ -69,27 +91,23 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
         }
 
         /* Provide immutable access to the last projected row. */
-        public Row currentValue() {
-          return mutableRow;
+        public InternalRow currentValue() {
+          return (InternalRow) mutableRow;
         }
 
         public Object apply(Object _i) {
-          Row i = (Row) _i;
-          $projectionCode
-
+          InternalRow i = (InternalRow) _i;
+          $allProjections
           return mutableRow;
         }
       }
     """
 
-
-    logDebug(s"code for ${expressions.mkString(",")}:\n$code")
+    logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
     val c = compile(code)
-    // fetch the only one method `generate(Expression[])`
-    val m = c.getDeclaredMethods()(0)
     () => {
-      m.invoke(c.newInstance(), ctx.references.toArray).asInstanceOf[BaseMutableProjection]
+      c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
     }
   }
 }

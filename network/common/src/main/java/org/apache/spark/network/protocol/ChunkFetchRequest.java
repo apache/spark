@@ -49,6 +49,11 @@ public final class ChunkFetchRequest implements RequestMessage {
   }
 
   @Override
+  public int hashCode() {
+    return streamChunkId.hashCode();
+  }
+
+  @Override
   public boolean equals(Object other) {
     if (other instanceof ChunkFetchRequest) {
       ChunkFetchRequest o = (ChunkFetchRequest) other;

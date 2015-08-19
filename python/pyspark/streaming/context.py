@@ -86,6 +86,9 @@ class StreamingContext(object):
     """
     _transformerSerializer = None
 
+    # Reference to a currently active StreamingContext
+    _activeContext = None
+
     def __init__(self, sparkContext, batchDuration=None, jssc=None):
         """
         Create a new StreamingContext.
@@ -142,10 +145,10 @@ class StreamingContext(object):
         Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
         If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
         recreated from the checkpoint data. If the data does not exist, then the provided setupFunc
-        will be used to create a JavaStreamingContext.
+        will be used to create a new context.
 
-        @param checkpointPath: Checkpoint directory used in an earlier JavaStreamingContext program
-        @param setupFunc:      Function to create a new JavaStreamingContext and setup DStreams
+        @param checkpointPath: Checkpoint directory used in an earlier streaming program
+        @param setupFunc:      Function to create a new context and setup DStreams
         """
         # TODO: support checkpoint in HDFS
         if not os.path.exists(checkpointPath) or not os.listdir(checkpointPath):
@@ -170,6 +173,52 @@ class StreamingContext(object):
         cls._transformerSerializer.ctx = sc
         return StreamingContext(sc, None, jssc)
 
+    @classmethod
+    def getActive(cls):
+        """
+        Return either the currently active StreamingContext (i.e., if there is a context started
+        but not stopped) or None.
+        """
+        activePythonContext = cls._activeContext
+        if activePythonContext is not None:
+            # Verify that the current running Java StreamingContext is active and is the same one
+            # backing the supposedly active Python context
+            activePythonContextJavaId = activePythonContext._jssc.ssc().hashCode()
+            activeJvmContextOption = activePythonContext._jvm.StreamingContext.getActive()
+
+            if activeJvmContextOption.isEmpty():
+                cls._activeContext = None
+            elif activeJvmContextOption.get().hashCode() != activePythonContextJavaId:
+                cls._activeContext = None
+                raise Exception("JVM's active JavaStreamingContext is not the JavaStreamingContext "
+                                "backing the action Python StreamingContext. This is unexpected.")
+        return cls._activeContext
+
+    @classmethod
+    def getActiveOrCreate(cls, checkpointPath, setupFunc):
+        """
+        Either return the active StreamingContext (i.e. currently started but not stopped),
+        or recreate a StreamingContext from checkpoint data or create a new StreamingContext
+        using the provided setupFunc function. If the checkpointPath is None or does not contain
+        valid checkpoint data, then setupFunc will be called to create a new context and setup
+        DStreams.
+
+        @param checkpointPath: Checkpoint directory used in an earlier streaming program. Can be
+                               None if the intention is to always create a new context when there
+                               is no active context.
+        @param setupFunc:      Function to create a new JavaStreamingContext and setup DStreams
+        """
+
+        if setupFunc is None:
+            raise Exception("setupFunc cannot be None")
+        activeContext = cls.getActive()
+        if activeContext is not None:
+            return activeContext
+        elif checkpointPath is not None:
+            return cls.getOrCreate(checkpointPath, setupFunc)
+        else:
+            return setupFunc()
+
     @property
     def sparkContext(self):
         """
@@ -182,6 +231,7 @@ class StreamingContext(object):
         Start the execution of the streams.
         """
         self._jssc.start()
+        StreamingContext._activeContext = self
 
     def awaitTermination(self, timeout=None):
         """
@@ -212,6 +262,7 @@ class StreamingContext(object):
                               of all received data to be completed
         """
         self._jssc.stop(stopSparkContext, stopGraceFully)
+        StreamingContext._activeContext = None
         if stopSparkContext:
             self._sc.stop()
 

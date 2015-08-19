@@ -40,7 +40,7 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
  *              where D is number of features
  * @param modelType The type of NB model to fit  can be "multinomial" or "bernoulli"
  */
-class NaiveBayesModel private[mllib] (
+class NaiveBayesModel private[spark] (
     val labels: Array[Double],
     val pi: Array[Double],
     val theta: Array[Array[Double]],
@@ -93,24 +93,68 @@ class NaiveBayesModel private[mllib] (
   override def predict(testData: Vector): Double = {
     modelType match {
       case Multinomial =>
-        val prob = thetaMatrix.multiply(testData)
-        BLAS.axpy(1.0, piVector, prob)
-        labels(prob.argmax)
+        labels(multinomialCalculation(testData).argmax)
       case Bernoulli =>
-        testData.foreachActive { (index, value) =>
-          if (value != 0.0 && value != 1.0) {
-            throw new SparkException(
-              s"Bernoulli naive Bayes requires 0 or 1 feature values but found $testData.")
-          }
-        }
-        val prob = thetaMinusNegTheta.get.multiply(testData)
-        BLAS.axpy(1.0, piVector, prob)
-        BLAS.axpy(1.0, negThetaSum.get, prob)
-        labels(prob.argmax)
-      case _ =>
-        // This should never happen.
-        throw new UnknownError(s"Invalid modelType: $modelType.")
+        labels(bernoulliCalculation(testData).argmax)
     }
+  }
+
+  /**
+   * Predict values for the given data set using the model trained.
+   *
+   * @param testData RDD representing data points to be predicted
+   * @return an RDD[Vector] where each entry contains the predicted posterior class probabilities,
+   *         in the same order as class labels
+   */
+  def predictProbabilities(testData: RDD[Vector]): RDD[Vector] = {
+    val bcModel = testData.context.broadcast(this)
+    testData.mapPartitions { iter =>
+      val model = bcModel.value
+      iter.map(model.predictProbabilities)
+    }
+  }
+
+  /**
+   * Predict posterior class probabilities for a single data point using the model trained.
+   *
+   * @param testData array representing a single data point
+   * @return predicted posterior class probabilities from the trained model,
+   *         in the same order as class labels
+   */
+  def predictProbabilities(testData: Vector): Vector = {
+    modelType match {
+      case Multinomial =>
+        posteriorProbabilities(multinomialCalculation(testData))
+      case Bernoulli =>
+        posteriorProbabilities(bernoulliCalculation(testData))
+    }
+  }
+
+  private def multinomialCalculation(testData: Vector) = {
+    val prob = thetaMatrix.multiply(testData)
+    BLAS.axpy(1.0, piVector, prob)
+    prob
+  }
+
+  private def bernoulliCalculation(testData: Vector) = {
+    testData.foreachActive((_, value) =>
+      if (value != 0.0 && value != 1.0) {
+        throw new SparkException(
+          s"Bernoulli naive Bayes requires 0 or 1 feature values but found $testData.")
+      }
+    )
+    val prob = thetaMinusNegTheta.get.multiply(testData)
+    BLAS.axpy(1.0, piVector, prob)
+    BLAS.axpy(1.0, negThetaSum.get, prob)
+    prob
+  }
+
+  private def posteriorProbabilities(logProb: DenseVector) = {
+    val logProbArray = logProb.toArray
+    val maxLog = logProbArray.max
+    val scaledProbs = logProbArray.map(lp => math.exp(lp - maxLog))
+    val probSum = scaledProbs.sum
+    new DenseVector(scaledProbs.map(_ / probSum))
   }
 
   override def save(sc: SparkContext, path: String): Unit = {
@@ -338,7 +382,7 @@ class NaiveBayes private (
         BLAS.axpy(1.0, c2._2, c1._2)
         (c1._1 + c2._1, c1._2)
       }
-    ).collect()
+    ).collect().sortBy(_._1)
 
     val numLabels = aggregated.length
     var numDocuments = 0L
@@ -381,13 +425,13 @@ class NaiveBayes private (
 object NaiveBayes {
 
   /** String name for multinomial model type. */
-  private[classification] val Multinomial: String = "multinomial"
+  private[spark] val Multinomial: String = "multinomial"
 
   /** String name for Bernoulli model type. */
-  private[classification] val Bernoulli: String = "bernoulli"
+  private[spark] val Bernoulli: String = "bernoulli"
 
   /* Set of modelTypes that NaiveBayes supports */
-  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli)
+  private[spark] val supportedModelTypes = Set(Multinomial, Bernoulli)
 
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
@@ -400,6 +444,7 @@ object NaiveBayes {
    *
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
+   * @since 0.9.0
    */
   def train(input: RDD[LabeledPoint]): NaiveBayesModel = {
     new NaiveBayes().run(input)
@@ -415,6 +460,7 @@ object NaiveBayes {
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
    * @param lambda The smoothing parameter
+   * @since 0.9.0
    */
   def train(input: RDD[LabeledPoint], lambda: Double): NaiveBayesModel = {
     new NaiveBayes(lambda, Multinomial).run(input)
@@ -437,6 +483,7 @@ object NaiveBayes {
    *
    * @param modelType The type of NB model to fit from the enumeration NaiveBayesModels, can be
    *              multinomial or bernoulli
+   * @since 0.9.0
    */
   def train(input: RDD[LabeledPoint], lambda: Double, modelType: String): NaiveBayesModel = {
     require(supportedModelTypes.contains(modelType),

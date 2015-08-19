@@ -91,8 +91,7 @@ object MimaBuild {
 
   def mimaSettings(sparkHome: File, projectRef: ProjectRef) = {
     val organization = "org.apache.spark"
-    // TODO: Change this once Spark 1.4.0 is released
-    val previousSparkVersion = "1.4.0-rc4"
+    val previousSparkVersion = "1.4.0"
     val fullId = "spark-" + projectRef.project + "_2.10"
     mimaDefaultSettings ++
     Seq(previousArtifact := Some(organization % fullId % previousSparkVersion),

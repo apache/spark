@@ -45,8 +45,5 @@ abstract class Model[M <: Model[M]] extends Transformer {
   /** Indicates whether this [[Model]] has a corresponding parent. */
   def hasParent: Boolean = parent != null
 
-  override def copy(extra: ParamMap): M = {
-    // The default implementation of Params.copy doesn't work for models.
-    throw new NotImplementedError(s"${this.getClass} doesn't implement copy(extra: ParamMap)")
-  }
+  override def copy(extra: ParamMap): M
 }

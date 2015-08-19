@@ -44,7 +44,7 @@ class PrimitiveKeyOpenHashMapSuite extends SparkFunSuite with Matchers {
     val goodMap3 = new PrimitiveKeyOpenHashMap[Int, Int](256)
     assert(goodMap3.size === 0)
     intercept[IllegalArgumentException] {
-      new PrimitiveKeyOpenHashMap[Int, Int](1 << 30) // Invalid map size: bigger than 2^29
+      new PrimitiveKeyOpenHashMap[Int, Int](1 << 30 + 1) // Invalid map size: bigger than 2^30
     }
     intercept[IllegalArgumentException] {
       new PrimitiveKeyOpenHashMap[Int, Int](-1)

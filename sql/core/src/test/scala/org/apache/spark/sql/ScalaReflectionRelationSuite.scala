@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.test.SharedSQLContext
 
 case class ReflectData(
     stringField: String,
@@ -72,17 +72,15 @@ case class ComplexReflectData(
     mapFieldContainsNull: Map[Int, Option[Long]],
     dataField: Data)
 
-class ScalaReflectionRelationSuite extends SparkFunSuite {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
+class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSQLContext {
+  import testImplicits._
 
   test("query case class RDD") {
     val data = ReflectData("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true,
-      new java.math.BigDecimal(1), new Date(12345), new Timestamp(12345), Seq(1, 2, 3))
+      new java.math.BigDecimal(1), Date.valueOf("1970-01-01"), new Timestamp(12345), Seq(1, 2, 3))
     Seq(data).toDF().registerTempTable("reflectData")
 
-    assert(ctx.sql("SELECT * FROM reflectData").collect().head ===
+    assert(sql("SELECT * FROM reflectData").collect().head ===
       Row("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true,
         new java.math.BigDecimal(1), Date.valueOf("1970-01-01"),
         new Timestamp(12345), Seq(1, 2, 3)))
@@ -92,7 +90,7 @@ class ScalaReflectionRelationSuite extends SparkFunSuite {
     val data = NullReflectData(null, null, null, null, null, null, null)
     Seq(data).toDF().registerTempTable("reflectNullData")
 
-    assert(ctx.sql("SELECT * FROM reflectNullData").collect().head ===
+    assert(sql("SELECT * FROM reflectNullData").collect().head ===
       Row.fromSeq(Seq.fill(7)(null)))
   }
 
@@ -100,7 +98,7 @@ class ScalaReflectionRelationSuite extends SparkFunSuite {
     val data = OptionalReflectData(None, None, None, None, None, None, None)
     Seq(data).toDF().registerTempTable("reflectOptionalData")
 
-    assert(ctx.sql("SELECT * FROM reflectOptionalData").collect().head ===
+    assert(sql("SELECT * FROM reflectOptionalData").collect().head ===
       Row.fromSeq(Seq.fill(7)(null)))
   }
 
@@ -108,7 +106,7 @@ class ScalaReflectionRelationSuite extends SparkFunSuite {
   test("query binary data") {
     Seq(ReflectBinary(Array[Byte](1))).toDF().registerTempTable("reflectBinary")
 
-    val result = ctx.sql("SELECT data FROM reflectBinary")
+    val result = sql("SELECT data FROM reflectBinary")
       .collect().head(0).asInstanceOf[Array[Byte]]
     assert(result.toSeq === Seq[Byte](1))
   }
@@ -127,17 +125,17 @@ class ScalaReflectionRelationSuite extends SparkFunSuite {
         Nested(None, "abc")))
 
     Seq(data).toDF().registerTempTable("reflectComplexData")
-    assert(ctx.sql("SELECT * FROM reflectComplexData").collect().head ===
-      new GenericRow(Array[Any](
+    assert(sql("SELECT * FROM reflectComplexData").collect().head ===
+      Row(
         Seq(1, 2, 3),
         Seq(1, 2, null),
         Map(1 -> 10L, 2 -> 20L),
         Map(1 -> 10L, 2 -> 20L, 3 -> null),
-        new GenericRow(Array[Any](
+        Row(
           Seq(10, 20, 30),
           Seq(10, 20, null),
           Map(10 -> 100L, 20 -> 200L),
           Map(10 -> 100L, 20 -> 200L, 30 -> null),
-          new GenericRow(Array[Any](null, "abc")))))))
+          Row(null, "abc"))))
   }
 }

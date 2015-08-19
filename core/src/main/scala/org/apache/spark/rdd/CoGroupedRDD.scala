@@ -23,8 +23,7 @@ import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{InterruptibleIterator, Partition, Partitioner, SparkEnv, TaskContext}
-import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency}
+import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.collection.{ExternalAppendOnlyMap, AppendOnlyMap, CompactBuffer}
 import org.apache.spark.util.Utils
@@ -94,13 +93,14 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
-    rdds.map { rdd: RDD[_ <: Product2[K, _]] =>
+    rdds.map { rdd: RDD[_] =>
       if (rdd.partitioner == Some(part)) {
         logDebug("Adding one-to-one dependency with " + rdd)
         new OneToOneDependency(rdd)
       } else {
         logDebug("Adding shuffle dependency with " + rdd)
-        new ShuffleDependency[K, Any, CoGroupCombiner](rdd, part, serializer)
+        new ShuffleDependency[K, Any, CoGroupCombiner](
+          rdd.asInstanceOf[RDD[_ <: Product2[K, _]]], part, serializer)
       }
     }
   }
@@ -133,7 +133,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     // A list of (rdd iterator, dependency number) pairs
     val rddIterators = new ArrayBuffer[(Iterator[Product2[K, Any]], Int)]
     for ((dep, depNum) <- dependencies.zipWithIndex) dep match {
-      case oneToOneDependency: OneToOneDependency[Product2[K, Any]] =>
+      case oneToOneDependency: OneToOneDependency[Product2[K, Any]] @unchecked =>
         val dependencyPartition = split.narrowDeps(depNum).get.split
         // Read them from the parent
         val it = oneToOneDependency.rdd.iterator(dependencyPartition, context)
@@ -168,8 +168,10 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
       for ((it, depNum) <- rddIterators) {
         map.insertAll(it.map(pair => (pair._1, new CoGroupValue(pair._2, depNum))))
       }
-      context.taskMetrics.incMemoryBytesSpilled(map.memoryBytesSpilled)
-      context.taskMetrics.incDiskBytesSpilled(map.diskBytesSpilled)
+      context.taskMetrics().incMemoryBytesSpilled(map.memoryBytesSpilled)
+      context.taskMetrics().incDiskBytesSpilled(map.diskBytesSpilled)
+      context.internalMetricsToAccumulators(
+        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(map.peakMemoryUsedBytes)
       new InterruptibleIterator(context,
         map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
     }

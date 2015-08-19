@@ -22,11 +22,11 @@ import java.io._
 import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 
 import org.apache.spark.{Logging, SparkFunSuite}
-import org.apache.spark.sql.sources.DescribeCommand
-import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
+import org.apache.spark.sql.execution.datasources.DescribeCommand
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -124,7 +124,7 @@ abstract class HiveComparisonTest
   protected val cacheDigest = java.security.MessageDigest.getInstance("MD5")
   protected def getMd5(str: String): String = {
     val digest = java.security.MessageDigest.getInstance("MD5")
-    digest.update(str.getBytes("utf-8"))
+    digest.update(str.replaceAll(System.lineSeparator(), "\n").getBytes("utf-8"))
     new java.math.BigInteger(1, digest.digest).toString(16)
   }
 
@@ -370,7 +370,11 @@ abstract class HiveComparisonTest
             // Check that the results match unless its an EXPLAIN query.
             val preparedHive = prepareAnswer(hiveQuery, hive)
 
-            if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) && preparedHive != catalyst) {
+            // We will ignore the ExplainCommand, ShowFunctions, DescribeFunction
+            if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) &&
+                (!hiveQuery.logical.isInstanceOf[ShowFunctions]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeFunction]) &&
+                preparedHive != catalyst) {
 
               val hivePrintOut = s"== HIVE - ${preparedHive.size} row(s) ==" +: preparedHive
               val catalystPrintOut = s"== CATALYST - ${catalyst.size} row(s) ==" +: catalyst
