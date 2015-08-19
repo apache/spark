@@ -214,7 +214,7 @@ class KeyHintSuite extends QueryTest {
       Row(null, null)))
   }
 
-  test("do not eliminate referential integrity inner joins where foreign key is nullable") {
+  test("do not eliminate referential integrity inner join where foreign key is nullable") {
     val orderInnerJoin = orderInnerJoinView
       .select(order("id"), customer("id"), employee("id"))
     checkAnswer(orderInnerJoin, Seq(
@@ -224,7 +224,7 @@ class KeyHintSuite extends QueryTest {
     checkJoinCount(orderInnerJoin, 1)
   }
 
-  test("eliminate referential integrity joins") {
+  test("eliminate referential integrity join") {
     val orderLeftOuterJoinEliminated = orderLeftOuterJoinView
       .select(order("id"), customer("id"), employee("id"))
     checkAnswer(orderLeftOuterJoinEliminated, Seq(
@@ -240,7 +240,7 @@ class KeyHintSuite extends QueryTest {
     checkJoinsEliminated(orderRightOuterJoinEliminated)
   }
 
-  test("do not eliminate referential integrity full outer joins") {
+  test("do not eliminate referential integrity full outer join") {
     val orderCustomerFullOuterJoinNotEliminated = orderCustomerFullOuterJoinView
       .select(order("id"), order("customerId"), customer("id"))
     checkAnswer(orderCustomerFullOuterJoinNotEliminated, Seq(
@@ -272,6 +272,4 @@ class KeyHintSuite extends QueryTest {
       Row(2, 0)))
     checkJoinsEliminated(bestFriendInnerJoinEliminated)
   }
-
-  test("join followed by join") {}
 }

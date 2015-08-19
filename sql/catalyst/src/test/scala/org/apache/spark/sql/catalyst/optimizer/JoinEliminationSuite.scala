@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.LeftOuter
+import org.apache.spark.sql.catalyst.plans.FullOuter
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.RightOuter
 import org.apache.spark.sql.catalyst.plans.logical.ForeignKey
@@ -38,148 +39,118 @@ class JoinEliminationSuite extends PlanTest {
       Batch("JoinElimination", Once, JoinElimination) :: Nil
   }
 
-  val testRelation1 = LocalRelation('a.int, 'b.int)
-  val testRelation2 = LocalRelation('c.int, 'd.int)
-  val testRelation1K = KeyHint(List(UniqueKey(testRelation1.output.head)), testRelation1)
-  val testRelation2K = KeyHint(List(UniqueKey(testRelation2.output.head)), testRelation2)
-  val testRelation3 = LocalRelation('e.int, 'f.int)
-  val testRelation3K = KeyHint(List(ForeignKey(testRelation3.output.head, testRelation1.output.head)), testRelation3)
+  val customer = {
+    val r = LocalRelation('customerId.int.notNull, 'customerName.string)
+    KeyHint(List(UniqueKey(r.output(0))), r)
+  }
+  val employee = {
+    val r = LocalRelation('employeeId.int.notNull, 'employeeName.string)
+    KeyHint(List(UniqueKey(r.output(0))), r)
+  }
+  val order = {
+    val r = LocalRelation(
+      'orderId.int.notNull, 'o_customerId.int.notNull, 'o_employeeId.int)
+    KeyHint(List(
+      UniqueKey(r.output(0)),
+      ForeignKey(r.output(1), customer.output(0)),
+      ForeignKey(r.output(2), employee.output(0))), r)
+  }
+  val bannedCustomer = {
+    val r = LocalRelation('bannedCustomerName.string.notNull)
+    KeyHint(List(UniqueKey(r.output(0))), r)
+  }
 
-  test("collapse left outer join followed by subset project") {
-    val query = testRelation1
-      .join(testRelation2K, LeftOuter, Some('a === 'c))
-      .select('a, 'b)
-
+  def checkJoinEliminated(
+      base: LogicalPlan,
+      join: LogicalPlan => LogicalPlan,
+      project: LogicalPlan => LogicalPlan,
+      projectAfterElimination: LogicalPlan => LogicalPlan): Unit = {
+    val query = project(join(base))
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = testRelation1.select('a, 'b).analyze
-
+    val correctAnswer = projectAfterElimination(base).analyze
     comparePlans(optimized, correctAnswer)
   }
 
-  test("collapse right outer join followed by subset project") {
-    val query = testRelation1K
-      .join(testRelation2, RightOuter, Some('a === 'c))
-      .select('c, 'd)
-
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = testRelation2.select('c, 'd).analyze
-
-    comparePlans(optimized, correctAnswer)
+  def checkJoinEliminated(
+      base: LogicalPlan,
+      join: LogicalPlan => LogicalPlan,
+      project: LogicalPlan => LogicalPlan): Unit = {
+    checkJoinEliminated(base, join, project, project)
   }
 
-  test("collapse outer join followed by subset project with expressions") {
-    val query = testRelation1
-      .join(testRelation2K, LeftOuter, Some('a === 'c))
-      .select(('a + 1).as('a), ('b + 2).as('b))
-
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = testRelation1.select(('a + 1).as('a), ('b + 2).as('b)).analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("collapse outer join with foreign key") {
-    val query = testRelation3K
-      .join(testRelation1K, LeftOuter, Some('e === 'a))
-      .select('a, 'f)
-
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = testRelation3K.select('e.as('a), 'f).analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("collapse outer join with foreign key despite alias") {
-    val query = testRelation3K
-      .join(testRelation1K.select('a.as('g), 'b), LeftOuter, Some('e === 'g))
-      .select('g, 'f)
-
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = testRelation3K.select('e.as('g), 'f).analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("do not collapse non-subset project") {
-    val query = testRelation1
-      .join(testRelation2K, LeftOuter, Some('a === 'c))
-      .select('a, 'b, ('c + 1).as('c), 'd)
-
+  def checkJoinNotEliminated(
+      base: LogicalPlan,
+      join: LogicalPlan => LogicalPlan,
+      project: LogicalPlan => LogicalPlan): Unit = {
+    val query = project(join(base))
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = query.analyze
-
     comparePlans(optimized, correctAnswer)
   }
 
-  test("do not collapse non-keyed join") {
-    val query = testRelation1
-      .join(testRelation2, LeftOuter, Some('a === 'c))
-      .select('a, 'b, ('c + 1).as('c), 'd)
-
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = query.analyze
-
-    comparePlans(optimized, correctAnswer)
+  test("eliminate unique key left outer join") {
+    checkJoinEliminated(
+      customer,
+      _.join(bannedCustomer, LeftOuter, Some('customerName === 'bannedCustomerName)),
+      _.select('customerId, 'customerName))
   }
 
-  test("collapse join preceded by join") {
-    val query1 = testRelation3K
-      .join(testRelation1, LeftOuter, Some('e === 'a)) // will not be eliminated
-    val query2 = query1
-      .join(testRelation2K, LeftOuter, Some('a === 'c)) // should be eliminated
-      .select('a, 'b, 'e, 'f)
-
-    val optimized = Optimize.execute(query2.analyze)
-    val correctAnswer = query1.select('a, 'b, 'e, 'f).analyze
-
-    comparePlans(optimized, correctAnswer)
+  test("do not eliminate unique key inner join") {
+    checkJoinNotEliminated(
+      customer,
+      _.join(bannedCustomer, Inner, Some('customerName === 'bannedCustomerName)),
+      _.select('customerId, 'customerName))
   }
 
-  test("eliminate inner join - fk on right, no pk columns kept") {
-    val query = testRelation1K
-      .join(testRelation3K, Inner, Some('a === 'e))
-      .select('e, 'f)
-
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = testRelation3K.select('e, 'f).analyze
-
-    comparePlans(optimized, correctAnswer)
+  test("do not eliminate unique key full outer join") {
+    checkJoinNotEliminated(
+      customer,
+      _.join(bannedCustomer, FullOuter, Some('customerName === 'bannedCustomerName)),
+      _.select('customerId, 'customerName))
   }
 
-  test("eliminate inner join - fk on right, pk columns kept") {
-    val query = testRelation1K
-      .join(testRelation3K, Inner, Some('a === 'e))
-      .select('a, 'f)
-
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = testRelation3K.select('e.as('a), 'f).analyze
-
-    comparePlans(optimized, correctAnswer)
+  test("do not eliminate referential integrity inner join where foreign key is nullable") {
+    checkJoinNotEliminated(
+      order,
+      _.join(employee, Inner, Some('employeeId === 'o_employeeId)),
+      _.select('orderId, 'employeeId))
   }
 
-  test("eliminate inner join - fk on left, pk columns kept") {
-    val query = testRelation3K
-      .join(testRelation1K, Inner, Some('a === 'e))
-      .select('a, 'f)
-
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = testRelation3K.select('e.as('a), 'f).analyze
-
-    comparePlans(optimized, correctAnswer)
+  test("eliminate referential integrity inner join when foreign key is not null") {
+    checkJoinEliminated(
+      order,
+      _.join(customer, Inner, Some('customerId === 'o_customerId)),
+      _.select('orderId, 'customerId),
+      _.select('orderId, 'o_customerId.as('customerId)))
   }
 
-  test("triangles") {
-    val e0 = LocalRelation('srcId.int, 'dstId.int)
-    val v0 = LocalRelation('id.int, 'attr.int)
-    val e = KeyHint(List(ForeignKey(e0.output.head, v0.output.head), ForeignKey(e0.output.last, v0.output.head)), e0)
-    val v = KeyHint(List(UniqueKey(v0.output.head)), v0)
+  test("eliminate referential integrity left/right outer join when foreign key is not null") {
+    checkJoinEliminated(
+      order,
+      _.join(customer, LeftOuter, Some('customerId === 'o_customerId)),
+      _.select('orderId, 'customerId),
+      _.select('orderId, 'o_customerId.as('customerId)))
 
-    val query = e.join(v, LeftOuter, Some('dstId === 'id)).select('srcId, 'id)
+    checkJoinEliminated(
+      order,
+      customer.join(_, RightOuter, Some('customerId === 'o_customerId)),
+      _.select('orderId, 'customerId),
+      _.select('orderId, 'o_customerId.as('customerId)))
+  }
 
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = e.select('srcId, 'dstId.as('id)).analyze
+  test("do not eliminate referential integrity full outer join") {
+    checkJoinNotEliminated(
+      order,
+      _.join(customer, FullOuter, Some('customerId === 'o_customerId)),
+      _.select('orderId, 'customerId))
+  }
 
-    comparePlans(optimized, correctAnswer)
-
+  test("eliminate referential integrity outer join despite alias") {
+    checkJoinEliminated(
+      order,
+      _.join(customer.select('customerId.as('customerId_alias), 'customerName),
+        LeftOuter, Some('customerId_alias === 'o_customerId)),
+      _.select('orderId, 'customerId_alias),
+      _.select('orderId, 'o_customerId.as('customerId_alias)))
   }
 }
