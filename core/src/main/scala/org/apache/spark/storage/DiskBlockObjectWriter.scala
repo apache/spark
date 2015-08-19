@@ -97,7 +97,6 @@ private[spark] class DiskBlockObjectWriter(
 
   override def close() {
     if (initialized) {
-      val length = channel.position()
       Utils.tryWithSafeFinally {
         if (syncWrites) {
           // Force outstanding writes to disk and track how long it takes
@@ -110,6 +109,8 @@ private[spark] class DiskBlockObjectWriter(
         objOut.close()
       }
 
+      finalPosition = file.length()
+      val length = finalPosition - initialPosition
       if (length > LargeByteBufferHelper.MAX_CHUNK_SIZE) {
         throw new ShuffleBlockSizeLimitException(length)
       }
