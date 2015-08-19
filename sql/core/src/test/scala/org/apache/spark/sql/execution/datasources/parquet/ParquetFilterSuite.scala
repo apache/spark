@@ -54,18 +54,18 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         .select(output.map(e => Column(e)): _*)
         .where(Column(predicate))
 
-      val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
+      val analyzedPredicate = query.queryExecution.optimizedPlan.collect {
         case PhysicalOperation(_, filters, LogicalRelation(_: ParquetRelation)) => filters
       }.flatten
-      assert(maybeAnalyzedPredicate.nonEmpty)
+      assert(analyzedPredicate.nonEmpty)
 
-      val maybeSelectedFilters = DataSourceStrategy.selectFilters(maybeAnalyzedPredicate)
-      assert(maybeSelectedFilters.nonEmpty)
+      val selectedFilters = DataSourceStrategy.selectFilters(analyzedPredicate)
+      assert(selectedFilters.nonEmpty)
 
-      maybeSelectedFilters.foreach { pred =>
-        val maybeFilter = ParquetFilters.createFilter(df.schema, pred)
-        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
-        maybeFilter.foreach { f =>
+      selectedFilters.foreach { pred =>
+        val filter = ParquetFilters.createFilter(df.schema, pred)
+        assert(filter.isDefined, s"Couldn't generate filter predicate for $pred")
+        filter.foreach { f =>
           // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
           assert(f.getClass === filterClass)
         }
