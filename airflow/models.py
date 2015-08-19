@@ -29,7 +29,7 @@ from airflow import settings, utils
 from airflow.executors import DEFAULT_EXECUTOR, LocalExecutor
 from airflow.configuration import conf
 from airflow.utils import (
-    AirflowException, XComException, State, apply_defaults, provide_session,
+    AirflowException, State, apply_defaults, provide_session,
     is_container, as_tuple)
 
 Base = declarative_base()
@@ -2214,7 +2214,7 @@ class XCom(Base):
             inplace=True)
 
         if result.empty:
-            raise XComException('No XCom values found.')
+            return None
 
         if limit is None:
             return result.iloc[0].value

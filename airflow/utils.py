@@ -32,10 +32,6 @@ class AirflowException(Exception):
     pass
 
 
-class XComException(AirflowException):
-    pass
-
-
 class AirflowSensorTimeout(Exception):
     pass
 
