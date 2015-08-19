@@ -26,6 +26,7 @@ import org.apache.spark.mllib.linalg._
  * provided "weight" vector. In other words, it scales each column of the dataset by a scalar
  * multiplier.
  * @param scalingVec The values used to scale the reference vector's individual components.
+ * @since 1.4.0
  */
 @Experimental
 class ElementwiseProduct(val scalingVec: Vector) extends VectorTransformer {
@@ -35,6 +36,7 @@ class ElementwiseProduct(val scalingVec: Vector) extends VectorTransformer {
    *
    * @param vector vector to be transformed.
    * @return transformed vector.
+   * @since 1.4.0
    */
   override def transform(vector: Vector): Vector = {
     require(vector.size == scalingVec.size,

@@ -26,6 +26,7 @@ import org.apache.spark.rdd.RDD
  * A feature transformer that projects vectors to a low-dimensional space using PCA.
  *
  * @param k number of principal components
+ * @since 1.4.0
  */
 class PCA(val k: Int) {
   require(k >= 1, s"PCA requires a number of principal components k >= 1 but was given $k")
@@ -34,6 +35,7 @@ class PCA(val k: Int) {
    * Computes a [[PCAModel]] that contains the principal components of the input vectors.
    *
    * @param sources source vectors
+   * @since 1.4.0
    */
   def fit(sources: RDD[Vector]): PCAModel = {
     require(k <= sources.first().size,
@@ -58,7 +60,10 @@ class PCA(val k: Int) {
     new PCAModel(k, pc)
   }
 
-  /** Java-friendly version of [[fit()]] */
+  /**
+   * Java-friendly version of [[fit()]]
+   * @since 1.4.0
+   */
   def fit(sources: JavaRDD[Vector]): PCAModel = fit(sources.rdd)
 }
 
@@ -75,6 +80,7 @@ class PCAModel private[spark] (val k: Int, val pc: DenseMatrix) extends VectorTr
    * @param vector vector to be transformed.
    *               Vector must be the same length as the source vectors given to [[PCA.fit()]].
    * @return transformed vector. Vector will be of length k.
+   * @since 1.4.0
    */
   override def transform(vector: Vector): Vector = {
     vector match {

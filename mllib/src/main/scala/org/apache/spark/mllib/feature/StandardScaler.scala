@@ -31,10 +31,14 @@ import org.apache.spark.rdd.RDD
  * @param withMean False by default. Centers the data with mean before scaling. It will build a
  *                 dense output, so this does not work on sparse input and will raise an exception.
  * @param withStd True by default. Scales the data to unit standard deviation.
+ * @since 1.1.0
  */
 @Experimental
 class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
 
+  /**
+   * @since 1.1.0
+   */
   def this() = this(false, true)
 
   if (!(withMean || withStd)) {
@@ -46,6 +50,7 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
    *
    * @param data The data used to compute the mean and variance to build the transformation model.
    * @return a StandardScalarModel
+   * @since 1.1.0
    */
   def fit(data: RDD[Vector]): StandardScalerModel = {
     // TODO: skip computation if both withMean and withStd are false
@@ -68,6 +73,7 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
  * @param mean column mean values
  * @param withStd whether to scale the data to have unit standard deviation
  * @param withMean whether to center the data before scaling
+ * @since 1.1.0
  */
 @Experimental
 class StandardScalerModel (
@@ -76,6 +82,9 @@ class StandardScalerModel (
     var withStd: Boolean,
     var withMean: Boolean) extends VectorTransformer {
 
+  /**
+   * @since 1.3.0
+   */
   def this(std: Vector, mean: Vector) {
     this(std, mean, withStd = std != null, withMean = mean != null)
     require(this.withStd || this.withMean,
@@ -86,8 +95,14 @@ class StandardScalerModel (
     }
   }
 
+  /**
+   * @since 1.3.0
+   */
   def this(std: Vector) = this(std, null)
 
+  /**
+   * @since 1.3.0
+   */
   @DeveloperApi
   def setWithMean(withMean: Boolean): this.type = {
     require(!(withMean && this.mean == null), "cannot set withMean to true while mean is null")
@@ -95,6 +110,9 @@ class StandardScalerModel (
     this
   }
 
+  /**
+   * @since 1.3.0
+   */
   @DeveloperApi
   def setWithStd(withStd: Boolean): this.type = {
     require(!(withStd && this.std == null),
@@ -114,6 +132,7 @@ class StandardScalerModel (
    * @param vector Vector to be standardized.
    * @return Standardized vector. If the std of a column is zero, it will return default `0.0`
    *         for the column with zero std.
+   * @since 1.1.0
    */
   override def transform(vector: Vector): Vector = {
     require(mean.size == vector.size)

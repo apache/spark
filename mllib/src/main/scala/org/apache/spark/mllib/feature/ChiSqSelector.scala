@@ -30,6 +30,7 @@ import org.apache.spark.rdd.RDD
  * Chi Squared selector model.
  *
  * @param selectedFeatures list of indices to select (filter). Must be ordered asc
+ * @since 1.3.0
  */
 @Experimental
 class ChiSqSelectorModel (val selectedFeatures: Array[Int]) extends VectorTransformer {
@@ -51,6 +52,7 @@ class ChiSqSelectorModel (val selectedFeatures: Array[Int]) extends VectorTransf
    *
    * @param vector vector to be transformed.
    * @return transformed vector.
+   * @since 1.3.0
    */
   override def transform(vector: Vector): Vector = {
     compress(vector, selectedFeatures)
@@ -106,6 +108,7 @@ class ChiSqSelectorModel (val selectedFeatures: Array[Int]) extends VectorTransf
  * Creates a ChiSquared feature selector.
  * @param numTopFeatures number of features that selector will select
  *                       (ordered by statistic value descending)
+ * @since 1.3.0
  */
 @Experimental
 class ChiSqSelector (val numTopFeatures: Int) extends Serializable {
@@ -116,6 +119,7 @@ class ChiSqSelector (val numTopFeatures: Int) extends Serializable {
    * @param data an `RDD[LabeledPoint]` containing the labeled dataset with categorical features.
    *             Real-valued features will be treated as categorical for each distinct value.
    *             Apply feature discretizer before using this function.
+   * @since 1.3.0
    */
   def fit(data: RDD[LabeledPoint]): ChiSqSelectorModel = {
     val indices = Statistics.chiSqTest(data)

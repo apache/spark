@@ -36,6 +36,7 @@ import org.apache.spark.rdd.RDD
  *
  * @param minDocFreq minimum of documents in which a term
  *                   should appear for filtering
+ * @since 1.1.0
  */
 @Experimental
 class IDF(val minDocFreq: Int) {
@@ -47,6 +48,7 @@ class IDF(val minDocFreq: Int) {
   /**
    * Computes the inverse document frequency.
    * @param dataset an RDD of term frequency vectors
+   * @since 1.1.0
    */
   def fit(dataset: RDD[Vector]): IDFModel = {
     val idf = dataset.treeAggregate(new IDF.DocumentFrequencyAggregator(
@@ -60,6 +62,7 @@ class IDF(val minDocFreq: Int) {
   /**
    * Computes the inverse document frequency.
    * @param dataset a JavaRDD of term frequency vectors
+   * @since 1.1.0
    */
   def fit(dataset: JavaRDD[Vector]): IDFModel = {
     fit(dataset.rdd)
@@ -170,6 +173,7 @@ class IDFModel private[spark] (val idf: Vector) extends Serializable {
    *
    * @param dataset an RDD of term frequency vectors
    * @return an RDD of TF-IDF vectors
+   * @since 1.1.0
    */
   def transform(dataset: RDD[Vector]): RDD[Vector] = {
     val bcIdf = dataset.context.broadcast(idf)
@@ -181,6 +185,7 @@ class IDFModel private[spark] (val idf: Vector) extends Serializable {
    *
    * @param v a term frequency vector
    * @return a TF-IDF vector
+   * @since 1.3.0
    */
   def transform(v: Vector): Vector = IDFModel.transform(idf, v)
 
@@ -188,6 +193,7 @@ class IDFModel private[spark] (val idf: Vector) extends Serializable {
    * Transforms term frequency (TF) vectors to TF-IDF vectors (Java version).
    * @param dataset a JavaRDD of term frequency vectors
    * @return a JavaRDD of TF-IDF vectors
+   * @since 1.1.0
    */
   def transform(dataset: JavaRDD[Vector]): JavaRDD[Vector] = {
     transform(dataset.rdd).toJavaRDD()
