@@ -78,7 +78,7 @@ class GaussianMixtureModel(
 
   /**
    * Maps given point to its cluster index.
-   * @since 1.4.0
+   * @since 1.5.0
    */
   def predict(point: Vector): Int = {
     val r = computeSoftAssignments(point.toBreeze.toDenseVector, gaussians, weights, k)
