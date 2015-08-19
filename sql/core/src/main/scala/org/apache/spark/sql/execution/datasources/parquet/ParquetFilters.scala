@@ -198,9 +198,11 @@ private[sql] object ParquetFilters {
     // which can be casted to `false` implicitly. Please refer to the `eval` method of these
     // operators and the `SimplifyFilters` rule for details.
 
-    // Hyukjin: I added [[EqualNullSafe]] with [[org.apache.parquet.filter2.predicate.Operators.Eq]].
+    // Hyukjin:
+    // I added [[EqualNullSafe]] with [[org.apache.parquet.filter2.predicate.Operators.Eq]].
     // So, it performs equality comparison identically when given [[sources.Filter]] is [[EqualTo]].
-    // The reason why I did this is, that the actual Parquet filter checks null-safe equality comparison.
+    // The reason why I did this is, that the actual Parquet filter checks null-safe equality
+    // comparison.
     // So I added this and maybe [[EqualTo]] should be changed. It still seems fine though, because
     // physical planning does not set `NULL` to [[EqualTo]] but changes it to [[IsNull]] and etc.
     // Probably I missed something and obviously this should be changed.
