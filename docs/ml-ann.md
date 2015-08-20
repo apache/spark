@@ -66,17 +66,17 @@ val test = splits(1)
 val layers = Array[Int](4, 5, 4, 3)
 // create the trainer and set its parameters
 val trainer = new MultilayerPerceptronClassifier()
-	.setLayers(layers)
-	.setBlockSize(128)
-	.setSeed(1234L)
-	.setMaxIter(100)
+  .setLayers(layers)
+  .setBlockSize(128)
+  .setSeed(1234L)
+  .setMaxIter(100)
 // train the model
 val model = trainer.fit(train)
 // compute precision on the test set
 val result = model.transform(test)
 val predictionAndLabels = result.select("prediction", "label")
 val evaluator = new MulticlassClassificationEvaluator()
-	.setMetricName("precision")
+  .setMetricName("precision")
 println("Precision:" + evaluator.evaluate(predictionAndLabels))
 {% endhighlight %}
 
@@ -104,18 +104,18 @@ DataFrame test = splits[1];
 // input layer of size 4 (features), two intermediate of size 5 and 4 and output of size 3 (classes)
 int[] layers = new int[] {4, 5, 4, 3};
 // create the trainer and set its parameters
-MultilayerPerceptronClassifier trainer = new MultilayerPerceptronClassifier();
-trainer.setLayers(layers)
-        .setBlockSize(128)
-        .setSeed(1234L)
-        .setMaxIter(100);
+MultilayerPerceptronClassifier trainer = new MultilayerPerceptronClassifier()
+  .setLayers(layers)
+  .setBlockSize(128)
+  .setSeed(1234L)
+  .setMaxIter(100);
 // train the model
 MultilayerPerceptronClassificationModel model = trainer.fit(train);
 // compute precision on the test set
 DataFrame result = model.transform(test);
 DataFrame predictionAndLabels = result.select("prediction", "label");
 MulticlassClassificationEvaluator evaluator = new MulticlassClassificationEvaluator()
-        .setMetricName("precision");
+  .setMetricName("precision");
 System.out.println("Precision = " + evaluator.evaluate(predictionAndLabels));
 {% endhighlight %}
 </div>
