@@ -1625,6 +1625,7 @@ admin._menu = admin._menu[:-1]
 class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
     create_template = 'airflow/conn_create.html'
     edit_template = 'airflow/conn_edit.html'
+    list_template = 'airflow/conn_list.html'
     verbose_name = "Connection"
     verbose_name_plural = "Connections"
     column_default_sort = ('conn_id', False)
@@ -1666,6 +1667,20 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
                 key:formdata[key]
                 for key in self.form_extra_fields.keys() if key in formdata}
             model.extra = json.dumps(extra)
+
+    @classmethod
+    def is_secure(self):
+        """
+        Used to display a message in the Connection list view making it clear
+        that the passwords can't be encrypted.
+        """
+        is_secure = False
+        try:
+            import cryptography
+            is_secure = True
+        except:
+            pass
+        return is_secure
 
     def on_form_prefill(self, form, id):
         try:
