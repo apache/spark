@@ -27,7 +27,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
-import org.apache.spark.graphx._
+import org.apache.spark.graphx.{Edge, EdgeContext, Graph, VertexId}
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -584,7 +584,7 @@ class DistributedLDAModel private[clustering] (
    *         (term indices, topic indices).  Note that terms will be omitted if not present in
    *         the document.
    */
-  lazy val topTopicAssignments: RDD[(Long, Array[Int], Array[Int])] = {
+  lazy val topicAssignments: RDD[(Long, Array[Int], Array[Int])] = {
     // For reference, compare the below code with the core part of EMLDAOptimizer.next().
     val eta = topicConcentration
     val W = vocabSize
@@ -610,6 +610,11 @@ class DistributedLDAModel private[clustering] (
       val (sortedTerms, sortedTopics) = terms.zip(topics).sortBy(_._1).unzip
       (docID, sortedTerms.toArray, sortedTopics.toArray)
     }
+  }
+
+  /** Java-friendly version of [[topicAssignments]] */
+  lazy val javaTopicAssignments: JavaRDD[(java.lang.Long, Array[Int], Array[Int])] = {
+    topicAssignments.asInstanceOf[RDD[(java.lang.Long, Array[Int], Array[Int])]].toJavaRDD()
   }
 
   // TODO
