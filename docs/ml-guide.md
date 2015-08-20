@@ -32,10 +32,7 @@ Users should be comfortable using `spark.mllib` features and expect more feature
 Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
 to `spark.ml`.
 
-Guides for sub-packages of `spark.ml` include:
-
-* [Feature Extraction, Transformation, and Selection](ml-features.html): Details on transformers supported in the Pipelines API, including a few not in the lower-level `spark.mllib` API
-* [Ensembles](ml-ensembles.html): Details on ensemble learning methods in the Pipelines API
+See the [Algorithm Guides section](#algorithm-guides) below for guides on sub-packages of `spark.ml`, including feature transformers unique to the Pipelines API, ensembles, and more.
 
 
 **Table of Contents**
@@ -179,10 +176,8 @@ There are now several algorithms in the Pipelines API which are not in the lower
 **Pipelines API Algorithm Guides**
 
 * [Feature Extraction, Transformation, and Selection](ml-features.html)
+* [Decision Trees for Classification and Regression](ml-decision-tree.html)
 * [Ensembles](ml-ensembles.html)
-
-**Algorithms in `spark.ml`**
-
 * [Linear methods with elastic net regularization](ml-linear-methods.html)
 
 # Code Examples
@@ -274,8 +269,9 @@ sc.stop()
 
 <div data-lang="java">
 {% highlight java %}
+import java.util.Arrays;
 import java.util.List;
-import com.google.common.collect.Lists;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
@@ -294,7 +290,7 @@ SQLContext jsql = new SQLContext(jsc);
 // Prepare training data.
 // We use LabeledPoint, which is a JavaBean.  Spark SQL can convert RDDs of JavaBeans
 // into DataFrames, where it uses the bean metadata to infer the schema.
-List<LabeledPoint> localTraining = Lists.newArrayList(
+List<LabeledPoint> localTraining = Arrays.asList(
   new LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
   new LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
   new LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
@@ -335,7 +331,7 @@ LogisticRegressionModel model2 = lr.fit(training, paramMapCombined);
 System.out.println("Model 2 was fit using parameters: " + model2.parent().extractParamMap());
 
 // Prepare test documents.
-List<LabeledPoint> localTest = Lists.newArrayList(
+List<LabeledPoint> localTest = Arrays.asList(
     new LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
     new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
     new LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5)));
@@ -496,8 +492,9 @@ sc.stop()
 
 <div data-lang="java">
 {% highlight java %}
+import java.util.Arrays;
 import java.util.List;
-import com.google.common.collect.Lists;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.Pipeline;
@@ -546,7 +543,7 @@ JavaSparkContext jsc = new JavaSparkContext(conf);
 SQLContext jsql = new SQLContext(jsc);
 
 // Prepare training documents, which are labeled.
-List<LabeledDocument> localTraining = Lists.newArrayList(
+List<LabeledDocument> localTraining = Arrays.asList(
   new LabeledDocument(0L, "a b c d e spark", 1.0),
   new LabeledDocument(1L, "b d", 0.0),
   new LabeledDocument(2L, "spark f g h", 1.0),
@@ -571,7 +568,7 @@ Pipeline pipeline = new Pipeline()
 PipelineModel model = pipeline.fit(training);
 
 // Prepare test documents, which are unlabeled.
-List<Document> localTest = Lists.newArrayList(
+List<Document> localTest = Arrays.asList(
   new Document(4L, "spark i j k"),
   new Document(5L, "l m n"),
   new Document(6L, "mapreduce spark"),
@@ -747,8 +744,9 @@ sc.stop()
 
 <div data-lang="java">
 {% highlight java %}
+import java.util.Arrays;
 import java.util.List;
-import com.google.common.collect.Lists;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.Pipeline;
@@ -800,7 +798,7 @@ JavaSparkContext jsc = new JavaSparkContext(conf);
 SQLContext jsql = new SQLContext(jsc);
 
 // Prepare training documents, which are labeled.
-List<LabeledDocument> localTraining = Lists.newArrayList(
+List<LabeledDocument> localTraining = Arrays.asList(
   new LabeledDocument(0L, "a b c d e spark", 1.0),
   new LabeledDocument(1L, "b d", 0.0),
   new LabeledDocument(2L, "spark f g h", 1.0),
@@ -849,7 +847,7 @@ crossval.setNumFolds(2); // Use 3+ in practice
 CrossValidatorModel cvModel = crossval.fit(training);
 
 // Prepare test documents, which are unlabeled.
-List<Document> localTest = Lists.newArrayList(
+List<Document> localTest = Arrays.asList(
   new Document(4L, "spark i j k"),
   new Document(5L, "l m n"),
   new Document(6L, "mapreduce spark"),

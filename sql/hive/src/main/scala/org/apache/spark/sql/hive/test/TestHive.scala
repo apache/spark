@@ -25,10 +25,8 @@ import scala.language.implicitConversions
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
-import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
-import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.analysis._
@@ -276,10 +274,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       "INSERT OVERWRITE TABLE serdeins SELECT * FROM src".cmd),
     TestTable("episodes",
       s"""CREATE TABLE episodes (title STRING, air_date STRING, doctor INT)
-         |ROW FORMAT SERDE '${classOf[AvroSerDe].getCanonicalName}'
-         |STORED AS
-         |INPUTFORMAT '${classOf[AvroContainerInputFormat].getCanonicalName}'
-         |OUTPUTFORMAT '${classOf[AvroContainerOutputFormat].getCanonicalName}'
+         |STORED AS avro
          |TBLPROPERTIES (
          |  'avro.schema.literal'='{
          |    "type": "record",
@@ -312,10 +307,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     TestTable("episodes_part",
       s"""CREATE TABLE episodes_part (title STRING, air_date STRING, doctor INT)
          |PARTITIONED BY (doctor_pt INT)
-         |ROW FORMAT SERDE '${classOf[AvroSerDe].getCanonicalName}'
-         |STORED AS
-         |INPUTFORMAT '${classOf[AvroContainerInputFormat].getCanonicalName}'
-         |OUTPUTFORMAT '${classOf[AvroContainerOutputFormat].getCanonicalName}'
+         |STORED AS avro
          |TBLPROPERTIES (
          |  'avro.schema.literal'='{
          |    "type": "record",

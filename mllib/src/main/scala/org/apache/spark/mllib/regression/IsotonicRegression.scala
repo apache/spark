@@ -46,6 +46,8 @@ import org.apache.spark.sql.SQLContext
  * @param predictions Array of predictions associated to the boundaries at the same index.
  *                    Results of isotonic regression and therefore monotone.
  * @param isotonic indicates whether this is isotonic or antitonic.
+ *
+ * @since 1.3.0
  */
 @Experimental
 class IsotonicRegressionModel (
@@ -59,7 +61,11 @@ class IsotonicRegressionModel (
   assertOrdered(boundaries)
   assertOrdered(predictions)(predictionOrd)
 
-  /** A Java-friendly constructor that takes two Iterable parameters and one Boolean parameter. */
+  /**
+   * A Java-friendly constructor that takes two Iterable parameters and one Boolean parameter.
+   *
+   * @since 1.4.0
+   */
   def this(boundaries: java.lang.Iterable[Double],
       predictions: java.lang.Iterable[Double],
       isotonic: java.lang.Boolean) = {
@@ -83,6 +89,8 @@ class IsotonicRegressionModel (
    *
    * @param testData Features to be labeled.
    * @return Predicted labels.
+   *
+   * @since 1.3.0
    */
   def predict(testData: RDD[Double]): RDD[Double] = {
     testData.map(predict)
@@ -94,6 +102,8 @@ class IsotonicRegressionModel (
    *
    * @param testData Features to be labeled.
    * @return Predicted labels.
+   *
+   * @since 1.3.0
    */
   def predict(testData: JavaDoubleRDD): JavaDoubleRDD = {
     JavaDoubleRDD.fromRDD(predict(testData.rdd.retag.asInstanceOf[RDD[Double]]))
@@ -114,6 +124,8 @@ class IsotonicRegressionModel (
    *         3) If testData falls between two values in boundary array then prediction is treated
    *           as piecewise linear function and interpolated value is returned. In case there are
    *           multiple values with the same boundary then the same rules as in 2) are used.
+   *
+   * @since 1.3.0
    */
   def predict(testData: Double): Double = {
 
@@ -148,6 +160,9 @@ class IsotonicRegressionModel (
   /** A convenient method for boundaries called by the Python API. */
   private[mllib] def predictionVector: Vector = Vectors.dense(predictions)
 
+  /**
+   * @since 1.4.0
+   */
   override def save(sc: SparkContext, path: String): Unit = {
     IsotonicRegressionModel.SaveLoadV1_0.save(sc, path, boundaries, predictions, isotonic)
   }
@@ -155,6 +170,9 @@ class IsotonicRegressionModel (
   override protected def formatVersion: String = "1.0"
 }
 
+/**
+ * @since 1.4.0
+ */
 object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
 
   import org.apache.spark.mllib.util.Loader._
@@ -200,6 +218,9 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
     }
   }
 
+  /**
+   * @since 1.4.0
+   */
   override def load(sc: SparkContext, path: String): IsotonicRegressionModel = {
     implicit val formats = DefaultFormats
     val (loadedClassName, version, metadata) = loadMetadata(sc, path)

@@ -673,7 +673,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Length(Literal.create(null, BinaryType)), null, create_row(bytes))
   }
 
-  test("number format") {
+  test("format_number / FormatNumber") {
     checkEvaluation(FormatNumber(Literal(4.asInstanceOf[Byte]), Literal(3)), "4.000")
     checkEvaluation(FormatNumber(Literal(4.asInstanceOf[Short]), Literal(3)), "4.000")
     checkEvaluation(FormatNumber(Literal(4.0f), Literal(3)), "4.000")
