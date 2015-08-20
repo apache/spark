@@ -41,14 +41,14 @@ class ExecutorMetrics extends Serializable {
    */
   private var _port: Option[Int] = _
   def port: Option[Int] = _port
-  private[spark] def setPort(value: Int) = _port = Some(value)
+  private[spark] def setPort(value: Option[Int]) = _port = value
 
   def hostPort: String = hostname + ":" + port.getOrElse(0)
 
   private var _transportMetrics: Option[TransportMetrics] = None
   def transportMetrics: Option[TransportMetrics] = _transportMetrics
-  private[spark] def setTransportMetrics(value: TransportMetrics) = {
-    _transportMetrics = Some(value)
+  private[spark] def setTransportMetrics(value: Option[TransportMetrics]) = {
+    _transportMetrics = value
   }
 }
 

@@ -19,8 +19,6 @@ package org.apache.spark.util
 
 import java.util.{Properties, UUID}
 
-import org.apache.spark.scheduler.cluster.ExecutorInfo
-
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
@@ -32,6 +30,7 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._
 
 /**
@@ -229,9 +228,11 @@ private[spark] object JsonProtocol {
   def executorMetricsUpdateToJson(metricsUpdate: SparkListenerExecutorMetricsUpdate): JValue = {
     val execId = metricsUpdate.execId
     val taskMetrics = metricsUpdate.taskMetrics
+    val executorMetrics = metricsUpdate.executorMetrics
     ("Event" -> Utils.getFormattedClassName(metricsUpdate)) ~
     ("Executor ID" -> execId) ~
-    ("Metrics Updated" -> taskMetrics.map { case (taskId, stageId, stageAttemptId, metrics) =>
+    ("Executor Metrics Updated" -> executorMetricsToJson(executorMetrics)) ~
+    ("Task Metrics Updated" -> taskMetrics.map { case (taskId, stageId, stageAttemptId, metrics) =>
       ("Task ID" -> taskId) ~
       ("Stage ID" -> stageId) ~
       ("Stage Attempt ID" -> stageAttemptId) ~
@@ -283,6 +284,22 @@ private[spark] object JsonProtocol {
     ("Name" -> accumulableInfo.name) ~
     ("Update" -> accumulableInfo.update.map(new JString(_)).getOrElse(JNothing)) ~
     ("Value" -> accumulableInfo.value)
+  }
+
+  def executorMetricsToJson(executorMetrics: ExecutorMetrics): JValue = {
+    val transportMetrics = executorMetrics.transportMetrics.map(
+      transportMetricsToJson).getOrElse(JNothing)
+    ("Executor Hostname" -> executorMetrics.hostname) ~
+    ("Executor Port" -> executorMetrics.port.map(new JInt(_)).getOrElse(JNothing)) ~
+    ("TransportMetrics" -> transportMetrics)
+  }
+
+  def transportMetricsToJson(transportMetrics: TransportMetrics): JValue = {
+    ("TimeStamep" -> transportMetrics.timeStamp) ~
+    ("ClientOnheapSize" -> transportMetrics.clientOnheapSize) ~
+    ("ClientDirectheapSize" -> transportMetrics.clientDirectheapSize) ~
+    ("ServerOnheapSize" -> transportMetrics.serverOnheapSize) ~
+    ("ServerDirectheapSize" -> transportMetrics.serverDirectheapSize)
   }
 
   def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
@@ -617,14 +634,15 @@ private[spark] object JsonProtocol {
 
   def executorMetricsUpdateFromJson(json: JValue): SparkListenerExecutorMetricsUpdate = {
     val execInfo = (json \ "Executor ID").extract[String]
-    val taskMetrics = (json \ "Metrics Updated").extract[List[JValue]].map { json =>
+    val executorMetrics = executorMetricsFromJson(json \ "Executor Metrics Updated")
+    val taskMetrics = (json \ "Task Metrics Updated").extract[List[JValue]].map { json =>
       val taskId = (json \ "Task ID").extract[Long]
       val stageId = (json \ "Stage ID").extract[Int]
       val stageAttemptId = (json \ "Stage Attempt ID").extract[Int]
       val metrics = taskMetricsFromJson(json \ "Task Metrics")
       (taskId, stageId, stageAttemptId, metrics)
     }
-    SparkListenerExecutorMetricsUpdate(execInfo, null, taskMetrics)
+    SparkListenerExecutorMetricsUpdate(execInfo, executorMetrics, taskMetrics)
   }
 
   /** --------------------------------------------------------------------- *
@@ -692,6 +710,25 @@ private[spark] object JsonProtocol {
     val update = Utils.jsonOption(json \ "Update").map(_.extract[String])
     val value = (json \ "Value").extract[String]
     AccumulableInfo(id, name, update, value)
+  }
+
+  def executorMetricsFromJson(json: JValue): ExecutorMetrics = {
+    val metrics = new ExecutorMetrics
+    metrics.setHostname((json \ "Executor Hostname").extract[String])
+    metrics.setPort(Utils.jsonOption(json \ "Executor Port").map(_.extract[Int]))
+    metrics.setTransportMetrics(
+      Utils.jsonOption((json \ "TransportMetrics")).map(transportMetrisFromJson))
+    metrics
+  }
+
+  def transportMetrisFromJson(json: JValue): TransportMetrics = {
+    val metrics = new TransportMetrics(
+      (json \ "TimeStamep").extract[Long],
+      (json \ "ClientOnheapSize").extract[Long],
+      (json \ "ClientDirectheapSize").extract[Long],
+      (json \ "ServerOnheapSize").extract[Long],
+      (json \ "ServerDirectheapSize").extract[Long])
+    metrics
   }
 
   def taskMetricsFromJson(json: JValue): TaskMetrics = {

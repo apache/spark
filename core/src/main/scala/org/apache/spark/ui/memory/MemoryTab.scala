@@ -41,7 +41,7 @@ class MemoryListener extends SparkListener {
   type ExecutorId = String
   val activeExecutorIdToMem = new HashMap[ExecutorId, MemoryUIInfo]
   val removedExecutorIdToMem = new HashMap[ExecutorId, MemoryUIInfo]
-  // latestExecIdToExecMetrics include all executors that is active and removed
+  // latestExecIdToExecMetrics include all executors that is active and removed.
   // this may consume a lot of memory when executors are changing frequently, e.g. in dynamical
   // allocation mode.
   val latestExecIdToExecMetrics = new HashMap[ExecutorId, ExecutorMetrics]
