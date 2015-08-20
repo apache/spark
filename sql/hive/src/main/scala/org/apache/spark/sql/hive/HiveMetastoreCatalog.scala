@@ -174,10 +174,13 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     // it is better at here to invalidate the cache to avoid confusing waring logs from the
     // cache loader (e.g. cannot find data source provider, which is only defined for
     // data source table.).
-    invalidateTable(tableIdent.database.getOrElse(client.currentDatabase), tableIdent.table)
+    invalidateTable(tableIdent)
   }
 
-  def invalidateTable(databaseName: String, tableName: String): Unit = {
+  def invalidateTable(tableIdent: TableIdentifier): Unit = {
+    val databaseName = tableIdent.database.getOrElse(client.currentDatabase)
+    val tableName = tableIdent.table
+
     cachedDataSourceTables.invalidate(QualifiedTableName(databaseName, tableName).toLowerCase)
   }
 
@@ -187,6 +190,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
    * Creates a data source table (a table created with USING clause) in Hive's metastore.
    * Returns true when the table has been created. Otherwise, false.
    */
+  // TODO: Remove this in SPARK-10104.
   def createDataSourceTable(
       tableName: String,
       userSpecifiedSchema: Option[StructType],
@@ -203,7 +207,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       isExternal)
   }
 
-  private def createDataSourceTable(
+  def createDataSourceTable(
       tableIdent: TableIdentifier,
       userSpecifiedSchema: Option[StructType],
       partitionColumns: Array[String],
@@ -371,10 +375,16 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
   }
 
   def hiveDefaultTableFilePath(tableName: String): String = {
+    hiveDefaultTableFilePath(new SqlParser().parseTableIdentifier(tableName))
+  }
+
+  def hiveDefaultTableFilePath(tableIdent: TableIdentifier): String = {
     // Code based on: hiveWarehouse.getTablePath(currentDatabase, tableName)
+    val database = tableIdent.database.getOrElse(client.currentDatabase)
+
     new Path(
-      new Path(client.getDatabase(client.currentDatabase).location),
-      tableName.toLowerCase).toString
+      new Path(client.getDatabase(database).location),
+      tableIdent.table.toLowerCase).toString
   }
 
   def tableExists(tableIdentifier: Seq[String]): Boolean = {
@@ -635,7 +645,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
           val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
           CreateTableUsingAsSelect(
-            desc.name,
+            TableIdentifier(desc.name),
             hive.conf.defaultDataSourceName,
             temporary = false,
             Array.empty[String],
