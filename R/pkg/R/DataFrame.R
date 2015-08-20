@@ -643,7 +643,7 @@ setMethod("collect",
               if (nrow <= 0) {
                 df <- data.frame()
               } else {
-                df <- data.frame(row.names = c(1 : nrow))                
+                df <- data.frame(row.names = 1 : nrow)                
               }
               
               # Append columns one by one
