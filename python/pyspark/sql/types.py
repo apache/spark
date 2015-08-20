@@ -1236,7 +1236,7 @@ class Row(tuple):
         return _create_row(self, args)
 
     def __getitem__(self, item):
-        if isinstance(item, int):
+        if isinstance(item, (int, slice)):
             return super(Row, self).__getitem__(item)
         try:
             # it will be slow when it has many fields,
