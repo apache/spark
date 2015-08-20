@@ -134,22 +134,24 @@ PythonOperator's ``python_callable`` function), then an XCom containing that
 value is automatically pushed.
 
 Tasks call ``xcom_pull()`` to retrieve XComs, optionally applying filters
-based on criteria like ``key``, source ``tasks``, and source ``dags``. By
-default, the value of the most recent XCom that matches the criteria is
-returned (unless ``tasks`` is a list, in which case a corresponding list of
-values is returned). However, if ``limit`` is greater than 0, a pandas
-``DataFrame`` is returned containing any matching XComs. This is to allow more
-complex filtering on the query result, if necessary.
+based on criteria like ``key``, source ``task_ids``, and source ``dag_id``. By
+default, ``xcom_pull()`` filters for the keys that are automatically given to
+XComs when they are pushed by being returned from execute functions (as
+opposed to XComs that are pushed manually).
+
+If ``xcom_pull`` is passed a single string for ``task_ids``, then the most
+recent XCom value from that task is returned; if a list of ``task_ids`` is
+passed, then a correpsonding list of XCom values is returned.
 
 .. code:: python
 
     # inside a PythonOperator called 'pushing_task'
-    def push_function(**context):
-        context['ti'].xcom_push(key='sample XCom', value=v)
+    def push_function():
+        return value
 
     # inside another PythonOperator
     def pull_function(**context):
-        v = context['ti'].xcom_pull(tasks='pushing_task')
+        value = context['ti'].xcom_pull(task_ids='pushing_task')
 
 
 XComs are similar to Variables, but are specifically designed for inter-task

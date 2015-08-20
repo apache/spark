@@ -36,7 +36,7 @@ Base = declarative_base()
 ID_LEN = 250
 SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
 DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
-RETURN_XCOM = '__return_value__'
+XCOM_RETURN_KEY = 'return_value'
 
 
 if 'mysql' in SQL_ALCHEMY_CONN:
@@ -857,7 +857,7 @@ class TaskInstance(Base):
 
                     # If the task returns a result, push an XCom containing it
                     if result is not None:
-                        self.xcom_push(key=RETURN_XCOM, value=result)
+                        self.xcom_push(key=XCOM_RETURN_KEY, value=result)
 
                     task_copy.post_execute(context=context)
             except (Exception, KeyboardInterrupt) as e:
@@ -1044,23 +1044,30 @@ class TaskInstance(Base):
 
     def xcom_pull(
             self,
-            key=None,
-            task_ids=None,
+            task_ids,
             dag_id=None,
+            key=XCOM_RETURN_KEY,
             include_prior_dates=False,
             limit=None):
         """
-        Pull XComs that optionally meet certain criteria. If a single task_id
-        string is provided, the result is the value of the most recent matching
-        XCom from that task_id. If multiple task_ids are provided, a tuple of
-        matching values is returned. None is returned whenever no matches are
-        found.
+        Pull XComs that optionally meet certain criteria.
+
+        The default value for `key` ("{return_key}") limits the search to XComs
+        that were returned by other tasks (as opposed to those that were pushed
+        manually). To remove this filter, pass key=None (or any desired value).
+
+        If a single task_id string is provided, the result is the value of the
+        most recent matching XCom from that task_id. If multiple task_ids are
+        provided, a tuple of matching values is returned. None is returned
+        whenever no matches are found.
 
         :param key: A key for the XCom. If provided, only XComs with matching
-            keys will be returned. Defaults to None.
+            keys will be returned. The default value is "{return_key}",
+            the key automatically given to XComs returned by tasks (as opposed
+            to being pushed manually). To remove the filter, pass key=None.
         :type key: string
-        :param task_ids: If supplied, only pulls XComs from tasks with matching
-            ids. Defaults to None.
+        :param task_ids: Only XComs from tasks with matching ids will be
+            pulled. Can pass None to remove the filter.
         :type task_ids: string or iterable of strings (representing task_ids)
         :param dag_id: If provided, only pulls XComs from this DAG.
             If None (default), the DAG of the calling task is used.
@@ -1072,7 +1079,7 @@ class TaskInstance(Base):
         :param limit: the maximum number of results to return. Pass None for
             no limit.
         :type limit: int
-        """
+        """.format(return_key=XCOM_RETURN_KEY)
 
         if dag_id is None:
             dag_id = self.dag_id
@@ -1572,9 +1579,9 @@ class BaseOperator(object):
     def xcom_pull(
             self,
             context,
-            key=None,
-            task_ids=None,
+            task_ids,
             dag_id=None,
+            key=XCOM_RETURN_KEY,
             include_prior_dates=None):
         """
         See TaskInstance.xcom_pull()
