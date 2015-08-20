@@ -183,62 +183,22 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 
   /** Send a GET request to the specified URL. */
   private def get(url: URL): SubmitRestProtocolResponse = {
-    logDebug(s"Sending GET request to server at $url.")
-    val conn = url.openConnection().asInstanceOf[HttpURLConnection]
-    conn.setRequestMethod("GET")
-    readResponse(conn)
+    decodeResponse(RestSubmissionClientHelper.get(url))
   }
 
   /** Send a POST request to the specified URL. */
   private def post(url: URL): SubmitRestProtocolResponse = {
-    logDebug(s"Sending POST request to server at $url.")
-    val conn = url.openConnection().asInstanceOf[HttpURLConnection]
-    conn.setRequestMethod("POST")
-    readResponse(conn)
+    decodeResponse(RestSubmissionClientHelper.post(url))
   }
 
   /** Send a POST request with the given JSON as the body to the specified URL. */
   private def postJson(url: URL, json: String): SubmitRestProtocolResponse = {
-    logDebug(s"Sending POST request to server at $url:\n$json")
-    val conn = url.openConnection().asInstanceOf[HttpURLConnection]
-    conn.setRequestMethod("POST")
-    conn.setRequestProperty("Content-Type", "application/json")
-    conn.setRequestProperty("charset", "utf-8")
-    conn.setDoOutput(true)
-    try {
-      val out = new DataOutputStream(conn.getOutputStream)
-      Utils.tryWithSafeFinally {
-        out.write(json.getBytes(Charsets.UTF_8))
-      } {
-        out.close()
-      }
-    } catch {
-      case e: ConnectException =>
-        throw new SubmitRestConnectionException("Connect Exception when connect to server", e)
-    }
-    readResponse(conn)
+    decodeResponse(RestSubmissionClientHelper.post(url, json))
   }
 
-  /**
-   * Read the response from the server and return it as a validated [[SubmitRestProtocolResponse]].
-   * If the response represents an error, report the embedded message to the user.
-   * Exposed for testing.
-   */
-  private[rest] def readResponse(connection: HttpURLConnection): SubmitRestProtocolResponse = {
+  private def decodeResponse(json: String): SubmitRestProtocolResponse = {
     try {
-      val dataStream =
-        if (connection.getResponseCode == HttpServletResponse.SC_OK) {
-          connection.getInputStream
-        } else {
-          connection.getErrorStream
-        }
-      // If the server threw an exception while writing a response, it will not have a body
-      if (dataStream == null) {
-        throw new SubmitRestProtocolException("Server returned empty body")
-      }
-      val responseJson = Source.fromInputStream(dataStream).mkString
-      logDebug(s"Response from the server:\n$responseJson")
-      val response = SubmitRestProtocolMessage.fromJson(responseJson)
+      val response = SubmitRestProtocolMessage.fromJson(json)
       response.validate()
       response match {
         // If the response is an error, log the message
@@ -252,8 +212,6 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
             s"Message received from server was not a response:\n${unexpected.toJson}")
       }
     } catch {
-      case unreachable @ (_: FileNotFoundException | _: SocketException) =>
-        throw new SubmitRestConnectionException("Unable to connect to server", unreachable)
       case malformed @ (_: JsonProcessingException | _: SubmitRestProtocolException) =>
         throw new SubmitRestProtocolException("Malformed response received from server", malformed)
     }
