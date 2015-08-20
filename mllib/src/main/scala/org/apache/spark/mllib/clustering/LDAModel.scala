@@ -605,8 +605,10 @@ class DistributedLDAModel private[clustering] (
         (terms_topics0._1 ++ terms_topics1._1, terms_topics0._2 ++ terms_topics1._2)
       }
     // M-STEP: Aggregation computes new N_{kj}, N_{wk} counts.
-    graph.aggregateMessages[(Array[Int], Array[Int])](sendMsg, mergeMsg).filter(isDocumentVertex)
-        .map { case (docID: Long, (terms: Array[Int], topics: Array[Int])) =>
+    val perDocAssignments =
+      graph.aggregateMessages[(Array[Int], Array[Int])](sendMsg, mergeMsg).filter(isDocumentVertex)
+    perDocAssignments.map { case (docID: Long, (terms: Array[Int], topics: Array[Int])) =>
+      // TODO: Avoid zip, which is inefficient.
       val (sortedTerms, sortedTopics) = terms.zip(topics).sortBy(_._1).unzip
       (docID, sortedTerms.toArray, sortedTopics.toArray)
     }
