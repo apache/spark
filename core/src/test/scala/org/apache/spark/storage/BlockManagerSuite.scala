@@ -830,9 +830,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val notMapped = diskStoreNotMapped.getBytes(blockId).get.asInstanceOf[WrappedLargeByteBuffer]
 
     // Not possible to do isInstanceOf due to visibility of HeapByteBuffer
-    assert(LargeByteBufferTestHelper.nioBuffers(mapped).get(0).getClass.getName
+    assert(LargeByteBufferTestHelper.nioBuffers(notMapped).get(0).getClass.getName
       .endsWith("HeapByteBuffer"), "Expected HeapByteBuffer for un-mapped read")
-    assert(LargeByteBufferTestHelper.nioBuffers(notMapped).get(0).isInstanceOf[MappedByteBuffer],
+    assert(LargeByteBufferTestHelper.nioBuffers(mapped).get(0).isInstanceOf[MappedByteBuffer],
       "Expected MappedByteBuffer for mapped read")
 
     def arrayFromByteBuffer(in: LargeByteBuffer): Array[Byte] = {
