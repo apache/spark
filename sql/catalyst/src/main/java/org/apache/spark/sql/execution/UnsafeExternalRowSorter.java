@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator;
 import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter;
@@ -48,7 +48,6 @@ final class UnsafeExternalRowSorter {
   private long numRowsInserted = 0;
 
   private final StructType schema;
-  private final UnsafeProjection unsafeProjection;
   private final PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
 
@@ -60,21 +59,21 @@ final class UnsafeExternalRowSorter {
       StructType schema,
       Ordering<InternalRow> ordering,
       PrefixComparator prefixComparator,
-      PrefixComputer prefixComputer) throws IOException {
+      PrefixComputer prefixComputer,
+      long pageSizeBytes) throws IOException {
     this.schema = schema;
-    this.unsafeProjection = UnsafeProjection.create(schema);
     this.prefixComputer = prefixComputer;
     final SparkEnv sparkEnv = SparkEnv.get();
     final TaskContext taskContext = TaskContext.get();
-    sorter = new UnsafeExternalSorter(
+    sorter = UnsafeExternalSorter.create(
       taskContext.taskMemoryManager(),
       sparkEnv.shuffleMemoryManager(),
       sparkEnv.blockManager(),
       taskContext,
       new RowComparator(ordering, schema.length()),
       prefixComparator,
-      4096,
-      sparkEnv.conf()
+      /* initialSize */ 4096,
+      pageSizeBytes
     );
   }
 
@@ -88,13 +87,12 @@ final class UnsafeExternalRowSorter {
   }
 
   @VisibleForTesting
-  void insertRow(InternalRow row) throws IOException {
-    UnsafeRow unsafeRow = unsafeProjection.apply(row);
+  void insertRow(UnsafeRow row) throws IOException {
     final long prefix = prefixComputer.computePrefix(row);
     sorter.insertRecord(
-      unsafeRow.getBaseObject(),
-      unsafeRow.getBaseOffset(),
-      unsafeRow.getSizeInBytes(),
+      row.getBaseObject(),
+      row.getBaseOffset(),
+      row.getSizeInBytes(),
       prefix
     );
     numRowsInserted++;
@@ -108,12 +106,19 @@ final class UnsafeExternalRowSorter {
     sorter.spill();
   }
 
+  /**
+   * Return the peak memory used so far, in bytes.
+   */
+  public long getPeakMemoryUsage() {
+    return sorter.getPeakMemoryUsedBytes();
+  }
+
   private void cleanupResources() {
-    sorter.freeMemory();
+    sorter.cleanupResources();
   }
 
   @VisibleForTesting
-  Iterator<InternalRow> sort() throws IOException {
+  Iterator<UnsafeRow> sort() throws IOException {
     try {
       final UnsafeSorterIterator sortedIterator = sorter.getSortedIterator();
       if (!sortedIterator.hasNext()) {
@@ -121,7 +126,7 @@ final class UnsafeExternalRowSorter {
         // here in order to prevent memory leaks.
         cleanupResources();
       }
-      return new AbstractScalaRowIterator() {
+      return new AbstractScalaRowIterator<UnsafeRow>() {
 
         private final int numFields = schema.length();
         private UnsafeRow row = new UnsafeRow();
@@ -132,7 +137,7 @@ final class UnsafeExternalRowSorter {
         }
 
         @Override
-        public InternalRow next() {
+        public UnsafeRow next() {
           try {
             sortedIterator.loadNext();
             row.pointTo(
@@ -152,7 +157,7 @@ final class UnsafeExternalRowSorter {
             cleanupResources();
             // Scala iterators don't declare any checked exceptions, so we need to use this hack
             // to re-throw the exception:
-            PlatformDependent.throwException(e);
+            Platform.throwException(e);
           }
           throw new RuntimeException("Exception should have been re-thrown in next()");
         };
@@ -164,11 +169,11 @@ final class UnsafeExternalRowSorter {
   }
 
 
-  public Iterator<InternalRow> sort(Iterator<InternalRow> inputIterator) throws IOException {
-      while (inputIterator.hasNext()) {
-        insertRow(inputIterator.next());
-      }
-      return sort();
+  public Iterator<UnsafeRow> sort(Iterator<UnsafeRow> inputIterator) throws IOException {
+    while (inputIterator.hasNext()) {
+      insertRow(inputIterator.next());
+    }
+    return sort();
   }
 
   /**

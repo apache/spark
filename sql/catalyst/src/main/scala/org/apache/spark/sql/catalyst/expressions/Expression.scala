@@ -420,7 +420,7 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
       TypeCheckResult.TypeCheckFailure(s"differing types in '$prettyString' " +
         s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
     } else if (!inputType.acceptsType(left.dataType)) {
-      TypeCheckResult.TypeCheckFailure(s"'$prettyString' accepts ${inputType.simpleString} type," +
+      TypeCheckResult.TypeCheckFailure(s"'$prettyString' requires ${inputType.simpleString} type," +
         s" not ${left.dataType.simpleString}")
     } else {
       TypeCheckResult.TypeCheckSuccess
@@ -431,4 +431,89 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 
 private[sql] object BinaryOperator {
   def unapply(e: BinaryOperator): Option[(Expression, Expression)] = Some((e.left, e.right))
+}
+
+/**
+ * An expression with three inputs and one output. The output is by default evaluated to null
+ * if any input is evaluated to null.
+ */
+abstract class TernaryExpression extends Expression {
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def nullable: Boolean = children.exists(_.nullable)
+
+  /**
+   * Default behavior of evaluation according to the default nullability of TernaryExpression.
+   * If subclass of BinaryExpression override nullable, probably should also override this.
+   */
+  override def eval(input: InternalRow): Any = {
+    val exprs = children
+    val value1 = exprs(0).eval(input)
+    if (value1 != null) {
+      val value2 = exprs(1).eval(input)
+      if (value2 != null) {
+        val value3 = exprs(2).eval(input)
+        if (value3 != null) {
+          return nullSafeEval(value1, value2, value3)
+        }
+      }
+    }
+    null
+  }
+
+  /**
+   * Called by default [[eval]] implementation.  If subclass of TernaryExpression keep the default
+   * nullability, they can override this method to save null-check code.  If we need full control
+   * of evaluation process, we should override [[eval]].
+   */
+  protected def nullSafeEval(input1: Any, input2: Any, input3: Any): Any =
+    sys.error(s"BinaryExpressions must override either eval or nullSafeEval")
+
+  /**
+   * Short hand for generating binary evaluation code.
+   * If either of the sub-expressions is null, the result of this computation
+   * is assumed to be null.
+   *
+   * @param f accepts two variable names and returns Java code to compute the output.
+   */
+  protected def defineCodeGen(
+    ctx: CodeGenContext,
+    ev: GeneratedExpressionCode,
+    f: (String, String, String) => String): String = {
+    nullSafeCodeGen(ctx, ev, (eval1, eval2, eval3) => {
+      s"${ev.primitive} = ${f(eval1, eval2, eval3)};"
+    })
+  }
+
+  /**
+   * Short hand for generating binary evaluation code.
+   * If either of the sub-expressions is null, the result of this computation
+   * is assumed to be null.
+   *
+   * @param f function that accepts the 2 non-null evaluation result names of children
+   *          and returns Java code to compute the output.
+   */
+  protected def nullSafeCodeGen(
+    ctx: CodeGenContext,
+    ev: GeneratedExpressionCode,
+    f: (String, String, String) => String): String = {
+    val evals = children.map(_.gen(ctx))
+    val resultCode = f(evals(0).primitive, evals(1).primitive, evals(2).primitive)
+    s"""
+      ${evals(0).code}
+      boolean ${ev.isNull} = true;
+      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+      if (!${evals(0).isNull}) {
+        ${evals(1).code}
+        if (!${evals(1).isNull}) {
+          ${evals(2).code}
+          if (!${evals(2).isNull}) {
+            ${ev.isNull} = false;  // resultCode could change nullability
+            $resultCode
+          }
+        }
+      }
+    """
+  }
 }

@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.Interval
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * A very simple SQL parser.  Based loosely on:
@@ -365,32 +365,32 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val millisecond: Parser[Long] =
     integral <~ intervalUnit("millisecond") ^^ {
-      case num => num.toLong * Interval.MICROS_PER_MILLI
+      case num => num.toLong * CalendarInterval.MICROS_PER_MILLI
     }
 
   protected lazy val second: Parser[Long] =
     integral <~ intervalUnit("second") ^^ {
-      case num => num.toLong * Interval.MICROS_PER_SECOND
+      case num => num.toLong * CalendarInterval.MICROS_PER_SECOND
     }
 
   protected lazy val minute: Parser[Long] =
     integral <~ intervalUnit("minute") ^^ {
-      case num => num.toLong * Interval.MICROS_PER_MINUTE
+      case num => num.toLong * CalendarInterval.MICROS_PER_MINUTE
     }
 
   protected lazy val hour: Parser[Long] =
     integral <~ intervalUnit("hour") ^^ {
-      case num => num.toLong * Interval.MICROS_PER_HOUR
+      case num => num.toLong * CalendarInterval.MICROS_PER_HOUR
     }
 
   protected lazy val day: Parser[Long] =
     integral <~ intervalUnit("day") ^^ {
-      case num => num.toLong * Interval.MICROS_PER_DAY
+      case num => num.toLong * CalendarInterval.MICROS_PER_DAY
     }
 
   protected lazy val week: Parser[Long] =
     integral <~ intervalUnit("week") ^^ {
-      case num => num.toLong * Interval.MICROS_PER_WEEK
+      case num => num.toLong * CalendarInterval.MICROS_PER_WEEK
     }
 
   protected lazy val intervalLiteral: Parser[Literal] =
@@ -406,7 +406,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
           val months = Seq(year, month).map(_.getOrElse(0)).sum
           val microseconds = Seq(week, day, hour, minute, second, millisecond, microsecond)
             .map(_.getOrElse(0L)).sum
-          Literal.create(new Interval(months, microseconds), IntervalType)
+          Literal.create(new CalendarInterval(months, microseconds), CalendarIntervalType)
       }
 
   private def toNarrowestIntegerType(value: String): Any = {

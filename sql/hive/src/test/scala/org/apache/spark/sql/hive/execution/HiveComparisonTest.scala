@@ -124,7 +124,7 @@ abstract class HiveComparisonTest
   protected val cacheDigest = java.security.MessageDigest.getInstance("MD5")
   protected def getMd5(str: String): String = {
     val digest = java.security.MessageDigest.getInstance("MD5")
-    digest.update(str.getBytes("utf-8"))
+    digest.update(str.replaceAll(System.lineSeparator(), "\n").getBytes("utf-8"))
     new java.math.BigInteger(1, digest.digest).toString(16)
   }
 

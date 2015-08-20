@@ -399,4 +399,19 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     sc.stop()
   }
 
+  test("external aggregation updates peak execution memory") {
+    val conf = createSparkConf(loadDefaults = false)
+      .set("spark.shuffle.memoryFraction", "0.001")
+      .set("spark.shuffle.manager", "hash") // make sure we're not also using ExternalSorter
+    sc = new SparkContext("local", "test", conf)
+    // No spilling
+    AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "external map without spilling") {
+      sc.parallelize(1 to 10, 2).map { i => (i, i) }.reduceByKey(_ + _).count()
+    }
+    // With spilling
+    AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "external map with spilling") {
+      sc.parallelize(1 to 1000 * 1000, 2).map { i => (i, i) }.reduceByKey(_ + _).count()
+    }
+  }
+
 }

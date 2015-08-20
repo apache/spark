@@ -26,12 +26,15 @@ import scala.collection.mutable.{HashMap, HashSet}
 
 import com.google.common.collect.HashBiMap
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
-import org.apache.mesos.{Scheduler => MScheduler, _}
+import org.apache.mesos.{Scheduler => MScheduler, SchedulerDriver}
+
+import org.apache.spark.{SecurityManager, SparkContext, SparkEnv, SparkException, TaskState}
+import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskState}
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -46,7 +49,8 @@ import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskState}
 private[spark] class CoarseMesosSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
-    master: String)
+    master: String,
+    securityManager: SecurityManager)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
   with MScheduler
   with MesosSchedulerUtils {
@@ -56,11 +60,18 @@ private[spark] class CoarseMesosSchedulerBackend(
   // Maximum number of cores to acquire (TODO: we'll need more flexible controls here)
   val maxCores = conf.get("spark.cores.max", Int.MaxValue.toString).toInt
 
+  // If shuffle service is enabled, the Spark driver will register with the shuffle service.
+  // This is for cleaning up shuffle files reliably.
+  private val shuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
+
   // Cores we have acquired with each Mesos task ID
   val coresByTaskId = new HashMap[Int, Int]
   var totalCoresAcquired = 0
 
   val slaveIdsWithExecutors = new HashSet[String]
+
+  // Maping from slave Id to hostname
+  private val slaveIdToHost = new HashMap[String, String]
 
   val taskIdToSlaveId: HashBiMap[Int, String] = HashBiMap.create[Int, String]
   // How many times tasks on each slave failed
@@ -89,6 +100,19 @@ private[spark] class CoarseMesosSchedulerBackend(
   // Offer constraints
   private val slaveOfferConstraints =
     parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
+
+  // A client for talking to the external shuffle service, if it is a
+  private val mesosExternalShuffleClient: Option[MesosExternalShuffleClient] = {
+    if (shuffleServiceEnabled) {
+      Some(new MesosExternalShuffleClient(
+        SparkTransportConf.fromSparkConf(conf),
+        securityManager,
+        securityManager.isAuthenticationEnabled(),
+        securityManager.isSaslEncryptionEnabled()))
+    } else {
+      None
+    }
+  }
 
   var nextMesosTaskId = 0
 
@@ -170,6 +194,11 @@ private[spark] class CoarseMesosSchedulerBackend(
         s" --app-id $appId")
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get))
     }
+
+    conf.getOption("spark.mesos.uris").map { uris =>
+      setupUris(uris, command)
+    }
+
     command.build()
   }
 
@@ -188,6 +217,7 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   override def registered(d: SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
     appId = frameworkId.getValue
+    mesosExternalShuffleClient.foreach(_.init(appId))
     logInfo("Registered as framework ID " + appId)
     markRegistered()
   }
@@ -244,6 +274,7 @@ private[spark] class CoarseMesosSchedulerBackend(
 
           // accept the offer and launch the task
           logDebug(s"Accepting offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")
+          slaveIdToHost(offer.getSlaveId.getValue) = offer.getHostname
           d.launchTasks(
             Collections.singleton(offer.getId),
             Collections.singleton(taskBuilder.build()), filters)
@@ -261,7 +292,27 @@ private[spark] class CoarseMesosSchedulerBackend(
     val taskId = status.getTaskId.getValue.toInt
     val state = status.getState
     logInfo(s"Mesos task $taskId is now $state")
+    val slaveId: String = status.getSlaveId.getValue
     stateLock.synchronized {
+      // If the shuffle service is enabled, have the driver register with each one of the
+      // shuffle services. This allows the shuffle services to clean up state associated with
+      // this application when the driver exits. There is currently not a great way to detect
+      // this through Mesos, since the shuffle services are set up independently.
+      if (TaskState.fromMesos(state).equals(TaskState.RUNNING) &&
+          slaveIdToHost.contains(slaveId) &&
+          shuffleServiceEnabled) {
+        assume(mesosExternalShuffleClient.isDefined,
+          "External shuffle client was not instantiated even though shuffle service is enabled.")
+        // TODO: Remove this and allow the MesosExternalShuffleService to detect
+        // framework termination when new Mesos Framework HTTP API is available.
+        val externalShufflePort = conf.getInt("spark.shuffle.service.port", 7337)
+        val hostname = slaveIdToHost.remove(slaveId).get
+        logDebug(s"Connecting to shuffle service on slave $slaveId, " +
+            s"host $hostname, port $externalShufflePort for app ${conf.getAppId}")
+        mesosExternalShuffleClient.get
+          .registerDriverWithShuffleService(hostname, externalShufflePort)
+      }
+
       if (TaskState.isFinished(TaskState.fromMesos(state))) {
         val slaveId = taskIdToSlaveId(taskId)
         slaveIdsWithExecutors -= slaveId

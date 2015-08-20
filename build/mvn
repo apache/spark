@@ -51,11 +51,11 @@ install_app() {
     # check if we have curl installed
     # download application
     [ ! -f "${local_tarball}" ] && [ $(command -v curl) ] && \
-      echo "exec: curl ${curl_opts} ${remote_tarball}" && \
+      echo "exec: curl ${curl_opts} ${remote_tarball}" 1>&2 && \
       curl ${curl_opts} "${remote_tarball}" > "${local_tarball}"
     # if the file still doesn't exist, lets try `wget` and cross our fingers
     [ ! -f "${local_tarball}" ] && [ $(command -v wget) ] && \
-      echo "exec: wget ${wget_opts} ${remote_tarball}" && \
+      echo "exec: wget ${wget_opts} ${remote_tarball}" 1>&2 && \
       wget ${wget_opts} -O "${local_tarball}" "${remote_tarball}"
     # if both were unsuccessful, exit
     [ ! -f "${local_tarball}" ] && \
@@ -82,7 +82,7 @@ install_mvn() {
 # Install zinc under the build/ folder
 install_zinc() {
   local zinc_path="zinc-0.3.5.3/bin/zinc"
-  [ ! -f "${zinc_path}" ] && ZINC_INSTALL_FLAG=1
+  [ ! -f "${_DIR}/${zinc_path}" ] && ZINC_INSTALL_FLAG=1
   install_app \
     "http://downloads.typesafe.com/zinc/0.3.5.3" \
     "zinc-0.3.5.3.tgz" \
@@ -135,9 +135,9 @@ cd "${_CALLING_DIR}"
 
 # Now that zinc is ensured to be installed, check its status and, if its
 # not running or just installed, start it
-if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`${ZINC_BIN} -status`" ]; then
+if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`${ZINC_BIN} -status -port ${ZINC_PORT}`" ]; then
   export ZINC_OPTS=${ZINC_OPTS:-"$_COMPILE_JVM_OPTS"}
-  ${ZINC_BIN} -shutdown
+  ${ZINC_BIN} -shutdown -port ${ZINC_PORT}
   ${ZINC_BIN} -start -port ${ZINC_PORT} \
     -scala-compiler "${SCALA_COMPILER}" \
     -scala-library "${SCALA_LIBRARY}" &>/dev/null
@@ -146,7 +146,7 @@ fi
 # Set any `mvn` options if not already present
 export MAVEN_OPTS=${MAVEN_OPTS:-"$_COMPILE_JVM_OPTS"}
 
-echo "Using \`mvn\` from path: $MVN_BIN"
+echo "Using \`mvn\` from path: $MVN_BIN" 1>&2
 
 # Last, call the `mvn` command as usual
-${MVN_BIN} "$@"
+${MVN_BIN} -DzincPort=${ZINC_PORT} "$@"

@@ -111,7 +111,7 @@ class DAGScheduler(
    *
    * All accesses to this map should be guarded by synchronizing on it (see SPARK-4454).
    */
-  private val cacheLocs = new HashMap[Int, Seq[Seq[TaskLocation]]]
+  private val cacheLocs = new HashMap[Int, IndexedSeq[Seq[TaskLocation]]]
 
   // For tracking failed nodes, we use the MapOutputTracker's epoch number, which is sent with
   // every task. When we detect a node failing, we note the current epoch number and failed
@@ -200,17 +200,17 @@ class DAGScheduler(
 
   // Called by TaskScheduler to cancel an entire TaskSet due to either repeated failures or
   // cancellation of the job itself.
-  def taskSetFailed(taskSet: TaskSet, reason: String): Unit = {
-    eventProcessLoop.post(TaskSetFailed(taskSet, reason))
+  def taskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable]): Unit = {
+    eventProcessLoop.post(TaskSetFailed(taskSet, reason, exception))
   }
 
   private[scheduler]
-  def getCacheLocs(rdd: RDD[_]): Seq[Seq[TaskLocation]] = cacheLocs.synchronized {
+  def getCacheLocs(rdd: RDD[_]): IndexedSeq[Seq[TaskLocation]] = cacheLocs.synchronized {
     // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
     if (!cacheLocs.contains(rdd.id)) {
       // Note: if the storage level is NONE, we don't need to get locations from block manager.
-      val locs: Seq[Seq[TaskLocation]] = if (rdd.getStorageLevel == StorageLevel.NONE) {
-        Seq.fill(rdd.partitions.size)(Nil)
+      val locs: IndexedSeq[Seq[TaskLocation]] = if (rdd.getStorageLevel == StorageLevel.NONE) {
+        IndexedSeq.fill(rdd.partitions.length)(Nil)
       } else {
         val blockIds =
           rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
@@ -302,12 +302,12 @@ class DAGScheduler(
       shuffleDep: ShuffleDependency[_, _, _],
       firstJobId: Int): ShuffleMapStage = {
     val rdd = shuffleDep.rdd
-    val numTasks = rdd.partitions.size
+    val numTasks = rdd.partitions.length
     val stage = newShuffleMapStage(rdd, numTasks, shuffleDep, firstJobId, rdd.creationSite)
     if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
       val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
       val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
-      for (i <- 0 until locs.size) {
+      for (i <- 0 until locs.length) {
         stage.outputLocs(i) = Option(locs(i)).toList // locs(i) will be null if missing
       }
       stage.numAvailableOutputs = locs.count(_ != null)
@@ -315,7 +315,7 @@ class DAGScheduler(
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
       // since we can't do it in the RDD constructor because # of partitions is unknown
       logInfo("Registering RDD " + rdd.id + " (" + rdd.getCreationSite + ")")
-      mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.size)
+      mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length)
     }
     stage
   }
@@ -566,7 +566,7 @@ class DAGScheduler(
       properties: Properties): PartialResult[R] = {
     val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
-    val partitions = (0 until rdd.partitions.size).toArray
+    val partitions = (0 until rdd.partitions.length).toArray
     val jobId = nextJobId.getAndIncrement()
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions, callSite, listener, SerializationUtils.clone(properties)))
@@ -677,8 +677,11 @@ class DAGScheduler(
     submitWaitingStages()
   }
 
-  private[scheduler] def handleTaskSetFailed(taskSet: TaskSet, reason: String) {
-    stageIdToStage.get(taskSet.stageId).foreach {abortStage(_, reason) }
+  private[scheduler] def handleTaskSetFailed(
+      taskSet: TaskSet,
+      reason: String,
+      exception: Option[Throwable]): Unit = {
+    stageIdToStage.get(taskSet.stageId).foreach { abortStage(_, reason, exception) }
     submitWaitingStages()
   }
 
@@ -715,7 +718,7 @@ class DAGScheduler(
     try {
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
-      finalStage = newResultStage(finalRDD, partitions.size, jobId, callSite)
+      finalStage = newResultStage(finalRDD, partitions.length, jobId, callSite)
     } catch {
       case e: Exception =>
         logWarning("Creating new stage failed due to exception - job: " + jobId, e)
@@ -762,7 +765,7 @@ class DAGScheduler(
         }
       }
     } else {
-      abortStage(stage, "No active job for stage " + stage.id)
+      abortStage(stage, "No active job for stage " + stage.id, None)
     }
   }
 
@@ -773,14 +776,25 @@ class DAGScheduler(
     stage.pendingTasks.clear()
 
     // First figure out the indexes of partition ids to compute.
-    val partitionsToCompute: Seq[Int] = {
+    val (allPartitions: Seq[Int], partitionsToCompute: Seq[Int]) = {
       stage match {
         case stage: ShuffleMapStage =>
-          (0 until stage.numPartitions).filter(id => stage.outputLocs(id).isEmpty)
+          val allPartitions = 0 until stage.numPartitions
+          val filteredPartitions = allPartitions.filter { id => stage.outputLocs(id).isEmpty }
+          (allPartitions, filteredPartitions)
         case stage: ResultStage =>
           val job = stage.resultOfJob.get
-          (0 until job.numPartitions).filter(id => !job.finished(id))
+          val allPartitions = 0 until job.numPartitions
+          val filteredPartitions = allPartitions.filter { id => !job.finished(id) }
+          (allPartitions, filteredPartitions)
       }
+    }
+
+    // Create internal accumulators if the stage has no accumulators initialized.
+    // Reset internal accumulators only if this stage is not partially submitted
+    // Otherwise, we may override existing accumulator values from some tasks
+    if (stage.internalAccumulators.isEmpty || allPartitions == partitionsToCompute) {
+      stage.resetInternalAccumulators()
     }
 
     val properties = jobIdToActiveJob.get(stage.firstJobId).map(_.properties).orNull
@@ -806,7 +820,7 @@ class DAGScheduler(
       case NonFatal(e) =>
         stage.makeNewStageAttempt(partitionsToCompute.size)
         listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
-        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}")
+        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}", Some(e))
         runningStages -= stage
         return
     }
@@ -835,13 +849,13 @@ class DAGScheduler(
     } catch {
       // In the case of a failure during serialization, abort the stage.
       case e: NotSerializableException =>
-        abortStage(stage, "Task not serializable: " + e.toString)
+        abortStage(stage, "Task not serializable: " + e.toString, Some(e))
         runningStages -= stage
 
         // Abort execution
         return
       case NonFatal(e) =>
-        abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
+        abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}", Some(e))
         runningStages -= stage
         return
     }
@@ -852,7 +866,8 @@ class DAGScheduler(
           partitionsToCompute.map { id =>
             val locs = taskIdToLocations(id)
             val part = stage.rdd.partitions(id)
-            new ShuffleMapTask(stage.id, stage.latestInfo.attemptId, taskBinary, part, locs)
+            new ShuffleMapTask(stage.id, stage.latestInfo.attemptId,
+              taskBinary, part, locs, stage.internalAccumulators)
           }
 
         case stage: ResultStage =>
@@ -861,12 +876,13 @@ class DAGScheduler(
             val p: Int = job.partitions(id)
             val part = stage.rdd.partitions(p)
             val locs = taskIdToLocations(id)
-            new ResultTask(stage.id, stage.latestInfo.attemptId, taskBinary, part, locs, id)
+            new ResultTask(stage.id, stage.latestInfo.attemptId,
+              taskBinary, part, locs, id, stage.internalAccumulators)
           }
       }
     } catch {
       case NonFatal(e) =>
-        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}")
+        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}", Some(e))
         runningStages -= stage
         return
     }
@@ -916,11 +932,11 @@ class DAGScheduler(
           // To avoid UI cruft, ignore cases where value wasn't updated
           if (acc.name.isDefined && partialValue != acc.zero) {
             val name = acc.name.get
-            val stringPartialValue = Accumulators.stringifyPartialValue(partialValue)
-            val stringValue = Accumulators.stringifyValue(acc.value)
-            stage.latestInfo.accumulables(id) = AccumulableInfo(id, name, stringValue)
+            val value = s"${acc.value}"
+            stage.latestInfo.accumulables(id) =
+              new AccumulableInfo(id, name, None, value, acc.isInternal)
             event.taskInfo.accumulables +=
-              AccumulableInfo(id, name, Some(stringPartialValue), stringValue)
+              new AccumulableInfo(id, name, Some(s"$partialValue"), value, acc.isInternal)
           }
         }
       } catch {
@@ -1023,7 +1039,7 @@ class DAGScheduler(
               //       we registered these map outputs.
               mapOutputTracker.registerMapOutputs(
                 shuffleStage.shuffleDep.shuffleId,
-                shuffleStage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
+                shuffleStage.outputLocs.map(list => if (list.isEmpty) null else list.head),
                 changeEpoch = true)
 
               clearCacheLocs()
@@ -1086,7 +1102,8 @@ class DAGScheduler(
           }
 
           if (disallowStageRetryForTest) {
-            abortStage(failedStage, "Fetch failure will not retry stage due to testing config")
+            abortStage(failedStage, "Fetch failure will not retry stage due to testing config",
+              None)
           } else if (failedStages.isEmpty) {
             // Don't schedule an event to resubmit failed stages if failed isn't empty, because
             // in that case the event will already have been scheduled.
@@ -1114,7 +1131,7 @@ class DAGScheduler(
       case commitDenied: TaskCommitDenied =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
-      case ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics) =>
+      case exceptionFailure: ExceptionFailure =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
 
       case TaskResultLost =>
@@ -1152,7 +1169,7 @@ class DAGScheduler(
         // TODO: This will be really slow if we keep accumulating shuffle map stages
         for ((shuffleId, stage) <- shuffleToMapStage) {
           stage.removeOutputsOnExecutor(execId)
-          val locs = stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray
+          val locs = stage.outputLocs.map(list => if (list.isEmpty) null else list.head)
           mapOutputTracker.registerMapOutputs(shuffleId, locs, changeEpoch = true)
         }
         if (shuffleToMapStage.isEmpty) {
@@ -1223,7 +1240,10 @@ class DAGScheduler(
    * Aborts all jobs depending on a particular Stage. This is called in response to a task set
    * being canceled by the TaskScheduler. Use taskSetFailed() to inject this event from outside.
    */
-  private[scheduler] def abortStage(failedStage: Stage, reason: String) {
+  private[scheduler] def abortStage(
+      failedStage: Stage,
+      reason: String,
+      exception: Option[Throwable]): Unit = {
     if (!stageIdToStage.contains(failedStage.id)) {
       // Skip all the actions if the stage has been removed.
       return
@@ -1232,7 +1252,7 @@ class DAGScheduler(
       activeJobs.filter(job => stageDependsOn(job.finalStage, failedStage)).toSeq
     failedStage.latestInfo.completionTime = Some(clock.getTimeMillis())
     for (job <- dependentJobs) {
-      failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason")
+      failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason", exception)
     }
     if (dependentJobs.isEmpty) {
       logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
@@ -1240,8 +1260,11 @@ class DAGScheduler(
   }
 
   /** Fails a job and all stages that are only used by that job, and cleans up relevant state. */
-  private def failJobAndIndependentStages(job: ActiveJob, failureReason: String) {
-    val error = new SparkException(failureReason)
+  private def failJobAndIndependentStages(
+      job: ActiveJob,
+      failureReason: String,
+      exception: Option[Throwable] = None): Unit = {
+    val error = new SparkException(failureReason, exception.getOrElse(null))
     var ableToCancelStages = true
 
     val shouldInterruptThread =
@@ -1360,32 +1383,35 @@ class DAGScheduler(
       return rddPrefs.map(TaskLocation(_))
     }
 
+    // If the RDD has narrow dependencies, pick the first partition of the first narrow dependency
+    // that has any placement preferences. Ideally we would choose based on transfer sizes,
+    // but this will do for now.
     rdd.dependencies.foreach {
       case n: NarrowDependency[_] =>
-        // If the RDD has narrow dependencies, pick the first partition of the first narrow dep
-        // that has any placement preferences. Ideally we would choose based on transfer sizes,
-        // but this will do for now.
         for (inPart <- n.getParents(partition)) {
           val locs = getPreferredLocsInternal(n.rdd, inPart, visited)
           if (locs != Nil) {
             return locs
           }
         }
-      case s: ShuffleDependency[_, _, _] =>
-        // For shuffle dependencies, pick locations which have at least REDUCER_PREF_LOCS_FRACTION
-        // of data as preferred locations
-        if (shuffleLocalityEnabled &&
-            rdd.partitions.size < SHUFFLE_PREF_REDUCE_THRESHOLD &&
-            s.rdd.partitions.size < SHUFFLE_PREF_MAP_THRESHOLD) {
-          // Get the preferred map output locations for this reducer
-          val topLocsForReducer = mapOutputTracker.getLocationsWithLargestOutputs(s.shuffleId,
-            partition, rdd.partitions.size, REDUCER_PREF_LOCS_FRACTION)
-          if (topLocsForReducer.nonEmpty) {
-            return topLocsForReducer.get.map(loc => TaskLocation(loc.host, loc.executorId))
-          }
-        }
-
       case _ =>
+    }
+
+    // If the RDD has shuffle dependencies and shuffle locality is enabled, pick locations that
+    // have at least REDUCER_PREF_LOCS_FRACTION of data as preferred locations
+    if (shuffleLocalityEnabled && rdd.partitions.length < SHUFFLE_PREF_REDUCE_THRESHOLD) {
+      rdd.dependencies.foreach {
+        case s: ShuffleDependency[_, _, _] =>
+          if (s.rdd.partitions.length < SHUFFLE_PREF_MAP_THRESHOLD) {
+            // Get the preferred map output locations for this reducer
+            val topLocsForReducer = mapOutputTracker.getLocationsWithLargestOutputs(s.shuffleId,
+              partition, rdd.partitions.length, REDUCER_PREF_LOCS_FRACTION)
+            if (topLocsForReducer.nonEmpty) {
+              return topLocsForReducer.get.map(loc => TaskLocation(loc.host, loc.executorId))
+            }
+          }
+        case _ =>
+      }
     }
     Nil
   }
@@ -1450,8 +1476,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case completion @ CompletionEvent(task, reason, _, _, taskInfo, taskMetrics) =>
       dagScheduler.handleTaskCompletion(completion)
 
-    case TaskSetFailed(taskSet, reason) =>
-      dagScheduler.handleTaskSetFailed(taskSet, reason)
+    case TaskSetFailed(taskSet, reason, exception) =>
+      dagScheduler.handleTaskSetFailed(taskSet, reason, exception)
 
     case ResubmitFailedStages =>
       dagScheduler.resubmitFailedStages()

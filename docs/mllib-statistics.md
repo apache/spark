@@ -95,9 +95,9 @@ mat = ... # an RDD of Vectors
 
 # Compute column summary statistics.
 summary = Statistics.colStats(mat)
-print summary.mean()
-print summary.variance()
-print summary.numNonzeros()
+print(summary.mean())
+print(summary.variance())
+print(summary.numNonzeros())
 
 {% endhighlight %}
 </div>
@@ -183,12 +183,12 @@ seriesY = ... # must have the same number of partitions and cardinality as serie
 
 # Compute the correlation using Pearson's method. Enter "spearman" for Spearman's method. If a 
 # method is not specified, Pearson's method will be used by default. 
-print Statistics.corr(seriesX, seriesY, method="pearson")
+print(Statistics.corr(seriesX, seriesY, method="pearson"))
 
 data = ... # an RDD of Vectors
 # calculate the correlation matrix using Pearson's method. Use "spearman" for Spearman's method.
 # If a method is not specified, Pearson's method will be used by default. 
-print Statistics.corr(data, method="pearson")
+print(Statistics.corr(data, method="pearson"))
 
 {% endhighlight %}
 </div>
@@ -398,14 +398,14 @@ vec = Vectors.dense(...) # a vector composed of the frequencies of events
 # compute the goodness of fit. If a second vector to test against is not supplied as a parameter,
 # the test runs against a uniform distribution.
 goodnessOfFitTestResult = Statistics.chiSqTest(vec)
-print goodnessOfFitTestResult # summary of the test including the p-value, degrees of freedom,
-                              # test statistic, the method used, and the null hypothesis.
+print(goodnessOfFitTestResult) # summary of the test including the p-value, degrees of freedom,
+                               # test statistic, the method used, and the null hypothesis.
 
 mat = Matrices.dense(...) # a contingency matrix
 
 # conduct Pearson's independence test on the input contingency matrix
 independenceTestResult = Statistics.chiSqTest(mat)
-print independenceTestResult  # summary of the test including the p-value, degrees of freedom...
+print(independenceTestResult)  # summary of the test including the p-value, degrees of freedom...
 
 obs = sc.parallelize(...)  # LabeledPoint(feature, label) .
 
@@ -415,8 +415,8 @@ obs = sc.parallelize(...)  # LabeledPoint(feature, label) .
 featureTestResults = Statistics.chiSqTest(obs)
 
 for i, result in enumerate(featureTestResults):
-    print "Column $d:" % (i + 1)
-    print result
+    print("Column $d:" % (i + 1))
+    print(result)
 {% endhighlight %}
 </div>
 
@@ -438,20 +438,63 @@ run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstra
 and interpret the hypothesis tests.
 
 {% highlight scala %}
-import org.apache.spark.SparkContext
-import org.apache.spark.mllib.stat.Statistics._
+import org.apache.spark.mllib.stat.Statistics
 
 val data: RDD[Double] = ... // an RDD of sample data
 
 // run a KS test for the sample versus a standard normal distribution
 val testResult = Statistics.kolmogorovSmirnovTest(data, "norm", 0, 1)
 println(testResult) // summary of the test including the p-value, test statistic,
-                      // and null hypothesis
-                      // if our p-value indicates significance, we can reject the null hypothesis
+                    // and null hypothesis
+                    // if our p-value indicates significance, we can reject the null hypothesis
 
 // perform a KS test using a cumulative distribution function of our making
 val myCDF: Double => Double = ...
 val testResult2 = Statistics.kolmogorovSmirnovTest(data, myCDF)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+[`Statistics`](api/java/org/apache/spark/mllib/stat/Statistics.html) provides methods to
+run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstrates how to run
+and interpret the hypothesis tests.
+
+{% highlight java %}
+import java.util.Arrays;
+
+import org.apache.spark.api.java.JavaDoubleRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+
+import org.apache.spark.mllib.stat.Statistics;
+import org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult;
+
+JavaSparkContext jsc = ...
+JavaDoubleRDD data = jsc.parallelizeDoubles(Arrays.asList(0.2, 1.0, ...));
+KolmogorovSmirnovTestResult testResult = Statistics.kolmogorovSmirnovTest(data, "norm", 0.0, 1.0);
+// summary of the test including the p-value, test statistic,
+// and null hypothesis
+// if our p-value indicates significance, we can reject the null hypothesis
+System.out.println(testResult);
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+[`Statistics`](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) provides methods to
+run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstrates how to run
+and interpret the hypothesis tests.
+
+{% highlight python %}
+from pyspark.mllib.stat import Statistics
+
+parallelData = sc.parallelize([1.0, 2.0, ... ])
+
+# run a KS test for the sample versus a standard normal distribution
+testResult = Statistics.kolmogorovSmirnovTest(parallelData, "norm", 0, 1)
+print(testResult) # summary of the test including the p-value, test statistic,
+                  # and null hypothesis
+                  # if our p-value indicates significance, we can reject the null hypothesis
+# Note that the Scala functionality of calling Statistics.kolmogorovSmirnovTest with
+# a lambda to calculate the CDF is not made available in the Python API
 {% endhighlight %}
 </div>
 </div>
@@ -526,6 +569,83 @@ sc = ... # SparkContext
 u = RandomRDDs.uniformRDD(sc, 1000000L, 10)
 # Apply a transform to get a random double RDD following `N(1, 4)`.
 v = u.map(lambda x: 1.0 + 2.0 * x)
+{% endhighlight %}
+</div>
+</div>
+
+## Kernel density estimation
+
+[Kernel density estimation](https://en.wikipedia.org/wiki/Kernel_density_estimation) is a technique
+useful for visualizing empirical probability distributions without requiring assumptions about the
+particular distribution that the observed samples are drawn from. It computes an estimate of the
+probability density function of a random variables, evaluated at a given set of points. It achieves
+this estimate by expressing the PDF of the empirical distribution at a particular point as the the
+mean of PDFs of normal distributions centered around each of the samples.
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+[`KernelDensity`](api/scala/index.html#org.apache.spark.mllib.stat.KernelDensity) provides methods
+to compute kernel density estimates from an RDD of samples. The following example demonstrates how
+to do so.
+
+{% highlight scala %}
+import org.apache.spark.mllib.stat.KernelDensity
+import org.apache.spark.rdd.RDD
+
+val data: RDD[Double] = ... // an RDD of sample data
+
+// Construct the density estimator with the sample data and a standard deviation for the Gaussian
+// kernels
+val kd = new KernelDensity()
+  .setSample(data)
+  .setBandwidth(3.0)
+
+// Find density estimates for the given values
+val densities = kd.estimate(Array(-1.0, 2.0, 5.0))
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+[`KernelDensity`](api/java/index.html#org.apache.spark.mllib.stat.KernelDensity) provides methods
+to compute kernel density estimates from an RDD of samples. The following example demonstrates how
+to do so.
+
+{% highlight java %}
+import org.apache.spark.mllib.stat.KernelDensity;
+import org.apache.spark.rdd.RDD;
+
+RDD<Double> data = ... // an RDD of sample data
+
+// Construct the density estimator with the sample data and a standard deviation for the Gaussian
+// kernels
+KernelDensity kd = new KernelDensity()
+  .setSample(data)
+  .setBandwidth(3.0);
+
+// Find density estimates for the given values
+double[] densities = kd.estimate(new double[] {-1.0, 2.0, 5.0});
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+[`KernelDensity`](api/python/pyspark.mllib.html#pyspark.mllib.stat.KernelDensity) provides methods
+to compute kernel density estimates from an RDD of samples. The following example demonstrates how
+to do so.
+
+{% highlight python %}
+from pyspark.mllib.stat import KernelDensity
+
+data = ... # an RDD of sample data
+
+# Construct the density estimator with the sample data and a standard deviation for the Gaussian
+# kernels
+kd = KernelDensity()
+kd.setSample(data)
+kd.setBandwidth(3.0)
+
+# Find density estimates for the given values
+densities = kd.estimate([-1.0, 2.0, 5.0])
 {% endhighlight %}
 </div>
 

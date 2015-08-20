@@ -223,7 +223,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     // Signal the receivers to delete old block data
     if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
       logInfo(s"Cleanup old received batch data: $cleanupThreshTime")
-      endpoint.send(CleanupOldBlocks(cleanupThreshTime))
+      synchronized {
+        if (isTrackerStarted) {
+          endpoint.send(CleanupOldBlocks(cleanupThreshTime))
+        }
+      }
     }
   }
 
@@ -285,8 +289,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Update a receiver's maximum ingestion rate */
-  def sendRateUpdate(streamUID: Int, newRate: Long): Unit = {
-    endpoint.send(UpdateReceiverRateLimit(streamUID, newRate))
+  def sendRateUpdate(streamUID: Int, newRate: Long): Unit = synchronized {
+    if (isTrackerStarted) {
+      endpoint.send(UpdateReceiverRateLimit(streamUID, newRate))
+    }
   }
 
   /** Add new blocks for the given stream */
@@ -462,8 +468,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
      * Start a receiver along with its scheduled executors
      */
     private def startReceiver(receiver: Receiver[_], scheduledExecutors: Seq[String]): Unit = {
+      def shouldStartReceiver: Boolean = {
+        // It's okay to start when trackerState is Initialized or Started
+        !(isTrackerStopping || isTrackerStopped)
+      }
+
       val receiverId = receiver.streamId
-      if (!isTrackerStarted) {
+      if (!shouldStartReceiver) {
         onReceiverJobFinish(receiverId)
         return
       }
@@ -488,14 +499,14 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // We will keep restarting the receiver job until ReceiverTracker is stopped
       future.onComplete {
         case Success(_) =>
-          if (!isTrackerStarted) {
+          if (!shouldStartReceiver) {
             onReceiverJobFinish(receiverId)
           } else {
             logInfo(s"Restarting Receiver $receiverId")
             self.send(RestartReceiver(receiver))
           }
         case Failure(e) =>
-          if (!isTrackerStarted) {
+          if (!shouldStartReceiver) {
             onReceiverJobFinish(receiverId)
           } else {
             logError("Receiver has been stopped. Try to restart it.", e)

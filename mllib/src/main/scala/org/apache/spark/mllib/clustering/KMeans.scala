@@ -49,15 +49,20 @@ class KMeans private (
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
    * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4, seed: random}.
+   * @since 0.8.0
    */
   def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4, Utils.random.nextLong())
 
   /**
    * Number of clusters to create (k).
+   * @since 1.4.0
    */
   def getK: Int = k
 
-  /** Set the number of clusters to create (k). Default: 2. */
+  /**
+   * Set the number of clusters to create (k). Default: 2.
+   * @since 0.8.0
+   */
   def setK(k: Int): this.type = {
     this.k = k
     this
@@ -65,10 +70,14 @@ class KMeans private (
 
   /**
    * Maximum number of iterations to run.
+   * @since 1.4.0
    */
   def getMaxIterations: Int = maxIterations
 
-  /** Set maximum number of iterations to run. Default: 20. */
+  /**
+   * Set maximum number of iterations to run. Default: 20.
+   * @since 0.8.0
+   */
   def setMaxIterations(maxIterations: Int): this.type = {
     this.maxIterations = maxIterations
     this
@@ -76,6 +85,7 @@ class KMeans private (
 
   /**
    * The initialization algorithm. This can be either "random" or "k-means||".
+   * @since 1.4.0
    */
   def getInitializationMode: String = initializationMode
 
@@ -83,6 +93,7 @@ class KMeans private (
    * Set the initialization algorithm. This can be either "random" to choose random points as
    * initial cluster centers, or "k-means||" to use a parallel variant of k-means++
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
+   * @since 0.8.0
    */
   def setInitializationMode(initializationMode: String): this.type = {
     KMeans.validateInitMode(initializationMode)
@@ -93,6 +104,7 @@ class KMeans private (
   /**
    * :: Experimental ::
    * Number of runs of the algorithm to execute in parallel.
+   * @since 1.4.0
    */
   @Experimental
   def getRuns: Int = runs
@@ -102,6 +114,7 @@ class KMeans private (
    * Set the number of runs of the algorithm to execute in parallel. We initialize the algorithm
    * this many times with random starting conditions (configured by the initialization mode), then
    * return the best clustering found over any run. Default: 1.
+   * @since 0.8.0
    */
   @Experimental
   def setRuns(runs: Int): this.type = {
@@ -114,12 +127,14 @@ class KMeans private (
 
   /**
    * Number of steps for the k-means|| initialization mode
+   * @since 1.4.0
    */
   def getInitializationSteps: Int = initializationSteps
 
   /**
    * Set the number of steps for the k-means|| initialization mode. This is an advanced
    * setting -- the default of 5 is almost always enough. Default: 5.
+   * @since 0.8.0
    */
   def setInitializationSteps(initializationSteps: Int): this.type = {
     if (initializationSteps <= 0) {
@@ -131,12 +146,14 @@ class KMeans private (
 
   /**
    * The distance threshold within which we've consider centers to have converged.
+   * @since 1.4.0
    */
   def getEpsilon: Double = epsilon
 
   /**
    * Set the distance threshold within which we've consider centers to have converged.
    * If all centers move less than this Euclidean distance, we stop iterating one run.
+   * @since 0.8.0
    */
   def setEpsilon(epsilon: Double): this.type = {
     this.epsilon = epsilon
@@ -145,10 +162,14 @@ class KMeans private (
 
   /**
    * The random seed for cluster initialization.
+   * @since 1.4.0
    */
   def getSeed: Long = seed
 
-  /** Set the random seed for cluster initialization. */
+  /**
+   * Set the random seed for cluster initialization.
+   * @since 1.4.0
+   */
   def setSeed(seed: Long): this.type = {
     this.seed = seed
     this
@@ -162,6 +183,7 @@ class KMeans private (
    * Set the initial starting point, bypassing the random initialization or k-means||
    * The condition model.k == this.k must be met, failure results
    * in an IllegalArgumentException.
+   * @since 1.4.0
    */
   def setInitialModel(model: KMeansModel): this.type = {
     require(model.k == k, "mismatched cluster count")
@@ -172,6 +194,7 @@ class KMeans private (
   /**
    * Train a K-means model on the given set of points; `data` should be cached for high
    * performance, because this is an iterative algorithm.
+   * @since 0.8.0
    */
   def run(data: RDD[Vector]): KMeansModel = {
 
@@ -430,11 +453,14 @@ class KMeans private (
 
 /**
  * Top-level methods for calling K-means clustering.
+ * @since 0.8.0
  */
 object KMeans {
 
   // Initialization mode names
+  /** @since 0.8.0 */
   val RANDOM = "random"
+  /** @since 0.8.0 */
   val K_MEANS_PARALLEL = "k-means||"
 
   /**
@@ -446,6 +472,7 @@ object KMeans {
    * @param runs number of parallel runs, defaults to 1. The best model is returned.
    * @param initializationMode initialization model, either "random" or "k-means||" (default).
    * @param seed random seed value for cluster initialization
+   * @since 1.3.0
    */
   def train(
       data: RDD[Vector],
@@ -470,6 +497,7 @@ object KMeans {
    * @param maxIterations max number of iterations
    * @param runs number of parallel runs, defaults to 1. The best model is returned.
    * @param initializationMode initialization model, either "random" or "k-means||" (default).
+   * @since 0.8.0
    */
   def train(
       data: RDD[Vector],
@@ -486,6 +514,7 @@ object KMeans {
 
   /**
    * Trains a k-means model using specified parameters and the default values for unspecified.
+   * @since 0.8.0
    */
   def train(
       data: RDD[Vector],
@@ -496,6 +525,7 @@ object KMeans {
 
   /**
    * Trains a k-means model using specified parameters and the default values for unspecified.
+   * @since 0.8.0
    */
   def train(
       data: RDD[Vector],

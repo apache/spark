@@ -17,30 +17,26 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.scalatest.BeforeAndAfterAll
-
+import java.math.MathContext
 import java.sql.Timestamp
 
+import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.catalyst.DefaultParserDialect
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.errors.DialectException
-import org.apache.spark.sql.execution.aggregate.Aggregate2Sort
-import org.apache.spark.sql.execution.GeneratedAggregate
+import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SQLTestData._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 /** A SQL Dialect for testing purpose, and it can not be nested type */
 class MyDialect extends DefaultParserDialect
 
-class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
-  // Make sure the tables are loaded.
-  TestData
+class SQLQuerySuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
-  val sqlContext = org.apache.spark.sql.test.TestSQLContext
-  import sqlContext.implicits._
-  import sqlContext.sql
+  setupTestData()
 
   test("having clause") {
     Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v").registerTempTable("hav")
@@ -60,7 +56,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("show functions") {
-    checkAnswer(sql("SHOW functions"), FunctionRegistry.builtin.listFunction().sorted.map(Row(_)))
+    checkAnswer(sql("SHOW functions"),
+      FunctionRegistry.builtin.listFunction().sorted.map(Row(_)))
   }
 
   test("describe functions") {
@@ -178,7 +175,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
     val df = Seq(Tuple1(1), Tuple1(2), Tuple1(3)).toDF("index")
     // we except the id is materialized once
-    val idUDF = udf(() => UUID.randomUUID().toString)
+    val idUDF = org.apache.spark.sql.functions.udf(() => UUID.randomUUID().toString)
 
     val dfWithId = df.withColumn("id", idUDF())
     // Make a new DataFrame (actually the same reference to the old one)
@@ -258,6 +255,23 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     }
   }
 
+  private def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
+    val df = sql(sqlText)
+    // First, check if we have GeneratedAggregate.
+    val hasGeneratedAgg = df.queryExecution.executedPlan
+      .collect { case _: aggregate.TungstenAggregate => true }
+      .nonEmpty
+    if (!hasGeneratedAgg) {
+      fail(
+        s"""
+           |Codegen is enabled, but query $sqlText does not have TungstenAggregate in the plan.
+           |${df.queryExecution.simpleString}
+         """.stripMargin)
+    }
+    // Then, check results.
+    checkAnswer(df, expectedResults)
+  }
+
   test("aggregation with codegen") {
     val originalValue = sqlContext.conf.codegenEnabled
     sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
@@ -266,26 +280,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
       .unionAll(sqlContext.table("testData"))
       .unionAll(sqlContext.table("testData"))
       .registerTempTable("testData3x")
-
-    def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
-      val df = sql(sqlText)
-      // First, check if we have GeneratedAggregate.
-      var hasGeneratedAgg = false
-      df.queryExecution.executedPlan.foreach {
-        case generatedAgg: GeneratedAggregate => hasGeneratedAgg = true
-        case newAggregate: Aggregate2Sort => hasGeneratedAgg = true
-        case _ =>
-      }
-      if (!hasGeneratedAgg) {
-        fail(
-          s"""
-             |Codegen is enabled, but query $sqlText does not have GeneratedAggregate in the plan.
-             |${df.queryExecution.simpleString}
-           """.stripMargin)
-      }
-      // Then, check results.
-      checkAnswer(df, expectedResults)
-    }
 
     try {
       // Just to group rows.
@@ -581,42 +575,28 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("sorting") {
-    val before = sqlContext.conf.externalSortEnabled
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, false)
-    sortTest()
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, before)
+    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "false") {
+      sortTest()
+    }
   }
 
   test("external sorting") {
-    val before = sqlContext.conf.externalSortEnabled
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, true)
-    sortTest()
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, before)
+    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "true") {
+      sortTest()
+    }
   }
 
   test("SPARK-6927 sorting with codegen on") {
-    val externalbefore = sqlContext.conf.externalSortEnabled
-    val codegenbefore = sqlContext.conf.codegenEnabled
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, false)
-    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
-    try{
+    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "false",
+      SQLConf.CODEGEN_ENABLED.key -> "true") {
       sortTest()
-    } finally {
-      sqlContext.setConf(SQLConf.EXTERNAL_SORT, externalbefore)
-      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, codegenbefore)
     }
   }
 
   test("SPARK-6927 external sorting with codegen on") {
-    val externalbefore = sqlContext.conf.externalSortEnabled
-    val codegenbefore = sqlContext.conf.codegenEnabled
-    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
-    sqlContext.setConf(SQLConf.EXTERNAL_SORT, true)
-    try {
+    withSQLConf(SQLConf.EXTERNAL_SORT.key -> "true",
+      SQLConf.CODEGEN_ENABLED.key -> "true") {
       sortTest()
-    } finally {
-      sqlContext.setConf(SQLConf.EXTERNAL_SORT, externalbefore)
-      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, codegenbefore)
     }
   }
 
@@ -729,9 +709,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
 
     checkAnswer(
       sql(
-        """
-          |SELECT COUNT(a), COUNT(b), COUNT(1), COUNT(DISTINCT a), COUNT(DISTINCT b) FROM testData3
-        """.stripMargin),
+        "SELECT COUNT(a), COUNT(b), COUNT(1), COUNT(DISTINCT a), COUNT(DISTINCT b) FROM testData3"),
       Row(2, 1, 2, 2, 1))
   }
 
@@ -1178,7 +1156,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
     validateMetadata(sql("SELECT * FROM personWithMeta"))
     validateMetadata(sql("SELECT id, name FROM personWithMeta"))
     validateMetadata(sql("SELECT * FROM personWithMeta JOIN salary ON id = personId"))
-    validateMetadata(sql("SELECT name, salary FROM personWithMeta JOIN salary ON id = personId"))
+    validateMetadata(sql(
+      "SELECT name, salary FROM personWithMeta JOIN salary ON id = personId"))
   }
 
   test("SPARK-3371 Renaming a function expression with group by gives error") {
@@ -1577,10 +1556,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("SPARK-8753: add interval type") {
-    import org.apache.spark.unsafe.types.Interval
+    import org.apache.spark.unsafe.types.CalendarInterval
 
     val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
-    checkAnswer(df, Row(new Interval(12 * 3 - 3, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123 )))
+    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123 )))
     withTempPath(f => {
       // Currently we don't yet support saving out values of interval data type.
       val e = intercept[AnalysisException] {
@@ -1602,20 +1581,67 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll with SQLTestUtils {
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {
-    import org.apache.spark.unsafe.types.Interval
-    import org.apache.spark.unsafe.types.Interval.MICROS_PER_WEEK
+    import org.apache.spark.unsafe.types.CalendarInterval
+    import org.apache.spark.unsafe.types.CalendarInterval.MICROS_PER_WEEK
 
     val df = sql("select interval 3 years -3 month 7 week 123 microseconds as i")
-    checkAnswer(df, Row(new Interval(12 * 3 - 3, 7L * MICROS_PER_WEEK + 123)))
+    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7L * MICROS_PER_WEEK + 123)))
 
-    checkAnswer(df.select(df("i") + new Interval(2, 123)),
-      Row(new Interval(12 * 3 - 3 + 2, 7L * MICROS_PER_WEEK + 123 + 123)))
+    checkAnswer(df.select(df("i") + new CalendarInterval(2, 123)),
+      Row(new CalendarInterval(12 * 3 - 3 + 2, 7L * MICROS_PER_WEEK + 123 + 123)))
 
-    checkAnswer(df.select(df("i") - new Interval(2, 123)),
-      Row(new Interval(12 * 3 - 3 - 2, 7L * MICROS_PER_WEEK + 123 - 123)))
+    checkAnswer(df.select(df("i") - new CalendarInterval(2, 123)),
+      Row(new CalendarInterval(12 * 3 - 3 - 2, 7L * MICROS_PER_WEEK + 123 - 123)))
 
     // unary minus
     checkAnswer(df.select(-df("i")),
-      Row(new Interval(-(12 * 3 - 3), -(7L * MICROS_PER_WEEK + 123))))
+      Row(new CalendarInterval(-(12 * 3 - 3), -(7L * MICROS_PER_WEEK + 123))))
+  }
+
+  test("aggregation with codegen updates peak execution memory") {
+    withSQLConf((SQLConf.CODEGEN_ENABLED.key, "true")) {
+      val sc = sqlContext.sparkContext
+      AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "aggregation with codegen") {
+        testCodeGen(
+          "SELECT key, count(value) FROM testData GROUP BY key",
+          (1 to 100).map(i => Row(i, 1)))
+      }
+    }
+  }
+
+  test("decimal precision with multiply/division") {
+    checkAnswer(sql("select 10.3 * 3.0"), Row(BigDecimal("30.90")))
+    checkAnswer(sql("select 10.3000 * 3.0"), Row(BigDecimal("30.90000")))
+    checkAnswer(sql("select 10.30000 * 30.0"), Row(BigDecimal("309.000000")))
+    checkAnswer(sql("select 10.300000000000000000 * 3.000000000000000000"),
+      Row(BigDecimal("30.900000000000000000000000000000000000", new MathContext(38))))
+    checkAnswer(sql("select 10.300000000000000000 * 3.0000000000000000000"),
+      Row(null))
+
+    checkAnswer(sql("select 10.3 / 3.0"), Row(BigDecimal("3.433333")))
+    checkAnswer(sql("select 10.3000 / 3.0"), Row(BigDecimal("3.4333333")))
+    checkAnswer(sql("select 10.30000 / 30.0"), Row(BigDecimal("0.343333333")))
+    checkAnswer(sql("select 10.300000000000000000 / 3.00000000000000000"),
+      Row(BigDecimal("3.4333333333333333333333333333333333333", new MathContext(38))))
+    checkAnswer(sql("select 10.3000000000000000000 / 3.00000000000000000"),
+      Row(null))
+  }
+
+  test("external sorting updates peak execution memory") {
+    withSQLConf((SQLConf.EXTERNAL_SORT.key, "true")) {
+      val sc = sqlContext.sparkContext
+      AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "external sort") {
+        sortTest()
+      }
+    }
+  }
+
+  test("SPARK-9511: error with table starting with number") {
+    withTempTable("1one") {
+      sqlContext.sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
+        .toDF("num", "str")
+        .registerTempTable("1one")
+      checkAnswer(sql("select count(num) from 1one"), Row(10))
+    }
   }
 }
