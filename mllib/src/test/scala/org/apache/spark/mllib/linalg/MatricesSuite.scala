@@ -483,4 +483,15 @@ class MatricesSuite extends SparkFunSuite {
     assert(sm1.numNonzeros === 1)
     assert(sm1.numActives === 3)
   }
+
+  test("numpy-like indexing") {
+    val dm = new DenseMatrix(3, 3, Array(1.0, 4.0, 7.0, 2.0, 5.0, 8.0, 3.0, 6.0, 9.0))
+    assert(dm!(1)===Matrices.dense(1, 3, Array(4.0, 5.0, 6.0)))
+    assert(dm!(1, 2)===6)
+    assert(dm!((), 1)===Matrices.dense(3, 1, Array(2.0, 5.0, 8.0)))
+    assert(dm!((1, 3))===Matrices.dense(2, 3, Array(4.0, 7.0, 5.0, 8.0, 6.0, 9.0)))
+    assert(dm!((), (1, 3))===Matrices.dense(3, 2, Array(2.0, 5.0, 8.0, 3.0, 6.0, 9.0)))
+    assert(dm!((1, 3), (1, 3))===Matrices.dense(2, 2, Array(5.0, 8.0, 6.0, 9.0)))
+  }
+
 }
