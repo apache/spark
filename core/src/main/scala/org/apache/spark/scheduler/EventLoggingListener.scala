@@ -159,6 +159,9 @@ private[spark] class EventLoggingListener(
     }
   }
 
+  // We log the event both when stage submitted and stage completed, and after each logEvent call,
+  // replace the modifiedMetrics with the latestMetrics. In case the stages submit and complete
+  // time might be interleaved. So as to make the result the same with the running time.
   private def logMetricsUpdateEvent() : Unit = {
     modifiedMetrics.map(metrics => logEvent(metrics._2))
     latestMetrics.map(metrics => modifiedMetrics.update(metrics._1, metrics._2))
@@ -246,6 +249,10 @@ private[spark] class EventLoggingListener(
     fileSystem.rename(new Path(logPath + IN_PROGRESS), target)
   }
 
+  /**
+   * According to the updated event to modify the maintained event's metrics
+   * @param executorId  the executor whose metrics will be modified
+   */
   private def updateModifiedMetrics(executorId: String): Unit = {
     val toBeModifiedEvent = modifiedMetrics.get(executorId)
     val latestEvent = latestMetrics.get(executorId)
@@ -257,7 +264,8 @@ private[spark] class EventLoggingListener(
         // latestEvent must has value
         val latestTransMetrics = latestEvent.get.executorMetrics.transportMetrics.get
         val toBeModTransMetrics = toBeModifiedMetrics.get
-        var timeStamp: Long = 0L
+        var timeStamp: Long = toBeModTransMetrics.timeStamp
+        // the logic here should be the same with that for memoryListener
         val (clientOnheapSize, serverOnheapSize) =
           if (latestTransMetrics.clientOnheapSize + latestTransMetrics.serverOnheapSize >
             toBeModTransMetrics.clientOnheapSize + toBeModTransMetrics.serverOnheapSize) {
