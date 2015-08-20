@@ -20,8 +20,11 @@ package org.apache.spark.scheduler
 import java.io._
 import java.net.URI
 
+import akka.remote.transport.Transport
+import org.apache.spark.executor.TransportMetrics
+
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import com.google.common.base.Charsets
 import org.apache.hadoop.conf.Configuration
@@ -91,7 +94,11 @@ private[spark] class EventLoggingListener(
   private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
 
   // Visible for tests only.
-  private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
+  private[scheduler] val logPath = getLogPath(
+    logBaseDir, appId, appAttemptId, compressionCodecName)
+
+  private val latestMetrics = new HashMap[String, SparkListenerExecutorMetricsUpdate]
+  private val modifiedMetrics = new HashMap[String, SparkListenerExecutorMetricsUpdate]
 
   /**
    * Creates the log file in the configured log directory.
@@ -152,8 +159,16 @@ private[spark] class EventLoggingListener(
     }
   }
 
+  private def logMetricsUpdateEvent() : Unit = {
+    modifiedMetrics.map(metrics => logEvent(metrics._2))
+    latestMetrics.map(metrics => modifiedMetrics.update(metrics._1, metrics._2))
+  }
+
   // Events that do not trigger a flush
-  override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = logEvent(event)
+  override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
+    logMetricsUpdateEvent()
+    logEvent(event)
+  }
 
   override def onTaskStart(event: SparkListenerTaskStart): Unit = logEvent(event)
 
@@ -165,6 +180,7 @@ private[spark] class EventLoggingListener(
 
   // Events that trigger a flush
   override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
+    logMetricsUpdateEvent()
     logEvent(event, flushLogger = true)
   }
 
@@ -191,11 +207,14 @@ private[spark] class EventLoggingListener(
   override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
     logEvent(event, flushLogger = true)
   }
+
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
     logEvent(event, flushLogger = true)
   }
 
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
+    latestMetrics.remove(event.executorId)
+    modifiedMetrics.remove(event.executorId)
     logEvent(event, flushLogger = true)
   }
 
@@ -204,7 +223,8 @@ private[spark] class EventLoggingListener(
 
   // No-op because logging every update would be overkill
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
-    logEvent(event, flushLogger = false)
+    latestMetrics.update(event.execId, event)
+    updateModifiedMetrics(event.execId)
   }
 
   /**
@@ -224,6 +244,41 @@ private[spark] class EventLoggingListener(
       }
     }
     fileSystem.rename(new Path(logPath + IN_PROGRESS), target)
+  }
+
+  private def updateModifiedMetrics(executorId: String): Unit = {
+    val toBeModifiedEvent = modifiedMetrics.get(executorId)
+    val latestEvent = latestMetrics.get(executorId)
+    if (toBeModifiedEvent.isEmpty) {
+      if (latestEvent.isDefined) modifiedMetrics.update(executorId, latestEvent.get)
+    } else {
+      val toBeModifiedMetrics = toBeModifiedEvent.get.executorMetrics.transportMetrics
+      if (toBeModifiedMetrics.isDefined) {
+        // latestEvent must has value
+        val latestTransMetrics = latestEvent.get.executorMetrics.transportMetrics.get
+        val toBeModTransMetrics = toBeModifiedMetrics.get
+        var timeStamp: Long = 0L
+        val (clientOnheapSize, serverOnheapSize) =
+          if (latestTransMetrics.clientOnheapSize + latestTransMetrics.serverOnheapSize >
+            toBeModTransMetrics.clientOnheapSize + toBeModTransMetrics.serverOnheapSize) {
+            timeStamp = latestTransMetrics.timeStamp
+            (latestTransMetrics.clientOnheapSize, latestTransMetrics.serverOnheapSize)
+          } else {
+            (toBeModTransMetrics.clientOnheapSize, toBeModTransMetrics.serverOnheapSize)
+          }
+        val (clientDirectheapSize, serverDirectheapSize) =
+          if (latestTransMetrics.clientDirectheapSize + latestTransMetrics.serverDirectheapSize >
+            toBeModTransMetrics.clientDirectheapSize + toBeModTransMetrics.serverDirectheapSize) {
+            timeStamp = latestTransMetrics.timeStamp
+            (latestTransMetrics.clientDirectheapSize, latestTransMetrics.serverDirectheapSize)
+          } else {
+            (toBeModTransMetrics.clientDirectheapSize, toBeModTransMetrics.serverDirectheapSize)
+          }
+        toBeModifiedEvent.get.executorMetrics.setTransportMetrics(
+          Some(TransportMetrics(timeStamp, clientOnheapSize, clientDirectheapSize,
+            serverOnheapSize, serverDirectheapSize)))
+      }
+    }
   }
 
 }
