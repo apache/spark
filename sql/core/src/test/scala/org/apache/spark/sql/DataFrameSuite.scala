@@ -887,4 +887,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .select(struct($"b"))
       .collect()
   }
+
+  test("SPARK-8436: When convert Timestamp to Long, return milliseconds.") {
+    val ms = new java.sql.Timestamp(1440065000)
+    val df = Seq(Tuple1(ms)).toDF("time")
+    val res = df.select(df("time") cast LongType cast TimestampType).first()
+    assert(res === Row(ms))
+  }
+
 }
