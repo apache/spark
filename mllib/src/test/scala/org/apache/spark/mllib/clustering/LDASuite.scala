@@ -149,20 +149,19 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Check: topTopicAssignments
     // Make sure it assigns a topic to each term appearing in each doc.
-    val topTopicAssignments: Array[(Array[Int], Array[Int])] =
-      model.topTopicAssignments.collect().sortBy(_._1).map(x => (x._2, x._3))
-    assert(topTopicAssignments.length === tinyCorpus.length)
-    topTopicAssignments.zip(tinyCorpus.map(_._2)).foreach { case ((inds, vals), doc) =>
-      assert(inds.length === doc.numNonzeros)
-      doc.foreachActive((i, _) => assert(inds.contains(i)))
-    }
-    // Compare with manually computing topTopicAssignments
-    // P(topic k | term w, doc j) \propto P(term w | topic k) * P(topic k | doc j)
-    val topics = model.topicsMatrix
-    topicDistributions.foreach { case (docID, dist) =>
-      Range(0, )
-      val P_k_given_wj = topics.multiply(dist)
-      P_k_given_wj
+    val topTopicAssignments: Map[Long, (Array[Int], Array[Int])] =
+      model.topTopicAssignments.collect().map(x => x._1 -> (x._2, x._3)).toMap
+    assert(topTopicAssignments.keys.max < tinyCorpus.length)
+    tinyCorpus.foreach { case (docID: Long, doc: Vector) =>
+      if (topTopicAssignments.contains(docID)) {
+        val (inds, vals) = topTopicAssignments(docID)
+        assert(inds.length === doc.numNonzeros)
+        // For "term" in actual doc,
+        // check that it has a topic assigned.
+        doc.foreachActive((term, wcnt) => assert(wcnt === 0 || inds.contains(term)))
+      } else {
+        assert(doc.numNonzeros === 0)
+      }
     }
   }
 

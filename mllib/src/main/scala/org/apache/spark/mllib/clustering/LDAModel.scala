@@ -597,7 +597,7 @@ class DistributedLDAModel private[clustering] (
           computePTopic(edgeContext.srcAttr, edgeContext.dstAttr, N_k, W, eta, alpha)
         // For this (doc j, term w), send top topic k to doc vertex.
         val topTopic: Int = argmax(scaledTopicDistribution)
-        val term: Int = edgeContext.dstId.toInt // ok to assume # terms < Int.MaxValue
+        val term: Int = index2term(edgeContext.dstId)
         edgeContext.sendToSrc((Array(term), Array(topTopic)))
       }
     val mergeMsg: ((Array[Int], Array[Int]), (Array[Int], Array[Int])) => (Array[Int], Array[Int]) =
@@ -607,7 +607,8 @@ class DistributedLDAModel private[clustering] (
     // M-STEP: Aggregation computes new N_{kj}, N_{wk} counts.
     graph.aggregateMessages[(Array[Int], Array[Int])](sendMsg, mergeMsg).filter(isDocumentVertex)
         .map { case (docID: Long, (terms: Array[Int], topics: Array[Int])) =>
-      (docID, terms, topics)
+      val (sortedTerms, sortedTopics) = terms.zip(topics).sortBy(_._1).unzip
+      (docID, sortedTerms.toArray, sortedTopics.toArray)
     }
   }
 
