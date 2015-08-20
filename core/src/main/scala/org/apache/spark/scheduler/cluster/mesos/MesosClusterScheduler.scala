@@ -507,14 +507,16 @@ private[spark] class MesosClusterScheduler(
       val driversToRetry = pendingRetryDrivers.filter { d =>
         d.retryState.get.nextRetry.before(currentTime)
       }
+
       scheduleTasks(
-        driversToRetry,
+        copyBuffer(driversToRetry),
         removeFromPendingRetryDrivers,
         currentOffers,
         tasks)
+
       // Then we walk through the queued drivers and try to schedule them.
       scheduleTasks(
-        queuedDrivers,
+        copyBuffer(queuedDrivers),
         removeFromQueuedDrivers,
         currentOffers,
         tasks)
@@ -527,13 +529,14 @@ private[spark] class MesosClusterScheduler(
       .foreach(o => driver.declineOffer(o.getId))
   }
 
+  private def copyBuffer(
+      buffer: ArrayBuffer[MesosDriverDescription]): ArrayBuffer[MesosDriverDescription] = {
+    val newBuffer = new ArrayBuffer[MesosDriverDescription](buffer.size)
+    buffer.copyToBuffer(newBuffer)
+    newBuffer
+  }
+
   def getSchedulerState(): MesosClusterSchedulerState = {
-    def copyBuffer(
-        buffer: ArrayBuffer[MesosDriverDescription]): ArrayBuffer[MesosDriverDescription] = {
-      val newBuffer = new ArrayBuffer[MesosDriverDescription](buffer.size)
-      buffer.copyToBuffer(newBuffer)
-      newBuffer
-    }
     stateLock.synchronized {
       new MesosClusterSchedulerState(
         frameworkId,

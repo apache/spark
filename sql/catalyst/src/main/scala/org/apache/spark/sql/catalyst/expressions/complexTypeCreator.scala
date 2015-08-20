@@ -206,7 +206,9 @@ case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = false
 
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+  override def eval(input: InternalRow): Any = {
+    InternalRow(children.map(_.eval(input)): _*)
+  }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = GenerateUnsafeProjection.createCode(ctx, children)
@@ -244,7 +246,9 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
 
   override def nullable: Boolean = false
 
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+  override def eval(input: InternalRow): Any = {
+    InternalRow(valExprs.map(_.eval(input)): _*)
+  }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
