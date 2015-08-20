@@ -167,7 +167,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
         edgeContext.sendToDst((false, scaledTopicDistribution))
         edgeContext.sendToSrc((false, scaledTopicDistribution))
       }
-    // This is a hack to detect whether we could modify the values in-place.
+    // The Boolean is a hack to detect whether we could modify the values in-place.
     // TODO: Add zero/seqOp/combOp option to aggregateMessages. (SPARK-5438)
     val mergeMsg: ((Boolean, TopicCounts), (Boolean, TopicCounts)) => (Boolean, TopicCounts) =
       (m0, m1) => {
