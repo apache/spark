@@ -218,6 +218,7 @@ class DagModelView(wwwutils.SuperUserMixin, ModelView):
     form_widget_args = {
         'last_scheduler_run': {'disabled': True},
         'fileloc': {'disabled': True},
+        'is_paused': {'disabled': True},
         'last_pickled': {'disabled': True},
         'pickle_id': {'disabled': True},
         'last_loaded': {'disabled': True},
@@ -817,6 +818,12 @@ class Airflow(BaseView):
         dttm = dateutil.parser.parse(execution_date)
         form = DateTimeForm(data={'execution_date': dttm})
         dag = dagbag.get_dag(dag_id)
+        if not dag or task_id not in dag.task_ids:
+            flash(
+                "Task [{}.{}] doesn't seem to exist"
+                " at the moment".format(dag_id, task_id),
+                "error")
+            return redirect('/admin/')
         task = dag.get_task(task_id)
         task = copy.copy(task)
         task.resolve_template_files()
@@ -1002,9 +1009,10 @@ class Airflow(BaseView):
             base_date = datetime.now()
         else:
             base_date = dateutil.parser.parse(base_date)
+        base_date = utils.round_time(base_date, dag.schedule_interval)
 
         start_date = dag.start_date
-        if not start_date:
+        if not start_date and 'start_date' in dag.default_args:
             start_date = dag.default_args['start_date']
 
         if start_date:
@@ -1012,10 +1020,10 @@ class Airflow(BaseView):
             offset = timedelta(seconds=int(difference.total_seconds() % dag.schedule_interval.total_seconds()))
             base_date -= offset
             base_date -= timedelta(microseconds=base_date.microsecond)
-    
+
         num_runs = request.args.get('num_runs')
         num_runs = int(num_runs) if num_runs else 25
-        from_date = (base_date-(num_runs * dag.schedule_interval))
+        from_date = (base_date - (num_runs * dag.schedule_interval))
 
         dates = utils.date_range(
             from_date, base_date, dag.schedule_interval)
@@ -1094,7 +1102,7 @@ class Airflow(BaseView):
         dag = dagbag.get_dag(dag_id)
         if dag_id not in dagbag.dags:
             flash('DAG "{0}" seems to be missing.'.format(dag_id), "error")
-            return redirect('/admin/dagmodel/')
+            return redirect('/admin/')
 
         root = request.args.get('root')
         if root:
@@ -1257,6 +1265,25 @@ class Airflow(BaseView):
             demo_mode=conf.getboolean('webserver', 'demo_mode'),
             root=root,
         )
+
+    @expose('/paused')
+    @login_required
+    def paused(self):
+        DagModel = models.DagModel
+        dag_id = request.args.get('dag_id')
+        session = settings.Session()
+        orm_dag = session.query(
+            DagModel).filter(DagModel.dag_id == dag_id).first()
+        if request.args.get('is_paused') == 'false':
+            orm_dag.is_paused = True
+        else:
+            orm_dag.is_paused = False
+        session.merge(orm_dag)
+        session.commit()
+        session.close()
+
+        dagbag.get_dag(dag_id)
+        return "OK"
 
     @expose('/refresh')
     @login_required
