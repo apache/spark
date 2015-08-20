@@ -41,6 +41,12 @@ defaults = {
     'smtp': {
         'smtp_starttls': True,
     },
+    'security': {
+        'ccache': '/tmp/airflow_krb5_ccache',
+        'principal': 'airflow',                 # gets augmented with fqdn
+        'reinit_frequency': '3600',
+        'kinit_path': 'kinit',
+    }
 }
 
 DEFAULT_CONFIG = """\
