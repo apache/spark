@@ -106,7 +106,4 @@ private[ui] class MemoryPage(parent: MemoryTab) extends WebUIPage("") {
 
     UIUtils.headerSparkPage("Memory Usage", content, parent)
   }
-
-
 }
-

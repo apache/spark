@@ -19,6 +19,7 @@ package org.apache.spark.network.nio
 
 import java.nio.ByteBuffer
 
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
@@ -55,6 +56,8 @@ final class NioBlockTransferService(conf: SparkConf, securityManager: SecurityMa
     checkInit()
     cm.id.host
   }
+
+  override def getMemMetrics(executorMetrics: ExecutorMetrics): Unit = {}
 
   /**
    * Initialize the transfer service by giving it the BlockDataManager that can be used to fetch
