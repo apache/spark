@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.classification;
 
+import java.io.Serializable;
 import java.util.Arrays;
 
 import org.junit.After;
@@ -31,7 +32,7 @@ import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 
-public class JavaMultilayerPerceptronClassifierSuite {
+public class JavaMultilayerPerceptronClassifierSuite implements Serializable {
 
   private transient JavaSparkContext jsc;
   private transient SQLContext sqlContext;
