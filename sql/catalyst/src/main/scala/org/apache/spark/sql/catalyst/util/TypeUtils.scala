@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import com.google.common.primitives.UnsignedBytes
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.types._
@@ -62,10 +63,6 @@ object TypeUtils {
   }
 
   def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
-    for (i <- 0 until x.length; if i < y.length) {
-      val res = x(i).compareTo(y(i))
-      if (res != 0) return res
-    }
-    x.length - y.length
+    UnsignedBytes.lexicographicalComparator().compare(x, y)
   }
 }
