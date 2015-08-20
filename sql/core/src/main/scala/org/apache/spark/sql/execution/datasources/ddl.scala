@@ -53,7 +53,7 @@ case class DescribeCommand(
   *                      If it is false, an exception will be thrown
   */
 case class CreateTableUsing(
-    tableName: String,
+    tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
     provider: String,
     temporary: Boolean,
@@ -71,8 +71,9 @@ case class CreateTableUsing(
  * can analyze the logical plan that will be used to populate the table.
  * So, [[PreWriteCheck]] can detect cases that are not allowed.
  */
+// TODO: Use TableIdentifier instead of String for tableName (SPARK-10104).
 case class CreateTableUsingAsSelect(
-    tableName: String,
+    tableIdent: TableIdentifier,
     provider: String,
     temporary: Boolean,
     partitionColumns: Array[String],
@@ -80,12 +81,10 @@ case class CreateTableUsingAsSelect(
     options: Map[String, String],
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = Seq.empty[Attribute]
-  // TODO: Override resolved after we support databaseName.
-  // override lazy val resolved = databaseName != None && childrenResolved
 }
 
 case class CreateTempTableUsing(
-    tableName: String,
+    tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
@@ -93,14 +92,16 @@ case class CreateTempTableUsing(
   def run(sqlContext: SQLContext): Seq[Row] = {
     val resolved = ResolvedDataSource(
       sqlContext, userSpecifiedSchema, Array.empty[String], provider, options)
-    sqlContext.registerDataFrameAsTable(
-      DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
+    sqlContext.catalog.registerTable(
+      tableIdent.toSeq,
+      DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
+
     Seq.empty[Row]
   }
 }
 
 case class CreateTempTableUsingAsSelect(
-    tableName: String,
+    tableIdent: TableIdentifier,
     provider: String,
     partitionColumns: Array[String],
     mode: SaveMode,
@@ -110,8 +111,9 @@ case class CreateTempTableUsingAsSelect(
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val df = DataFrame(sqlContext, query)
     val resolved = ResolvedDataSource(sqlContext, provider, partitionColumns, mode, options, df)
-    sqlContext.registerDataFrameAsTable(
-      DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
+    sqlContext.catalog.registerTable(
+      tableIdent.toSeq,
+      DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
 
     Seq.empty[Row]
   }

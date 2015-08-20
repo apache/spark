@@ -218,7 +218,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       case _ =>
         val cmd =
           CreateTableUsingAsSelect(
-            tableIdent.unquotedString,
+            tableIdent,
             source,
             temporary = false,
             partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
