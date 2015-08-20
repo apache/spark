@@ -19,7 +19,7 @@ package org.apache.spark.network.sasl;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.collect.Lists;
 import org.junit.After;
@@ -188,7 +188,7 @@ public class SaslIntegrationSuite {
       client1 = clientFactory.createClient(TestUtils.getLocalHost(),
         blockServer.getPort());
 
-      final AtomicBoolean gotSecurityException = new AtomicBoolean(false);
+      final AtomicReference<Throwable> exception = new AtomicReference<>();
 
       BlockFetchingListener listener = new BlockFetchingListener() {
         @Override
@@ -197,9 +197,8 @@ public class SaslIntegrationSuite {
         }
 
         @Override
-        public synchronized void onBlockFetchFailure(String blockId, Throwable exception) {
-          gotSecurityException.set(
-            exception.getMessage().contains(SecurityException.class.getName()));
+        public synchronized void onBlockFetchFailure(String blockId, Throwable t) {
+          exception.set(t);
           notifyAll();
         }
       };
@@ -211,8 +210,7 @@ public class SaslIntegrationSuite {
         fetcher.start();
         listener.wait();
       }
-      assertTrue("Should have failed to fetch blocks from non-authorized app.",
-        gotSecurityException.get());
+      checkSecurityException(exception.get());
 
       // Register an executor so that the next steps work.
       ExecutorShuffleInfo executorInfo = new ExecutorShuffleInfo(
@@ -243,19 +241,18 @@ public class SaslIntegrationSuite {
         }
 
         @Override
-        public synchronized void onFailure(int chunkIndex, Throwable e) {
-          gotSecurityException.set(e.getMessage().contains(SecurityException.class.getName()));
+        public synchronized void onFailure(int chunkIndex, Throwable t) {
+          exception.set(t);
           notifyAll();
         }
       };
 
-      gotSecurityException.set(false);
+      exception.set(null);
       synchronized (callback) {
         client2.fetchChunk(streamId, 0, callback);
         callback.wait();
       }
-      assertTrue("Should have failed to fetch blocks from non-authorized stream.",
-        gotSecurityException.get());
+      checkSecurityException(exception.get());
     } finally {
       if (client1 != null) {
         client1.close();
@@ -281,5 +278,11 @@ public class SaslIntegrationSuite {
     public StreamManager getStreamManager() {
       return new OneForOneStreamManager();
     }
+  }
+
+  private void checkSecurityException(Throwable t) {
+    assertNotNull("No exception was caught.", t);
+    assertTrue("Expected SecurityException.",
+      t.getMessage().contains(SecurityException.class.getName()));
   }
 }
