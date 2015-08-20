@@ -372,7 +372,7 @@ object NullPropagation extends Rule[LogicalPlan] {
         case _ => e
       }
 
-      case e: StringComparison => e.children match {
+      case e: StringPredicate => e.children match {
         case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
         case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
         case _ => e

@@ -60,7 +60,7 @@ public class MyDoubleSum extends UserDefinedAggregateFunction {
     return _bufferSchema;
   }
 
-  @Override public DataType returnDataType() {
+  @Override public DataType dataType() {
     return _returnDataType;
   }
 
