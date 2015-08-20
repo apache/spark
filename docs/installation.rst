@@ -6,6 +6,7 @@ working towards a production grade environment is a bit more work.
 As of August 2015, Airflow has experimental support for Python 3. Any issues should be reported (or fixed!).
 The only major regression is that ``HDFSHooks`` do not work (due to a ``snakebite`` dependency)
 
+
 Extra Packages
 ''''''''''''''
 The ``airflow`` PyPI basic package only installs what's needed to get started.
