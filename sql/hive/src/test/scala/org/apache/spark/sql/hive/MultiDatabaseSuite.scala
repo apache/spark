@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.{QueryTest, SQLContext, SaveMode}
+import org.apache.spark.sql.{AnalysisException, QueryTest, SQLContext, SaveMode}
 
 class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
   override val _sqlContext: HiveContext = TestHive
@@ -256,6 +256,54 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
         checkAnswer(
           sqlContext.table(s"$db.t"),
           df.withColumn("p", lit(1)).unionAll(df.withColumn("p", lit(2))))
+      }
+    }
+  }
+
+  test("invalid database name and table names") {
+    {
+      val message = intercept[AnalysisException] {
+        df.write.format("parquet").saveAsTable("`d:b`.`t:a`")
+      }.getMessage
+      assert(message.contains("is not a valid name for metastore"))
+    }
+
+    {
+      val message = intercept[AnalysisException] {
+        df.write.format("parquet").saveAsTable("`d:b`.`table`")
+      }.getMessage
+      assert(message.contains("is not a valid name for metastore"))
+    }
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      {
+        val message = intercept[AnalysisException] {
+          sql(
+            s"""
+            |CREATE TABLE `d:b`.`t:a` (a int)
+            |USING parquet
+            |OPTIONS (
+            |  path '$path'
+            |)
+            """.stripMargin)
+        }.getMessage
+        assert(message.contains("is not a valid name for metastore"))
+      }
+
+      {
+        val message = intercept[AnalysisException] {
+          sql(
+            s"""
+              |CREATE TABLE `d:b`.`table` (a int)
+              |USING parquet
+              |OPTIONS (
+              |  path '$path'
+              |)
+              """.stripMargin)
+        }.getMessage
+        assert(message.contains("is not a valid name for metastore"))
       }
     }
   }
