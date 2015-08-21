@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.types.{DataType, NumericType}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AlgebraicAggregate
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.types._
 
 /**
  * The trait of the Window Specification (specified in the OVER clause or WINDOW clause) for
@@ -295,7 +297,7 @@ case class UnresolvedWindowFunction(
 }
 
 case class UnresolvedWindowExpression(
-    child: UnresolvedWindowFunction,
+    child: Expression,
     windowSpec: WindowSpecReference) extends UnaryExpression with Unevaluable {
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
@@ -305,7 +307,7 @@ case class UnresolvedWindowExpression(
 }
 
 case class WindowExpression(
-    windowFunction: WindowFunction,
+    windowFunction: Expression,
     windowSpec: WindowSpecDefinition) extends Expression with Unevaluable {
 
   override def children: Seq[Expression] = windowFunction :: windowSpec :: Nil
@@ -327,4 +329,193 @@ object FrameBoundaryExtractor {
     case ValueFollowing(offset) => Some(offset)
     case _ => None
   }
+}
+
+/**
+ * A window function is a function that can only be evaluated in the context of a window operator.
+ */
+trait WindowFunction2 extends Expression {
+  /**
+   * Define the frame in which the window operator must be executed.
+   */
+  def frame: WindowFrame = UnspecifiedFrame
+}
+
+trait SizeBasedWindowFunction extends WindowFunction2 {
+  def withSize(n: Expression): SizeBasedWindowFunction
+}
+
+abstract class OffsetWindowFunction
+    extends Expression with WindowFunction2 with Unevaluable with ImplicitCastInputTypes {
+  self: Product =>
+  val input: Expression
+  val default: Expression
+  val offset: Expression
+  val offsetSign: Int
+  def offsetValue: Int = offset.eval().asInstanceOf[Int]
+
+  override def children: Seq[Expression] = Seq(input, offset, default)
+
+  override def foldable: Boolean = input.foldable && (default == null || default.foldable)
+
+  override def nullable: Boolean = input.nullable && (default == null || default.nullable)
+
+  override lazy val frame = {
+    val boundary = ValueFollowing(offsetSign * offsetValue)
+    SpecifiedWindowFrame(RowFrame, boundary, boundary)
+  }
+
+  override def dataType: DataType = input.dataType
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(AnyDataType, IntegerType, TypeCollection(input.dataType, NullType))
+
+  override def toString: String = s"$prettyName($input, $offset, $default)"
+}
+
+case class Lead(input: Expression, offset: Expression, default: Expression)
+    extends OffsetWindowFunction {
+
+  def this(input: Expression, offset: Expression) =
+    this(input, offset, Literal(null))
+
+  def this(input: Expression) =
+    this(input, Literal(1), Literal(null))
+
+  def this() = this(Literal(null), Literal(1), Literal(null))
+
+  val offsetSign = 1
+}
+
+case class Lag(input: Expression, offset: Expression, default: Expression)
+  extends OffsetWindowFunction {
+
+  def this(input: Expression, offset: Expression) =
+    this(input, offset, Literal(null))
+
+  def this(input: Expression) =
+    this(input, Literal(1), Literal(null))
+
+  def this() = this(Literal(null), Literal(1), Literal(null))
+
+  val offsetSign = -1
+}
+
+abstract class AggregateWindowFunction extends AlgebraicAggregate with WindowFunction2 {
+  self: Product =>
+  override val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
+  override def dataType: DataType = IntegerType
+  override def nullable: Boolean = false
+  override val mergeExpressions = Nil // TODO how to deal with this?
+}
+
+abstract class RowNumberLike extends AggregateWindowFunction {
+  override def children: Seq[Expression] = Nil
+  override def inputTypes: Seq[AbstractDataType] = Nil
+  protected val rowNumber = AttributeReference("rowNumber", IntegerType)()
+  override val bufferAttributes: Seq[AttributeReference] = rowNumber :: Nil
+  override val initialValues: Seq[Expression] = Literal(0) :: Nil
+  override val updateExpressions: Seq[Expression] = rowNumber + 1 :: Nil
+}
+
+case class RowNumber() extends RowNumberLike {
+  override val evaluateExpression = Cast(rowNumber, IntegerType)
+}
+
+case class CumeDist(n: Expression) extends RowNumberLike with SizeBasedWindowFunction {
+  def this() = this(Literal(0))
+  override def dataType: DataType = DoubleType
+  override def deterministic: Boolean = true
+  override def withSize(n: Expression): CumeDist = CumeDist(n)
+  override val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
+  override val evaluateExpression = Cast(rowNumber, DoubleType) / Cast(n, DoubleType)
+}
+
+case class NTile(buckets: Expression, n: Expression) extends RowNumberLike
+    with SizeBasedWindowFunction {
+  def this() = this(Literal(1), Literal(0))
+  def this(buckets: Expression) = this(buckets, Literal(0))
+  override def withSize(n: Expression): NTile = NTile(buckets, n)
+  private val bucket = AttributeReference("bucket", IntegerType)()
+  private val bucketThreshold = AttributeReference("bucketThreshold", IntegerType)()
+  private val bucketSize = AttributeReference("bucketSize", IntegerType)()
+  private val bucketsWithPadding = AttributeReference("bucketsWithPadding", IntegerType)()
+
+  override val bufferAttributes = Seq(
+    rowNumber,
+    bucket,
+    bucketThreshold,
+    bucketSize,
+    bucketsWithPadding
+  )
+
+  override val initialValues = Seq(
+    Literal(0),
+    Literal(0),
+    Literal(0),
+    Cast(n / buckets, IntegerType),
+    Cast(n % buckets, IntegerType)
+  )
+
+  override val updateExpressions = Seq(
+    rowNumber + 1,
+    bucket + If(rowNumber > bucketThreshold, 1, 0),
+    bucketThreshold +
+      If(rowNumber > bucketThreshold, bucketSize + If(bucket <= bucketsWithPadding, 1, 0), 0),
+    bucketSize,
+    bucketsWithPadding
+  )
+
+  override val evaluateExpression = bucket
+}
+
+abstract class RankLike extends AggregateWindowFunction {
+  override def children: Seq[Expression] = order
+  override def inputTypes: Seq[AbstractDataType] = children.map(_ => AnyDataType)
+
+  val order: Seq[Expression]
+  protected val orderAttrs = order.zipWithIndex.map{ case (expr, i) =>
+    AttributeReference(i.toString, expr.dataType)()
+  }
+
+  protected val orderEquals =
+    order.zip(orderAttrs).map(EqualNullSafe.tupled).reduceOption(And).getOrElse(Literal(true))
+  protected val orderInit = order.map(e => Literal.create(null, e.dataType))
+  protected val rank = AttributeReference("rank", IntegerType)()
+  protected val rowNumber = AttributeReference("rowNumber", IntegerType)()
+
+  // Implementation for RANK()
+  protected def doUpdateRank: Expression = rowNumber + 1
+  protected def updateRank = If(And(orderEquals, rank !== 0), rank, doUpdateRank)
+  override val bufferAttributes = rank +: rowNumber +: orderAttrs
+  override val initialValues = Literal(0) +: Literal(0) +: orderInit
+  override val updateExpressions = updateRank +: (rowNumber + 1) +: order
+  override val evaluateExpression: Expression = Cast(rank, IntegerType)
+
+  def withOrder(order: Seq[Expression]): RankLike
+}
+
+case class Rank(order: Seq[Expression]) extends RankLike {
+  def this() = this(Nil)
+  override def withOrder(order: Seq[Expression]): Rank = Rank(order)
+}
+
+case class DenseRank(order: Seq[Expression]) extends RankLike {
+  def this() = this(Nil)
+  override def withOrder(order: Seq[Expression]): DenseRank = DenseRank(order)
+  override protected def doUpdateRank = rank + 1
+  override val updateExpressions = updateRank +: order
+  override val bufferAttributes = rank +: orderAttrs
+  override val initialValues = Literal(0) +: orderInit
+}
+
+case class PercentRank(order: Seq[Expression], n: Expression) extends RankLike
+    with SizeBasedWindowFunction {
+  def this() = this(Nil, MutableLiteral(0, IntegerType))
+  override def withOrder(order: Seq[Expression]): PercentRank = PercentRank(order, n)
+  override def withSize(n: Expression): PercentRank = PercentRank(order, n)
+  override def dataType: DataType = DoubleType
+  override val evaluateExpression =
+    If(n > 1, Cast(rank - 1, DoubleType) / Cast(n - 1, DoubleType),
+      Literal.create(0.0d, DoubleType))
 }

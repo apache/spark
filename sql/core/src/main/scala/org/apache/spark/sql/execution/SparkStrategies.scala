@@ -364,8 +364,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
       }
       case logical.Window(projectList, windowExprs, partitionSpec, orderSpec, child) =>
+        val convertedWindowExpressions = windowExprs.map { e =>
+          val converted = e.transformDown(Utils.convertAggregateExpressions)
+          converted.asInstanceOf[NamedExpression]
+        }
         execution.Window(
-          projectList, windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
+          projectList,
+          convertedWindowExpressions,
+          partitionSpec,
+          orderSpec,
+          planLater(child)) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child) =>
         execution.Sample(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
