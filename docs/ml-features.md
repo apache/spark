@@ -1532,10 +1532,6 @@ Suppose also that we have a potential input attributes for the `userFeatures`, i
  ["f1", "f2", "f3"] | ["f2", "f3"]
 ~~~
 
-**NOTE**
-
-The Python version of `VectorSlicer` does not support selecting by names currently.
-
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
@@ -1610,27 +1606,6 @@ vectorSlicer.setIndices(new int[]{1}).setNames(new String[]{"f3"});
 DataFrame output = vectorSlicer.transform(dataset);
 
 System.out.println(output.select("userFeatures", "features").first());
-{% endhighlight %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-[`VectorSlicer`](api/python/pyspark.ml.html#pyspark.ml.feature.VectorSlicer) takes an input column
-name with specified indices or names and an output column name.
-
-{% highlight python %}
-from pyspark.mllib.linalg import DenseVector
-from pyspark.mllib.linalg import SparseVector
-from pyspark.ml.feature import VectorSlicer
-
-dataset = sqlContext.createDataFrame([(SparseVector(3, {0: -2.0, 1: 2.3}),),
-    (DenseVector([-2.0, 2.3, 0.0]),)], ["userFeatures"])
-
-vectorSlicer = VectorSlicer(indices=[1, 2], inputCol="userFeatures", outputCol="features")
-
-output = vectorSlicer.transform(dataset)
-
-print(output.select("userFeatures", "features").first())
 {% endhighlight %}
 </div>
 </div>
