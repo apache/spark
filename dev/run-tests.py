@@ -85,6 +85,13 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
     return [f for f in raw_output.split('\n') if f]
 
 
+def setup_test_environ(environ):
+    print("[info] Setup the following environment variables for tests: ")
+    for (k, v) in environ.items():
+        print("%s=%s" % (k, v))
+        os.environ[k] = v
+
+
 def determine_modules_to_test(changed_modules):
     """
     Given a set of modules that have changed, compute the transitive closure of those modules'
@@ -266,6 +273,7 @@ def get_hadoop_profiles(hadoop_version):
         "hadoop2.0": ["-Phadoop-1", "-Dhadoop.version=2.0.0-mr1-cdh4.1.1"],
         "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
         "hadoop2.3": ["-Pyarn", "-Phadoop-2.3", "-Dhadoop.version=2.3.0"],
+        "hadoop2.6": ["-Pyarn", "-Phadoop-2.6"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
@@ -282,7 +290,7 @@ def build_spark_maven(hadoop_version):
     mvn_goals = ["clean", "package", "-DskipTests"]
     profiles_and_goals = build_profiles + mvn_goals
 
-    print("[info] Building Spark (w/Hive 0.13.1) using Maven with these arguments: ",
+    print("[info] Building Spark (w/Hive 1.2.1) using Maven with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_maven(profiles_and_goals)
@@ -294,17 +302,20 @@ def build_spark_sbt(hadoop_version):
     sbt_goals = ["package",
                  "assembly/assembly",
                  "streaming-kafka-assembly/assembly",
-                 "streaming-flume-assembly/assembly"]
+                 "streaming-flume-assembly/assembly",
+                 "streaming-mqtt-assembly/assembly",
+                 "streaming-mqtt/test:assembly",
+                 "streaming-kinesis-asl-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
-    print("[info] Building Spark (w/Hive 0.13.1) using SBT with these arguments: ",
+    print("[info] Building Spark (w/Hive 1.2.1) using SBT with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_sbt(profiles_and_goals)
 
 
 def build_apache_spark(build_tool, hadoop_version):
-    """Will build Spark against Hive v0.13.1 given the passed in build tool (either `sbt` or
+    """Will build Spark against Hive v1.2.1 given the passed in build tool (either `sbt` or
     `maven`). Defaults to using `sbt`."""
 
     set_title_and_block("Building Spark", "BLOCK_BUILD")
@@ -454,6 +465,15 @@ def main():
         changed_modules = [modules.root]
     print("[info] Found the following changed modules:",
           ", ".join(x.name for x in changed_modules))
+
+    # setup environment variables
+    # note - the 'root' module doesn't collect environment variables for all modules. Because the
+    # environment variables should not be set if a module is not changed, even if running the 'root'
+    # module. So here we should use changed_modules rather than test_modules.
+    test_environ = {}
+    for m in changed_modules:
+        test_environ.update(m.environ)
+    setup_test_environ(test_environ)
 
     test_modules = determine_modules_to_test(changed_modules)
 

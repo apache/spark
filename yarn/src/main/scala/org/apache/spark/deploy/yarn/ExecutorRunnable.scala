@@ -86,10 +86,17 @@ class ExecutorRunnable(
     val commands = prepareCommand(masterAddress, slaveId, hostname, executorMemory, executorCores,
       appId, localResources)
 
-    logInfo(s"Setting up executor with environment: $env")
-    logInfo("Setting up executor with commands: " + commands)
-    ctx.setCommands(commands)
+    logInfo(s"""
+      |===============================================================================
+      |YARN executor launch context:
+      |  env:
+      |${env.map { case (k, v) => s"    $k -> $v\n" }.mkString}
+      |  command:
+      |    ${commands.mkString(" ")}
+      |===============================================================================
+      """.stripMargin)
 
+    ctx.setCommands(commands)
     ctx.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr))
 
     // If external shuffle service is enabled, register with the Yarn shuffle service already
@@ -210,7 +217,7 @@ class ExecutorRunnable(
       // an inconsistent state.
       // TODO: If the OOM is not recoverable by rescheduling it on different node, then do
       // 'something' to fail job ... akin to blacklisting trackers in mapred ?
-      "-XX:OnOutOfMemoryError='kill %p'") ++
+      YarnSparkHadoopUtil.getOutOfMemoryErrorArgument) ++
       javaOpts ++
       Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
         "--driver-url", masterAddress.toString,

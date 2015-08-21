@@ -59,6 +59,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var packages: String = null
   var repositories: String = null
   var ivyRepoPath: String = null
+  var packagesExclusions: String = null
   var verbose: Boolean = false
   var isPython: Boolean = false
   var pyFiles: String = null
@@ -172,6 +173,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     name = Option(name).orElse(sparkProperties.get("spark.app.name")).orNull
     jars = Option(jars).orElse(sparkProperties.get("spark.jars")).orNull
     ivyRepoPath = sparkProperties.get("spark.jars.ivy").orNull
+    packages = Option(packages).orElse(sparkProperties.get("spark.jars.packages")).orNull
+    packagesExclusions = Option(packagesExclusions)
+      .orElse(sparkProperties.get("spark.jars.excludes")).orNull
     deployMode = Option(deployMode).orElse(env.get("DEPLOY_MODE")).orNull
     numExecutors = Option(numExecutors)
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
@@ -299,6 +303,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     |  childArgs               [${childArgs.mkString(" ")}]
     |  jars                    $jars
     |  packages                $packages
+    |  packagesExclusions      $packagesExclusions
     |  repositories            $repositories
     |  verbose                 $verbose
     |
@@ -391,6 +396,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       case PACKAGES =>
         packages = value
 
+      case PACKAGES_EXCLUDE =>
+        packagesExclusions = value
+
       case REPOSITORIES =>
         repositories = value
 
@@ -482,6 +490,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              maven repo, then maven central and any additional remote
         |                              repositories given by --repositories. The format for the
         |                              coordinates should be groupId:artifactId:version.
+        |  --exclude-packages          Comma-separated list of groupId:artifactId, to exclude while
+        |                              resolving the dependencies provided in --packages to avoid
+        |                              dependency conflicts.
         |  --repositories              Comma-separated list of additional remote repositories to
         |                              search for the maven coordinates given with --packages.
         |  --py-files PY_FILES         Comma-separated list of .zip, .egg, or .py files to place
@@ -600,5 +611,4 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       System.setErr(currentErr)
     }
   }
-
 }
