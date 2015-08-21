@@ -198,11 +198,11 @@ case class Cast(child: Expression, dataType: DataType)
 
   // converting milliseconds to us
   private[this] def longToTimestamp(t: Long): Long = t * 1000L
-  // converting us to seconds
-  private[this] def timestampToLong(ts: Long): Long = math.floor(ts.toDouble / 1000000L).toLong
-  // converting us to seconds in double
+  // converting us to milliseconds
+  private[this] def timestampToLong(ts: Long): Long = math.floor(ts.toDouble / 1000L).toLong
+  // converting us to milliseconds in double
   private[this] def timestampToDouble(ts: Long): Double = {
-    ts / 1000000.0
+    ts / 1000.0
   }
 
   // DateConverter
