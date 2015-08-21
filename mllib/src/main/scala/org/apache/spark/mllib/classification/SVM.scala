@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.classification
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
@@ -46,8 +46,8 @@ class SVMModel (
    * Sets the threshold that separates positive predictions from negative predictions. An example
    * with prediction score greater than or equal to this threshold is identified as an positive,
    * and negative otherwise. The default value is 0.0.
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   @Experimental
   def setThreshold(threshold: Double): this.type = {
     this.threshold = Some(threshold)
@@ -57,16 +57,16 @@ class SVMModel (
   /**
    * :: Experimental ::
    * Returns the threshold (if any) used for converting raw prediction scores into 0/1 predictions.
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   @Experimental
   def getThreshold: Option[Double] = threshold
 
   /**
    * :: Experimental ::
    * Clears the threshold so that `predict` will output raw prediction scores.
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   @Experimental
   def clearThreshold(): this.type = {
     threshold = None
@@ -84,9 +84,7 @@ class SVMModel (
     }
   }
 
-  /**
-   * @since 1.3.0
-   */
+  @Since("1.3.0")
   override def save(sc: SparkContext, path: String): Unit = {
     GLMClassificationModel.SaveLoadV1_0.save(sc, path, this.getClass.getName,
       numFeatures = weights.size, numClasses = 2, weights, intercept, threshold)
@@ -94,9 +92,7 @@ class SVMModel (
 
   override protected def formatVersion: String = "1.0"
 
-  /**
-   * @since 1.4.0
-   */
+  @Since("1.4.0")
   override def toString: String = {
     s"${super.toString}, numClasses = 2, threshold = ${threshold.getOrElse("None")}"
   }
@@ -104,9 +100,7 @@ class SVMModel (
 
 object SVMModel extends Loader[SVMModel] {
 
-   /**
-   * @since 1.3.0
-   */
+  @Since("1.3.0")
   override def load(sc: SparkContext, path: String): SVMModel = {
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
     // Hard-code class name string in case it changes in the future
@@ -185,8 +179,8 @@ object SVMWithSGD {
    * @param miniBatchFraction Fraction of data to be used per iteration.
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to
    *        the number of features in the data.
-   * @since 0.8.0
    */
+  @Since("0.8.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -209,8 +203,8 @@ object SVMWithSGD {
    * @param stepSize Step size to be used for each iteration of gradient descent.
    * @param regParam Regularization parameter.
    * @param miniBatchFraction Fraction of data to be used per iteration.
-   * @since 0.8.0
    */
+  @Since("0.8.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -231,8 +225,8 @@ object SVMWithSGD {
    * @param regParam Regularization parameter.
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a SVMModel which has the weights and offset from training.
-   * @since 0.8.0
    */
+  @Since("0.8.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -250,8 +244,8 @@ object SVMWithSGD {
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a SVMModel which has the weights and offset from training.
-   * @since 0.8.0
    */
+  @Since("0.8.0")
   def train(input: RDD[LabeledPoint], numIterations: Int): SVMModel = {
     train(input, numIterations, 1.0, 0.01, 1.0)
   }
