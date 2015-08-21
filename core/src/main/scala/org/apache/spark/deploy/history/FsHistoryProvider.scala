@@ -98,17 +98,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  /**
-   * An Executor to fetch and parse log files.
-   */
-  private val replayExecutor: ExecutorService = {
-    if (!conf.contains("spark.testing")) {
-      ThreadUtils.newDaemonSingleThreadExecutor("log-replay-executor")
-    } else {
-      MoreExecutors.sameThreadExecutor()
-    }
-  }
-
   initialize()
 
   private def initialize(): Unit = {
@@ -208,9 +197,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
 
       logInfos.sliding(20, 20).foreach { batch =>
-        replayExecutor.submit(new Runnable {
-          override def run(): Unit = mergeApplicationListing(batch)
-        })
+        mergeApplicationListing(batch)
       }
 
       lastModifiedTime = newLastModifiedTime
