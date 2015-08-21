@@ -280,4 +280,38 @@ class ConstantFoldingSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("binary comparison folding") {
+    val trueQuery = testRelation.select(Literal(true).as("r"))
+    val falseQuery = testRelation.select(Literal(false).as("r"))
+    def checkComparisonFolding(l: LogicalPlan, expected: Boolean): Unit = {
+      val optimized = Optimize.execute(l.analyze)
+      if (expected) {
+        comparePlans(optimized, trueQuery)
+      } else {
+        comparePlans(optimized, falseQuery)
+      }
+    }
+
+    checkComparisonFolding(
+      testRelation.select(EqualTo('a, Int.MaxValue.toLong + 1L).as("r")), false)
+    checkComparisonFolding(
+      testRelation.select(EqualTo('a, Int.MinValue.toLong - 1L).as("r")), false)
+    checkComparisonFolding(
+      testRelation.select(LessThan('a, Int.MaxValue.toLong + 1L).as("r")), true)
+    checkComparisonFolding(
+      testRelation.select(LessThan('a, Int.MinValue.toLong - 1L).as("r")), false)
+    checkComparisonFolding(
+      testRelation.select(GreaterThan('a, Int.MaxValue.toLong + 1L).as("r")), false)
+    checkComparisonFolding(
+      testRelation.select(GreaterThan('a, Int.MinValue.toLong - 1L).as("r")), true)
+    checkComparisonFolding(
+      testRelation.select(LessThanOrEqual('a, Int.MaxValue.toLong).as("r")), true)
+    checkComparisonFolding(
+      testRelation.select(LessThanOrEqual('a, Int.MinValue.toLong - 1L).as("r")), false)
+    checkComparisonFolding(
+      testRelation.select(GreaterThanOrEqual('a, Int.MaxValue.toLong + 1L).as("r")), false)
+    checkComparisonFolding(
+      testRelation.select(GreaterThanOrEqual('a, Int.MinValue.toLong).as("r")), true)
+  }
 }
