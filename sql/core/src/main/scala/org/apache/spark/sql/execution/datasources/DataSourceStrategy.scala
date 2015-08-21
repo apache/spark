@@ -36,13 +36,6 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  */
 private[sql] object DataSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan)) =>
-      pruneFilterProjectRaw(
-        l,
-        projects,
-        filters,
-        (a, f) => toCatalystRDD(l, a, t.buildScan(a, f))) :: Nil
-
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedFilteredScan)) =>
       pruneFilterProject(
         l,
