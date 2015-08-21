@@ -31,7 +31,7 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
+import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.avro.{AvroGenericRecordWritable, AvroSerdeUtils}
@@ -118,8 +118,8 @@ private[hive] object HiveShim {
    *
    * @param functionClassName UDF class name
    */
-  private[hive] case class HiveFunctionWrapper(var functionClassName: String)
-    extends java.io.Externalizable {
+  private[hive] case class HiveFunctionWrapper(var functionClassName: String,
+    var instance: AnyRef = null) extends java.io.Externalizable with Logging {
 
     // for Serialization
     def this() = this(null)
@@ -154,8 +154,6 @@ private[hive] object HiveShim {
       serializeObjectByKryo(Utilities.runtimeSerializationKryo.get(), function, out)
     }
 
-    private var instance: AnyRef = null
-
     def writeExternal(out: java.io.ObjectOutput) {
       // output the function name
       out.writeUTF(functionClassName)
@@ -184,7 +182,7 @@ private[hive] object HiveShim {
         // read the function in bytes
         val functionInBytesLength = in.readInt()
         val functionInBytes = new Array[Byte](functionInBytesLength)
-        in.read(functionInBytes, 0, functionInBytesLength)
+        in.readFully(functionInBytes)
 
         // deserialize the function object via Hive Utilities
         instance = deserializePlan[AnyRef](new java.io.ByteArrayInputStream(functionInBytes),
@@ -196,14 +194,8 @@ private[hive] object HiveShim {
       if (instance != null) {
         instance.asInstanceOf[UDFType]
       } else {
-        val func = Utils.getContextOrSparkClassLoader
+        Utils.getContextOrSparkClassLoader
           .loadClass(functionClassName).newInstance.asInstanceOf[UDFType]
-        if (!func.isInstanceOf[UDF]) {
-          // We cache the function if it's no the Simple UDF,
-          // as we always have to create new instance for Simple UDF
-          instance = func
-        }
-        func
       }
     }
   }
