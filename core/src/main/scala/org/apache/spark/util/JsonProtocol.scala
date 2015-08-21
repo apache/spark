@@ -290,7 +290,6 @@ private[spark] object JsonProtocol {
     val transportMetrics = executorMetrics.transportMetrics.map(
       transportMetricsToJson).getOrElse(JNothing)
     ("Executor Hostname" -> executorMetrics.hostname) ~
-    ("Executor Port" -> executorMetrics.port.map(new JInt(_)).getOrElse(JNothing)) ~
     ("TransportMetrics" -> transportMetrics)
   }
 
@@ -715,7 +714,6 @@ private[spark] object JsonProtocol {
   def executorMetricsFromJson(json: JValue): ExecutorMetrics = {
     val metrics = new ExecutorMetrics
     metrics.setHostname((json \ "Executor Hostname").extract[String])
-    metrics.setPort(Utils.jsonOption(json \ "Executor Port").map(_.extract[Int]))
     metrics.setTransportMetrics(
       Utils.jsonOption((json \ "TransportMetrics")).map(transportMetrisFromJson))
     metrics

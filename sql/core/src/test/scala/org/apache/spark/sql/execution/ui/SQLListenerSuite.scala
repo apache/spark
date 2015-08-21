@@ -108,7 +108,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
 
     assert(listener.getExecutionMetrics(0).isEmpty)
 
-    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
+    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", null, Seq(
       // (task id, stage id, stage attempt, metrics)
       (0L, 0, 0, createTaskMetrics(accumulatorUpdates)),
       (1L, 0, 0, createTaskMetrics(accumulatorUpdates))
@@ -116,7 +116,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
 
     assert(listener.getExecutionMetrics(0) === accumulatorUpdates.mapValues(_ * 2))
 
-    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
+    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", null, Seq(
       // (task id, stage id, stage attempt, metrics)
       (0L, 0, 0, createTaskMetrics(accumulatorUpdates)),
       (1L, 0, 0, createTaskMetrics(accumulatorUpdates.mapValues(_ * 2)))
@@ -127,7 +127,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     // Retrying a stage should reset the metrics
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 1)))
 
-    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
+    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", null, Seq(
       // (task id, stage id, stage attempt, metrics)
       (0L, 0, 1, createTaskMetrics(accumulatorUpdates)),
       (1L, 0, 1, createTaskMetrics(accumulatorUpdates))
@@ -167,7 +167,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     // Summit a new stage
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(1, 0)))
 
-    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
+    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", null, Seq(
       // (task id, stage id, stage attempt, metrics)
       (0L, 1, 0, createTaskMetrics(accumulatorUpdates)),
       (1L, 1, 0, createTaskMetrics(accumulatorUpdates))

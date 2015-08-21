@@ -120,7 +120,7 @@ class MemoryUIInfo {
         case Some(transportMemSize) => transportInfo
         case _ => Some(new transportMemSize)
       }
-      executorAddress = execMetrics.hostPort
+      executorAddress = execMetrics.hostname
       if (execMetrics.transportMetrics.isDefined) {
         transportInfo.get.updateTransport(execMetrics.transportMetrics.get)
       }

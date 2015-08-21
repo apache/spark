@@ -36,15 +36,6 @@ class ExecutorMetrics extends Serializable {
   def hostname: String = _hostname
   private[spark] def setHostname(value: String) = _hostname = value
 
-  /**
-   * Host's port the executor runs on
-   */
-  private var _port: Option[Int] = _
-  def port: Option[Int] = _port
-  private[spark] def setPort(value: Option[Int]) = _port = value
-
-  def hostPort: String = hostname + ":" + port.getOrElse(0)
-
   private var _transportMetrics: Option[TransportMetrics] = None
   def transportMetrics: Option[TransportMetrics] = _transportMetrics
   private[spark] def setTransportMetrics(value: Option[TransportMetrics]) = {
