@@ -696,7 +696,7 @@ class DAGSchedulerSuite
     assertDataStructuresEmpty()
   }
 
-  test("verify not submit next stage while not have registered mapStatus") {
+  test("don't submit stage until its dependencies map outputs are registered (SPARK-5259)") {
     val firstRDD = new MyRDD(sc, 3, Nil)
     val firstShuffleDep = new ShuffleDependency(firstRDD, null)
     val firstShuffleId = firstShuffleDep.shuffleId
