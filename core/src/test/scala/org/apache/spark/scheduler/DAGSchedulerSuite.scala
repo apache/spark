@@ -719,7 +719,7 @@ class DAGSchedulerSuite
       null, null, createFakeTaskInfo(), null))
 
     // so we resubmit stage 0, which completes happily
-    Thread.sleep(1000)
+    scheduler.resubmitFailedStages()
     val stage0Resubmit = taskSets(2)
     assert(stage0Resubmit.stageId == 0)
     assert(stage0Resubmit.stageAttemptId === 1)
