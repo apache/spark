@@ -450,6 +450,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           receiver.preferredLocation,
           receiverTrackingInfos,
           getExecutors)
+        // Assume there is one receiver restarting at one time, so we don't need to update
+        // receiverTrackingInfos
         startReceiver(receiver, scheduledExecutors)
       case c: CleanupOldBlocks =>
         receiverTrackingInfos.values.flatMap(_.endpoint).foreach(_.send(c))

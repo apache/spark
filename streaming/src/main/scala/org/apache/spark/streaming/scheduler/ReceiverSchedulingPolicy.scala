@@ -141,17 +141,16 @@ private[streaming] class ReceiverSchedulingPolicy {
     val scheduledExecutors = mutable.Set[String]()
     scheduledExecutors ++= preferredLocation
 
-    val executorWeights = receiverTrackingInfoMap.filter(_._1 != receiverId).values.flatMap {
-      receiverTrackingInfo =>
-        receiverTrackingInfo.state match {
-          case ReceiverState.INACTIVE => Nil
-          case ReceiverState.SCHEDULED =>
-            val scheduledExecutors = receiverTrackingInfo.scheduledExecutors.get
-            // The probability that a scheduled receiver will run in an executor is
-            // 1.0 / scheduledLocations.size
-            scheduledExecutors.map(location => location -> (1.0 / scheduledExecutors.size))
-          case ReceiverState.ACTIVE => Seq(receiverTrackingInfo.runningExecutor.get -> 1.0)
-        }
+    val executorWeights = receiverTrackingInfoMap.values.flatMap { receiverTrackingInfo =>
+      receiverTrackingInfo.state match {
+        case ReceiverState.INACTIVE => Nil
+        case ReceiverState.SCHEDULED =>
+          val scheduledExecutors = receiverTrackingInfo.scheduledExecutors.get
+          // The probability that a scheduled receiver will run in an executor is
+          // 1.0 / scheduledLocations.size
+          scheduledExecutors.map(location => location -> (1.0 / scheduledExecutors.size))
+        case ReceiverState.ACTIVE => Seq(receiverTrackingInfo.runningExecutor.get -> 1.0)
+      }
     }.groupBy(_._1).mapValues(_.map(_._2).sum) // Sum weights for each executor
 
     val idleExecutors = executors.toSet -- executorWeights.keys

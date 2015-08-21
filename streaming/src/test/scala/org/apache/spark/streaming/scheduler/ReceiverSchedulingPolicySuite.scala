@@ -49,7 +49,7 @@ class ReceiverSchedulingPolicySuite extends SparkFunSuite {
     assert(scheduledExecutors.toSet === Set("host2", "host3", "host4", "host5"))
   }
 
-  test("rescheduleReceiver: return executors that have minimum weight if no idle executors") {
+  test("rescheduleReceiver: return all executors that have minimum weight if no idle executors") {
     val executors = Seq("host1", "host2", "host3", "host4", "host5")
     // Weights: host1 = 1.5, host2 = 0.5, host3 = 1.0, host4 = 0.5, host5 = 0.5
     val receiverTrackingInfoMap = Map(
@@ -128,25 +128,4 @@ class ReceiverSchedulingPolicySuite extends SparkFunSuite {
     }
   }
 
-  test("when scheduleReceivers return a balanced result, we should not restart receivers") {
-    val receivers = (0 until 6).map(new RateTestReceiver(_))
-    val executors = (10000 until 10005).map(port => s"localhost:${port}")
-    val scheduledExecutors = receiverSchedulingPolicy.scheduleReceivers(receivers, executors)
-    val receiverTrackingInfoMap = scheduledExecutors.map { case (receiverId, executors) =>
-      assert(executors.size === 1) // Each receiver has been assigned one executor
-      receiverId -> ReceiverTrackingInfo(receiverId, ReceiverState.SCHEDULED, Some(executors), None)
-    }
-    // "scheduledExecutors" has already been balanced, assume we launch receivers as
-    // "scheduledExecutors" suggested
-    for (receiverId <- receivers.map(_.streamId)) {
-      val scheduledExecutorsWhenRegistering = receiverSchedulingPolicy.rescheduleReceiver(
-        receiverId, None, receiverTrackingInfoMap, executors)
-      // Assume the receiver has been launched in the exact scheduled location
-      val runningLocation = scheduledExecutors(receiverId)(0)
-      // Since all receivers are launched as "scheduledExecutors" suggested, we should allow it to
-      // run in its current runningLocation, so "scheduledExecutorsWhenRegistering" should contains
-      // "runningLocation"
-      assert(scheduledExecutorsWhenRegistering.contains(runningLocation))
-    }
-  }
 }
