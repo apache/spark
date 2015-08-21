@@ -1170,7 +1170,8 @@ class BaseOperator(object):
         X will wait for tasks immediately downstream of the previous instance
         of task X to finish successfully before it runs. This is useful if the
         different instances of a task X alter the same asset, and this asset
-        is used by tasks downstream of task X.
+        is used by tasks downstream of task X. Note that depends_on_past
+        is forced to True wherever wait_for_downstream is used.
     :type wait_for_downstream: bool
     :param queue: which queue to target when running this job. Not
         all executors implement queue management, the CeleryExecutor
@@ -1262,6 +1263,8 @@ class BaseOperator(object):
         self.end_date = end_date
         self.depends_on_past = depends_on_past
         self.wait_for_downstream = wait_for_downstream
+        if wait_for_downstream:
+            self.depends_on_past = True
         self._schedule_interval = schedule_interval
         self.retries = retries
         self.queue = queue
