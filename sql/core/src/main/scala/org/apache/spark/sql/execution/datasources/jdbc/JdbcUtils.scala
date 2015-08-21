@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, DriverManager, PreparedStatement}
+import java.sql.{Connection, PreparedStatement}
 import java.util.Properties
 
 import scala.util.Try
@@ -36,7 +36,7 @@ object JdbcUtils extends Logging {
    * Establishes a JDBC connection.
    */
   def createConnection(url: String, connectionProperties: Properties): Connection = {
-    DriverManager.getConnection(url, connectionProperties)
+    JDBCRDD.getConnector(connectionProperties.getProperty("driver"), url, connectionProperties)()
   }
 
   /**
@@ -88,13 +88,15 @@ object JdbcUtils extends Logging {
       table: String,
       iterator: Iterator[Row],
       rddSchema: StructType,
-      nullTypes: Array[Int]): Iterator[Byte] = {
+      nullTypes: Array[Int],
+      batchSize: Int): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
     try {
       conn.setAutoCommit(false) // Everything in the same db transaction.
       val stmt = insertStatement(conn, table, rddSchema)
       try {
+        var rowCount = 0
         while (iterator.hasNext) {
           val row = iterator.next()
           val numFields = rddSchema.fields.length
@@ -122,7 +124,15 @@ object JdbcUtils extends Logging {
             }
             i = i + 1
           }
-          stmt.executeUpdate()
+          stmt.addBatch()
+          rowCount += 1
+          if (rowCount % batchSize == 0) {
+            stmt.executeBatch()
+            rowCount = 0
+          }
+        }
+        if (rowCount > 0) {
+          stmt.executeBatch()
         }
       } finally {
         stmt.close()
@@ -170,7 +180,7 @@ object JdbcUtils extends Logging {
             case BinaryType => "BLOB"
             case TimestampType => "TIMESTAMP"
             case DateType => "DATE"
-            case t: DecimalType => s"DECIMAL(${t.precision}},${t.scale}})"
+            case t: DecimalType => s"DECIMAL(${t.precision},${t.scale})"
             case _ => throw new IllegalArgumentException(s"Don't know how to save $field to JDBC")
           })
       val nullable = if (field.nullable) "" else "NOT NULL"
@@ -211,8 +221,9 @@ object JdbcUtils extends Logging {
     val rddSchema = df.schema
     val driver: String = DriverRegistry.getDriverClassName(url)
     val getConnection: () => Connection = JDBCRDD.getConnector(driver, url, properties)
+    val batchSize = properties.getProperty("batchsize", "1000").toInt
     df.foreachPartition { iterator =>
-      savePartition(getConnection, table, iterator, rddSchema, nullTypes)
+      savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize)
     }
   }
 

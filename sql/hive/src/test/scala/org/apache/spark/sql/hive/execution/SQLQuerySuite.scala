@@ -66,7 +66,8 @@ class MyDialect extends DefaultParserDialect
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest with SQLTestUtils {
-  override def sqlContext: SQLContext = TestHive
+  override def _sqlContext: SQLContext = TestHive
+  private val sqlContext = _sqlContext
 
   test("UDTF") {
     sql(s"ADD JAR ${TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
@@ -1136,5 +1137,40 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     checkAnswer(sql("select interval '299.889987299' second"),
       Row(CalendarInterval.fromString(
         "interval 4 minutes 59 seconds 889 milliseconds 987 microseconds")))
+  }
+
+  test("specifying database name for a temporary table is not allowed") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df =
+        sqlContext.sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+      df
+        .write
+        .format("parquet")
+        .save(path)
+
+      val message = intercept[AnalysisException] {
+        sqlContext.sql(
+          s"""
+          |CREATE TEMPORARY TABLE db.t
+          |USING parquet
+          |OPTIONS (
+          |  path '$path'
+          |)
+        """.stripMargin)
+      }.getMessage
+      assert(message.contains("Specifying database name or other qualifiers are not allowed"))
+
+      // If you use backticks to quote the name of a temporary table having dot in it.
+      sqlContext.sql(
+        s"""
+          |CREATE TEMPORARY TABLE `db.t`
+          |USING parquet
+          |OPTIONS (
+          |  path '$path'
+          |)
+        """.stripMargin)
+      checkAnswer(sqlContext.table("`db.t`"), df)
+    }
   }
 }

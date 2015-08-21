@@ -19,25 +19,28 @@ package org.apache.spark.sql.execution
 
 import scala.util.Random
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row, SQLConf}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 /**
  * A test suite that generates randomized data to test the [[TungstenSort]] operator.
  */
-class TungstenSortSuite extends SparkPlanTest with BeforeAndAfterAll {
+class TungstenSortSuite extends SparkPlanTest with SharedSQLContext {
 
   override def beforeAll(): Unit = {
-    TestSQLContext.conf.setConf(SQLConf.CODEGEN_ENABLED, true)
+    super.beforeAll()
+    ctx.conf.setConf(SQLConf.CODEGEN_ENABLED, true)
   }
 
   override def afterAll(): Unit = {
-    TestSQLContext.conf.setConf(SQLConf.CODEGEN_ENABLED, SQLConf.CODEGEN_ENABLED.defaultValue.get)
+    try {
+      ctx.conf.setConf(SQLConf.CODEGEN_ENABLED, SQLConf.CODEGEN_ENABLED.defaultValue.get)
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("sort followed by limit") {
@@ -61,7 +64,7 @@ class TungstenSortSuite extends SparkPlanTest with BeforeAndAfterAll {
   }
 
   test("sorting updates peak execution memory") {
-    val sc = TestSQLContext.sparkContext
+    val sc = ctx.sparkContext
     AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "unsafe external sort") {
       checkThatPlansAgree(
         (1 to 100).map(v => Tuple1(v)).toDF("a"),
@@ -80,8 +83,8 @@ class TungstenSortSuite extends SparkPlanTest with BeforeAndAfterAll {
   ) {
     test(s"sorting on $dataType with nullable=$nullable, sortOrder=$sortOrder") {
       val inputData = Seq.fill(1000)(randomDataGenerator())
-      val inputDf = TestSQLContext.createDataFrame(
-        TestSQLContext.sparkContext.parallelize(Random.shuffle(inputData).map(v => Row(v))),
+      val inputDf = ctx.createDataFrame(
+        ctx.sparkContext.parallelize(Random.shuffle(inputData).map(v => Row(v))),
         StructType(StructField("a", dataType, nullable = true) :: Nil)
       )
       assert(TungstenSort.supportsSchema(inputDf.schema))

@@ -22,13 +22,11 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.parquet.schema.MessageTypeParser
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-abstract class ParquetSchemaTest extends SparkFunSuite with ParquetTest {
-  val sqlContext = TestSQLContext
+abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
 
   /**
    * Checks whether the reflected Parquet message type for product type `T` conforms `messageType`.

@@ -17,16 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestData._
 
-case class FunctionResult(f1: String, f2: String)
+private case class FunctionResult(f1: String, f2: String)
 
-class UDFSuite extends QueryTest with SQLTestUtils {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
-
-  override def sqlContext(): SQLContext = ctx
+class UDFSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("built-in fixed arity expressions") {
     val df = ctx.emptyDataFrame
@@ -57,7 +54,7 @@ class UDFSuite extends QueryTest with SQLTestUtils {
   test("SPARK-8003 spark_partition_id") {
     val df = Seq((1, "Tearing down the walls that divide us")).toDF("id", "saying")
     df.registerTempTable("tmp_table")
-    checkAnswer(ctx.sql("select spark_partition_id() from tmp_table").toDF(), Row(0))
+    checkAnswer(sql("select spark_partition_id() from tmp_table").toDF(), Row(0))
     ctx.dropTempTable("tmp_table")
   }
 
@@ -66,9 +63,9 @@ class UDFSuite extends QueryTest with SQLTestUtils {
       val data = ctx.sparkContext.parallelize(0 to 10, 2).toDF("id")
       data.write.parquet(dir.getCanonicalPath)
       ctx.read.parquet(dir.getCanonicalPath).registerTempTable("test_table")
-      val answer = ctx.sql("select input_file_name() from test_table").head().getString(0)
+      val answer = sql("select input_file_name() from test_table").head().getString(0)
       assert(answer.contains(dir.getCanonicalPath))
-      assert(ctx.sql("select input_file_name() from test_table").distinct().collect().length >= 2)
+      assert(sql("select input_file_name() from test_table").distinct().collect().length >= 2)
       ctx.dropTempTable("test_table")
     }
   }
@@ -91,17 +88,17 @@ class UDFSuite extends QueryTest with SQLTestUtils {
 
   test("Simple UDF") {
     ctx.udf.register("strLenScala", (_: String).length)
-    assert(ctx.sql("SELECT strLenScala('test')").head().getInt(0) === 4)
+    assert(sql("SELECT strLenScala('test')").head().getInt(0) === 4)
   }
 
   test("ZeroArgument UDF") {
     ctx.udf.register("random0", () => { Math.random()})
-    assert(ctx.sql("SELECT random0()").head().getDouble(0) >= 0.0)
+    assert(sql("SELECT random0()").head().getDouble(0) >= 0.0)
   }
 
   test("TwoArgument UDF") {
     ctx.udf.register("strLenScala", (_: String).length + (_: Int))
-    assert(ctx.sql("SELECT strLenScala('test', 1)").head().getInt(0) === 5)
+    assert(sql("SELECT strLenScala('test', 1)").head().getInt(0) === 5)
   }
 
   test("UDF in a WHERE") {
@@ -112,7 +109,7 @@ class UDFSuite extends QueryTest with SQLTestUtils {
     df.registerTempTable("integerData")
 
     val result =
-      ctx.sql("SELECT * FROM integerData WHERE oneArgFilter(key)")
+      sql("SELECT * FROM integerData WHERE oneArgFilter(key)")
     assert(result.count() === 20)
   }
 
@@ -124,7 +121,7 @@ class UDFSuite extends QueryTest with SQLTestUtils {
     df.registerTempTable("groupData")
 
     val result =
-      ctx.sql(
+      sql(
         """
          | SELECT g, SUM(v) as s
          | FROM groupData
@@ -143,7 +140,7 @@ class UDFSuite extends QueryTest with SQLTestUtils {
     df.registerTempTable("groupData")
 
     val result =
-      ctx.sql(
+      sql(
         """
          | SELECT SUM(v)
          | FROM groupData
@@ -163,7 +160,7 @@ class UDFSuite extends QueryTest with SQLTestUtils {
     df.registerTempTable("groupData")
 
     val result =
-      ctx.sql(
+      sql(
         """
          | SELECT timesHundred(SUM(v)) as v100
          | FROM groupData
@@ -178,7 +175,7 @@ class UDFSuite extends QueryTest with SQLTestUtils {
     ctx.udf.register("returnStruct", (f1: String, f2: String) => FunctionResult(f1, f2))
 
     val result =
-      ctx.sql("SELECT returnStruct('test', 'test2') as ret")
+      sql("SELECT returnStruct('test', 'test2') as ret")
         .select($"ret.f1").head().getString(0)
     assert(result === "test")
   }
@@ -186,12 +183,12 @@ class UDFSuite extends QueryTest with SQLTestUtils {
   test("udf that is transformed") {
     ctx.udf.register("makeStruct", (x: Int, y: Int) => (x, y))
     // 1 + 1 is constant folded causing a transformation.
-    assert(ctx.sql("SELECT makeStruct(1 + 1, 2)").first().getAs[Row](0) === Row(2, 2))
+    assert(sql("SELECT makeStruct(1 + 1, 2)").first().getAs[Row](0) === Row(2, 2))
   }
 
   test("type coercion for udf inputs") {
     ctx.udf.register("intExpected", (x: Int) => x)
     // pass a decimal to intExpected.
-    assert(ctx.sql("SELECT intExpected(1.0)").head().getInt(0) === 1)
+    assert(sql("SELECT intExpected(1.0)").head().getInt(0) === 1)
   }
 }

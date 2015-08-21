@@ -389,7 +389,8 @@ Apart from these, the following properties are also available, and may be useful
     Implementation to use for transferring shuffle and cached blocks between executors. There
     are two implementations available: <code>netty</code> and <code>nio</code>. Netty-based
     block transfer is intended to be simpler but equally efficient and is the default option
-    starting in 1.2.
+    starting in 1.2, and <code>nio</code> block transfer is deprecated in Spark 1.5.0 and will
+    be removed in Spark 1.6.0.
   </td>
 </tr>
 <tr>
@@ -1560,7 +1561,11 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>PYSPARK_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark.</td>
+    <td>Python binary executable to use for PySpark in both driver and workers (default is `python`).</td>
+  </tr>
+  <tr>
+    <td><code>PYSPARK_DRIVER_PYTHON</code></td>
+    <td>Python binary executable to use for PySpark in driver only (default is PYSPARK_PYTHON).</td>
   </tr>
   <tr>
     <td><code>SPARK_LOCAL_IP</code></td>

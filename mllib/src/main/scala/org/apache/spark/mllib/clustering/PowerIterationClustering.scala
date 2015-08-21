@@ -39,12 +39,16 @@ import org.apache.spark.{Logging, SparkContext, SparkException}
  *
  * @param k number of clusters
  * @param assignments an RDD of clustering [[PowerIterationClustering#Assignment]]s
+ * @since 1.3.0
  */
 @Experimental
 class PowerIterationClusteringModel(
     val k: Int,
     val assignments: RDD[PowerIterationClustering.Assignment]) extends Saveable with Serializable {
 
+  /**
+   * @since 1.4.0
+   */
   override def save(sc: SparkContext, path: String): Unit = {
     PowerIterationClusteringModel.SaveLoadV1_0.save(sc, this, path)
   }
@@ -52,6 +56,9 @@ class PowerIterationClusteringModel(
   override protected def formatVersion: String = "1.0"
 }
 
+/**
+ * @since 1.4.0
+ */
 object PowerIterationClusteringModel extends Loader[PowerIterationClusteringModel] {
   override def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {
     PowerIterationClusteringModel.SaveLoadV1_0.load(sc, path)
@@ -65,6 +72,9 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
     private[clustering]
     val thisClassName = "org.apache.spark.mllib.clustering.PowerIterationClusteringModel"
 
+    /**
+     * @since 1.4.0
+     */
     def save(sc: SparkContext, model: PowerIterationClusteringModel, path: String): Unit = {
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
@@ -77,6 +87,9 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
       dataRDD.write.parquet(Loader.dataPath(path))
     }
 
+    /**
+     * @since 1.4.0
+     */
     def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {
       implicit val formats = DefaultFormats
       val sqlContext = new SQLContext(sc)
@@ -120,13 +133,16 @@ class PowerIterationClustering private[clustering] (
 
   import org.apache.spark.mllib.clustering.PowerIterationClustering._
 
-  /** Constructs a PIC instance with default parameters: {k: 2, maxIterations: 100,
-   *  initMode: "random"}.
+  /**
+   * Constructs a PIC instance with default parameters: {k: 2, maxIterations: 100,
+   * initMode: "random"}.
+   * @since 1.3.0
    */
   def this() = this(k = 2, maxIterations = 100, initMode = "random")
 
   /**
    * Set the number of clusters.
+   * @since 1.3.0
    */
   def setK(k: Int): this.type = {
     this.k = k
@@ -135,6 +151,7 @@ class PowerIterationClustering private[clustering] (
 
   /**
    * Set maximum number of iterations of the power iteration loop
+   * @since 1.3.0
    */
   def setMaxIterations(maxIterations: Int): this.type = {
     this.maxIterations = maxIterations
@@ -144,6 +161,7 @@ class PowerIterationClustering private[clustering] (
   /**
    * Set the initialization mode. This can be either "random" to use a random vector
    * as vertex properties, or "degree" to use normalized sum similarities. Default: random.
+   * @since 1.3.0
    */
   def setInitializationMode(mode: String): this.type = {
     this.initMode = mode match {
@@ -164,6 +182,7 @@ class PowerIterationClustering private[clustering] (
    *              assume s,,ij,, = 0.0.
    *
    * @return a [[PowerIterationClusteringModel]] that contains the clustering result
+   * @since 1.5.0
    */
   def run(graph: Graph[Double, Double]): PowerIterationClusteringModel = {
     val w = normalize(graph)
@@ -185,6 +204,7 @@ class PowerIterationClustering private[clustering] (
    *                     assume s,,ij,, = 0.0.
    *
    * @return a [[PowerIterationClusteringModel]] that contains the clustering result
+   * @since 1.3.0
    */
   def run(similarities: RDD[(Long, Long, Double)]): PowerIterationClusteringModel = {
     val w = normalize(similarities)
@@ -197,6 +217,7 @@ class PowerIterationClustering private[clustering] (
 
   /**
    * A Java-friendly version of [[PowerIterationClustering.run]].
+   * @since 1.3.0
    */
   def run(similarities: JavaRDD[(java.lang.Long, java.lang.Long, java.lang.Double)])
     : PowerIterationClusteringModel = {
@@ -221,6 +242,9 @@ class PowerIterationClustering private[clustering] (
   }
 }
 
+/**
+ * @since 1.3.0
+ */
 @Experimental
 object PowerIterationClustering extends Logging {
 
@@ -229,6 +253,7 @@ object PowerIterationClustering extends Logging {
    * Cluster assignment.
    * @param id node id
    * @param cluster assigned cluster id
+   * @since 1.3.0
    */
   @Experimental
   case class Assignment(id: Long, cluster: Int)
