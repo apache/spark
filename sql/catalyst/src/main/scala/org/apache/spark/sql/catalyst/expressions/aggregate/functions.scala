@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import com.clearspring.analytics.hash.MurmurHash
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
@@ -301,4 +303,198 @@ case class Sum(child: Expression) extends AlgebraicAggregate {
   }
 
   override val evaluateExpression = Cast(currentSum, resultType)
+}
+
+// Port of Clearspring HLL
+case class HyperLogLog(child: Expression, relativeSD: Double = 0.05)
+    extends AggregateFunction2 {
+  /**
+   * The size of a word used for storing registers.
+   */
+  val WORD_SIZE = java.lang.Long.SIZE
+
+  /**
+   * The number of bits that is required per register.
+   * 
+   * This number is determined by the maximum number of leading binary zeros a hashcode can 
+   * produce. This is equal to the number of bits the hashcode returns. The current
+   * implementation uses a 32-bit hashcode, this means 5-bits are (at most) needed to store the
+   * number of leading zeros.
+   * 
+   * One of the suggestions in the HyperLogLog++ is to use a 64-bit hashcode and to increase the
+   * register size accordingly. This will be especially useful when cardinality will be larger
+   * than 1E9.
+   * 
+   * An interesting thought is that HHL always splits a hashcode into a bucket of p-bits and value
+   * of (r-p)-bits. This means that the number of leading binary zeros can never reach the value
+   * of 'r', and we therefore need fewer bits to store this value. Is this also in the HLL+ paper?     
+   */
+  val REGISTER_SIZE = 5
+
+  /**
+   * Value used to mask a register stored in a word.
+   */
+  val REGISTER_WORD_MASK: Long = (1 << (REGISTER_SIZE + 1)) - 1
+  
+  /**
+   * The number of registers which can be stored in one word.
+   */
+  val REGISTERS_PER_WORD = WORD_SIZE / REGISTER_SIZE
+  
+  /**
+   * The number of bits used for addressing.
+   * 
+   * The name is 
+   */
+  val b = {
+    val invRelativeSD = 1.106d / relativeSD
+    (math.log(invRelativeSD * invRelativeSD) / Math.log(2.0d)).toInt
+  }
+
+  /**
+   * The number of registers used.
+   */
+  val m = 1 << b
+
+  val alphaMM = b match {
+    case 4 => 0.673d * m * m
+    case 5 => 0.697d * m * m
+    case 6 => 0.709d * m * m
+    case _ => (0.7213d / (1.0d + 1.079d / m)) * m * m
+  }
+
+  /**
+   * The number of words used to store the registers.
+   */
+  val numWords = m / REGISTERS_PER_WORD match {
+    case x if m % REGISTERS_PER_WORD == 0 => x
+    case x => x + 1
+  }
+
+  def children: Seq[Expression] = Seq(child)
+
+  def nullable: Boolean = false
+
+  def dataType: DataType = LongType
+
+  def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+
+  def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
+
+  def cloneBufferAttributes: Seq[Attribute] = bufferAttributes.map(_.newInstance())
+
+  /** Allocate enough words to store all registers. */
+  val bufferAttributes: Seq[AttributeReference] = Seq.tabulate(numWords) { i =>
+    AttributeReference(s"e$i", LongType)()
+  }
+
+  /** Fill all words with zeros. */
+  def initialize(buffer: MutableRow): Unit = {
+    var word = 0
+    while (word < numWords) {
+      buffer.setLong(mutableBufferOffset + word, 0)
+      word += 1
+    }
+  }
+
+  /***/
+  def update(buffer: MutableRow, input: InternalRow): Unit = {
+    val v = child.eval(input)
+    if (v != null) {
+      // Hash the value.
+      val x = MurmurHash.hash(v)
+
+      // Determine which register we are going to use.
+      val j = x >>> (Integer.SIZE - b) // TODO create variable.
+
+      // Setup access to the word containing the register we are interested in.
+      val word = j / REGISTERS_PER_WORD
+      val wordShift = REGISTER_SIZE * (j - (word * REGISTERS_PER_WORD)) // TODO is this cheaper than a straight modulo?
+      val wordMask = REGISTER_WORD_MASK << wordShift
+      val wordValue = buffer.getLong(mutableBufferOffset + word)
+
+      // Extract the M[J] register value from the word.
+      val m_j = (wordValue & wordMask) >>> wordShift
+
+      // Determine the number of leading zeros in the remaining bits.
+      // TODO create variable
+      // TODO maybe it is easier to just subtract a value from the number of leading zeros.
+      // TODO understand this better
+      val rho_w = Integer.numberOfLeadingZeros((x << b) | (1 << (b - 1)) + 1) + 1
+
+      // Take the maximum number of leading zeros.
+      if (rho_w > m_j) {
+        buffer.setLong(mutableBufferOffset + word, (wordValue & ~wordMask) | (rho_w << wordShift))
+      }
+    }
+  }
+
+  def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+    var word = 0
+    while (word < numWords) {
+      // Iterate through all the registers within the word and select the maximum number of
+      // leading zeros for each register.
+      val wordValue1 = buffer1.getLong(mutableBufferOffset + word)
+      val wordValue2 = buffer2.getLong(inputBufferOffset + word)
+      var wordValue = 0L
+      var j = 0
+      var mask = REGISTER_WORD_MASK
+      while (j < REGISTERS_PER_WORD) {
+        wordValue |= math.max(wordValue1 & mask, wordValue2 & mask)
+        mask <<= REGISTER_SIZE
+        j += 1
+      }
+      buffer1.setLong(mutableBufferOffset + word, wordValue)
+      word += 1
+    }
+  }
+
+  /**
+   * Compute the HyperLogLog estimate.
+   *
+   * Variable names in the paper match variable names in the code.
+   *
+   * Contrary to the original paper we omit the large value correction. It has been proved that
+   * this doesn't do any good (see the documentation of the ClearSpring HLL implementation).
+   *
+   * @param buffer to get the values from.
+   * @return the HyperLogLog estimate.
+   */
+  def eval(buffer: InternalRow): Any = {
+    // Compute the indicator value 'z' and count the number of zeros 'v'.
+    var zInverse = 0.0d
+    var v = 0.0d
+    var j = 0
+    var word = 0
+    while (word < numWords) {
+      val wordValue = buffer.getLong(mutableBufferOffset + word)
+      var i = 0
+      var shift = 0
+      while (j < m && i < REGISTERS_PER_WORD) {
+        val m_j = (wordValue >>> shift) & REGISTER_WORD_MASK
+        zInverse += 1.0 / (1 << m_j)
+        if (m_j == 0) {
+          v += 1.0d
+        }
+        shift += REGISTER_SIZE
+        i += 1
+        j += 1
+      }
+      word += 1
+    }
+    val z = 1.0d / zInverse
+
+    // Compute the raw HyperLogLog estimate.
+    // This omits the large value correction.
+    val estimate = alphaMM * z match {
+      case e if e <= (5.0d / 2.0d) * m =>
+        // Small value correction.
+        m * Math.log(m / v)
+      case e =>
+        e
+    }
+
+    // Round to the nearest long value.
+    Math.round(estimate)
+  }
 }
