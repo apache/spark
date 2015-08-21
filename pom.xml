@@ -295,6 +295,18 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
+    <!-- TODO: This can be deleted after Spark 1.5 is posted -->
+    <repository>
+      <id>spark-1.5-staging</id>
+      <name>Spark 1.5 RC1 Staging Repository</name>
+      <url>https://repository.apache.org/content/repositories/orgapachespark-1136</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
     <!-- For transitive dependencies brougt by parquet-thrift -->
     <repository>
       <id>twttr-repo</id>
