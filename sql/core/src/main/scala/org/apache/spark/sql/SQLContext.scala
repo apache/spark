@@ -204,6 +204,9 @@ class SQLContext(
     override def initialValue: SQLSession = openSession()
   }
 
+  @transient
+  protected[sql] val defaultSession = createSession()
+
   protected[sql] def dialectClassName = if (conf.dialect == "sql") {
     classOf[DefaultParserDialect].getCanonicalName
   } else {
@@ -867,6 +870,7 @@ class SQLContext(
     val session = createSession()
     session.conf.setConf(properties)
     setSession(session)
+    session
   }
 
   protected[sql] def currentSession(): SQLSession = {
@@ -881,9 +885,8 @@ class SQLContext(
     tlSession.remove()
   }
 
-  protected[sql] def setSession(session: SQLSession): SQLSession = {
+  protected[sql] def setSession(session: SQLSession): Unit = {
     tlSession.set(session)
-    session
   }
 
   protected[sql] class SQLSession {
