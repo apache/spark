@@ -234,8 +234,8 @@ while creating tasks:
 * ``all_success``: (default) all parents have succeeded
 * ``all_failed``: all parents are in a ``failed`` or ``upstream_failed`` state
 * ``all_done``: all parents are done with their execution
-* ``one_failed``: at least one parent has failed
-* ``one_success``: at least one parent has succeeded
+* ``one_failed``: fires as soon as at least one parent has failed, it does not wait for all parents to be done
+* ``one_success``: fires as soon as at least one parent succeeds, it does not wait for all parents to be done
 * ``dummy``: dependencies are just for show, trigger at will
 
 Note that these can be used in conjunction with ``depends_on_past`` (boolean)
