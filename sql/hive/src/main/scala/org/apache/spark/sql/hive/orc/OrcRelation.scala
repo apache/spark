@@ -313,7 +313,7 @@ private[orc] case class OrcTableScan(
 
     val wrappedConf = new SerializableConfiguration(conf)
 
-    rdd.mapPartitionsWithInputSplit { case (split: OrcSplit, iterator) =>
+    val rddWithInputSplit = rdd.mapPartitionsWithInputSplit { case (split: OrcSplit, iterator) =>
       val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
       fillObject(
         split.getPath.toString,
@@ -322,6 +322,8 @@ private[orc] case class OrcTableScan(
         attributes.zipWithIndex,
         mutableRow)
     }
+
+    CombineSmallFile.combineWithFiles(rddWithInputSplit, sqlContext, inputPaths)
   }
 }
 
