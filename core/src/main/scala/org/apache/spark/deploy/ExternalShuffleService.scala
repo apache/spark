@@ -53,7 +53,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
-    new ExternalShuffleBlockHandler(conf)
+    new ExternalShuffleBlockHandler(conf, null)
   }
 
   /** Starts the external shuffle service if the user has configured us to. */
