@@ -31,7 +31,7 @@ NEED_KRB181_WORKAROUND=None
 def renew_from_kt():
     # The config is specified in seconds. But we ask for that same amount in
     # minutes to give ourselves a large renewal buffer.
-    renewal_lifetime = "%sm" % conf.get('security', 'reinit_frequency')
+    renewal_lifetime = "%sm" % conf.getint('security', 'reinit_frequency')
     principal = "%s/%s" % (conf.get('security', 'principal'), socket.getfqdn())
     cmdv = [conf.get('security', 'kinit_path'),
             "-r", renewal_lifetime,
@@ -108,4 +108,4 @@ def run():
 
     while True:
         renew_from_kt()
-        time.sleep(conf.get('security', 'reinit_frequency'))
+        time.sleep(conf.getint('security', 'reinit_frequency'))
