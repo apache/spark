@@ -171,7 +171,7 @@ class GaussianMixture private (
 
     // Heuristic to distribute the computation of the [[MultivariateGaussian]]s, approximately when
     // d > 25 except for when k is very small
-    val distributeGaussians = ((k - 1.0) / k) * d > 25
+    val distributeGaussians = GaussianMixture.distributeGaussians(k, d)
 
     // Determine initial weights and corresponding Gaussians.
     // If the user supplied an initial GMM, we use those values, otherwise
@@ -211,9 +211,9 @@ class GaussianMixture private (
           Seq.tabulate(k)(i => (sums.means(i), sums.sigmas(i), sums.weights(i)))
         val (ws, gs) = sc.parallelize(tuples, numPartitions).map { case (mean, sigma, weight) =>
           updateWeightsAndGaussians(mean, sigma, weight, sumWeights)
-        }.collect.unzip
-        Array.copy(ws, 0, weights, 0, ws.length)
-        Array.copy(gs, 0, gaussians, 0, gs.length)
+        }.collect().unzip
+        Array.copy(ws.toArray, 0, weights, 0, ws.length)
+        Array.copy(gs.toArray, 0, gaussians, 0, gs.length)
       } else {
         var i = 0
         while (i < k) {
@@ -269,6 +269,15 @@ class GaussianMixture private (
     x.foreach(xi => ss += (xi - mu) :^ 2.0)
     diag(ss / x.length.toDouble)
   }
+}
+
+private[clustering] object GaussianMixture {
+  /**
+   * Decide whether matrix decompositions should be distributed
+   * @param k  Number of topics
+   * @param d  Number of features
+   */
+  def distributeGaussians(k: Int, d: Int): Boolean = ((k - 1.0) / k) * d > 25
 }
 
 // companion class to provide zero constructor for ExpectationSum
