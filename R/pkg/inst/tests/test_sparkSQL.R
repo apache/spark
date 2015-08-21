@@ -953,6 +953,28 @@ test_that("showDF()", {
   expect_output(s , expected)
 })
 
+test_that("show()", {
+  df <- jsonFile(sqlContext, jsonPath)
+  s <- capture.output(df)
+  expected <- paste("+----+-------+\n",
+                    "| age|   name|\n",
+                    "+----+-------+\n",
+                    "|null|Michael|\n",
+                    "|  30|   Andy|\n",
+                    "|  19| Justin|\n",
+                    "+----+-------+\n", sep="")
+  expect_output(s , expected)
+  s1 <- capture.output(show(df))
+  expected1 <- paste("+----+-------+\n",
+                    "| age|   name|\n",
+                    "+----+-------+\n",
+                    "|null|Michael|\n",
+                    "|  30|   Andy|\n",
+                    "|  19| Justin|\n",
+                    "+----+-------+\n", sep="")
+  expect_output(s1 , expected1)
+})
+
 test_that("isLocal()", {
   df <- jsonFile(sqlContext, jsonPath)
   expect_false(isLocal(df))
