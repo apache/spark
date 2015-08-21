@@ -244,24 +244,43 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
 
     if (isTrackerStopping || isTrackerStopped) {
-      false
-    } else if (!scheduleReceiver(streamId).contains(hostPort)) {
-      // Refuse it since it's scheduled to a wrong executor
-      false
-    } else {
-      val name = s"${typ}-${streamId}"
-      val receiverTrackingInfo = ReceiverTrackingInfo(
-        streamId,
-        ReceiverState.ACTIVE,
-        scheduledExecutors = None,
-        runningExecutor = Some(hostPort),
-        name = Some(name),
-        endpoint = Some(receiverEndpoint))
-      receiverTrackingInfos.put(streamId, receiverTrackingInfo)
-      listenerBus.post(StreamingListenerReceiverStarted(receiverTrackingInfo.toReceiverInfo))
-      logInfo("Registered receiver for stream " + streamId + " from " + senderAddress)
-      true
+      return false
     }
+
+    val scheduledExecutors = receiverTrackingInfos(streamId).scheduledExecutors
+    if (scheduledExecutors.nonEmpty) {
+      // This receiver is registering at the first time, it's scheduled by
+      // ReceiverSchedulingPolicy.scheduleReceivers. So use "scheduledExecutors" to check it.
+      if (!scheduledExecutors.get.contains(hostPort)) {
+        // Refuse it since it's scheduled to a wrong executor
+        val oldReceiverInfo = receiverTrackingInfos(streamId)
+        // Clear "scheduledExecutors" to mark this receiver has already tried to register.
+        val newReceiverInfo = oldReceiverInfo.copy(
+          state = ReceiverState.INACTIVE, scheduledExecutors = None)
+        receiverTrackingInfos(streamId) = newReceiverInfo
+        return false
+      }
+    } else {
+      // This receiver is scheduled by "ReceiverSchedulingPolicy.rescheduleReceiver", so calling
+      // "ReceiverSchedulingPolicy.rescheduleReceiver" again to check it.
+      if (!scheduleReceiver(streamId).contains(hostPort)) {
+        // Refuse it since it's scheduled to a wrong executor
+        return false
+      }
+    }
+
+    val name = s"${typ}-${streamId}"
+    val receiverTrackingInfo = ReceiverTrackingInfo(
+      streamId,
+      ReceiverState.ACTIVE,
+      scheduledExecutors = None,
+      runningExecutor = Some(hostPort),
+      name = Some(name),
+      endpoint = Some(receiverEndpoint))
+    receiverTrackingInfos.put(streamId, receiverTrackingInfo)
+    listenerBus.post(StreamingListenerReceiverStarted(receiverTrackingInfo.toReceiverInfo))
+    logInfo("Registered receiver for stream " + streamId + " from " + senderAddress)
+    true
   }
 
   /** Deregister a receiver */
@@ -431,7 +450,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           receiver.preferredLocation,
           receiverTrackingInfos,
           getExecutors)
-        updateReceiverScheduledExecutors(receiver.streamId, scheduledExecutors)
         startReceiver(receiver, scheduledExecutors)
       case c: CleanupOldBlocks =>
         receiverTrackingInfos.values.flatMap(_.endpoint).foreach(_.send(c))
