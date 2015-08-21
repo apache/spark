@@ -88,7 +88,8 @@ private[spark] class MesosSchedulerBackend(
       throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
     }
     val environment = Environment.newBuilder()
-    sc.conf.getOption("spark.executor.extraClassPath").foreach { cp =>
+
+    sc.conf.getExecutorExtraClassPath().foreach { cp =>
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }

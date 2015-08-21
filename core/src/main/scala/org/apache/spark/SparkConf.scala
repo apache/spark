@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
@@ -465,6 +466,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
           |Please instead use:
           | - ./spark-submit with --driver-class-path to augment the driver classpath
           | - spark.executor.extraClassPath to augment the executor classpath
+          | - spark.common.extraClassPath to augument the driver and executor classpath.
+          |   When both spark.common.extraClassPath and spark.[executor|driver].extraClassPath
+          |   are used together, spark.common.extraClassPath jars are put before the
+          |   the spark.[executor|driver].extraClassPath jars in the user classpath.
         """.stripMargin
       logWarning(warning)
 
@@ -504,6 +509,23 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def toDebugString: String = {
     getAll.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
   }
+
+  def getDriverExtraClassPath() : Option[String] = {
+    // Concatenate common and driver classpath in that order
+    val commonExtraClassPath = getOption("spark.common.extraClassPath")
+    val driverExtraClassPath = getOption("spark.driver.extraClassPath")
+    Some((commonExtraClassPath ++ driverExtraClassPath).mkString(File.pathSeparator))
+      .filter(_.nonEmpty)
+  }
+
+  def getExecutorExtraClassPath() : Option[String] = {
+    // Concatenate common and executor classpath in that order
+    val commonExtraClassPath = getOption("spark.common.extraClassPath")
+    val executorExtraClassPath = getOption("spark.executor.extraClassPath")
+    Some((commonExtraClassPath ++ executorExtraClassPath).mkString(File.pathSeparator))
+      .filter(_.nonEmpty)
+  }
+
 
 }
 

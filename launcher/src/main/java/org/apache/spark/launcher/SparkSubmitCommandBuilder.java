@@ -190,8 +190,20 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     // modified to cover the driver's configuration.
     Properties props = loadPropertiesFile();
     boolean isClientMode = isClientMode(props);
-    String extraClassPath = isClientMode ?
-      firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_CLASSPATH, conf, props) : null;
+    String extraClassPath = null;
+    if (isClientMode) {
+      String commonExtraClassPath = firstNonEmptyValue(SparkLauncher.COMMON_EXTRA_CLASSPATH, conf, props);
+      String driverExtraClassPath = firstNonEmptyValue(SparkLauncher.DRIVER_EXTRA_CLASSPATH, conf, props);
+
+      // If common extra classpath was found, add it to the combined extra classpath.
+      if (commonExtraClassPath != null) {
+        extraClassPath = commonExtraClassPath;
+      }
+      // If driver specific extra classpath was found, append it to the combined extra classpath.
+      if (driverExtraClassPath != null) {
+        extraClassPath = (extraClassPath != null) ? extraClassPath + File.pathSeparator + driverExtraClassPath : driverExtraClassPath;
+      }
+    }
 
     List<String> cmd = buildJavaCommand(extraClassPath);
     // Take Thrift Server as daemon

@@ -35,7 +35,8 @@ export _SPARK_CMD_USAGE="Usage: ./bin/spark-shell [options]"
 # so we need to add the "-Dscala.usejavacp=true" flag manually. We
 # do this specifically for the Spark shell because the scala REPL
 # has its own class loader, and any additional classpath specified
-# through spark.driver.extraClassPath is not automatically propagated.
+# through spark.driver.extraClassPath and/or spark.common.extraClassPath are not
+# automatically propagated to spark shell.
 SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Dscala.usejavacp=true"
 
 function main() {

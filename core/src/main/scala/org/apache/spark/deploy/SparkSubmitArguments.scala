@@ -44,6 +44,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var totalExecutorCores: String = null
   var propertiesFile: String = null
   var driverMemory: String = null
+  var commonExtraClassPath: String = null
   var driverExtraClassPath: String = null
   var driverExtraLibraryPath: String = null
   var driverExtraJavaOptions: String = null
@@ -142,6 +143,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     master = Option(master)
       .orElse(sparkProperties.get("spark.master"))
       .orElse(env.get("MASTER"))
+      .orNull
+    commonExtraClassPath = Option(commonExtraClassPath)
+      .orElse(sparkProperties.get("spark.common.extraClassPath"))
       .orNull
     driverExtraClassPath = Option(driverExtraClassPath)
       .orElse(sparkProperties.get("spark.driver.extraClassPath"))
@@ -288,6 +292,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     |  propertiesFile          $propertiesFile
     |  driverMemory            $driverMemory
     |  driverCores             $driverCores
+    |  commonExtraClassPath    $commonExtraClassPath
     |  driverExtraClassPath    $driverExtraClassPath
     |  driverExtraLibraryPath  $driverExtraLibraryPath
     |  driverExtraJavaOptions  $driverExtraJavaOptions

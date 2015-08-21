@@ -242,8 +242,7 @@ class YarnClusterSuite extends SparkFunSuite with BeforeAndAfterAll with Matcher
       sys.props("java.class.path") +
       File.pathSeparator +
       extraClassPath.mkString(File.pathSeparator)
-    props.setProperty("spark.driver.extraClassPath", childClasspath)
-    props.setProperty("spark.executor.extraClassPath", childClasspath)
+    props.setProperty("spark.common.extraClassPath", childClasspath)
 
     // SPARK-4267: make sure java options are propagated correctly.
     props.setProperty("spark.driver.extraJavaOptions", "-Dfoo=\"one two three\"")

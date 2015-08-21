@@ -247,6 +247,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.common.extraClassPath</code></td>
+  <td>(none)</td>
+  <td>
+    Extra classpath entries to append to the classpath of executors and the drivers. When both
+    spark.common.extraClassPath and spark.[executor|driver].extraClassPath are set, the
+    spark.common.extraClassPath preceeds the spark.[executor|driver].extraClassPath
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.extraClassPath</code></td>
   <td>(none)</td>
   <td>
