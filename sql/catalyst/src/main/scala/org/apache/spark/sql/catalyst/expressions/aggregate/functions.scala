@@ -306,20 +306,16 @@ case class Sum(child: Expression) extends AlgebraicAggregate {
 }
 
 /**
- *
+ * TODO
  *
  * Papers:
  * http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf
- * http://static.googleusercontent.com/external_content/untrusted_dlcp/research.google.com/en/us/pubs/archive/40671.pdf
  * https://docs.google.com/document/d/1gyjfMHy43U9OWBXxfaeG-3MjGzejW1dlpyMwEYAAWEI/view?fullscreen#
  *
  * Note on provenance
  * - Clearspring:
- *
  * - Aggregage Knowledge:
- *   https://github.com/aggregateknowledge/java-hll/blob/master/src/main/java/net/agkn/hll/HLL.java
  * - Algebird:
- *   https://github.com/twitter/algebird/blob/develop/algebird-core/src/main/scala/com/twitter/algebird/HyperLogLog.scala
  *
  * Note on naming: Tried to match the paper.
  *
@@ -333,44 +329,42 @@ case class HyperLogLog(child: Expression, relativeSD: Double = 0.05)
   /**
    * The size of a word used for storing registers.
    */
-  val WORD_SIZE = java.lang.Long.SIZE
+  private[this] val WORD_SIZE = java.lang.Long.SIZE
 
   /**
    * The number of bits that is required per register.
-   * 
-   * This number is determined by the maximum number of leading binary zeros a hashcode can 
+   *
+   * This number is determined by the maximum number of leading binary zeros a hashcode can
    * produce. This is equal to the number of bits the hashcode returns. The current
    * implementation uses a 32-bit hashcode, this means 5-bits are (at most) needed to store the
    * number of leading zeros.
-   * 
+   *
    * One of the suggestions in the HyperLogLog++ is to use a 64-bit hashcode and to increase the
    * register size accordingly. This will be especially useful when cardinality will be larger
    * than 1E9.
-   * 
+   *
    * An interesting thought is that HHL always splits a hashcode into a bucket of p-bits and value
    * of (r-p)-bits. This means that the number of leading binary zeros can never reach the value
-   * of 'r', and we therefore need fewer bits to store this value. Is this also in the HLL+ paper?     
+   * of 'r', and we therefore need fewer bits to store this value. Is this also in the HLL+ paper?
    */
-  val REGISTER_SIZE = 5
+  private[this] val REGISTER_SIZE = 5
 
   /**
    * Value used to mask a register stored in a word.
    */
-  val REGISTER_WORD_MASK: Long = (1 << (REGISTER_SIZE + 1)) - 1
-  
+  private[this] val REGISTER_WORD_MASK: Long = (1 << REGISTER_SIZE) - 1
+
   /**
    * The number of registers which can be stored in one word.
    */
-  val REGISTERS_PER_WORD = WORD_SIZE / REGISTER_SIZE
-  
+  private[this] val REGISTERS_PER_WORD = WORD_SIZE / REGISTER_SIZE
+
   /**
    * The number of bits used for addressing.
-   * 
-   * The name is 
    */
-  val b = {
+  private[this] val b = {
     val invRelativeSD = 1.106d / relativeSD
-    (math.log(invRelativeSD * invRelativeSD) / Math.log(2.0d)).toInt
+    (Math.log(invRelativeSD * invRelativeSD) / Math.log(2.0d)).toInt
   }
 
   /**
@@ -378,19 +372,19 @@ case class HyperLogLog(child: Expression, relativeSD: Double = 0.05)
    *
    * This assumes the use of 32-bit hashcodes.
    */
-  val jShift = Integer.SIZE - b
+  private[this] val jShift = Integer.SIZE - b
 
   /**
    * Minimum 'w' value.
    */
-  val wMin = 1 << (b - 1)
+  private[this] val wMin = 1 << (b - 1)
 
   /**
    * The number of registers used.
    */
-  val m = 1 << b
+  private[this] val m = 1 << b
 
-  val alphaMM = b match {
+  private[this] val alphaMM = b match {
     case 4 => 0.673d * m * m
     case 5 => 0.697d * m * m
     case 6 => 0.709d * m * m
@@ -400,7 +394,7 @@ case class HyperLogLog(child: Expression, relativeSD: Double = 0.05)
   /**
    * The number of words used to store the registers.
    */
-  val numWords = m / REGISTERS_PER_WORD match {
+  private[this] val numWords = m / REGISTERS_PER_WORD match {
     case x if m % REGISTERS_PER_WORD == 0 => x
     case x => x + 1
   }
@@ -431,54 +425,60 @@ case class HyperLogLog(child: Expression, relativeSD: Double = 0.05)
     }
   }
 
-  /** Update the HLL buffer. */
+  /**
+   * Update the HLL buffer.
+   *
+   * Variable names in the paper match variable names in the code.
+   */
   def update(buffer: MutableRow, input: InternalRow): Unit = {
     val v = child.eval(input)
     if (v != null) {
-      // Create the hashed value.
+      // Create the hashed value 'x'.
       val x = MurmurHash.hash(v)
 
-      // Determine which register we are going to use.
+      // Determine which register 'j' we are going to use.
       val j = x >>> jShift
 
-      // Determine the number of leading zeros in the remaining bits.
-      val rhow = Integer.numberOfLeadingZeros((x << b) | wMin) + 1
+      // Determine the number of leading zeros in the remaining bits 'w'.
+      val pw = Integer.numberOfLeadingZeros((x << b) | wMin) + 1L
 
       // Get the word containing the register we are interested in.
-      val word = j / REGISTERS_PER_WORD
-      val wordValue = buffer.getLong(mutableBufferOffset + word)
+      val wordOffset = j / REGISTERS_PER_WORD
+      val word = buffer.getLong(mutableBufferOffset + wordOffset)
 
       // Extract the M[J] register value from the word.
-      val MjShift = REGISTER_SIZE * (j - (word * REGISTERS_PER_WORD))
-      val MjMask = REGISTER_WORD_MASK << MjShift
-      val Mj = (wordValue & MjMask) >>> MjShift
+      val shift = REGISTER_SIZE * (j - (wordOffset * REGISTERS_PER_WORD))
+      val mask = REGISTER_WORD_MASK << shift
+      val Mj = (word & mask) >>> shift
 
       // Assign the maximum number of leading zeros to the register.
-      if (rhow > Mj) {
-        buffer.setLong(mutableBufferOffset + word, (wordValue & ~MjMask) | (rhow << MjShift))
+      if (pw > Mj) {
+        buffer.setLong(mutableBufferOffset + wordOffset, (word & ~mask) | (pw << shift))
       }
     }
   }
 
+  /**
+   * Merge the HLL buffers by iterating through the registers in both buffers and select the
+   * maximum number of leading zeros for each register.
+   */
   def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
     var j = 0
-    var word = 0
-    while (word < numWords) {
-      // Iterate through all the registers within the word and select the maximum number of
-      // leading zeros for each register.
-      val wordValue1 = buffer1.getLong(mutableBufferOffset + word)
-      val wordValue2 = buffer2.getLong(inputBufferOffset + word)
-      var wordValue = 0L
+    var wordOffset = 0
+    while (wordOffset < numWords) {
+      val word1 = buffer1.getLong(mutableBufferOffset + wordOffset)
+      val word2 = buffer2.getLong(inputBufferOffset + wordOffset)
+      var word = 0L
       var i = 0
       var mask = REGISTER_WORD_MASK
       while (j < m && i < REGISTERS_PER_WORD) {
-        wordValue |= math.max(wordValue1 & mask, wordValue2 & mask)
+        word |= Math.max(word1 & mask, word2 & mask)
         mask <<= REGISTER_SIZE
         i += 1
         j += 1
       }
-      buffer1.setLong(mutableBufferOffset + word, wordValue)
-      word += 1
+      buffer1.setLong(mutableBufferOffset + wordOffset, word)
+      wordOffset += 1
     }
   }
 
@@ -489,31 +489,28 @@ case class HyperLogLog(child: Expression, relativeSD: Double = 0.05)
    *
    * Contrary to the original paper we omit the large value correction. It has been proved that
    * this doesn't do any good (see the documentation of the ClearSpring HLL implementation).
-   *
-   * @param buffer to get the values from.
-   * @return the HyperLogLog estimate.
    */
   def eval(buffer: InternalRow): Any = {
-    // Compute the indicator value 'z' and count the number of zeros 'v'.
+    // Compute the indicator value 'z' and count the number of zeros 'V'.
     var zInverse = 0.0d
-    var v = 0.0d
+    var V = 0.0d
     var j = 0
-    var word = 0
-    while (word < numWords) {
-      val wordValue = buffer.getLong(mutableBufferOffset + word)
+    var wordOffset = 0
+    while (wordOffset < numWords) {
+      val word = buffer.getLong(mutableBufferOffset + wordOffset)
       var i = 0
       var shift = 0
       while (j < m && i < REGISTERS_PER_WORD) {
-        val m_j = (wordValue >>> shift) & REGISTER_WORD_MASK
-        zInverse += 1.0 / (1 << m_j)
-        if (m_j == 0) {
-          v += 1.0d
+        val Mj = (word >>> shift) & REGISTER_WORD_MASK
+        zInverse += 1.0 / (1 << Mj)
+        if (Mj == 0) {
+          V += 1.0d
         }
         shift += REGISTER_SIZE
         i += 1
         j += 1
       }
-      word += 1
+      wordOffset += 1
     }
     val z = 1.0d / zInverse
 
@@ -522,7 +519,7 @@ case class HyperLogLog(child: Expression, relativeSD: Double = 0.05)
     val estimate = alphaMM * z match {
       case e if e <= (5.0d / 2.0d) * m =>
         // Small value correction.
-        m * Math.log(m / v)
+        m * Math.log(m / V)
       case e =>
         e
     }
