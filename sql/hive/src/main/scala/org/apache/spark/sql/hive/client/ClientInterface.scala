@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.client
 import java.io.PrintStream
 import java.util.{Map => JMap}
 
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Expression
 
@@ -90,6 +91,9 @@ private[hive] trait ClientInterface {
 
   /** Returns the Hive Version of this client. */
   def version: HiveVersion
+
+  /** Returns the initial HiveConf used to create this client. */
+  def initialConf: HiveConf
 
   /** Returns the configuration for the given key in the current session. */
   def getConf(key: String, defaultValue: String): String

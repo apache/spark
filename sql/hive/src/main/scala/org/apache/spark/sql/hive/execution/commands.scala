@@ -100,8 +100,9 @@ case class AddJar(path: String) extends RunnableCommand {
     // returns the value of a thread local variable and its HiveConf may not be the HiveConf
     // associated with `executionHive.state` (for example, HiveContext is created in one thread
     // and then add jar is called from another thread).
-    hiveContext.executionHive.state.getConf.setClassLoader(newClassLoader)
+    hiveContext.executionHive.initialConf.setClassLoader(newClassLoader)
     // Add jar to isolated hive (metadataHive) class loader.
+    hiveContext.metadataHive.initialConf.setClassLoader(newClassLoader)
     hiveContext.runSqlHive(s"ADD JAR $path")
 
     // Add jar to executors
