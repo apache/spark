@@ -173,6 +173,10 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
   /** Generate basic information of the streaming program */
   private def generateBasicInfo(): Seq[Node] = {
+    val (numActiveReceivers, numInactiveReceivers) = listener.synchronized {
+      (listener.numActiveReceivers, listener.numInactiveReceivers)
+    }
+
     val timeSinceStart = System.currentTimeMillis() - startTime
     <div>Running batches of
       <strong>
@@ -187,7 +191,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
         {SparkUIUtils.formatDate(startTime)}
       </strong>
       (<strong>{listener.numTotalCompletedBatches}</strong>
-      completed batches, <strong>{listener.numTotalReceivedRecords}</strong> records)
+      completed batches, <strong>{listener.numTotalReceivedRecords}</strong> records,
+      <strong>{numActiveReceivers}</strong> active receivers,
+      <strong>{numInactiveReceivers}</strong> inactive receivers)
     </div>
     <br />
   }
