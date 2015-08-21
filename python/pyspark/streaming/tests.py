@@ -850,7 +850,9 @@ class KafkaStreamTests(PySparkStreamingTestCase):
                 offsetRanges.append(o)
             return rdd
 
-        stream.transform(transformWithOffsetRanges).foreachRDD(lambda rdd: rdd.count())
+        # Test whether it is ok mixing KafkaTransformedDStream and TransformedDStream together,
+        # only the TransformedDstreams can be folded together.
+        stream.transform(transformWithOffsetRanges).map(lambda kv: kv[1]).count().pprint()
         self.ssc.start()
         self.wait_for(offsetRanges, 1)
 
