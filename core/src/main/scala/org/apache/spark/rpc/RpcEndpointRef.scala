@@ -100,7 +100,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
         val future = ask[T](message, timeout)
         val result = timeout.awaitResult(future)
         if (result == null) {
-          throw new SparkException("Actor returned null")
+          throw new SparkException("RpcEndpoint returned null")
         }
         return result
       } catch {

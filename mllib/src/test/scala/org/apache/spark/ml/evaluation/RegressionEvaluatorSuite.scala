@@ -63,7 +63,7 @@ class RegressionEvaluatorSuite extends SparkFunSuite with MLlibTestSparkContext 
 
     // default = rmse
     val evaluator = new RegressionEvaluator()
-    assert(evaluator.evaluate(predictions) ~== -0.1019382 absTol 0.001)
+    assert(evaluator.evaluate(predictions) ~== 0.1019382 absTol 0.001)
 
     // r2 score
     evaluator.setMetricName("r2")
@@ -71,6 +71,6 @@ class RegressionEvaluatorSuite extends SparkFunSuite with MLlibTestSparkContext 
 
     // mae
     evaluator.setMetricName("mae")
-    assert(evaluator.evaluate(predictions) ~== -0.08036075 absTol 0.001)
+    assert(evaluator.evaluate(predictions) ~== 0.08036075 absTol 0.001)
   }
 }

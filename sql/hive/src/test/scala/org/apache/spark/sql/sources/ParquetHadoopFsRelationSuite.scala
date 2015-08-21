@@ -23,12 +23,12 @@ import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.{AnalysisException, SaveMode, parquet}
+import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 
 class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
-  override val dataSourceName: String = classOf[parquet.DefaultSource].getCanonicalName
+  override val dataSourceName: String = "parquet"
 
   import sqlContext._
   import sqlContext.implicits._

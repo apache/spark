@@ -32,7 +32,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{Vector, Vectors, DenseMatrix, BLAS, DenseVector}
 import org.apache.spark.mllib.util.{Loader, Saveable}
@@ -70,6 +70,7 @@ private case class VocabWord(
  * and
  * Distributed Representations of Words and Phrases and their Compositionality.
  */
+@Since("1.1.0")
 @Experimental
 class Word2Vec extends Serializable with Logging {
 
@@ -83,6 +84,7 @@ class Word2Vec extends Serializable with Logging {
   /**
    * Sets vector size (default: 100).
    */
+  @Since("1.1.0")
   def setVectorSize(vectorSize: Int): this.type = {
     this.vectorSize = vectorSize
     this
@@ -91,6 +93,7 @@ class Word2Vec extends Serializable with Logging {
   /**
    * Sets initial learning rate (default: 0.025).
    */
+  @Since("1.1.0")
   def setLearningRate(learningRate: Double): this.type = {
     this.learningRate = learningRate
     this
@@ -99,6 +102,7 @@ class Word2Vec extends Serializable with Logging {
   /**
    * Sets number of partitions (default: 1). Use a small number for accuracy.
    */
+  @Since("1.1.0")
   def setNumPartitions(numPartitions: Int): this.type = {
     require(numPartitions > 0, s"numPartitions must be greater than 0 but got $numPartitions")
     this.numPartitions = numPartitions
@@ -109,6 +113,7 @@ class Word2Vec extends Serializable with Logging {
    * Sets number of iterations (default: 1), which should be smaller than or equal to number of
    * partitions.
    */
+  @Since("1.1.0")
   def setNumIterations(numIterations: Int): this.type = {
     this.numIterations = numIterations
     this
@@ -117,6 +122,7 @@ class Word2Vec extends Serializable with Logging {
   /**
    * Sets random seed (default: a random long integer).
    */
+  @Since("1.1.0")
   def setSeed(seed: Long): this.type = {
     this.seed = seed
     this
@@ -126,6 +132,7 @@ class Word2Vec extends Serializable with Logging {
    * Sets minCount, the minimum number of times a token must appear to be included in the word2vec
    * model's vocabulary (default: 5).
    */
+  @Since("1.3.0")
   def setMinCount(minCount: Int): this.type = {
     this.minCount = minCount
     this
@@ -263,6 +270,7 @@ class Word2Vec extends Serializable with Logging {
    * @param dataset an RDD of words
    * @return a Word2VecModel
    */
+  @Since("1.1.0")
   def fit[S <: Iterable[String]](dataset: RDD[S]): Word2VecModel = {
 
     val words = dataset.flatMap(x => x)
@@ -412,6 +420,7 @@ class Word2Vec extends Serializable with Logging {
    * @param dataset a JavaRDD of words
    * @return a Word2VecModel
    */
+  @Since("1.1.0")
   def fit[S <: JavaIterable[String]](dataset: JavaRDD[S]): Word2VecModel = {
     fit(dataset.rdd.map(_.asScala))
   }
@@ -454,6 +463,7 @@ class Word2VecModel private[mllib] (
     wordVecNorms
   }
 
+  @Since("1.5.0")
   def this(model: Map[String, Array[Float]]) = {
     this(Word2VecModel.buildWordIndex(model), Word2VecModel.buildWordVectors(model))
   }
@@ -469,6 +479,7 @@ class Word2VecModel private[mllib] (
 
   override protected def formatVersion = "1.0"
 
+  @Since("1.4.0")
   def save(sc: SparkContext, path: String): Unit = {
     Word2VecModel.SaveLoadV1_0.save(sc, path, getVectors)
   }
@@ -478,6 +489,7 @@ class Word2VecModel private[mllib] (
    * @param word a word
    * @return vector representation of word
    */
+  @Since("1.1.0")
   def transform(word: String): Vector = {
     wordIndex.get(word) match {
       case Some(ind) =>
@@ -494,6 +506,7 @@ class Word2VecModel private[mllib] (
    * @param num number of synonyms to find
    * @return array of (word, cosineSimilarity)
    */
+  @Since("1.1.0")
   def findSynonyms(word: String, num: Int): Array[(String, Double)] = {
     val vector = transform(word)
     findSynonyms(vector, num)
@@ -505,6 +518,7 @@ class Word2VecModel private[mllib] (
    * @param num number of synonyms to find
    * @return array of (word, cosineSimilarity)
    */
+  @Since("1.1.0")
   def findSynonyms(vector: Vector, num: Int): Array[(String, Double)] = {
     require(num > 0, "Number of similar words should > 0")
     // TODO: optimize top-k
@@ -534,6 +548,7 @@ class Word2VecModel private[mllib] (
   /**
    * Returns a map of words to their vector representations.
    */
+  @Since("1.2.0")
   def getVectors: Map[String, Array[Float]] = {
     wordIndex.map { case (word, ind) =>
       (word, wordVectors.slice(vectorSize * ind, vectorSize * ind + vectorSize))
@@ -541,6 +556,7 @@ class Word2VecModel private[mllib] (
   }
 }
 
+@Since("1.4.0")
 @Experimental
 object Word2VecModel extends Loader[Word2VecModel] {
 
@@ -600,6 +616,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
     }
   }
 
+  @Since("1.4.0")
   override def load(sc: SparkContext, path: String): Word2VecModel = {
 
     val (loadedClassName, loadedVersion, metadata) = Loader.loadMetadata(sc, path)
