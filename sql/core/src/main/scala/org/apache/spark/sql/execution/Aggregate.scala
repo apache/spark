@@ -160,9 +160,11 @@ case class Aggregate(
       }
     } else {
       child.execute().mapPartitions { iter =>
-        val hashTable = if (initSize < 0)
-          new java.util.HashMap[InternalRow, Array[AggregateFunction1]]() else
+        val hashTable = if (initSize < 0) {
+          new java.util.HashMap[InternalRow, Array[AggregateFunction1]]()
+        } else {
           new java.util.HashMap[InternalRow, Array[AggregateFunction1]](initSize)
+        }
 
         val groupingProjection = new InterpretedMutableProjection(groupingExpressions, child.output)
 
