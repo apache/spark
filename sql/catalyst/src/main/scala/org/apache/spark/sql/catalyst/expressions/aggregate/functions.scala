@@ -305,7 +305,29 @@ case class Sum(child: Expression) extends AlgebraicAggregate {
   override val evaluateExpression = Cast(currentSum, resultType)
 }
 
-// Port of Clearspring HLL
+/**
+ *
+ *
+ * Papers:
+ * http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf
+ * http://static.googleusercontent.com/external_content/untrusted_dlcp/research.google.com/en/us/pubs/archive/40671.pdf
+ * https://docs.google.com/document/d/1gyjfMHy43U9OWBXxfaeG-3MjGzejW1dlpyMwEYAAWEI/view?fullscreen#
+ *
+ * Note on provenance
+ * - Clearspring:
+ *
+ * - Aggregage Knowledge:
+ *   https://github.com/aggregateknowledge/java-hll/blob/master/src/main/java/net/agkn/hll/HLL.java
+ * - Algebird:
+ *   https://github.com/twitter/algebird/blob/develop/algebird-core/src/main/scala/com/twitter/algebird/HyperLogLog.scala
+ *
+ * Note on naming: Tried to match the paper.
+ *
+ * Note on the use of longs for storage instead of something else.
+ *
+ * @param child
+ * @param relativeSD
+ */
 case class HyperLogLog(child: Expression, relativeSD: Double = 0.05)
     extends AggregateFunction2 {
   /**
@@ -352,6 +374,18 @@ case class HyperLogLog(child: Expression, relativeSD: Double = 0.05)
   }
 
   /**
+   * Shift used to extract the 'j' (the register) value from the hashed value.
+   *
+   * This assumes the use of 32-bit hashcodes.
+   */
+  val jShift = Integer.SIZE - b
+
+  /**
+   * Minimum 'w' value.
+   */
+  val wMin = 1 << (b - 1)
+
+  /**
    * The number of registers used.
    */
   val m = 1 << b
@@ -385,7 +419,7 @@ case class HyperLogLog(child: Expression, relativeSD: Double = 0.05)
 
   /** Allocate enough words to store all registers. */
   val bufferAttributes: Seq[AttributeReference] = Seq.tabulate(numWords) { i =>
-    AttributeReference(s"e$i", LongType)()
+    AttributeReference(s"MS[$i]", LongType)()
   }
 
   /** Fill all words with zeros. */
@@ -397,39 +431,37 @@ case class HyperLogLog(child: Expression, relativeSD: Double = 0.05)
     }
   }
 
-  /***/
+  /** Update the HLL buffer. */
   def update(buffer: MutableRow, input: InternalRow): Unit = {
     val v = child.eval(input)
     if (v != null) {
-      // Hash the value.
+      // Create the hashed value.
       val x = MurmurHash.hash(v)
 
       // Determine which register we are going to use.
-      val j = x >>> (Integer.SIZE - b) // TODO create variable.
+      val j = x >>> jShift
 
-      // Setup access to the word containing the register we are interested in.
+      // Determine the number of leading zeros in the remaining bits.
+      val rhow = Integer.numberOfLeadingZeros((x << b) | wMin) + 1
+
+      // Get the word containing the register we are interested in.
       val word = j / REGISTERS_PER_WORD
-      val wordShift = REGISTER_SIZE * (j - (word * REGISTERS_PER_WORD)) // TODO is this cheaper than a straight modulo?
-      val wordMask = REGISTER_WORD_MASK << wordShift
       val wordValue = buffer.getLong(mutableBufferOffset + word)
 
       // Extract the M[J] register value from the word.
-      val m_j = (wordValue & wordMask) >>> wordShift
+      val MjShift = REGISTER_SIZE * (j - (word * REGISTERS_PER_WORD))
+      val MjMask = REGISTER_WORD_MASK << MjShift
+      val Mj = (wordValue & MjMask) >>> MjShift
 
-      // Determine the number of leading zeros in the remaining bits.
-      // TODO create variable
-      // TODO maybe it is easier to just subtract a value from the number of leading zeros.
-      // TODO understand this better
-      val rho_w = Integer.numberOfLeadingZeros((x << b) | (1 << (b - 1)) + 1) + 1
-
-      // Take the maximum number of leading zeros.
-      if (rho_w > m_j) {
-        buffer.setLong(mutableBufferOffset + word, (wordValue & ~wordMask) | (rho_w << wordShift))
+      // Assign the maximum number of leading zeros to the register.
+      if (rhow > Mj) {
+        buffer.setLong(mutableBufferOffset + word, (wordValue & ~MjMask) | (rhow << MjShift))
       }
     }
   }
 
   def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+    var j = 0
     var word = 0
     while (word < numWords) {
       // Iterate through all the registers within the word and select the maximum number of
@@ -437,11 +469,12 @@ case class HyperLogLog(child: Expression, relativeSD: Double = 0.05)
       val wordValue1 = buffer1.getLong(mutableBufferOffset + word)
       val wordValue2 = buffer2.getLong(inputBufferOffset + word)
       var wordValue = 0L
-      var j = 0
+      var i = 0
       var mask = REGISTER_WORD_MASK
-      while (j < REGISTERS_PER_WORD) {
+      while (j < m && i < REGISTERS_PER_WORD) {
         wordValue |= math.max(wordValue1 & mask, wordValue2 & mask)
         mask <<= REGISTER_SIZE
+        i += 1
         j += 1
       }
       buffer1.setLong(mutableBufferOffset + word, wordValue)
