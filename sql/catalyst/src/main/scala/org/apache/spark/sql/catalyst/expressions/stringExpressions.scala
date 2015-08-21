@@ -72,7 +72,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
  * Returns null if the separator is null. Otherwise, concat_ws skips all null values.
  */
 case class ConcatWs(children: Seq[Expression])
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, s"$prettyName requires at least one argument.")
 
@@ -114,8 +114,41 @@ case class ConcatWs(children: Seq[Expression])
         boolean ${ev.isNull} = ${ev.primitive} == null;
       """
     } else {
-      // Contains a mix of strings and array<string>s. Fall back to interpreted mode for now.
-      super.genCode(ctx, ev)
+      val list = ctx.freshName("list")
+      val array = ctx.freshName("array")
+
+      val sep = children.head.gen(ctx)
+      val vararg = children.tail.map { child =>
+        val eval = child.gen(ctx)
+        child.dataType match {
+          case StringType =>
+            s"""
+              ${eval.code}
+              $list.add(${eval.isNull} ? (UTF8String) null : ${eval.primitive});
+             """
+          case _: ArrayType =>
+            val size = ctx.freshName("n")
+            val j = ctx.freshName("j")
+            s"""
+              ${eval.code}
+              if (!${eval.isNull}) {
+                final int $size = ${eval.primitive}.numElements();
+                for (int $j = 0; $j < $size; $j ++) {
+                  $list.add(${ctx.getValue(eval.primitive, StringType, j)});
+                }
+              }
+             """
+        }
+      }.mkString("\n")
+      s"""
+        ${sep.code}
+        java.util.ArrayList<UTF8String> $list = new java.util.ArrayList<UTF8String>();
+        $vararg
+        UTF8String[] $array = new UTF8String[$list.size()];
+        $list.toArray($array);
+        UTF8String ${ev.primitive} = UTF8String.concatWs(${sep.primitive}, $array);
+        boolean ${ev.isNull} = ${ev.primitive} == null;
+       """
     }
   }
 }
