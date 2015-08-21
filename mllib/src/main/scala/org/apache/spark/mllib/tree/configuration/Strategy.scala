@@ -158,11 +158,6 @@ class Strategy (
       s"  Valid values are integers >= 0.")
     require(maxBins >= 2, s"DecisionTree Strategy given invalid maxBins parameter: $maxBins." +
       s"  Valid values are integers >= 2.")
-    categoricalFeaturesInfo.foreach { case (feature, arity) =>
-      require(arity >= 2,
-        s"DecisionTree Strategy given invalid categoricalFeaturesInfo setting:" +
-        s" feature $feature has $arity categories.  The number of categories should be >= 2.")
-    }
     require(minInstancesPerNode >= 1,
       s"DecisionTree Strategy requires minInstancesPerNode >= 1 but was given $minInstancesPerNode")
     require(maxMemoryInMB <= 10240,
