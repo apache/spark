@@ -25,7 +25,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -45,8 +45,8 @@ import org.apache.spark.util.Utils
  *
  * @param algo algorithm for the ensemble model, either Classification or Regression
  * @param trees tree ensembles
- * @since 1.2.0
  */
+@Since("1.2.0")
 @Experimental
 class RandomForestModel(override val algo: Algo, override val trees: Array[DecisionTreeModel])
   extends TreeEnsembleModel(algo, trees, Array.fill(trees.length)(1.0),
@@ -60,8 +60,8 @@ class RandomForestModel(override val algo: Algo, override val trees: Array[Decis
    * @param sc  Spark context used to save model data.
    * @param path  Path specifying the directory in which to save this model.
    *              If the directory already exists, this method throws an exception.
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   override def save(sc: SparkContext, path: String): Unit = {
     TreeEnsembleModel.SaveLoadV1_0.save(sc, path, this,
       RandomForestModel.SaveLoadV1_0.thisClassName)
@@ -70,9 +70,7 @@ class RandomForestModel(override val algo: Algo, override val trees: Array[Decis
   override protected def formatVersion: String = RandomForestModel.formatVersion
 }
 
-/**
- * @since 1.3.0
- */
+@Since("1.3.0")
 object RandomForestModel extends Loader[RandomForestModel] {
 
   private[mllib] def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
@@ -82,8 +80,8 @@ object RandomForestModel extends Loader[RandomForestModel] {
    * @param sc  Spark context used for loading model files.
    * @param path  Path specifying the directory to which the model was saved.
    * @return  Model instance
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   override def load(sc: SparkContext, path: String): RandomForestModel = {
     val (loadedClassName, version, jsonMetadata) = Loader.loadMetadata(sc, path)
     val classNameV1_0 = SaveLoadV1_0.thisClassName
@@ -114,8 +112,8 @@ object RandomForestModel extends Loader[RandomForestModel] {
  * @param algo algorithm for the ensemble model, either Classification or Regression
  * @param trees tree ensembles
  * @param treeWeights tree ensemble weights
- * @since 1.2.0
  */
+@Since("1.2.0")
 @Experimental
 class GradientBoostedTreesModel(
     override val algo: Algo,
@@ -130,8 +128,8 @@ class GradientBoostedTreesModel(
    * @param sc  Spark context used to save model data.
    * @param path  Path specifying the directory in which to save this model.
    *              If the directory already exists, this method throws an exception.
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   override def save(sc: SparkContext, path: String): Unit = {
     TreeEnsembleModel.SaveLoadV1_0.save(sc, path, this,
       GradientBoostedTreesModel.SaveLoadV1_0.thisClassName)
@@ -143,8 +141,8 @@ class GradientBoostedTreesModel(
    * @param loss evaluation metric.
    * @return an array with index i having the losses or errors for the ensemble
    *         containing the first i+1 trees
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def evaluateEachIteration(
       data: RDD[LabeledPoint],
       loss: Loss): Array[Double] = {
@@ -186,8 +184,8 @@ class GradientBoostedTreesModel(
 }
 
 /**
- * @since 1.3.0
  */
+@Since("1.3.0")
 object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
 
   /**
@@ -199,8 +197,8 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    * @param loss: evaluation metric.
    * @return a RDD with each element being a zip of the prediction and error
    *         corresponding to every sample.
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def computeInitialPredictionAndError(
       data: RDD[LabeledPoint],
       initTreeWeight: Double,
@@ -223,8 +221,8 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    * @param loss: evaluation metric.
    * @return a RDD with each element being a zip of the prediction and error
    *         corresponding to each sample.
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def updatePredictionError(
     data: RDD[LabeledPoint],
     predictionAndError: RDD[(Double, Double)],
@@ -248,8 +246,8 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    * @param sc  Spark context used for loading model files.
    * @param path  Path specifying the directory to which the model was saved.
    * @return  Model instance
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   override def load(sc: SparkContext, path: String): GradientBoostedTreesModel = {
     val (loadedClassName, version, jsonMetadata) = Loader.loadMetadata(sc, path)
     val classNameV1_0 = SaveLoadV1_0.thisClassName
