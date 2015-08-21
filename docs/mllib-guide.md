@@ -48,6 +48,7 @@ This lists functionality included in `spark.mllib`, the main MLlib API.
 * [Feature extraction and transformation](mllib-feature-extraction.html)
 * [Frequent pattern mining](mllib-frequent-pattern-mining.html)
   * [FP-growth](mllib-frequent-pattern-mining.html#fp-growth)
+  * [association rules](mllib-frequent-pattern-mining.html#association-rules)
   * [PrefixSpan](mllib-frequent-pattern-mining.html#prefix-span)
 * [Evaluation Metrics](mllib-evaluation-metrics.html)
 * [Optimization (developer)](mllib-optimization.html)
@@ -72,11 +73,14 @@ Users should be comfortable using `spark.mllib` features and expect more feature
 Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
 to `spark.ml`.
 
-More detailed guides for `spark.ml` include:
+Guides for `spark.ml` include:
 
 * **[spark.ml programming guide](ml-guide.html)**: overview of the Pipelines API and major concepts
-* [Feature transformers](ml-features.html): Details on transformers supported in the Pipelines API, including a few not in the lower-level `spark.mllib` API
-* [Ensembles](ml-ensembles.html): Details on ensemble learning methods in the Pipelines API
+* Guides on using algorithms within the Pipelines API:
+  * [Feature transformers](ml-features.html), including a few not in the lower-level `spark.mllib` API
+  * [Decision trees](ml-decision-tree.html)
+  * [Ensembles](ml-ensembles.html)
+  * [Linear methods](ml-linear-methods.html)
 
 # Dependencies
 

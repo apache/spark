@@ -163,6 +163,23 @@ private[spark] class Client(
     appContext.setQueue(args.amQueue)
     appContext.setAMContainerSpec(containerContext)
     appContext.setApplicationType("SPARK")
+    sparkConf.getOption(CONF_SPARK_YARN_APPLICATION_TAGS)
+      .map(StringUtils.getTrimmedStringCollection(_))
+      .filter(!_.isEmpty())
+      .foreach { tagCollection =>
+        try {
+          // The setApplicationTags method was only introduced in Hadoop 2.4+, so we need to use
+          // reflection to set it, printing a warning if a tag was specified but the YARN version
+          // doesn't support it.
+          val method = appContext.getClass().getMethod(
+            "setApplicationTags", classOf[java.util.Set[String]])
+          method.invoke(appContext, new java.util.HashSet[String](tagCollection))
+        } catch {
+          case e: NoSuchMethodException =>
+            logWarning(s"Ignoring $CONF_SPARK_YARN_APPLICATION_TAGS because this version of " +
+              "YARN does not support it")
+        }
+      }
     sparkConf.getOption("spark.yarn.maxAppAttempts").map(_.toInt) match {
       case Some(v) => appContext.setMaxAppAttempts(v)
       case None => logDebug("spark.yarn.maxAppAttempts is not set. " +
@@ -268,8 +285,8 @@ private[spark] class Client(
     // multiple times, YARN will fail to launch containers for the app with an internal
     // error.
     val distributedUris = new HashSet[String]
-    obtainTokenForHiveMetastore(hadoopConf, credentials)
-    obtainTokenForHBase(hadoopConf, credentials)
+    obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
+    obtainTokenForHBase(sparkConf, hadoopConf, credentials)
 
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
       fs.getDefaultReplication(dst)).toShort
@@ -414,7 +431,7 @@ private[spark] class Client(
     }
 
     // Distribute an archive with Hadoop and Spark configuration for the AM.
-    val (_, confLocalizedPath) = distribute(createConfArchive().getAbsolutePath(),
+    val (_, confLocalizedPath) = distribute(createConfArchive().toURI().getPath(),
       resType = LocalResourceType.ARCHIVE,
       destName = Some(LOCALIZED_CONF_DIR),
       appMasterOnly = true)
@@ -987,6 +1004,10 @@ object Client extends Logging {
   // of the executors
   val CONF_SPARK_YARN_SECONDARY_JARS = "spark.yarn.secondary.jars"
 
+  // Comma-separated list of strings to pass through as YARN application tags appearing
+  // in YARN ApplicationReports, which can be used for filtering when querying YARN.
+  val CONF_SPARK_YARN_APPLICATION_TAGS = "spark.yarn.tags"
+
   // Staging directory is private! -> rwx--------
   val STAGING_DIR_PERMISSION: FsPermission =
     FsPermission.createImmutable(Integer.parseInt("700", 8).toShort)
@@ -1077,20 +1098,10 @@ object Client extends Logging {
     triedDefault.toOption
   }
 
-  /**
-   * In Hadoop 0.23, the MR application classpath comes with the YARN application
-   * classpath. In Hadoop 2.0, it's an array of Strings, and in 2.2+ it's a String.
-   * So we need to use reflection to retrieve it.
-   */
   private[yarn] def getDefaultMRApplicationClasspath: Option[Seq[String]] = {
     val triedDefault = Try[Seq[String]] {
       val field = classOf[MRJobConfig].getField("DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH")
-      val value = if (field.getType == classOf[String]) {
-        StringUtils.getStrings(field.get(null).asInstanceOf[String]).toArray
-      } else {
-        field.get(null).asInstanceOf[Array[String]]
-      }
-      value.toSeq
+      StringUtils.getStrings(field.get(null).asInstanceOf[String]).toSeq
     } recoverWith {
       case e: NoSuchFieldException => Success(Seq.empty[String])
     }
@@ -1228,8 +1239,11 @@ object Client extends Logging {
   /**
    * Obtains token for the Hive metastore and adds them to the credentials.
    */
-  private def obtainTokenForHiveMetastore(conf: Configuration, credentials: Credentials) {
-    if (UserGroupInformation.isSecurityEnabled) {
+  private def obtainTokenForHiveMetastore(
+      sparkConf: SparkConf,
+      conf: Configuration,
+      credentials: Credentials) {
+    if (shouldGetTokens(sparkConf, "hive") && UserGroupInformation.isSecurityEnabled) {
       val mirror = universe.runtimeMirror(getClass.getClassLoader)
 
       try {
@@ -1286,8 +1300,11 @@ object Client extends Logging {
   /**
    * Obtain security token for HBase.
    */
-  def obtainTokenForHBase(conf: Configuration, credentials: Credentials): Unit = {
-    if (UserGroupInformation.isSecurityEnabled) {
+  def obtainTokenForHBase(
+      sparkConf: SparkConf,
+      conf: Configuration,
+      credentials: Credentials): Unit = {
+    if (shouldGetTokens(sparkConf, "hbase") && UserGroupInformation.isSecurityEnabled) {
       val mirror = universe.runtimeMirror(getClass.getClassLoader)
 
       try {
@@ -1381,6 +1398,15 @@ object Client extends Logging {
    */
   def buildPath(components: String*): String = {
     components.mkString(Path.SEPARATOR)
+  }
+
+  /**
+   * Return whether delegation tokens should be retrieved for the given service when security is
+   * enabled. By default, tokens are retrieved, but that behavior can be changed by setting
+   * a service-specific configuration.
+   */
+  def shouldGetTokens(conf: SparkConf, service: String): Boolean = {
+    conf.getBoolean(s"spark.yarn.security.tokens.${service}.enabled", true)
   }
 
 }
