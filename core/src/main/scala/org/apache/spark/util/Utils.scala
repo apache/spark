@@ -655,6 +655,9 @@ private[spark] object Utils extends Logging {
       // created the directories already, and that they are secured so that only the
       // user has access to them.
       getYarnLocalDirs(conf).split(",")
+    } else if (conf.getenv("MESOS_DIRECTORY") != null) {
+      // running inside mesos and have a local directory to use
+      Array(conf.getenv("MESOS_DIRECTORY"))
     } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
     } else {
