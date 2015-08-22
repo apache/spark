@@ -273,14 +273,13 @@ public final class UnsafeRow extends MutableRow {
       } else {
 
         final BigInteger integer = value.toJavaBigDecimal().unscaledValue();
-        final int[] mag = (int[]) Platform.getObjectVolatile(integer,
-          Platform.BIG_INTEGER_MAG_OFFSET);
-        assert(mag.length <= 4);
+        byte[] bytes = integer.toByteArray();
+        assert(bytes.length <= 16);
 
         // Write the bytes to the variable length portion.
         Platform.copyMemory(
-          mag, Platform.INT_ARRAY_OFFSET, baseObject, baseOffset + cursor, mag.length * 4);
-        setLong(ordinal, (cursor << 32) | ((long) (((integer.signum() + 1) << 8) + mag.length)));
+          bytes, Platform.BYTE_ARRAY_OFFSET, baseObject, baseOffset + cursor, bytes.length);
+        setLong(ordinal, (cursor << 32) | ((long) bytes.length));
       }
     }
   }
@@ -375,8 +374,6 @@ public final class UnsafeRow extends MutableRow {
     return Platform.getDouble(baseObject, getFieldOffset(ordinal));
   }
 
-  private static byte[] EMPTY = new byte[0];
-
   @Override
   public Decimal getDecimal(int ordinal, int precision, int scale) {
     if (isNullAt(ordinal)) {
@@ -385,20 +382,10 @@ public final class UnsafeRow extends MutableRow {
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
       return Decimal.apply(getLong(ordinal), precision, scale);
     } else {
-      long offsetAndSize = getLong(ordinal);
-      long offset = offsetAndSize >>> 32;
-      int signum = ((int) (offsetAndSize & 0xfff) >> 8);
-      assert signum >=0 && signum <= 2 : "invalid signum " + signum;
-      int size = (int) (offsetAndSize & 0xff);
-      int[] mag = new int[size];
-      Platform.copyMemory(
-        baseObject, baseOffset + offset, mag, Platform.INT_ARRAY_OFFSET, size * 4);
-
-      // create a BigInteger using signum and mag
-      BigInteger v = new BigInteger(0, EMPTY);  // create the initial object
-      Platform.putInt(v, Platform.BIG_INTEGER_SIGNUM_OFFSET, signum - 1);
-      Platform.putObjectVolatile(v, Platform.BIG_INTEGER_MAG_OFFSET, mag);
-      return Decimal.apply(new BigDecimal(v, scale), precision, scale);
+      byte[] bytes = getBinary(ordinal);
+      BigInteger bigInteger = new BigInteger(bytes);
+      BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
+      return Decimal.apply(javaDecimal, precision, scale);
     }
   }
 

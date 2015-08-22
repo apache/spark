@@ -27,7 +27,7 @@
     } ]
   }, {
     "type" : "record",
-    "name" : "ParquetAvroCompat",
+    "name" : "AvroPrimitives",
     "fields" : [ {
       "name" : "bool_column",
       "type" : "boolean"
@@ -49,7 +49,11 @@
     }, {
       "name" : "string_column",
       "type" : "string"
-    }, {
+    } ]
+  }, {
+    "type" : "record",
+    "name" : "AvroOptionalPrimitives",
+    "fields" : [ {
       "name" : "maybe_bool_column",
       "type" : [ "null", "boolean" ]
     }, {
@@ -70,7 +74,53 @@
     }, {
       "name" : "maybe_string_column",
       "type" : [ "null", "string" ]
+    } ]
+  }, {
+    "type" : "record",
+    "name" : "AvroNonNullableArrays",
+    "fields" : [ {
+      "name" : "strings_column",
+      "type" : {
+        "type" : "array",
+        "items" : "string"
+      }
     }, {
+      "name" : "maybe_ints_column",
+      "type" : [ "null", {
+        "type" : "array",
+        "items" : "int"
+      } ]
+    } ]
+  }, {
+    "type" : "record",
+    "name" : "AvroArrayOfArray",
+    "fields" : [ {
+      "name" : "int_arrays_column",
+      "type" : {
+        "type" : "array",
+        "items" : {
+          "type" : "array",
+          "items" : "int"
+        }
+      }
+    } ]
+  }, {
+    "type" : "record",
+    "name" : "AvroMapOfArray",
+    "fields" : [ {
+      "name" : "string_to_ints_column",
+      "type" : {
+        "type" : "map",
+        "values" : {
+          "type" : "array",
+          "items" : "int"
+        }
+      }
+    } ]
+  }, {
+    "type" : "record",
+    "name" : "ParquetAvroCompat",
+    "fields" : [ {
       "name" : "strings_column",
       "type" : {
         "type" : "array",

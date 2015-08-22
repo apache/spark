@@ -182,6 +182,7 @@ private[r] class RBackendHandler(server: RBackend)
       if (parameterType.isPrimitive) {
         parameterWrapperType = parameterType match {
           case java.lang.Integer.TYPE => classOf[java.lang.Integer]
+          case java.lang.Long.TYPE => classOf[java.lang.Integer]
           case java.lang.Double.TYPE => classOf[java.lang.Double]
           case java.lang.Boolean.TYPE => classOf[java.lang.Boolean]
           case _ => parameterType

@@ -22,8 +22,6 @@ import java.nio.ByteBuffer
 
 import com.google.common.io.BaseEncoding
 import org.apache.hadoop.conf.Configuration
-import org.apache.parquet.filter2.compat.FilterCompat
-import org.apache.parquet.filter2.compat.FilterCompat._
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.io.api.Binary
@@ -38,12 +36,6 @@ import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] object ParquetFilters {
   val PARQUET_FILTER_DATA = "org.apache.spark.sql.parquet.row.filter"
-
-  def createRecordFilter(filterExpressions: Seq[Expression]): Option[Filter] = {
-    filterExpressions.flatMap { filter =>
-      createFilter(filter)
-    }.reduceOption(FilterApi.and).map(FilterCompat.get)
-  }
 
   case class SetInFilter[T <: Comparable[T]](
     valueSet: Set[T]) extends UserDefinedPredicate[T] with Serializable {
@@ -205,6 +197,16 @@ private[sql] object ParquetFilters {
     // For any comparison operator `cmp`, both `a cmp NULL` and `NULL cmp a` evaluate to `NULL`,
     // which can be casted to `false` implicitly. Please refer to the `eval` method of these
     // operators and the `SimplifyFilters` rule for details.
+
+    // Hyukjin:
+    // I added [[EqualNullSafe]] with [[org.apache.parquet.filter2.predicate.Operators.Eq]].
+    // So, it performs equality comparison identically when given [[sources.Filter]] is [[EqualTo]].
+    // The reason why I did this is, that the actual Parquet filter checks null-safe equality
+    // comparison.
+    // So I added this and maybe [[EqualTo]] should be changed. It still seems fine though, because
+    // physical planning does not set `NULL` to [[EqualTo]] but changes it to [[IsNull]] and etc.
+    // Probably I missed something and obviously this should be changed.
+
     predicate match {
       case sources.IsNull(name) =>
         makeEq.lift(dataTypeOf(name)).map(_(name, null))
@@ -214,6 +216,11 @@ private[sql] object ParquetFilters {
       case sources.EqualTo(name, value) =>
         makeEq.lift(dataTypeOf(name)).map(_(name, value))
       case sources.Not(sources.EqualTo(name, value)) =>
+        makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
+
+      case sources.EqualNullSafe(name, value) =>
+        makeEq.lift(dataTypeOf(name)).map(_(name, value))
+      case sources.Not(sources.EqualNullSafe(name, value)) =>
         makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
 
       case sources.LessThan(name, value) =>
@@ -271,96 +278,6 @@ private[sql] object ParquetFilters {
     val addMethod = classOf[ValidTypeMap].getDeclaredMethods.find(_.getName == "add").get
     addMethod.setAccessible(true)
     addMethod.invoke(null, classOf[Binary], enumTypeDescriptor)
-  }
-
-  /**
-   * Converts Catalyst predicate expressions to Parquet filter predicates.
-   *
-   * @todo This can be removed once we get rid of the old Parquet support.
-   */
-  def createFilter(predicate: Expression): Option[FilterPredicate] = {
-    // NOTE:
-    //
-    // For any comparison operator `cmp`, both `a cmp NULL` and `NULL cmp a` evaluate to `NULL`,
-    // which can be casted to `false` implicitly. Please refer to the `eval` method of these
-    // operators and the `SimplifyFilters` rule for details.
-    predicate match {
-      case IsNull(NamedExpression(name, dataType)) =>
-        makeEq.lift(dataType).map(_(name, null))
-      case IsNotNull(NamedExpression(name, dataType)) =>
-        makeNotEq.lift(dataType).map(_(name, null))
-
-      case EqualTo(NamedExpression(name, _), NonNullLiteral(value, dataType)) =>
-        makeEq.lift(dataType).map(_(name, value))
-      case EqualTo(Cast(NamedExpression(name, _), dataType), NonNullLiteral(value, _)) =>
-        makeEq.lift(dataType).map(_(name, value))
-      case EqualTo(NonNullLiteral(value, dataType), NamedExpression(name, _)) =>
-        makeEq.lift(dataType).map(_(name, value))
-      case EqualTo(NonNullLiteral(value, _), Cast(NamedExpression(name, _), dataType)) =>
-        makeEq.lift(dataType).map(_(name, value))
-
-      case Not(EqualTo(NamedExpression(name, _), NonNullLiteral(value, dataType))) =>
-        makeNotEq.lift(dataType).map(_(name, value))
-      case Not(EqualTo(Cast(NamedExpression(name, _), dataType), NonNullLiteral(value, _))) =>
-        makeNotEq.lift(dataType).map(_(name, value))
-      case Not(EqualTo(NonNullLiteral(value, dataType), NamedExpression(name, _))) =>
-        makeNotEq.lift(dataType).map(_(name, value))
-      case Not(EqualTo(NonNullLiteral(value, _), Cast(NamedExpression(name, _), dataType))) =>
-        makeNotEq.lift(dataType).map(_(name, value))
-
-      case LessThan(NamedExpression(name, _), NonNullLiteral(value, dataType)) =>
-        makeLt.lift(dataType).map(_(name, value))
-      case LessThan(Cast(NamedExpression(name, _), dataType), NonNullLiteral(value, _)) =>
-        makeLt.lift(dataType).map(_(name, value))
-      case LessThan(NonNullLiteral(value, dataType), NamedExpression(name, _)) =>
-        makeGt.lift(dataType).map(_(name, value))
-      case LessThan(NonNullLiteral(value, _), Cast(NamedExpression(name, _), dataType)) =>
-        makeGt.lift(dataType).map(_(name, value))
-
-      case LessThanOrEqual(NamedExpression(name, _), NonNullLiteral(value, dataType)) =>
-        makeLtEq.lift(dataType).map(_(name, value))
-      case LessThanOrEqual(Cast(NamedExpression(name, _), dataType), NonNullLiteral(value, _)) =>
-        makeLtEq.lift(dataType).map(_(name, value))
-      case LessThanOrEqual(NonNullLiteral(value, dataType), NamedExpression(name, _)) =>
-        makeGtEq.lift(dataType).map(_(name, value))
-      case LessThanOrEqual(NonNullLiteral(value, _), Cast(NamedExpression(name, _), dataType)) =>
-        makeGtEq.lift(dataType).map(_(name, value))
-
-      case GreaterThan(NamedExpression(name, _), NonNullLiteral(value, dataType)) =>
-        makeGt.lift(dataType).map(_(name, value))
-      case GreaterThan(Cast(NamedExpression(name, _), dataType), NonNullLiteral(value, _)) =>
-        makeGt.lift(dataType).map(_(name, value))
-      case GreaterThan(NonNullLiteral(value, dataType), NamedExpression(name, _)) =>
-        makeLt.lift(dataType).map(_(name, value))
-      case GreaterThan(NonNullLiteral(value, _), Cast(NamedExpression(name, _), dataType)) =>
-        makeLt.lift(dataType).map(_(name, value))
-
-      case GreaterThanOrEqual(NamedExpression(name, _), NonNullLiteral(value, dataType)) =>
-        makeGtEq.lift(dataType).map(_(name, value))
-      case GreaterThanOrEqual(Cast(NamedExpression(name, _), dataType), NonNullLiteral(value, _)) =>
-        makeGtEq.lift(dataType).map(_(name, value))
-      case GreaterThanOrEqual(NonNullLiteral(value, dataType), NamedExpression(name, _)) =>
-        makeLtEq.lift(dataType).map(_(name, value))
-      case GreaterThanOrEqual(NonNullLiteral(value, _), Cast(NamedExpression(name, _), dataType)) =>
-        makeLtEq.lift(dataType).map(_(name, value))
-
-      case And(lhs, rhs) =>
-        (createFilter(lhs) ++ createFilter(rhs)).reduceOption(FilterApi.and)
-
-      case Or(lhs, rhs) =>
-        for {
-          lhsFilter <- createFilter(lhs)
-          rhsFilter <- createFilter(rhs)
-        } yield FilterApi.or(lhsFilter, rhsFilter)
-
-      case Not(pred) =>
-        createFilter(pred).map(FilterApi.not)
-
-      case InSet(NamedExpression(name, dataType), valueSet) =>
-        makeInSet.lift(dataType).map(_(name, valueSet))
-
-      case _ => None
-    }
   }
 
   /**

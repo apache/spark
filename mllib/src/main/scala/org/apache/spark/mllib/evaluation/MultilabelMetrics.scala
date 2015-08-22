@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.evaluation
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.sql.DataFrame
@@ -25,8 +26,8 @@ import org.apache.spark.sql.DataFrame
  * Evaluator for multilabel classification.
  * @param predictionAndLabels an RDD of (predictions, labels) pairs,
  * both are non-null Arrays, each with unique elements.
- * @since 1.2.0
  */
+@Since("1.2.0")
 class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]) {
 
   /**
@@ -104,8 +105,8 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
   /**
    * Returns precision for a given label (category)
    * @param label the label.
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def precision(label: Double): Double = {
     val tp = tpPerClass(label)
     val fp = fpPerClass.getOrElse(label, 0L)
@@ -115,8 +116,8 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
   /**
    * Returns recall for a given label (category)
    * @param label the label.
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def recall(label: Double): Double = {
     val tp = tpPerClass(label)
     val fn = fnPerClass.getOrElse(label, 0L)
@@ -126,8 +127,8 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
   /**
    * Returns f1-measure for a given label (category)
    * @param label the label.
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def f1Measure(label: Double): Double = {
     val p = precision(label)
     val r = recall(label)

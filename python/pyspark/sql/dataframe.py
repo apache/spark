@@ -1202,7 +1202,9 @@ class DataFrame(object):
     @ignore_unicode_prefix
     @since(1.3)
     def withColumn(self, colName, col):
-        """Returns a new :class:`DataFrame` by adding a column.
+        """
+        Returns a new :class:`DataFrame` by adding a column or replacing the
+        existing column that has the same name.
 
         :param colName: string, name of the new column.
         :param col: a :class:`Column` expression for the new column.
@@ -1210,7 +1212,8 @@ class DataFrame(object):
         >>> df.withColumn('age2', df.age + 2).collect()
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
         """
-        return self.select('*', col.alias(colName))
+        assert isinstance(col, Column), "col should be Column"
+        return DataFrame(self._jdf.withColumn(colName, col._jc), self.sql_ctx)
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -1223,10 +1226,7 @@ class DataFrame(object):
         >>> df.withColumnRenamed('age', 'age2').collect()
         [Row(age2=2, name=u'Alice'), Row(age2=5, name=u'Bob')]
         """
-        cols = [Column(_to_java_column(c)).alias(new)
-                if c == existing else c
-                for c in self.columns]
-        return self.select(*cols)
+        return DataFrame(self._jdf.withColumnRenamed(existing, new), self.sql_ctx)
 
     @since(1.4)
     @ignore_unicode_prefix

@@ -18,7 +18,7 @@
 package org.apache.spark.ui.scope
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{StringBuilder, ListBuffer}
 
 import org.apache.spark.Logging
 import org.apache.spark.scheduler.StageInfo
@@ -167,7 +167,7 @@ private[ui] object RDDOperationGraph extends Logging {
   def makeDotFile(graph: RDDOperationGraph): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
-    dotFile.append(makeDotSubgraph(graph.rootCluster, indent = "  "))
+    makeDotSubgraph(dotFile, graph.rootCluster, indent = "  ")
     graph.edges.foreach { edge => dotFile.append(s"""  ${edge.fromId}->${edge.toId};\n""") }
     dotFile.append("}")
     val result = dotFile.toString()
@@ -180,18 +180,19 @@ private[ui] object RDDOperationGraph extends Logging {
     s"""${node.id} [label="${node.name} [${node.id}]"]"""
   }
 
-  /** Return the dot representation of a subgraph in an RDDOperationGraph. */
-  private def makeDotSubgraph(cluster: RDDOperationCluster, indent: String): String = {
-    val subgraph = new StringBuilder
-    subgraph.append(indent + s"subgraph cluster${cluster.id} {\n")
-    subgraph.append(indent + s"""  label="${cluster.name}";\n""")
+  /** Update the dot representation of the RDDOperationGraph in cluster to subgraph. */
+  private def makeDotSubgraph(
+      subgraph: StringBuilder,
+      cluster: RDDOperationCluster,
+      indent: String): Unit = {
+    subgraph.append(indent).append(s"subgraph cluster${cluster.id} {\n")
+    subgraph.append(indent).append(s"""  label="${cluster.name}";\n""")
     cluster.childNodes.foreach { node =>
-      subgraph.append(indent + s"  ${makeDotNode(node)};\n")
+      subgraph.append(indent).append(s"  ${makeDotNode(node)};\n")
     }
     cluster.childClusters.foreach { cscope =>
-      subgraph.append(makeDotSubgraph(cscope, indent + "  "))
+      makeDotSubgraph(subgraph, cscope, indent + "  ")
     }
-    subgraph.append(indent + "}\n")
-    subgraph.toString()
+    subgraph.append(indent).append("}\n")
   }
 }
