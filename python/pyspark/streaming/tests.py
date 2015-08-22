@@ -1133,20 +1133,20 @@ class KinesisStreamTests(PySparkStreamingTestCase):
             kinesisTestUtils.deleteDynamoDBTable(kinesisAppName)
 
 
-# Search jar in the project dir using name_pattern for both sbt build and maven build because the
-# artifact jars are in different directories.
-def search_jar(dir, name_pattern):
+# Search jar in the project dir using the jar name_prefix for both sbt build and maven build because
+# the artifact jars are in different directories.
+def search_jar(dir, name_prefix):
     # We should ignore the following jars
     ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
-    jars = (glob.glob(os.path.join(dir, "target/scala-*/" + name_pattern)) +  # sbt build
-            glob.glob(os.path.join(dir, "target/" + name_pattern)))  # maven build
+    jars = (glob.glob(os.path.join(dir, "target/scala-*/" + name_prefix + "-*.jar")) +  # sbt build
+            glob.glob(os.path.join(dir, "target/" + name_prefix + "_*.jar")))  # maven build
     return [jar for jar in jars if not jar.endswith(ignored_jar_suffixes)]
 
 
 def search_kafka_assembly_jar():
     SPARK_HOME = os.environ["SPARK_HOME"]
     kafka_assembly_dir = os.path.join(SPARK_HOME, "external/kafka-assembly")
-    jars = search_jar(kafka_assembly_dir, "spark-streaming-kafka-assembly*.jar")
+    jars = search_jar(kafka_assembly_dir, "spark-streaming-kafka-assembly")
     if not jars:
         raise Exception(
             ("Failed to find Spark Streaming kafka assembly jar in %s. " % kafka_assembly_dir) +
@@ -1163,7 +1163,7 @@ def search_kafka_assembly_jar():
 def search_flume_assembly_jar():
     SPARK_HOME = os.environ["SPARK_HOME"]
     flume_assembly_dir = os.path.join(SPARK_HOME, "external/flume-assembly")
-    jars = search_jar(flume_assembly_dir, "spark-streaming-flume-assembly*.jar")
+    jars = search_jar(flume_assembly_dir, "spark-streaming-flume-assembly")
     if not jars:
         raise Exception(
             ("Failed to find Spark Streaming Flume assembly jar in %s. " % flume_assembly_dir) +
@@ -1180,7 +1180,7 @@ def search_flume_assembly_jar():
 def search_mqtt_assembly_jar():
     SPARK_HOME = os.environ["SPARK_HOME"]
     mqtt_assembly_dir = os.path.join(SPARK_HOME, "external/mqtt-assembly")
-    jars = search_jar(mqtt_assembly_dir, "spark-streaming-mqtt-assembly*.jar")
+    jars = search_jar(mqtt_assembly_dir, "spark-streaming-mqtt-assembly")
     if not jars:
         raise Exception(
             ("Failed to find Spark Streaming MQTT assembly jar in %s. " % mqtt_assembly_dir) +
@@ -1214,7 +1214,7 @@ def search_mqtt_test_jar():
 def search_kinesis_asl_assembly_jar():
     SPARK_HOME = os.environ["SPARK_HOME"]
     kinesis_asl_assembly_dir = os.path.join(SPARK_HOME, "extras/kinesis-asl-assembly")
-    jars = search_jar(kinesis_asl_assembly_dir, "spark-streaming-kinesis-asl-assembly*.jar")
+    jars = search_jar(kinesis_asl_assembly_dir, "spark-streaming-kinesis-asl-assembly")
     if not jars:
         return None
     elif len(jars) > 1:
