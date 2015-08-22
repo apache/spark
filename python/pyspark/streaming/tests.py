@@ -1154,8 +1154,8 @@ def search_kafka_assembly_jar():
             "'build/sbt assembly/assembly streaming-kafka-assembly/assembly' or "
             "'build/mvn package' before running this test.")
     elif len(jars) > 1:
-        raise Exception(("Found multiple Spark Streaming Kafka assembly JARs in %s; please "
-                         "remove all but one") % kafka_assembly_dir)
+        raise Exception(("Found multiple Spark Streaming Kafka assembly JARs: %s; please "
+                         "remove all but one") % (", ".join(jars)))
     else:
         return jars[0]
 
@@ -1171,8 +1171,8 @@ def search_flume_assembly_jar():
             "'build/sbt assembly/assembly streaming-flume-assembly/assembly' or "
             "'build/mvn package' before running this test.")
     elif len(jars) > 1:
-        raise Exception(("Found multiple Spark Streaming Flume assembly JARs in %s; please "
-                        "remove all but one") % flume_assembly_dir)
+        raise Exception(("Found multiple Spark Streaming Flume assembly JARs: %s; please "
+                        "remove all but one") % (", ".join(jars)))
     else:
         return jars[0]
 
@@ -1188,8 +1188,8 @@ def search_mqtt_assembly_jar():
             "'build/sbt assembly/assembly streaming-mqtt-assembly/assembly' or "
             "'build/mvn package' before running this test")
     elif len(jars) > 1:
-        raise Exception(("Found multiple Spark Streaming MQTT assembly JARs in %s; please "
-                         "remove all but one") % mqtt_assembly_dir)
+        raise Exception(("Found multiple Spark Streaming MQTT assembly JARs: %s; please "
+                         "remove all but one") % (", ".join(jars)))
     else:
         return jars[0]
 
@@ -1205,8 +1205,8 @@ def search_mqtt_test_jar():
             "You need to build Spark with "
             "'build/sbt assembly/assembly streaming-mqtt/test:assembly'")
     elif len(jars) > 1:
-        raise Exception(("Found multiple Spark Streaming MQTT test JARs in %s; please "
-                         "remove all but one") % mqtt_test_dir)
+        raise Exception(("Found multiple Spark Streaming MQTT test JARs: %s; please "
+                         "remove all but one") % (", ".join(jars)))
     else:
         return jars[0]
 
@@ -1218,8 +1218,8 @@ def search_kinesis_asl_assembly_jar():
     if not jars:
         return None
     elif len(jars) > 1:
-        raise Exception(("Found multiple Spark Streaming Kinesis ASL assembly JARs in %s; please "
-                         "remove all but one") % kinesis_asl_assembly_dir)
+        raise Exception(("Found multiple Spark Streaming Kinesis ASL assembly JARs: %s; please "
+                         "remove all but one") % (", ".join(jars)))
     else:
         return jars[0]
 
