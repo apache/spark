@@ -161,9 +161,13 @@ object JdbcUtils extends Logging {
   /**
    * Compute the schema string for this RDD.
    */
-  def schemaString(df: DataFrame, url: String): String = {
+  def schemaString(
+                    df: DataFrame,
+                    url: String,
+                    properties: Properties = new Properties()): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
+    val stringDataType = properties.getProperty("dbStringDataType", "TEXT")
     df.schema.fields foreach { field => {
       val name = field.name
       val typ: String =
@@ -176,7 +180,7 @@ object JdbcUtils extends Logging {
             case ShortType => "INTEGER"
             case ByteType => "BYTE"
             case BooleanType => "BIT(1)"
-            case StringType => "TEXT"
+            case StringType => stringDataType
             case BinaryType => "BLOB"
             case TimestampType => "TIMESTAMP"
             case DateType => "DATE"
