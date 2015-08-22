@@ -165,11 +165,15 @@ class StreamingContext(object):
             print("failed to load StreamingContext from checkpoint", file=sys.stderr)
             raise
 
-        jsc = jssc.sparkContext()
-        conf = SparkConf(_jconf=jsc.getConf())
-        sc = SparkContext(conf=conf, gateway=gw, jsc=jsc)
+        # If there is already an active instance of Python SparkContext use it, or create a new one
+        if not SparkContext._active_spark_context:
+            jsc = jssc.sparkContext()
+            conf = SparkConf(_jconf=jsc.getConf())
+            SparkContext(conf=conf, gateway=gw, jsc=jsc)
+
+        sc = SparkContext._active_spark_context
+
         # update ctx in serializer
-        SparkContext._active_spark_context = sc
         cls._transformerSerializer.ctx = sc
         return StreamingContext(sc, None, jssc)
 
