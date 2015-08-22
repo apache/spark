@@ -37,6 +37,7 @@ defaults = {
     },
     'celery': {
         'default_queue': 'default',
+        'flower_port': '5555'
     },
     'smtp': {
         'smtp_starttls': True,
@@ -138,7 +139,7 @@ celery_result_backend = db+mysql://airflow:airflow@localhost:3306/airflow
 
 # Celery Flower is a sweet UI for Celery. Airflow has a shortcut to start
 # it `airflow flower`. This defines the port that Celery Flower runs on
-flower_port = 8383
+flower_port = 5555
 
 # Default queue that tasks get assigned to and that worker listen on.
 default_queue = default

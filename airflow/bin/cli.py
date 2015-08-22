@@ -544,7 +544,7 @@ def get_parser():
     parser_flower = subparsers.add_parser('flower', help=ht)
     parser_flower.add_argument(
         "-p", "--port", help="The port",
-        default='5555')
+        default=conf.get('celery', 'FLOWER_PORT'))
     parser_flower.add_argument(
         "-a", "--broker_api", help="Broker api")
     parser_flower.set_defaults(func=flower)
