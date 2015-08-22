@@ -41,6 +41,7 @@ import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.{DataWriteMethod, OutputMetrics}
+import org.apache.spark.io.RDDMultipleTextOutputFormat
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
@@ -886,6 +887,25 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       case None =>
         self.filter(_._1 == key).map(_._2).collect()
     }
+  }
+
+  /**
+   * Save this RDD as multiple text files, using string representations of elements.
+   * File paths are determined by the string representations of keys.
+   */
+  def saveAsTextFileByKey(
+    path: String): Unit = self.withScope {
+    saveAsHadoopFile(path, keyClass, valueClass, classOf[RDDMultipleTextOutputFormat[K, V]])
+  }
+
+  /**
+   * Save this RDD as multiple text files, using string representations of elements.
+   * File paths are determined by the string representations of keys.
+   */
+  def saveAsTextFileByKey(
+    path: String,
+    codec: Class[_ <: CompressionCodec]): Unit = self.withScope {
+    saveAsHadoopFile(path, keyClass, valueClass, classOf[RDDMultipleTextOutputFormat[K, V]], codec)
   }
 
   /**

@@ -770,6 +770,24 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def lookup(key: K): JList[V] = seqAsJavaList(rdd.lookup(key))
 
+  /**
+   * Save this RDD as multiple text files, using string representations of elements.
+   * File paths are determined by the string representations of keys.
+   */
+  def saveAsTextFileByKey(path: String) {
+    RDD.rddToPairRDDFunctions(rdd).saveAsTextFileByKey(path)
+  }
+
+  /**
+   * Save this RDD as multiple text files, using string representations of elements.
+   * File paths are determined by the string representations of keys.
+   */
+  def saveAsTextFileByKey(
+    path: String,
+    codec: Class[_ <: CompressionCodec]) {
+    RDD.rddToPairRDDFunctions(rdd).saveAsTextFileByKey(path, codec)
+  }
+
   /** Output the RDD to any Hadoop-supported file system. */
   def saveAsHadoopFile[F <: OutputFormat[_, _]](
       path: String,
