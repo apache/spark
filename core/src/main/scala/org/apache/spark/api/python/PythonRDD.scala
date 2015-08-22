@@ -774,6 +774,27 @@ private[spark] object PythonRDD extends Logging {
       converted.saveAsHadoopDataset(new JobConf(conf))
     }
   }
+
+  /**
+   * Output a Python RDD of key-value pairs to text files. Keys/values are first
+   * converted for output using either user specified converters or, by default,
+   * [[org.apache.spark.api.python.JavaToWritableConverter]].
+   */
+  def saveAsTextFileByKey[C <: CompressionCodec](
+      pyRDD: JavaRDD[Array[Byte]],
+      batchSerialized: Boolean,
+      path: String,
+      keyConverterClass: String,
+      valueConverterClass: String,
+      compressionCodecClass: String): Unit = {
+    val rdd = SerDeUtil.pythonToPairRDD(pyRDD, batchSerialized)
+    val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
+      new JavaToWritableConverter)
+    Option(compressionCodecClass).map(Utils.classForName(_).asInstanceOf[Class[C]]) match {
+      case Some(codec) => converted.saveAsTextFileByKey(path, codec)
+      case None => converted.saveAsTextFileByKey(path)
+    }
+  }
 }
 
 private

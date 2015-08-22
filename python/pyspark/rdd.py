@@ -1507,6 +1507,31 @@ class RDD(object):
         else:
             keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
 
+    @ignore_unicode_prefix
+    def saveAsTextFileByKey(self, path, keyConverter=None, valueConverter=None,
+                            compressionCodecClass=None):
+        """
+        Save this RDD as multiple text files, using string representations of values.
+        File path is determined by string representations of keys.
+
+        @param path: path to text file
+        @param compressionCodecClass: (None by default) string i.e.
+            "org.apache.hadoop.io.compress.GzipCodec"
+
+        >>> tempFile = NamedTemporaryFile(delete=True)
+        >>> tempFile.close()
+        >>> sc.parallelize(zip(['a','b'] * 2, range(4))).saveAsTextFileByKey(tempFile.name)
+        >>> from fileinput import input
+        >>> from glob import glob
+        >>> ''.join(sorted(input(glob(tempFile.name + "/a/part-0000*"))))
+        '0\\n2\\n'
+        >>> ''.join(sorted(input(glob(tempFile.name + "/b/part-0000*"))))
+        '1\\n3\\n'
+        """
+        self.ctx._jvm.PythonRDD.saveAsTextFileByKey(self._jrdd, True,
+                                                     path, keyConverter, valueConverter,
+                                                     compressionCodecClass)
+
     # Pair functions
 
     def collectAsMap(self):
