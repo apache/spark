@@ -81,7 +81,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val k = 5
     val d = data.first().size
-    assert(GaussianMixture.distributeGaussians(k, d))
+    assert(GaussianMixture.shouldDistributeGaussians(k, d))
 
     val gmm = new GaussianMixture()
       .setK(k)
@@ -182,9 +182,9 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.dense( 4.5605), Vectors.dense( 5.2043), Vectors.dense( 6.2734)
     )
 
-    val data2: Array[Vector] = Range(0, 25).map { i =>
-      Range(0, 50).map(i + _.toDouble)
-    }.map(v => Vectors.dense(v.toArray)).toArray
+    val data2: Array[Vector] = Array.tabulate(25){ i: Int =>
+      Vectors.dense(Array.tabulate(50)(i + _.toDouble))
+    }
 
   }
 }

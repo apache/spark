@@ -169,9 +169,7 @@ class GaussianMixture private (
     // Get length of the input vectors
     val d = breezeData.first().length
 
-    // Heuristic to distribute the computation of the [[MultivariateGaussian]]s, approximately when
-    // d > 25 except for when k is very small
-    val distributeGaussians = GaussianMixture.distributeGaussians(k, d)
+    val shouldDistributeGaussians = GaussianMixture.shouldDistributeGaussians(k, d)
 
     // Determine initial weights and corresponding Gaussians.
     // If the user supplied an initial GMM, we use those values, otherwise
@@ -205,7 +203,7 @@ class GaussianMixture private (
       // (often referred to as the "M" step in literature)
       val sumWeights = sums.weights.sum
 
-      if (distributeGaussians) {
+      if (shouldDistributeGaussians) {
         val numPartitions = math.min(k, 1024)
         val tuples =
           Seq.tabulate(k)(i => (sums.means(i), sums.sigmas(i), sums.weights(i)))
@@ -273,11 +271,12 @@ class GaussianMixture private (
 
 private[clustering] object GaussianMixture {
   /**
-   * Decide whether matrix decompositions should be distributed
+   * Heuristic to distribute the computation of the [[MultivariateGaussian]]s, approximately when
+   * d > 25 except for when k is very small.
    * @param k  Number of topics
    * @param d  Number of features
    */
-  def distributeGaussians(k: Int, d: Int): Boolean = ((k - 1.0) / k) * d > 25
+  def shouldDistributeGaussians(k: Int, d: Int): Boolean = ((k - 1.0) / k) * d > 25
 }
 
 // companion class to provide zero constructor for ExpectationSum
