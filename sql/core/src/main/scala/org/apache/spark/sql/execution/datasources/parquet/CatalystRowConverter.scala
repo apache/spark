@@ -459,7 +459,8 @@ private[parquet] class CatalystRowConverter(
       (parquetRepeatedType, catalystElementType) match {
         case (t: PrimitiveType, _) => true
         case (t: GroupType, _) if t.getFieldCount > 1 => true
-        case (t, _) if t.getName == "array" || t.getName == s"${parentName}_tuple" => true
+        case (t: GroupType, _) if t.getFieldCount == 1 && t.getName == "array" => true
+        case (t: GroupType, _) if t.getFieldCount == 1 && t.getName == parentName + "_tuple" => true
         case (t: GroupType, StructType(Array(f))) if f.name == t.getFieldName(0) => true
         case _ => false
       }
