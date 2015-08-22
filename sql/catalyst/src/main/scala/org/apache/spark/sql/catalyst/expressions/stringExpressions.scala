@@ -122,7 +122,7 @@ case class ConcatWs(children: Seq[Expression])
       val (varargCount, varargBuild) = children.tail.zip(evals.tail).map { case (child, eval) =>
         child.dataType match {
           case StringType =>
-            (s"$varargNum ++;",
+            ("", // we count all the StringType arguments num at once below.
               s"$array[$idxInVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.primitive};")
           case _: ArrayType =>
             val size = ctx.freshName("n")
@@ -144,7 +144,7 @@ case class ConcatWs(children: Seq[Expression])
 
       evals.map(_.code).mkString("\n") +
       s"""
-        int $varargNum = 0;
+        int $varargNum = ${children.count(_.dataType == StringType) - 1};
         int $idxInVararg = 0;
         ${varargCount.mkString("\n")}
         UTF8String[] $array = new UTF8String[$varargNum];
