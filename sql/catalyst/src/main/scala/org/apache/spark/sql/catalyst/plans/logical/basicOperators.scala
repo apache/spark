@@ -163,7 +163,7 @@ case class InsertIntoTable(
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = Seq.empty
 
   assert(overwrite || !ifNotExists)
   override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall {
