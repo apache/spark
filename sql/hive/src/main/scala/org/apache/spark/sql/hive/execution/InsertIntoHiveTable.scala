@@ -61,7 +61,7 @@ case class InsertIntoHiveTable(
     serializer
   }
 
-  def output: Seq[Attribute] = child.output
+  def output: Seq[Attribute] = Seq.empty
 
   def saveAsHiveFile(
       rdd: RDD[InternalRow],
