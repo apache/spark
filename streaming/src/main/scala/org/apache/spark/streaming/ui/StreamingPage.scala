@@ -303,6 +303,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
     val numCompletedBatches = listener.retainedCompletedBatches.size
     val numActiveBatches = batchTimes.length - numCompletedBatches
+    val numReceivers = listener.numInactiveReceivers + listener.numActiveReceivers
     val table =
       // scalastyle:off
       <table id="stat-table" class="table table-bordered" style="width: auto">
@@ -330,7 +331,11 @@ private[ui] class StreamingPage(parent: StreamingTab)
                 }
               }
               </div>
-              <div>{listener.numActiveReceivers}/{listener.numInactiveReceivers + listener.numActiveReceivers} receiver(s) active</div>
+              {
+                if (numReceivers > 0) {
+                  <div>Receivers: {listener.numActiveReceivers} / {numReceivers} active</div>
+                }
+              }
               <div>Avg: {eventRateForAllStreams.formattedAvg} events/sec</div>
             </div>
           </td>
