@@ -114,41 +114,44 @@ case class ConcatWs(children: Seq[Expression])
         boolean ${ev.isNull} = ${ev.primitive} == null;
       """
     } else {
-      val list = ctx.freshName("list")
       val array = ctx.freshName("array")
+      val varargNum = ctx.freshName("varargNum")
+      val idxInVararg = ctx.freshName("idxInVararg")
 
-      val sep = children.head.gen(ctx)
-      val vararg = children.tail.map { child =>
-        val eval = child.gen(ctx)
+      val evals = children.map(_.gen(ctx))
+      val (varargCount, varargBuild) = children.tail.zip(evals.tail).map { case (child, eval) =>
         child.dataType match {
           case StringType =>
-            s"""
-              ${eval.code}
-              $list.add(${eval.isNull} ? (UTF8String) null : ${eval.primitive});
-             """
+            (s"$varargNum ++;",
+              s"$array[$idxInVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.primitive};")
           case _: ArrayType =>
             val size = ctx.freshName("n")
-            val j = ctx.freshName("j")
-            s"""
-              ${eval.code}
+            (s"""
               if (!${eval.isNull}) {
-                final int $size = ${eval.primitive}.numElements();
-                for (int $j = 0; $j < $size; $j ++) {
-                  $list.add(${ctx.getValue(eval.primitive, StringType, j)});
-                }
+                $varargNum += ${eval.primitive}.numElements();
               }
-             """
+            """,
+            s"""
+            if (!${eval.isNull}) {
+              final int $size = ${eval.primitive}.numElements();
+              for (int j = 0; j < $size; j ++) {
+                $array[$idxInVararg ++] = ${ctx.getValue(eval.primitive, StringType, "j")};
+              }
+            }
+            """)
         }
-      }.mkString("\n")
+      }.unzip
+
+      evals.map(_.code).mkString("\n") +
       s"""
-        ${sep.code}
-        java.util.ArrayList<UTF8String> $list = new java.util.ArrayList<UTF8String>();
-        $vararg
-        UTF8String[] $array = new UTF8String[$list.size()];
-        $list.toArray($array);
-        UTF8String ${ev.primitive} = UTF8String.concatWs(${sep.primitive}, $array);
+        int $varargNum = 0;
+        int $idxInVararg = 0;
+        ${varargCount.mkString("\n")}
+        UTF8String[] $array = new UTF8String[$varargNum];
+        ${varargBuild.mkString("\n")}
+        UTF8String ${ev.primitive} = UTF8String.concatWs(${evals.head.primitive}, $array);
         boolean ${ev.isNull} = ${ev.primitive} == null;
-       """
+      """
     }
   }
 }
