@@ -233,7 +233,7 @@ class DagBag(object):
             self.process_file(dag_folder, only_if_updated=only_if_updated)
         elif os.path.isdir(dag_folder):
             patterns = []
-            for root, dirs, files in os.walk(dag_folder):
+            for root, dirs, files in os.walk(dag_folder, followlinks=True):
                 ignore_file = [f for f in files if f == '.airflowignore']
                 if ignore_file:
                     f = open(os.path.join(root, ignore_file[0]), 'r')

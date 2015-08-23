@@ -35,7 +35,7 @@ plugins_folder = os.path.expanduser(plugins_folder)
 plugins = []
 
 # Crawl through the plugins folder to find AirflowPlugin derivatives
-for root, dirs, files in os.walk(plugins_folder):
+for root, dirs, files in os.walk(plugins_folder, followlinks=True):
     for f in files:
         try:
             filepath = os.path.join(root, f)
