@@ -192,6 +192,10 @@ object MimaExcludes {
             // SPARK-9704 Made ProbabilisticClassifier, Identifiable, VectorUDT public APIs
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.mllib.linalg.VectorUDT.serialize")
+          ) ++ Seq(
+            // SPARK-10154 remove the no-longer-necessary CatalystScan
+            ProblemFilters.exclude[MissingClassProblem](
+              "org.apache.spark.sql.sources.CatalystScan")
           )
 
         case v if v.startsWith("1.4") =>
