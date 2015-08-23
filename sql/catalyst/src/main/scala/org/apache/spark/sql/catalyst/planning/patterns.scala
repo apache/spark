@@ -151,7 +151,10 @@ object PartialAggregation {
 
         // Replace aggregations with a new expression that computes the result from the already
         // computed partial evaluations and grouping values.
-        val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
+        // transformDown is needed at here because we want to match aggregate function first.
+        // Otherwise, if a grouping expression is used as an argument of an aggregate function,
+        // we will match grouping expression first and have a wrong plan.
+        val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformDown {
           case e: Expression if partialEvaluations.contains(new TreeNodeRef(e)) =>
             partialEvaluations(new TreeNodeRef(e)).finalEvaluation
 
