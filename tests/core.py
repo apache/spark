@@ -14,12 +14,13 @@ DEFAULT_DATE = datetime(2015, 1, 1)
 TEST_DAG_ID = 'unit_tests'
 configuration.test_mode()
 
+#utils.initdb()
+
 
 class TransferTests(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        utils.initdb()
         args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
         dag = DAG(TEST_DAG_ID, default_args=args)
         dag.clear(start_date=DEFAULT_DATE, end_date=datetime.now())
@@ -54,7 +55,6 @@ class HivePrestoTest(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        utils.initdb()
         args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
         dag = DAG(TEST_DAG_ID, default_args=args)
         self.dag = dag
@@ -151,10 +151,8 @@ class CoreTest(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        utils.initdb()
         self.dagbag = models.DagBag(
             dag_folder=DEV_NULL, include_examples=True)
-        utils.initdb()
         args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
         dag = DAG(TEST_DAG_ID, default_args=args)
         self.dag = dag
@@ -258,7 +256,6 @@ class WebUiTests(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        utils.initdb()
         app.config['TESTING'] = True
         self.app = app.test_client()
 
@@ -367,7 +364,6 @@ if 'MySqlOperator' in dir(operators):
 
         def setUp(self):
             configuration.test_mode()
-            utils.initdb()
             args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
             dag = DAG(TEST_DAG_ID, default_args=args)
             self.dag = dag
@@ -388,7 +384,6 @@ if 'PostgresOperator' in dir(operators):
 
         def setUp(self):
             configuration.test_mode()
-            utils.initdb()
             args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
             dag = DAG(TEST_DAG_ID, default_args=args)
             self.dag = dag
@@ -418,7 +413,6 @@ class HttpOpSensorTest(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        utils.initdb()
         args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
         dag = DAG(TEST_DAG_ID, default_args=args)
         self.dag = dag

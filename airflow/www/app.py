@@ -1626,11 +1626,24 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
     create_template = 'airflow/conn_create.html'
     edit_template = 'airflow/conn_edit.html'
     list_template = 'airflow/conn_list.html'
+    form_columns = (
+        'conn_id',
+        'conn_type',
+        'host',
+        'schema',
+        'login',
+        'password',
+        'port',
+        'extra',
+    )
     verbose_name = "Connection"
     verbose_name_plural = "Connections"
     column_default_sort = ('conn_id', False)
     column_list = ('conn_id', 'conn_type', 'host', 'port')
-    form_overrides = dict(password=VisiblePasswordField)
+    form_overrides = dict(_password=VisiblePasswordField)
+    form_widget_args = {
+        'is_encrypted': {'disabled': True},
+    }
     # Used to customized the form, the forms elements get rendered
     # and results are stored in the extra field as json. All of these
     # need to be prefixed with extra__ and then the conn_type ___ as in

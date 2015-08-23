@@ -21,7 +21,8 @@ from airflow import settings
 
 def upgrade():
     inspector = Inspector.from_engine(settings.engine)
-    if 'connection' not in inspector.get_table_names():
+    tables = inspector.get_table_names()
+    if 'connection' not in tables:
         op.create_table(
             'connection',
             sa.Column('id', sa.Integer(), nullable=False),
@@ -36,6 +37,7 @@ def upgrade():
             sa.Column('extra', sa.String(length=5000), nullable=True),
             sa.PrimaryKeyConstraint('id')
         )
+    if 'dag' not in tables:
         op.create_table(
             'dag',
             sa.Column('dag_id', sa.String(length=250), nullable=False),
@@ -51,6 +53,7 @@ def upgrade():
             sa.Column('owners', sa.String(length=2000), nullable=True),
             sa.PrimaryKeyConstraint('dag_id')
         )
+    if 'dag_pickle' not in tables:
         op.create_table(
             'dag_pickle',
             sa.Column('id', sa.Integer(), nullable=False),
@@ -59,6 +62,7 @@ def upgrade():
             sa.Column('pickle_hash', sa.BigInteger(), nullable=True),
             sa.PrimaryKeyConstraint('id')
         )
+    if 'import_error' not in tables:
         op.create_table(
             'import_error',
             sa.Column('id', sa.Integer(), nullable=False),
@@ -67,6 +71,7 @@ def upgrade():
             sa.Column('stacktrace', sa.Text(), nullable=True),
             sa.PrimaryKeyConstraint('id')
         )
+    if 'job' not in tables:
         op.create_table(
             'job',
             sa.Column('id', sa.Integer(), nullable=False),
@@ -87,12 +92,14 @@ def upgrade():
             ['job_type', 'latest_heartbeat'],
             unique=False
         )
+    if 'known_event_type' not in tables:
         op.create_table(
             'known_event_type',
             sa.Column('id', sa.Integer(), nullable=False),
             sa.Column('know_event_type', sa.String(length=200), nullable=True),
             sa.PrimaryKeyConstraint('id')
         )
+    if 'log' not in tables:
         op.create_table(
             'log',
             sa.Column('id', sa.Integer(), nullable=False),
@@ -104,6 +111,7 @@ def upgrade():
             sa.Column('owner', sa.String(length=500), nullable=True),
             sa.PrimaryKeyConstraint('id')
         )
+    if 'sla_miss' not in tables:
         op.create_table(
             'sla_miss',
             sa.Column('task_id', sa.String(length=250), nullable=False),
@@ -114,6 +122,7 @@ def upgrade():
             sa.Column('description', sa.Text(), nullable=True),
             sa.PrimaryKeyConstraint('task_id', 'dag_id', 'execution_date')
         )
+    if 'slot_pool' not in tables:
         op.create_table(
             'slot_pool',
             sa.Column('id', sa.Integer(), nullable=False),
@@ -123,6 +132,7 @@ def upgrade():
             sa.PrimaryKeyConstraint('id'),
             sa.UniqueConstraint('pool')
         )
+    if 'task_instance' not in tables:
         op.create_table(
             'task_instance',
             sa.Column('task_id', sa.String(length=250), nullable=False),
@@ -159,6 +169,8 @@ def upgrade():
             ['dag_id', 'task_id', 'execution_date', 'state'],
             unique=False
         )
+
+    if 'user' not in tables:
         op.create_table(
             'user',
             sa.Column('id', sa.Integer(), nullable=False),
@@ -167,6 +179,7 @@ def upgrade():
             sa.PrimaryKeyConstraint('id'),
             sa.UniqueConstraint('username')
         )
+    if 'variable' not in tables:
         op.create_table(
             'variable',
             sa.Column('id', sa.Integer(), nullable=False),
@@ -175,6 +188,7 @@ def upgrade():
             sa.PrimaryKeyConstraint('id'),
             sa.UniqueConstraint('key')
         )
+    if 'chart' not in tables:
         op.create_table(
             'chart',
             sa.Column('id', sa.Integer(), nullable=False),
@@ -195,6 +209,7 @@ def upgrade():
             sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
             sa.PrimaryKeyConstraint('id')
         )
+    if 'known_event' not in tables:
         op.create_table(
             'known_event',
             sa.Column('id', sa.Integer(), nullable=False),
