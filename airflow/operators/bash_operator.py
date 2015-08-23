@@ -1,3 +1,5 @@
+
+from builtins import bytes
 import logging
 from subprocess import Popen, STDOUT, PIPE
 from tempfile import gettempdir, NamedTemporaryFile
@@ -39,7 +41,8 @@ class BashOperator(BaseOperator):
         logging.info("tmp dir root location: \n" + gettempdir())
         with TemporaryDirectory(prefix='airflowtmp') as tmp_dir:
             with NamedTemporaryFile(dir=tmp_dir, prefix=self.task_id) as f:
-                f.write(bash_command)
+
+                f.write(bytes(bash_command, 'utf_8'))
                 f.flush()
                 fname = f.name
                 script_location = tmp_dir + "/" + fname

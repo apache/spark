@@ -28,7 +28,7 @@ open to whoever wants to implement it.
 Look through the GitHub issues for features. Anything tagged with
 "feature" is open to whoever wants to implement it.
 
-We've created the operators, hooks, macros and executors we needed, but we 
+We've created the operators, hooks, macros and executors we needed, but we
 made sure that this part of Airflow is extensible. New operators,
 hooks and operators are very welcomed!
 
@@ -78,16 +78,11 @@ Generate the documentation with:
 
 ## Pull Request Guidelines
 
-Before you submit a pull request from your forked repo, check that it 
+Before you submit a pull request from your forked repo, check that it
 meets these guidelines:
 
-1.  The pull request should include tests, either as doctests,
-    unit tests, or both.
-2.  If the pull request adds functionality, the docs should be updated
-    as part of the same PR. Doc string are often sufficient, make 
-    sure to follow the sphinx compatible standards.
-3.  The pull request should work for Python 2.6, 2.7, and ideally python 3.3.
-    `from __future__ import ` will be required in every `.py` file soon.
-4.  Code will be reviewed by re running the unittests, flake8 and syntax
-    should be as rigorous as the core Python project.
-5.  Please rebase and resolve all conflicts before submitting.
+1. The pull request should include tests, either as doctests, unit tests, or both.
+1. If the pull request adds functionality, the docs should be updated as part of the same PR. Doc string are often sufficient, make sure to follow the sphinx compatible standards.
+1. The pull request should work for Python 2.6, 2.7, and 3.3. If you need help writing code that works in both Python 2 and 3, see the documentation at the [Python-Future project](http://python-future.org) (the future package is an Airflow requirement and should be used where possible).
+1.  Code will be reviewed by re running the unittests, flake8 and syntax should be as rigorous as the core Python project.
+1.  Please rebase and resolve all conflicts before submitting.

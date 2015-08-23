@@ -3,9 +3,8 @@ Installation
 Setting up the sandbox from the :doc:`start` section was easy, now
 working towards a production grade environment is a bit more work.
 
-Note that Airflow is only
-tested under Python 2.7.* as many of our dependencies don't support
-python3 (as of 2015-06).
+As of August 2015, Airflow has experimental support for Python 3. Any issues should be reported (or fixed!).
+The only major regression is that ``HDFSHooks`` do not work (due to a ``snakebite`` dependency)
 
 
 Extra Packages

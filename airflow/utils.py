@@ -1,7 +1,5 @@
 from __future__ import print_function
-from builtins import str
-from builtins import input
-from builtins import object
+from builtins import str, input, object
 from past.builtins import basestring
 from copy import copy
 from datetime import datetime, timedelta
