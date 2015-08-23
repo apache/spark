@@ -21,7 +21,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.SQLContext
@@ -29,11 +28,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric, SQLMetrics}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric}
 
 object SparkPlan {
   protected[sql] val currentContext = new ThreadLocal[SQLContext]()
@@ -43,7 +40,8 @@ object SparkPlan {
  * :: DeveloperApi ::
  */
 @DeveloperApi
-abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
+abstract class SparkPlan extends QueryPlan[SparkPlan]
+  with CommonOperatorGenerator with Serializable {
 
   /**
    * A handle to the SQL Context that was used to create this plan.   Since many operators need
@@ -220,99 +218,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
     val converter = CatalystTypeConverters.createToScalaConverter(schema)
     buf.toArray.map(converter(_).asInstanceOf[Row])
-  }
-
-  private[this] def isTesting: Boolean = sys.props.contains("spark.testing")
-
-  protected def newProjection(
-      expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
-    log.debug(
-      s"Creating Projection: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
-    if (codegenEnabled) {
-      try {
-        GenerateProjection.generate(expressions, inputSchema)
-      } catch {
-        case e: Exception =>
-          if (isTesting) {
-            throw e
-          } else {
-            log.error("Failed to generate projection, fallback to interpret", e)
-            new InterpretedProjection(expressions, inputSchema)
-          }
-      }
-    } else {
-      new InterpretedProjection(expressions, inputSchema)
-    }
-  }
-
-  protected def newMutableProjection(
-      expressions: Seq[Expression],
-      inputSchema: Seq[Attribute]): () => MutableProjection = {
-    log.debug(
-      s"Creating MutableProj: $expressions, inputSchema: $inputSchema, codegen:$codegenEnabled")
-    if(codegenEnabled) {
-      try {
-        GenerateMutableProjection.generate(expressions, inputSchema)
-      } catch {
-        case e: Exception =>
-          if (isTesting) {
-            throw e
-          } else {
-            log.error("Failed to generate mutable projection, fallback to interpreted", e)
-            () => new InterpretedMutableProjection(expressions, inputSchema)
-          }
-      }
-    } else {
-      () => new InterpretedMutableProjection(expressions, inputSchema)
-    }
-  }
-
-  protected def newPredicate(
-      expression: Expression, inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
-    if (codegenEnabled) {
-      try {
-        GeneratePredicate.generate(expression, inputSchema)
-      } catch {
-        case e: Exception =>
-          if (isTesting) {
-            throw e
-          } else {
-            log.error("Failed to generate predicate, fallback to interpreted", e)
-            InterpretedPredicate.create(expression, inputSchema)
-          }
-      }
-    } else {
-      InterpretedPredicate.create(expression, inputSchema)
-    }
-  }
-
-  protected def newOrdering(
-      order: Seq[SortOrder],
-      inputSchema: Seq[Attribute]): Ordering[InternalRow] = {
-    if (codegenEnabled) {
-      try {
-        GenerateOrdering.generate(order, inputSchema)
-      } catch {
-        case e: Exception =>
-          if (isTesting) {
-            throw e
-          } else {
-            log.error("Failed to generate ordering, fallback to interpreted", e)
-            new InterpretedOrdering(order, inputSchema)
-          }
-      }
-    } else {
-      new InterpretedOrdering(order, inputSchema)
-    }
-  }
-  /**
-   * Creates a row ordering for the given schema, in natural ascending order.
-   */
-  protected def newNaturalAscendingOrdering(dataTypes: Seq[DataType]): Ordering[InternalRow] = {
-    val order: Seq[SortOrder] = dataTypes.zipWithIndex.map {
-      case (dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
-    }
-    newOrdering(order, Seq.empty)
   }
 }
 

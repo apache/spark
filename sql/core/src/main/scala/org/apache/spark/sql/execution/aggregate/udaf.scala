@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.catalyst.expressions.{MutableRow, InterpretedMutableProjection, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{MutableRow, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction2
+import org.apache.spark.sql.execution.CommonOperatorGenerator
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
 
@@ -295,7 +295,7 @@ private[sql] class InputAggregationBuffer private[sql] (
 private[sql] case class ScalaUDAF(
     children: Seq[Expression],
     udaf: UserDefinedAggregateFunction)
-  extends AggregateFunction2 with Logging {
+  extends AggregateFunction2 with CommonOperatorGenerator {
 
   require(
     children.length == udaf.inputSchema.length,
@@ -324,17 +324,10 @@ private[sql] case class ScalaUDAF(
     StructType(inputFields)
   }
 
+  override protected def codegenEnabled = true
   private lazy val inputProjection = {
     val inputAttributes = childrenSchema.toAttributes
-    log.debug(
-      s"Creating MutableProj: $children, inputSchema: $inputAttributes.")
-    try {
-      GenerateMutableProjection.generate(children, inputAttributes)()
-    } catch {
-      case e: Exception =>
-        log.error("Failed to generate mutable projection, fallback to interpreted", e)
-        new InterpretedMutableProjection(children, inputAttributes)
-    }
+    newMutableProjection(children, inputAttributes)()
   }
 
   private[this] lazy val inputToScalaConverters: Any => Any =
