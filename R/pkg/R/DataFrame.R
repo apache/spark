@@ -945,6 +945,13 @@ setMethod("[", signature(x = "DataFrame", i = "missing"),
             select(x, j)
           })
 
+#' @rdname select
+setMethod("[", signature(x = "DataFrame"),
+          function(x, i, j, ...) {
+            filtered <- filter(x, i)
+            filtered[, j]
+          })
+
 #' Select
 #'
 #' Selects a set of columns with names or Column expressions.
@@ -963,8 +970,11 @@ setMethod("[", signature(x = "DataFrame", i = "missing"),
 #'   # Columns can also be selected using `[[` and `[`
 #'   df[[2]] == df[["age"]]
 #'   df[,2] == df[,"age"]
+#'   df[,c("name", "age")]
 #'   # Similar to R data frames columns can also be selected using `$`
 #'   df$age
+#'   # It can also be subset on rows and Columns
+#'   df[df$name == "Smith", 2]
 #' }
 setMethod("select", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {

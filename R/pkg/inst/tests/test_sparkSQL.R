@@ -587,6 +587,22 @@ test_that("select with column", {
   expect_equal(collect(select(df3, "x"))[[1, 1]], "x")
 })
 
+test_that("subsetting", {
+  df <- jsonFile(sqlContext, jsonPath)
+  filtered <- df[df$age > 20,]
+  expect_equal(count(filtered), 1)
+  expect_equal(columns(filtered), c("name", "age"))
+  expect_equal(collect(filtered)$name, "Andy")
+  df2 <- df[df$age == 19,1]
+  expect_is(df2, "DataFrame")
+  expect_equal(count(df2), 1)
+  expect_equal(columns(df2), c("name"))
+  expect_equal(collect(df2)$name, "Justin")
+  df3 <- df[df$age > 20, 2]
+  expect_equal(count(df3), 1)
+  expect_equal(columns(df3), c("age"))
+}}
+
 test_that("selectExpr() on a DataFrame", {
   df <- jsonFile(sqlContext, jsonPath)
   selected <- selectExpr(df, "age * 2")
