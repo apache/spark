@@ -201,11 +201,11 @@ class SQLContext(
 
   @transient
   protected[sql] val tlSession = new ThreadLocal[SQLSession]() {
-    override def initialValue: SQLSession = openSession()
+    override def initialValue: SQLSession = defaultSession
   }
 
   @transient
-  protected[sql] val defaultSession = createSession()
+  protected[sql] lazy val defaultSession = createSession()
 
   protected[sql] def dialectClassName = if (conf.dialect == "sql") {
     classOf[DefaultParserDialect].getCanonicalName
