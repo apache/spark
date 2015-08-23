@@ -25,7 +25,6 @@ import com.google.common.base.Charsets.UTF_8
 import org.apache.hadoop.io._
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
 
-import org.apache.spark.SparkException
 import org.apache.spark.api.java.JavaSparkContext
 
 /**
@@ -82,25 +81,6 @@ private[python] class TestOutputValueConverter extends Converter[Any, Any] {
   }
 }
 
-private[python] class DoubleArrayWritable extends ArrayWritable(classOf[DoubleWritable])
-
-private[python] class DoubleArrayToWritableConverter extends Converter[Any, Writable] {
-  override def convert(obj: Any): DoubleArrayWritable = obj match {
-    case arr if arr.getClass.isArray && arr.getClass.getComponentType == classOf[Double] =>
-      val daw = new DoubleArrayWritable
-      daw.set(arr.asInstanceOf[Array[Double]].map(new DoubleWritable(_)))
-      daw
-    case other => throw new SparkException(s"Data of type $other is not supported")
-  }
-}
-
-private[python] class WritableToDoubleArrayConverter extends Converter[Any, Array[Double]] {
-  override def convert(obj: Any): Array[Double] = obj match {
-    case daw : DoubleArrayWritable => daw.get().map(_.asInstanceOf[DoubleWritable].get())
-    case other => throw new SparkException(s"Data of type $other is not supported")
-  }
-}
-
 /**
  * This object contains method to generate SequenceFile test data and write it to a
  * given directory (probably a temp directory)
@@ -143,7 +123,7 @@ object WriteInputFormatTestDataGenerator {
       (new IntWritable(k), NullWritable.get())
     }.saveAsSequenceFile(nullPath)
 
-    // Create test data for ArrayWritable
+    // Create test data for DoubleArrayWritable
     val data = Seq(
       (1, Array()),
       (2, Array(3.0, 4.0, 5.0)),
@@ -185,6 +165,4 @@ object WriteInputFormatTestDataGenerator {
       classOf[Text], classOf[TestWritable],
       classOf[SequenceFileOutputFormat[Text, TestWritable]])
   }
-
-
 }

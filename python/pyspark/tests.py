@@ -19,6 +19,7 @@
 Unit tests for PySpark; additional tests are implemented as doctests in
 individual modules.
 """
+from __future__ import print_function
 
 from array import array
 from glob import glob
@@ -36,22 +37,26 @@ import hashlib
 
 from py4j.protocol import Py4JJavaError
 
-if sys.version_info[:2] <= (2, 6):
+PY26 = sys.version_info[:2] <= (2, 6)
+PY27 = sys.version_info[:2] >= (2, 7) and sys.version_info[0] < 3
+PY3 = sys.version_info[0] >= 3
+
+if PY26:
+    from StringIO import StringIO
     try:
         import unittest2 as unittest
     except ImportError:
         sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
         sys.exit(1)
-else:
-    import unittest
-    if sys.version_info[0] >= 3:
-        xrange = range
-        basestring = str
-
-if sys.version >= "3":
-    from io import StringIO
-else:
+elif PY27:
     from StringIO import StringIO
+    import unittest
+elif PY3:
+    from io import StringIO
+    import unittest
+    xrange = range
+    basestring = str
+
 
 
 from pyspark.conf import SparkConf
@@ -66,8 +71,11 @@ from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, External
 from pyspark import shuffle
 from pyspark.profiler import BasicProfiler
 
+from pyspark.numpyconverter import numpy_to_python, python_to_numpy
+
 _have_scipy = False
 _have_numpy = False
+_have_pypy = False
 try:
     import scipy.sparse
     _have_scipy = True
@@ -80,7 +88,12 @@ try:
 except:
     # No NumPy, but that's okay, we'll skip those tests
     pass
-
+try:
+    import __pypy__
+    _have_pypy = True
+except:
+    # We'll want to skip some NumPy tests if we are running on PyPy due to NotImplemented exception
+    pass
 
 SPARK_HOME = os.environ["SPARK_HOME"]
 
@@ -1086,7 +1099,7 @@ class InputFormatTests(ReusedPySparkTestCase):
         ReusedPySparkTestCase.tearDownClass()
         shutil.rmtree(cls.tempdir.name)
 
-    @unittest.skipIf(sys.version >= "3", "serialize array of byte")
+    @unittest.skipIf(PY3, "serialize array of byte")
     def test_sequencefiles(self):
         basepath = self.tempdir.name
         ints = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfint/",
@@ -1165,7 +1178,7 @@ class InputFormatTests(ReusedPySparkTestCase):
         ea = [(1, array('d')),
               (2, array('d', [3.0, 4.0, 5.0])),
               (3, array('d', [4.0, 5.0, 6.0]))]
-        self.assertEqual(arrays, ea)
+        self.assertAlmostEquals(arrays, ea, 1.0E-7)
 
         clazz = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfclass/",
                                             "org.apache.hadoop.io.Text",
@@ -1981,6 +1994,286 @@ class NumPyTests(PySparkTestCase):
         self.assertSequenceEqual([1.0, 1.0], s.min().tolist())
         self.assertSequenceEqual([3.0, 3.0], s.max().tolist())
         self.assertSequenceEqual([1.0, 1.0], s.sampleStdev().tolist())
+
+
+import collections
+
+def is_equal(expected, actual):
+    if isinstance(expected, np.ndarray) and isinstance(actual, np.ndarray):
+        if np.result_type(actual) == np.dtype('O') and np.result_type(expected) == np.dtype('O') or \
+                (sys.version_info < (2, 7) and ((actual.dtype.char == 'S' and expected.dtype.char == 'S') or (
+                                actual.dtype.char == 'U' and expected.dtype.char == 'U'))):
+            return all([is_equal(x[0], x[1]) for x in zip(actual, expected)])
+        else:
+            return np.array_equal(actual, expected)
+    elif isinstance(expected, float) and isinstance(actual, float):
+        return np.allclose(expected, actual)
+    elif isinstance(expected, collections.Iterable) and isinstance(actual, collections.Iterable) and not isinstance(
+            actual, basestring) and not isinstance(expected, basestring):
+        return all([is_equal(x[0], x[1]) for x in zip(actual, expected)])
+    else:
+        return expected == actual
+
+
+@unittest.skipIf(not _have_numpy, "NumPy not installed")
+@unittest.skipIf(_have_pypy, "Skipping test on PyPy")
+class NumpyConverterTests(unittest.TestCase):
+    """Tests conversion of NumPy structures to pure Python types we can store in Sequence files """
+
+    def test_2d_numpy_array_conversion(self):
+        test_data_out = np.array([[-0.09, 0.56, -2.08, 2.73],
+                                  [-1.70, -0.55, -0.51, -0.04],
+                                  [1.00, 0.83, 0.66, -2.24],
+                                  [-0.48, -1.32, 0.18, 0.47],
+                                  [1.49, 0.35, -1.12, -0.15],
+                                  [0.10, 0.10, 1.98, 0.16]])
+
+        converted = numpy_to_python(test_data_out)
+        test_data_in = python_to_numpy(converted)
+        self.assertTrue(is_equal(test_data_out, test_data_in))
+
+    def test_3d_numpy_array_conversion(self):
+        test_data_out = np.array([[[-0.09, 0.56],
+                                   [-2.08, 2.73]],
+                                  [[-1.70, -0.55],
+                                   [0.66, -2.24]]])
+
+        converted = numpy_to_python(test_data_out)
+        test_data_in = python_to_numpy(converted)
+        self.assertTrue(is_equal(test_data_out, test_data_in))
+
+    def test_numpy_array_conversion(self):
+        test_data_out = np.array([-0.49, -0.09, 0.92])
+
+        converted = numpy_to_python(test_data_out)
+        test_data_in = python_to_numpy(converted)
+        self.assertTrue(is_equal(test_data_out, test_data_in))
+
+    def test_list_of_numpy_array_conversion(self):
+        test_data_out = [np.array([-0.49, -0.09, 0.92]),
+                         np.array([0.02, -1.79, 1.28, 1.80, -0.69])]
+
+        converted = numpy_to_python(test_data_out)
+        test_data_in = python_to_numpy(converted)
+        self.assertTrue(is_equal(test_data_out, test_data_in))
+
+    def test_empty_numpy_array_conversion(self):
+        test_data_out = [np.array([]), np.array([])]
+
+        converted = numpy_to_python(test_data_out)
+        test_data_in = python_to_numpy(converted)
+        self.assertTrue(is_equal(test_data_out, test_data_in))
+
+    def test_nested_numpy_array_conversion_mixed_empty(self):
+        test_data_out = np.array([np.array([]), np.array([-0.49, -0.09, 0.92])])
+
+        converted = numpy_to_python(test_data_out)
+        test_data_in = python_to_numpy(converted)
+        self.assertTrue(is_equal(test_data_out, test_data_in))
+
+    def test_nested_numpy_array_conversion(self):
+        test_data_out = np.array([np.array([-0.49, -0.09, 0.92]), np.array([0.02, -1.79, 1.28, 1.80, -0.69])])
+
+        converted = numpy_to_python(test_data_out)
+        test_data_in = python_to_numpy(converted)
+        self.assertTrue(is_equal(test_data_out, test_data_in))
+
+    def test_nested_empty_numpy_array_conversion(self):
+        test_data_out = np.array([np.array([]), np.array([])])
+
+        converted = numpy_to_python(test_data_out)
+        test_data_in = python_to_numpy(converted)
+        self.assertTrue(is_equal(test_data_out, test_data_in))
+
+    def test_numpy_list_of_array_conversion(self):
+        test_data_out = [(1, np.array([-0.49, -0.09, 0.92, 0.02, -1.79, 1.28, 1.80, -0.69])),
+                         (2, np.array([-0.49, -0.09, 0.92, -0.47, 0.18, 0.02, -1.79, 1.28, 1.80, -0.69]))]
+
+        converted = numpy_to_python(test_data_out)
+        test_data_in = python_to_numpy(converted)
+        self.assertTrue(is_equal(test_data_out, test_data_in))
+
+    def test_numpy_list_of_nested_array_conversion_tuple(self):
+        test_data_out = [(1, np.array([np.array([-0.49, -0.09, 0.92]),
+                                       np.array([0.02, -1.79, 1.28, 1.80, -0.69])])),
+                         (2, np.array([np.array([-0.49, -0.09, -0.47]),
+                                       np.array([0.18, 0.02, -1.79, 1.28, 1.80, -0.69])]))]
+
+        converted = numpy_to_python(test_data_out)
+        test_data_in = python_to_numpy(converted)
+        self.assertTrue(is_equal(test_data_out, test_data_in))
+
+    def test_numpy_string_type_conversion(self):
+        test_data_out = [np.array(['string', 'values']), np.array(['are', 'also', 'supported'])]
+        converted = numpy_to_python(test_data_out)
+        test_data_in = python_to_numpy(converted)
+        self.assertTrue(is_equal(test_data_out, test_data_in))
+
+        utest_data_out = [np.array([u'string', u'values']), np.array([u'are', u'also', u'supported'])]
+        converted = numpy_to_python(utest_data_out)
+        utest_data_in = python_to_numpy(converted)
+        self.assertTrue(is_equal(utest_data_out, utest_data_in))
+
+    def test_list_type_conversion(self):
+        test_data_out = ['some', 'string', 'values']
+        converted = numpy_to_python(test_data_out)
+        test_data_in = python_to_numpy(converted)
+        self.assertTrue(is_equal(test_data_out, test_data_in))
+
+        utest_data_out = [u'some', u'string', u'values']
+        converted = numpy_to_python(utest_data_out)
+        utest_data_in = python_to_numpy(converted)
+        self.assertTrue(is_equal(utest_data_out, utest_data_in))
+
+
+@unittest.skipIf(not _have_numpy, "NumPy not installed")
+@unittest.skipIf(_have_pypy, "Skipping test on PyPy")
+class NumPySequenceFileTests(ReusedPySparkTestCase):
+    def setUp(self):
+        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(self.tempdir.name)
+
+        self._double_list_out = [(1, np.array([-0.49, -0.09, 0.92, 0.02, -1.79, 1.28, 1.80, -0.69])),
+                                 (2, np.array([-0.49, -0.09, 0.92, -0.47, 0.18, 0.02, -1.79, 1.28, 1.80, -0.69]))]
+
+    def tearDown(self):
+        shutil.rmtree(self.tempdir.name, ignore_errors=True)
+
+    def test_numpy(self):
+        basepath = self.tempdir.name
+
+        converted = numpy_to_python(self._double_list_out)
+
+        double_list_output_path = basepath + "/newhadoopNumpyArray/"
+        double_list_rdd_out = self.sc.parallelize(converted)
+
+        conf = {"mapred.input.dir": double_list_output_path,
+                "io.compression.codecs": "com.hadoop.compression.lzo.LzopCodec",
+                "io.compression.codec.lzo.class": "com.hadoop.compression.lzo.LzoCodec"}
+
+        double_list_rdd_out.saveAsNewAPIHadoopFile(
+            double_list_output_path,
+            "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.BytesWritable",
+            valueConverter="org.apache.spark.api.python.ByteArrayToWritableConverter",
+            conf=conf)
+
+        double_list_rdd_in = self.sc.newAPIHadoopRDD(
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.BytesWritable",
+            valueConverter="org.apache.spark.api.python.WritableToByteArrayConverter",
+            conf=conf)
+
+        double_list_in = python_to_numpy(double_list_rdd_in.collect())
+        self.assertTrue(is_equal(double_list_in, self._double_list_out))
+
+    def test_numpy_transformation(self):
+        basepath = self.tempdir.name
+
+        double_list_output_path = basepath + "/newhadoopNumpyArrayTransformation/"
+        double_list_rdd_out = self.sc.parallelize(self._double_list_out)
+
+        converted_rdd_out = double_list_rdd_out.map(numpy_to_python)
+
+        conf = {"mapred.input.dir": double_list_output_path,
+                "io.compression.codecs": "com.hadoop.compression.lzo.LzopCodec",
+                "io.compression.codec.lzo.class": "com.hadoop.compression.lzo.LzoCodec"}
+
+        converted_rdd_out.saveAsNewAPIHadoopFile(
+            double_list_output_path,
+            "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.BytesWritable",
+            valueConverter="org.apache.spark.api.python.ByteArrayToWritableConverter",
+            conf=conf)
+
+        rdd_in = self.sc.newAPIHadoopRDD(
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.BytesWritable",
+            valueConverter="org.apache.spark.api.python.WritableToByteArrayConverter",
+            conf=conf)
+
+        converted_rdd_in = rdd_in.map(python_to_numpy)
+        double_list_in = converted_rdd_in.collect()
+        self.assertTrue(is_equal(double_list_in, self._double_list_out))
+
+    def test_numpy_2d_transformation(self):
+        basepath = self.tempdir.name
+
+        double_list_out = [(1, np.array([[-0.09223047, 0.56101001, -2.08799406, 2.73619202],
+                                         [-1.70413179, -0.55621796, -0.51597891, -0.04763835],
+                                         [1.00702439, 0.83728634, 0.66796774, -2.24088619],
+                                         [-0.48888159, -1.32765396, 0.18118185, 0.47026988],
+                                         [1.49631205, 0.39330622, -1.12406829, -0.15243705],
+                                         [0.10949224, 0.10804479, 1.98677539, 0.16198759]])),
+                           (2, np.array([[0.55046612, 0.91210854],
+                                         [0.34662734, 0.85856632]]))]
+
+        double_list_output_path = basepath + "/newhadoopNumpyArrayTransformation/"
+        double_list_rdd_out = self.sc.parallelize(double_list_out)
+
+        converted_rdd_out = double_list_rdd_out.map(numpy_to_python)
+
+        conf = {"mapred.input.dir": double_list_output_path,
+                "io.compression.codecs": "com.hadoop.compression.lzo.LzopCodec",
+                "io.compression.codec.lzo.class": "com.hadoop.compression.lzo.LzoCodec"}
+
+        converted_rdd_out.saveAsNewAPIHadoopFile(
+            double_list_output_path,
+            "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.BytesWritable",
+            valueConverter="org.apache.spark.api.python.ByteArrayToWritableConverter",
+            conf=conf)
+
+        converted_rdd_in = self.sc.newAPIHadoopRDD(
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.BytesWritable",
+            valueConverter="org.apache.spark.api.python.WritableToByteArrayConverter",
+            conf=conf)
+
+        converted_rdd_in = converted_rdd_in.map(python_to_numpy)
+        double_list_in = converted_rdd_in.collect()
+        self.assertTrue(is_equal(double_list_in, double_list_out))
+
+    def test_nested_numpy(self):
+        basepath = self.tempdir.name
+
+        test_data_out = [(1, np.array([np.array([-0.49, -0.09, 0.92]),
+                                       np.array([0.02, -1.79, 1.28, 1.80, -0.69])])),
+                         (2, np.array([np.array([-0.49, -0.09, -0.47]),
+                                       np.array([0.18, 0.02, -1.79, 1.28, 1.80, -0.69])]))]
+
+        converted = numpy_to_python(test_data_out)
+        nested_double_list_output_path = basepath + "/newhadoopNestedNumpyArray/"
+        nested_double_list_rdd_out = self.sc.parallelize(converted)
+
+        conf = {"mapred.input.dir": nested_double_list_output_path,
+                "io.compression.codecs": "com.hadoop.compression.lzo.LzopCodec",
+                "io.compression.codec.lzo.class": "com.hadoop.compression.lzo.LzoCodec"}
+
+        nested_double_list_rdd_out.saveAsNewAPIHadoopFile(
+            nested_double_list_output_path,
+            "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.BytesWritable",
+            valueConverter="org.apache.spark.api.python.ByteArrayToWritableConverter",
+            conf=conf)
+
+        nested_double_list_rdd_in = self.sc.newAPIHadoopRDD(
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
+            "org.apache.hadoop.io.BytesWritable",
+            valueConverter="org.apache.spark.api.python.WritableToByteArrayConverter",
+            conf=conf)
+
+        test_data_in = python_to_numpy(nested_double_list_rdd_in.collect())
+        self.assertTrue(is_equal(test_data_in, test_data_out))
+
 
 
 if __name__ == "__main__":
