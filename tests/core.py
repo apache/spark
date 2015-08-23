@@ -7,7 +7,7 @@ from airflow import jobs, models, DAG, executors, utils, operators
 from airflow.www.app import app
 from airflow import utils
 
-NUM_EXAMPLE_DAGS = 5
+NUM_EXAMPLE_DAGS = 6
 DEV_NULL = '/dev/null'
 LOCAL_EXECUTOR = executors.LocalExecutor()
 DEFAULT_DATE = datetime(2015, 1, 1)
@@ -163,6 +163,23 @@ class CoreTest(unittest.TestCase):
 
     def test_confirm_unittest_mod(self):
         assert configuration.conf.get('core', 'unit_test_mode')
+
+    def test_cli(self):
+        from airflow.bin import cli
+        parser = cli.get_parser()
+        args = parser.parse_args(['list_dags'])
+        cli.list_dags(args)
+
+        for dag_id in self.dagbag.dags.keys():
+            args = parser.parse_args(['list_tasks', dag_id])
+            cli.list_tasks(args)
+
+        args = parser.parse_args(['list_tasks', 'example_bash_operator', '--tree'])
+        cli.list_tasks(args)
+
+        cli.initdb(parser.parse_args(['initdb']))
+        # cli.upgradedb(parser.parse_args(['upgradedb']))
+
 
     def test_time_sensor(self):
         t = operators.TimeSensor(
@@ -349,6 +366,7 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(
             "/admin/airflow/refresh?dag_id=example_bash_operator")
         response = self.app.get("/admin/airflow/refresh_all")
+        response = self.app.get("/admin/airflow/paused?dag_id=example_python_operator&is_paused=false")
 
     def test_charts(self):
         response = self.app.get(
