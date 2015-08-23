@@ -24,7 +24,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
@@ -41,6 +41,7 @@ import org.apache.spark.util.Utils
  * @param topNode root node
  * @param algo algorithm type -- classification or regression
  */
+@Since("1.0.0")
 @Experimental
 class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable with Saveable {
 
@@ -50,6 +51,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * @param features array representing a single data point
    * @return Double prediction from the trained model
    */
+  @Since("1.0.0")
   def predict(features: Vector): Double = {
     topNode.predict(features)
   }
@@ -60,6 +62,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * @param features RDD representing data points to be predicted
    * @return RDD of predictions for each of the given data points
    */
+  @Since("1.0.0")
   def predict(features: RDD[Vector]): RDD[Double] = {
     features.map(x => predict(x))
   }
@@ -70,6 +73,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * @param features JavaRDD representing data points to be predicted
    * @return JavaRDD of predictions for each of the given data points
    */
+  @Since("1.2.0")
   def predict(features: JavaRDD[Vector]): JavaRDD[Double] = {
     predict(features.rdd)
   }
@@ -77,6 +81,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
   /**
    * Get number of nodes in tree, including leaf nodes.
    */
+  @Since("1.1.0")
   def numNodes: Int = {
     1 + topNode.numDescendants
   }
@@ -85,6 +90,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * Get depth of tree.
    * E.g.: Depth 0 means 1 leaf node.  Depth 1 means 1 internal node and 2 leaf nodes.
    */
+  @Since("1.1.0")
   def depth: Int = {
     topNode.subtreeDepth
   }
@@ -109,6 +115,12 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
     header + topNode.subtreeToString(2)
   }
 
+  /**
+   * @param sc  Spark context used to save model data.
+   * @param path  Path specifying the directory in which to save this model.
+   *              If the directory already exists, this method throws an exception.
+   */
+  @Since("1.3.0")
   override def save(sc: SparkContext, path: String): Unit = {
     DecisionTreeModel.SaveLoadV1_0.save(sc, path, this)
   }
@@ -116,6 +128,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
   override protected def formatVersion: String = DecisionTreeModel.formatVersion
 }
 
+@Since("1.3.0")
 object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
 
   private[spark] def formatVersion: String = "1.0"
@@ -297,6 +310,13 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
     }
   }
 
+  /**
+   *
+   * @param sc  Spark context used for loading model files.
+   * @param path  Path specifying the directory to which the model was saved.
+   * @return  Model instance
+   */
+  @Since("1.3.0")
   override def load(sc: SparkContext, path: String): DecisionTreeModel = {
     implicit val formats = DefaultFormats
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)

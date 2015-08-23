@@ -17,12 +17,13 @@
 
 package org.apache.spark.mllib.tree.configuration
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 
 /**
  * :: Experimental ::
  * Enum for selecting the quantile calculation strategy
  */
+@Since("1.0.0")
 @Experimental
 object QuantileStrategy extends Enumeration {
   type QuantileStrategy = Value

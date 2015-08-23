@@ -19,7 +19,7 @@ package org.apache.spark.mllib.tree.configuration
 
 import scala.beans.BeanProperty
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
 
@@ -39,6 +39,7 @@ import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
  *                      then stop.  Ignored when
  *                      [[org.apache.spark.mllib.tree.GradientBoostedTrees.run()]] is used.
  */
+@Since("1.2.0")
 @Experimental
 case class BoostingStrategy(
     // Required boosting parameters
@@ -70,6 +71,7 @@ case class BoostingStrategy(
   }
 }
 
+@Since("1.2.0")
 @Experimental
 object BoostingStrategy {
 
@@ -78,6 +80,7 @@ object BoostingStrategy {
    * @param algo Learning goal.  Supported: "Classification" or "Regression"
    * @return Configuration for boosting algorithm
    */
+  @Since("1.2.0")
   def defaultParams(algo: String): BoostingStrategy = {
     defaultParams(Algo.fromString(algo))
   }
@@ -89,6 +92,7 @@ object BoostingStrategy {
    *             [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
    * @return Configuration for boosting algorithm
    */
+  @Since("1.3.0")
   def defaultParams(algo: Algo): BoostingStrategy = {
     val treeStrategy = Strategy.defaultStrategy(algo)
     treeStrategy.maxDepth = 3

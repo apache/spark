@@ -120,7 +120,6 @@ private[sql] case class InMemoryRelation(
       new Iterator[CachedBatch] {
         def next(): CachedBatch = {
           val columnBuilders = output.map { attribute =>
-            val columnType = ColumnType(attribute.dataType)
             ColumnBuilder(attribute.dataType, batchSize, attribute.name, useCompression)
           }.toArray
 

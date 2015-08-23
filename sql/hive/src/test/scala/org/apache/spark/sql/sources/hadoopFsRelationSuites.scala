@@ -570,6 +570,40 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       df.write.format(dataSourceName).partitionBy("c", "d", "e").saveAsTable("t")
     }
   }
+
+  test("SPARK-9899 Disable customized output committer when speculation is on") {
+    val clonedConf = new Configuration(configuration)
+    val speculationEnabled =
+      sqlContext.sparkContext.conf.getBoolean("spark.speculation", defaultValue = false)
+
+    try {
+      withTempPath { dir =>
+        // Enables task speculation
+        sqlContext.sparkContext.conf.set("spark.speculation", "true")
+
+        // Uses a customized output committer which always fails
+        configuration.set(
+          SQLConf.OUTPUT_COMMITTER_CLASS.key,
+          classOf[AlwaysFailOutputCommitter].getName)
+
+        // Code below shouldn't throw since customized output committer should be disabled.
+        val df = sqlContext.range(10).coalesce(1)
+        df.write.format(dataSourceName).save(dir.getCanonicalPath)
+        checkAnswer(
+          sqlContext
+            .read
+            .format(dataSourceName)
+            .option("dataSchema", df.schema.json)
+            .load(dir.getCanonicalPath),
+          df)
+      }
+    } finally {
+      // Hadoop 1 doesn't have `Configuration.unset`
+      configuration.clear()
+      clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+      sqlContext.sparkContext.conf.set("spark.speculation", speculationEnabled.toString)
+    }
+  }
 }
 
 // This class is used to test SPARK-8578. We should not use any custom output committer when

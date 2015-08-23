@@ -58,6 +58,9 @@ private[sql] abstract class BaseWriterContainer(
   // This is only used on driver side.
   @transient private val jobContext: JobContext = job
 
+  private val speculationEnabled: Boolean =
+    relation.sqlContext.sparkContext.conf.getBoolean("spark.speculation", defaultValue = false)
+
   // The following fields are initialized and used on both driver and executor side.
   @transient protected var outputCommitter: OutputCommitter = _
   @transient private var jobId: JobID = _
@@ -126,9 +129,20 @@ private[sql] abstract class BaseWriterContainer(
       // associated with the file output format since it is not safe to use a custom
       // committer for appending. For example, in S3, direct parquet output committer may
       // leave partial data in the destination dir when the the appending job fails.
+      //
+      // See SPARK-8578 for more details
       logInfo(
-        s"Using output committer class ${defaultOutputCommitter.getClass.getCanonicalName} " +
+        s"Using default output committer ${defaultOutputCommitter.getClass.getCanonicalName} " +
           "for appending.")
+      defaultOutputCommitter
+    } else if (speculationEnabled) {
+      // When speculation is enabled, it's not safe to use customized output committer classes,
+      // especially direct output committers (e.g. `DirectParquetOutputCommitter`).
+      //
+      // See SPARK-9899 for more details.
+      logInfo(
+        s"Using default output committer ${defaultOutputCommitter.getClass.getCanonicalName} " +
+          "because spark.speculation is configured to be true.")
       defaultOutputCommitter
     } else {
       val committerClass = context.getConfiguration.getClass(
@@ -217,6 +231,8 @@ private[sql] class DefaultWriterContainer(
     val writer = outputWriterFactory.newInstance(getWorkPath, dataSchema, taskAttemptContext)
     writer.initConverter(dataSchema)
 
+    var writerClosed = false
+
     // If anything below fails, we should abort the task.
     try {
       while (iterator.hasNext) {
@@ -235,7 +251,10 @@ private[sql] class DefaultWriterContainer(
     def commitTask(): Unit = {
       try {
         assert(writer != null, "OutputWriter instance should have been initialized")
-        writer.close()
+        if (!writerClosed) {
+          writer.close()
+          writerClosed = true
+        }
         super.commitTask()
       } catch {
         case cause: Throwable =>
@@ -247,7 +266,10 @@ private[sql] class DefaultWriterContainer(
 
     def abortTask(): Unit = {
       try {
-        writer.close()
+        if (!writerClosed) {
+          writer.close()
+          writerClosed = true
+        }
       } finally {
         super.abortTask()
       }
@@ -274,6 +296,8 @@ private[sql] class DynamicPartitionWriterContainer(
   def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
     val outputWriters = new java.util.HashMap[InternalRow, OutputWriter]
     executorSideSetup(taskContext)
+
+    var outputWritersCleared = false
 
     // Returns the partition key given an input row
     val getPartitionKey = UnsafeProjection.create(partitionColumns, inputSchema)
@@ -379,8 +403,11 @@ private[sql] class DynamicPartitionWriterContainer(
     }
 
     def clearOutputWriters(): Unit = {
-      outputWriters.asScala.values.foreach(_.close())
-      outputWriters.clear()
+      if (!outputWritersCleared) {
+        outputWriters.asScala.values.foreach(_.close())
+        outputWriters.clear()
+        outputWritersCleared = true
+      }
     }
 
     def commitTask(): Unit = {

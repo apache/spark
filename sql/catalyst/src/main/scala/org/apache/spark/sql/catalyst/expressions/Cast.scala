@@ -447,7 +447,7 @@ case class Cast(child: Expression, dataType: DataType)
     case StringType => castToStringCode(from, ctx)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
-    case decimal: DecimalType => castToDecimalCode(from, decimal)
+    case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
     case TimestampType => castToTimestampCode(from, ctx)
     case CalendarIntervalType => castToIntervalCode(from)
     case BooleanType => castToBooleanCode(from)
@@ -528,14 +528,18 @@ case class Cast(child: Expression, dataType: DataType)
       }
     """
 
-  private[this] def castToDecimalCode(from: DataType, target: DecimalType): CastFunction = {
+  private[this] def castToDecimalCode(
+      from: DataType,
+      target: DecimalType,
+      ctx: CodeGenContext): CastFunction = {
+    val tmp = ctx.freshName("tmpDecimal")
     from match {
       case StringType =>
         (c, evPrim, evNull) =>
           s"""
             try {
-              Decimal tmpDecimal = Decimal.apply(new java.math.BigDecimal($c.toString()));
-              ${changePrecision("tmpDecimal", target, evPrim, evNull)}
+              Decimal $tmp = Decimal.apply(new java.math.BigDecimal($c.toString()));
+              ${changePrecision(tmp, target, evPrim, evNull)}
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
             }
@@ -543,8 +547,8 @@ case class Cast(child: Expression, dataType: DataType)
       case BooleanType =>
         (c, evPrim, evNull) =>
           s"""
-            Decimal tmpDecimal = $c ? Decimal.apply(1) : Decimal.apply(0);
-            ${changePrecision("tmpDecimal", target, evPrim, evNull)}
+            Decimal $tmp = $c ? Decimal.apply(1) : Decimal.apply(0);
+            ${changePrecision(tmp, target, evPrim, evNull)}
           """
       case DateType =>
         // date can't cast to decimal in Hive
@@ -553,29 +557,29 @@ case class Cast(child: Expression, dataType: DataType)
         // Note that we lose precision here.
         (c, evPrim, evNull) =>
           s"""
-            Decimal tmpDecimal = Decimal.apply(
+            Decimal $tmp = Decimal.apply(
               scala.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
-            ${changePrecision("tmpDecimal", target, evPrim, evNull)}
+            ${changePrecision(tmp, target, evPrim, evNull)}
           """
       case DecimalType() =>
         (c, evPrim, evNull) =>
           s"""
-            Decimal tmpDecimal = $c.clone();
-            ${changePrecision("tmpDecimal", target, evPrim, evNull)}
+            Decimal $tmp = $c.clone();
+            ${changePrecision(tmp, target, evPrim, evNull)}
           """
       case x: IntegralType =>
         (c, evPrim, evNull) =>
           s"""
-            Decimal tmpDecimal = Decimal.apply((long) $c);
-            ${changePrecision("tmpDecimal", target, evPrim, evNull)}
+            Decimal $tmp = Decimal.apply((long) $c);
+            ${changePrecision(tmp, target, evPrim, evNull)}
           """
       case x: FractionalType =>
         // All other numeric types can be represented precisely as Doubles
         (c, evPrim, evNull) =>
           s"""
             try {
-              Decimal tmpDecimal = Decimal.apply(scala.math.BigDecimal.valueOf((double) $c));
-              ${changePrecision("tmpDecimal", target, evPrim, evNull)}
+              Decimal $tmp = Decimal.apply(scala.math.BigDecimal.valueOf((double) $c));
+              ${changePrecision(tmp, target, evPrim, evNull)}
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
             }

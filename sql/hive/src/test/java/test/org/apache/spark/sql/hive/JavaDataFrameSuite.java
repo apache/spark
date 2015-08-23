@@ -92,7 +92,7 @@ public class JavaDataFrameSuite {
     DataFrame aggregatedDF =
       df.groupBy()
         .agg(
-          udaf.apply(true, col("value")),
+          udaf.distinct(col("value")),
           udaf.apply(col("value")),
           registeredUDAF.apply(col("value")),
           callUDF("mydoublesum", col("value")));
