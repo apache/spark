@@ -48,20 +48,6 @@ Some of the commonly used options are:
 * `application-jar`: Path to a bundled jar including your application and all dependencies. The URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes.
 * `application-arguments`: Arguments passed to the main method of your main class, if any
 
-For submitting application to YARN, the alternate options are:
-
-{% highlight bash %}
-./bin/spark-submit \
-  --class <main-class>
-  --master <yarn-deploy-mode>
-  --conf <key>=<value> \
-  ... # other options
-  <application-jar> \
-  [application-arguments] 
-{% endhighlight %}
-
-* `--master`: The --master parameter is either `yarn-client` or `yarn-cluster`. Defaults to `yarn-client`
-
 <b>&#8224;</b> A common deployment strategy is to submit your application from a gateway machine
 that is
 physically co-located with your worker machines (e.g. Master node in a standalone EC2 cluster).
