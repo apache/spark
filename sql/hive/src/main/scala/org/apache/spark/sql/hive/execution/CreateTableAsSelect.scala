@@ -40,6 +40,8 @@ case class CreateTableAsSelect(
   def database: String = tableDesc.database
   def tableName: String = tableDesc.name
 
+  override def children: Seq[LogicalPlan] = Seq(query)
+
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     lazy val metastoreRelation: MetastoreRelation = {
@@ -91,6 +93,6 @@ case class CreateTableAsSelect(
   }
 
   override def argString: String = {
-    s"[Database:$database, TableName: $tableName, InsertIntoHiveTable]\n" + query.toString
+    s"[Database:$database, TableName: $tableName, InsertIntoHiveTable]"
   }
 }

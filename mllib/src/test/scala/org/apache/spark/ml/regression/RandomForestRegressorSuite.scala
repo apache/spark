@@ -19,6 +19,7 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
@@ -91,7 +92,11 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     val categoricalFeatures = Map.empty[Int, Int]
     val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0)
 
-    val importances = rf.fit(df).featureImportances
+    val model = rf.fit(df)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
+    val importances = model.featureImportances
     val mostImportantFeature = importances.argmax
     assert(mostImportantFeature === 1)
   }

@@ -49,7 +49,17 @@ trait BaseGenericInternalRow extends InternalRow {
   override def getMap(ordinal: Int): MapData = getAs(ordinal)
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)
 
-  override def toString(): String = {
+  override def anyNull: Boolean = {
+    val len = numFields
+    var i = 0
+    while (i < len) {
+      if (isNullAt(i)) { return true }
+      i += 1
+    }
+    false
+  }
+
+  override def toString: String = {
     if (numFields == 0) {
       "[empty row]"
     } else {

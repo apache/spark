@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisSuite, EliminateSubQueries}
+import org.apache.spark.sql.catalyst.SimpleCatalystConf
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -88,20 +89,24 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
       ('a === 'b || 'b > 3 && 'a > 3 && 'a < 5))
   }
 
-  private def caseInsensitiveAnalyse(plan: LogicalPlan) =
-    AnalysisSuite.caseInsensitiveAnalyzer.execute(plan)
+  private val caseInsensitiveAnalyzer =
+    new Analyzer(EmptyCatalog, EmptyFunctionRegistry, new SimpleCatalystConf(false))
 
   test("(a && b) || (a && c) => a && (b || c) when case insensitive") {
-    val plan = caseInsensitiveAnalyse(testRelation.where(('a > 2 && 'b > 3) || ('A > 2 && 'b < 5)))
+    val plan = caseInsensitiveAnalyzer.execute(
+      testRelation.where(('a > 2 && 'b > 3) || ('A > 2 && 'b < 5)))
     val actual = Optimize.execute(plan)
-    val expected = caseInsensitiveAnalyse(testRelation.where('a > 2 && ('b > 3 || 'b < 5)))
+    val expected = caseInsensitiveAnalyzer.execute(
+      testRelation.where('a > 2 && ('b > 3 || 'b < 5)))
     comparePlans(actual, expected)
   }
 
   test("(a || b) && (a || c) => a || (b && c) when case insensitive") {
-    val plan = caseInsensitiveAnalyse(testRelation.where(('a > 2 || 'b > 3) && ('A > 2 || 'b < 5)))
+    val plan = caseInsensitiveAnalyzer.execute(
+      testRelation.where(('a > 2 || 'b > 3) && ('A > 2 || 'b < 5)))
     val actual = Optimize.execute(plan)
-    val expected = caseInsensitiveAnalyse(testRelation.where('a > 2 || ('b > 3 && 'b < 5)))
+    val expected = caseInsensitiveAnalyzer.execute(
+      testRelation.where('a > 2 || ('b > 3 && 'b < 5)))
     comparePlans(actual, expected)
   }
 }

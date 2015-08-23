@@ -40,6 +40,7 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     conf.set("spark.deploy.recoveryMode", "CUSTOM")
     conf.set("spark.deploy.recoveryMode.factory",
       classOf[CustomRecoveryModeFactory].getCanonicalName)
+    conf.set("spark.master.rest.enabled", "false")
 
     val instantiationAttempts = CustomRecoveryModeFactory.instantiationAttempts
 
@@ -151,6 +152,14 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
     basicScheduling(spreadOut = false)
   }
 
+  test("basic scheduling with more memory - spread out") {
+    basicSchedulingWithMoreMemory(spreadOut = true)
+  }
+
+  test("basic scheduling with more memory - no spread out") {
+    basicSchedulingWithMoreMemory(spreadOut = false)
+  }
+
   test("scheduling with max cores - spread out") {
     schedulingWithMaxCores(spreadOut = true)
   }
@@ -210,6 +219,13 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
   private def basicScheduling(spreadOut: Boolean): Unit = {
     val master = makeMaster()
     val appInfo = makeAppInfo(1024)
+    val scheduledCores = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
+    assert(scheduledCores === Array(10, 10, 10))
+  }
+
+  private def basicSchedulingWithMoreMemory(spreadOut: Boolean): Unit = {
+    val master = makeMaster()
+    val appInfo = makeAppInfo(3072)
     val scheduledCores = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     assert(scheduledCores === Array(10, 10, 10))
   }

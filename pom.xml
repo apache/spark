@@ -104,6 +104,7 @@
     <module>external/flume-sink</module>
     <module>external/flume-assembly</module>
     <module>external/mqtt</module>
+    <module>external/mqtt-assembly</module>
     <module>external/zeromq</module>
     <module>examples</module>
     <module>repl</module>
@@ -431,7 +432,7 @@
         <version>${commons-lang3.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.commons</groupId>
+        <groupId>commons-lang</groupId>
         <artifactId>commons-lang</artifactId>
         <version>${commons-lang2.version}</version>
       </dependency>
@@ -652,6 +653,11 @@
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
+        <version>${fasterxml.jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-annotations</artifactId>
         <version>${fasterxml.jackson.version}</version>
       </dependency>
       <!-- Guava is excluded because of SPARK-6149.  The Guava version referenced in this module is
@@ -1597,7 +1603,7 @@
         <groupId>com.twitter</groupId>
         <artifactId>parquet-hadoop-bundle</artifactId>
         <version>${hive.parquet.version}</version>
-        <scope>runtime</scope>
+        <scope>compile</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.flume</groupId>
@@ -1894,6 +1900,7 @@
               <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
               <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
+              <spark.master.rest.enabled>false</spark.master.rest.enabled>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>

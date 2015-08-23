@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.ui.SparkPlanGraph
+import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.util.Utils
 
 private[sql] object SQLExecution {

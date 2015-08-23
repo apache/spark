@@ -60,7 +60,6 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // Scanning partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation))
         if t.partitionSpec.partitionColumns.nonEmpty =>
-      t.refresh()
       val selectedPartitions = prunePartitions(filters, t.partitionSpec).toArray
 
       logInfo {
@@ -88,7 +87,6 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
     // Scanning non-partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation)) =>
-      t.refresh()
       // See buildPartitionedTableScan for the reason that we need to create a shard
       // broadcast HadoopConf.
       val sharedHadoopConf = SparkHadoopUtil.get.conf
@@ -101,8 +99,9 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         (a, f) =>
           toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray, f, t.paths, confBroadcast))) :: Nil
 
-    case l @ LogicalRelation(t: TableScan) =>
-      execution.PhysicalRDD(l.output, toCatalystRDD(l, t.buildScan())) :: Nil
+    case l @ LogicalRelation(baseRelation: TableScan) =>
+      execution.PhysicalRDD.createFromDataSource(
+        l.output, toCatalystRDD(l, baseRelation.buildScan()), baseRelation) :: Nil
 
     case i @ logical.InsertIntoTable(
       l @ LogicalRelation(t: InsertableRelation), part, query, overwrite, false) if part.isEmpty =>
@@ -169,7 +168,10 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         new UnionRDD(relation.sqlContext.sparkContext, perPartitionRows)
       }
 
-    execution.PhysicalRDD(projections.map(_.toAttribute), unionedRows)
+    execution.PhysicalRDD.createFromDataSource(
+      projections.map(_.toAttribute),
+      unionedRows,
+      logicalRelation.relation)
   }
 
   // TODO: refactor this thing. It is very complicated because it does projection internally.
@@ -299,14 +301,18 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         projects.asInstanceOf[Seq[Attribute]] // Safe due to if above.
           .map(relation.attributeMap)            // Match original case of attributes.
 
-      val scan = execution.PhysicalRDD(projects.map(_.toAttribute),
-        scanBuilder(requestedColumns, pushedFilters))
+      val scan = execution.PhysicalRDD.createFromDataSource(
+        projects.map(_.toAttribute),
+        scanBuilder(requestedColumns, pushedFilters),
+        relation.relation)
       filterCondition.map(execution.Filter(_, scan)).getOrElse(scan)
     } else {
       val requestedColumns = (projectSet ++ filterSet).map(relation.attributeMap).toSeq
 
-      val scan = execution.PhysicalRDD(requestedColumns,
-        scanBuilder(requestedColumns, pushedFilters))
+      val scan = execution.PhysicalRDD.createFromDataSource(
+        requestedColumns,
+        scanBuilder(requestedColumns, pushedFilters),
+        relation.relation)
       execution.Project(projects, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
     }
   }
@@ -342,6 +348,11 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         Some(sources.EqualTo(a.name, v))
       case expressions.EqualTo(Literal(v, _), a: Attribute) =>
         Some(sources.EqualTo(a.name, v))
+
+      case expressions.EqualNullSafe(a: Attribute, Literal(v, _)) =>
+        Some(sources.EqualNullSafe(a.name, v))
+      case expressions.EqualNullSafe(Literal(v, _), a: Attribute) =>
+        Some(sources.EqualNullSafe(a.name, v))
 
       case expressions.GreaterThan(a: Attribute, Literal(v, _)) =>
         Some(sources.GreaterThan(a.name, v))

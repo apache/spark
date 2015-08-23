@@ -304,7 +304,7 @@ private[sql] case class ScalaUDAF(
 
   override def nullable: Boolean = true
 
-  override def dataType: DataType = udaf.returnDataType
+  override def dataType: DataType = udaf.dataType
 
   override def deterministic: Boolean = udaf.deterministic
 

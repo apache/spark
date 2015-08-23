@@ -39,7 +39,6 @@ import org.apache.spark.mllib.linalg.Vector
  *    .setNumIterations(10)
  *    .setInitialWeights(Vectors.dense(...))
  *    .trainOn(DStream)
- *
  */
 @Experimental
 class StreamingLinearRegressionWithSGD private[mllib] (
@@ -61,31 +60,41 @@ class StreamingLinearRegressionWithSGD private[mllib] (
 
   protected var model: Option[LinearRegressionModel] = None
 
-  /** Set the step size for gradient descent. Default: 0.1. */
+  /**
+   * Set the step size for gradient descent. Default: 0.1.
+   */
   def setStepSize(stepSize: Double): this.type = {
     this.algorithm.optimizer.setStepSize(stepSize)
     this
   }
 
-  /** Set the number of iterations of gradient descent to run per update. Default: 50. */
+  /**
+   * Set the number of iterations of gradient descent to run per update. Default: 50.
+   */
   def setNumIterations(numIterations: Int): this.type = {
     this.algorithm.optimizer.setNumIterations(numIterations)
     this
   }
 
-  /** Set the fraction of each batch to use for updates. Default: 1.0. */
+  /**
+   * Set the fraction of each batch to use for updates. Default: 1.0.
+   */
   def setMiniBatchFraction(miniBatchFraction: Double): this.type = {
     this.algorithm.optimizer.setMiniBatchFraction(miniBatchFraction)
     this
   }
 
-  /** Set the initial weights. */
+  /**
+   * Set the initial weights.
+   */
   def setInitialWeights(initialWeights: Vector): this.type = {
     this.model = Some(algorithm.createModel(initialWeights, 0.0))
     this
   }
 
-  /** Set the convergence tolerance. */
+  /**
+   * Set the convergence tolerance.
+   */
   def setConvergenceTol(tolerance: Double): this.type = {
     this.algorithm.optimizer.setConvergenceTol(tolerance)
     this

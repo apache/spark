@@ -28,7 +28,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 import org.apache.spark.rdd.RDD
@@ -45,6 +45,7 @@ import org.apache.spark.storage.StorageLevel
  * @param nCols number of columns. A non-positive value means unknown, and then the number of
  *              columns will be determined by the size of the first row.
  */
+@Since("1.0.0")
 @Experimental
 class RowMatrix(
     val rows: RDD[Vector],
@@ -52,9 +53,11 @@ class RowMatrix(
     private var nCols: Int) extends DistributedMatrix with Logging {
 
   /** Alternative constructor leaving matrix dimensions to be determined automatically. */
+  @Since("1.0.0")
   def this(rows: RDD[Vector]) = this(rows, 0L, 0)
 
   /** Gets or computes the number of columns. */
+  @Since("1.0.0")
   override def numCols(): Long = {
     if (nCols <= 0) {
       try {
@@ -70,6 +73,7 @@ class RowMatrix(
   }
 
   /** Gets or computes the number of rows. */
+  @Since("1.0.0")
   override def numRows(): Long = {
     if (nRows <= 0L) {
       nRows = rows.count()
@@ -108,6 +112,7 @@ class RowMatrix(
   /**
    * Computes the Gramian matrix `A^T A`.
    */
+  @Since("1.0.0")
   def computeGramianMatrix(): Matrix = {
     val n = numCols().toInt
     checkNumColumns(n)
@@ -178,6 +183,7 @@ class RowMatrix(
    *              are treated as zero, where sigma(0) is the largest singular value.
    * @return SingularValueDecomposition(U, s, V). U = null if computeU = false.
    */
+  @Since("1.0.0")
   def computeSVD(
       k: Int,
       computeU: Boolean = false,
@@ -318,6 +324,7 @@ class RowMatrix(
    * Computes the covariance matrix, treating each row as an observation.
    * @return a local dense matrix of size n x n
    */
+  @Since("1.0.0")
   def computeCovariance(): Matrix = {
     val n = numCols().toInt
     checkNumColumns(n)
@@ -371,6 +378,7 @@ class RowMatrix(
    * @param k number of top principal components.
    * @return a matrix of size n-by-k, whose columns are principal components
    */
+  @Since("1.0.0")
   def computePrincipalComponents(k: Int): Matrix = {
     val n = numCols().toInt
     require(k > 0 && k <= n, s"k = $k out of range (0, n = $n]")
@@ -389,6 +397,7 @@ class RowMatrix(
   /**
    * Computes column-wise summary statistics.
    */
+  @Since("1.0.0")
   def computeColumnSummaryStatistics(): MultivariateStatisticalSummary = {
     val summary = rows.treeAggregate(new MultivariateOnlineSummarizer)(
       (aggregator, data) => aggregator.add(data),
@@ -404,6 +413,7 @@ class RowMatrix(
    * @return a [[org.apache.spark.mllib.linalg.distributed.RowMatrix]] representing the product,
    *         which preserves partitioning
    */
+  @Since("1.0.0")
   def multiply(B: Matrix): RowMatrix = {
     val n = numCols().toInt
     val k = B.numCols
@@ -436,6 +446,7 @@ class RowMatrix(
    * @return An n x n sparse upper-triangular matrix of cosine similarities between
    *         columns of this matrix.
    */
+  @Since("1.2.0")
   def columnSimilarities(): CoordinateMatrix = {
     columnSimilarities(0.0)
   }
@@ -479,6 +490,7 @@ class RowMatrix(
    * @return An n x n sparse upper-triangular matrix of cosine similarities
    *         between columns of this matrix.
    */
+  @Since("1.2.0")
   def columnSimilarities(threshold: Double): CoordinateMatrix = {
     require(threshold >= 0, s"Threshold cannot be negative: $threshold")
 
@@ -656,6 +668,7 @@ class RowMatrix(
   }
 }
 
+@Since("1.0.0")
 @Experimental
 object RowMatrix {
 

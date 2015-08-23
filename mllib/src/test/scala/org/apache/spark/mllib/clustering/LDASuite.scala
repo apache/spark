@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.clustering
 
+import java.util.{ArrayList => JArrayList}
+
 import breeze.linalg.{DenseMatrix => BDM, argtopk, max, argmax}
 
 import org.apache.spark.SparkFunSuite
@@ -133,16 +135,33 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     }
 
     // Top 3 documents per topic
-    model.topDocumentsPerTopic(3).zip(topDocsByTopicDistributions(3)).foreach {case (t1, t2) =>
+    model.topDocumentsPerTopic(3).zip(topDocsByTopicDistributions(3)).foreach { case (t1, t2) =>
       assert(t1._1 === t2._1)
       assert(t1._2 === t2._2)
     }
 
     // All documents per topic
     val q = tinyCorpus.length
-    model.topDocumentsPerTopic(q).zip(topDocsByTopicDistributions(q)).foreach {case (t1, t2) =>
+    model.topDocumentsPerTopic(q).zip(topDocsByTopicDistributions(q)).foreach { case (t1, t2) =>
       assert(t1._1 === t2._1)
       assert(t1._2 === t2._2)
+    }
+
+    // Check: topTopicAssignments
+    // Make sure it assigns a topic to each term appearing in each doc.
+    val topTopicAssignments: Map[Long, (Array[Int], Array[Int])] =
+      model.topicAssignments.collect().map(x => x._1 -> (x._2, x._3)).toMap
+    assert(topTopicAssignments.keys.max < tinyCorpus.length)
+    tinyCorpus.foreach { case (docID: Long, doc: Vector) =>
+      if (topTopicAssignments.contains(docID)) {
+        val (inds, vals) = topTopicAssignments(docID)
+        assert(inds.length === doc.numNonzeros)
+        // For "term" in actual doc,
+        // check that it has a topic assigned.
+        doc.foreachActive((term, wcnt) => assert(wcnt === 0 || inds.contains(term)))
+      } else {
+        assert(doc.numNonzeros === 0)
+      }
     }
   }
 
@@ -160,8 +179,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("setter alias") {
     val lda = new LDA().setAlpha(2.0).setBeta(3.0)
-    assert(lda.getAlpha.toArray.forall(_ === 2.0))
-    assert(lda.getDocConcentration.toArray.forall(_ === 2.0))
+    assert(lda.getAsymmetricAlpha.toArray.forall(_ === 2.0))
+    assert(lda.getAsymmetricDocConcentration.toArray.forall(_ === 2.0))
     assert(lda.getBeta === 3.0)
     assert(lda.getTopicConcentration === 3.0)
   }
@@ -574,6 +593,17 @@ private[clustering] object LDASuite {
     Vectors.sparse(6, Array(3, 5), Array(1, 1)),
     Vectors.sparse(6, Array(4, 5), Array(1, 1))
   ).zipWithIndex.map { case (wordCounts, docId) => (docId.toLong, wordCounts) }
+
+  /** Used in the Java Test Suite */
+  def javaToyData: JArrayList[(java.lang.Long, Vector)] = {
+    val javaData = new JArrayList[(java.lang.Long, Vector)]
+    var i = 0
+    while (i < toyData.length) {
+      javaData.add((toyData(i)._1, toyData(i)._2))
+      i += 1
+    }
+    javaData
+  }
 
   def toyModel: LocalLDAModel = {
     val k = 2

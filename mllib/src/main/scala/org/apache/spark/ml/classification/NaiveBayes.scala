@@ -86,6 +86,7 @@ class NaiveBayes(override val uid: String)
    * Set the model type using a string (case-sensitive).
    * Supported options: "multinomial" and "bernoulli".
    * Default is "multinomial"
+   * @group setParam
    */
   def setModelType(value: String): this.type = set(modelType, value)
   setDefault(modelType -> OldNaiveBayes.Multinomial)
@@ -101,6 +102,9 @@ class NaiveBayes(override val uid: String)
 
 /**
  * Model produced by [[NaiveBayes]]
+ * @param pi log of class priors, whose dimension is C (number of classes)
+ * @param theta log of class conditional probabilities, whose dimension is C (number of classes)
+ *              by D (number of features)
  */
 class NaiveBayesModel private[ml] (
     override val uid: String,

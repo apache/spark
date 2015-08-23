@@ -81,7 +81,7 @@ private[spark] abstract class Stage(
    * accumulators here again will override partial values from the finished tasks.
    */
   def resetInternalAccumulators(): Unit = {
-    _internalAccumulators = InternalAccumulator.create()
+    _internalAccumulators = InternalAccumulator.create(rdd.sparkContext)
   }
 
   /**
