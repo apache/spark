@@ -34,7 +34,7 @@ import org.apache.spark.sql.{SQLConf, SQLContext, QueryTest}
  */
 class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
   private var sc: SparkContext = null
-  private var sqlContext: SQLContext = null
+  protected var sqlContext: SQLContext = null
 
   /**
    * Create a new [[SQLContext]] running in local-cluster mode with unsafe and codegen enabled.

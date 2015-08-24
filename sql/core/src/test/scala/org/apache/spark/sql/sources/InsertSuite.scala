@@ -25,7 +25,6 @@ import org.apache.spark.util.Utils
 
 class InsertSuite extends DataSourceTest with SharedSQLContext {
   protected override lazy val sql = caseInsensitiveContext.sql _
-  private lazy val sparkContext = caseInsensitiveContext.sparkContext
   private var path: File = null
 
   override def beforeAll(): Unit = {

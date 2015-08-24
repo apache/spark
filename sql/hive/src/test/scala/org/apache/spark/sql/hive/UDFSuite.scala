@@ -18,10 +18,11 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 case class FunctionResult(f1: String, f2: String)
 
-class UDFSuite extends QueryTest {
+class UDFSuite extends QueryTest with TestHiveSingleton {
   private lazy val ctx = org.apache.spark.sql.hive.test.TestHive
 
   test("UDF case insensitive") {

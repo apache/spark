@@ -26,13 +26,10 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.{UnaryNode, SparkPlan, SparkPlanTest}
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.types.StringType
 
-class ScriptTransformationSuite extends SparkPlanTest {
-
-  override def _sqlContext: SQLContext = TestHive
-  private val sqlContext = _sqlContext
+class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
 
   private val noSerdeIOSchema = HiveScriptIOSchema(
     inputRowFormat = Seq.empty,

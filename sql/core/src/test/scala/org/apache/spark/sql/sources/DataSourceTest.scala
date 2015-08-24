@@ -21,11 +21,10 @@ import org.apache.spark.sql._
 
 
 private[sql] abstract class DataSourceTest extends QueryTest {
-  protected def _sqlContext: SQLContext
 
   // We want to test some edge cases.
   protected lazy val caseInsensitiveContext: SQLContext = {
-    val ctx = new SQLContext(_sqlContext.sparkContext)
+    val ctx = new SQLContext(sqlContext.sparkContext)
     ctx.setConf(SQLConf.CASE_SENSITIVE, false)
     ctx
   }

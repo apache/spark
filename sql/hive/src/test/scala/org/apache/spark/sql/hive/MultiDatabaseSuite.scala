@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.{QueryTest, SQLContext, SaveMode}
 
-class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
-  override val _sqlContext: SQLContext = TestHive
-  private val sqlContext = _sqlContext
+class MultiDatabaseSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   private val df = sqlContext.range(10).coalesce(1)
 

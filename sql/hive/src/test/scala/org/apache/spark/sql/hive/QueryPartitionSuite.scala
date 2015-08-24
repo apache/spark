@@ -18,19 +18,19 @@
 package org.apache.spark.sql.hive
 
 import com.google.common.io.Files
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
 
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.util.Utils
 
 
-class QueryPartitionSuite extends QueryTest {
+class QueryPartitionSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
-  private lazy val ctx = org.apache.spark.sql.hive.test.TestHive
-  import ctx.implicits._
-  import ctx.sql
+  import testImplicits._
 
   test("SPARK-5068: query data when path doesn't exist"){
-    val testData = ctx.sparkContext.parallelize(
+    val testData = sparkContext.parallelize(
       (1 to 10).map(i => TestData(i, i.toString))).toDF()
     testData.registerTempTable("testData")
 

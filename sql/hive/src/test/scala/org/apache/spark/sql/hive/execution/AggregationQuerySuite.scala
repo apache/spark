@@ -21,15 +21,15 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import _root_.test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 
-abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
-  override def _sqlContext: SQLContext = TestHive
-  protected val sqlContext = _sqlContext
-  import sqlContext.implicits._
+abstract class AggregationQuerySuite
+  extends QueryTest with TestHiveSingleton with SQLTestUtils with BeforeAndAfterAll {
+
+  import testImplicits._
 
   var originalUseAggregate2: Boolean = _
 
@@ -597,7 +597,7 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
     sqlContext.conf.unsetConf("spark.sql.TungstenAggregate.testFallbackStartsAt")
   }
 
-  override protected def checkAnswer(actual: DataFrame, expectedAnswer: Seq[Row]): Unit = {
+  override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     (0 to 2).foreach { fallbackStartsAt =>
       sqlContext.setConf(
         "spark.sql.TungstenAggregate.testFallbackStartsAt",
@@ -626,12 +626,12 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
   }
 
   // Override it to make sure we call the actually overridden checkAnswer.
-  override protected def checkAnswer(df: DataFrame, expectedAnswer: Row): Unit = {
+  override protected def checkAnswer(df: => DataFrame, expectedAnswer: Row): Unit = {
     checkAnswer(df, Seq(expectedAnswer))
   }
 
   // Override it to make sure we call the actually overridden checkAnswer.
-  override protected def checkAnswer(df: DataFrame, expectedAnswer: DataFrame): Unit = {
+  override protected def checkAnswer(df: => DataFrame, expectedAnswer: DataFrame): Unit = {
     checkAnswer(df, expectedAnswer.collect())
   }
 }

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
@@ -65,9 +65,7 @@ class MyDialect extends DefaultParserDialect
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
-class SQLQuerySuite extends QueryTest with SQLTestUtils {
-  override def _sqlContext: SQLContext = TestHive
-  private val sqlContext = _sqlContext
+class SQLQuerySuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   test("UDTF") {
     sql(s"ADD JAR ${TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath()}")

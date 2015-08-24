@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.{QueryTest, Row, SQLContext}
 
 case class Cases(lower: String, UPPER: String)
 
-class HiveParquetSuite extends QueryTest with ParquetTest {
+class HiveParquetSuite extends QueryTest with TestHiveSingleton with ParquetTest {
   private val ctx = TestHive
-  override def _sqlContext: SQLContext = ctx
+  override def sqlContext: SQLContext = ctx
 
   test("Case insensitive attribute names") {
     withParquetTable((1 to 4).map(i => Cases(i.toString, i.toString)), "cases") {

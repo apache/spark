@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.hive.test.TestHive._
@@ -26,7 +27,7 @@ import org.apache.spark.sql.{QueryTest, Row}
 
 case class OrcData(intField: Int, stringField: String)
 
-abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
+abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterAll {
   var orcTableDir: File = null
   var orcTableAsDir: File = null
 

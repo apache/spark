@@ -29,7 +29,7 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{SQLContext, QueryTest}
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.sql.types.DecimalType
@@ -273,16 +273,17 @@ object SparkSQLConfTest extends Logging {
 }
 
 object SPARK_9757 extends QueryTest with Logging {
+  val sparkContext = new SparkContext(
+    new SparkConf()
+      .set("spark.sql.hive.metastore.version", "0.13.1")
+      .set("spark.sql.hive.metastore.jars", "maven"))
+
+  protected val sqlContext: SQLContext = new TestHiveContext(sparkContext)
+
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
 
-    val sparkContext = new SparkContext(
-      new SparkConf()
-        .set("spark.sql.hive.metastore.version", "0.13.1")
-        .set("spark.sql.hive.metastore.jars", "maven"))
-
-    val hiveContext = new TestHiveContext(sparkContext)
-    import hiveContext.implicits._
+    import sqlContext.implicits._
 
     import org.apache.spark.sql.functions._
 
@@ -292,24 +293,24 @@ object SPARK_9757 extends QueryTest with Logging {
     try {
       {
         val df =
-          hiveContext
+          sqlContext
             .range(10)
             .select(('id + 0.1) cast DecimalType(10, 3) as 'dec)
         df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
-        checkAnswer(hiveContext.table("t"), df)
+        checkAnswer(sqlContext.table("t"), df)
       }
 
       {
         val df =
-          hiveContext
+          sqlContext
             .range(10)
             .select(callUDF("struct", ('id + 0.2) cast DecimalType(10, 3)) as 'dec_struct)
         df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
-        checkAnswer(hiveContext.table("t"), df)
+        checkAnswer(sqlContext.table("t"), df)
       }
     } finally {
       dir.delete()
-      hiveContext.sql("DROP TABLE t")
+      sqlContext.sql("DROP TABLE t")
       sparkContext.stop()
     }
   }

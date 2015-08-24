@@ -26,12 +26,10 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-
 class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
-  override val dataSourceName: String = "parquet"
+  import testImplicits._
 
-  import sqlContext._
-  import sqlContext.implicits._
+  override val dataSourceName: String = "parquet"
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
@@ -51,7 +49,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        read.format(dataSourceName)
+        sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
     }
@@ -69,7 +67,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         .format("parquet")
         .save(s"${dir.getCanonicalPath}/_temporary")
 
-      checkAnswer(read.format("parquet").load(dir.getCanonicalPath), df.collect())
+      checkAnswer(sqlContext.read.format("parquet").load(dir.getCanonicalPath), df.collect())
     }
   }
 
@@ -97,7 +95,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
       // This shouldn't throw anything.
       df.write.format("parquet").mode(SaveMode.Overwrite).save(path)
-      checkAnswer(read.format("parquet").load(path), df)
+      checkAnswer(sqlContext.read.format("parquet").load(path), df)
     }
   }
 
@@ -107,7 +105,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         // Parquet doesn't allow field names with spaces.  Here we are intentionally making an
         // exception thrown from the `ParquetRelation2.prepareForWriteJob()` method to trigger
         // the bug.  Please refer to spark-8079 for more details.
-        range(1, 10)
+        sqlContext.range(1, 10)
           .withColumnRenamed("id", "a b")
           .write
           .format("parquet")

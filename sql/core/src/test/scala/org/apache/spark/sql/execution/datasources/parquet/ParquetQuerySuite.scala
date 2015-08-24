@@ -30,6 +30,7 @@ import org.apache.spark.util.Utils
  * A test suite that tests various Parquet queries.
  */
 class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext {
+  import testImplicits._
 
   test("simple select queries") {
     withParquetTable((0 until 10).map(i => (i, i.toString)), "t") {
@@ -203,8 +204,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   }
 
   test("SPARK-10005 Schema merging for nested struct") {
-    val sqlContext = _sqlContext
-    import sqlContext.implicits._
 
     withTempPath { dir =>
       val path = dir.getCanonicalPath

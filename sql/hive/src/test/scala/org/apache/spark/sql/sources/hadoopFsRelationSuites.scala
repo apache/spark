@@ -30,15 +30,13 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 
-abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
-  override def _sqlContext: SQLContext = TestHive
-  protected val sqlContext = _sqlContext
-  import sqlContext.implicits._
+abstract class HadoopFsRelationTest extends QueryTest with TestHiveSingleton with SQLTestUtils {
+  import testImplicits._
 
   val dataSourceName: String
 

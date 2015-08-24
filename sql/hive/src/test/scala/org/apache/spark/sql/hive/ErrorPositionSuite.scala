@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+
 import scala.util.Try
 
 import org.scalatest.BeforeAndAfter
@@ -27,7 +29,7 @@ import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 
 
-class ErrorPositionSuite extends QueryTest with BeforeAndAfter {
+class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
 
   before {
     Seq((1, 1, 1)).toDF("a", "a", "b").registerTempTable("dupAttributes")

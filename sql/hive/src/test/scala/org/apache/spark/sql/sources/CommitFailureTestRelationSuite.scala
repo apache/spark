@@ -21,13 +21,12 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.test.SQLTestUtils
 
 
-class CommitFailureTestRelationSuite extends SparkFunSuite with SQLTestUtils {
-  override def _sqlContext: SQLContext = TestHive
-  private val sqlContext = _sqlContext
+class CommitFailureTestRelationSuite
+  extends SparkFunSuite with TestHiveSingleton with SQLTestUtils {
 
   // When committing a task, `CommitFailureTestSource` throws an exception for testing purpose.
   val dataSourceName: String = classOf[CommitFailureTestSource].getCanonicalName

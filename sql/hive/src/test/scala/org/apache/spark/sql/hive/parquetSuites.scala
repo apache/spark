@@ -25,7 +25,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
 import org.apache.spark.sql.hive.execution.HiveTableScan
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
@@ -684,9 +684,8 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
 /**
  * A collection of tests for parquet data with various forms of partitioning.
  */
-abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
-  override def _sqlContext: SQLContext = TestHive
-  protected val sqlContext = _sqlContext
+abstract class ParquetPartitioningTest
+  extends QueryTest with TestHiveSingleton with SQLTestUtils with BeforeAndAfterAll {
 
   var partitionedTableDir: File = null
   var normalTableDir: File = null

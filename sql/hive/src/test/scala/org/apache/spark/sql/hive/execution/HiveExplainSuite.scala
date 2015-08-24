@@ -18,16 +18,14 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{SQLContext, QueryTest}
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.test.SQLTestUtils
 
 /**
  * A set of tests that validates support for Hive Explain command.
  */
-class HiveExplainSuite extends QueryTest with SQLTestUtils {
-  override def _sqlContext: SQLContext = TestHive
-  private val sqlContext = _sqlContext
+class HiveExplainSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   test("explain extended command") {
     checkExistence(sql(" explain   select * from src where key=123 "), true,
