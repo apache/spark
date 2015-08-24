@@ -1099,4 +1099,26 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY c0.a"), Row(1))
     checkAnswer(sql("SELECT b[0].a FROM t ORDER BY c0.a"), Row(1))
   }
+
+  test("SPARK-10169: grouping expressions used as arguments of aggregate functions.") {
+    sqlCtx.sparkContext
+      .parallelize((1 to 1000), 50)
+      .map(i => Tuple1(i))
+      .toDF("i")
+      .registerTempTable("t")
+
+    val query = sqlCtx.sql(
+      """
+        |select i % 10, sum(if(i % 10 = 5, 1, 0)), count(i)
+        |from t
+        |where i % 10 = 5
+        |group by i % 10
+      """.stripMargin)
+
+    checkAnswer(
+      query,
+      Row(5, 100, 100))
+
+    dropTempTable("t")
+  }
 }
