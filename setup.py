@@ -42,7 +42,7 @@ setup(
         'chartkick>=0.4.2',
         'dill>=0.2.2',
         'flask>=0.10.1',
-        'flask-admin>=1.0.9',
+        'flask-admin==1.2.0',
         'flask-cache>=0.13.1',
         'flask-login>=0.2.11',
         'flower>=0.7.3',
