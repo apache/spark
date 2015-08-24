@@ -217,8 +217,8 @@ private[yarn] class YarnAllocator(
    *
    * This must be synchronized because variables read in this method are mutated by other methods.
    *
-   * Returns a list of executor loss reasons discovered by the allocator, which can then be forwarded
-   * to the driver by the calling ApplicationMaster.
+   * Returns a list of executor loss reasons discovered by the allocator, which can then be
+   * forwarded to the driver by the calling ApplicationMaster.
    */
   def allocateResources(): Option[Map[String, ExecutorLossReason]] = synchronized {
     updateResourceRequests()

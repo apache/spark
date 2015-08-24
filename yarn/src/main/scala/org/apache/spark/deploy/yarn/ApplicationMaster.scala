@@ -601,11 +601,12 @@ private[spark] class ApplicationMaster(
         }
         context.reply(true)
 
-      case GetExecutorLossReason(executorId) =>
+      case GetExecutorLossReason(eid) =>
         Option(allocator) match {
           case Some(a) =>
             pendingLossReasonRequests.synchronized {
-              pendingLossReasonRequests.getOrElseUpdate(executorId, new ArrayBuffer[RpcCallContext]) += context
+              pendingLossReasonRequests
+                  .getOrElseUpdate(eid, new ArrayBuffer[RpcCallContext]) += context
             }
           case None =>
             logWarning("Container allocator was not ready to report on executor status.")

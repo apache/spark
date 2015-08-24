@@ -101,9 +101,9 @@ private[spark] abstract class YarnSchedulerBackend(
   private class YarnDriverEndpoint(rpcEnv: RpcEnv, sparkProperties: ArrayBuffer[(String, String)])
       extends DriverEndpoint(rpcEnv, sparkProperties) {
 
-    private val handleDisconnectedExecutorThreadPool =
-      ThreadUtils.newDaemonCachedThreadPool("yarn-driver-handle-lost-executor-thread-pool")
-    implicit val askSchedulerExecutor = ExecutionContext.fromExecutor(handleDisconnectedExecutorThreadPool)
+    private val askSchedulerThreadPool =
+        ThreadUtils.newDaemonCachedThreadPool("yarn-driver-handle-lost-executor-thread-pool")
+    implicit val askSchedulerExecutor = ExecutionContext.fromExecutor(askSchedulerThreadPool)
 
     /**
      * When onDisconnected is received at the driver endpoint, the superclass DriverEndpoint
@@ -118,7 +118,8 @@ private[spark] abstract class YarnSchedulerBackend(
      */
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       addressToExecutorId.get(rpcAddress).foreach({ executorId =>
-        val future = yarnSchedulerEndpoint.ask[ExecutorLossReason](GetExecutorLossReason(executorId), askTimeout)
+        val lossRequest = GetExecutorLossReason(executorId)
+        val future = yarnSchedulerEndpoint.ask[ExecutorLossReason](lossRequest, askTimeout)
         future onSuccess {
           case reason: ExecutorLossReason =>
             driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
