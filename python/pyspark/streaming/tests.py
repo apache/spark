@@ -603,6 +603,10 @@ class CheckpointTests(unittest.TestCase):
     def tearDown(self):
         if self.ssc is not None:
             self.ssc.stop(True)
+        if self.sc is not None:
+            self.sc.stop()
+        if self.cpd is not None:
+            shutil.rmtree(self.cpd)
 
     def test_get_or_create_and_get_active_or_create(self):
         inputd = tempfile.mkdtemp()
@@ -622,8 +626,12 @@ class CheckpointTests(unittest.TestCase):
             self.setupCalled = True
             return ssc
 
-        cpd = tempfile.mkdtemp("test_streaming_cps")
-        self.ssc = StreamingContext.getOrCreate(cpd, setup)
+        # Verify that getOrCreate() calls setup() in absence of checkpoint files
+        self.cpd = tempfile.mkdtemp("test_streaming_cps")
+        self.setupCalled = False
+        self.ssc = StreamingContext.getOrCreate(self.cpd, setup)
+        self.assertFalse(self.setupCalled)
+
         self.ssc.start()
 
         def check_output(n):
@@ -660,31 +668,52 @@ class CheckpointTests(unittest.TestCase):
         self.ssc.stop(True, True)
         time.sleep(1)
         self.setupCalled = False
-        self.ssc = StreamingContext.getOrCreate(cpd, setup)
+        self.ssc = StreamingContext.getOrCreate(self.cpd, setup)
         self.assertFalse(self.setupCalled)
         self.ssc.start()
         check_output(3)
+
+        # Verify that getOrCreate() uses existing SparkContext
+        self.ssc.stop(True, True)
+        time.sleep(1)
+        sc = SparkContext(SparkConf())
+        self.setupCalled = False
+        self.ssc = StreamingContext.getOrCreate(self.cpd, setup)
+        self.assertFalse(self.setupCalled)
+        self.assertTrue(self.ssc.sparkContext == sc)
 
         # Verify the getActiveOrCreate() recovers from checkpoint files
         self.ssc.stop(True, True)
         time.sleep(1)
         self.setupCalled = False
-        self.ssc = StreamingContext.getActiveOrCreate(cpd, setup)
+        self.ssc = StreamingContext.getActiveOrCreate(self.cpd, setup)
         self.assertFalse(self.setupCalled)
         self.ssc.start()
         check_output(4)
 
         # Verify that getActiveOrCreate() returns active context
         self.setupCalled = False
-        self.assertEquals(StreamingContext.getActiveOrCreate(cpd, setup), self.ssc)
+        self.assertEquals(StreamingContext.getActiveOrCreate(self.cpd, setup), self.ssc)
         self.assertFalse(self.setupCalled)
+
+        # Verify that getActiveOrCreate() uses existing SparkContext
+        self.ssc.stop(True, True)
+        time.sleep(1)
+        self.sc = SparkContext(SparkConf())
+        self.setupCalled = False
+        self.ssc = StreamingContext.getActiveOrCreate(self.cpd, setup)
+        self.assertFalse(self.setupCalled)
+        self.assertTrue(self.ssc.sparkContext == sc)
 
         # Verify that getActiveOrCreate() calls setup() in absence of checkpoint files
         self.ssc.stop(True, True)
-        shutil.rmtree(cpd)  # delete checkpoint directory
+        shutil.rmtree(self.cpd)  # delete checkpoint directory
+        time.sleep(1)
         self.setupCalled = False
-        self.ssc = StreamingContext.getActiveOrCreate(cpd, setup)
+        self.ssc = StreamingContext.getActiveOrCreate(self.cpd, setup)
         self.assertTrue(self.setupCalled)
+
+        # Stop everything
         self.ssc.stop(True, True)
 
 
