@@ -17,13 +17,13 @@
 
 package org.apache.spark.mllib.tree.configuration
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 
 /**
  * :: Experimental ::
  * Enum to select the algorithm for the decision tree
- * @since 1.0.0
  */
+@Since("1.0.0")
 @Experimental
 object Algo extends Enumeration {
   type Algo = Value

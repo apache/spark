@@ -20,7 +20,7 @@ package org.apache.spark.mllib.clustering
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaSparkContext._
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.rdd.RDD
@@ -63,9 +63,8 @@ import org.apache.spark.util.random.XORShiftRandom
  * such that at time t + h the discount applied to the data from t is 0.5.
  * The definition remains the same whether the time unit is given
  * as batches or points.
- * @since 1.2.0
- *
  */
+@Since("1.2.0")
 @Experimental
 class StreamingKMeansModel(
     override val clusterCenters: Array[Vector],
@@ -73,8 +72,8 @@ class StreamingKMeansModel(
 
   /**
    * Perform a k-means update on a batch of data.
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def update(data: RDD[Vector], decayFactor: Double, timeUnit: String): StreamingKMeansModel = {
 
     // find nearest cluster to each point
@@ -166,23 +165,23 @@ class StreamingKMeansModel(
  *    .setRandomCenters(5, 100.0)
  *    .trainOn(DStream)
  * }}}
- * @since 1.2.0
  */
+@Since("1.2.0")
 @Experimental
 class StreamingKMeans(
     var k: Int,
     var decayFactor: Double,
     var timeUnit: String) extends Logging with Serializable {
 
-  /** @since 1.2.0 */
+  @Since("1.2.0")
   def this() = this(2, 1.0, StreamingKMeans.BATCHES)
 
   protected var model: StreamingKMeansModel = new StreamingKMeansModel(null, null)
 
   /**
    * Set the number of clusters.
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def setK(k: Int): this.type = {
     this.k = k
     this
@@ -190,8 +189,8 @@ class StreamingKMeans(
 
   /**
    * Set the decay factor directly (for forgetful algorithms).
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def setDecayFactor(a: Double): this.type = {
     this.decayFactor = a
     this
@@ -199,8 +198,8 @@ class StreamingKMeans(
 
   /**
    * Set the half life and time unit ("batches" or "points") for forgetful algorithms.
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def setHalfLife(halfLife: Double, timeUnit: String): this.type = {
     if (timeUnit != StreamingKMeans.BATCHES && timeUnit != StreamingKMeans.POINTS) {
       throw new IllegalArgumentException("Invalid time unit for decay: " + timeUnit)
@@ -213,8 +212,8 @@ class StreamingKMeans(
 
   /**
    * Specify initial centers directly.
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def setInitialCenters(centers: Array[Vector], weights: Array[Double]): this.type = {
     model = new StreamingKMeansModel(centers, weights)
     this
@@ -226,8 +225,8 @@ class StreamingKMeans(
    * @param dim Number of dimensions
    * @param weight Weight for each center
    * @param seed Random seed
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def setRandomCenters(dim: Int, weight: Double, seed: Long = Utils.random.nextLong): this.type = {
     val random = new XORShiftRandom(seed)
     val centers = Array.fill(k)(Vectors.dense(Array.fill(dim)(random.nextGaussian())))
@@ -238,8 +237,8 @@ class StreamingKMeans(
 
   /**
    * Return the latest model.
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def latestModel(): StreamingKMeansModel = {
     model
   }
@@ -251,8 +250,8 @@ class StreamingKMeans(
    * and updates the model using each batch of data from the stream.
    *
    * @param data DStream containing vector data
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def trainOn(data: DStream[Vector]) {
     assertInitialized()
     data.foreachRDD { (rdd, time) =>
@@ -262,8 +261,8 @@ class StreamingKMeans(
 
   /**
    * Java-friendly version of `trainOn`.
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def trainOn(data: JavaDStream[Vector]): Unit = trainOn(data.dstream)
 
   /**
@@ -271,8 +270,8 @@ class StreamingKMeans(
    *
    * @param data DStream containing vector data
    * @return DStream containing predictions
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def predictOn(data: DStream[Vector]): DStream[Int] = {
     assertInitialized()
     data.map(model.predict)
@@ -280,8 +279,8 @@ class StreamingKMeans(
 
   /**
    * Java-friendly version of `predictOn`.
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def predictOn(data: JavaDStream[Vector]): JavaDStream[java.lang.Integer] = {
     JavaDStream.fromDStream(predictOn(data.dstream).asInstanceOf[DStream[java.lang.Integer]])
   }
@@ -292,8 +291,8 @@ class StreamingKMeans(
    * @param data DStream containing (key, feature vector) pairs
    * @tparam K key type
    * @return DStream containing the input keys and the predictions as values
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def predictOnValues[K: ClassTag](data: DStream[(K, Vector)]): DStream[(K, Int)] = {
     assertInitialized()
     data.mapValues(model.predict)
@@ -301,8 +300,8 @@ class StreamingKMeans(
 
   /**
    * Java-friendly version of `predictOnValues`.
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def predictOnValues[K](
       data: JavaPairDStream[K, Vector]): JavaPairDStream[K, java.lang.Integer] = {
     implicit val tag = fakeClassTag[K]

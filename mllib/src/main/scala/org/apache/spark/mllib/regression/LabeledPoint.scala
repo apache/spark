@@ -19,6 +19,7 @@ package org.apache.spark.mllib.regression
 
 import scala.beans.BeanInfo
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.SparkException
@@ -29,8 +30,8 @@ import org.apache.spark.SparkException
  * @param label Label for this data point.
  * @param features List of features for this data point.
  *
- * @since 0.8.0
  */
+@Since("0.8.0")
 @BeanInfo
 case class LabeledPoint(label: Double, features: Vector) {
   override def toString: String = {
@@ -41,15 +42,15 @@ case class LabeledPoint(label: Double, features: Vector) {
 /**
  * Parser for [[org.apache.spark.mllib.regression.LabeledPoint]].
  *
- * @since 1.1.0
  */
+@Since("1.1.0")
 object LabeledPoint {
   /**
    * Parses a string resulted from `LabeledPoint#toString` into
    * an [[org.apache.spark.mllib.regression.LabeledPoint]].
    *
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def parse(s: String): LabeledPoint = {
     if (s.startsWith("(")) {
       NumericParser.parse(s) match {

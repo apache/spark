@@ -25,6 +25,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{Loader, Saveable}
@@ -444,8 +445,8 @@ object NaiveBayes {
    *
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
-   * @since 0.9.0
    */
+  @Since("0.9.0")
   def train(input: RDD[LabeledPoint]): NaiveBayesModel = {
     new NaiveBayes().run(input)
   }
@@ -460,8 +461,8 @@ object NaiveBayes {
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
    * @param lambda The smoothing parameter
-   * @since 0.9.0
    */
+  @Since("0.9.0")
   def train(input: RDD[LabeledPoint], lambda: Double): NaiveBayesModel = {
     new NaiveBayes(lambda, Multinomial).run(input)
   }
@@ -483,8 +484,8 @@ object NaiveBayes {
    *
    * @param modelType The type of NB model to fit from the enumeration NaiveBayesModels, can be
    *              multinomial or bernoulli
-   * @since 0.9.0
    */
+  @Since("0.9.0")
   def train(input: RDD[LabeledPoint], lambda: Double, modelType: String): NaiveBayesModel = {
     require(supportedModelTypes.contains(modelType),
       s"NaiveBayes was created with an unknown modelType: $modelType.")

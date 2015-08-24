@@ -179,6 +179,7 @@ There are now several algorithms in the Pipelines API which are not in the lower
 * [Decision Trees for Classification and Regression](ml-decision-tree.html)
 * [Ensembles](ml-ensembles.html)
 * [Linear methods with elastic net regularization](ml-linear-methods.html)
+* [Multilayer perceptron classifier](ml-ann.html)
 
 # Code Examples
 

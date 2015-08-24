@@ -19,11 +19,18 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.{QueryTest, SQLContext, SaveMode}
+import org.apache.spark.sql.{AnalysisException, QueryTest, SQLContext, SaveMode}
 
 class MultiDatabaseSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
-  private val df = sqlContext.range(10).coalesce(1)
+  private lazy val df = sqlContext.range(10).coalesce(1)
+
+  private def checkTablePath(dbName: String, tableName: String): Unit = {
+    val metastoreTable = hiveContext.catalog.client.getTable(dbName, tableName)
+    val expectedPath = hiveContext.catalog.client.getDatabase(dbName).location + "/" + tableName
+
+    assert(metastoreTable.serdeProperties("path") === expectedPath)
+  }
 
   test(s"saveAsTable() to non-default database - with USE - Overwrite") {
     withTempDatabase { db =>
@@ -35,6 +42,8 @@ class MultiDatabaseSuite extends QueryTest with TestHiveSingleton with SQLTestUt
 
       assert(sqlContext.tableNames(db).contains("t"))
       checkAnswer(sqlContext.table(s"$db.t"), df)
+
+      checkTablePath(db, "t")
     }
   }
 
@@ -43,6 +52,58 @@ class MultiDatabaseSuite extends QueryTest with TestHiveSingleton with SQLTestUt
       df.write.mode(SaveMode.Overwrite).saveAsTable(s"$db.t")
       assert(sqlContext.tableNames(db).contains("t"))
       checkAnswer(sqlContext.table(s"$db.t"), df)
+
+      checkTablePath(db, "t")
+    }
+  }
+
+  test(s"createExternalTable() to non-default database - with USE") {
+    withTempDatabase { db =>
+      activateDatabase(db) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          df.write.format("parquet").mode(SaveMode.Overwrite).save(path)
+
+          sqlContext.createExternalTable("t", path, "parquet")
+          assert(sqlContext.tableNames(db).contains("t"))
+          checkAnswer(sqlContext.table("t"), df)
+
+          sql(
+            s"""
+              |CREATE TABLE t1
+              |USING parquet
+              |OPTIONS (
+              |  path '$path'
+              |)
+            """.stripMargin)
+          assert(sqlContext.tableNames(db).contains("t1"))
+          checkAnswer(sqlContext.table("t1"), df)
+        }
+      }
+    }
+  }
+
+  test(s"createExternalTable() to non-default database - without USE") {
+    withTempDatabase { db =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        df.write.format("parquet").mode(SaveMode.Overwrite).save(path)
+        sqlContext.createExternalTable(s"$db.t", path, "parquet")
+
+        assert(sqlContext.tableNames(db).contains("t"))
+        checkAnswer(sqlContext.table(s"$db.t"), df)
+
+        sql(
+          s"""
+              |CREATE TABLE $db.t1
+              |USING parquet
+              |OPTIONS (
+              |  path '$path'
+              |)
+            """.stripMargin)
+        assert(sqlContext.tableNames(db).contains("t1"))
+        checkAnswer(sqlContext.table(s"$db.t1"), df)
+      }
     }
   }
 
@@ -57,6 +118,8 @@ class MultiDatabaseSuite extends QueryTest with TestHiveSingleton with SQLTestUt
 
       assert(sqlContext.tableNames(db).contains("t"))
       checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
+
+      checkTablePath(db, "t")
     }
   }
 
@@ -66,6 +129,8 @@ class MultiDatabaseSuite extends QueryTest with TestHiveSingleton with SQLTestUt
       df.write.mode(SaveMode.Append).saveAsTable(s"$db.t")
       assert(sqlContext.tableNames(db).contains("t"))
       checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
+
+      checkTablePath(db, "t")
     }
   }
 
@@ -128,7 +193,7 @@ class MultiDatabaseSuite extends QueryTest with TestHiveSingleton with SQLTestUt
     }
   }
 
-  test("Refreshes a table in a non-default database") {
+  test("Refreshes a table in a non-default database - with USE") {
     import org.apache.spark.sql.functions.lit
 
     withTempDatabase { db =>
@@ -149,7 +214,93 @@ class MultiDatabaseSuite extends QueryTest with TestHiveSingleton with SQLTestUt
           sql("ALTER TABLE t ADD PARTITION (p=1)")
           sql("REFRESH TABLE t")
           checkAnswer(sqlContext.table("t"), df.withColumn("p", lit(1)))
+
+          df.write.parquet(s"$path/p=2")
+          sql("ALTER TABLE t ADD PARTITION (p=2)")
+          hiveContext.refreshTable("t")
+          checkAnswer(
+            sqlContext.table("t"),
+            df.withColumn("p", lit(1)).unionAll(df.withColumn("p", lit(2))))
         }
+      }
+    }
+  }
+
+  test("Refreshes a table in a non-default database - without USE") {
+    import org.apache.spark.sql.functions.lit
+
+    withTempDatabase { db =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+
+        sql(
+          s"""CREATE EXTERNAL TABLE $db.t (id BIGINT)
+               |PARTITIONED BY (p INT)
+               |STORED AS PARQUET
+               |LOCATION '$path'
+             """.stripMargin)
+
+        checkAnswer(sqlContext.table(s"$db.t"), sqlContext.emptyDataFrame)
+
+        df.write.parquet(s"$path/p=1")
+        sql(s"ALTER TABLE $db.t ADD PARTITION (p=1)")
+        sql(s"REFRESH TABLE $db.t")
+        checkAnswer(sqlContext.table(s"$db.t"), df.withColumn("p", lit(1)))
+
+        df.write.parquet(s"$path/p=2")
+        sql(s"ALTER TABLE $db.t ADD PARTITION (p=2)")
+        hiveContext.refreshTable(s"$db.t")
+        checkAnswer(
+          sqlContext.table(s"$db.t"),
+          df.withColumn("p", lit(1)).unionAll(df.withColumn("p", lit(2))))
+      }
+    }
+  }
+
+  test("invalid database name and table names") {
+    {
+      val message = intercept[AnalysisException] {
+        df.write.format("parquet").saveAsTable("`d:b`.`t:a`")
+      }.getMessage
+      assert(message.contains("is not a valid name for metastore"))
+    }
+
+    {
+      val message = intercept[AnalysisException] {
+        df.write.format("parquet").saveAsTable("`d:b`.`table`")
+      }.getMessage
+      assert(message.contains("is not a valid name for metastore"))
+    }
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      {
+        val message = intercept[AnalysisException] {
+          sql(
+            s"""
+            |CREATE TABLE `d:b`.`t:a` (a int)
+            |USING parquet
+            |OPTIONS (
+            |  path '$path'
+            |)
+            """.stripMargin)
+        }.getMessage
+        assert(message.contains("is not a valid name for metastore"))
+      }
+
+      {
+        val message = intercept[AnalysisException] {
+          sql(
+            s"""
+              |CREATE TABLE `d:b`.`table` (a int)
+              |USING parquet
+              |OPTIONS (
+              |  path '$path'
+              |)
+              """.stripMargin)
+        }.getMessage
+        assert(message.contains("is not a valid name for metastore"))
       }
     }
   }

@@ -25,11 +25,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
-import org.apache.parquet.schema.OriginalType.{LIST, INT_32, UTF8}
+import org.apache.parquet.schema.OriginalType.{INT_32, LIST, UTF8}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.DOUBLE
 import org.apache.parquet.schema.Type.Repetition
 import org.apache.parquet.schema.{GroupType, MessageType, PrimitiveType, Type}
 
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -145,7 +146,16 @@ private[parquet] class CatalystRowConverter(
     parquetType: GroupType,
     catalystType: StructType,
     updater: ParentContainerUpdater)
-  extends CatalystGroupConverter(updater) {
+  extends CatalystGroupConverter(updater) with Logging {
+
+  logDebug(
+    s"""Building row converter for the following schema:
+       |
+       |Parquet form:
+       |$parquetType
+       |Catalyst form:
+       |${catalystType.prettyJson}
+     """.stripMargin)
 
   /**
    * Updater used together with field converters within a [[CatalystRowConverter]].  It propagates
@@ -464,9 +474,15 @@ private[parquet] class CatalystRowConverter(
 
       override def getConverter(fieldIndex: Int): Converter = converter
 
-      override def end(): Unit = currentArray += currentElement
+      override def end(): Unit = {
+        converter.updater.end()
+        currentArray += currentElement
+      }
 
-      override def start(): Unit = currentElement = null
+      override def start(): Unit = {
+        converter.updater.start()
+        currentElement = null
+      }
     }
   }
 

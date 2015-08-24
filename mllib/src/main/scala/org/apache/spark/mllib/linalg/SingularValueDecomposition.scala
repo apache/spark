@@ -17,13 +17,13 @@
 
 package org.apache.spark.mllib.linalg
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 
 /**
  * :: Experimental ::
  * Represents singular value decomposition (SVD) factors.
- * @since 1.0.0
  */
+@Since("1.0.0")
 @Experimental
 case class SingularValueDecomposition[UType, VType](U: UType, s: Vector, V: VType)
 

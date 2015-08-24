@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.tree
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.impl.PeriodicRDDCheckpointer
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -48,8 +48,8 @@ import org.apache.spark.storage.StorageLevel
  *       for other loss functions.
  *
  * @param boostingStrategy Parameters for the gradient boosting algorithm.
- * @since 1.2.0
  */
+@Since("1.2.0")
 @Experimental
 class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
   extends Serializable with Logging {
@@ -58,8 +58,8 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
    * Method to train a gradient boosting model
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @return a gradient boosted trees model that can be used for prediction
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def run(input: RDD[LabeledPoint]): GradientBoostedTreesModel = {
     val algo = boostingStrategy.treeStrategy.algo
     algo match {
@@ -76,8 +76,8 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
 
   /**
    * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees!#run]].
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def run(input: JavaRDD[LabeledPoint]): GradientBoostedTreesModel = {
     run(input.rdd)
   }
@@ -91,8 +91,8 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
    *                        E.g., these two datasets could be created from an original dataset
    *                        by using [[org.apache.spark.rdd.RDD.randomSplit()]]
    * @return a gradient boosted trees model that can be used for prediction
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def runWithValidation(
       input: RDD[LabeledPoint],
       validationInput: RDD[LabeledPoint]): GradientBoostedTreesModel = {
@@ -115,8 +115,8 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
 
   /**
    * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees!#runWithValidation]].
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def runWithValidation(
       input: JavaRDD[LabeledPoint],
       validationInput: JavaRDD[LabeledPoint]): GradientBoostedTreesModel = {
@@ -124,9 +124,7 @@ class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
   }
 }
 
-/**
- * @since 1.2.0
- */
+@Since("1.2.0")
 object GradientBoostedTrees extends Logging {
 
   /**
@@ -137,8 +135,8 @@ object GradientBoostedTrees extends Logging {
    *              For regression, labels are real numbers.
    * @param boostingStrategy Configuration options for the boosting algorithm.
    * @return a gradient boosted trees model that can be used for prediction
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def train(
       input: RDD[LabeledPoint],
       boostingStrategy: BoostingStrategy): GradientBoostedTreesModel = {
@@ -147,8 +145,8 @@ object GradientBoostedTrees extends Logging {
 
   /**
    * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees$#train]]
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def train(
       input: JavaRDD[LabeledPoint],
       boostingStrategy: BoostingStrategy): GradientBoostedTreesModel = {

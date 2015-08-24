@@ -43,6 +43,13 @@ private[sql] abstract class ParquetCompatibilityTest extends QueryTest with Parq
     val footers = ParquetFileReader.readAllFootersInParallel(configuration, parquetFiles, true)
     footers.head.getParquetMetadata.getFileMetaData.getSchema
   }
+
+  protected def logParquetSchema(path: String): Unit = {
+    logInfo(
+      s"""Schema of the Parquet file written by parquet-avro:
+         |${readParquetSchema(path)}
+       """.stripMargin)
+  }
 }
 
 object ParquetCompatibilityTest {
