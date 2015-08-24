@@ -110,10 +110,10 @@ private[ml] trait HasPredictionCol extends Params {
 private[ml] trait HasWeightCol extends Params {
 
   /**
-   * Param for whether to over-/undersamples each of training sample according to the given weights in `sampleWeightCol`. If empty,  all samples are supposed to have weight one.
+   * Param for whether to over-/undersamples each of training sample according to the given weights in `weightCol`. If empty,  all samples are supposed to have weight one.
    * @group param
    */
-  final val weightCol: Param[String] = new Param[String](this, "weightCol", "whether to over-/undersamples each of training sample according to the given weights in `sampleWeightCol`. If empty,  all samples are supposed to have weight one")
+  final val weightCol: Param[String] = new Param[String](this, "weightCol", "whether to over-/undersamples each of training sample according to the given weights in `weightCol`. If empty,  all samples are supposed to have weight one")
 
   setDefault(weightCol, "")
 
@@ -351,10 +351,10 @@ private[ml] trait HasTol extends Params {
 private[ml] trait HasStepSize extends Params {
 
   /**
-   * Param for Step size to be used for each iteration of optimization.
+   * Param for Step size to be used for each iteration of optimization..
    * @group param
    */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization")
+  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization.")
 
   /** @group getParam */
   final def getStepSize: Double = $(stepSize)
