@@ -66,6 +66,9 @@ class Evaluator(Params):
         else:
             raise ValueError("Params must be a param map but got %s." % type(params))
 
+    def isLargerBetter(self):
+        return True
+
 
 @inherit_doc
 class JavaEvaluator(Evaluator, JavaWrapper):
@@ -84,6 +87,9 @@ class JavaEvaluator(Evaluator, JavaWrapper):
         """
         self._transfer_params_to_java()
         return self._java_obj.evaluate(dataset._jdf)
+
+    def isLargerBetter(self):
+        return self._java_obj.isLargerBetter()
 
 
 @inherit_doc
