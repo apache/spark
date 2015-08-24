@@ -220,7 +220,7 @@ private[yarn] class YarnAllocator(
    * Returns a list of executor loss reasons discovered by the allocator, which can then be
    * forwarded to the driver by the calling ApplicationMaster.
    */
-  def allocateResources(): Option[Map[String, ExecutorLossReason]] = synchronized {
+  def allocateResources(): Map[String, ExecutorLossReason] = synchronized {
     updateResourceRequests()
 
     val progressIndicator = 0.1f
@@ -248,10 +248,10 @@ private[yarn] class YarnAllocator(
 
       logDebug("Finished processing %d completed containers. Current running executor count: %d."
         .format(completedContainers.size, numExecutorsRunning))
-      Some(discoveredLossReasons)
+      discoveredLossReasons
     } else {
       // No completed containers, so no reasons to report
-      None
+      new HashMap[String, ExecutorLossReason]
     }
   }
 

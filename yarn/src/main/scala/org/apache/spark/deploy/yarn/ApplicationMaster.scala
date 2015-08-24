@@ -354,7 +354,8 @@ private[spark] class ApplicationMaster(
                 "Max number of executor failures reached")
             } else {
               logDebug("Sending progress")
-              allocator.allocateResources().foreach { discoveredLossReasons =>
+              val discoveredLossReasons = allocator.allocateResources()
+              if (!discoveredLossReasons.isEmpty) {
                 pendingLossReasonRequests.synchronized {
                   discoveredLossReasons.foreach { case (execId, lossReason) =>
                     pendingLossReasonRequests.remove(execId).foreach { pendingRequests =>
