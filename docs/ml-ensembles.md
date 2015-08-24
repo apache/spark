@@ -599,7 +599,7 @@ val featureIndexer = new VectorIndexer()
 val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3))
 
 // Train a GBT model.
-val rf = new GBTClassifier()
+val gbt = new GBTClassifier()
   .setLabelCol("indexedLabel")
   .setFeaturesCol("indexedFeatures")
   .setMaxIter(10)
@@ -612,7 +612,7 @@ val labelConverter = new IndexToString()
 
 // Chain indexers and GBT in a Pipeline
 val pipeline = new Pipeline()
-  .setStages(Array(labelIndexer, featureIndexer, rf, labelConverter))
+  .setStages(Array(labelIndexer, featureIndexer, gbt, labelConverter))
 
 // Train model.  This also runs the indexers.
 val model = pipeline.fit(trainingData)
@@ -677,7 +677,7 @@ DataFrame trainingData = splits[0];
 DataFrame testData = splits[1];
 
 // Train a GBT model.
-GBTClassifier rf = new GBTClassifier()
+GBTClassifier gbt = new GBTClassifier()
   .setLabelCol("indexedLabel")
   .setFeaturesCol("indexedFeatures")
   .setMaxIter(10);
@@ -690,7 +690,7 @@ IndexToString labelConverter = new IndexToString()
 
 // Chain indexers and GBT in a Pipeline
 Pipeline pipeline = new Pipeline()
-  .setStages(new PipelineStage[]{labelIndexer, featureIndexer, rf, labelConverter});
+  .setStages(new PipelineStage[]{labelIndexer, featureIndexer, gbt, labelConverter});
 
 // Train model.  This also runs the indexers.
 PipelineModel model = pipeline.fit(trainingData);
@@ -741,10 +741,10 @@ featureIndexer =\
 (trainingData, testData) = data.randomSplit([0.7, 0.3])
 
 # Train a GBT model.
-rf = GBTClassifier(labelCol="indexedLabel", featuresCol="indexedFeatures", maxIter=10)
+gbt = GBTClassifier(labelCol="indexedLabel", featuresCol="indexedFeatures", maxIter=10)
 
 # Chain indexers and GBT in a Pipeline
-pipeline = Pipeline(stages=[labelIndexer, featureIndexer, rf])
+pipeline = Pipeline(stages=[labelIndexer, featureIndexer, gbt])
 
 # Train model.  This also runs the indexers.
 model = pipeline.fit(trainingData)
@@ -797,14 +797,14 @@ val featureIndexer = new VectorIndexer()
 val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3))
 
 // Train a GBT model.
-val rf = new GBTRegressor()
+val gbt = new GBTRegressor()
   .setLabelCol("label")
   .setFeaturesCol("indexedFeatures")
   .setMaxIter(10)
 
 // Chain indexer and GBT in a Pipeline
 val pipeline = new Pipeline()
-  .setStages(Array(featureIndexer, rf))
+  .setStages(Array(featureIndexer, gbt))
 
 // Train model.  This also runs the indexer.
 val model = pipeline.fit(trainingData)
@@ -864,14 +864,14 @@ DataFrame trainingData = splits[0];
 DataFrame testData = splits[1];
 
 // Train a GBT model.
-GBTRegressor rf = new GBTRegressor()
+GBTRegressor gbt = new GBTRegressor()
   .setLabelCol("label")
   .setFeaturesCol("indexedFeatures")
   .setMaxIter(10);
 
 // Chain indexer and GBT in a Pipeline
 Pipeline pipeline = new Pipeline()
-  .setStages(new PipelineStage[]{featureIndexer, rf});
+  .setStages(new PipelineStage[]{featureIndexer, gbt});
 
 // Train model.  This also runs the indexer.
 PipelineModel model = pipeline.fit(trainingData);
@@ -919,10 +919,10 @@ featureIndexer =\
 (trainingData, testData) = data.randomSplit([0.7, 0.3])
 
 # Train a GBT model.
-rf = GBTRegressor(featuresCol="indexedFeatures", maxIter=10)
+gbt = GBTRegressor(featuresCol="indexedFeatures", maxIter=10)
 
 # Chain indexer and GBT in a Pipeline
-pipeline = Pipeline(stages=[featureIndexer, rf])
+pipeline = Pipeline(stages=[featureIndexer, gbt])
 
 # Train model.  This also runs the indexer.
 model = pipeline.fit(trainingData)
