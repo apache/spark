@@ -244,7 +244,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           scheduler.executorLost(executorId, reason)
           listenerBus.post(
             SparkListenerExecutorRemoved(System.currentTimeMillis(), executorId, reason.toString))
-        case None => logError(s"Asked to remove non-existent executor $executorId")
+        case None => logInfo(s"Asked to remove non-existent executor $executorId")
       }
     }
 
