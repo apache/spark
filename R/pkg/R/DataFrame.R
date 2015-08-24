@@ -922,8 +922,10 @@ setMethod("$<-", signature(x = "DataFrame"),
             x
           })
 
+setClassUnion("numericOrcharacter", c("numeric", "character"))
+
 #' @rdname select
-setMethod("[[", signature(x = "DataFrame"),
+setMethod("[[", signature(x = "DataFrame", i = "numericOrcharacter"),
           function(x, i) {
             if (is.numeric(i)) {
               cols <- columns(x)
@@ -946,10 +948,16 @@ setMethod("[", signature(x = "DataFrame", i = "missing"),
           })
 
 #' @rdname select
-setMethod("[", signature(x = "DataFrame"),
+setMethod("[", signature(x = "DataFrame", i = "Column"),
           function(x, i, j, ...) {
+            # It could handle i as "character" but it seems confusing and not required
+            # https://stat.ethz.ch/R-manual/R-devel/library/base/html/Extract.data.frame.html
             filtered <- filter(x, i)
-            filtered[, j]
+            if (!missing(j)) {
+              filtered[, j]
+            } else {
+              filtered
+            }
           })
 
 #' Select
@@ -974,7 +982,7 @@ setMethod("[", signature(x = "DataFrame"),
 #'   # Similar to R data frames columns can also be selected using `$`
 #'   df$age
 #'   # It can also be subset on rows and Columns
-#'   df[df$name == "Smith", 2]
+#'   df[df$name == "Smith", c(1,2)]
 #' }
 setMethod("select", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
