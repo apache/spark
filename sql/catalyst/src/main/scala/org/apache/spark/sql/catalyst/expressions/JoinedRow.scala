@@ -121,6 +121,8 @@ class JoinedRow extends InternalRow {
     }
   }
 
+  override def allNull: Boolean = row1.allNull && row2.allNull
+
   override def anyNull: Boolean = row1.anyNull || row2.anyNull
 
   override def copy(): InternalRow = {

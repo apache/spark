@@ -451,6 +451,10 @@ private class SortMergeFullJoinScanner(
     }
   }
 
+  private def canCompare: Boolean = {
+    (leftAdvanced && rightAdvanced ) && (!leftRowKey.allNull || !rightRowKey.allNull)
+  }
+
   // --- Public methods --------------------------------------------------------------------------
 
   def getLeftRow(): InternalRow = leftRow
@@ -480,7 +484,7 @@ private class SortMergeFullJoinScanner(
     }
 
     // Both left and right iterators have rows
-    latestStatus = if (leftAdvanced && rightAdvanced) {
+    latestStatus = if (canCompare) {
       // No buffered matching rows
       val comp = keyOrdering.compare(leftRowKey, rightRowKey)
       if (comp == 0) {

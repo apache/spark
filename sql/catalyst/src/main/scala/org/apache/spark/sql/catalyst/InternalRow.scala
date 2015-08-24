@@ -39,6 +39,9 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
   /** Returns true if there are any NULL values in this row. */
   def anyNull: Boolean
 
+  /** Returns true if only NULL values in this row. */
+  def allNull: Boolean
+
   /* ---------------------- utility methods for Scala ---------------------- */
 
   /**
