@@ -13,6 +13,7 @@ import os
 import socket
 import sys
 
+from flask._compat import PY2
 from flask import (
     Flask, url_for, Markup, Blueprint, redirect,
     flash, Response, render_template)
@@ -799,6 +800,7 @@ class Airflow(BaseView):
                     log += "Failed to fetch log file.".format(**locals())
             session.commit()
             session.close()
+        log = log.decode('utf-8') if PY2 else log
 
         title = "Log"
 
