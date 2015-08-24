@@ -582,12 +582,12 @@ class Analyzer(
             val evaluatedOrderings: Seq[SortOrder] = sortOrder.zip(resolvedAggregateOrdering).map {
               case (order, evaluated) => order.copy(child = evaluated.toAttribute)
             }
-            val aggExprsWithHaving: Seq[NamedExpression] =
+            val aggExprsWithOrdering: Seq[NamedExpression] =
               resolvedAggregateOrdering ++ originalAggExprs
 
             Project(aggregate.output,
               Sort(evaluatedOrderings, global,
-                aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
+                aggregate.copy(aggregateExpressions = aggExprsWithOrdering)))
           } else {
             sort
           }
