@@ -81,6 +81,7 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
       case StringContains("c", v) => _.contains(v)
       case EqualTo("c", v: String) => _.equals(v)
       case EqualTo("c", v: UTF8String) => sys.error("UTF8String should not appear in filters")
+      case In("c", values) => (s: String) => values.map(_.asInstanceOf[String]).toSet.contains(s)
       case _ => (c: String) => true
     }
 
@@ -241,6 +242,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
   testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%Ee%'", 0)
 
   testPushDown("SELECT c FROM oneToTenFiltered WHERE c = 'aaaaaAAAAA'", 1)
+  testPushDown("SELECT c FROM oneToTenFiltered WHERE c IN ('aaaaaAAAAA', 'foo')", 1)
 
   def testPushDown(sqlString: String, expectedCount: Int): Unit = {
     test(s"PushDown Returns $expectedCount: $sqlString") {
