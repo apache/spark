@@ -49,6 +49,7 @@ class DataTypeParserSuite extends SparkFunSuite {
   checkDataType("timestamp", TimestampType)
   checkDataType("string", StringType)
   checkDataType("varchAr(20)", StringType)
+  checkDataType("ChAr(10)", StringType)
   checkDataType("BINARY", BinaryType)
 
   checkDataType("array<doublE>", ArrayType(DoubleType, true))
@@ -62,6 +63,10 @@ class DataTypeParserSuite extends SparkFunSuite {
   checkDataType(
     "MAP<int, struct<varchar:string>>",
     MapType(IntegerType, StructType(StructField("varchar", StringType, true) :: Nil), true)
+  )
+  checkDataType(
+    "MAP<int, struct<char:string>>",
+    MapType(IntegerType, StructType(StructField("char", StringType, true) :: Nil), true)
   )
 
   checkDataType(
