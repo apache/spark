@@ -205,7 +205,7 @@ class SQLContext(
   }
 
   @transient
-  protected[sql] lazy val defaultSession = createSession()
+  protected[sql] lazy val defaultSession = openSession()
 
   protected[sql] def dialectClassName = if (conf.dialect == "sql") {
     classOf[DefaultParserDialect].getCanonicalName
