@@ -575,7 +575,8 @@ class Analyzer(
           val requiredAttributes = resolvedAggregateOrdering.map(_.references).reduce(_ ++ _)
           val missingAttributes = (requiredAttributes -- aggregate.outputSet).nonEmpty
 
-          // If resolution was successful and we see the filter has an aggregate in it, add it to
+          // If resolution was successful and we see the ordering either has an aggregate in it or
+          // it is missing something that is projected away by the aggregate, add the ordering
           // the original aggregate operator.
           if (resolvedOperator.resolved && (needsAggregate || missingAttributes)) {
             val evaluatedOrderings: Seq[SortOrder] = sortOrder.zip(resolvedAggregateOrdering).map {
