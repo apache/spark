@@ -67,7 +67,7 @@ case class SortMergeOuterJoin(
     // For left and right outer joins, the output is partitioned by the streamed input's join keys.
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning
-    case FullOuter => PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
+    case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
     case x =>
       throw new IllegalArgumentException(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
@@ -386,11 +386,13 @@ private class SortMergeFullJoinScanner(
 
     do {
       leftMatches += leftRow.copy()
-    } while (advancedLeft() && (keyOrdering.compare(leftRowKey, matchingKey) == 0))
+      leftAdvanced = advancedLeft()
+    } while (leftAdvanced && (keyOrdering.compare(leftRowKey, matchingKey) == 0))
 
     do {
       rightMatches += rightRow.copy()
-    } while (advancedRight() && (keyOrdering.compare(matchingKey, rightRowKey) == 0))
+      rightAdvanced = advancedRight()
+    } while (rightAdvanced && (keyOrdering.compare(matchingKey, rightRowKey) == 0))
 
     leftIndex = 0
     rightIndex = 0
