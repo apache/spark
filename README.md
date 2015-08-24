@@ -45,3 +45,4 @@ Currently **officialy** using Airflow:
 * [Airflow Google Group (mailing list / forum)](https://groups.google.com/forum/#!forum/airbnb_airflow) 
 * [Airbnb Blog Post about Airflow](http://nerds.airbnb.com/airflow/)
 * [Hadoop Summit Airflow Video](https://www.youtube.com/watch?v=oYp49mBwH60)
+* [Docker Airflow (externally maintained)](https://github.com/puckel/docker-airflow)
