@@ -1119,7 +1119,7 @@ Note that since zero values will probably be transformed to non-zero values, out
 The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [0, 1].
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 More details can be found in the API docs for
 [MinMaxScaler](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScaler) and
 [MinMaxScalerModel](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScalerModel).
@@ -1141,10 +1141,10 @@ val scaledData = scalerModel.transform(dataFrame)
 {% endhighlight %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
 More details can be found in the API docs for
-[MinMaxScaler](api/java/index.html#org.apache.spark.ml.feature.MinMaxScaler) and
-[MinMaxScalerModel](api/java/index.html#org.apache.spark.ml.feature.MinMaxScalerModel).
+[MinMaxScaler](api/java/org/apache/spark/ml/feature/MinMaxScaler.html) and
+[MinMaxScalerModel](api/java/org/apache/spark/ml/feature/MinMaxScalerModel.html).
 {% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.MinMaxScaler;
