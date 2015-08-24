@@ -151,7 +151,10 @@ object PartialAggregation {
 
         // Replace aggregations with a new expression that computes the result from the already
         // computed partial evaluations and grouping values.
-        val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
+        // transformDown is needed at here because we want to match aggregate function first.
+        // Otherwise, if a grouping expression is used as an argument of an aggregate function,
+        // we will match grouping expression first and have a wrong plan.
+        val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformDown {
           case e: Expression if partialEvaluations.contains(new TreeNodeRef(e)) =>
             partialEvaluations(new TreeNodeRef(e)).finalEvaluation
 
@@ -159,7 +162,13 @@ object PartialAggregation {
             // Should trim aliases around `GetField`s. These aliases are introduced while
             // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
             // (Should we just turn `GetField` into a `NamedExpression`?)
-            val trimmed = e.transform { case Alias(g: ExtractValue, _) => g }
+            def trimAliases(e: Expression): Expression =
+              e.transform { case Alias(g: ExtractValue, _) => g }
+            val trimmed = e match {
+              // Don't trim the top level Alias.
+              case Alias(child, name) => Alias(trimAliases(child), name)()
+              case _ => trimAliases(e)
+            }
             namedGroupingExpressions
               .find { case (k, v) => k semanticEquals trimmed }
               .map(_._2.toAttribute)
