@@ -310,7 +310,13 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     setViewAcls(Set[String](defaultUser), allowedUsers)
   }
 
-  def getViewAcls: String = viewAcls.mkString(",")
+  def getViewAcls: String = {
+    if (viewAcls.contains("*")) {
+      "*"
+    } else {
+      viewAcls.mkString(",")
+    }
+  }
 
   /**
    * Admin acls should be set before the view or modify acls.  If you modify the admin
@@ -321,7 +327,13 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     logInfo("Changing modify acls to: " + modifyAcls.mkString(","))
   }
 
-  def getModifyAcls: String = modifyAcls.mkString(",")
+  def getModifyAcls: String = {
+    if (modifyAcls.contains("*")) {
+      "*"
+    } else {
+      modifyAcls.mkString(",")
+    }
+  }
 
   /**
    * Admin acls should be set before the view or modify acls.  If you modify the admin
