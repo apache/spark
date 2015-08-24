@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.hive.MetastoreRelation
 import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 
 import org.apache.spark.{Logging, SparkFunSuite}
@@ -28,6 +30,8 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.DescribeCommand
 import org.apache.spark.sql.hive.test.TestHive
+
+import scala.util.control.NonFatal
 
 /**
  * Allows the creations of tests that execute the same query against both hive
@@ -386,11 +390,48 @@ abstract class HiveComparisonTest
                 hiveCacheFiles.foreach(_.delete())
               }
 
+
+              val computedTablesMessages = try {
+                TestHive.reset()
+                val executions = queryList.map(new TestHive.QueryExecution(_))
+                executions.foreach(_.toRdd)
+                val tablesRead = executions.flatMap(_.executedPlan.collect {
+                  case ts: HiveTableScan => ts.relation.tableName
+                }).toSet
+
+                val tablesGenerated = queryList.zip(executions).flatMap{
+                  case (q, e) => e.executedPlan.collect {
+                    case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>
+                      (q, e, i)
+                  }
+                }
+
+                println(tablesRead)
+                println(tablesGenerated.map(_._3.table))
+
+                tablesGenerated.map { case (hiveql, execution, insert) =>
+                  s"""
+                     |
+                     |=== Generated Table ===
+                     |$hiveql
+                     |$execution
+                     |== Results ==
+                     |${insert.child.execute().collect().mkString("\n")}
+                   """.stripMargin
+                }
+
+              } catch {
+                case NonFatal(e) =>
+                  e.printStackTrace()
+                  s"Couldn't compute tables: $e"
+              }
+
               val errorMessage =
                 s"""
                   |Results do not match for $testCaseName:
                   |$hiveQuery\n${hiveQuery.analyzed.output.map(_.name).mkString("\t")}
                   |$resultComparison
+                  |$computedTablesMessages
                 """.stripMargin
 
               stringToFile(new File(wrongDirectory, testCaseName), errorMessage + consoleTestCase)
