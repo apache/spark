@@ -80,6 +80,11 @@
       <version>${fasterxml.jackson.version}</version>
     </dependency>
     <dependency>
+      <groupId>org.scalaz</groupId>
+      <artifactId>scalaz-core_${scala.binary.version}</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <scope>test</scope>

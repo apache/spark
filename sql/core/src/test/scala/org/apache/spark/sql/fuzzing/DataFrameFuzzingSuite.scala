@@ -17,92 +17,19 @@
 
 package org.apache.spark.sql.fuzzing
 
-import java.lang.reflect.InvocationTargetException
-
-import scala.reflect.runtime.{universe => ru}
 import scala.util.Random
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-
-trait DataFrameTransformation extends Function[DataFrame, DataFrame] {
-
-}
-
-case class CallTransform(
-    method: ru.MethodSymbol,
-    args: Seq[Any])(
-    implicit runtimeMirror: ru.Mirror) extends DataFrameTransformation {
-  override def apply(df: DataFrame): DataFrame = {
-    val reflectedMethod: ru.MethodMirror = runtimeMirror.reflect(df).reflectMethod(method)
-    try {
-      println(s"    Applying method $reflectedMethod with args $args")
-      val x = reflectedMethod.apply(args: _*).asInstanceOf[DataFrame]
-      println(s"    Applied method $reflectedMethod with args $args")
-      x
-    } catch {
-      case e: InvocationTargetException => throw e.getCause
-    }
-  }
-}
-
-
-/**
- * This test suite generates random data frames, then applies random sequences of operations to
- * them in order to construct random queries. We don't have a source of truth for these random
- * queries but nevertheless they are still useful for testing that we don't crash in bad ways.
- */
-class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
-
-  val tempDir = Utils.createTempDir()
-
-  private var sqlContext: SQLContext = _
-  private var dataGenerator: RandomDataFrameGenerator = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sqlContext = new SQLContext(sc)
-    dataGenerator = new RandomDataFrameGenerator(123, sqlContext)
-    sqlContext.conf.setConf(SQLConf.SHUFFLE_PARTITIONS, 10)
-  }
+object DataFrameFuzzingUtils {
 
   def randomChoice[T](values: Seq[T]): T = {
     values(Random.nextInt(values.length))
-  }
-
-  implicit val m: ru.Mirror = ru.runtimeMirror(this.getClass.getClassLoader)
-
-  val whitelistedParameterTypes = Set(
-    m.universe.typeOf[DataFrame],
-    m.universe.typeOf[Seq[Column]],
-    m.universe.typeOf[Column],
-    m.universe.typeOf[String],
-    m.universe.typeOf[Seq[String]]
-  )
-
-  val dataFrameTransformations: Seq[ru.MethodSymbol] = {
-    val dfType = m.universe.typeOf[DataFrame]
-    dfType.members
-      .filter(_.isPublic)
-      .filter(_.isMethod)
-      .map(_.asMethod)
-      .filter(_.returnType =:= dfType)
-      .filterNot(_.isConstructor)
-      .filter { m =>
-        m.paramss.flatten.forall { p =>
-          whitelistedParameterTypes.exists { t => p.typeSignature <:< t }
-        }
-      }
-      .filterNot(_.name.toString == "drop") // since this can lead to a DataFrame with no columns
-      .filterNot(_.name.toString == "describe") // since we cannot run all queries on describe output
-      .filterNot(_.name.toString == "dropDuplicates")
-      .toSeq
   }
 
   /**
@@ -135,70 +62,36 @@ class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
       Some(randomChoice(candidateColumns)._1)
     }
   }
+}
 
-  class NoDataGeneratorException extends Exception
 
-  def getParamValues(
-      df: DataFrame,
-      method: ru.MethodSymbol,
-      typeConstraint: DataType => Boolean = _ => true): Seq[Any] = {
-    val params = method.paramss.flatten // We don't use multiple parameter lists
-    def randColName(): String =
-      getRandomColumnName(df, typeConstraint).getOrElse(throw new NoDataGeneratorException)
-    params.map { p =>
-      val t = p.typeSignature
-      if (t =:= ru.typeOf[DataFrame]) {
-        randomChoice(Seq(
-          df,
-          //tryToExecute(applyRandomTransformationToDataFrame(df)),
-          dataGenerator.randomDataFrame(numCols = Random.nextInt(4) + 1, numRows = 100)
-        )) // ++ Try(applyRandomTransformationToDataFrame(df)).toOption.toSeq)
-      } else if (t =:= ru.typeOf[Column]) {
-        df.col(randColName())
-      } else if (t =:= ru.typeOf[String]) {
-        if (p.name == "joinType") {
-          randomChoice(JoinType.supportedJoinTypes)
-        } else {
-          randColName()
-        }
-      } else if (t <:< ru.typeOf[Seq[Column]]) {
-        Seq.fill(Random.nextInt(2) + 1)(df.col(randColName()))
-      } else if (t <:< ru.typeOf[Seq[String]]) {
-        Seq.fill(Random.nextInt(2) + 1)(randColName())
-      } else {
-        sys.error("ERROR!")
-      }
-    }
-  }
+/**
+ * This test suite generates random data frames, then applies random sequences of operations to
+ * them in order to construct random queries. We don't have a source of truth for these random
+ * queries but nevertheless they are still useful for testing that we don't crash in bad ways.
+ */
+class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
 
-  def applyRandomTransformationToDataFrame(df: DataFrame): DataFrame = {
-    val method: ru.MethodSymbol = randomChoice(dataFrameTransformations)
-    try {
-      try {
-        CallTransform(method, getParamValues(df, method)).apply(df)
-      } catch {
-        case NonFatal(e) =>
-          println(df.queryExecution)
-          throw e
-      }
-    } catch {
-      case e: AnalysisException if e.getMessage.contains("is not a boolean") =>
-        CallTransform(method, getParamValues(df, method, _ == BooleanType)).apply(df)
-      case e: AnalysisException if e.getMessage.contains("is not supported for columns of type") =>
-        CallTransform(method, getParamValues(df, method, _.isInstanceOf[AtomicType])).apply(df)
-    }
+  val tempDir = Utils.createTempDir()
+
+  private var sqlContext: SQLContext = _
+  private var dataGenerator: RandomDataFrameGenerator = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    sqlContext = new SQLContext(sc)
+    dataGenerator = new RandomDataFrameGenerator(123, sqlContext)
+    sqlContext.conf.setConf(SQLConf.SHUFFLE_PARTITIONS, 10)
   }
 
   def tryToExecute(df: DataFrame): DataFrame = {
     try {
-      println("Before executing:")
-      df.explain(true)
       df.rdd.count()
       df
     } catch {
       case NonFatal(e) =>
         println(df.queryExecution)
-        throw new Exception(e)
+        throw e
     }
   }
 
@@ -220,26 +113,37 @@ class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
     "Cannot resolve column name" // TODO: only ignore for join?
   )
 
+  def getRandomTransformation(df: DataFrame): DataFrameTransformation = {
+    (1 to 1000).iterator.map(_ => ReflectiveFuzzing.getTransformation(df)).flatten.next()
+  }
+
+  def applyRandomTransform(df: DataFrame): DataFrame = {
+    val tf = getRandomTransformation(df)
+    println("    " + tf)
+    tf.apply(df)
+  }
 
   test("fuzz test") {
-      for (_ <- 1 to 1000) {
-        println("-" * 80)
+      for (i <- 1 to 1000) {
+        println(s"Iteration $i")
         try {
-          val df = dataGenerator.randomDataFrame(
+          var df = dataGenerator.randomDataFrame(
             numCols = Random.nextInt(2) + 1,
             numRows = 20,
             allowComplexTypes = true)
-          val df1 = tryToExecute(applyRandomTransformationToDataFrame(df))
-          val df2 = tryToExecute(applyRandomTransformationToDataFrame(df1))
+          var depth = 3
+          while (depth > 0) {
+            df = tryToExecute(applyRandomTransform(df))
+            depth -= 1
+          }
         } catch {
-          case e: NoDataGeneratorException =>
-            println("skipped due to lack of data generator")
           case e: UnresolvedException[_] =>
-            println("skipped due to unresolved")
+//            println("skipped due to unresolved")
           case e: Exception
             if ignoredAnalysisExceptionMessages.exists {
               m => Option(e.getMessage).getOrElse("").toLowerCase.contains(m.toLowerCase)
-            } => println("Skipped due to expected AnalysisException")
+            } =>
+//            println("Skipped due to expected AnalysisException " + e)
         }
       }
     }
