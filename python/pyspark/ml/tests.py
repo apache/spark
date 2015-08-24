@@ -319,8 +319,6 @@ class CrossValidatorTests(PySparkTestCase):
         bestModel = cvModel.bestModel
         bestModelMetric = evaluator.evaluate(bestModel.transform(dataset))
 
-        print bestModel.getOrDefault('inducedError'), "Best model should have zero induced error"
-        print bestModelMetric, "Best model should fit exactly"
         self.assertEqual(0.0, bestModel.getOrDefault('inducedError'), "Best model should have zero induced error")
         self.assertEqual(0.0, bestModelMetric, "Best model has RMSE of 0")
 
@@ -344,8 +342,6 @@ class CrossValidatorTests(PySparkTestCase):
         bestModel = cvModel.bestModel
         bestModelMetric = evaluator.evaluate(bestModel.transform(dataset))
 
-        print bestModel.getOrDefault('inducedError'), "Best model should have zero induced error"
-        print bestModelMetric, "Best model should fit exactly"
         self.assertEqual(0.0, bestModel.getOrDefault('inducedError'), "Best model should have zero induced error")
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
 
