@@ -423,7 +423,7 @@ abstract class HiveComparisonTest
               } catch {
                 case NonFatal(e) =>
                   e.printStackTrace()
-                  s"Couldn't compute tables: $e"
+                  s"Couldn't compute dependent tables: $e"
               }
 
               val errorMessage =
