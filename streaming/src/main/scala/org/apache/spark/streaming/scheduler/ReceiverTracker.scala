@@ -528,7 +528,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         new SerializableConfiguration(ssc.sparkContext.hadoopConfiguration)
 
       // Function to start the receiver on the worker node
-      val startReceiverFunc = new StartReceiverFunc(checkpointDirOption, serializableHadoopConf)
+      val startReceiverFunc: Iterator[Receiver[_]] => Unit =
+        (i: Iterator[Receiver[_]]) => {
+          new StartReceiverFunc(checkpointDirOption, serializableHadoopConf)(i)
+        }
 
       // Create the RDD using the scheduledExecutors to run the receiver in a Spark job
       val receiverRDD: RDD[Receiver[_]] =
