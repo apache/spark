@@ -18,7 +18,6 @@
 package org.apache.spark.storage
 
 import java.io.IOException
-import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.{Date, Random}
 
@@ -32,6 +31,7 @@ import tachyon.TachyonURI
 
 import org.apache.spark.Logging
 import org.apache.spark.executor.ExecutorExitCode
+import org.apache.spark.network.buffer.{BufferTooLargeException, LargeByteBufferHelper, LargeByteBuffer}
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 
@@ -99,12 +99,14 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     fileExists(file)
   }
 
-  override def putBytes(blockId: BlockId, bytes: ByteBuffer): Unit = {
+  override def putBytes(blockId: BlockId, bytes: LargeByteBuffer): Unit = {
     val file = getFile(blockId)
     val os = file.getOutStream(WriteType.TRY_CACHE)
     try {
-      os.write(bytes.array())
+      os.write(bytes.asByteBuffer().array())
     } catch {
+      case tooLarge: BufferTooLargeException =>
+        throw new TachyonBlockSizeLimitException(tooLarge)
       case NonFatal(e) =>
         logWarning(s"Failed to put bytes of block $blockId into Tachyon", e)
         os.cancel()
@@ -127,7 +129,7 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     }
   }
 
-  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  override def getBytes(blockId: BlockId): Option[LargeByteBuffer] = {
     val file = getFile(blockId)
     if (file == null || file.getLocationHosts.size == 0) {
       return None
@@ -135,9 +137,10 @@ private[spark] class TachyonBlockManager() extends ExternalBlockManager with Log
     val is = file.getInStream(ReadType.CACHE)
     try {
       val size = file.length
+      // TODO get tachyon to support large blocks
       val bs = new Array[Byte](size.asInstanceOf[Int])
       ByteStreams.readFully(is, bs)
-      Some(ByteBuffer.wrap(bs))
+      Some(LargeByteBufferHelper.asLargeByteBuffer(bs))
     } catch {
       case NonFatal(e) =>
         logWarning(s"Failed to get bytes of block $blockId from Tachyon", e)

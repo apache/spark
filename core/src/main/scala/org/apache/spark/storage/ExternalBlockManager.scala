@@ -19,6 +19,8 @@ package org.apache.spark.storage
 
 import java.nio.ByteBuffer
 
+import org.apache.spark.network.buffer.LargeByteBuffer
+
 /**
  * An abstract class that the concrete external block manager has to inherit.
  * The class has to have a no-argument constructor, and will be initialized by init,
@@ -75,7 +77,7 @@ private[spark] abstract class ExternalBlockManager {
    *
    * @throws java.io.IOException if there is any file system failure in putting the block.
    */
-  def putBytes(blockId: BlockId, bytes: ByteBuffer): Unit
+  def putBytes(blockId: BlockId, bytes: LargeByteBuffer): Unit
 
   def putValues(blockId: BlockId, values: Iterator[_]): Unit = {
     val bytes = blockManager.dataSerialize(blockId, values)
@@ -89,7 +91,7 @@ private[spark] abstract class ExternalBlockManager {
    *
    * @throws java.io.IOException if there is any file system failure in getting the block.
    */
-  def getBytes(blockId: BlockId): Option[ByteBuffer]
+  def getBytes(blockId: BlockId): Option[LargeByteBuffer]
 
   /**
    * Retrieve the block data.

@@ -14,29 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.network.buffer;
 
-package org.apache.spark.shuffle
+import java.io.IOException;
 
-import java.nio.ByteBuffer
+public class BufferTooLargeException extends IOException {
+  public final long actualSize;
+  public final long extra;
+  public final long maxSize;
 
-import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.storage.ShuffleBlockId
-
-private[spark]
-/**
- * Implementers of this trait understand how to retrieve block data for a logical shuffle block
- * identifier (i.e. map, reduce, and shuffle). Implementations may use files or file segments to
- * encapsulate shuffle data. This is used by the BlockStore to abstract over different shuffle
- * implementations when shuffle data is retrieved.
- */
-trait ShuffleBlockResolver {
-  type ShuffleId = Int
-
-  /**
-   * Retrieve the data for the specified block. If the data for that block is not available,
-   * throws an unspecified exception.
-   */
-  def getBlockData(blockId: ShuffleBlockId): ManagedBuffer
-
-  def stop(): Unit
+  public BufferTooLargeException(long actualSize, long maxSize) {
+    super(String.format("LargeByteBuffer is too large to convert.  Size: %d; Size Limit: %d (%d " +
+      "too big)", actualSize, maxSize,
+      actualSize - maxSize));
+    this.extra = actualSize - maxSize;
+    this.actualSize = actualSize;
+    this.maxSize = maxSize;
+  }
 }

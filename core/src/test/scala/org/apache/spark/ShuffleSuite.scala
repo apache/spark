@@ -23,7 +23,7 @@ import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.serializer.KryoSerializer
-import org.apache.spark.storage.{ShuffleDataBlockId, ShuffleBlockId}
+import org.apache.spark.storage.{ShuffleBlockSizeLimitException, BlockSizeLimitException, ShuffleDataBlockId, ShuffleBlockId}
 import org.apache.spark.util.MutablePair
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
@@ -281,6 +281,39 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
     // This count should retry the execution of the previous stage and rerun shuffle.
     rdd.count()
+  }
+
+  ignore("shuffle total > 2GB ok if each block is small") {
+    sc = new SparkContext("local", "test", conf)
+    val rdd = sc.parallelize(1 to 1e6.toInt, 1).map{ i =>
+      val n = 3e3.toInt
+      val arr = new Array[Byte](n)
+      // need to make sure the array doesn't compress to something small
+      scala.util.Random.nextBytes(arr)
+      (i, arr)
+    }
+    rdd.partitionBy(new HashPartitioner(100)).count()
+  }
+
+  ignore("shuffle blocks > 2GB fail with sane exception") {
+    //  note that this *could* succeed in local mode, b/c local shuffles actually don't
+    //  have a limit at 2GB.  BUT, we make them fail in any case, b/c its better to have
+    //  a consistent failure, and not have success depend on where tasks get scheduled
+
+    sc = new SparkContext("local", "test", conf)
+    val rdd = sc.parallelize(1 to 1e6.toInt, 1).map{ i =>
+      val n = 3e3.toInt
+      val arr = new Array[Byte](n)
+      // need to make sure the array doesn't compress to something small
+      scala.util.Random.nextBytes(arr)
+      (2 * i, arr)
+    }
+
+    val exc = intercept[SparkException] {
+      rdd.partitionBy(new org.apache.spark.HashPartitioner(2)).count()
+    }
+
+    exc.getCause shouldBe a[ShuffleBlockSizeLimitException]
   }
 
   test("metrics for shuffle without aggregation") {

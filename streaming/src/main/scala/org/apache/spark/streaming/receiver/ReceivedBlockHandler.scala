@@ -17,13 +17,15 @@
 
 package org.apache.spark.streaming.receiver
 
-import scala.concurrent.duration._
+
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.language.{existentials, postfixOps}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.network.buffer.LargeByteBufferHelper
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler._
 import org.apache.spark.streaming.util.{WriteAheadLogRecordHandle, WriteAheadLogUtils}
@@ -83,7 +85,8 @@ private[streaming] class BlockManagerBasedBlockHandler(
         numRecords = countIterator.count
         putResult
       case ByteBufferBlock(byteBuffer) =>
-        blockManager.putBytes(blockId, byteBuffer, storageLevel, tellMaster = true)
+        blockManager.putBytes(blockId, LargeByteBufferHelper.asLargeByteBuffer(byteBuffer),
+          storageLevel, tellMaster = true)
       case o =>
         throw new SparkException(
           s"Could not store $blockId to block manager, unexpected block type ${o.getClass.getName}")
@@ -177,7 +180,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
         numRecords = countIterator.count
         serializedBlock
       case ByteBufferBlock(byteBuffer) =>
-        byteBuffer
+        LargeByteBufferHelper.asLargeByteBuffer(byteBuffer)
       case _ =>
         throw new Exception(s"Could not push $blockId to block manager, unexpected block type")
     }
@@ -194,7 +197,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
     // Store the block in write ahead log
     val storeInWriteAheadLogFuture = Future {
-      writeAheadLog.write(serializedBlock, clock.getTimeMillis())
+      writeAheadLog.write(serializedBlock.asByteBuffer(), clock.getTimeMillis())
     }
 
     // Combine the futures, wait for both to complete, and return the write ahead log record handle

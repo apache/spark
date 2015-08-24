@@ -20,6 +20,8 @@ package org.apache.spark.streaming
 import java.io.File
 import java.nio.ByteBuffer
 
+import org.apache.spark.network.buffer.LargeByteBufferHelper
+
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -142,7 +144,7 @@ class ReceivedBlockHandlerSuite
         val loggedData = walSegments.flatMap { walSegment =>
           val fileSegment = walSegment.asInstanceOf[FileBasedWriteAheadLogSegment]
           val reader = new FileBasedWriteAheadLogRandomReader(fileSegment.path, hadoopConf)
-          val bytes = reader.read(fileSegment)
+          val bytes = LargeByteBufferHelper.asLargeByteBuffer(reader.read(fileSegment))
           reader.close()
           blockManager.dataDeserialize(generateBlockId(), bytes).toList
         }
@@ -326,7 +328,7 @@ class ReceivedBlockHandlerSuite
 
     storeAndVerify(blocks.map { b => IteratorBlock(b.toIterator) })
     storeAndVerify(blocks.map { b => ArrayBufferBlock(new ArrayBuffer ++= b) })
-    storeAndVerify(blocks.map { b => ByteBufferBlock(dataToByteBuffer(b)) })
+    storeAndVerify(blocks.map { b => ByteBufferBlock(dataToByteBuffer(b).asByteBuffer()) })
   }
 
   /** Test error handling when blocks that cannot be stored */

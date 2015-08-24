@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark._
+import org.apache.spark.network.buffer.LargeByteBufferHelper
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming.util._
@@ -156,11 +157,13 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
       logInfo(s"Read partition data of $this from write ahead log, record handle " +
         partition.walRecordHandle)
       if (storeInBlockManager) {
-        blockManager.putBytes(blockId, dataRead, storageLevel)
+        blockManager.putBytes(blockId, LargeByteBufferHelper.asLargeByteBuffer(dataRead),
+          storageLevel)
         logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
         dataRead.rewind()
       }
-      blockManager.dataDeserialize(blockId, dataRead).asInstanceOf[Iterator[T]]
+      blockManager.dataDeserialize(blockId, LargeByteBufferHelper.asLargeByteBuffer(dataRead))
+        .asInstanceOf[Iterator[T]]
     }
 
     if (partition.isBlockIdValid) {

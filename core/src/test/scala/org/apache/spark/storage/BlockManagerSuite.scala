@@ -20,6 +20,8 @@ package org.apache.spark.storage
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
 
+import org.apache.spark.network.buffer.{LargeByteBufferTestHelper, WrappedLargeByteBuffer, LargeByteBufferHelper, LargeByteBuffer}
+
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.implicitConversions
@@ -169,8 +171,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations("a3").size === 0, "master was told about a3")
 
     // Drop a1 and a2 from memory; this should be reported back to the master
-    store.dropFromMemory("a1", null: Either[Array[Any], ByteBuffer])
-    store.dropFromMemory("a2", null: Either[Array[Any], ByteBuffer])
+    store.dropFromMemory("a1", null: Either[Array[Any], LargeByteBuffer])
+    store.dropFromMemory("a2", null: Either[Array[Any], LargeByteBuffer])
     assert(store.getSingle("a1") === None, "a1 not removed from store")
     assert(store.getSingle("a2") === None, "a2 not removed from store")
     assert(master.getLocations("a1").size === 0, "master did not remove a1")
@@ -410,8 +412,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       t2.join()
       t3.join()
 
-      store.dropFromMemory("a1", null: Either[Array[Any], ByteBuffer])
-      store.dropFromMemory("a2", null: Either[Array[Any], ByteBuffer])
+      store.dropFromMemory("a1", null: Either[Array[Any], LargeByteBuffer])
+      store.dropFromMemory("a2", null: Either[Array[Any], LargeByteBuffer])
       store.waitForAsyncReregister()
     }
   }
@@ -807,7 +809,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     var counter = 0.toByte
     def incr: Byte = {counter = (counter + 1).toByte; counter;}
     val bytes = Array.fill[Byte](1000)(incr)
-    val byteBuffer = ByteBuffer.wrap(bytes)
+    val byteBuffer = LargeByteBufferHelper.asLargeByteBuffer(bytes)
 
     val blockId = BlockId("rdd_1_2")
 
@@ -820,21 +822,22 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     val diskStoreMapped = new DiskStore(blockManager, diskBlockManager)
     diskStoreMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
-    val mapped = diskStoreMapped.getBytes(blockId).get
+    val mapped = diskStoreMapped.getBytes(blockId).get.asInstanceOf[WrappedLargeByteBuffer]
 
     when(blockManager.conf).thenReturn(conf.clone.set(confKey, "1m"))
     val diskStoreNotMapped = new DiskStore(blockManager, diskBlockManager)
     diskStoreNotMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
-    val notMapped = diskStoreNotMapped.getBytes(blockId).get
+    val notMapped = diskStoreNotMapped.getBytes(blockId).get.asInstanceOf[WrappedLargeByteBuffer]
 
     // Not possible to do isInstanceOf due to visibility of HeapByteBuffer
-    assert(notMapped.getClass.getName.endsWith("HeapByteBuffer"),
-      "Expected HeapByteBuffer for un-mapped read")
-    assert(mapped.isInstanceOf[MappedByteBuffer], "Expected MappedByteBuffer for mapped read")
+    assert(LargeByteBufferTestHelper.nioBuffers(notMapped).get(0).getClass.getName
+      .endsWith("HeapByteBuffer"), "Expected HeapByteBuffer for un-mapped read")
+    assert(LargeByteBufferTestHelper.nioBuffers(mapped).get(0).isInstanceOf[MappedByteBuffer],
+      "Expected MappedByteBuffer for mapped read")
 
-    def arrayFromByteBuffer(in: ByteBuffer): Array[Byte] = {
-      val array = new Array[Byte](in.remaining())
-      in.get(array)
+    def arrayFromByteBuffer(in: LargeByteBuffer): Array[Byte] = {
+      val array = new Array[Byte](in.remaining().toInt)
+      in.get(array, 0, in.remaining().toInt)
       array
     }
 
@@ -1242,13 +1245,23 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store = makeBlockManager(12000)
     val memoryStore = store.memoryStore
     val blockId = BlockId("rdd_3_10")
-    var bytes: ByteBuffer = null
+    var bytes: LargeByteBuffer = null
     val result = memoryStore.putBytes(blockId, 10000, () => {
-      bytes = ByteBuffer.allocate(10000)
+      bytes = LargeByteBufferHelper.allocate(10000)
       bytes
     })
     assert(result.size === 10000)
-    assert(result.data === Right(bytes))
+    assert(result.data.isRight)
+    assertEquivalentByteBufs(result.data.right.get, bytes)
     assert(result.droppedBlocks === Nil)
+  }
+
+  def assertEquivalentByteBufs(exp: LargeByteBuffer, act: LargeByteBuffer): Unit = {
+    assert(exp.size() === act.size())
+    val expBytes = new Array[Byte](exp.size().toInt)
+    exp.get(expBytes, 0, exp.size().toInt)
+    val actBytes = new Array[Byte](act.size().toInt)
+    act.get(actBytes, 0, act.size().toInt)
+    assert(expBytes === actBytes)
   }
 }

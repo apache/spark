@@ -23,12 +23,12 @@ import scala.collection.JavaConversions._
 
 import org.apache.spark.Logging
 import org.apache.spark.network.BlockDataManager
-import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.buffer.{BufferTooLargeException, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.server.{OneForOneStreamManager, RpcHandler, StreamManager}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, OpenBlocks, StreamHandle, UploadBlock}
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage.{BlockId, StorageLevel}
+import org.apache.spark.storage.{ShuffleRemoteBlockSizeLimitException, BlockId, StorageLevel}
 
 /**
  * Serves requests to open blocks by simply registering one chunk per block requested.
@@ -53,11 +53,24 @@ class NettyBlockRpcServer(
 
     message match {
       case openBlocks: OpenBlocks =>
-        val blocks: Seq[ManagedBuffer] =
-          openBlocks.blockIds.map(BlockId.apply).map(blockManager.getBlockData)
-        val streamId = streamManager.registerStream(blocks.iterator)
-        logTrace(s"Registered streamId $streamId with ${blocks.size} buffers")
-        responseContext.onSuccess(new StreamHandle(streamId, blocks.size).toByteArray)
+        try {
+          val blocks: Seq[ManagedBuffer] =
+            openBlocks.blockIds.map(BlockId.apply).map(blockManager.getBlockData)
+          val streamId = streamManager.registerStream(blocks.iterator)
+          logTrace(s"Registered streamId $streamId with ${blocks.size} buffers")
+          responseContext.onSuccess(new StreamHandle(streamId, blocks.size).toByteArray)
+        } catch {
+          // shouldn't ever happen, b/c we should prevent writing 2GB shuffle files,
+          // but just to be safe
+          case ex: BufferTooLargeException =>
+            // throw & catch this helper exception, just to get full stack trace
+            try {
+              throw new ShuffleRemoteBlockSizeLimitException(ex)
+            } catch {
+              case ex2: ShuffleRemoteBlockSizeLimitException =>
+                responseContext.onFailure(ex2)
+            }
+        }
 
       case uploadBlock: UploadBlock =>
         // StorageLevel is serialized as bytes using our JavaSerializer.

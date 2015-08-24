@@ -17,8 +17,9 @@
 
 package org.apache.spark.storage
 
-import java.nio.ByteBuffer
 import java.util.LinkedHashMap
+
+import org.apache.spark.network.buffer.LargeByteBuffer
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -86,7 +87,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
+  override def putBytes(
+      blockId: BlockId,
+      _bytes: LargeByteBuffer,
+      level: StorageLevel): PutResult = {
     // Work on a duplicate - since the original input might be used elsewhere.
     val bytes = _bytes.duplicate()
     bytes.rewind()
@@ -94,8 +98,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       val values = blockManager.dataDeserialize(blockId, bytes)
       putIterator(blockId, values, level, returnValues = true)
     } else {
-      val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)
-      PutResult(bytes.limit(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
+      val putAttempt = tryToPut(blockId, bytes, bytes.size(), deserialized = false)
+      PutResult(bytes.size(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
     }
   }
 
@@ -105,13 +109,16 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    *
    * The caller should guarantee that `size` is correct.
    */
-  def putBytes(blockId: BlockId, size: Long, _bytes: () => ByteBuffer): PutResult = {
+  def putBytes(
+    blockId: BlockId,
+    size: Long,
+    _bytes: () => LargeByteBuffer): PutResult = {
     // Work on a duplicate - since the original input might be used elsewhere.
-    lazy val bytes = _bytes().duplicate().rewind().asInstanceOf[ByteBuffer]
+    lazy val bytes = _bytes().duplicate().rewind()
     val putAttempt = tryToPut(blockId, () => bytes, size, deserialized = false)
     val data =
       if (putAttempt.success) {
-        assert(bytes.limit == size)
+        assert(bytes.size() == size)
         Right(bytes.duplicate())
       } else {
         null
@@ -130,8 +137,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       PutResult(sizeEstimate, Left(values.iterator), putAttempt.droppedBlocks)
     } else {
       val bytes = blockManager.dataSerialize(blockId, values.iterator)
-      val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)
-      PutResult(bytes.limit(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
+      val putAttempt = tryToPut(blockId, bytes, bytes.size(), deserialized = false)
+      PutResult(bytes.size(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
     }
   }
 
@@ -181,7 +188,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  override def getBytes(blockId: BlockId): Option[LargeByteBuffer] = {
     val entry = entries.synchronized {
       entries.get(blockId)
     }
@@ -190,7 +197,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     } else if (entry.deserialized) {
       Some(blockManager.dataSerialize(blockId, entry.value.asInstanceOf[Array[Any]].iterator))
     } else {
-      Some(entry.value.asInstanceOf[ByteBuffer].duplicate()) // Doesn't actually copy the data
+      Some(entry.value.asInstanceOf[LargeByteBuffer].duplicate()) // Doesn't actually copy the data
     }
   }
 
@@ -203,7 +210,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     } else if (entry.deserialized) {
       Some(entry.value.asInstanceOf[Array[Any]].iterator)
     } else {
-      val buffer = entry.value.asInstanceOf[ByteBuffer].duplicate() // Doesn't actually copy data
+      // Doesn't actually copy data
+      val buffer = entry.value.asInstanceOf[LargeByteBuffer].duplicate()
       Some(blockManager.dataDeserialize(blockId, buffer))
     }
   }
@@ -392,7 +400,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         lazy val data = if (deserialized) {
           Left(value().asInstanceOf[Array[Any]])
         } else {
-          Right(value().asInstanceOf[ByteBuffer].duplicate())
+          Right(value().asInstanceOf[LargeByteBuffer].duplicate())
         }
         val droppedBlockStatus = blockManager.dropFromMemory(blockId, () => data)
         droppedBlockStatus.foreach { status => droppedBlocks += ((blockId, status)) }
@@ -463,7 +471,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
             val data = if (entry.deserialized) {
               Left(entry.value.asInstanceOf[Array[Any]])
             } else {
-              Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
+              Right(entry.value.asInstanceOf[LargeByteBuffer].duplicate())
             }
             val droppedBlockStatus = blockManager.dropFromMemory(blockId, data)
             droppedBlockStatus.foreach { status => droppedBlocks += ((blockId, status)) }
