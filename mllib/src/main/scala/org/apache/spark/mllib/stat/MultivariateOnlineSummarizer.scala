@@ -44,7 +44,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   private var currM2: Array[Double] = _
   private var currL1: Array[Double] = _
   private var totalCnt: Long = 0
-  private var totalWeightCnt: Double = 0.0
+  private var totalWeightSum: Double = 0.0
   private var nnz: Array[Double] = _
   private var currMax: Array[Double] = _
   private var currMin: Array[Double] = _
@@ -105,7 +105,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       }
     }
 
-    totalWeightCnt += sampleWeight
+    totalWeightSum += sampleWeight
     totalCnt += 1
     this
   }
@@ -119,11 +119,11 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.1.0")
   def merge(other: MultivariateOnlineSummarizer): this.type = {
-    if (this.totalWeightCnt != 0.0 && other.totalWeightCnt != 0.0) {
+    if (this.totalWeightSum != 0.0 && other.totalWeightSum != 0.0) {
       require(n == other.n, s"Dimensions mismatch when merging with another summarizer. " +
         s"Expecting $n but got ${other.n}.")
       totalCnt += other.totalCnt
-      totalWeightCnt += other.totalWeightCnt
+      totalWeightSum += other.totalWeightSum
       var i = 0
       while (i < n) {
         val thisNnz = nnz(i)
@@ -146,14 +146,14 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
         nnz(i) = totalNnz
         i += 1
       }
-    } else if (totalWeightCnt == 0.0 && other.totalWeightCnt != 0.0) {
+    } else if (totalWeightSum == 0.0 && other.totalWeightSum != 0.0) {
       this.n = other.n
       this.currMean = other.currMean.clone()
       this.currM2n = other.currM2n.clone()
       this.currM2 = other.currM2.clone()
       this.currL1 = other.currL1.clone()
       this.totalCnt = other.totalCnt
-      this.totalWeightCnt = other.totalWeightCnt
+      this.totalWeightSum = other.totalWeightSum
       this.nnz = other.nnz.clone()
       this.currMax = other.currMax.clone()
       this.currMin = other.currMin.clone()
@@ -167,12 +167,13 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.1.0")
   override def mean: Vector = {
-    require(totalWeightCnt > 0, s"Nothing has been added to this summarizer.")
+    require(totalWeightSum >= 1.0, s"The effective number of samples should be " +
+      s"greater than or equal to 1.0, but $totalWeightSum.")
 
     val realMean = Array.ofDim[Double](n)
     var i = 0
     while (i < n) {
-      realMean(i) = currMean(i) * (nnz(i) / totalWeightCnt)
+      realMean(i) = currMean(i) * (nnz(i) / totalWeightSum)
       i += 1
     }
     Vectors.dense(realMean)
@@ -184,11 +185,12 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.1.0")
   override def variance: Vector = {
-    require(totalWeightCnt > 0, s"Nothing has been added to this summarizer.")
+    require(totalWeightSum >= 1.0, s"The effective number of samples should be " +
+      s"greater than or equal to 1.0, but $totalWeightSum.")
 
     val realVariance = Array.ofDim[Double](n)
 
-    val denominator = totalWeightCnt - 1.0
+    val denominator = totalWeightSum - 1.0
 
     // Sample variance is computed, if the denominator is less than 0, the variance is just 0.
     if (denominator > 0.0) {
@@ -197,7 +199,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       val len = currM2n.length
       while (i < len) {
         realVariance(i) = currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) *
-          (totalWeightCnt - nnz(i)) / totalWeightCnt
+          (totalWeightSum - nnz(i)) / totalWeightSum
         realVariance(i) /= denominator
         i += 1
       }
@@ -212,7 +214,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   @Since("1.1.0")
   override def count: Long = totalCnt
 
-  private[spark] def weightedCount: Double = totalWeightCnt
+  private[spark] def weightedCount: Double = totalWeightSum
 
   /**
    * Number of nonzero elements in each dimension.
@@ -220,7 +222,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.1.0")
   override def numNonzeros: Vector = {
-    require(totalWeightCnt > 0, s"Nothing has been added to this summarizer.")
+    require(totalWeightSum >= 1.0, s"The effective number of samples should be " +
+      s"greater than or equal to 1.0, but $totalWeightSum.")
 
     Vectors.dense(nnz)
   }
@@ -231,11 +234,12 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.1.0")
   override def max: Vector = {
-    require(totalWeightCnt > 0, s"Nothing has been added to this summarizer.")
+    require(totalWeightSum >= 1.0, s"The effective number of samples should be " +
+      s"greater than or equal to 1.0, but $totalWeightSum.")
 
     var i = 0
     while (i < n) {
-      if ((nnz(i) < totalWeightCnt) && (currMax(i) < 0.0)) currMax(i) = 0.0
+      if ((nnz(i) < totalWeightSum) && (currMax(i) < 0.0)) currMax(i) = 0.0
       i += 1
     }
     Vectors.dense(currMax)
@@ -247,11 +251,12 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.1.0")
   override def min: Vector = {
-    require(totalWeightCnt > 0, s"Nothing has been added to this summarizer.")
+    require(totalWeightSum >= 1.0, s"The effective number of samples should be " +
+      s"greater than or equal to 1.0, but $totalWeightSum.")
 
     var i = 0
     while (i < n) {
-      if ((nnz(i) < totalWeightCnt) && (currMin(i) > 0.0)) currMin(i) = 0.0
+      if ((nnz(i) < totalWeightSum) && (currMin(i) > 0.0)) currMin(i) = 0.0
       i += 1
     }
     Vectors.dense(currMin)
@@ -263,7 +268,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.2.0")
   override def normL2: Vector = {
-    require(totalWeightCnt > 0, s"Nothing has been added to this summarizer.")
+    require(totalWeightSum >= 1.0, s"The effective number of samples should be " +
+      s"greater than or equal to 1.0, but $totalWeightSum.")
 
     val realMagnitude = Array.ofDim[Double](n)
 
@@ -282,7 +288,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.2.0")
   override def normL1: Vector = {
-    require(totalWeightCnt > 0, s"Nothing has been added to this summarizer.")
+    require(totalWeightSum >= 1.0, s"The effective number of samples should be " +
+      s"greater than or equal to 1.0, but $totalWeightSum.")
 
     Vectors.dense(currL1)
   }

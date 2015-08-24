@@ -105,23 +105,6 @@ private[ml] trait HasPredictionCol extends Params {
 }
 
 /**
- * Trait for shared param weightCol (default: "").
- */
-private[ml] trait HasWeightCol extends Params {
-
-  /**
-   * Param for whether to over-/undersamples each of training sample according to the given weights in `weightCol`. If empty,  all samples are supposed to have weight one.
-   * @group param
-   */
-  final val weightCol: Param[String] = new Param[String](this, "weightCol", "whether to over-/undersamples each of training sample according to the given weights in `weightCol`. If empty,  all samples are supposed to have weight one")
-
-  setDefault(weightCol, "")
-
-  /** @group getParam */
-  final def getWeightCol: String = $(weightCol)
-}
-
-/**
  * Trait for shared param rawPredictionCol (default: "rawPrediction").
  */
 private[ml] trait HasRawPredictionCol extends Params {

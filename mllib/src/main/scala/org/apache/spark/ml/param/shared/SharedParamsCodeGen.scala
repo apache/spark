@@ -38,9 +38,6 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("featuresCol", "features column name", Some("\"features\"")),
       ParamDesc[String]("labelCol", "label column name", Some("\"label\"")),
       ParamDesc[String]("predictionCol", "prediction column name", Some("\"prediction\"")),
-      ParamDesc[String]("weightCol", "whether to over-/undersamples each of training" +
-        " sample according to the given weights in `weightCol`. If empty, " +
-        " all samples are supposed to have weight one", Some("\"\"")),
       ParamDesc[String]("rawPredictionCol", "raw prediction (a.k.a. confidence) column name",
         Some("\"rawPrediction\"")),
       ParamDesc[String]("probabilityCol", "Column name for predicted class conditional" +
