@@ -251,7 +251,7 @@ private[yarn] class YarnAllocator(
       discoveredLossReasons
     } else {
       // No completed containers, so no reasons to report
-      new HashMap[String, ExecutorLossReason]
+      Map.empty[String, ExecutorLossReason]
     }
   }
 
