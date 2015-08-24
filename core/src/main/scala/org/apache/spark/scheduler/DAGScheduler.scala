@@ -89,7 +89,6 @@ class DAGScheduler(
   private val nextStageId = new AtomicInteger(0)
 
   private[scheduler] val jobIdToStageIds = new HashMap[Int, HashSet[Int]]
-  private[scheduler] val shuffleIdToShuffleMapStage = new TimeStampedHashMap[Int, ShuffleMapStage]()
   private[scheduler] val stageIdToStage = new HashMap[Int, Stage]
   private[scheduler] val shuffleToMapStage = new HashMap[Int, ShuffleMapStage]
   private[scheduler] val jobIdToActiveJob = new HashMap[Int, ActiveJob]
@@ -317,7 +316,7 @@ class DAGScheduler(
       firstJobId: Int): ShuffleMapStage = {
     val rdd = shuffleDep.rdd
     val numTasks = rdd.partitions.length
-    shuffleIdToShuffleMapStage.getOrElseUpdate(shuffleDep.shuffleId, {
+//    shuffleIdToShuffleMapStage.getOrElseUpdate(shuffleDep.shuffleId, {
       val stage = newShuffleMapStage(rdd, numTasks, shuffleDep, firstJobId, rdd.creationSite)
       if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
         val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
@@ -333,7 +332,7 @@ class DAGScheduler(
         mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length)
       }
       stage
-    })
+//    })
   }
 
   /**
@@ -373,7 +372,7 @@ class DAGScheduler(
     val parentsWithNoMapStage = getAncestorShuffleDependencies(shuffleDep.rdd)
     while (parentsWithNoMapStage.nonEmpty) {
       val currentShufDep = parentsWithNoMapStage.pop()
-      val stage = newOrUsedShuffleStage(currentShufDep, firstJobId)
+      val stage = getShuffleMapStage(currentShufDep, firstJobId)
       shuffleToMapStage(currentShufDep.shuffleId) = stage
     }
   }

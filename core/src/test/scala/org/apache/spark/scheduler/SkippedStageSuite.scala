@@ -53,4 +53,18 @@ class SkippedStageSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+
+  test("job shares long lineage w/ caching") {
+    sc = new SparkContext("local", "test")
+    sc.addSparkListener(new PrintStageSubmission)
+    val partitioner = new org.apache.spark.HashPartitioner(10)
+
+    val d1 = sc.parallelize(1 to 100).map { x => (x % 10) -> x}.partitionBy(partitioner)
+    val d2 = d1.mapPartitions{itr => itr.map{ case(x,y) => x -> (y + 1)}}.partitionBy(partitioner)
+    val d3 = d2.mapPartitions{itr => itr.map{ case(x,y) => x -> (y + 1)}}.partitionBy(partitioner)
+    d3.cache()
+    d3.count()
+    d3.count()
+  }
+
 }
