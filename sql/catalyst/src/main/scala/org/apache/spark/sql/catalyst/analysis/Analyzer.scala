@@ -567,8 +567,8 @@ class Analyzer(
         // Try resolving the ordering as though it is in the aggregate clause.
         try {
           val aliasedOrder = sortOrder.map(o => Alias(o.child, "aggOrder")())
-          val aggregatedCondition = Aggregate(grouping, aliasedOrder, child)
-          val resolvedOperator: Aggregate = execute(aggregatedCondition).asInstanceOf[Aggregate]
+          val aggregatedOrdering = Aggregate(grouping, aliasedOrder, child)
+          val resolvedOperator: Aggregate = execute(aggregatedOrdering).asInstanceOf[Aggregate]
           def resolvedAggregateOrdering = resolvedOperator.aggregateExpressions
 
           val needsAggregate = resolvedAggregateOrdering.exists(containsAggregate)
