@@ -546,7 +546,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
  * Function to start the receiver on the worker node. Use a class instead of closure to avoid
  * the serialization issue.
  */
-private class StartReceiverFunc(
+private[streaming] class StartReceiverFunc(
     checkpointDirOption: Option[String],
     serializableHadoopConf: SerializableConfiguration)
   extends (Iterator[Receiver[_]] => Unit) with Serializable {

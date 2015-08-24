@@ -36,7 +36,7 @@ import org.apache.spark.Logging
 /**
  * Shared utility methods for performing Kinesis tests that actually transfer data
  */
-private class KinesisTestUtils extends Logging {
+private[kinesis] class KinesisTestUtils extends Logging {
 
   val endpointUrl = KinesisTestUtils.endpointUrl
   val regionName = RegionUtils.getRegionByEndpoint(endpointUrl).getName()
