@@ -684,7 +684,7 @@ class DataFrame private[sql](
       // make it a NamedExpression.
       case Column(u: UnresolvedAttribute) => UnresolvedAlias(u)
       case Column(expr: NamedExpression) => expr
-      // Leave an unaliased explode with an empty list of names since the analzyer will generate the
+      // Leave an unaliased explode with an empty list of names since the analyzer will generate the
       // correct defaults after the nested expression's type has been resolved.
       case Column(explode: Explode) => MultiAlias(explode, Nil)
       case Column(expr: Expression) => Alias(expr, expr.prettyString)()
