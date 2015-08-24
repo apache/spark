@@ -21,6 +21,8 @@ import java.io.{DataInput, DataOutput}
 import java.util
 import java.util.Properties
 
+import test.org.apache.spark.sql.hive.execution.{UDFIntegerToString,UDFListListInt,UDFListString,UDFStringString,UDFTwoListList};
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFAverage, GenericUDF}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
