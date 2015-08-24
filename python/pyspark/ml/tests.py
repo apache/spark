@@ -264,5 +264,66 @@ class FeatureTests(PySparkTestCase):
         self.assertEquals(transformedDF.head().output, ["a b c d", "b c d e"])
 
 
+
+class HasInducedError(Params):
+
+    def __init__(self):
+        super(HasInducedError, self).__init__()
+        self.inducedError = Param(self, "inducedError", "Uniformly-distributed error added to feature")
+
+    def getInducedError(self):
+        return self.getOrDefault(self.inducedError)
+
+class InducedErrorModel(Model, HasInducedError):
+
+    def __init__(self):
+        super(InducedErrorModel, self).__init__()
+    
+    def _transform(self, dataset):
+        return dataset.withColumn("prediction", 
+                                  dataset.feature + (rand(0) * self.getInducedError()))
+
+class InducedErrorEstimator(Estimator, HasInducedError):
+
+    def __init__(self, inducedError=1.0):
+        super(InducedErrorEstimator, self).__init__()
+        self._set(inducedError=inducedError)
+
+    def _fit(self, dataset):
+        model = InducedErrorModel()
+        self._copyValues(model)
+        return model
+
+class CrossValidatorTests(PySparkTestCase):
+
+    def test_fit_regression(self):
+
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([
+            (10, 10.0), 
+            (50, 50.0), 
+            (100, 100.0), 
+            (500, 500.0)] * 10,
+            ["feature", "label"])
+
+
+        iee = InducedErrorEstimator()
+        evaluator = RegressionEvaluator(metricName="rmse")
+
+        grid = (ParamGridBuilder()
+            .addGrid( iee.inducedError, [100.0, 0.0, 10000.0] )
+            .build())
+
+        cv = CrossValidator(estimator=iee0, estimatorParamMaps=grid, evaluator=evaluator)
+
+        cvModel = cv.fit(dataset)
+        bestModel = cvModel.bestModel
+
+        bestModelMetric = rmse_eval.evaluate(bestModel.transform(dataset))
+
+        self.assertEqual(0.0, bestModel.getOrDefault('inducedError'), "Best model has zero induced error")
+        self.assertEqual(0.0, bestModelMetric, "Best model should fit exactly")
+
+
 if __name__ == "__main__":
     unittest.main()
