@@ -26,6 +26,7 @@ NULL
 #'
 #' @family normal_funcs
 #' @rdname lit
+#' @name lit
 #' @export
 setMethod("lit", signature("ANY"),
           function(x) {
@@ -40,6 +41,7 @@ setMethod("lit", signature("ANY"),
 #' Computes the absolute value.
 #'
 #' @rdname abs
+#' @name abs
 #' @family normal_funcs
 #' @export
 #' @examples \dontrun{abs(df$c)}
@@ -56,6 +58,7 @@ setMethod("abs",
 #' 0.0 through pi.
 #'
 #' @rdname acos
+#' @name acos
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{acos(df$c)}
@@ -71,6 +74,7 @@ setMethod("acos",
 #' Aggregate function: returns the approximate number of distinct items in a group.
 #'
 #' @rdname approxCountDistinct
+#' @name approxCountDistinct
 #' @family agg_funcs
 #' @export
 #' @examples \dontrun{approxCountDistinct(df$c)}
@@ -87,6 +91,7 @@ setMethod("approxCountDistinct",
 #' result as a int column.
 #'
 #' @rdname ascii
+#' @name ascii
 #' @family string_funcs
 #' @export
 #' @examples \dontrun{\dontrun{ascii(df$c)}}
@@ -103,6 +108,7 @@ setMethod("ascii",
 #' -pi/2 through pi/2.
 #'
 #' @rdname asin
+#' @name asin
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{asin(df$c)}
@@ -118,6 +124,7 @@ setMethod("asin",
 #' Computes the tangent inverse of the given value.
 #'
 #' @rdname atan
+#' @name atan
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{atan(df$c)}
@@ -133,6 +140,7 @@ setMethod("atan",
 #' Aggregate function: returns the average of the values in a group.
 #'
 #' @rdname avg
+#' @name avg
 #' @family agg_funcs
 #' @export
 #' @examples \dontrun{avg(df$c)}
@@ -149,6 +157,7 @@ setMethod("avg",
 #' This is the reverse of unbase64.
 #'
 #' @rdname base64
+#' @name base64
 #' @family string_funcs
 #' @export
 #' @examples \dontrun{base64(df$c)}
@@ -165,6 +174,7 @@ setMethod("base64",
 #' column. For example, bin("12") returns "1100".
 #'
 #' @rdname bin
+#' @name bin
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{bin(df$c)}
@@ -180,6 +190,7 @@ setMethod("bin",
 #' Computes bitwise NOT.
 #'
 #' @rdname bitwiseNOT
+#' @name bitwiseNOT
 #' @family normal_funcs
 #' @export
 #' @examples \dontrun{bitwiseNOT(df$c)}
@@ -195,6 +206,7 @@ setMethod("bitwiseNOT",
 #' Computes the cube-root of the given value.
 #'
 #' @rdname cbrt
+#' @name cbrt
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{cbrt(df$c)}
@@ -210,6 +222,7 @@ setMethod("cbrt",
 #' Computes the ceiling of the given value.
 #'
 #' @rdname ceil
+#' @name ceil
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{ceil(df$c)}
@@ -225,6 +238,7 @@ setMethod("ceil",
 #' Computes the cosine of the given value.
 #'
 #' @rdname cos
+#' @name cos
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{cos(df$c)}
@@ -240,6 +254,7 @@ setMethod("cos",
 #' Computes the hyperbolic cosine of the given value.
 #'
 #' @rdname cosh
+#' @name cosh
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{cosh(df$c)}
@@ -255,6 +270,7 @@ setMethod("cosh",
 #' Aggregate function: returns the number of items in a group.
 #'
 #' @rdname count
+#' @name count
 #' @family agg_funcs
 #' @export
 #' @examples \dontrun{count(df$c)}
@@ -271,6 +287,7 @@ setMethod("count",
 #' returns the value as a bigint.
 #'
 #' @rdname crc32
+#' @name crc32
 #' @family misc_funcs
 #' @export
 #' @examples \dontrun{crc32(df$c)}
@@ -286,6 +303,7 @@ setMethod("crc32",
 #' Extracts the day of the month as an integer from a given date/timestamp/string.
 #'
 #' @rdname dayofmonth
+#' @name dayofmonth
 #' @family datetime_funcs
 #' @export
 #' @examples \dontrun{dayofmonth(df$c)}
@@ -301,6 +319,7 @@ setMethod("dayofmonth",
 #' Extracts the day of the year as an integer from a given date/timestamp/string.
 #'
 #' @rdname dayofyear
+#' @name dayofyear
 #' @family datetime_funcs
 #' @export
 #' @examples \dontrun{dayofyear(df$c)}
@@ -316,6 +335,7 @@ setMethod("dayofyear",
 #' Computes the exponential of the given value.
 #'
 #' @rdname exp
+#' @name exp
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{exp(df$c)}
@@ -331,6 +351,7 @@ setMethod("exp",
 #' Creates a new row for each element in the given array or map column.
 #'
 #' @rdname explode
+#' @name explode
 #' @family collection_funcs
 #' @export
 #' @examples \dontrun{explode(df$c)}
@@ -346,6 +367,7 @@ setMethod("explode",
 #' Computes the exponential of the given value minus one.
 #'
 #' @rdname expm1
+#' @name expm1
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{expm1(df$c)}
@@ -361,6 +383,7 @@ setMethod("expm1",
 #' Computes the factorial of the given value.
 #'
 #' @rdname factorial
+#' @name factorial
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{factorial(df$c)}
@@ -376,6 +399,7 @@ setMethod("factorial",
 #' Aggregate function: returns the first value in a group.
 #'
 #' @rdname first
+#' @name first
 #' @family agg_funcs
 #' @export
 #' @examples \dontrun{first(df$c)}
@@ -391,6 +415,7 @@ setMethod("first",
 #' Computes the floor of the given value.
 #'
 #' @rdname floor
+#' @name floor
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{floor(df$c)}
@@ -406,6 +431,7 @@ setMethod("floor",
 #' Computes hex value of the given column.
 #'
 #' @rdname hex
+#' @name hex
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{hex(df$c)}
@@ -421,6 +447,7 @@ setMethod("hex",
 #' Extracts the hours as an integer from a given date/timestamp/string.
 #'
 #' @rdname hour
+#' @name hour
 #' @family datetime_funcs
 #' @export
 #' @examples \dontrun{hour(df$c)}
@@ -439,6 +466,7 @@ setMethod("hour",
 #' For example, "hello world" will become "Hello World".
 #'
 #' @rdname initcap
+#' @name initcap
 #' @family string_funcs
 #' @export
 #' @examples \dontrun{initcap(df$c)}
@@ -454,6 +482,7 @@ setMethod("initcap",
 #' Return true iff the column is NaN.
 #'
 #' @rdname isNaN
+#' @name isNaN
 #' @family normal_funcs
 #' @export
 #' @examples \dontrun{isNaN(df$c)}
@@ -469,6 +498,7 @@ setMethod("isNaN",
 #' Aggregate function: returns the last value in a group.
 #'
 #' @rdname last
+#' @name last
 #' @family agg_funcs
 #' @export
 #' @examples \dontrun{last(df$c)}
@@ -486,6 +516,7 @@ setMethod("last",
 #' month in July 2015.
 #'
 #' @rdname last_day
+#' @name last_day
 #' @family datetime_funcs
 #' @export
 #' @examples \dontrun{last_day(df$c)}
@@ -501,6 +532,7 @@ setMethod("last_day",
 #' Computes the length of a given string or binary column.
 #'
 #' @rdname length
+#' @name length
 #' @family string_funcs
 #' @export
 #' @examples \dontrun{length(df$c)}
@@ -516,6 +548,7 @@ setMethod("length",
 #' Computes the natural logarithm of the given value.
 #'
 #' @rdname log
+#' @name log
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{log(df$c)}
@@ -531,6 +564,7 @@ setMethod("log",
 #' Computes the logarithm of the given value in base 10.
 #'
 #' @rdname log10
+#' @name log10
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{log10(df$c)}
@@ -546,6 +580,7 @@ setMethod("log10",
 #' Computes the natural logarithm of the given value plus one.
 #'
 #' @rdname log1p
+#' @name log1p
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{log1p(df$c)}
@@ -561,6 +596,7 @@ setMethod("log1p",
 #' Computes the logarithm of the given column in base 2.
 #'
 #' @rdname log2
+#' @name log2
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{log2(df$c)}
@@ -576,6 +612,7 @@ setMethod("log2",
 #' Converts a string column to lower case.
 #'
 #' @rdname lower
+#' @name lower
 #' @family string_funcs
 #' @export
 #' @examples \dontrun{lower(df$c)}
@@ -591,6 +628,7 @@ setMethod("lower",
 #' Trim the spaces from left end for the specified string value.
 #'
 #' @rdname ltrim
+#' @name ltrim
 #' @family string_funcs
 #' @export
 #' @examples \dontrun{ltrim(df$c)}
@@ -606,6 +644,7 @@ setMethod("ltrim",
 #' Aggregate function: returns the maximum value of the expression in a group.
 #'
 #' @rdname max
+#' @name max
 #' @family agg_funcs
 #' @export
 #' @examples \dontrun{max(df$c)}
@@ -622,6 +661,7 @@ setMethod("max",
 #' as a 32 character hex string.
 #'
 #' @rdname md5
+#' @name md5
 #' @family misc_funcs
 #' @export
 #' @examples \dontrun{md5(df$c)}
@@ -638,6 +678,7 @@ setMethod("md5",
 #' Alias for avg.
 #'
 #' @rdname mean
+#' @name mean
 #' @family agg_funcs
 #' @export
 #' @examples \dontrun{mean(df$c)}
@@ -653,6 +694,7 @@ setMethod("mean",
 #' Aggregate function: returns the minimum value of the expression in a group.
 #'
 #' @rdname min
+#' @name min
 #' @family agg_funcs
 #' @export
 #' @examples \dontrun{min(df$c)}
@@ -668,6 +710,7 @@ setMethod("min",
 #' Extracts the minutes as an integer from a given date/timestamp/string.
 #'
 #' @rdname minute
+#' @name minute
 #' @family datetime_funcs
 #' @export
 #' @examples \dontrun{minute(df$c)}
@@ -683,6 +726,7 @@ setMethod("minute",
 #' Extracts the month as an integer from a given date/timestamp/string.
 #'
 #' @rdname month
+#' @name month
 #' @family datetime_funcs
 #' @export
 #' @examples \dontrun{month(df$c)}
@@ -698,6 +742,7 @@ setMethod("month",
 #' Unary minus, i.e. negate the expression.
 #'
 #' @rdname negate
+#' @name negate
 #' @family normal_funcs
 #' @export
 #' @examples \dontrun{negate(df$c)}
@@ -713,6 +758,7 @@ setMethod("negate",
 #' Extracts the quarter as an integer from a given date/timestamp/string.
 #'
 #' @rdname quarter
+#' @name quarter
 #' @family datetime_funcs
 #' @export
 #' @examples \dontrun{quarter(df$c)}
@@ -728,6 +774,7 @@ setMethod("quarter",
 #' Reverses the string column and returns it as a new string column.
 #'
 #' @rdname reverse
+#' @name reverse
 #' @family string_funcs
 #' @export
 #' @examples \dontrun{reverse(df$c)}
@@ -744,6 +791,7 @@ setMethod("reverse",
 #' is equal to a mathematical integer.
 #'
 #' @rdname rint
+#' @name rint
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{rint(df$c)}
@@ -759,6 +807,7 @@ setMethod("rint",
 #' Returns the value of the column `e` rounded to 0 decimal places.
 #'
 #' @rdname round
+#' @name round
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{round(df$c)}
@@ -774,6 +823,7 @@ setMethod("round",
 #' Trim the spaces from right end for the specified string value.
 #'
 #' @rdname rtrim
+#' @name rtrim
 #' @family string_funcs
 #' @export
 #' @examples \dontrun{rtrim(df$c)}
@@ -789,6 +839,7 @@ setMethod("rtrim",
 #' Extracts the seconds as an integer from a given date/timestamp/string.
 #'
 #' @rdname second
+#' @name second
 #' @family datetime_funcs
 #' @export
 #' @examples \dontrun{second(df$c)}
@@ -805,6 +856,7 @@ setMethod("second",
 #' as a 40 character hex string.
 #'
 #' @rdname sha1
+#' @name sha1
 #' @family misc_funcs
 #' @export
 #' @examples \dontrun{sha1(df$c)}
@@ -820,6 +872,7 @@ setMethod("sha1",
 #' Computes the signum of the given value.
 #'
 #' @rdname signum
+#' @name signum
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{signum(df$c)}
@@ -835,6 +888,7 @@ setMethod("signum",
 #' Computes the sine of the given value.
 #'
 #' @rdname sin
+#' @name sin
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{sin(df$c)}
@@ -850,6 +904,7 @@ setMethod("sin",
 #' Computes the hyperbolic sine of the given value.
 #'
 #' @rdname sinh
+#' @name sinh
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{sinh(df$c)}
@@ -865,6 +920,7 @@ setMethod("sinh",
 #' Returns length of array or map.
 #'
 #' @rdname size
+#' @name size
 #' @family collection_funcs
 #' @export
 #' @examples \dontrun{size(df$c)}
@@ -880,6 +936,7 @@ setMethod("size",
 #' Return the soundex code for the specified expression.
 #'
 #' @rdname soundex
+#' @name soundex
 #' @family string_funcs
 #' @export
 #' @examples \dontrun{soundex(df$c)}
@@ -895,6 +952,7 @@ setMethod("soundex",
 #' Computes the square root of the specified float value.
 #'
 #' @rdname sqrt
+#' @name sqrt
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{sqrt(df$c)}
@@ -910,6 +968,7 @@ setMethod("sqrt",
 #' Aggregate function: returns the sum of all values in the expression.
 #'
 #' @rdname sum
+#' @name sum
 #' @family agg_funcs
 #' @export
 #' @examples \dontrun{sum(df$c)}
@@ -925,6 +984,7 @@ setMethod("sum",
 #' Aggregate function: returns the sum of distinct values in the expression.
 #'
 #' @rdname sumDistinct
+#' @name sumDistinct
 #' @family agg_funcs
 #' @export
 #' @examples \dontrun{sumDistinct(df$c)}
@@ -940,6 +1000,7 @@ setMethod("sumDistinct",
 #' Computes the tangent of the given value.
 #'
 #' @rdname tan
+#' @name tan
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{tan(df$c)}
@@ -955,6 +1016,7 @@ setMethod("tan",
 #' Computes the hyperbolic tangent of the given value.
 #'
 #' @rdname tanh
+#' @name tanh
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{tanh(df$c)}
@@ -970,6 +1032,7 @@ setMethod("tanh",
 #' Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
 #'
 #' @rdname toDegrees
+#' @name toDegrees
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{toDegrees(df$c)}
@@ -985,6 +1048,7 @@ setMethod("toDegrees",
 #' Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
 #'
 #' @rdname toRadians
+#' @name toRadians
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{toRadians(df$c)}
@@ -1000,6 +1064,7 @@ setMethod("toRadians",
 #' Converts the column into DateType.
 #'
 #' @rdname to_date
+#' @name to_date
 #' @family datetime_funcs
 #' @export
 #' @examples \dontrun{to_date(df$c)}
@@ -1015,6 +1080,7 @@ setMethod("to_date",
 #' Trim the spaces from both ends for the specified string column.
 #'
 #' @rdname trim
+#' @name trim
 #' @family string_funcs
 #' @export
 #' @examples \dontrun{trim(df$c)}
@@ -1031,6 +1097,7 @@ setMethod("trim",
 #' This is the reverse of base64.
 #'
 #' @rdname unbase64
+#' @name unbase64
 #' @family string_funcs
 #' @export
 #' @examples \dontrun{unbase64(df$c)}
@@ -1047,6 +1114,7 @@ setMethod("unbase64",
 #' and converts to the byte representation of number.
 #'
 #' @rdname unhex
+#' @name unhex
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{unhex(df$c)}
@@ -1062,6 +1130,7 @@ setMethod("unhex",
 #' Converts a string column to upper case.
 #'
 #' @rdname upper
+#' @name upper
 #' @family string_funcs
 #' @export
 #' @examples \dontrun{upper(df$c)}
@@ -1077,6 +1146,7 @@ setMethod("upper",
 #' Extracts the week number as an integer from a given date/timestamp/string.
 #'
 #' @rdname weekofyear
+#' @name weekofyear
 #' @family datetime_funcs
 #' @export
 #' @examples \dontrun{weekofyear(df$c)}
@@ -1092,6 +1162,7 @@ setMethod("weekofyear",
 #' Extracts the year as an integer from a given date/timestamp/string.
 #'
 #' @rdname year
+#' @name year
 #' @family datetime_funcs
 #' @export
 #' @examples \dontrun{year(df$c)}
@@ -1108,6 +1179,7 @@ setMethod("year",
 #' polar coordinates (r, theta).
 #'
 #' @rdname atan2
+#' @name atan2
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{atan2(df$c, x)}
@@ -1125,6 +1197,7 @@ setMethod("atan2", signature(y = "Column"),
 #' Returns the number of days from `start` to `end`.
 #'
 #' @rdname datediff
+#' @name datediff
 #' @family datetime_funcs
 #' @export
 #' @examples \dontrun{datediff(df$c, x)}
@@ -1142,6 +1215,7 @@ setMethod("datediff", signature(y = "Column"),
 #' Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
 #'
 #' @rdname hypot
+#' @name hypot
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{hypot(df$c, x)}
@@ -1159,6 +1233,7 @@ setMethod("hypot", signature(y = "Column"),
 #' Computes the Levenshtein distance of the two given string columns.
 #'
 #' @rdname levenshtein
+#' @name levenshtein
 #' @family string_funcs
 #' @export
 #' @examples \dontrun{levenshtein(df$c, x)}
@@ -1176,6 +1251,7 @@ setMethod("levenshtein", signature(y = "Column"),
 #' Returns number of months between dates `date1` and `date2`.
 #'
 #' @rdname months_between
+#' @name months_between
 #' @family datetime_funcs
 #' @export
 #' @examples \dontrun{months_between(df$c, x)}
@@ -1194,6 +1270,7 @@ setMethod("months_between", signature(y = "Column"),
 #' hhBoth inputs should be floating point columns (DoubleType or FloatType).
 #'
 #' @rdname nanvl
+#' @name nanvl
 #' @family normal_funcs
 #' @export
 #' @examples \dontrun{nanvl(df$c, x)}
@@ -1211,6 +1288,7 @@ setMethod("nanvl", signature(y = "Column"),
 #' Returns the positive value of dividend mod divisor.
 #'
 #' @rdname pmod
+#' @name pmod
 #' @docType methods
 #' @family math_funcs
 #' @export
@@ -1229,6 +1307,7 @@ setMethod("pmod", signature(y = "Column"),
 #'
 #' @family agg_funcs
 #' @rdname approxCountDistinct
+#' @name approxCountDistinct
 #' @return the approximate number of distinct items in a group.
 #' @export
 setMethod("approxCountDistinct",
@@ -1242,6 +1321,7 @@ setMethod("approxCountDistinct",
 #'
 #' @family agg_funcs
 #' @rdname countDistinct
+#' @name countDistinct
 #' @return the number of distinct items in a group.
 #' @export
 setMethod("countDistinct",
@@ -1262,6 +1342,7 @@ setMethod("countDistinct",
 #'
 #' @family string_funcs
 #' @rdname concat
+#' @name concat
 #' @export
 setMethod("concat",
           signature(x = "Column"),
@@ -1278,6 +1359,7 @@ setMethod("concat",
 #'
 #' @family normal_funcs
 #' @rdname greatest
+#' @name greatest
 #' @export
 setMethod("greatest",
           signature(x = "Column"),
@@ -1295,6 +1377,7 @@ setMethod("greatest",
 #'
 #' @family normal_funcs
 #' @rdname least
+#' @name least
 #' @export
 setMethod("least",
           signature(x = "Column"),
@@ -1311,6 +1394,7 @@ setMethod("least",
 #'
 #' @family math_funcs
 #' @rdname ceil
+#' @name ceil
 #' @aliases ceil
 #' @export
 setMethod("ceiling",
@@ -1325,6 +1409,7 @@ setMethod("ceiling",
 #'
 #' @family math_funcs
 #' @rdname signum
+#' @name signum
 #' @aliases signum
 #' @export
 setMethod("sign", signature(x = "Column"),
@@ -1338,6 +1423,7 @@ setMethod("sign", signature(x = "Column"),
 #'
 #' @family agg_funcs
 #' @rdname countDistinct
+#' @name countDistinct
 #' @aliases countDistinct
 #' @export
 setMethod("n_distinct", signature(x = "Column"),
@@ -1351,6 +1437,7 @@ setMethod("n_distinct", signature(x = "Column"),
 #'
 #' @family agg_funcs
 #' @rdname count
+#' @name count
 #' @aliases count
 #' @export
 setMethod("n", signature(x = "Column"),
@@ -1371,6 +1458,7 @@ setMethod("n", signature(x = "Column"),
 #'
 #' @family datetime_funcs
 #' @rdname date_format
+#' @name date_format
 #' @export
 setMethod("date_format", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -1384,6 +1472,7 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #'
 #' @family datetime_funcs
 #' @rdname from_utc_timestamp
+#' @name from_utc_timestamp
 #' @export
 setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -1401,6 +1490,7 @@ setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
 #'
 #' @family string_funcs
 #' @rdname instr
+#' @name instr
 #' @export
 setMethod("instr", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -1421,6 +1511,7 @@ setMethod("instr", signature(y = "Column", x = "character"),
 #'
 #' @family datetime_funcs
 #' @rdname next_day
+#' @name next_day
 #' @export
 setMethod("next_day", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -1434,6 +1525,7 @@ setMethod("next_day", signature(y = "Column", x = "character"),
 #'
 #' @family datetime_funcs
 #' @rdname to_utc_timestamp
+#' @name to_utc_timestamp
 #' @export
 setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -1445,8 +1537,10 @@ setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
 #'
 #' Returns the date that is numMonths after startDate.
 #'
+#' @name add_months
 #' @family datetime_funcs
 #' @rdname add_months
+#' @name add_months
 #' @export
 setMethod("add_months", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -1460,6 +1554,7 @@ setMethod("add_months", signature(y = "Column", x = "numeric"),
 #'
 #' @family datetime_funcs
 #' @rdname date_add
+#' @name date_add
 #' @export
 setMethod("date_add", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -1473,6 +1568,7 @@ setMethod("date_add", signature(y = "Column", x = "numeric"),
 #'
 #' @family datetime_funcs
 #' @rdname date_sub
+#' @name date_sub
 #' @export
 setMethod("date_sub", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -1490,6 +1586,7 @@ setMethod("date_sub", signature(y = "Column", x = "numeric"),
 #'
 #' @family string_funcs
 #' @rdname format_number
+#' @name format_number
 #' @export
 setMethod("format_number", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -1508,6 +1605,7 @@ setMethod("format_number", signature(y = "Column", x = "numeric"),
 #' @param x one of 224, 256, 384, or 512.
 #' @family misc_funcs
 #' @rdname sha2
+#' @name sha2
 #' @export
 setMethod("sha2", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -1522,6 +1620,7 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
 #'
 #' @family math_funcs
 #' @rdname shiftLeft
+#' @name shiftLeft
 #' @export
 setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -1538,6 +1637,7 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
 #'
 #' @family math_funcs
 #' @rdname shiftRight
+#' @name shiftRight
 #' @export
 setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -1554,6 +1654,7 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
 #'
 #' @family math_funcs
 #' @rdname shiftRightUnsigned
+#' @name shiftRightUnsigned
 #' @export
 setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -1570,6 +1671,7 @@ setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
 #'
 #' @family string_funcs
 #' @rdname concat_ws
+#' @name concat_ws
 #' @export
 setMethod("concat_ws", signature(sep = "character", x = "Column"),
           function(sep, x, ...) {
@@ -1584,6 +1686,7 @@ setMethod("concat_ws", signature(sep = "character", x = "Column"),
 #'
 #' @family math_funcs
 #' @rdname conv
+#' @name conv
 #' @export
 setMethod("conv", signature(x = "Column", fromBase = "numeric", toBase = "numeric"),
           function(x, fromBase, toBase) {
@@ -1602,6 +1705,7 @@ setMethod("conv", signature(x = "Column", fromBase = "numeric", toBase = "numeri
 #'
 #' @family normal_funcs
 #' @rdname expr
+#' @name expr
 #' @export
 setMethod("expr", signature(x = "character"),
           function(x) {
@@ -1615,6 +1719,7 @@ setMethod("expr", signature(x = "character"),
 #'
 #' @family string_funcs
 #' @rdname format_string
+#' @name format_string
 #' @export
 setMethod("format_string", signature(format = "character", x = "Column"),
           function(format, x, ...) {
@@ -1633,6 +1738,7 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #'
 #' @family datetime_funcs
 #' @rdname from_unixtime
+#' @name from_unixtime
 #' @export
 setMethod("from_unixtime", signature(x = "Column"),
           function(x, format = "yyyy-MM-dd HH:mm:ss") {
@@ -1650,6 +1756,7 @@ setMethod("from_unixtime", signature(x = "Column"),
 #'
 #' @family string_funcs
 #' @rdname locate
+#' @name locate
 #' @export
 setMethod("locate", signature(substr = "character", str = "Column"),
           function(substr, str, pos = 0) {
@@ -1665,6 +1772,7 @@ setMethod("locate", signature(substr = "character", str = "Column"),
 #'
 #' @family string_funcs
 #' @rdname lpad
+#' @name lpad
 #' @export
 setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
           function(x, len, pad) {
@@ -1680,6 +1788,7 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 #'
 #' @family normal_funcs
 #' @rdname rand
+#' @name rand
 #' @export
 setMethod("rand", signature(seed = "missing"),
           function(seed) {
@@ -1688,6 +1797,7 @@ setMethod("rand", signature(seed = "missing"),
           })
 #' @family normal_funcs
 #' @rdname rand
+#' @name rand
 #' @export
 setMethod("rand", signature(seed = "numeric"),
           function(seed) {
@@ -1701,6 +1811,7 @@ setMethod("rand", signature(seed = "numeric"),
 #'
 #' @family normal_funcs
 #' @rdname randn
+#' @name randn
 #' @export
 setMethod("randn", signature(seed = "missing"),
           function(seed) {
@@ -1709,6 +1820,7 @@ setMethod("randn", signature(seed = "missing"),
           })
 #' @family normal_funcs
 #' @rdname randn
+#' @name randn
 #' @export
 setMethod("randn", signature(seed = "numeric"),
           function(seed) {
@@ -1722,6 +1834,7 @@ setMethod("randn", signature(seed = "numeric"),
 #'
 #' @family string_funcs
 #' @rdname regexp_extract
+#' @name regexp_extract
 #' @export
 setMethod("regexp_extract",
           signature(x = "Column", pattern = "character", idx = "numeric"),
@@ -1738,6 +1851,7 @@ setMethod("regexp_extract",
 #'
 #' @family string_funcs
 #' @rdname regexp_replace
+#' @name regexp_replace
 #' @export
 setMethod("regexp_replace",
           signature(x = "Column", pattern = "character", replacement = "character"),
@@ -1754,6 +1868,7 @@ setMethod("regexp_replace",
 #'
 #' @family string_funcs
 #' @rdname rpad
+#' @name rpad
 #' @export
 setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
           function(x, len, pad) {
@@ -1772,6 +1887,7 @@ setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
 #'
 #' @family string_funcs
 #' @rdname substring_index
+#' @name substring_index
 #' @export
 setMethod("substring_index",
           signature(x = "Column", delim = "character", count = "numeric"),
@@ -1791,6 +1907,7 @@ setMethod("substring_index",
 #'
 #' @family string_funcs
 #' @rdname translate
+#' @name translate
 #' @export
 setMethod("translate",
           signature(x = "Column", matchingString = "character", replaceString = "character"),
@@ -1806,6 +1923,7 @@ setMethod("translate",
 #'
 #' @family datetime_funcs
 #' @rdname unix_timestamp
+#' @name unix_timestamp
 #' @export
 setMethod("unix_timestamp", signature(x = "missing", format = "missing"),
           function(x, format) {
@@ -1814,6 +1932,7 @@ setMethod("unix_timestamp", signature(x = "missing", format = "missing"),
           })
 #' @family datetime_funcs
 #' @rdname unix_timestamp
+#' @name unix_timestamp
 #' @export
 setMethod("unix_timestamp", signature(x = "Column", format = "missing"),
           function(x, format) {
@@ -1822,6 +1941,7 @@ setMethod("unix_timestamp", signature(x = "Column", format = "missing"),
           })
 #' @family datetime_funcs
 #' @rdname unix_timestamp
+#' @name unix_timestamp
 #' @export
 setMethod("unix_timestamp", signature(x = "Column", format = "character"),
           function(x, format = "yyyy-MM-dd HH:mm:ss") {
@@ -1835,6 +1955,7 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
 #'
 #' @family normal_funcs
 #' @rdname when
+#' @name when
 #' @export
 setMethod("when", signature(condition = "Column", value = "ANY"),
           function(condition, value) {
@@ -1851,6 +1972,7 @@ setMethod("when", signature(condition = "Column", value = "ANY"),
 #'
 #' @family normal_funcs
 #' @rdname ifelse
+#' @name ifelse
 #' @export
 setMethod("ifelse",
           signature(test = "Column", yes = "ANY", no = "ANY"),
