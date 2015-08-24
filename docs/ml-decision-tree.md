@@ -234,7 +234,7 @@ IndexToString labelConverter = new IndexToString()
 
 // Chain indexers and tree in a Pipeline
 Pipeline pipeline = new Pipeline()
-  .setStages(new PipelineStage[]{labelIndexer, featureIndexer, dt, labelConverter});
+  .setStages(new PipelineStage[] {labelIndexer, featureIndexer, dt, labelConverter});
 
 // Train model.  This also runs the indexers.
 PipelineModel model = pipeline.fit(trainingData);
@@ -417,7 +417,7 @@ DecisionTreeRegressor dt = new DecisionTreeRegressor()
 
 // Chain indexer and tree in a Pipeline
 Pipeline pipeline = new Pipeline()
-  .setStages(new PipelineStage[]{featureIndexer, dt});
+  .setStages(new PipelineStage[] {featureIndexer, dt});
 
 // Train model.  This also runs the indexer.
 PipelineModel model = pipeline.fit(trainingData);

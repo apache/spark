@@ -234,7 +234,7 @@ IndexToString labelConverter = new IndexToString()
 
 // Chain indexers and forest in a Pipeline
 Pipeline pipeline = new Pipeline()
-  .setStages(new PipelineStage[]{labelIndexer, featureIndexer, rf, labelConverter});
+  .setStages(new PipelineStage[] {labelIndexer, featureIndexer, rf, labelConverter});
 
 // Train model.  This also runs the indexers.
 PipelineModel model = pipeline.fit(trainingData);
@@ -416,7 +416,7 @@ RandomForestRegressor rf = new RandomForestRegressor()
 
 // Chain indexer and forest in a Pipeline
 Pipeline pipeline = new Pipeline()
-  .setStages(new PipelineStage[]{featureIndexer, rf});
+  .setStages(new PipelineStage[] {featureIndexer, rf});
 
 // Train model.  This also runs the indexer.
 PipelineModel model = pipeline.fit(trainingData);
@@ -690,7 +690,7 @@ IndexToString labelConverter = new IndexToString()
 
 // Chain indexers and GBT in a Pipeline
 Pipeline pipeline = new Pipeline()
-  .setStages(new PipelineStage[]{labelIndexer, featureIndexer, gbt, labelConverter});
+  .setStages(new PipelineStage[] {labelIndexer, featureIndexer, gbt, labelConverter});
 
 // Train model.  This also runs the indexers.
 PipelineModel model = pipeline.fit(trainingData);
@@ -768,6 +768,9 @@ print gbtModel # summary only
 </div>
 
 #### Example: Regression
+
+Note: For this example dataset, `GBTRegressor` actually only needs 1 iteration, but that will not
+be true in general.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -871,7 +874,7 @@ GBTRegressor gbt = new GBTRegressor()
 
 // Chain indexer and GBT in a Pipeline
 Pipeline pipeline = new Pipeline()
-  .setStages(new PipelineStage[]{featureIndexer, gbt});
+  .setStages(new PipelineStage[] {featureIndexer, gbt});
 
 // Train model.  This also runs the indexer.
 PipelineModel model = pipeline.fit(trainingData);
@@ -1027,7 +1030,7 @@ RDD<LabeledPoint> data = MLUtils.loadLibSVMFile(jsc.sc(),
   "data/mllib/sample_multiclass_classification_data.txt");
 
 DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
-DataFrame[] splits = dataFrame.randomSplit(new double[]{0.7, 0.3}, 12345);
+DataFrame[] splits = dataFrame.randomSplit(new double[] {0.7, 0.3}, 12345);
 DataFrame train = splits[0];
 DataFrame test = splits[1];
 
