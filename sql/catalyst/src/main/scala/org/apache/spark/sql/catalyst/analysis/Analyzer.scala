@@ -78,7 +78,7 @@ class Analyzer(
       ResolveAliases ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
-      UnresolvedHavingClauseAttributes ::
+      ResolveAggregateFunctions ::
       HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
@@ -452,37 +452,6 @@ class Analyzer(
           logDebug(s"Failed to find $missing in ${p.output.mkString(", ")}")
           s // Nothing we can do here. Return original plan.
         }
-      case s @ Sort(ordering, global, a @ Aggregate(grouping, aggs, child))
-          if !s.resolved && a.resolved =>
-        // A small hack to create an object that will allow us to resolve any references that
-        // refer to named expressions that are present in the grouping expressions.
-        val groupingRelation = LocalRelation(
-          grouping.collect { case ne: NamedExpression => ne.toAttribute }
-        )
-
-        // Find sort attributes that are projected away so we can temporarily add them back in.
-        val (newOrdering, missingAttr) = resolveAndFindMissing(ordering, a, groupingRelation)
-
-        // Find aggregate expressions and evaluate them early, since they can't be evaluated in a
-        // Sort.
-        val (withAggsRemoved, aliasedAggregateList) = newOrdering.map {
-          case aggOrdering if aggOrdering.collect { case a: AggregateExpression => a }.nonEmpty =>
-            val aliased = Alias(aggOrdering.child, "_aggOrdering")()
-            (aggOrdering.copy(child = aliased.toAttribute), Some(aliased))
-
-          case other => (other, None)
-        }.unzip
-
-        val missing = missingAttr ++ aliasedAggregateList.flatten
-
-        if (missing.nonEmpty) {
-          // Add missing grouping exprs and then project them away after the sort.
-          Project(a.output,
-            Sort(withAggsRemoved, global,
-              Aggregate(grouping, aggs ++ missing, child)))
-        } else {
-          s // Nothing we can do here. Return original plan.
-        }
     }
 
     /**
@@ -560,33 +529,32 @@ class Analyzer(
   }
 
   /**
-   * This rule finds expressions in HAVING clause filters that depend on
-   * unresolved attributes.  It pushes these expressions down to the underlying
-   * aggregates and then projects them away above the filter.
+   * This rule finds aggregate expressions that are not in an aggregate operator.  For example,
+   * those in a HAVING clause or ORDER BY clause.  These expressions are pushed down to the
+   * underlying aggregate operator and then projected away after the original operator.
    */
-  object UnresolvedHavingClauseAttributes extends Rule[LogicalPlan] {
+  object ResolveAggregateFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case filter @ Filter(havingCondition,
              aggregate @ Aggregate(grouping, originalAggExprs, child))
           if aggregate.resolved && !filter.resolved =>
 
         // Try resolving the condition of the filter as though it is in the aggregate clause
-        val aggregatedCondition = Aggregate(grouping, Alias(havingCondition, "")() :: Nil, child)
+        val aggregatedCondition =
+          Aggregate(grouping, Alias(havingCondition, "havingCondition")() :: Nil, child)
         val resolvedOperator = execute(aggregatedCondition)
         def resolvedAggregateFilter =
           resolvedOperator
             .asInstanceOf[Aggregate]
             .aggregateExpressions.head
-            .children.head // Strip alias
 
         // If resolution was successful and we see the filter has an aggregate in it, add it to
         // the original aggregate operator.
         if (resolvedOperator.resolved && containsAggregate(resolvedAggregateFilter)) {
-          val evaluatedCondition = Alias(resolvedAggregateFilter, "havingCondition")()
-          val aggExprsWithHaving = evaluatedCondition +: originalAggExprs
+          val aggExprsWithHaving = resolvedAggregateFilter +: originalAggExprs
 
           Project(aggregate.output,
-            Filter(evaluatedCondition.toAttribute,
+            Filter(resolvedAggregateFilter.toAttribute,
               aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
         } else {
           plan
@@ -603,10 +571,12 @@ class Analyzer(
         def resolvedAggregateOrdering: Seq[NamedExpression] = resolvedOperator.aggregateExpressions
 
         val needsAggregate = resolvedAggregateOrdering.exists(containsAggregate)
+        val requiredAttributes = resolvedAggregateOrdering.map(_.references).reduce(_ ++ _)
+        val missingAttributes = (requiredAttributes -- aggregate.outputSet).nonEmpty
 
         // If resolution was successful and we see the filter has an aggregate in it, add it to
         // the original aggregate operator.
-        if (resolvedOperator.resolved && needsAggregate) {
+        if (resolvedOperator.resolved && (needsAggregate || missingAttributes)) {
           val evaluatedOrderings: Seq[SortOrder] = sortOrder.zip(resolvedAggregateOrdering).map {
             case (order, evaluated) => order.copy(child = evaluated.toAttribute)
           }
