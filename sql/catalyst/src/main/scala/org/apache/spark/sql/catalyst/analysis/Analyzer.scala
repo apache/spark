@@ -566,15 +566,59 @@ class Analyzer(
    */
   object UnresolvedHavingClauseAttributes extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case filter @ Filter(havingCondition, aggregate @ Aggregate(_, originalAggExprs, _))
-          if aggregate.resolved && containsAggregate(havingCondition) =>
+      case filter @ Filter(havingCondition,
+             aggregate @ Aggregate(grouping, originalAggExprs, child))
+          if aggregate.resolved && !filter.resolved =>
 
-        val evaluatedCondition = Alias(havingCondition, "havingCondition")()
-        val aggExprsWithHaving = evaluatedCondition +: originalAggExprs
+        // Try resolving the condition of the filter as though it is in the aggregate clause
+        val aggregatedCondition = Aggregate(grouping, Alias(havingCondition, "")() :: Nil, child)
+        val resolvedOperator = execute(aggregatedCondition)
+        def resolvedAggregateFilter =
+          resolvedOperator
+            .asInstanceOf[Aggregate]
+            .aggregateExpressions.head
+            .children.head // Strip alias
 
-        Project(aggregate.output,
-          Filter(evaluatedCondition.toAttribute,
-            aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
+        // If resolution was successful and we see the filter has an aggregate in it, add it to
+        // the original aggregate operator.
+        if (resolvedOperator.resolved && containsAggregate(resolvedAggregateFilter)) {
+          val evaluatedCondition = Alias(resolvedAggregateFilter, "havingCondition")()
+          val aggExprsWithHaving = evaluatedCondition +: originalAggExprs
+
+          Project(aggregate.output,
+            Filter(evaluatedCondition.toAttribute,
+              aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
+        } else {
+          plan
+        }
+
+      case sort @ Sort(sortOrder, global,
+             aggregate @ Aggregate(grouping, originalAggExprs, child))
+        if aggregate.resolved && !sort.resolved =>
+
+        // Try resolving the condition of the filter as though it is in the aggregate clause
+        val aliasedOrder = sortOrder.map(o => Alias(o.child, "aggOrder")())
+        val aggregatedCondition = Aggregate(grouping, aliasedOrder, child)
+        val resolvedOperator: Aggregate = execute(aggregatedCondition).asInstanceOf[Aggregate]
+        def resolvedAggregateOrdering: Seq[NamedExpression] = resolvedOperator.aggregateExpressions
+
+        val needsAggregate = resolvedAggregateOrdering.exists(containsAggregate)
+
+        // If resolution was successful and we see the filter has an aggregate in it, add it to
+        // the original aggregate operator.
+        if (resolvedOperator.resolved && needsAggregate) {
+          val evaluatedOrderings: Seq[SortOrder] = sortOrder.zip(resolvedAggregateOrdering).map {
+            case (order, evaluated) => order.copy(child = evaluated.toAttribute)
+          }
+          val aggExprsWithHaving: Seq[NamedExpression] =
+            resolvedAggregateOrdering ++ originalAggExprs
+
+          Project(aggregate.output,
+            Sort(evaluatedOrderings, global,
+              aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
+        } else {
+          plan
+        }
     }
 
     protected def containsAggregate(condition: Expression): Boolean = {
