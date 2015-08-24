@@ -68,7 +68,7 @@ class DAGScheduler(
     blockManagerMaster: BlockManagerMaster,
     env: SparkEnv,
     clock: Clock = new SystemClock())
-  extends Logging {
+  extends Logging with CleanerListener {
 
   def this(sc: SparkContext, taskScheduler: TaskScheduler) = {
     this(
@@ -246,14 +246,18 @@ class DAGScheduler(
   private def getShuffleMapStage(
       shuffleDep: ShuffleDependency[_, _, _],
       firstJobId: Int): ShuffleMapStage = {
+    logInfo(s"trying to get shuffle map stage for ${shuffleDep.shuffleId}")
     shuffleToMapStage.get(shuffleDep.shuffleId) match {
-      case Some(stage) => stage
+      case Some(stage) =>
+        logInfo(s"for ${shuffleDep.shuffleId} found $stage")
+        stage
       case None =>
         // We are going to register ancestor shuffle dependencies
         registerShuffleDependencies(shuffleDep, firstJobId)
         // Then register current shuffleDep
         val stage = newOrUsedShuffleStage(shuffleDep, firstJobId)
         shuffleToMapStage(shuffleDep.shuffleId) = stage
+        logInfo(s"setting shuffleToMapStage = $shuffleToMapStage")
 
         stage
     }
@@ -297,6 +301,7 @@ class DAGScheduler(
       numTasks: Int,
       jobId: Int,
       callSite: CallSite): ResultStage = {
+    logInfo(s"getting parent stages and id for job $jobId with shuffleToMapStage = $shuffleToMapStage")
     val (parentStages: List[Stage], id: Int) = getParentStagesAndId(rdd, jobId)
     val stage: ResultStage = new ResultStage(id, rdd, numTasks, parentStages, jobId, callSite)
 
@@ -484,9 +489,6 @@ class DAGScheduler(
                 if (runningStages.contains(stage)) {
                   logDebug("Removing running stage %d".format(stageId))
                   runningStages -= stage
-                }
-                for ((k, v) <- shuffleToMapStage.find(_._2 == stage)) {
-                  shuffleToMapStage.remove(k)
                 }
                 if (waitingStages.contains(stage)) {
                   logDebug("Removing stage %d from waiting set.".format(stageId))
@@ -1437,6 +1439,20 @@ class DAGScheduler(
     eventProcessLoop.stop()
     taskScheduler.stop()
   }
+
+  /**
+   * Called by the context cleaner when a shuffle is removed
+   * @param shuffleId
+   */
+  override def shuffleCleaned(shuffleId: Int): Unit = {
+    shuffleToMapStage.remove(shuffleId)
+  }
+
+  // These are all called by the context cleaner but we don't need them
+  override def accumCleaned(accId: Long): Unit = {}
+  override def broadcastCleaned(broadcastId: Long): Unit = {}
+  override def checkpointCleaned(rddId: Long): Unit = {}
+  override def rddCleaned(rddId: Int): Unit = {}
 
   // Start the event thread and register the metrics source at the end of the constructor
   env.metricsSystem.registerSource(metricsSource)
