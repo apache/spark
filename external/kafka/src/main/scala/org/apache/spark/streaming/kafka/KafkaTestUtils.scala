@@ -20,9 +20,8 @@ package org.apache.spark.streaming.kafka
 import java.io.File
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
-import java.util.{Map => JMap}
-import java.util.Properties
 import java.util.concurrent.TimeoutException
+import java.util.{Map => JMap, Properties}
 
 import scala.annotation.tailrec
 import scala.language.postfixOps
@@ -30,17 +29,16 @@ import scala.util.control.NonFatal
 
 import kafka.admin.AdminUtils
 import kafka.api.Request
-import kafka.common.TopicAndPartition
 import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
 import kafka.serializer.StringEncoder
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.utils.{ZKStringSerializer, ZkUtils}
-import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.I0Itec.zkclient.ZkClient
+import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
-import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkConf}
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
@@ -48,7 +46,7 @@ import org.apache.spark.util.Utils
  *
  * The reason to put Kafka test utility class in src is to test Python related Kafka APIs.
  */
-private class KafkaTestUtils extends Logging {
+private[kafka] class KafkaTestUtils extends Logging {
 
   // Zookeeper related configurations
   private val zkHost = "localhost"

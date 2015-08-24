@@ -247,7 +247,7 @@ object FlumeUtils {
  * This is a helper class that wraps the methods in FlumeUtils into more Python-friendly class and
  * function so that it can be easily instantiated and called from Python's FlumeUtils.
  */
-private class FlumeUtilsPythonHelper {
+private[flume] class FlumeUtilsPythonHelper {
 
   def createStream(
       jssc: JavaStreamingContext,
