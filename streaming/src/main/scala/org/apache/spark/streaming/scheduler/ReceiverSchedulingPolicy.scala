@@ -22,6 +22,36 @@ import scala.collection.mutable
 
 import org.apache.spark.streaming.receiver.Receiver
 
+/**
+ * A class that tries to schedule receivers with evenly distributed. There are two phases for
+ * scheduling receivers.
+ *
+ * - The first phase is global scheduling when ReceiverTracker is starting and we need to schedule
+ *   all receivers at the same time. ReceiverTracker will call `scheduleReceivers` at this phase.
+ *   It will try to schedule receivers with evenly distributed. ReceiverTracker should update its
+ *   receiverTrackingInfoMap according to the results of `scheduleReceivers`.
+ *   `ReceiverTrackingInfo.scheduledExecutors` for each receiver will set to an executor list that
+ *   contains the scheduled locations. Then when a receiver is starting, it will send a register
+ *   request and `ReceiverTracker.registerReceiver` will be called. In
+ *   `ReceiverTracker.registerReceiver`, if a receiver's scheduled executors is set, it should check
+ *   if the location of this receiver is one of the scheduled executors, if not, the register will
+ *   be rejected.
+ * - The second phase is local scheduling when a receiver is restarting. There are two cases of
+ *   receiver restarting:
+ *   - If a receiver is restarting because it's rejected due to the real location and the scheduled
+ *     executors mismatching, in other words, it fails to start in one of the locations that
+ *     `scheduleReceivers` suggested, `ReceiverTracker` should firstly choose the executors that are
+ *     still alive in the list of scheduled executors, then use them to launch the receiver job.
+ *   - If a receiver is restarting without a scheduled executors list, or the executors in the list
+ *     are dead, `ReceiverTracker` should call `rescheduleReceiver`. If so, `ReceiverTracker` should
+ *     not set `ReceiverTrackingInfo.scheduledExecutors` for this executor, instead, it should clear
+ *     it. Then when this receiver is registering, we can know this is a local scheduling, and
+ *     `ReceiverTrackingInfo` should call `rescheduleReceiver` again to check if the launching
+ *     location is matching.
+ *
+ * In conclusion, we should make a global schedule, try to achieve that exactly as long as possible,
+ * otherwise do local scheduling.
+ */
 private[streaming] class ReceiverSchedulingPolicy {
 
   /**

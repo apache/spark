@@ -249,15 +249,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     val scheduledExecutors = receiverTrackingInfos(streamId).scheduledExecutors
     if (scheduledExecutors.nonEmpty) {
-      // This receiver is registering at the first time, it's scheduled by
+      // This receiver is registering and it's scheduled by
       // ReceiverSchedulingPolicy.scheduleReceivers. So use "scheduledExecutors" to check it.
       if (!scheduledExecutors.get.contains(hostPort)) {
         // Refuse it since it's scheduled to a wrong executor
-        val oldReceiverInfo = receiverTrackingInfos(streamId)
-        // Clear "scheduledExecutors" to mark this receiver has already tried to register.
-        val newReceiverInfo = oldReceiverInfo.copy(
-          state = ReceiverState.INACTIVE, scheduledExecutors = None)
-        receiverTrackingInfos(streamId) = newReceiverInfo
         return false
       }
     } else {
@@ -445,11 +440,22 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           startReceiver(receiver, executors)
         }
       case RestartReceiver(receiver) =>
-        val scheduledExecutors = schedulingPolicy.rescheduleReceiver(
-          receiver.streamId,
-          receiver.preferredLocation,
-          receiverTrackingInfos,
-          getExecutors)
+        val oldScheduledExecutors = getStoredScheduledExecutors(receiver.streamId)
+        val scheduledExecutors = if (oldScheduledExecutors.nonEmpty) {
+            // Try global scheduling again
+            oldScheduledExecutors
+          } else {
+            val oldReceiverInfo = receiverTrackingInfos(receiver.streamId)
+            // Clear "scheduledExecutors" to indicate we are going to do local scheduling
+            val newReceiverInfo = oldReceiverInfo.copy(
+              state = ReceiverState.INACTIVE, scheduledExecutors = None)
+            receiverTrackingInfos(receiver.streamId) = newReceiverInfo
+            schedulingPolicy.rescheduleReceiver(
+              receiver.streamId,
+              receiver.preferredLocation,
+              receiverTrackingInfos,
+              getExecutors)
+          }
         // Assume there is one receiver restarting at one time, so we don't need to update
         // receiverTrackingInfos
         startReceiver(receiver, scheduledExecutors)
@@ -482,6 +488,24 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         assert(isTrackerStopping || isTrackerStopped)
         stopReceivers()
         context.reply(true)
+    }
+
+    /**
+     * Return the stored scheduled executors that are still alive.
+     */
+    private def getStoredScheduledExecutors(receiverId: Int): Seq[String] = {
+      if (receiverTrackingInfos.contains(receiverId)) {
+        val scheduledExecutors = receiverTrackingInfos(receiverId).scheduledExecutors
+        if (scheduledExecutors.nonEmpty) {
+          val executors = getExecutors.toSet
+          // Only return the alive executors
+          scheduledExecutors.get.filter(executors)
+        } else {
+          Nil
+        }
+      } else {
+        Nil
+      }
     }
 
     /**
