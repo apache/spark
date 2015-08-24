@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.util.concurrent.locks.ReentrantReadWriteLock
+
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Future, ExecutionContext}
 

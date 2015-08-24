@@ -356,10 +356,9 @@ private[spark] class ApplicationMaster(
               logDebug("Sending progress")
               allocator.allocateResources().foreach { discoveredLossReasons =>
                 pendingLossReasonRequests.synchronized {
-                  discoveredLossReasons.foreach { executorIdAndReason =>
-                    pendingLossReasonRequests.remove(executorIdAndReason._1).foreach { pendingRequests =>
-                      pendingRequests.foreach(_.reply(executorIdAndReason._2))
-                      pendingRequests.clear()
+                  discoveredLossReasons.foreach { case (execId, lossReason) =>
+                    pendingLossReasonRequests.remove(execId).foreach { pendingRequests =>
+                      pendingRequests.foreach(_.reply(lossReason))
                     }
                   }
                 }
@@ -606,10 +605,7 @@ private[spark] class ApplicationMaster(
         Option(allocator) match {
           case Some(a) =>
             pendingLossReasonRequests.synchronized {
-              if (!pendingLossReasonRequests.contains(executorId)) {
-                pendingLossReasonRequests.put(executorId, new ArrayBuffer[RpcCallContext])
-              }
-              pendingLossReasonRequests(executorId) += context
+              pendingLossReasonRequests.getOrElseUpdate(executorId, new ArrayBuffer[RpcCallContext]) += context
             }
           case None =>
             logWarning("Container allocator was not ready to report on executor status.")
