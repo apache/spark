@@ -40,7 +40,8 @@ private[sql] abstract class ParquetCompatibilityTest extends QueryTest with Parq
       override def accept(path: Path): Boolean = pathFilter(path)
     }).toSeq
 
-    val footers = ParquetFileReader.readAllFootersInParallel(hadoopConfiguration, parquetFiles, true)
+    val footers =
+      ParquetFileReader.readAllFootersInParallel(hadoopConfiguration, parquetFiles, true)
     footers.head.getParquetMetadata.getFileMetaData.getSchema
   }
 

@@ -50,7 +50,7 @@ case class ListStringCaseClass(l: Seq[String])
 class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   import testImplicits._
 
-  def udf = sqlContext.udf
+  private def udf = sqlContext.udf
 
   test("spark sql udf test that returns a struct") {
     udf.register("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))

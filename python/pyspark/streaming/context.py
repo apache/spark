@@ -150,14 +150,14 @@ class StreamingContext(object):
         @param checkpointPath: Checkpoint directory used in an earlier streaming program
         @param setupFunc:      Function to create a new context and setup DStreams
         """
-        # TODO: support checkpoint in HDFS
-        if not os.path.exists(checkpointPath) or not os.listdir(checkpointPath):
+        cls._ensure_initialized()
+        gw = SparkContext._gateway
+
+        # Check whether valid checkpoint information exists in the given path
+        if gw.jvm.CheckpointReader.read(checkpointPath).isEmpty():
             ssc = setupFunc()
             ssc.checkpoint(checkpointPath)
             return ssc
-
-        cls._ensure_initialized()
-        gw = SparkContext._gateway
 
         try:
             jssc = gw.jvm.JavaStreamingContext(checkpointPath)
@@ -165,11 +165,15 @@ class StreamingContext(object):
             print("failed to load StreamingContext from checkpoint", file=sys.stderr)
             raise
 
-        jsc = jssc.sparkContext()
-        conf = SparkConf(_jconf=jsc.getConf())
-        sc = SparkContext(conf=conf, gateway=gw, jsc=jsc)
+        # If there is already an active instance of Python SparkContext use it, or create a new one
+        if not SparkContext._active_spark_context:
+            jsc = jssc.sparkContext()
+            conf = SparkConf(_jconf=jsc.getConf())
+            SparkContext(conf=conf, gateway=gw, jsc=jsc)
+
+        sc = SparkContext._active_spark_context
+
         # update ctx in serializer
-        SparkContext._active_spark_context = sc
         cls._transformerSerializer.ctx = sc
         return StreamingContext(sc, None, jssc)
 
