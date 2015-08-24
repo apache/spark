@@ -149,6 +149,10 @@ private[spark] object SerDe {
       case 'b' => readBooleanArr(dis)
       case 'j' => readStringArr(dis).map(x => JVMObjectTracker.getObject(x))
       case 'r' => readBytesArr(dis)
+      case 'l' => {
+        val len = readInt(dis)
+        (0 until len).map(_ => readList(dis)).toArray
+      }
       case _ => throw new IllegalArgumentException(s"Invalid array type $arrType")
     }
   }
