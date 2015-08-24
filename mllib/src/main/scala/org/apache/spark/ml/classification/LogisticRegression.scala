@@ -264,7 +264,7 @@ class LogisticRegression(override val uid: String)
             v: (Double, Double, Vector)) => {
               val weight = v._2
               (c._1.add(v._3, weight), c._2.add(v._1, weight))
-          }
+            }
 
           instances.treeAggregate(
             new MultivariateOnlineSummarizer, new MultiClassSummarizer)(seqOp, combOp)
@@ -537,7 +537,7 @@ private[classification] class MultiClassSummarizer extends Serializable {
    */
   def add(label: Double, weight: Double = 1.0): this.type = {
     if (weight == 0.0) return this
-    require(weight > 0.0, s"sampleWeight, ${weight} has to be >= 0.0")
+    require(weight > 0.0, s"sample weight, ${weight} has to be >= 0.0")
 
     if (label - label.toInt != 0.0 || label < 0) {
       totalInvalidCnt += 1
@@ -737,7 +737,7 @@ private class LogisticAggregator(
     featuresStd: Array[Double],
     featuresMean: Array[Double]) extends Serializable {
 
-  private var totalWeightSum = 0.0
+  private var weightSum = 0.0
   private var lossSum = 0.0
 
   private val weightsArray = weights match {
@@ -756,16 +756,16 @@ private class LogisticAggregator(
    * of the objective function.
    *
    * @param label The label for this data point.
-   * @param weight The weight for over-/undersamples each of training sample. Default is one.
    * @param data The features for one data point in dense/sparse vector format to be added
    *             into this aggregator.
+   * @param weight The weight for over-/undersamples each of training sample. Default is one.
    * @return This LogisticAggregator object.
    */
-  def add(label: Double, weight: Double, data: Vector): this.type = {
+  def add(label: Double, data: Vector, weight: Double = 1.0): this.type = {
     require(dim == data.size, s"Dimensions mismatch when adding new sample." +
       s" Expecting $dim but got ${data.size}.")
     if (weight == 0.0) return this
-    require(weight > 0.0, s"sampleWeight, ${weight} has to be >= 0.0")
+    require(weight > 0.0, s"sample weight, ${weight} has to be >= 0.0")
 
     val localWeightsArray = weightsArray
     val localGradientSumArray = gradientSumArray
@@ -805,7 +805,7 @@ private class LogisticAggregator(
         new NotImplementedError("LogisticRegression with ElasticNet in ML package only supports " +
           "binary classification for now.")
     }
-    totalWeightSum += weight
+    weightSum += weight
     this
   }
 
@@ -821,8 +821,8 @@ private class LogisticAggregator(
     require(dim == other.dim, s"Dimensions mismatch when merging with another " +
       s"LeastSquaresAggregator. Expecting $dim but got ${other.dim}.")
 
-    if (other.totalWeightSum != 0.0) {
-      totalWeightSum += other.totalWeightSum
+    if (other.weightSum != 0.0) {
+      weightSum += other.weightSum
       lossSum += other.lossSum
 
       var i = 0
@@ -838,16 +838,16 @@ private class LogisticAggregator(
   }
 
   def loss: Double = {
-    require(totalWeightSum >= 1.0, s"The effective number of samples should be " +
-      s"greater than or equal to 1.0, but $totalWeightSum.")
-    lossSum / totalWeightSum
+    require(weightSum >= 1.0, s"The effective number of samples should be " +
+      s"greater than or equal to 1.0, but $weightSum.")
+    lossSum / weightSum
   }
 
   def gradient: Vector = {
-    require(totalWeightSum >= 1.0, s"The effective number of samples should be " +
-      s"greater than or equal to 1.0, but $totalWeightSum.")
+    require(weightSum >= 1.0, s"The effective number of samples should be " +
+      s"greater than or equal to 1.0, but $weightSum.")
     val result = Vectors.dense(gradientSumArray.clone())
-    scal(1.0 / totalWeightSum, result)
+    scal(1.0 / weightSum, result)
     result
   }
 }
@@ -875,12 +875,12 @@ private class LogisticCostFun(
       val combOp = (c1: LogisticAggregator, c2: LogisticAggregator) => c1.merge(c2)
       data match {
         case Left(data: RDD[(Double, Vector)]) =>
-          val seqOP = (c: LogisticAggregator, v: (Double, Vector)) => c.add(v._1, 1.0, v._2)
+          val seqOP = (c: LogisticAggregator, v: (Double, Vector)) => c.add(v._1, v._2)
           data.treeAggregate(new LogisticAggregator(w, numClasses, fitIntercept,
             featuresStd, featuresMean))(seqOP, combOp)
         case Right(data: RDD[(Double, Double, Vector)]) =>
           val seqOp = (c: LogisticAggregator, v: (Double, Double, Vector)) =>
-            c.add(v._1, v._2, v._3)
+            c.add(v._1, v._3, v._2)
           data.treeAggregate(new LogisticAggregator(w, numClasses, fitIntercept,
             featuresStd, featuresMean))(seqOp, combOp)
       }
