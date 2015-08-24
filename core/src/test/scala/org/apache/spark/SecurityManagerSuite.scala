@@ -125,6 +125,27 @@ class SecurityManagerSuite extends SparkFunSuite {
 
   }
 
+  test("set security with * in acls") {
+    val conf = new SparkConf
+    conf.set("spark.ui.acls.enable", "true")
+    conf.set("spark.admin.acls", "user1,user2")
+    conf.set("spark.ui.view.acls", "*")
+    conf.set("spark.modify.acls", "user4")
+
+    val securityManager = new SecurityManager(conf);
+    assert(securityManager.aclsEnabled() === true)
+
+    assert(securityManager.checkUIViewPermissions("user1") === true)
+    assert(securityManager.checkUIViewPermissions("user5") === true)
+    assert(securityManager.checkUIViewPermissions("user6") === true)
+    assert(securityManager.checkModifyPermissions("user4") === true)
+    assert(securityManager.checkModifyPermissions("user7") === false)
+    assert(securityManager.checkModifyPermissions("user8") === false)
+    securityManager.setModifyAcls(Set("user4"), "*")
+    assert(securityManager.checkModifyPermissions("user7") === true)
+    assert(securityManager.checkModifyPermissions("user8") === true)
+  }
+
   test("ssl on setup") {
     val conf = SSLSampleConfigs.sparkSSLConfig()
     val expectedAlgorithms = Set(
