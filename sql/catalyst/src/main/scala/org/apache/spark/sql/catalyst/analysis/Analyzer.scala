@@ -557,7 +557,7 @@ class Analyzer(
             Filter(resolvedAggregateFilter.toAttribute,
               aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
         } else {
-          plan
+          filter
         }
 
       case sort @ Sort(sortOrder, global,
@@ -587,7 +587,7 @@ class Analyzer(
             Sort(evaluatedOrderings, global,
               aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
         } else {
-          plan
+          sort
         }
     }
 
