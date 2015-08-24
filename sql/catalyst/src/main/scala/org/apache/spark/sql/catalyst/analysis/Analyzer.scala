@@ -564,30 +564,36 @@ class Analyzer(
              aggregate @ Aggregate(grouping, originalAggExprs, child))
         if aggregate.resolved && !sort.resolved =>
 
-        // Try resolving the condition of the filter as though it is in the aggregate clause
-        val aliasedOrder = sortOrder.map(o => Alias(o.child, "aggOrder")())
-        val aggregatedCondition = Aggregate(grouping, aliasedOrder, child)
-        val resolvedOperator: Aggregate = execute(aggregatedCondition).asInstanceOf[Aggregate]
-        def resolvedAggregateOrdering: Seq[NamedExpression] = resolvedOperator.aggregateExpressions
+        // Try resolving the ordering as though it is in the aggregate clause.
+        try {
+          val aliasedOrder = sortOrder.map(o => Alias(o.child, "aggOrder")())
+          val aggregatedCondition = Aggregate(grouping, aliasedOrder, child)
+          val resolvedOperator: Aggregate = execute(aggregatedCondition).asInstanceOf[Aggregate]
+          def resolvedAggregateOrdering = resolvedOperator.aggregateExpressions
 
-        val needsAggregate = resolvedAggregateOrdering.exists(containsAggregate)
-        val requiredAttributes = resolvedAggregateOrdering.map(_.references).reduce(_ ++ _)
-        val missingAttributes = (requiredAttributes -- aggregate.outputSet).nonEmpty
+          val needsAggregate = resolvedAggregateOrdering.exists(containsAggregate)
+          val requiredAttributes = resolvedAggregateOrdering.map(_.references).reduce(_ ++ _)
+          val missingAttributes = (requiredAttributes -- aggregate.outputSet).nonEmpty
 
-        // If resolution was successful and we see the filter has an aggregate in it, add it to
-        // the original aggregate operator.
-        if (resolvedOperator.resolved && (needsAggregate || missingAttributes)) {
-          val evaluatedOrderings: Seq[SortOrder] = sortOrder.zip(resolvedAggregateOrdering).map {
-            case (order, evaluated) => order.copy(child = evaluated.toAttribute)
+          // If resolution was successful and we see the filter has an aggregate in it, add it to
+          // the original aggregate operator.
+          if (resolvedOperator.resolved && (needsAggregate || missingAttributes)) {
+            val evaluatedOrderings: Seq[SortOrder] = sortOrder.zip(resolvedAggregateOrdering).map {
+              case (order, evaluated) => order.copy(child = evaluated.toAttribute)
+            }
+            val aggExprsWithHaving: Seq[NamedExpression] =
+              resolvedAggregateOrdering ++ originalAggExprs
+
+            Project(aggregate.output,
+              Sort(evaluatedOrderings, global,
+                aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
+          } else {
+            sort
           }
-          val aggExprsWithHaving: Seq[NamedExpression] =
-            resolvedAggregateOrdering ++ originalAggExprs
-
-          Project(aggregate.output,
-            Sort(evaluatedOrderings, global,
-              aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
-        } else {
-          sort
+        } catch {
+          // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
+          // just return the original plan.
+          case ae: AnalysisException => sort
         }
     }
 
