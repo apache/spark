@@ -19,8 +19,8 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.MetastoreRelation
+import scala.util.control.NonFatal
+
 import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 
 import org.apache.spark.{Logging, SparkFunSuite}
@@ -30,8 +30,6 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.DescribeCommand
 import org.apache.spark.sql.hive.test.TestHive
-
-import scala.util.control.NonFatal
 
 /**
  * Allows the creations of tests that execute the same query against both hive
