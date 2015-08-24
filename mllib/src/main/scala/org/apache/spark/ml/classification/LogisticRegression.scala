@@ -837,7 +837,7 @@ private class LogisticAggregator(
     this
   }
 
-  def loss: Double ={
+  def loss: Double = {
     require(totalWeightSum >= 1.0, s"The effective number of samples should be " +
       s"greater than or equal to 1.0, but $totalWeightSum.")
     lossSum / totalWeightSum
