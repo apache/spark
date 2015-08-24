@@ -983,6 +983,7 @@ setMethod("[", signature(x = "DataFrame", i = "Column"),
 #'   df$age
 #'   # It can also be subset on rows and Columns
 #'   df[df$name == "Smith", c(1,2)]
+#'   df[df$age %in% c(19, 30), 1:2]
 #' }
 setMethod("select", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
