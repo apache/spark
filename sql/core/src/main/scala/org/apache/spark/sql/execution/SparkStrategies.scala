@@ -142,6 +142,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         joins.SortMergeOuterJoin(
           leftKeys, rightKeys, RightOuter, condition, planLater(left), planLater(right)) :: Nil
 
+      case ExtractEquiJoinKeys(FullOuter, leftKeys, rightKeys, condition, left, right)
+        if sqlContext.conf.sortMergeJoinEnabled && RowOrdering.isOrderable(leftKeys) &&
+          RowOrdering.isOrderable(rightKeys) =>
+        joins.SortMergeOuterJoin(
+          leftKeys, rightKeys, FullOuter, condition, planLater(left), planLater(right)) :: Nil
+
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right) =>
         joins.ShuffledHashOuterJoin(
           leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
