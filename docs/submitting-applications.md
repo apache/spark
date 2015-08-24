@@ -87,6 +87,12 @@ run it with `--help`. Here are a few examples of common options:
   --total-executor-cores 100 \
   /path/to/examples.jar \
   1000
+  
+# Run a Python application on a Spark Standalone cluster
+./bin/spark-submit \
+  --master spark://207.184.161.138:7077 \
+  examples/src/main/python/pi.py \
+  1000
 
 # Run on a Spark Standalone cluster in cluster deploy mode with supervise
 ./bin/spark-submit \
@@ -99,7 +105,7 @@ run it with `--help`. Here are a few examples of common options:
   /path/to/examples.jar \
   1000
 
-# Run on a YARN cluster
+# Run on a YARN cluster without --deploy mode
 export HADOOP_CONF_DIR=XXX
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
@@ -107,12 +113,6 @@ export HADOOP_CONF_DIR=XXX
   --executor-memory 20G \
   --num-executors 50 \
   /path/to/examples.jar \
-  1000
-
-# Run a Python application on a Spark Standalone cluster
-./bin/spark-submit \
-  --master spark://207.184.161.138:7077 \
-  examples/src/main/python/pi.py \
   1000
 {% endhighlight %}
 
@@ -139,7 +139,6 @@ client mode. The cluster location will be found based on the HADOOP_CONF_DIR or 
 cluster mode. The cluster location will be found based on the HADOOP_CONF_DIR or YARN_CONF_DIR variable.
 </td></tr>
 </table>
-
 
 # Loading Configuration from a File
 

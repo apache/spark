@@ -967,7 +967,7 @@ object Client extends Logging {
   def main(argStrings: Array[String]) {
     if (!sys.props.contains("SPARK_SUBMIT")) {
       logWarning("WARNING: This client is deprecated and will be removed in a " +
-        "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
+        "future version of Spark. Use ./bin/spark-submit with \"--master yarn --deploy-mode cluster (or client)  OR --master yarn-cluster (yarn-client)\"")
     }
 
     // Set an env variable indicating we are running in YARN mode.
