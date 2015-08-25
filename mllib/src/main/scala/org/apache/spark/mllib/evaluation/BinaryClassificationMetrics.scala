@@ -42,11 +42,11 @@ import org.apache.spark.sql.DataFrame
  *                be smaller as a result, meaning there may be an extra sample at
  *                partition boundaries.
  */
-@Since("1.3.0")
+@Since("1.0.0")
 @Experimental
-class BinaryClassificationMetrics(
-    val scoreAndLabels: RDD[(Double, Double)],
-    val numBins: Int) extends Logging {
+class BinaryClassificationMetrics @Since("1.3.0") (
+    @Since("1.3.0") val scoreAndLabels: RDD[(Double, Double)],
+    @Since("1.3.0") val numBins: Int) extends Logging {
 
   require(numBins >= 0, "numBins must be nonnegative")
 
