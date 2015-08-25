@@ -335,8 +335,8 @@ class Connection(Base):
     def set_password(self, value):
         if value:
             try:
-                val = bytes(value.encode('utf-8'))
-                self._password = FERNET.encrypt(val)
+                bytes_val = bytes(value.encode('utf-8'))
+                self._password = FERNET.encrypt(bytes_val)
                 self.is_encrypted = True
             except NameError:
                 self._password = val
