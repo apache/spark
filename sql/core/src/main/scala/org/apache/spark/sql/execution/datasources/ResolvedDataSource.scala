@@ -100,9 +100,13 @@ object ResolvedDataSource extends Logging {
           val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
             val patternPaths = caseInsensitiveOptions("path").split(",").map(new Path(_))
-            val fs = patternPaths.head.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-            val qualifiedPatterns = patternPaths.map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
-            qualifiedPatterns.flatMap(SparkHadoopUtil.get.globPathIfNecessary(_).map(_.toString)).toArray
+            // assume all paths are on same filesystem
+            val fs = patternPaths.head
+              .getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+            val qualifiedPatterns = 
+              patternPaths.map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
+            qualifiedPatterns
+              .flatMap(SparkHadoopUtil.get.globPathIfNecessary(_).map(_.toString)).toArray
           }
 
           val dataSchema =
@@ -127,9 +131,13 @@ object ResolvedDataSource extends Logging {
           val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
             val patternPaths = caseInsensitiveOptions("path").split(",").map(new Path(_))
-            val fs = patternPaths.head.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-            val qualifiedPatterns = patternPaths.map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
-            qualifiedPatterns.flatMap(SparkHadoopUtil.get.globPathIfNecessary(_).map(_.toString)).toArray
+            // assume all paths are on same filesystem
+            val fs = patternPaths.head
+              .getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+            val qualifiedPatterns =
+              patternPaths.map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
+            qualifiedPatterns
+              .flatMap(SparkHadoopUtil.get.globPathIfNecessary(_).map(_.toString)).toArray
           }
           dataSource.createRelation(sqlContext, paths, None, None, caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
