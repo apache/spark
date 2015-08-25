@@ -262,4 +262,30 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
 
     sql("DROP TABLE table_with_partition")
   }
+
+  test("Remove empty file creation") {
+    val testData = TestHive.sparkContext.parallelize(
+      (1 to 2).map(i => TestData(i, i.toString))).toDF()
+    testData.registerTempTable("testData")
+
+    val tmpDir = Utils.createTempDir()
+    sql(
+      s"""
+         |CREATE TABLE table1(key int,value string)
+         |location '${tmpDir.toURI.toString}'
+       """.stripMargin)
+    sql(
+      """
+        |INSERT OVERWRITE TABLE table1
+        |SELECT count(key), value FROM testData GROUP BY value
+      """.stripMargin)
+    def listFiles(path: File): List[File] = {
+      val file = path.listFiles()
+      file.filter { e => e.isFile && !e.getName.endsWith(".crc")}.toList
+    }
+    val fileList = listFiles(tmpDir)
+    assert(fileList.filter(e => e.length > 0).sortBy(_.getName) === fileList.sortBy(_.getName))
+
+    sql("DROP TABLE table1")
+  }
 }
