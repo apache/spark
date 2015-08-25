@@ -421,6 +421,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
         catalog.ParquetConversions ::
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
+        catalog.WriteToDirs ::
         ExtractPythonUDFs ::
         ResolveHiveWindowFunction ::
         PreInsertCastAndRename ::
@@ -525,7 +526,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
   }
 
   @transient
-  private val hivePlanner = new SparkPlanner with HiveStrategies {
+  private[hive] val hivePlanner = new SparkPlanner with HiveStrategies {
     val hiveContext = self
 
     override def strategies: Seq[Strategy] = experimental.extraStrategies ++ Seq(
