@@ -652,18 +652,49 @@ setMethod("dim",
 setMethod("collect",
           signature(x = "DataFrame"),
           function(x, stringsAsFactors = FALSE) {
-            # listCols is a list of raw vectors, one per column
-            listCols <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToCols", x@sdf)
-            cols <- lapply(listCols, function(col) {
-              objRaw <- rawConnection(col)
-              numRows <- readInt(objRaw)
-              col <- readCol(objRaw, numRows)
-              close(objRaw)
-              col
-            })
-            names(cols) <- columns(x)
-            do.call(cbind.data.frame, list(cols, stringsAsFactors = stringsAsFactors))
-          })
+            names <- columns(x)
+            ncol <- length(names)
+            if (ncol <= 0) {
+              # empty data.frame with 0 columns and 0 rows
+              data.frame()
+            } else {
+              # listCols is a list of columns
+              listCols <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToCols", x@sdf)
+              stopifnot(length(listCols) == ncol)
+              
+              # An empty data.frame with 0 columns and number of rows as collected
+              nrow <- length(listCols[[1]])
+              if (nrow <= 0) {
+                df <- data.frame()
+              } else {
+                df <- data.frame(row.names = 1 : nrow)                
+              }
+              
+              # Append columns one by one
+              for (colIndex in 1 : ncol) {
+                # Note: appending a column of list type into a data.frame so that
+                # data of complex type can be held. But getting a cell from a column
+                # of list type returns a list instead of a vector. So for columns of
+                # non-complex type, append them as vector.
+                col <- listCols[[colIndex]]
+                if (length(col) <= 0) {
+                  df[[names[colIndex]]] <- col
+                } else {
+                  # TODO: more robust check on column of primitive types
+                  vec <- do.call(c, col)
+                  if (class(vec) != "list") {
+                    df[[names[colIndex]]] <- vec                  
+                  } else {
+                    # For columns of complex type, be careful to access them.
+                    # Get a column of complex type returns a list.
+                    # Get a cell from a column of complex type returns a list instead of a vector.
+                    df[[names[colIndex]]] <- col
+                 }
+              }
+            }
+            df
+          }
+        })
 
 #' Limit
 #'
