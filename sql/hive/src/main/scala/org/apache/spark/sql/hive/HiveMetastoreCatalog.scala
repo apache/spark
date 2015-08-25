@@ -751,7 +751,7 @@ private[hive] case class InsertIntoHiveTable(
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = Seq.empty
 
   val numDynamicPartitions = partition.values.count(_.isEmpty)
 

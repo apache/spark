@@ -146,6 +146,24 @@ class AnalysisErrorSuite extends AnalysisTest {
     "unresolved" :: Nil)
 
   errorTest(
+    "union with unequal number of columns",
+    testRelation.unionAll(testRelation2),
+    "union" :: "number of columns" :: testRelation2.output.length.toString ::
+      testRelation.output.length.toString :: Nil)
+
+  errorTest(
+    "intersect with unequal number of columns",
+    testRelation.intersect(testRelation2),
+    "intersect" :: "number of columns" :: testRelation2.output.length.toString ::
+      testRelation.output.length.toString :: Nil)
+
+  errorTest(
+    "except with unequal number of columns",
+    testRelation.except(testRelation2),
+    "except" :: "number of columns" :: testRelation2.output.length.toString ::
+      testRelation.output.length.toString :: Nil)
+
+  errorTest(
     "SPARK-9955: correct error message for aggregate",
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where('bad_column > 1).groupBy('a)(UnresolvedAlias(max('b))),
