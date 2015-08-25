@@ -20,7 +20,7 @@ package org.apache.spark.examples.mllib
 
 import scopt.OptionParser
 
-import org.apache.spark.mllib.fpm.FPGrowth
+import org.apache.spark.mllib.fpm.{FPGrowthModel, FPGrowth}
 import org.apache.spark.{SparkConf, SparkContext}
 
 /**

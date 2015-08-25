@@ -20,17 +20,25 @@ package org.apache.spark.mllib.fpm
 import java.{util => ju}
 import java.lang.{Iterable => JavaIterable}
 
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import scala.collection.mutable
 import scala.collection.JavaConverters._
-import scala.reflect.ClassTag
+import scala.reflect._
 
 import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkException}
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.mllib.fpm.FPGrowth._
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.sql.{Row, SQLContext}
+import  org.apache.spark.sql.types._
 
 /**
  * :: Experimental ::
@@ -42,7 +50,9 @@ import org.apache.spark.storage.StorageLevel
  */
 @Since("1.3.0")
 @Experimental
-class FPGrowthModel[Item: ClassTag](val freqItemsets: RDD[FreqItemset[Item]]) extends Serializable {
+class FPGrowthModel[Item: ClassTag](val freqItemsets: RDD[FreqItemset[Item]])
+      extends Saveable with Serializable{
+
   /**
    * Generates association rules for the [[Item]]s in [[freqItemsets]].
    * @param confidence minimal confidence of the rules produced
@@ -52,7 +62,73 @@ class FPGrowthModel[Item: ClassTag](val freqItemsets: RDD[FreqItemset[Item]]) ex
     val associationRules = new AssociationRules(confidence)
     associationRules.run(freqItemsets)
   }
+  override def save(sc: SparkContext, path: String): Unit = {
+    FPGrowthModel.SaveLoadV1_0.save(sc, this, path)
+  }
+
+  override protected def formatVersion: String = "1.0"
 }
+
+object FPGrowthModel extends Loader[FPGrowthModel[FreqItemset[Any]]] {
+
+  override def load(sc: SparkContext, path: String): FPGrowthModel[FreqItemset[Any]] = {
+        FPGrowthModel.SaveLoadV1_0.load(sc, path)
+      }
+
+      private case class itemCountPair[Item](items: Array[Item], freq: Long)
+
+    private[fpm]
+    object SaveLoadV1_0 {
+
+      private val thisFormatVersion = "1.0"
+
+      private[fpm]
+      val thisClassName = "org.apache.spark.mllib.fpm.FPGrowthModel"
+
+      def save[Item: ClassTag](sc: SparkContext, model: FPGrowthModel[Item], path: String): Unit = {
+        val sqlContext = new SQLContext(sc)
+
+        val metadata = compact(render(
+          ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
+            ("frequentItemsCount" -> model.freqItemsets.count())))
+        sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+        val sqlType = model.freqItemsets.first().items(0) match {
+          case _: java.lang.String => StringType
+          case _: java.lang.Integer => IntegerType
+          case _: java.lang.Long => LongType
+          case _: java.lang.Double => DoubleType
+          case _: java.lang.Float => FloatType
+          case _: java.lang.Boolean => BooleanType
+        }
+        val fields = Array(StructField("item", ArrayType(sqlType), true),
+          StructField("count", LongType, true))
+        val schema = StructType(fields)
+        val rowDataRDD = model.freqItemsets.map { freqItemSetObj =>
+          Row(freqItemSetObj.items, freqItemSetObj.freq)
+        }
+        sqlContext.createDataFrame(rowDataRDD, schema).write.parquet(Loader.dataPath(path))
+
+      }
+
+      def load[Item: ClassTag](sc: SparkContext, path: String): FPGrowthModel[Item] = {
+        implicit val formats = DefaultFormats
+        val sqlContext = new SQLContext(sc)
+        val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
+        assert(className == thisClassName)
+        assert(formatVersion == thisFormatVersion)
+        val frequentItemsCount = (metadata \ "frequentItemsCount").extract[Int]
+        val itemsRDD = sqlContext.read.parquet(Loader.dataPath(path))
+        Loader.checkSchema[itemCountPair[Any]](itemsRDD.schema)
+        val dataArray = itemsRDD.select("item", "count")
+        val freqRdd = dataArray.map { d =>
+           val itemArray = d.getAs[Seq[Item]](0).toArray
+           val countValue = d.getLong(1)
+           new FreqItemset[Item](itemArray, countValue)
+         }
+        new FPGrowthModel(freqRdd)
+      }
+    }
+  }
 
 /**
  * :: Experimental ::
