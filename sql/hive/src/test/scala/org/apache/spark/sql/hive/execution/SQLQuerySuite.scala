@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.sql.{Date, Timestamp}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.DefaultParserDialect
@@ -164,7 +164,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   test("show functions") {
     val allFunctions =
       (FunctionRegistry.builtin.listFunction().toSet[String] ++
-        org.apache.hadoop.hive.ql.exec.FunctionRegistry.getFunctionNames).toList.sorted
+        org.apache.hadoop.hive.ql.exec.FunctionRegistry.getFunctionNames.asScala).toList.sorted
     checkAnswer(sql("SHOW functions"), allFunctions.map(Row(_)))
     checkAnswer(sql("SHOW functions abs"), Row("abs"))
     checkAnswer(sql("SHOW functions 'abs'"), Row("abs"))

@@ -22,7 +22,7 @@ import java.net.{URL, URLClassLoader}
 import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 import scala.concurrent.duration._
@@ -194,7 +194,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
     logInfo("defalt warehouse location is " + defaltWarehouseLocation)
 
     // `configure` goes second to override other settings.
-    val allConfig = metadataConf.iterator.map(e => e.getKey -> e.getValue).toMap ++ configure
+    val allConfig = metadataConf.asScala.map(e => e.getKey -> e.getValue).toMap ++ configure
 
     val isolatedLoader = if (hiveMetastoreJars == "builtin") {
       if (hiveExecutionVersion != hiveMetastoreVersion) {

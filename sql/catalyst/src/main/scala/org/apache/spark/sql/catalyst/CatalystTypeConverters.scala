@@ -329,7 +329,10 @@ object CatalystTypeConverters {
         null
       }
     }
-    override def toScala(catalystValue: Decimal): JavaBigDecimal = catalystValue.toJavaBigDecimal
+    override def toScala(catalystValue: Decimal): JavaBigDecimal = {
+      if (catalystValue == null) null
+      else catalystValue.toJavaBigDecimal
+    }
     override def toScalaImpl(row: InternalRow, column: Int): JavaBigDecimal =
       row.getDecimal(column, dataType.precision, dataType.scale).toJavaBigDecimal
   }

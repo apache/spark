@@ -24,7 +24,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{Vector, Matrices, Matrix}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
@@ -43,8 +43,8 @@ import org.apache.spark.sql.{SQLContext, Row}
  *                the weight for Gaussian i, and weights.sum == 1
  * @param gaussians Array of MultivariateGaussian where gaussians(i) represents
  *                  the Multivariate Gaussian (Normal) Distribution for Gaussian i
- * @since 1.3.0
  */
+@Since("1.3.0")
 @Experimental
 class GaussianMixtureModel(
   val weights: Array[Double],
@@ -54,23 +54,21 @@ class GaussianMixtureModel(
 
   override protected def formatVersion = "1.0"
 
-  /**
-   * @since 1.4.0
-   */
+  @Since("1.4.0")
   override def save(sc: SparkContext, path: String): Unit = {
     GaussianMixtureModel.SaveLoadV1_0.save(sc, path, weights, gaussians)
   }
 
   /**
    * Number of gaussians in mixture
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def k: Int = weights.length
 
   /**
    * Maps given points to their cluster indices.
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def predict(points: RDD[Vector]): RDD[Int] = {
     val responsibilityMatrix = predictSoft(points)
     responsibilityMatrix.map(r => r.indexOf(r.max))
@@ -78,8 +76,8 @@ class GaussianMixtureModel(
 
   /**
    * Maps given point to its cluster index.
-   * @since 1.5.0
    */
+  @Since("1.5.0")
   def predict(point: Vector): Int = {
     val r = computeSoftAssignments(point.toBreeze.toDenseVector, gaussians, weights, k)
     r.indexOf(r.max)
@@ -87,16 +85,16 @@ class GaussianMixtureModel(
 
   /**
    * Java-friendly version of [[predict()]]
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
     predict(points.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Integer]]
 
   /**
    * Given the input vectors, return the membership value of each vector
    * to all mixture components.
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def predictSoft(points: RDD[Vector]): RDD[Array[Double]] = {
     val sc = points.sparkContext
     val bcDists = sc.broadcast(gaussians)
@@ -108,8 +106,8 @@ class GaussianMixtureModel(
 
   /**
    * Given the input vector, return the membership values to all mixture components.
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def predictSoft(point: Vector): Array[Double] = {
     computeSoftAssignments(point.toBreeze.toDenseVector, gaussians, weights, k)
   }
@@ -133,9 +131,7 @@ class GaussianMixtureModel(
   }
 }
 
-/**
- * @since 1.4.0
- */
+@Since("1.4.0")
 @Experimental
 object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
 
@@ -186,9 +182,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
     }
   }
 
-  /**
-   * @since 1.4.0
-   */
+  @Since("1.4.0")
   override def load(sc: SparkContext, path: String) : GaussianMixtureModel = {
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
     implicit val formats = DefaultFormats

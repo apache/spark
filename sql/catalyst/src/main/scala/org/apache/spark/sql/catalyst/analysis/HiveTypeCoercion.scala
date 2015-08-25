@@ -203,6 +203,7 @@ object HiveTypeCoercion {
         planName: String,
         left: LogicalPlan,
         right: LogicalPlan): (LogicalPlan, LogicalPlan) = {
+      require(left.output.length == right.output.length)
 
       val castedTypes = left.output.zip(right.output).map {
         case (lhs, rhs) if lhs.dataType != rhs.dataType =>
@@ -229,15 +230,10 @@ object HiveTypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case p if p.analyzed => p
 
-      case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
-        val (newLeft, newRight) = widenOutputTypes(u.nodeName, left, right)
-        Union(newLeft, newRight)
-      case e @ Except(left, right) if e.childrenResolved && !e.resolved =>
-        val (newLeft, newRight) = widenOutputTypes(e.nodeName, left, right)
-        Except(newLeft, newRight)
-      case i @ Intersect(left, right) if i.childrenResolved && !i.resolved =>
-        val (newLeft, newRight) = widenOutputTypes(i.nodeName, left, right)
-        Intersect(newLeft, newRight)
+      case s @ SetOperation(left, right) if s.childrenResolved
+          && left.output.length == right.output.length && !s.resolved =>
+        val (newLeft, newRight) = widenOutputTypes(s.nodeName, left, right)
+        s.makeCopy(Array(newLeft, newRight))
     }
   }
 
