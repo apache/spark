@@ -22,11 +22,11 @@ import scala.util.Random
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.RDD
 
 /**
  * :: DeveloperApi ::
@@ -35,6 +35,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
  * response variable `Y`.
  */
 @DeveloperApi
+@Since("0.8.0")
 object LinearDataGenerator {
 
   /**
@@ -46,6 +47,7 @@ object LinearDataGenerator {
    * @param seed Random seed
    * @return Java List of input.
    */
+  @Since("0.8.0")
   def generateLinearInputAsList(
       intercept: Double,
       weights: Array[Double],
@@ -68,6 +70,7 @@ object LinearDataGenerator {
    * @param eps Epsilon scaling factor.
    * @return Seq of input.
    */
+  @Since("0.8.0")
   def generateLinearInput(
       intercept: Double,
       weights: Array[Double],
@@ -92,6 +95,7 @@ object LinearDataGenerator {
    * @param eps Epsilon scaling factor.
    * @return Seq of input.
    */
+  @Since("0.8.0")
   def generateLinearInput(
       intercept: Double,
       weights: Array[Double],
@@ -132,6 +136,7 @@ object LinearDataGenerator {
    *
    * @return RDD of LabeledPoint containing sample data.
    */
+  @Since("0.8.0")
   def generateLinearRDD(
       sc: SparkContext,
       nexamples: Int,
@@ -151,6 +156,7 @@ object LinearDataGenerator {
     data
   }
 
+  @Since("0.8.0")
   def main(args: Array[String]) {
     if (args.length < 2) {
       // scalastyle:off println
