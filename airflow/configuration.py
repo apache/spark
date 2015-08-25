@@ -5,11 +5,22 @@ from configparser import ConfigParser
 import errno
 import logging
 import os
+import sys
+import textwrap
+
 
 try:
     from cryptography.fernet import Fernet
 except:
     pass
+
+
+def generate_fernet_key():
+    try:
+        FERNET_KEY = Fernet.generate_key()
+    except NameError:
+        FERNET_KEY = "cryptography_not_found_storing_passwords_in_plain_text"
+    return FERNET_KEY
 
 
 class AirflowConfigException(Exception):
@@ -287,11 +298,7 @@ if not os.path.isfile(AIRFLOW_CONFIG):
     when it is missing. The right way to change your configuration is to alter
     your configuration file, not this code.
     """
-    try:
-        FERNET_KEY = Fernet.generate_key()
-    except NameError:
-        FERNET_KEY = "storing_passwords_in_plain_text"
-
+    FERNET_KEY = generate_fernet_key()
     logging.info("Creating new config file in: " + AIRFLOW_CONFIG)
     f = open(AIRFLOW_CONFIG, 'w')
     f.write(DEFAULT_CONFIG.format(**locals()))
@@ -313,3 +320,21 @@ def test_mode():
 
 conf = ConfigParserWithDefaults(defaults)
 conf.read(AIRFLOW_CONFIG)
+if 'cryptography' in sys.modules and not conf.has_option('core', 'fernet_key'):
+    logging.warning(textwrap.dedent("""
+
+        Your system supports encrypted passwords for Airflow connections but is
+        currently storing them in plaintext! To turn on encryption, add a
+        "fernet_key" option to the "core" section of your airflow.cfg file,
+        like this:
+
+            [core]
+            fernet_key = <YOUR FERNET KEY>
+
+        Your airflow.cfg file is located at: {cfg}.
+        If you need to generate a fernet key, you can run this code:
+
+            from airflow.configuration import generate_fernet_key
+            generate_fernet_key()
+
+        """.format(cfg=AIRFLOW_CONFIG)))
