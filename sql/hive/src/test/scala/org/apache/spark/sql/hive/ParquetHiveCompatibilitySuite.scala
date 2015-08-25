@@ -112,7 +112,7 @@ class ParquetHiveCompatibilitySuite
       "BOOLEAN", "TINYINT", "SMALLINT", "INT", "BIGINT", "FLOAT", "DOUBLE", "STRING")
   }
 
-  ignore("SPARK-10177 timestamp") {
+  test("SPARK-10177 timestamp") {
     testParquetHiveCompatibility(Row(Timestamp.valueOf("2015-08-24 00:31:00")), "TIMESTAMP")
   }
 

@@ -22,7 +22,7 @@ import java.io.File
 import java.util.jar.JarFile
 
 import scala.collection.mutable
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.runtimeMirror
 import scala.reflect.runtime.{universe => unv}
 import scala.util.Try
@@ -161,7 +161,7 @@ object GenerateMIMAIgnore {
     val path = packageName.replace('.', '/')
     val resources = classLoader.getResources(path)
 
-    val jars = resources.filter(x => x.getProtocol == "jar")
+    val jars = resources.asScala.filter(_.getProtocol == "jar")
       .map(_.getFile.split(":")(1).split("!")(0)).toSeq
 
     jars.flatMap(getClassesFromJar(_, path))
@@ -175,7 +175,7 @@ object GenerateMIMAIgnore {
   private def getClassesFromJar(jarPath: String, packageName: String) = {
     import scala.collection.mutable
     val jar = new JarFile(new File(jarPath))
-    val enums = jar.entries().map(_.getName).filter(_.startsWith(packageName))
+    val enums = jar.entries().asScala.map(_.getName).filter(_.startsWith(packageName))
     val classes = mutable.HashSet[Class[_]]()
     for (entry <- enums if entry.endsWith(".class")) {
       try {

@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.sources
 
-import java.sql.Date
-
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -550,7 +548,7 @@ abstract class HadoopFsRelationTest extends QueryTest with TestHiveSingleton wit
     } finally {
       // Hadoop 1 doesn't have `Configuration.unset`
       hadoopConfiguration.clear()
-      clonedConf.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
+      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
     }
   }
 
@@ -598,7 +596,7 @@ abstract class HadoopFsRelationTest extends QueryTest with TestHiveSingleton wit
     } finally {
       // Hadoop 1 doesn't have `Configuration.unset`
       hadoopConfiguration.clear()
-      clonedConf.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
+      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
       sqlContext.sparkContext.conf.set("spark.speculation", speculationEnabled.toString)
     }
   }

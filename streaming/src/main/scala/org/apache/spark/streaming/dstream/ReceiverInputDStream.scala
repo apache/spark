@@ -116,7 +116,15 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
             logWarning("Some blocks have Write Ahead Log information; this is unexpected")
           }
         }
-        new BlockRDD[T](ssc.sc, blockIds)
+        val validBlockIds = blockIds.filter { id =>
+          ssc.sparkContext.env.blockManager.master.contains(id)
+        }
+        if (validBlockIds.size != blockIds.size) {
+          logWarning("Some blocks could not be recovered as they were not found in memory. " +
+            "To prevent such data loss, enabled Write Ahead Log (see programming guide " +
+            "for more details.")
+        }
+        new BlockRDD[T](ssc.sc, validBlockIds)
       }
     } else {
       // If no block is ready now, creating WriteAheadLogBackedBlockRDD or BlockRDD

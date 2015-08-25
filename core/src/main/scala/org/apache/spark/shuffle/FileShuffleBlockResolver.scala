@@ -21,7 +21,7 @@ import java.io.File
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.{Logging, SparkConf, SparkEnv}
 import org.apache.spark.executor.ShuffleWriteMetrics
@@ -210,11 +210,13 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
     shuffleStates.get(shuffleId) match {
       case Some(state) =>
         if (consolidateShuffleFiles) {
-          for (fileGroup <- state.allFileGroups; file <- fileGroup.files) {
+          for (fileGroup <- state.allFileGroups.asScala;
+               file <- fileGroup.files) {
             file.delete()
           }
         } else {
-          for (mapId <- state.completedMapTasks; reduceId <- 0 until state.numBuckets) {
+          for (mapId <- state.completedMapTasks.asScala;
+               reduceId <- 0 until state.numBuckets) {
             val blockId = new ShuffleBlockId(shuffleId, mapId, reduceId)
             blockManager.diskBlockManager.getFile(blockId).delete()
           }

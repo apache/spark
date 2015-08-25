@@ -26,8 +26,8 @@ import java.util.{Arrays, Properties, UUID}
 import java.util.concurrent.atomic.{AtomicReference, AtomicBoolean, AtomicInteger}
 import java.util.UUID.randomUUID
 
+import scala.collection.JavaConverters._
 import scala.collection.{Map, Set}
-import scala.collection.JavaConversions._
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
@@ -114,6 +114,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * :: DeveloperApi ::
    * Alternative constructor for setting preferred locations where Spark will create executors.
    *
+   * @param config a [[org.apache.spark.SparkConf]] object specifying other Spark parameters
    * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on.
    * Can be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
    * from a list of input files or InputFormats for the application.
@@ -145,6 +146,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    * @param environment Environment variables to set on worker nodes.
+   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on.
+   * Can be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
+   * from a list of input files or InputFormats for the application.
    */
   def this(
       master: String,
@@ -841,6 +845,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @note Small files are preferred, large file is also allowable, but may cause bad performance.
    * @note On some filesystems, `.../path/&#42;` can be a more efficient way to read all files
    *       in a directory rather than `.../path/` or `.../path`
+   *
+   * @param path Directory to the input data files, the path can be comma separated paths as the
+   *             list of inputs.
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
   def wholeTextFiles(
@@ -889,6 +896,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @note Small files are preferred; very large files may cause bad performance.
    * @note On some filesystems, `.../path/&#42;` can be a more efficient way to read all files
    *       in a directory rather than `.../path/` or `.../path`
+   *
+   * @param path Directory to the input data files, the path can be comma separated paths as the
+   *             list of inputs.
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
   @Experimental
@@ -918,8 +928,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * '''Note:''' We ensure that the byte array for each record in the resulting RDD
    * has the provided record length.
    *
-   * @param path Directory to the input data files
+   * @param path Directory to the input data files, the path can be comma separated paths as the
+   *             list of inputs.
    * @param recordLength The length at which to split the records
+   * @param conf Configuration for setting up the dataset.
+   *
    * @return An RDD of data with values, represented as byte arrays
    */
   @Experimental
@@ -1533,7 +1546,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def getAllPools: Seq[Schedulable] = {
     assertNotStopped()
     // TODO(xiajunluan): We should take nested pools into account
-    taskScheduler.rootPool.schedulableQueue.toSeq
+    taskScheduler.rootPool.schedulableQueue.asScala.toSeq
   }
 
   /**
