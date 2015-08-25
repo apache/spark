@@ -370,17 +370,36 @@ private[hive] trait HiveInspectors {
   protected def wrapperFor(oi: ObjectInspector, dataType: DataType): Any => Any = oi match {
     case _: JavaHiveVarcharObjectInspector =>
       (o: Any) =>
-        val s = o.asInstanceOf[UTF8String].toString
-        new HiveVarchar(s, s.size)
+        if (o != null) {
+          val s = o.asInstanceOf[UTF8String].toString
+          new HiveVarchar(s, s.size)
+        } else {
+          null
+        }
 
     case _: JavaHiveDecimalObjectInspector =>
-      (o: Any) => HiveDecimal.create(o.asInstanceOf[Decimal].toJavaBigDecimal)
+      (o: Any) =>
+        if (o != null) {
+          HiveDecimal.create(o.asInstanceOf[Decimal].toJavaBigDecimal)
+        } else {
+          null
+        }
 
     case _: JavaDateObjectInspector =>
-      (o: Any) => DateTimeUtils.toJavaDate(o.asInstanceOf[Int])
+      (o: Any) =>
+        if (o != null) {
+          DateTimeUtils.toJavaDate(o.asInstanceOf[Int])
+        } else {
+          null
+        }
 
     case _: JavaTimestampObjectInspector =>
-      (o: Any) => DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long])
+      (o: Any) =>
+        if (o != null) {
+          DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long])
+        } else {
+          null
+        }
 
     case soi: StandardStructObjectInspector =>
       val schema = dataType.asInstanceOf[StructType]
