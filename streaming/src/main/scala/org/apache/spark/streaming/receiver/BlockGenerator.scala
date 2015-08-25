@@ -140,6 +140,16 @@ private[streaming] class BlockGenerator(
       }
     }
 
+    // When we arrive here, no data will be added to `currentBuffer`. However, `currentBuffer` may
+    // not be empty. If so, we should wait until all data in `currentBuffer` is consumed, because
+    // `blockIntervalTimer.stop(interruptTimer = false)` doesn't guarantee calling
+    // `updateCurrentBuffer` for us.
+    var isCurrentBufferEmpty = synchronized { currentBuffer.isEmpty }
+    while(!isCurrentBufferEmpty) {
+      Thread.sleep(blockIntervalMs)
+      isCurrentBufferEmpty = synchronized { currentBuffer.isEmpty }
+    }
+
     // Stop generating blocks and set the state for block pushing thread to start draining the queue
     logInfo("Stopping BlockGenerator")
     blockIntervalTimer.stop(interruptTimer = false)
