@@ -50,10 +50,10 @@ import org.apache.spark.sql.SQLContext
  */
 @Since("1.3.0")
 @Experimental
-class IsotonicRegressionModel (
-    val boundaries: Array[Double],
-    val predictions: Array[Double],
-    val isotonic: Boolean) extends Serializable with Saveable {
+class IsotonicRegressionModel @Since("1.3.0") (
+    @Since("1.3.0") val boundaries: Array[Double],
+    @Since("1.3.0") val predictions: Array[Double],
+    @Since("1.3.0") val isotonic: Boolean) extends Serializable with Saveable {
 
   private val predictionOrd = if (isotonic) Ordering[Double] else Ordering[Double].reverse
 
@@ -63,7 +63,6 @@ class IsotonicRegressionModel (
 
   /**
    * A Java-friendly constructor that takes two Iterable parameters and one Boolean parameter.
-   *
    */
   @Since("1.4.0")
   def this(boundaries: java.lang.Iterable[Double],
@@ -214,8 +213,6 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
     }
   }
 
-  /**
-   */
   @Since("1.4.0")
   override def load(sc: SparkContext, path: String): IsotonicRegressionModel = {
     implicit val formats = DefaultFormats
@@ -256,6 +253,7 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
  * @see [[http://en.wikipedia.org/wiki/Isotonic_regression Isotonic regression (Wikipedia)]]
  */
 @Experimental
+@Since("1.3.0")
 class IsotonicRegression private (private var isotonic: Boolean) extends Serializable {
 
   /**
@@ -263,6 +261,7 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    *
    * @return New instance of IsotonicRegression.
    */
+  @Since("1.3.0")
   def this() = this(true)
 
   /**
@@ -271,6 +270,7 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    * @param isotonic Isotonic (increasing) or antitonic (decreasing) sequence.
    * @return This instance of IsotonicRegression.
    */
+  @Since("1.3.0")
   def setIsotonic(isotonic: Boolean): this.type = {
     this.isotonic = isotonic
     this
@@ -286,6 +286,7 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    *              the algorithm is executed.
    * @return Isotonic regression model.
    */
+  @Since("1.3.0")
   def run(input: RDD[(Double, Double, Double)]): IsotonicRegressionModel = {
     val preprocessedInput = if (isotonic) {
       input
@@ -311,6 +312,7 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    *              the algorithm is executed.
    * @return Isotonic regression model.
    */
+  @Since("1.3.0")
   def run(input: JavaRDD[(JDouble, JDouble, JDouble)]): IsotonicRegressionModel = {
     run(input.rdd.retag.asInstanceOf[RDD[(Double, Double, Double)]])
   }
