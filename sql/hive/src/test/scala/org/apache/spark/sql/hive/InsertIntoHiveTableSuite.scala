@@ -263,7 +263,7 @@ class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
     sql("DROP TABLE table_with_partition")
   }
 
-  test("Remove empty file creation") {
+  test("SPARK-10216: Avoid creating empty files during overwrite into Hive table with group by query") {
     val testData = TestHive.sparkContext.parallelize(
       (1 to 2).map(i => TestData(i, i.toString))).toDF()
     testData.registerTempTable("testData")
