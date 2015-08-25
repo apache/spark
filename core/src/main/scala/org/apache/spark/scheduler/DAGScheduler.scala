@@ -370,7 +370,7 @@ class DAGScheduler(
     val parentsWithNoMapStage = getAncestorShuffleDependencies(shuffleDep.rdd)
     while (parentsWithNoMapStage.nonEmpty) {
       val currentShufDep = parentsWithNoMapStage.pop()
-      val stage = getShuffleMapStage(currentShufDep, firstJobId)
+      val stage = newOrUsedShuffleStage(currentShufDep, firstJobId)
       shuffleToMapStage(currentShufDep.shuffleId) = stage
     }
   }
