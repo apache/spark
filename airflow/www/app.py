@@ -1690,6 +1690,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
         is_secure = False
         try:
             import cryptography
+            conf.get('core', 'fernet_key')
             is_secure = True
         except:
             pass
