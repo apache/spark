@@ -21,7 +21,7 @@ import java.io.{File, FileOutputStream, OutputStreamWriter}
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
@@ -144,7 +144,7 @@ abstract class BaseYarnClusterSuite
     props.setProperty("spark.driver.extraJavaOptions", "-Dfoo=\"one two three\"")
     props.setProperty("spark.executor.extraJavaOptions", "-Dfoo=\"one two three\"")
 
-    yarnCluster.getConfig().foreach { e =>
+    yarnCluster.getConfig.asScala.foreach { e =>
       props.setProperty("spark.hadoop." + e.getKey(), e.getValue())
     }
 
@@ -161,7 +161,7 @@ abstract class BaseYarnClusterSuite
     props.store(writer, "Spark properties.")
     writer.close()
 
-    val extraJarArgs = if (!extraJars.isEmpty()) Seq("--jars", extraJars.mkString(",")) else Nil
+    val extraJarArgs = if (extraJars.nonEmpty) Seq("--jars", extraJars.mkString(",")) else Nil
     val mainArgs =
       if (klass.endsWith(".py")) {
         Seq(klass)

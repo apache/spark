@@ -93,7 +93,7 @@ class StreamingLinearRegressionWithSGD private[mllib] (
   }
 
   /**
-   * Set the convergence tolerance.
+   * Set the convergence tolerance. Default: 0.001.
    */
   def setConvergenceTol(tolerance: Double): this.type = {
     this.algorithm.optimizer.setConvergenceTol(tolerance)

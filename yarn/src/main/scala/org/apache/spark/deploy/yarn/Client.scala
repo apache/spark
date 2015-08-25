@@ -25,7 +25,7 @@ import java.security.PrivilegedExceptionAction
 import java.util.{Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.reflect.runtime.universe
 import scala.util.{Try, Success, Failure}
@@ -511,7 +511,7 @@ private[spark] class Client(
     val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + stagingDirPath
     YarnSparkHadoopUtil.get.obtainTokensForNamenodes(
       nns, hadoopConf, creds, Some(sparkConf.get("spark.yarn.principal")))
-    val t = creds.getAllTokens
+    val t = creds.getAllTokens.asScala
       .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
       .head
     val newExpiration = t.renew(hadoopConf)
@@ -650,8 +650,8 @@ private[spark] class Client(
     distCacheMgr.setDistArchivesEnv(launchEnv)
 
     val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
-    amContainer.setLocalResources(localResources)
-    amContainer.setEnvironment(launchEnv)
+    amContainer.setLocalResources(localResources.asJava)
+    amContainer.setEnvironment(launchEnv.asJava)
 
     val javaOpts = ListBuffer[String]()
 
@@ -782,7 +782,7 @@ private[spark] class Client(
 
     // TODO: it would be nicer to just make sure there are no null commands here
     val printableCommands = commands.map(s => if (s == null) "null" else s).toList
-    amContainer.setCommands(printableCommands)
+    amContainer.setCommands(printableCommands.asJava)
 
     logDebug("===============================================================================")
     logDebug("YARN AM launch context:")
@@ -797,7 +797,8 @@ private[spark] class Client(
 
     // send the acl settings into YARN to control who has access via YARN interfaces
     val securityManager = new SecurityManager(sparkConf)
-    amContainer.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager))
+    amContainer.setApplicationACLs(
+      YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
     setupSecurityToken(amContainer)
     UserGroupInformation.getCurrentUser().addCredentials(credentials)
 

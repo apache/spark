@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import com.google.common.base.Objects
@@ -483,7 +483,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       // are empty.
       val partitions = metastoreRelation.getHiveQlPartitions().map { p =>
         val location = p.getLocation
-        val values = InternalRow.fromSeq(p.getValues.zip(partitionColumnDataTypes).map {
+        val values = InternalRow.fromSeq(p.getValues.asScala.zip(partitionColumnDataTypes).map {
           case (rawValue, dataType) => Cast(Literal(rawValue), dataType).eval(null)
         })
         ParquetPartition(values, location)
@@ -751,7 +751,7 @@ private[hive] case class InsertIntoHiveTable(
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = Seq.empty
 
   val numDynamicPartitions = partition.values.count(_.isEmpty)
 
@@ -798,9 +798,9 @@ private[hive] case class MetastoreRelation
 
     val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
     tTable.setSd(sd)
-    sd.setCols(table.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
+    sd.setCols(table.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)).asJava)
     tTable.setPartitionKeys(
-      table.partitionColumns.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
+      table.partitionColumns.map(c => new FieldSchema(c.name, c.hiveType, c.comment)).asJava)
 
     table.location.foreach(sd.setLocation)
     table.inputFormat.foreach(sd.setInputFormat)
@@ -852,11 +852,11 @@ private[hive] case class MetastoreRelation
       val tPartition = new org.apache.hadoop.hive.metastore.api.Partition
       tPartition.setDbName(databaseName)
       tPartition.setTableName(tableName)
-      tPartition.setValues(p.values)
+      tPartition.setValues(p.values.asJava)
 
       val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
       tPartition.setSd(sd)
-      sd.setCols(table.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
+      sd.setCols(table.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)).asJava)
 
       sd.setLocation(p.storage.location)
       sd.setInputFormat(p.storage.inputFormat)

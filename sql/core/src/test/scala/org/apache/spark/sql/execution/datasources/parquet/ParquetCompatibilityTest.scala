@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.parquet.hadoop.ParquetFileReader
@@ -40,8 +40,9 @@ private[sql] abstract class ParquetCompatibilityTest extends QueryTest with Parq
       override def accept(path: Path): Boolean = pathFilter(path)
     }).toSeq
 
-    val footers = ParquetFileReader.readAllFootersInParallel(configuration, parquetFiles, true)
-    footers.head.getParquetMetadata.getFileMetaData.getSchema
+    val footers =
+      ParquetFileReader.readAllFootersInParallel(configuration, parquetFiles.asJava, true)
+    footers.iterator().next().getParquetMetadata.getFileMetaData.getSchema
   }
 
   protected def logParquetSchema(path: String): Unit = {

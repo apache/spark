@@ -289,6 +289,15 @@ object CheckpointReader extends Logging {
   /**
    * Read checkpoint files present in the given checkpoint directory. If there are no checkpoint
    * files, then return None, else try to return the latest valid checkpoint object. If no
+   * checkpoint files could be read correctly, then return None.
+   */
+  def read(checkpointDir: String): Option[Checkpoint] = {
+    read(checkpointDir, new SparkConf(), SparkHadoopUtil.get.conf, ignoreReadError = true)
+  }
+
+  /**
+   * Read checkpoint files present in the given checkpoint directory. If there are no checkpoint
+   * files, then return None, else try to return the latest valid checkpoint object. If no
    * checkpoint files could be read correctly, then return None (if ignoreReadError = true),
    * or throw exception (if ignoreReadError = false).
    */

@@ -1133,6 +1133,7 @@ val scaledData = scalerModel.transform(dataFrame)
 {% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.StandardScaler;
+import org.apache.spark.ml.feature.StandardScalerModel;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.sql.DataFrame;
@@ -1169,6 +1170,76 @@ scalerModel = scaler.fit(dataFrame)
 
 # Normalize each feature to have unit standard deviation.
 scaledData = scalerModel.transform(dataFrame)
+{% endhighlight %}
+</div>
+</div>
+
+## MinMaxScaler
+
+`MinMaxScaler` transforms a dataset of `Vector` rows, rescaling each feature to a specific range (often [0, 1]).  It takes parameters:
+
+* `min`: 0.0 by default. Lower bound after transformation, shared by all features.
+* `max`: 1.0 by default. Upper bound after transformation, shared by all features.
+
+`MinMaxScaler` computes summary statistics on a data set and produces a `MinMaxScalerModel`. The model can then transform each feature individually such that it is in the given range.
+
+The rescaled value for a feature E is calculated as,
+`\begin{equation}
+  Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
+\end{equation}`
+For the case `E_{max} == E_{min}`, `Rescaled(e_i) = 0.5 * (max + min)`
+
+Note that since zero values will probably be transformed to non-zero values, output of the transformer will be DenseVector even for sparse input.
+
+The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [0, 1].
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+More details can be found in the API docs for
+[MinMaxScaler](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScaler) and
+[MinMaxScalerModel](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScalerModel).
+{% highlight scala %}
+import org.apache.spark.ml.feature.MinMaxScaler
+import org.apache.spark.mllib.util.MLUtils
+
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+val dataFrame = sqlContext.createDataFrame(data)
+val scaler = new MinMaxScaler()
+  .setInputCol("features")
+  .setOutputCol("scaledFeatures")
+
+// Compute summary statistics and generate MinMaxScalerModel
+val scalerModel = scaler.fit(dataFrame)
+
+// rescale each feature to range [min, max].
+val scaledData = scalerModel.transform(dataFrame)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+More details can be found in the API docs for
+[MinMaxScaler](api/java/org/apache/spark/ml/feature/MinMaxScaler.html) and
+[MinMaxScalerModel](api/java/org/apache/spark/ml/feature/MinMaxScalerModel.html).
+{% highlight java %}
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.MinMaxScaler;
+import org.apache.spark.ml.feature.MinMaxScalerModel;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.sql.DataFrame;
+
+JavaRDD<LabeledPoint> data =
+  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
+DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
+MinMaxScaler scaler = new MinMaxScaler()
+  .setInputCol("features")
+  .setOutputCol("scaledFeatures");
+
+// Compute summary statistics and generate MinMaxScalerModel
+MinMaxScalerModel scalerModel = scaler.fit(dataFrame);
+
+// rescale each feature to range [min, max].
+DataFrame scaledData = scalerModel.transform(dataFrame);
 {% endhighlight %}
 </div>
 </div>
@@ -1473,6 +1544,139 @@ assembler = VectorAssembler(
     outputCol="features")
 output = assembler.transform(dataset)
 print(output.select("features", "clicked").first())
+{% endhighlight %}
+</div>
+</div>
+
+# Feature Selectors
+
+## VectorSlicer
+
+`VectorSlicer` is a transformer that takes a feature vector and outputs a new feature vector with a
+sub-array of the original features. It is useful for extracting features from a vector column.
+
+`VectorSlicer` accepts a vector column with a specified indices, then outputs a new vector column
+whose values are selected via those indices. There are two types of indices, 
+
+ 1. Integer indices that represents the indices into the vector, `setIndices()`;
+
+ 2. String indices that represents the names of features into the vector, `setNames()`. 
+ *This requires the vector column to have an `AttributeGroup` since the implementation matches on
+ the name field of an `Attribute`.*
+
+Specification by integer and string are both acceptable. Moreover, you can use integer index and 
+string name simultaneously. At least one feature must be selected. Duplicate features are not
+allowed, so there can be no overlap between selected indices and names. Note that if names of
+features are selected, an exception will be threw out when encountering with empty input attributes.
+
+The output vector will order features with the selected indices first (in the order given),
+followed by the selected names (in the order given).
+
+**Examples**
+
+Suppose that we have a DataFrame with the column `userFeatures`:
+
+~~~
+ userFeatures     
+------------------
+ [0.0, 10.0, 0.5] 
+~~~
+
+`userFeatures` is a vector column that contains three user features. Assuming that the first column
+of `userFeatures` are all zeros, so we want to remove it and only the last two columns are selected.
+The `VectorSlicer` selects the last two elements with `setIndices(1, 2)` then produces a new vector
+column named `features`:
+
+~~~
+ userFeatures     | features
+------------------|-----------------------------
+ [0.0, 10.0, 0.5] | [10.0, 0.5]
+~~~
+
+Suppose also that we have a potential input attributes for the `userFeatures`, i.e. 
+`["f1", "f2", "f3"]`, then we can use `setNames("f2", "f3")` to select them.
+
+~~~
+ userFeatures     | features
+------------------|-----------------------------
+ [0.0, 10.0, 0.5] | [10.0, 0.5]
+ ["f1", "f2", "f3"] | ["f2", "f3"]
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+[`VectorSlicer`](api/scala/index.html#org.apache.spark.ml.feature.VectorSlicer) takes an input
+column name with specified indices or names and an output column name.
+
+{% highlight scala %}
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
+import org.apache.spark.ml.feature.VectorSlicer
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+
+val data = Array(
+  Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
+  Vectors.dense(-2.0, 2.3, 0.0)
+)
+
+val defaultAttr = NumericAttribute.defaultAttr
+val attrs = Array("f1", "f2", "f3").map(defaultAttr.withName)
+val attrGroup = new AttributeGroup("userFeatures", attrs.asInstanceOf[Array[Attribute]])
+
+val dataRDD = sc.parallelize(data).map(Row.apply)
+val dataset = sqlContext.createDataFrame(dataRDD, StructType(attrGroup.toStructField()))
+
+val slicer = new VectorSlicer().setInputCol("userFeatures").setOutputCol("features")
+
+slicer.setIndices(1).setNames("f3")
+// or slicer.setIndices(Array(1, 2)), or slicer.setNames(Array("f2", "f3"))
+
+val output = slicer.transform(dataset)
+println(output.select("userFeatures", "features").first())
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+[`VectorSlicer`](api/java/org/apache/spark/ml/feature/VectorSlicer.html) takes an input column name
+with specified indices or names and an output column name.
+
+{% highlight java %}
+import java.util.Arrays;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.types.*;
+import static org.apache.spark.sql.types.DataTypes.*;
+
+Attribute[] attrs = new Attribute[]{
+  NumericAttribute.defaultAttr().withName("f1"),
+  NumericAttribute.defaultAttr().withName("f2"),
+  NumericAttribute.defaultAttr().withName("f3")
+};
+AttributeGroup group = new AttributeGroup("userFeatures", attrs);
+
+JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+  RowFactory.create(Vectors.sparse(3, new int[]{0, 1}, new double[]{-2.0, 2.3})),
+  RowFactory.create(Vectors.dense(-2.0, 2.3, 0.0))
+));
+
+DataFrame dataset = jsql.createDataFrame(jrdd, (new StructType()).add(group.toStructField()));
+
+VectorSlicer vectorSlicer = new VectorSlicer()
+  .setInputCol("userFeatures").setOutputCol("features");
+
+vectorSlicer.setIndices(new int[]{1}).setNames(new String[]{"f3"});
+// or slicer.setIndices(new int[]{1, 2}), or slicer.setNames(new String[]{"f2", "f3"})
+
+DataFrame output = vectorSlicer.transform(dataset);
+
+System.out.println(output.select("userFeatures", "features").first());
 {% endhighlight %}
 </div>
 </div>

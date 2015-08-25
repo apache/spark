@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark.sql.hive;
+package org.apache.spark.sql.hive;
 
 import java.io.File;
 import java.io.IOException;
@@ -37,7 +37,6 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.QueryTest$;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.hive.HiveContext;
 import org.apache.spark.sql.hive.test.TestHive$;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;

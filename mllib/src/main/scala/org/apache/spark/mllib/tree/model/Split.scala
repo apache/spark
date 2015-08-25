@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.tree.model
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
 import org.apache.spark.mllib.tree.configuration.FeatureType
 import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
@@ -30,8 +30,8 @@ import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
  *                  Split left if feature <= threshold, else right.
  * @param featureType type of feature -- categorical or continuous
  * @param categories Split left if categorical feature value is in this set, else right.
- * @since 1.0.0
  */
+@Since("1.0.0")
 @DeveloperApi
 case class Split(
     feature: Int,

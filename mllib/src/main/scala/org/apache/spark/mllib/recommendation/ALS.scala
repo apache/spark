@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.recommendation
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.recommendation.{ALS => NewALS}
 import org.apache.spark.rdd.RDD
@@ -26,8 +26,8 @@ import org.apache.spark.storage.StorageLevel
 
 /**
  * A more compact class to represent a rating than Tuple3[Int, Int, Double].
- * @since 0.8.0
  */
+@Since("0.8.0")
 case class Rating(user: Int, product: Int, rating: Double)
 
 /**
@@ -255,8 +255,8 @@ class ALS private (
 
 /**
  * Top-level methods for calling Alternating Least Squares (ALS) matrix factorization.
- * @since 0.8.0
  */
+@Since("0.8.0")
 object ALS {
   /**
    * Train a matrix factorization model given an RDD of ratings given by users to some products,
@@ -271,8 +271,8 @@ object ALS {
    * @param lambda     regularization factor (recommended: 0.01)
    * @param blocks     level of parallelism to split computation into
    * @param seed       random seed
-   * @since 0.9.1
    */
+  @Since("0.9.1")
   def train(
       ratings: RDD[Rating],
       rank: Int,
@@ -296,8 +296,8 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    * @param blocks     level of parallelism to split computation into
-   * @since 0.8.0
    */
+  @Since("0.8.0")
   def train(
       ratings: RDD[Rating],
       rank: Int,
@@ -319,8 +319,8 @@ object ALS {
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
-   * @since 0.8.0
    */
+  @Since("0.8.0")
   def train(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double)
     : MatrixFactorizationModel = {
     train(ratings, rank, iterations, lambda, -1)
@@ -336,8 +336,8 @@ object ALS {
    * @param ratings    RDD of (userID, productID, rating) pairs
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
-   * @since 0.8.0
    */
+  @Since("0.8.0")
   def train(ratings: RDD[Rating], rank: Int, iterations: Int)
     : MatrixFactorizationModel = {
     train(ratings, rank, iterations, 0.01, -1)
@@ -357,8 +357,8 @@ object ALS {
    * @param blocks     level of parallelism to split computation into
    * @param alpha      confidence parameter
    * @param seed       random seed
-   * @since 0.8.1
    */
+  @Since("0.8.1")
   def trainImplicit(
       ratings: RDD[Rating],
       rank: Int,
@@ -384,8 +384,8 @@ object ALS {
    * @param lambda     regularization factor (recommended: 0.01)
    * @param blocks     level of parallelism to split computation into
    * @param alpha      confidence parameter
-   * @since 0.8.1
    */
+  @Since("0.8.1")
   def trainImplicit(
       ratings: RDD[Rating],
       rank: Int,
@@ -409,8 +409,8 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    * @param alpha      confidence parameter
-   * @since 0.8.1
    */
+  @Since("0.8.1")
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double, alpha: Double)
     : MatrixFactorizationModel = {
     trainImplicit(ratings, rank, iterations, lambda, -1, alpha)
@@ -427,8 +427,8 @@ object ALS {
    * @param ratings    RDD of (userID, productID, rating) pairs
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
-   * @since 0.8.1
    */
+  @Since("0.8.1")
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int)
     : MatrixFactorizationModel = {
     trainImplicit(ratings, rank, iterations, 0.01, -1, 1.0)

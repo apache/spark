@@ -22,7 +22,6 @@ import java.util.{ArrayList => JArrayList}
 
 import org.apache.spark.api.java.JavaRDD
 
-import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Failure
@@ -214,7 +213,7 @@ private[spark] object SerDeUtil extends Logging {
         new AutoBatchedPickler(cleaned)
       } else {
         val pickle = new Pickler
-        cleaned.grouped(batchSize).map(batched => pickle.dumps(seqAsJavaList(batched)))
+        cleaned.grouped(batchSize).map(batched => pickle.dumps(batched.asJava))
       }
     }
   }
