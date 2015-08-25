@@ -12,6 +12,14 @@ except:
     pass
 
 
+def generate_fernet_key():
+    try:
+        FERNET_KEY = Fernet.generate_key()
+    except NameError:
+        FERNET_KEY = "cryptography_not_found_storing_passwords_in_plain_text"
+    return FERNET_KEY
+
+
 class AirflowConfigException(Exception):
     pass
 
@@ -287,11 +295,7 @@ if not os.path.isfile(AIRFLOW_CONFIG):
     when it is missing. The right way to change your configuration is to alter
     your configuration file, not this code.
     """
-    try:
-        FERNET_KEY = Fernet.generate_key()
-    except NameError:
-        FERNET_KEY = "storing_passwords_in_plain_text"
-
+    FERNET_KEY = generate_fernet_key()
     logging.info("Creating new config file in: " + AIRFLOW_CONFIG)
     f = open(AIRFLOW_CONFIG, 'w')
     f.write(DEFAULT_CONFIG.format(**locals()))
