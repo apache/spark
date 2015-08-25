@@ -28,9 +28,8 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils {
 
   private lazy val ctx = org.apache.spark.sql.hive.test.TestHive
   import ctx.implicits._
-  import ctx.sql
 
-  def _sqlContext = ctx
+  protected def _sqlContext = ctx
 
   test("SPARK-5068: query data when path doesn't exist"){
     withSQLConf((SQLConf.HIVE_VERIFY_PARTITION_PATH.key, "false")) {
