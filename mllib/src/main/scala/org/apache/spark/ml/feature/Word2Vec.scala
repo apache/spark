@@ -201,15 +201,16 @@ class Word2VecModel private[ml] (
       case None => bcWordVectors = Some(dataset.sqlContext.sparkContext.broadcast(wordVectors))
       case _ =>
     }
+    val localBcWordVectors = bcWordVectors.get
     val word2Vec = udf { sentence: Seq[String] =>
       if (sentence.size == 0) {
         Vectors.sparse($(vectorSize), Array.empty[Int], Array.empty[Double])
       } else {
         val cum = Vectors.zeros($(vectorSize))
-        val model = bcWordVectors.get.value.getVectors
+        val model = localBcWordVectors.value.getVectors
         for (word <- sentence) {
           if (model.contains(word)) {
-            axpy(1.0, bcWordVectors.get.value.transform(word), cum)
+            axpy(1.0, localBcWordVectors.value.transform(word), cum)
           } else {
             // pass words which not belong to model
           }
