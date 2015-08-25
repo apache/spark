@@ -45,6 +45,7 @@ col <- function(x) {
 }
 
 #' @rdname show
+#' @name show
 setMethod("show", "Column",
           function(object) {
             cat("Column", callJMethod(object@jc, "toString"), "\n")

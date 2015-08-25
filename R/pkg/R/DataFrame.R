@@ -62,6 +62,7 @@ dataFrame <- function(sdf, isCached = FALSE) {
 #' @param x A SparkSQL DataFrame
 #'
 #' @rdname printSchema
+#' @name printSchema
 #' @export
 #' @examples
 #'\dontrun{
@@ -186,6 +187,7 @@ setMethod("showDF",
 #' @param x A SparkSQL DataFrame
 #'
 #' @rdname show
+#' @name show
 #' @export
 #' @examples
 #'\dontrun{
@@ -332,7 +334,8 @@ setMethod("insertInto",
 #'
 #' @param x A SparkSQL DataFrame
 #'
-#' @rdname cache-methods
+#' @rdname cache
+#' @name cache
 #' @export
 #' @examples
 #'\dontrun{
@@ -558,6 +561,7 @@ setMethod("sample_frac",
 #' @param x A SparkSQL DataFrame
 #'
 #' @rdname count
+#' @name count
 #' @aliases nrow
 #' @export
 #' @examples
@@ -1552,6 +1556,7 @@ setMethod("saveAsTable",
 #' @param ... Additional expressions
 #' @return A DataFrame
 #' @rdname describe
+#' @name describe
 #' @aliases summary
 #' @export
 #' @examples
@@ -1573,6 +1578,7 @@ setMethod("describe",
           })
 
 #' @rdname describe
+#' @name describe
 setMethod("describe",
           signature(x = "DataFrame"),
           function(x) {
