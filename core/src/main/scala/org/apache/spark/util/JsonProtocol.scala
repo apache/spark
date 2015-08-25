@@ -796,7 +796,8 @@ private[spark] object JsonProtocol {
       case `taskKilled` => TaskKilled
       case `executorLostFailure` =>
         val executorId = Utils.jsonOption(json \ "Executor ID").map(_.extract[String])
-        val isLossReasonNormal = Utils.jsonOption(json \ "Is exit reason normal").map(_.extract[Boolean])
+        val isLossReasonNormal = Utils.jsonOption(json \ "Is exit reason normal").
+          map(_.extract[Boolean])
         ExecutorLostFailure(executorId.getOrElse("Unknown"), isLossReasonNormal.getOrElse(false))
       case `unknownReason` => UnknownReason
     }
