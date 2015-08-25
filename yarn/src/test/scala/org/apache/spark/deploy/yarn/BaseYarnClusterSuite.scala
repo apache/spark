@@ -135,6 +135,7 @@ abstract class BaseYarnClusterSuite
         logConfDir.getAbsolutePath() +
         File.pathSeparator +
         extraClassPath.mkString(File.pathSeparator))
+      .asScala
       .mkString(File.pathSeparator)
 
     props.setProperty("spark.driver.extraClassPath", testClasspath)
