@@ -24,32 +24,9 @@
  * </p>
  *
  * <p>
- * To launch a Spark application, just instantiate a {@link org.apache.spark.launcher.SparkLauncher}
- * and configure the application to run. For example:
- * </p>
- *
- * <pre>
- * {@code
- *   import org.apache.spark.launcher.SparkLauncher;
- *
- *   public class MyLauncher {
- *     public static void main(String[] args) throws Exception {
- *       Process spark = new SparkLauncher()
- *         .setAppResource("/my/app.jar")
- *         .setMainClass("my.spark.app.Main")
- *         .setMaster("local")
- *         .setConf(SparkLauncher.DRIVER_MEMORY, "2g")
- *         .launch();
- *       spark.waitFor();
- *     }
- *   }
- * }
- * </pre>
- *
- * <p>
- * Since Spark 1.5.0, the {@link org.apache.spark.launcher.SparkLauncher#startApplication(
- * org.apache.spark.launcher.SparkAppHandle.Listener...)} method is preferred, since it provides
- * information about the running application while also allowing finer-grained control of its state:
+ * The {@link org.apache.spark.launcher.SparkLauncher#startApplication(
+ * org.apache.spark.launcher.SparkAppHandle.Listener...)} can be used to start Spark and provide
+ * a handle to monitor and control the running application:
  * </p>
  *
  * <pre>
@@ -73,5 +50,33 @@
  *   }
  * }
  * </pre>
+ *
+ * <p>
+ * It's also possible to launch a raw child process, using the
+ * {@link org.apache.spark.launcher.SparkLauncher#launch()} method:
+ * </p>
+ *
+ * <pre>
+ * {@code
+ *   import org.apache.spark.launcher.SparkLauncher;
+ *
+ *   public class MyLauncher {
+ *     public static void main(String[] args) throws Exception {
+ *       Process spark = new SparkLauncher()
+ *         .setAppResource("/my/app.jar")
+ *         .setMainClass("my.spark.app.Main")
+ *         .setMaster("local")
+ *         .setConf(SparkLauncher.DRIVER_MEMORY, "2g")
+ *         .launch();
+ *       spark.waitFor();
+ *     }
+ *   }
+ * }
+ * </pre>
+ *
+ * <p>This method requires the calling code to manually manage the child process, including its
+ * output streams (to avoid possible deadlocks). It's recommended that
+ * {@link org.apache.spark.launcher.SparkLauncher#startApplication(
+ *   org.apache.spark.launcher.SparkAppHandle.Listener...)} be used instead.</p>
  */
 package org.apache.spark.launcher;

@@ -337,6 +337,9 @@ public class SparkLauncher {
 
   /**
    * Launches a sub-process that will start the configured Spark application.
+   * <p/>
+   * The {@link #startApplication(SparkAppHandle.Listener...)} method is preferred when launching
+   * Spark, since it provides better control of the child application.
    *
    * @return A process handle for the Spark app.
    */

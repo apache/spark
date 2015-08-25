@@ -21,12 +21,15 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadFactory;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Handle implementation for monitoring apps started as a child process.
  */
 class ChildProcAppHandle implements SparkAppHandle {
 
+  private static final Logger LOG = Logger.getLogger(ChildProcAppHandle.class.getName());
   private static final ThreadFactory REDIRECTOR_FACTORY =
     new NamedThreadFactory("ChildProcOutputRedirector-%d");
 
@@ -129,6 +132,9 @@ class ChildProcAppHandle implements SparkAppHandle {
     if (!state.isFinal()) {
       state = s;
       fireEvent(false);
+    } else {
+      LOG.log(Level.WARNING, "Backend requested transition from final state {0} to {1}.",
+        new Object[] { state, s });
     }
   }
 
