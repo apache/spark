@@ -118,11 +118,12 @@ def determine_modules_to_test(changed_modules):
 
 
 def determine_tags_to_exclude(changed_modules):
-  tags = [ ]
-  for m in modules.all_modules:
-    if m not in changed_modules:
-      tags += m.test_tags
-  return tags
+    tags = []
+    for m in modules.all_modules:
+        if m not in changed_modules:
+            tags += m.test_tags
+    return tags
+
 
 # -------------------------------------------------------------------------------------------------
 # Functions for working with subprocesses and shell tools
@@ -377,7 +378,7 @@ def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
         list(set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules)))
 
     if excluded_tags:
-      test_profiles += [ '-Dtest.exclude.tags=' + ",".join(excluded_tags) ]
+        test_profiles += ['-Dtest.exclude.tags=' + ",".join(excluded_tags)]
 
     if build_tool == "maven":
         run_scala_tests_maven(test_profiles)
