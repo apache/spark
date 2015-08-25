@@ -696,6 +696,12 @@ class DAGSchedulerSuite
     assertDataStructuresEmpty()
   }
 
+  /**
+   * This test runs a three stage job, with a fetch failure in stage 1.  but during the retry, we
+   * have completions from both the first & second attempt of stage 1.  So all the map output is
+   * available before we finish any task set for stage 1.  We want to make sure that we don't
+   * submit stage 2 until the map output for stage 1 is registered
+   */
   test("don't submit stage until its dependencies map outputs are registered (SPARK-5259)") {
     val firstRDD = new MyRDD(sc, 3, Nil)
     val firstShuffleDep = new ShuffleDependency(firstRDD, null)
