@@ -281,6 +281,134 @@ class DenseMatrix(
   @Since("1.3.0")
   override def apply(i: Int, j: Int): Double = values(index(i, j))
 
+  def !(i: Int): DenseMatrix = {
+    val r = if(i>=0) i else numRows + i
+
+    if(!isRowWithinBounds(r)){
+      val errmsg = "out of matrix index : (" + i + ", )"
+      throw new IllegalArgumentException(errmsg)
+    }
+
+    val elems = (0 to numCols-1).map(apply(r, _)).toArray
+    new DenseMatrix(1, numCols, elems)
+  }
+
+  def !(i: Int, j:Int): Double ={
+    val r = i
+    val c = if(j>=0) j else numCols + j
+
+    if(!isWithinBounds(r, c)){
+      val errmsg = "out of matrix index : (" + i + ", " + j + ")"
+      throw new IllegalArgumentException(errmsg)
+    }
+
+    apply(r, c)
+  }
+
+  def !(u: Unit, j: Int): DenseMatrix = {
+    val c = if(j>=0) j else numCols + j
+
+    if(!isColumnWithinBounds(c)){
+      val errmsg = "out of matrix index : ( , " + j + ")"
+      throw new IllegalArgumentException(errmsg)
+    }
+
+    val elems = (0 to numRows-1).map(apply(_, c)).toArray
+    new DenseMatrix(numRows, 1, elems)
+  }
+
+  def !(t1: (Int, Int)): DenseMatrix = {
+    val r1 = t1._1
+    val r2 = if(t1._2>=0) t1._2 else numRows + t1._2
+
+    if(!(r2>r1)){
+      val errmsg = "illegal range : (" + t1._1 + ", "+ t1._2 + ")"
+      throw new IllegalArgumentException(errmsg)
+    }
+
+    if(!(isRowWithinBounds(r1) && isRowWithinBounds(r2 - 1))){
+      val errmsg = "out of matrix index(row range) : (" + t1._1 + ", "+ t1._2 + ")"
+      throw new IllegalArgumentException(errmsg)
+    }
+
+    val elems = new Array[Double]((r2-r1)*numCols)
+
+    for(i <- r1 to r2 - 1; j <- 0 to numCols-1){
+      elems(i-r1+j*(r2-r1)) = apply(i, j)
+    }
+
+    new DenseMatrix(r2-r1, numCols, elems)
+  }
+
+  def !(u: Unit, t2: (Int, Int)): DenseMatrix = {
+    val c1 = t2._1
+    val c2 = if(t2._2>=0) t2._2 else numCols + t2._2
+
+    if(!(c2>c1)){
+      val errmsg = "illegal range : (" + t2._1 + ", "+ t2._2 + ")"
+      throw new IllegalArgumentException(errmsg)
+    }
+
+    if(!(isColumnWithinBounds(c1) && isColumnWithinBounds(c2 - 1))){
+      val errmsg = "out of matrix index(column range) : (" + t2._1 + ", "+ t2._2 + ")"
+      throw new IllegalArgumentException(errmsg)
+    }
+
+    val elems = new Array[Double]((c2-c1)*numRows)
+
+    for(i <- 0 to numRows - 1; j <- c1 to c2 - 1){
+      elems(i+numRows*(j-c1)) = apply(i, j)
+    }
+
+    new DenseMatrix(numRows, c2-c1, elems)
+  }
+
+  def !(t1: (Int, Int), t2: (Int, Int)): DenseMatrix = {
+    val r1 = t1._1
+    val r2 = if(t1._2>=0) t1._2 else numRows + t1._2
+    val c1 = t2._1
+    val c2 = if(t2._2>=0) t2._2 else numCols + t2._2
+
+    if(!(r2>r1)){
+      val errmsg = "illegal range(row) : (" + t1._1 + ", "+ t1._2 + ")"
+      throw new IllegalArgumentException(errmsg)
+    }
+
+    if(!(c2>c1)){
+      val errmsg = "illegal range(column) : (" + t2._1 + ", "+ t2._2 + ")"
+      throw new IllegalArgumentException(errmsg)
+    }
+
+    if(!(isRowWithinBounds(r1) && isRowWithinBounds(r2 - 1))){
+      val errmsg = "out of matrix index(row range) : (" + t1._1 + ", "+ t1._2 + ")"
+      throw new IllegalArgumentException(errmsg)
+    }
+
+    if(!(isColumnWithinBounds(c1) && isColumnWithinBounds(c2 - 1))){
+      val errmsg = "out of matrix index(column range) : (" + t2._1 + ", "+ t2._2 + ")"
+      throw new IllegalArgumentException(errmsg)
+    }
+
+    val elems = new Array[Double]((r2-r1)*(c2-c1))
+
+    for(i <- r1 to r2 - 1; j <- c1 to c2 - 1){
+      elems(i - r1 + (r2-r1)*(j - c1)) = apply(i, j)
+    }
+    new DenseMatrix(r2-r1, c2-c1, elems)
+  }
+
+  private def isRowWithinBounds(r: Int): Boolean = {
+    0 <= r && r < numRows
+  }
+
+  private def isColumnWithinBounds(c: Int): Boolean = {
+    0 <= c && c < numCols
+  }
+
+  private def isWithinBounds(r: Int, c:Int): Boolean = {
+    isRowWithinBounds(r) && isColumnWithinBounds(c)
+  }
+
   private[mllib] def index(i: Int, j: Int): Int = {
     if (!isTransposed) i + numRows * j else j + numCols * i
   }
