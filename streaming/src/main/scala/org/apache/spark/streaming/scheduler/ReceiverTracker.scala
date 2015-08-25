@@ -529,8 +529,21 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
       // Function to start the receiver on the worker node
       val startReceiverFunc: Iterator[Receiver[_]] => Unit =
-        (i: Iterator[Receiver[_]]) => {
-          new StartReceiverFunc(checkpointDirOption, serializableHadoopConf)(i)
+        (iterator: Iterator[Receiver[_]]) => {
+          if (!iterator.hasNext) {
+            throw new SparkException(
+              "Could not start receiver as object not found.")
+          }
+          if (TaskContext.get().attemptNumber() == 0) {
+            val receiver = iterator.next()
+            assert(iterator.hasNext == false)
+            val supervisor = new ReceiverSupervisorImpl(
+              receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
+            supervisor.start()
+            supervisor.awaitTermination()
+          } else {
+            // It's restarted by TaskScheduler, but we want to reschedule it again. So exit it.
+          }
         }
 
       // Create the RDD using the scheduledExecutors to run the receiver in a Spark job
@@ -584,34 +597,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     private def stopReceivers() {
       receiverTrackingInfos.values.flatMap(_.endpoint).foreach { _.send(StopReceiver) }
       logInfo("Sent stop signal to all " + receiverTrackingInfos.size + " receivers")
-    }
-  }
-
-}
-
-/**
- * Function to start the receiver on the worker node. Use a class instead of closure to avoid
- * the serialization issue.
- */
-private[streaming] class StartReceiverFunc(
-    checkpointDirOption: Option[String],
-    serializableHadoopConf: SerializableConfiguration)
-  extends (Iterator[Receiver[_]] => Unit) with Serializable {
-
-  override def apply(iterator: Iterator[Receiver[_]]): Unit = {
-    if (!iterator.hasNext) {
-      throw new SparkException(
-        "Could not start receiver as object not found.")
-    }
-    if (TaskContext.get().attemptNumber() == 0) {
-      val receiver = iterator.next()
-      assert(iterator.hasNext == false)
-      val supervisor = new ReceiverSupervisorImpl(
-        receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
-      supervisor.start()
-      supervisor.awaitTermination()
-    } else {
-      // It's restarted by TaskScheduler, but we want to reschedule it again. So exit it.
     }
   }
 
