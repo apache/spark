@@ -1133,6 +1133,7 @@ val scaledData = scalerModel.transform(dataFrame)
 {% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.StandardScaler;
+import org.apache.spark.ml.feature.StandardScalerModel;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.sql.DataFrame;
@@ -1169,6 +1170,76 @@ scalerModel = scaler.fit(dataFrame)
 
 # Normalize each feature to have unit standard deviation.
 scaledData = scalerModel.transform(dataFrame)
+{% endhighlight %}
+</div>
+</div>
+
+## MinMaxScaler
+
+`MinMaxScaler` transforms a dataset of `Vector` rows, rescaling each feature to a specific range (often [0, 1]).  It takes parameters:
+
+* `min`: 0.0 by default. Lower bound after transformation, shared by all features.
+* `max`: 1.0 by default. Upper bound after transformation, shared by all features.
+
+`MinMaxScaler` computes summary statistics on a data set and produces a `MinMaxScalerModel`. The model can then transform each feature individually such that it is in the given range.
+
+The rescaled value for a feature E is calculated as,
+`\begin{equation}
+  Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
+\end{equation}`
+For the case `E_{max} == E_{min}`, `Rescaled(e_i) = 0.5 * (max + min)`
+
+Note that since zero values will probably be transformed to non-zero values, output of the transformer will be DenseVector even for sparse input.
+
+The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [0, 1].
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+More details can be found in the API docs for
+[MinMaxScaler](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScaler) and
+[MinMaxScalerModel](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScalerModel).
+{% highlight scala %}
+import org.apache.spark.ml.feature.MinMaxScaler
+import org.apache.spark.mllib.util.MLUtils
+
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+val dataFrame = sqlContext.createDataFrame(data)
+val scaler = new MinMaxScaler()
+  .setInputCol("features")
+  .setOutputCol("scaledFeatures")
+
+// Compute summary statistics and generate MinMaxScalerModel
+val scalerModel = scaler.fit(dataFrame)
+
+// rescale each feature to range [min, max].
+val scaledData = scalerModel.transform(dataFrame)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+More details can be found in the API docs for
+[MinMaxScaler](api/java/org/apache/spark/ml/feature/MinMaxScaler.html) and
+[MinMaxScalerModel](api/java/org/apache/spark/ml/feature/MinMaxScalerModel.html).
+{% highlight java %}
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.MinMaxScaler;
+import org.apache.spark.ml.feature.MinMaxScalerModel;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.sql.DataFrame;
+
+JavaRDD<LabeledPoint> data =
+  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
+DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
+MinMaxScaler scaler = new MinMaxScaler()
+  .setInputCol("features")
+  .setOutputCol("scaledFeatures");
+
+// Compute summary statistics and generate MinMaxScalerModel
+MinMaxScalerModel scalerModel = scaler.fit(dataFrame);
+
+// rescale each feature to range [min, max].
+DataFrame scaledData = scalerModel.transform(dataFrame);
 {% endhighlight %}
 </div>
 </div>
