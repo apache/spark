@@ -1622,9 +1622,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(sql("select 10.3000 / 3.0"), Row(BigDecimal("3.4333333")))
     checkAnswer(sql("select 10.30000 / 30.0"), Row(BigDecimal("0.343333333")))
     checkAnswer(sql("select 10.300000000000000000 / 3.00000000000000000"),
-      Row(BigDecimal("3.4333333333333333333333333333333333333", new MathContext(38))))
+      Row(BigDecimal("3.433333333333333333333333333", new MathContext(38))))
     checkAnswer(sql("select 10.3000000000000000000 / 3.00000000000000000"),
-      Row(null))
+      Row(BigDecimal("3.4333333333333333333333333333", new MathContext(38))))
   }
 
   test("SPARK-10215 Div of Decimal returns null") {
