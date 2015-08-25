@@ -1,7 +1,7 @@
 from __future__ import print_function
 from builtins import str
 from past.builtins import basestring
-from builtins import object
+from builtins import object, bytes
 import copy
 from datetime import datetime, timedelta
 import functools
@@ -328,7 +328,7 @@ class Connection(Base):
 
     def get_password(self):
         if self._password and self.is_encrypted:
-            return FERNET.decrypt(self._password)
+            return FERNET.decrypt(bytes(self._password, 'utf-8'))
         else:
             return self._password
 
@@ -339,7 +339,7 @@ class Connection(Base):
                 self._password = FERNET.encrypt(val)
                 self.is_encrypted = True
             except NameError:
-                self._password = val
+                self._password = value
                 self.is_encrypted = False
 
     @declared_attr
