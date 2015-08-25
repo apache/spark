@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.dsl.plans._
 
 class AnalysisSuite extends AnalysisTest {
-  import TestRelations._
+  import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
   test("union project *") {
     val plan = (1 to 100)
@@ -96,7 +95,7 @@ class AnalysisSuite extends AnalysisTest {
     assert(pl(1).dataType == DoubleType)
     assert(pl(2).dataType == DoubleType)
     // StringType will be promoted into Decimal(38, 18)
-    assert(pl(3).dataType == DecimalType(38, 29))
+    assert(pl(3).dataType == DecimalType(38, 22))
     assert(pl(4).dataType == DoubleType)
   }
 
