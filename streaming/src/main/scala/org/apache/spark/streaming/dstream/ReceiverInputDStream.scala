@@ -122,7 +122,7 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
         if (validBlockIds.size != blockIds.size) {
           logWarning("Some blocks could not be recovered as they were not found in memory. " +
             "To prevent such data loss, enabled Write Ahead Log (see programming guide " +
-            "for more details.") 
+            "for more details.")
         }
         new BlockRDD[T](ssc.sc, validBlockIds)
       }
