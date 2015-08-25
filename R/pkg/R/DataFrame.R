@@ -29,8 +29,8 @@ setOldClass("jobj")
 #' @seealso jsonFile, table
 #' @docType class
 #'
-#' @param env An R environment that stores bookkeeping states of the DataFrame
-#' @param sdf A Java object reference to the backing Scala DataFrame
+#' @slot env An R environment that stores bookkeeping states of the DataFrame
+#' @slot sdf A Java object reference to the backing Scala DataFrame
 #' @export
 setClass("DataFrame",
          slots = list(env = "environment",
