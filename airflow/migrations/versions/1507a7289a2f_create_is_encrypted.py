@@ -14,6 +14,8 @@ depends_on = None
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.engine.reflection import Inspector
+from airflow import settings
 
 
 connectionhelper = sa.Table(
@@ -24,15 +26,21 @@ connectionhelper = sa.Table(
 )
 
 
-def upgrade():
-    op.add_column('connection',
-                  sa.Column('is_encrypted', sa.Boolean,
-                            unique=False, default=False))
 
-    conn = op.get_bind()
-    conn.execute(
-        connectionhelper.update().values(is_encrypted=False)
-    )
+
+def upgrade():
+    inspector = Inspector.from_engine(settings.engine)
+    col_names = [col['name'] for col in inspector.get_columns('connection')]
+
+    if 'is_encrypted' not in col_names:
+        op.add_column(
+            'connection',
+            sa.Column('is_encrypted', sa.Boolean, unique=False, default=False))
+
+        conn = op.get_bind()
+        conn.execute(
+            connectionhelper.update().values(is_encrypted=False)
+        )
 
 
 def downgrade():
