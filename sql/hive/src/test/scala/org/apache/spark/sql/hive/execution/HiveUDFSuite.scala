@@ -276,6 +276,11 @@ class HiveUDFSuite extends QueryTest {
     checkAnswer(
       sql("SELECT testStringStringUDF(\"hello\", s) FROM stringTable"),
       Seq(Row("hello world"), Row("hello goodbye")))
+
+    checkAnswer(
+      sql("SELECT testStringStringUDF(\"\", testStringStringUDF(\"hello\", s)) FROM stringTable"),
+      Seq(Row(" hello world"), Row(" hello goodbye")))
+
     sql("DROP TEMPORARY FUNCTION IF EXISTS testStringStringUDF")
 
     TestHive.reset()
