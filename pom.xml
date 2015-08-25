@@ -181,6 +181,7 @@
     <libthrift.version>0.9.2</libthrift.version>
 
     <test.java.home>${java.home}</test.java.home>
+    <test.exclude.tags></test.exclude.tags>
 
     <!--
       Dependency scopes that can be overridden by enabling certain profiles. These profiles are
@@ -1909,6 +1910,7 @@
               <test.src.tables>src</test.src.tables>
             </systemProperties>
             <failIfNoTests>false</failIfNoTests>
+            <tagsToExclude>${test.exclude.tags}</tagsToExclude>
           </configuration>
         </plugin>
         <!-- Scalatest runs all Scala tests -->
