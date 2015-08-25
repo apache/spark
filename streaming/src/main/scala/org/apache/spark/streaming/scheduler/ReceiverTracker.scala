@@ -439,6 +439,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           startReceiver(receiver, executors)
         }
       case RestartReceiver(receiver) =>
+        // Old scheduled executors minus the ones that are not active any more
         val oldScheduledExecutors = getStoredScheduledExecutors(receiver.streamId)
         val scheduledExecutors = if (oldScheduledExecutors.nonEmpty) {
             // Try global scheduling again
