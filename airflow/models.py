@@ -443,6 +443,8 @@ class TaskInstance(Base):
     pool = Column(String(50))
     queue = Column(String(50))
     priority_weight = Column(Integer)
+    operator = Column(String(1000))
+    queued_dttm = Column(DateTime)
 
     __table_args__ = (
         Index('ti_dag_state', dag_id, state),
@@ -797,6 +799,7 @@ class TaskInstance(Base):
         self.job_id = job_id
         iso = datetime.now().isoformat()
         self.hostname = socket.gethostname()
+        self.operator = task.__class__.__name__
 
         if self.state == State.RUNNING:
             logging.warning("Another instance is running, skipping.")
@@ -830,6 +833,7 @@ class TaskInstance(Base):
                 # If a pool is set for this task, marking the task instance
                 # as QUEUED
                 self.state = State.QUEUED
+                self.queued_dttm = datetime.now()
                 session.merge(self)
                 session.commit()
                 session.close()
