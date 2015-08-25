@@ -400,8 +400,15 @@ object HiveTypeCoercion {
             resultType)
 
         case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val resultType = DecimalType.bounded(p1 - s1 + s2 + max(6, s1 + p2 + 1),
-            max(6, s1 + p2 + 1))
+          var intDig = min(DecimalType.MAX_SCALE, p1 - s1 + s2)
+          var decDig = min(DecimalType.MAX_SCALE, max(6, s1 + p2 + 1))
+          val diff = (intDig + decDig) - DecimalType.MAX_SCALE
+          if (diff > 0) {
+            decDig -= diff / 2 + 1
+            intDig = DecimalType.MAX_SCALE - decDig
+            DecimalType.bounded(intDig + decDig, decDig)
+          }
+          val resultType = DecimalType.bounded(intDig + decDig, decDig)
           val widerType = widerDecimalType(p1, s1, p2, s2)
           CheckOverflow(Divide(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
             resultType)
@@ -744,7 +751,7 @@ object HiveTypeCoercion {
 
         // If input is a numeric type but not decimal, and we expect a decimal type,
         // cast the input to decimal.
-        case (d: NumericType, DecimalType) => Cast(e, DecimalType.forType(d))
+        case (d: NumericType, _: DecimalType) => Cast(e, DecimalType.forType(d))
         // For any other numeric types, implicitly cast to each other, e.g. long -> int, int -> long
         case (_: NumericType, target: NumericType) => Cast(e, target)
 
@@ -753,7 +760,7 @@ object HiveTypeCoercion {
         case (TimestampType, DateType) => Cast(e, DateType)
 
         // Implicit cast from/to string
-        case (StringType, DecimalType) => Cast(e, DecimalType.SYSTEM_DEFAULT)
+        case (StringType, _: DecimalType) => Cast(e, DecimalType.SYSTEM_DEFAULT)
         case (StringType, target: NumericType) => Cast(e, target)
         case (StringType, DateType) => Cast(e, DateType)
         case (StringType, TimestampType) => Cast(e, TimestampType)

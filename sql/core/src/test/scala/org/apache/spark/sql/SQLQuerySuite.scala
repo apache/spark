@@ -1627,6 +1627,27 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(null))
   }
 
+  test("SPARK-10215 Div of Decimal returns null") {
+    val d = Decimal(1.12321)
+    val df = Seq((d, 1)).toDF("a", "b")
+
+    checkAnswer(
+      df.selectExpr("b * a / b"),
+      Seq(Row(d.toBigDecimal)))
+    checkAnswer(
+      df.selectExpr("b * a / b / b"),
+      Seq(Row(d.toBigDecimal)))
+    checkAnswer(
+      df.selectExpr("b * a + b"),
+      Seq(Row(BigDecimal(2.12321))))
+    checkAnswer(
+      df.selectExpr("b * a - b"),
+      Seq(Row(BigDecimal(0.12321))))
+    checkAnswer(
+      df.selectExpr("b * a * b"),
+      Seq(Row(d.toBigDecimal)))
+  }
+
   test("external sorting updates peak execution memory") {
     withSQLConf((SQLConf.EXTERNAL_SORT.key, "true")) {
       val sc = sqlContext.sparkContext
