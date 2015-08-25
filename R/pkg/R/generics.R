@@ -441,7 +441,7 @@ setGeneric("filter", function(x, condition) { standardGeneric("filter") })
 #' @export
 setGeneric("group_by", function(x, ...) { standardGeneric("group_by") })
 
-#' @rdname DataFrame
+#' @rdname groupBy
 #' @export
 setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
 
