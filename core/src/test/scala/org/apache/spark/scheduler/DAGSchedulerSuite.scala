@@ -822,18 +822,16 @@ class DAGSchedulerSuite
     assert(jobIdToStageIds(1) === Set(0, 2))
     completeNextStageWithFetchFailure(2, 0, shuffleDep)
     scheduler.resubmitFailedStages()
-    logInfo("taskSets after fetch failure = " + taskSets)
     completeNextShuffleMapSuccesfully(0, 1, 2)
-    logInfo("taskSets after recomplete stage 0 = " + taskSets)
     completeNextResultStageWithSuccess(2, 1, idx => idx + 1234)
     assert(results === Map(0 -> 1234, 1 -> 1235))
 
     assertDataStructuresEmpty()
-    emptyAfterContextCleaner()
+    assertEmptyAfterContextCleaner()
   }
 
 
-  test("reused dependency with long lineage", ActiveTag) {
+  test("reused dependency with long lineage") {
     val jobIdToStageIds = new mutable.HashMap[Int, Set[Int]]()
     val listener = new SparkListener {
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
@@ -875,7 +873,7 @@ class DAGSchedulerSuite
     assert(results === Map(0 -> 1234, 1 -> 1235))
     results.clear()
     assertDataStructuresEmpty()
-    emptyAfterContextCleaner()
+    assertEmptyAfterContextCleaner()
 
     // now try submitting again, after we've cleaned out the shuffle data.  Should be fine,
     // we just need to rerun everything
@@ -886,15 +884,12 @@ class DAGSchedulerSuite
     assert(jobIdToStageIds(2) === Set(5, 6, 7, 8))  // new stages this time
     completeNextShuffleMapSuccesfully(5, 0, 4)
     completeNextShuffleMapSuccesfully(6, 0, 6)
-    println(taskSets)
     completeNextShuffleMapSuccesfully(7, 0, 8)
-    println(taskSets)
-    logInfo("tasksets = " + taskSets)
     completeNextResultStageWithSuccess(8, 0, idx => idx + 4321)
     assert(results === (0 until 8).map{idx => idx -> (idx + 4321)}.toMap)
 
     assertDataStructuresEmpty()
-    emptyAfterContextCleaner()
+    assertEmptyAfterContextCleaner()
   }
 
   /**
@@ -1219,7 +1214,7 @@ class DAGSchedulerSuite
     assert(scheduler.outputCommitCoordinator.isEmpty)
   }
 
-  private def emptyAfterContextCleaner(): Unit = {
+  private def assertEmptyAfterContextCleaner(): Unit = {
     scheduler.shuffleToMapStage.foreach { case (shuffleId, _) =>
       sc.cleaner.get.doCleanupShuffle(shuffleId, blocking=true)
     }

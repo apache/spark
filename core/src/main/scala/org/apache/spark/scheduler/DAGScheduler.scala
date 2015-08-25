@@ -246,18 +246,14 @@ class DAGScheduler(
   private def getShuffleMapStage(
       shuffleDep: ShuffleDependency[_, _, _],
       firstJobId: Int): ShuffleMapStage = {
-    logInfo(s"trying to get shuffle map stage for ${shuffleDep.shuffleId}")
     shuffleToMapStage.get(shuffleDep.shuffleId) match {
-      case Some(stage) =>
-        logInfo(s"for ${shuffleDep.shuffleId} found $stage")
-        stage
+      case Some(stage) => stage
       case None =>
         // We are going to register ancestor shuffle dependencies
         registerShuffleDependencies(shuffleDep, firstJobId)
         // Then register current shuffleDep
         val stage = newOrUsedShuffleStage(shuffleDep, firstJobId)
         shuffleToMapStage(shuffleDep.shuffleId) = stage
-        logInfo(s"setting shuffleToMapStage = $shuffleToMapStage")
 
         stage
     }
@@ -301,7 +297,6 @@ class DAGScheduler(
       numTasks: Int,
       jobId: Int,
       callSite: CallSite): ResultStage = {
-    logInfo(s"getting parent stages and id for job $jobId with shuffleToMapStage = $shuffleToMapStage")
     val (parentStages: List[Stage], id: Int) = getParentStagesAndId(rdd, jobId)
     val stage: ResultStage = new ResultStage(id, rdd, numTasks, parentStages, jobId, callSite)
 
@@ -321,23 +316,21 @@ class DAGScheduler(
       firstJobId: Int): ShuffleMapStage = {
     val rdd = shuffleDep.rdd
     val numTasks = rdd.partitions.length
-//    shuffleIdToShuffleMapStage.getOrElseUpdate(shuffleDep.shuffleId, {
-      val stage = newShuffleMapStage(rdd, numTasks, shuffleDep, firstJobId, rdd.creationSite)
-      if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
-        val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
-        val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
-        for (i <- 0 until locs.length) {
-          stage.outputLocs(i) = Option(locs(i)).toList // locs(i) will be null if missing
-        }
-        stage.numAvailableOutputs = locs.count(_ != null)
-      } else {
-        // Kind of ugly: need to register RDDs with the cache and map output tracker here
-        // since we can't do it in the RDD constructor because # of partitions is unknown
-        logInfo("Registering RDD " + rdd.id + " (" + rdd.getCreationSite + ")")
-        mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length)
+    val stage = newShuffleMapStage(rdd, numTasks, shuffleDep, firstJobId, rdd.creationSite)
+    if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
+      val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
+      val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
+      for (i <- 0 until locs.length) {
+        stage.outputLocs(i) = Option(locs(i)).toList // locs(i) will be null if missing
       }
-      stage
-//    })
+      stage.numAvailableOutputs = locs.count(_ != null)
+    } else {
+      // Kind of ugly: need to register RDDs with the cache and map output tracker here
+      // since we can't do it in the RDD constructor because # of partitions is unknown
+      logInfo("Registering RDD " + rdd.id + " (" + rdd.getCreationSite + ")")
+      mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length)
+    }
+    stage
   }
 
   /**
