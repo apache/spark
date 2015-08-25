@@ -17,6 +17,8 @@
 
 context("SerDe functionality")
 
+sc <- sparkR.init()
+
 test_that("SerDe of primitive types", {
   x <- callJStatic("SparkRHandler", "echo", 1L)
   expect_equal(x, 1L)
