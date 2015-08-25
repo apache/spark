@@ -569,10 +569,6 @@ setGeneric("withColumnRenamed",
 
 #' @rdname column
 #' @export
-setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCountDistinct") })
-
-#' @rdname column
-#' @export
 setGeneric("asc", function(x) { standardGeneric("asc") })
 
 #' @rdname column
@@ -586,10 +582,6 @@ setGeneric("cast", function(x, dataType) { standardGeneric("cast") })
 #' @rdname column
 #' @export
 setGeneric("contains", function(x, ...) { standardGeneric("contains") })
-
-#' @rdname column
-#' @export
-setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") })
 
 #' @rdname column
 #' @export
@@ -609,10 +601,6 @@ setGeneric("getItem", function(x, ...) { standardGeneric("getItem") })
 
 #' @rdname column
 #' @export
-setGeneric("hypot", function(y, x) { standardGeneric("hypot") })
-
-#' @rdname column
-#' @export
 setGeneric("isNull", function(x) { standardGeneric("isNull") })
 
 #' @rdname column
@@ -621,27 +609,7 @@ setGeneric("isNotNull", function(x) { standardGeneric("isNotNull") })
 
 #' @rdname column
 #' @export
-setGeneric("last", function(x) { standardGeneric("last") })
-
-#' @rdname column
-#' @export
 setGeneric("like", function(x, ...) { standardGeneric("like") })
-
-#' @rdname column
-#' @export
-setGeneric("lower", function(x) { standardGeneric("lower") })
-
-#' @rdname column
-#' @export
-setGeneric("n", function(x) { standardGeneric("n") })
-
-#' @rdname column
-#' @export
-setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
-
-#' @rdname column
-#' @export
-setGeneric("rint", function(x, ...) { standardGeneric("rint") })
 
 #' @rdname column
 #' @export
@@ -662,312 +630,340 @@ setGeneric("otherwise", function(x, value) { standardGeneric("otherwise") })
 
 ###################### Expression Function Methods ##########################
 
-#' @rdname functions
+#' @rdname add_months
 #' @export
 setGeneric("add_months", function(y, x) { standardGeneric("add_months") })
 
-#' @rdname functions
+#' @rdname approxCountDistinct
+#' @export
+setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCountDistinct") })
+
+#' @rdname ascii
 #' @export
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
 
-#' @rdname functions
+#' @rdname avg
 #' @export
 setGeneric("avg", function(x, ...) { standardGeneric("avg") })
 
-#' @rdname functions
+#' @rdname base64
 #' @export
 setGeneric("base64", function(x) { standardGeneric("base64") })
 
-#' @rdname functions
+#' @rdname bin
 #' @export
 setGeneric("bin", function(x) { standardGeneric("bin") })
 
-#' @rdname functions
+#' @rdname bitwiseNOT
 #' @export
 setGeneric("bitwiseNOT", function(x) { standardGeneric("bitwiseNOT") })
 
-#' @rdname functions
+#' @rdname cbrt
 #' @export
 setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
 
-#' @rdname functions
+#' @rdname ceil
 #' @export
 setGeneric("ceil", function(x) { standardGeneric("ceil") })
 
-#' @rdname functions
+#' @rdname concat
 #' @export
 setGeneric("concat", function(x, ...) { standardGeneric("concat") })
 
-#' @rdname functions
+#' @rdname concat_ws
 #' @export
 setGeneric("concat_ws", function(sep, x, ...) { standardGeneric("concat_ws") })
 
-#' @rdname functions
+#' @rdname conv
 #' @export
 setGeneric("conv", function(x, fromBase, toBase) { standardGeneric("conv") })
 
-#' @rdname functions
+#' @rdname countDistinct
+#' @export
+setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") })
+
+#' @rdname crc32
 #' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
-#' @rdname functions
+#' @rdname datediff
 #' @export
 setGeneric("datediff", function(y, x) { standardGeneric("datediff") })
 
-#' @rdname functions
+#' @rdname date_add
 #' @export
 setGeneric("date_add", function(y, x) { standardGeneric("date_add") })
 
-#' @rdname functions
+#' @rdname date_format
 #' @export
 setGeneric("date_format", function(y, x) { standardGeneric("date_format") })
 
-#' @rdname functions
+#' @rdname date_sub
 #' @export
 setGeneric("date_sub", function(y, x) { standardGeneric("date_sub") })
 
-#' @rdname functions
+#' @rdname dayofmonth
 #' @export
 setGeneric("dayofmonth", function(x) { standardGeneric("dayofmonth") })
 
-#' @rdname functions
+#' @rdname dayofyear
 #' @export
 setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 
-#' @rdname functions
+#' @rdname explode
 #' @export
 setGeneric("explode", function(x) { standardGeneric("explode") })
 
-#' @rdname functions
+#' @rdname expr
 #' @export
 setGeneric("expr", function(x) { standardGeneric("expr") })
 
-#' @rdname functions
+#' @rdname from_utc_timestamp
 #' @export
 setGeneric("from_utc_timestamp", function(y, x) { standardGeneric("from_utc_timestamp") })
 
-#' @rdname functions
+#' @rdname format_number
 #' @export
 setGeneric("format_number", function(y, x) { standardGeneric("format_number") })
 
-#' @rdname functions
+#' @rdname format_string
 #' @export
 setGeneric("format_string", function(format, x, ...) { standardGeneric("format_string") })
 
-#' @rdname functions
+#' @rdname from_unixtime
 #' @export
 setGeneric("from_unixtime", function(x, ...) { standardGeneric("from_unixtime") })
 
-#' @rdname functions
+#' @rdname greatest
 #' @export
 setGeneric("greatest", function(x, ...) { standardGeneric("greatest") })
 
-#' @rdname functions
+#' @rdname hex
 #' @export
 setGeneric("hex", function(x) { standardGeneric("hex") })
 
-#' @rdname functions
+#' @rdname hour
 #' @export
 setGeneric("hour", function(x) { standardGeneric("hour") })
 
-#' @rdname functions
+#' @rdname hypot
+#' @export
+setGeneric("hypot", function(y, x) { standardGeneric("hypot") })
+
+#' @rdname initcap
 #' @export
 setGeneric("initcap", function(x) { standardGeneric("initcap") })
 
-#' @rdname functions
+#' @rdname instr
 #' @export
 setGeneric("instr", function(y, x) { standardGeneric("instr") })
 
-#' @rdname functions
+#' @rdname isNaN
 #' @export
 setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
 
-#' @rdname functions
+#' @rdname last
+#' @export
+setGeneric("last", function(x) { standardGeneric("last") })
+
+#' @rdname last_day
 #' @export
 setGeneric("last_day", function(x) { standardGeneric("last_day") })
 
-#' @rdname functions
+#' @rdname least
 #' @export
 setGeneric("least", function(x, ...) { standardGeneric("least") })
 
-#' @rdname functions
+#' @rdname levenshtein
 #' @export
 setGeneric("levenshtein", function(y, x) { standardGeneric("levenshtein") })
 
-#' @rdname functions
+#' @rdname lit
 #' @export
 setGeneric("lit", function(x) { standardGeneric("lit") })
 
-#' @rdname functions
+#' @rdname locate
 #' @export
 setGeneric("locate", function(substr, str, ...) { standardGeneric("locate") })
 
-#' @rdname functions
+#' @rdname lower
 #' @export
 setGeneric("lower", function(x) { standardGeneric("lower") })
 
-#' @rdname functions
+#' @rdname lpad
 #' @export
 setGeneric("lpad", function(x, len, pad) { standardGeneric("lpad") })
 
-#' @rdname functions
+#' @rdname ltrim
 #' @export
 setGeneric("ltrim", function(x) { standardGeneric("ltrim") })
 
-#' @rdname functions
+#' @rdname md5
 #' @export
 setGeneric("md5", function(x) { standardGeneric("md5") })
 
-#' @rdname functions
+#' @rdname minute
 #' @export
 setGeneric("minute", function(x) { standardGeneric("minute") })
 
-#' @rdname functions
+#' @rdname month
 #' @export
 setGeneric("month", function(x) { standardGeneric("month") })
 
-#' @rdname functions
+#' @rdname months_between
 #' @export
 setGeneric("months_between", function(y, x) { standardGeneric("months_between") })
 
-#' @rdname functions
+#' @rdname count
+#' @export
+setGeneric("n", function(x) { standardGeneric("n") })
+
+#' @rdname nanvl
 #' @export
 setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })
 
-#' @rdname functions
+#' @rdname negate
 #' @export
 setGeneric("negate", function(x) { standardGeneric("negate") })
 
-#' @rdname functions
+#' @rdname next_day
 #' @export
 setGeneric("next_day", function(y, x) { standardGeneric("next_day") })
 
-#' @rdname functions
+#' @rdname countDistinct
+#' @export
+setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
+
+#' @rdname pmod
 #' @export
 setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
 
-#' @rdname functions
+#' @rdname quarter
 #' @export
 setGeneric("quarter", function(x) { standardGeneric("quarter") })
 
-#' @rdname functions
+#' @rdname rand
 #' @export
 setGeneric("rand", function(seed) { standardGeneric("rand") })
 
-#' @rdname functions
+#' @rdname randn
 #' @export
 setGeneric("randn", function(seed) { standardGeneric("randn") })
 
-#' @rdname functions
+#' @rdname regexp_extract
 #' @export
 setGeneric("regexp_extract", function(x, pattern, idx) { standardGeneric("regexp_extract") })
 
-#' @rdname functions
+#' @rdname regexp_replace
 #' @export
 setGeneric("regexp_replace",
            function(x, pattern, replacement) { standardGeneric("regexp_replace") })
 
-#' @rdname functions
+#' @rdname reverse
 #' @export
 setGeneric("reverse", function(x) { standardGeneric("reverse") })
 
-#' @rdname functions
+#' @rdname rint
+#' @export
+setGeneric("rint", function(x, ...) { standardGeneric("rint") })
+
+#' @rdname rpad
 #' @export
 setGeneric("rpad", function(x, len, pad) { standardGeneric("rpad") })
 
-#' @rdname functions
+#' @rdname rtrim
 #' @export
 setGeneric("rtrim", function(x) { standardGeneric("rtrim") })
 
-#' @rdname functions
+#' @rdname second
 #' @export
 setGeneric("second", function(x) { standardGeneric("second") })
 
-#' @rdname functions
+#' @rdname sha1
 #' @export
 setGeneric("sha1", function(x) { standardGeneric("sha1") })
 
-#' @rdname functions
+#' @rdname sha2
 #' @export
 setGeneric("sha2", function(y, x) { standardGeneric("sha2") })
 
-#' @rdname functions
+#' @rdname shiftLeft
 #' @export
 setGeneric("shiftLeft", function(y, x) { standardGeneric("shiftLeft") })
 
-#' @rdname functions
+#' @rdname shiftRight
 #' @export
 setGeneric("shiftRight", function(y, x) { standardGeneric("shiftRight") })
 
-#' @rdname functions
+#' @rdname shiftRightUnsigned
 #' @export
 setGeneric("shiftRightUnsigned", function(y, x) { standardGeneric("shiftRightUnsigned") })
 
-#' @rdname functions
+#' @rdname signum
 #' @export
 setGeneric("signum", function(x) { standardGeneric("signum") })
 
-#' @rdname functions
+#' @rdname size
 #' @export
 setGeneric("size", function(x) { standardGeneric("size") })
 
-#' @rdname functions
+#' @rdname soundex
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
 
-#' @rdname functions
+#' @rdname substring_index
 #' @export
 setGeneric("substring_index", function(x, delim, count) { standardGeneric("substring_index") })
 
-#' @rdname functions
+#' @rdname sumDistinct
 #' @export
 setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
 
-#' @rdname functions
+#' @rdname toDegrees
 #' @export
 setGeneric("toDegrees", function(x) { standardGeneric("toDegrees") })
 
-#' @rdname functions
+#' @rdname toRadians
 #' @export
 setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 
-#' @rdname functions
+#' @rdname to_date
 #' @export
 setGeneric("to_date", function(x) { standardGeneric("to_date") })
 
-#' @rdname functions
+#' @rdname to_utc_timestamp
 #' @export
 setGeneric("to_utc_timestamp", function(y, x) { standardGeneric("to_utc_timestamp") })
 
-#' @rdname functions
+#' @rdname translate
 #' @export
 setGeneric("translate", function(x, matchingString, replaceString) { standardGeneric("translate") })
 
-#' @rdname functions
+#' @rdname trim
 #' @export
 setGeneric("trim", function(x) { standardGeneric("trim") })
 
-#' @rdname functions
+#' @rdname unbase64
 #' @export
 setGeneric("unbase64", function(x) { standardGeneric("unbase64") })
 
-#' @rdname functions
+#' @rdname unhex
 #' @export
 setGeneric("unhex", function(x) { standardGeneric("unhex") })
 
-#' @rdname functions
+#' @rdname unix_timestamp
 #' @export
 setGeneric("unix_timestamp", function(x, format) { standardGeneric("unix_timestamp") })
 
-#' @rdname functions
+#' @rdname upper
 #' @export
 setGeneric("upper", function(x) { standardGeneric("upper") })
 
-#' @rdname functions
+#' @rdname weekofyear
 #' @export
 setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
 
-#' @rdname functions
+#' @rdname year
 #' @export
 setGeneric("year", function(x) { standardGeneric("year") })
 
