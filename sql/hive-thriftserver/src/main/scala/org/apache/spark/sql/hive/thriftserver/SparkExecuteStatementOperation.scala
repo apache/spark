@@ -159,6 +159,12 @@ private[hive] class SparkExecuteStatementOperation(
 
               // User information is part of the metastore client member in Hive
               hiveContext.setSession(currentSqlSession)
+              // Always use the latest class loader provided by executionHive's state.
+              val executionHiveClassLoader =
+                hiveContext.executionHive.state.getConf.getClassLoader
+              sessionHive.getConf.setClassLoader(executionHiveClassLoader)
+              parentSessionState.getConf.setClassLoader(executionHiveClassLoader)
+
               Hive.set(sessionHive)
               SessionState.setCurrentSessionState(parentSessionState)
               try {
