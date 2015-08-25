@@ -95,7 +95,7 @@ private[sql] object JacksonGenerator {
       case (FloatType, v: Float) => gen.writeNumber(v)
       case (DoubleType, v: Double) => gen.writeNumber(v)
       case (LongType, v: Long) => gen.writeNumber(v)
-      case (DecimalType(), v: java.math.BigDecimal) => gen.writeNumber(v)
+      case (DecimalType(), v: Decimal) => gen.writeNumber(v.toJavaBigDecimal)
       case (ByteType, v: Byte) => gen.writeNumber(v.toInt)
       case (BinaryType, v: Array[Byte]) => gen.writeBinary(v)
       case (BooleanType, v: Boolean) => gen.writeBoolean(v)
