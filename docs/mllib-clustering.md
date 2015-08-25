@@ -459,7 +459,7 @@ LDA takes the following parameters:
 * `checkpointInterval`: If using checkpointing (set in the Spark configuration), this parameter specifies the frequency with which checkpoints will be created.  If `maxIterations` is large, using checkpointing can help reduce shuffle file sizes on disk and help with failure recovery.
 
 *Note*: LDA is a new feature with some missing functionality.  In particular, it does not yet
-support prediction on new documents, and it does not have a Python API.  These will be added in the future.
+support prediction on new documents, this will be added in the future.
 
 **Examples**
 
