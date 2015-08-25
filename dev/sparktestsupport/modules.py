@@ -404,6 +404,18 @@ ec2 = Module(
 )
 
 
+yarn = Module(
+    name="yarn",
+    dependencies=[],
+    source_file_regexes=[
+        "yarn/",
+        "network/yarn/",
+    ],
+    test_tags=[
+        "org.apache.spark.deploy.yarn.ExtendedYarnTest"
+    ]
+)
+
 # The root module is a dummy module which is used to run all of the tests.
 # No other modules should directly depend on this module.
 root = Module(

@@ -37,6 +37,7 @@ import org.apache.spark.util.Utils
  * applications, and require the Spark assembly to be built before they can be successfully
  * run.
  */
+@ExtendedYarnTest
 class YarnClusterSuite extends BaseYarnClusterSuite {
 
   override def yarnConfig: YarnConfiguration = new YarnConfiguration()
