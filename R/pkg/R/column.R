@@ -169,8 +169,7 @@ setMethod("between", signature(x = "Column"),
 #'
 #' @rdname column
 #'
-#' @examples
-#' \dontrun{
+#' @examples \dontrun{
 #'   cast(df$age, "string")
 #'   cast(df$name, list(type="array", elementType="byte", containsNull = TRUE))
 #' }
@@ -192,7 +191,7 @@ setMethod("cast",
 #'
 #' @rdname column
 #' @return a matched values as a result of comparing with given values.
-#' \dontrun{
+#' @examples \dontrun{
 #'   filter(df, "age in (10, 30)")
 #'   where(df, df$age %in% c(10, 30))
 #' }
