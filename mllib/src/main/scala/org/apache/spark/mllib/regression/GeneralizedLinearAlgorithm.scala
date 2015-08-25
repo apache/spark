@@ -239,6 +239,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
       numFeatures = input.map(_.features.size).first()
     }
 
+    if (input.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data is not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
+    }
+
     // Check the data properties before running the optimizer
     if (validateData && !validators.forall(func => func(input))) {
       throw new SparkException("Input validation failed.")
@@ -282,7 +287,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
         if (useFeatureScaling) {
           input.map(lp => (lp.label, scaler.transform(lp.features))).cache()
         } else {
-          input.map(lp => (lp.label, lp.features)).cache()
+          input.map(lp => (lp.label, lp.features))
         }
       }
 
@@ -346,8 +351,16 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
       }
     }
 
+    // Warn at the end of the run as well, for increased visibility.
+    if (input.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data is not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
+    }
+
     // Unpersist cached data
-    data.unpersist(false)
+    if (data.getStorageLevel != StorageLevel.NONE) {
+      data.unpersist(false)
+    }
 
     createModel(weights, intercept)
   }
