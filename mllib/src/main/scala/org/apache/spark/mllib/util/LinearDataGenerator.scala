@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.util
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.util.Random
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
@@ -52,7 +52,7 @@ object LinearDataGenerator {
       nPoints: Int,
       seed: Int,
       eps: Double): java.util.List[LabeledPoint] = {
-    seqAsJavaList(generateLinearInput(intercept, weights, nPoints, seed, eps))
+    generateLinearInput(intercept, weights, nPoints, seed, eps).asJava
   }
 
   /**

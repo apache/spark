@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.util.{Map => JMap}
 
-import scala.collection.JavaConversions.{iterableAsScalaIterable, mapAsJavaMap, mapAsScalaMap}
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
@@ -44,7 +44,7 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
     val parquetRequestedSchema = readContext.getRequestedSchema
 
     val catalystRequestedSchema =
-      Option(readContext.getReadSupportMetadata).map(_.toMap).flatMap { metadata =>
+      Option(readContext.getReadSupportMetadata).map(_.asScala).flatMap { metadata =>
         metadata
           // First tries to read requested schema, which may result from projections
           .get(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
@@ -123,7 +123,7 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
       maybeRequestedSchema.fold(context.getFileSchema) { schemaString =>
         val toParquet = new CatalystSchemaConverter(conf)
         val fileSchema = context.getFileSchema.asGroupType()
-        val fileFieldNames = fileSchema.getFields.map(_.getName).toSet
+        val fileFieldNames = fileSchema.getFields.asScala.map(_.getName).toSet
 
         StructType
           // Deserializes the Catalyst schema of requested columns
@@ -152,7 +152,7 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
         maybeRequestedSchema.map(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA -> _) ++
         maybeRowSchema.map(RowWriteSupport.SPARK_ROW_SCHEMA -> _)
 
-    new ReadContext(parquetRequestedSchema, metadata)
+    new ReadContext(parquetRequestedSchema, metadata.asJava)
   }
 }
 

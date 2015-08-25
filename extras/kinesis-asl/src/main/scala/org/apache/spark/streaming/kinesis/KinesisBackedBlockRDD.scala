@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.kinesis
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
@@ -213,7 +213,7 @@ class KinesisSequenceRangeIterator(
       s"getting records using shard iterator") {
         client.getRecords(getRecordsRequest)
       }
-    (getRecordsResult.getRecords.iterator(), getRecordsResult.getNextShardIterator)
+    (getRecordsResult.getRecords.iterator().asScala, getRecordsResult.getNextShardIterator)
   }
 
   /**

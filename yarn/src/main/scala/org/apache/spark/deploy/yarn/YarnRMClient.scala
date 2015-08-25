@@ -19,17 +19,15 @@ package org.apache.spark.deploy.yarn
 
 import java.util.{List => JList}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.{Map, Set}
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.util.ConverterUtils
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -108,8 +106,8 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
       val method = classOf[WebAppUtils].getMethod("getProxyHostsAndPortsForAmFilter",
         classOf[Configuration])
       val proxies = method.invoke(null, conf).asInstanceOf[JList[String]]
-      val hosts = proxies.map { proxy => proxy.split(":")(0) }
-      val uriBases = proxies.map { proxy => prefix + proxy + proxyBase }
+      val hosts = proxies.asScala.map { proxy => proxy.split(":")(0) }
+      val uriBases = proxies.asScala.map { proxy => prefix + proxy + proxyBase }
       Map("PROXY_HOSTS" -> hosts.mkString(","), "PROXY_URI_BASES" -> uriBases.mkString(","))
     } catch {
       case e: NoSuchMethodException =>

@@ -21,7 +21,7 @@ import java.io.File
 import java.util.concurrent.locks.ReentrantLock
 import java.util.{Collections, Date, List => JList}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -350,7 +350,7 @@ private[spark] class MesosClusterScheduler(
         }
         // TODO: Page the status updates to avoid trying to reconcile
         // a large amount of tasks at once.
-        driver.reconcileTasks(statuses)
+        driver.reconcileTasks(statuses.toSeq.asJava)
       }
     }
   }
@@ -493,10 +493,10 @@ private[spark] class MesosClusterScheduler(
   }
 
   override def resourceOffers(driver: SchedulerDriver, offers: JList[Offer]): Unit = {
-    val currentOffers = offers.map { o =>
+    val currentOffers = offers.asScala.map(o =>
       new ResourceOffer(
         o, getResource(o.getResourcesList, "cpus"), getResource(o.getResourcesList, "mem"))
-    }.toList
+    ).toList
     logTrace(s"Received offers from Mesos: \n${currentOffers.mkString("\n")}")
     val tasks = new mutable.HashMap[OfferID, ArrayBuffer[TaskInfo]]()
     val currentTime = new Date()
@@ -521,10 +521,10 @@ private[spark] class MesosClusterScheduler(
         currentOffers,
         tasks)
     }
-    tasks.foreach { case (offerId, tasks) =>
-      driver.launchTasks(Collections.singleton(offerId), tasks)
+    tasks.foreach { case (offerId, taskInfos) =>
+      driver.launchTasks(Collections.singleton(offerId), taskInfos.asJava)
     }
-    offers
+    offers.asScala
       .filter(o => !tasks.keySet.contains(o.getId))
       .foreach(o => driver.declineOffer(o.getId))
   }
