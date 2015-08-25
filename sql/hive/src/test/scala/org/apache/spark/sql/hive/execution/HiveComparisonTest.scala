@@ -390,7 +390,7 @@ abstract class HiveComparisonTest
 
               // If this query is reading other tables that were created during this test run
               // also print out the query plans and results for those.
-              val computedTablesMessages = try {
+              val computedTablesMessages: String = try {
                 val tablesRead = new TestHive.QueryExecution(query).executedPlan.collect {
                   case ts: HiveTableScan => ts.relation.tableName
                 }.toSet
@@ -398,7 +398,7 @@ abstract class HiveComparisonTest
                 TestHive.reset()
                 val executions = queryList.map(new TestHive.QueryExecution(_))
                 executions.foreach(_.toRdd)
-                val tablesGenerated = queryList.zip(executions).flatMap{
+                val tablesGenerated = queryList.zip(executions).flatMap {
                   case (q, e) => e.executedPlan.collect {
                     case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>
                       (q, e, i)
@@ -407,18 +407,17 @@ abstract class HiveComparisonTest
 
                 tablesGenerated.map { case (hiveql, execution, insert) =>
                   s"""
-                     |
                      |=== Generated Table ===
                      |$hiveql
                      |$execution
                      |== Results ==
                      |${insert.child.execute().collect().mkString("\n")}
                    """.stripMargin
-                }
+                }.mkString("\n")
 
               } catch {
                 case NonFatal(e) =>
-                  e.printStackTrace()
+                  logError("Failed to compute generated tables", e)
                   s"Couldn't compute dependent tables: $e"
               }
 
