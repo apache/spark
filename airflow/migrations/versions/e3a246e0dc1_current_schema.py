@@ -32,7 +32,6 @@ def upgrade():
             sa.Column('schema', sa.String(length=500), nullable=True),
             sa.Column('login', sa.String(length=500), nullable=True),
             sa.Column('password', sa.String(length=500), nullable=True),
-            sa.Column('is_encrypted', sa.Boolean(), nullable=True),
             sa.Column('port', sa.Integer(), nullable=True),
             sa.Column('extra', sa.String(length=5000), nullable=True),
             sa.PrimaryKeyConstraint('id')
@@ -224,6 +223,22 @@ def upgrade():
             sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
             sa.PrimaryKeyConstraint('id')
         )
+    if 'xcom' not in tables:
+        op.create_table(
+            'xcom',
+            sa.Column('id', sa.Integer(), nullable=False),
+            sa.Column('key', sa.String(length=512), nullable=True),
+            sa.Column('value', sa.PickleType(), nullable=True),
+            sa.Column(
+                'timestamp',
+                sa.DateTime(),
+                server_default=sa.text(u'CURRENT_TIMESTAMP'),
+                nullable=False),
+            sa.Column('execution_date', sa.DateTime(), nullable=False),
+            sa.Column('task_id', sa.String(length=250), nullable=False),
+            sa.Column('dag_id', sa.String(length=250), nullable=False),
+            sa.PrimaryKeyConstraint('id')
+        )
 
 
 def downgrade():
@@ -245,3 +260,4 @@ def downgrade():
     op.drop_table('dag_pickle')
     op.drop_table('dag')
     op.drop_table('connection')
+    op.drop_table('xcom')
