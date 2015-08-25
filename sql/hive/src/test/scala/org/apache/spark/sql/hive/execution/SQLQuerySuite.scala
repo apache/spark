@@ -507,19 +507,20 @@ class SQLQuerySuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     checkAnswer(
       sql("SELECT f1.f2.f3 FROM nested"),
       Row(1))
-    checkAnswer(sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested"),
-      Seq.empty[Row])
+
+    sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested")
     checkAnswer(
       sql("SELECT * FROM test_ctas_1234"),
       sql("SELECT * FROM nested").collect().toSeq)
 
     intercept[AnalysisException] {
-      sql("CREATE TABLE test_ctas_12345 AS SELECT * from notexists").collect()
+      sql("CREATE TABLE test_ctas_1234 AS SELECT * from notexists").collect()
     }
   }
 
   test("test CTAS") {
-    checkAnswer(sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src"), Seq.empty[Row])
+    sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src")
+
     checkAnswer(
       sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
       sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
