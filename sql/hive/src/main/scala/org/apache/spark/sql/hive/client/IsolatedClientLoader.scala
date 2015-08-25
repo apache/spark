@@ -133,6 +133,7 @@ private[hive] class IsolatedClientLoader(
   protected def isSharedClass(name: String): Boolean =
     name.contains("slf4j") ||
     name.contains("log4j") ||
+    name.contains("commons.logging") ||
     name.startsWith("org.apache.spark.") ||
     (name.startsWith("org.apache.hadoop.") && !name.startsWith("org.apache.hadoop.hive.")) ||
     name.startsWith("scala.") ||
