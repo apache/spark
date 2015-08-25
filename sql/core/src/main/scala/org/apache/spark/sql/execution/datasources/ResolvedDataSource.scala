@@ -103,7 +103,7 @@ object ResolvedDataSource extends Logging {
             // assume all paths are on same filesystem
             val fs = patternPaths.head
               .getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-            val qualifiedPatterns = 
+            val qualifiedPatterns =
               patternPaths.map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
             qualifiedPatterns
               .flatMap(SparkHadoopUtil.get.globPathIfNecessary(_).map(_.toString)).toArray
