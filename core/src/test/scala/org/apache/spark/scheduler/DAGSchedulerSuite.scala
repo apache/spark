@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
@@ -163,7 +164,7 @@ class DAGSchedulerSuite
     cancelledStages.clear()
     cacheLocations.clear()
     results.clear()
-    mapOutputTracker = new MapOutputTrackerMaster(conf)
+    mapOutputTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     scheduler = new DAGScheduler(
         sc,
         taskScheduler,
@@ -171,6 +172,9 @@ class DAGSchedulerSuite
         mapOutputTracker,
         blockManagerMaster,
         sc.env)
+    // this is normally done in the SparkContext creation, but since we are ignoring the
+    // scheduler in the SparkContext and creating our own, need to re-register here
+    sc.cleaner.foreach{_.attachListener(scheduler)}
     dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
   }
 
@@ -699,9 +703,9 @@ class DAGSchedulerSuite
   // Helper function to validate state when creating tests for task failures
   def checkStageId(stageId: Int, attempt: Int, stageAttempt: TaskSet) {
     assert(stageAttempt.stageId === stageId,
-      s": expected stage $stageId, got ${stageAttempt.stageId}")
+      s": expected stage $stageId, instead was ${stageAttempt.stageId}")
     assert(stageAttempt.stageAttemptId == attempt,
-      s": expected stage attempt $attempt, got ${stageAttempt.stageAttemptId}")
+      s": expected stage attempt $attempt, instead was ${stageAttempt.stageAttemptId}")
   }
 
   def makeCompletions(stageAttempt: TaskSet, reduceParts: Int): Seq[(Success.type, MapStatus)] = {
@@ -791,10 +795,20 @@ class DAGSchedulerSuite
   test("shuffle fetch failure in a reused shuffle dependency") {
     // Run the first job successfully, which creates one shuffle dependency
 
+    val jobIdToStageIds = new mutable.HashMap[Int, Set[Int]]()
+    val listener = new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        jobIdToStageIds(jobStart.jobId) = jobStart.stageIds.toSet
+      }
+    }
+    sc.addSparkListener(listener)
+
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
     submit(reduceRdd, Array(0, 1))
+    sc.listenerBus.waitUntilEmpty(1000)
+    assert(jobIdToStageIds(0) === Set(0, 1))
 
     completeNextShuffleMapSuccesfully(0, 0, 2)
     completeNextResultStageWithSuccess(1, 0)
@@ -803,16 +817,84 @@ class DAGSchedulerSuite
 
     // submit another job w/ the shared dependency, and have a fetch failure
     val reduce2 = new MyRDD(sc, 2, List(shuffleDep))
-    submit(reduce2, Array(0,1))
-    // Note that the numbering here is only b/c the shared dependency produces a new, skipped
-    // stage.  If instead it reused the existing stage, then the numbering would be different
-    completeNextStageWithFetchFailure(3, 0, shuffleDep)
+    submit(reduce2, Array(0, 1))
+    sc.listenerBus.waitUntilEmpty(1000)
+    assert(jobIdToStageIds(1) === Set(0, 2))
+    completeNextStageWithFetchFailure(2, 0, shuffleDep)
     scheduler.resubmitFailedStages()
-    completeNextShuffleMapSuccesfully(2, 0, 2) // really the same as stage 0, but gets its own stage
-    completeNextResultStageWithSuccess(3, 1, idx => idx + 1234)
+    logInfo("taskSets after fetch failure = " + taskSets)
+    completeNextShuffleMapSuccesfully(0, 1, 2)
+    logInfo("taskSets after recomplete stage 0 = " + taskSets)
+    completeNextResultStageWithSuccess(2, 1, idx => idx + 1234)
     assert(results === Map(0 -> 1234, 1 -> 1235))
 
     assertDataStructuresEmpty()
+    emptyAfterContextCleaner()
+  }
+
+
+  test("reused dependency with long lineage", ActiveTag) {
+    val jobIdToStageIds = new mutable.HashMap[Int, Set[Int]]()
+    val listener = new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        jobIdToStageIds(jobStart.jobId) = jobStart.stageIds.toSet
+      }
+    }
+    sc.addSparkListener(listener)
+
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd, null)
+    val reduceRdd = new MyRDD(sc, 4, List(shuffleDep1))
+    val shuffleDep2 = new ShuffleDependency(reduceRdd, null)
+    val reduceRdd2 = new MyRDD(sc, 6, List(shuffleDep2))
+    val shuffleDep3 = new ShuffleDependency(reduceRdd2, null)
+    val reduceRdd3 = new MyRDD(sc, 8, List(shuffleDep3))
+    submit(reduceRdd3, (0 until 8).toArray)
+    sc.listenerBus.waitUntilEmpty(1000)
+    assert(jobIdToStageIds(0) === Set(0, 1, 2, 3))
+
+    completeNextShuffleMapSuccesfully(0, 0, 4)
+    completeNextShuffleMapSuccesfully(1, 0, 6)
+    completeNextShuffleMapSuccesfully(2, 0, 8)
+    completeNextResultStageWithSuccess(3, 0)
+    assert(results === (0 until 8).map{_ -> 42}.toMap)
+    results.clear()
+    assertDataStructuresEmpty()
+
+    // submit another job w/ the shared dependency, and have a fetch failure
+    val reduce4 = new MyRDD(sc, 2, List(shuffleDep3))
+    submit(reduce4, Array(0, 1))
+    sc.listenerBus.waitUntilEmpty(1000)
+    assert(jobIdToStageIds(1) === Set(0, 1, 2, 4))
+    completeNextStageWithFetchFailure(4, 0, shuffleDep3)
+    scheduler.resubmitFailedStages()
+    completeNextShuffleMapSuccesfully(0, 1, 4)
+    completeNextShuffleMapSuccesfully(1, 1, 6)
+    completeNextShuffleMapSuccesfully(2, 1, 8)
+    completeNextResultStageWithSuccess(4, 1, idx => idx + 1234)
+    assert(results === Map(0 -> 1234, 1 -> 1235))
+    results.clear()
+    assertDataStructuresEmpty()
+    emptyAfterContextCleaner()
+
+    // now try submitting again, after we've cleaned out the shuffle data.  Should be fine,
+    // we just need to rerun everything
+
+    val reduce5 = new MyRDD(sc, 8, List(shuffleDep3))
+    submit(reduce5, (0 until 8).toArray)
+    sc.listenerBus.waitUntilEmpty(1000)
+    assert(jobIdToStageIds(2) === Set(5, 6, 7, 8))  // new stages this time
+    completeNextShuffleMapSuccesfully(5, 0, 4)
+    completeNextShuffleMapSuccesfully(6, 0, 6)
+    println(taskSets)
+    completeNextShuffleMapSuccesfully(7, 0, 8)
+    println(taskSets)
+    logInfo("tasksets = " + taskSets)
+    completeNextResultStageWithSuccess(8, 0, idx => idx + 4321)
+    assert(results === (0 until 8).map{idx => idx -> (idx + 4321)}.toMap)
+
+    assertDataStructuresEmpty()
+    emptyAfterContextCleaner()
   }
 
   /**
@@ -1132,10 +1214,17 @@ class DAGSchedulerSuite
     assert(scheduler.failedStages.isEmpty)
     assert(scheduler.jobIdToActiveJob.isEmpty)
     assert(scheduler.jobIdToStageIds.isEmpty)
-    assert(scheduler.stageIdToStage.isEmpty)
     assert(scheduler.runningStages.isEmpty)
     assert(scheduler.waitingStages.isEmpty)
     assert(scheduler.outputCommitCoordinator.isEmpty)
+  }
+
+  private def emptyAfterContextCleaner(): Unit = {
+    scheduler.shuffleToMapStage.foreach { case (shuffleId, _) =>
+      sc.cleaner.get.doCleanupShuffle(shuffleId, blocking=true)
+    }
+    assert(scheduler.stageIdToStage.isEmpty)
+    assert(scheduler.shuffleToMapStage.isEmpty)
   }
 
   // Nothing in this test should break if the task info's fields are null, but

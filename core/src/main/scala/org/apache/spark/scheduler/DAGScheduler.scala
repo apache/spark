@@ -500,9 +500,12 @@ class DAGScheduler(
                 }
               }
               // data structures based on StageId
-              stageIdToStage -= stageId
-              logDebug("After removal of stage %d, remaining stages = %d"
-                .format(stageId, stageIdToStage.size))
+              // ShuffleMapStages aren't removed until the shuffle is cleaned
+              if (stage.isInstanceOf[ResultStage]) {
+                stageIdToStage -= stageId
+                logDebug("After removal of stage %d, remaining stages = %d"
+                  .format(stageId, stageIdToStage.size))
+              }
             }
 
             jobSet -= job.jobId
@@ -1445,7 +1448,8 @@ class DAGScheduler(
    * @param shuffleId
    */
   override def shuffleCleaned(shuffleId: Int): Unit = {
-    shuffleToMapStage.remove(shuffleId)
+    val stageOpt = shuffleToMapStage.remove(shuffleId)
+    stageOpt.foreach { stage => stageIdToStage -= stage.id}
   }
 
   // These are all called by the context cleaner but we don't need them
