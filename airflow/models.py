@@ -335,11 +335,11 @@ class Connection(Base):
     def set_password(self, value):
         if value:
             try:
-                bytes_val = bytes(value.encode('utf-8'))
-                self._password = FERNET.encrypt(bytes_val)
+                val = bytes(value.encode('utf-8'))
+                self._password = FERNET.encrypt(val)
                 self.is_encrypted = True
             except NameError:
-                self._password = val
+                self._password = value
                 self.is_encrypted = False
 
     @declared_attr
