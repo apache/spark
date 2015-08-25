@@ -234,10 +234,16 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   def setRank(value: Int): this.type = set(rank, value)
 
   /** @group setParam */
-  def setNumUserBlocks(value: Int): this.type = set(numUserBlocks, value)
+  def setNumUserBlocks(value: Int): this.type = {
+    require(value > 0, "Number of blocks must be > 0, auto-configuring with -1 is not supported.")
+    set(numUserBlocks, value)
+  }
 
   /** @group setParam */
-  def setNumItemBlocks(value: Int): this.type = set(numItemBlocks, value)
+  def setNumItemBlocks(value: Int): this.type = {
+    require(value > 0, "Number of blocks must be > 0, auto-configuring with -1 is not supported.")
+    set(numItemBlocks, value)
+  }
 
   /** @group setParam */
   def setImplicitPrefs(value: Boolean): this.type = set(implicitPrefs, value)
