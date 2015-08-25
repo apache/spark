@@ -52,10 +52,10 @@ import org.apache.spark.storage.StorageLevel
  *                        and the features computed for this product.
  */
 @Since("0.8.0")
-class MatrixFactorizationModel(
-    val rank: Int,
-    val userFeatures: RDD[(Int, Array[Double])],
-    val productFeatures: RDD[(Int, Array[Double])])
+class MatrixFactorizationModel @Since("0.8.0") (
+    @Since("0.8.0") val rank: Int,
+    @Since("0.8.0") val userFeatures: RDD[(Int, Array[Double])],
+    @Since("0.8.0") val productFeatures: RDD[(Int, Array[Double])])
   extends Saveable with Serializable with Logging {
 
   require(rank > 0)
