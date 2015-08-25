@@ -1679,4 +1679,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(sqlContext.table("`db.t`"), df)
     }
   }
+
+  test("SPARK-10130 type coercion for IF should have children resolved first") {
+    val df = Seq((1, 1), (-1, 1)).toDF("key", "value")
+    df.registerTempTable("src")
+    checkAnswer(
+      sql("SELECT IF(a > 0, a, 0) FROM (SELECT key a FROM src) temp"), Seq(Row(1), Row(0)))
+  }
 }

@@ -61,7 +61,6 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
          |
          |Parquet form:
          |$parquetRequestedSchema
-         |
          |Catalyst form:
          |$catalystRequestedSchema
        """.stripMargin
