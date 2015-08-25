@@ -350,7 +350,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * :: Experimental ::
-   * Creates a DataFrame from an RDD of case classes.
+   * Creates a DataFrame from an RDD of Product (e.g. case classes, tuples).
    *
    * @group dataframes
    * @since 1.3.0
