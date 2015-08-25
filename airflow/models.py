@@ -2177,7 +2177,8 @@ class XCom(Base):
     id = Column(Integer, primary_key=True)
     key = Column(String(512))
     value = Column(PickleType(pickler=dill))
-    timestamp = Column(DateTime, server_default=func.current_timestamp())
+    timestamp = Column(
+        DateTime, server_default=func.current_timestamp(), nullable=False)
     execution_date = Column(DateTime, nullable=False)
 
     # source information

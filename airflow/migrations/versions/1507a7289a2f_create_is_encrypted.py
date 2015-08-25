@@ -26,21 +26,27 @@ connectionhelper = sa.Table(
 )
 
 
-
-
 def upgrade():
+    # first check if the user already has this done. This should only be
+    # true for users who are upgrading from a previous version of Airflow
+    # that predates Alembic integration
     inspector = Inspector.from_engine(settings.engine)
-    col_names = [col['name'] for col in inspector.get_columns('connection')]
 
-    if 'is_encrypted' not in col_names:
-        op.add_column(
-            'connection',
-            sa.Column('is_encrypted', sa.Boolean, unique=False, default=False))
+    # this will only be true if 'connection' already exists in the db,
+    # but not if alembic created it in a previous migration
+    if 'connection' in inspector.get_table_names():
+        col_names = [c['name'] for c in inspector.get_columns('connection')]
+        if 'is_encrypted' in col_names:
+            return
 
-        conn = op.get_bind()
-        conn.execute(
-            connectionhelper.update().values(is_encrypted=False)
-        )
+    op.add_column(
+        'connection',
+        sa.Column('is_encrypted', sa.Boolean, unique=False, default=False))
+
+    conn = op.get_bind()
+    conn.execute(
+        connectionhelper.update().values(is_encrypted=False)
+    )
 
 
 def downgrade():
