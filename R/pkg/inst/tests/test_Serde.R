@@ -57,11 +57,21 @@ test_that("SerDe of list of primitive types", {
   y <- callJStatic("SparkRHandler", "echo", x)
   expect_equal(x, y)
   expect_equal(class(y[[1]]), "character")
+  
+  # Empty list
+  x<-list()
+  y <- callJStatic("SparkRHandler", "echo", x)
+  expect_equal(x, y)
 })
 
 test_that("SerDe of list of lists", {
   x <- list(list(1L, 2L, 3L), list(1, 2, 3),
             list(TRUE, FALSE), list("a", "b", "c"))
+  y <- callJStatic("SparkRHandler", "echo", x)
+  expect_equal(x, y)
+
+  # List of empty lists
+  x <- list(list(), list())
   y <- callJStatic("SparkRHandler", "echo", x)
   expect_equal(x, y)
 })
