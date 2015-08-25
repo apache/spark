@@ -135,6 +135,7 @@ class SecurityManagerSuite extends SparkFunSuite {
     val securityManager = new SecurityManager(conf);
     assert(securityManager.aclsEnabled() === true)
 
+    // check for viewAcls and modifyAcls with *
     assert(securityManager.checkUIViewPermissions("user1") === true)
     assert(securityManager.checkUIViewPermissions("user5") === true)
     assert(securityManager.checkUIViewPermissions("user6") === true)
@@ -142,6 +143,22 @@ class SecurityManagerSuite extends SparkFunSuite {
     assert(securityManager.checkModifyPermissions("user7") === false)
     assert(securityManager.checkModifyPermissions("user8") === false)
     securityManager.setModifyAcls(Set("user4"), "*")
+    assert(securityManager.checkModifyPermissions("user7") === true)
+    assert(securityManager.checkModifyPermissions("user8") === true)
+
+    // check for adminAcls with *
+    securityManager.setAdminAcls("user1,user2")
+    securityManager.setModifyAcls(Set("user1"), "user2")
+    securityManager.setViewAcls(Set("user1"), "user2")
+    assert(securityManager.checkUIViewPermissions("user5") === false)
+    assert(securityManager.checkUIViewPermissions("user6") === false)
+    assert(securityManager.checkModifyPermissions("user7") === false)
+    assert(securityManager.checkModifyPermissions("user8") === false)
+    securityManager.setAdminAcls("user1,*")
+    securityManager.setModifyAcls(Set("user1"), "user2")
+    securityManager.setViewAcls(Set("user1"), "user2")
+    assert(securityManager.checkUIViewPermissions("user5") === true)
+    assert(securityManager.checkUIViewPermissions("user6") === true)
     assert(securityManager.checkModifyPermissions("user7") === true)
     assert(securityManager.checkModifyPermissions("user8") === true)
   }

@@ -310,6 +310,9 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     setViewAcls(Set[String](defaultUser), allowedUsers)
   }
 
+  /**
+   * Checking the existence of "*" is necessary as Yarn can't recognize the "*" in "defaultuser,*"
+   */
   def getViewAcls: String = {
     if (viewAcls.contains("*")) {
       "*"
@@ -327,6 +330,9 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     logInfo("Changing modify acls to: " + modifyAcls.mkString(","))
   }
 
+  /**
+   * Checking the existence of "*" is necessary as Yarn can't recognize the "*" in "defaultuser,*"
+    */
   def getModifyAcls: String = {
     if (modifyAcls.contains("*")) {
       "*"
