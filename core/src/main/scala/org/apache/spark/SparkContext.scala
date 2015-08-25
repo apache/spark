@@ -114,6 +114,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * :: DeveloperApi ::
    * Alternative constructor for setting preferred locations where Spark will create executors.
    *
+   * @param config a [[org.apache.spark.SparkConf]] object specifying other Spark parameters
    * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on.
    * Can be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
    * from a list of input files or InputFormats for the application.
@@ -145,6 +146,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    * @param environment Environment variables to set on worker nodes.
+   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on.
+   * Can be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
+   * from a list of input files or InputFormats for the application.
    */
   def this(
       master: String,
