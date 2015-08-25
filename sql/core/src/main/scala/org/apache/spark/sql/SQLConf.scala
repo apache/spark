@@ -312,7 +312,7 @@ private[spark] object SQLConf {
     doc = "When true, enable filter pushdown for ORC files.")
 
   val HIVE_VERIFY_PARTITION_PATH = booleanConf("spark.sql.hive.verifyPartitionPath",
-    defaultValue = Some(true),
+    defaultValue = Some(false),
     doc = "<TODO>")
 
   val HIVE_METASTORE_PARTITION_PRUNING = booleanConf("spark.sql.hive.metastorePartitionPruning",
