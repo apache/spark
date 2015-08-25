@@ -79,13 +79,24 @@ class DbApiHook(BaseHook):
 
     def run(self, sql, autocommit=False, parameters=None):
         """
-        Runs a command
+        Runs a command or a list of commands. Pass a list of sql
+        statements to the sql parameter to get them to execute
+        sequentially
+
+        :param sql: the sql statement to be executed (str) or a list of
+            sql statements to execute
+        :type sql: str or list
         """
         conn = self.get_conn()
+        if isinstance(sql, basestring):
+            sql = [sql]
+
         if self.supports_autocommit:
-           self.set_autocommit(conn,autocommit)
+           self.set_autocommit(conn, autocommit)
+
         cur = conn.cursor()
-        cur.execute(sql)
+        for s in sql:
+            cur.execute(s)
         conn.commit()
         cur.close()
         conn.close()
