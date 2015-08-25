@@ -87,33 +87,35 @@ case class InsertIntoHiveTable(
 
     // Note that this function is executed on executor side
     def writeToFile(context: TaskContext, iterator: Iterator[InternalRow]): Unit = {
-      val serializer = newSerializer(fileSinkConf.getTableInfo)
-      val standardOI = ObjectInspectorUtils
-        .getStandardObjectInspector(
-          fileSinkConf.getTableInfo.getDeserializer.getObjectInspector,
-          ObjectInspectorCopyOption.JAVA)
-        .asInstanceOf[StructObjectInspector]
+      if (iterator.hasNext) {
+        val serializer = newSerializer(fileSinkConf.getTableInfo)
+        val standardOI = ObjectInspectorUtils
+          .getStandardObjectInspector(
+            fileSinkConf.getTableInfo.getDeserializer.getObjectInspector,
+            ObjectInspectorCopyOption.JAVA)
+          .asInstanceOf[StructObjectInspector]
 
-      val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
-      val dataTypes: Array[DataType] = child.output.map(_.dataType).toArray
-      val wrappers = fieldOIs.zip(dataTypes).map { case (f, dt) => wrapperFor(f, dt)}
-      val outputData = new Array[Any](fieldOIs.length)
+        val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
+        val dataTypes: Array[DataType] = child.output.map(_.dataType).toArray
+        val wrappers = fieldOIs.zip(dataTypes).map { case (f, dt) => wrapperFor(f, dt)}
+        val outputData = new Array[Any](fieldOIs.length)
 
-      writerContainer.executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
+        writerContainer.executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
 
-      iterator.foreach { row =>
-        var i = 0
-        while (i < fieldOIs.length) {
-          outputData(i) = if (row.isNullAt(i)) null else wrappers(i)(row.get(i, dataTypes(i)))
-          i += 1
+        iterator.foreach { row =>
+          var i = 0
+          while (i < fieldOIs.length) {
+            outputData(i) = if (row.isNullAt(i)) null else wrappers(i)(row.get(i, dataTypes(i)))
+            i += 1
+          }
+
+          writerContainer
+            .getLocalFileWriter(row, table.schema)
+            .write(serializer.serialize(outputData, standardOI))
         }
 
-        writerContainer
-          .getLocalFileWriter(row, table.schema)
-          .write(serializer.serialize(outputData, standardOI))
+        writerContainer.close()
       }
-
-      writerContainer.close()
     }
   }
 
