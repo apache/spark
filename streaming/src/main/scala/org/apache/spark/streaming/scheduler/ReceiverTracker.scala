@@ -248,34 +248,33 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
 
     val scheduledExecutors = receiverTrackingInfos(streamId).scheduledExecutors
-    if (scheduledExecutors.nonEmpty) {
-      // This receiver is registering and it's scheduled by
-      // ReceiverSchedulingPolicy.scheduleReceivers. So use "scheduledExecutors" to check it.
-      if (!scheduledExecutors.get.contains(hostPort)) {
-        // Refuse it since it's scheduled to a wrong executor
-        return false
+    val accetableExecutors = if (scheduledExecutors.nonEmpty) {
+        // This receiver is registering and it's scheduled by
+        // ReceiverSchedulingPolicy.scheduleReceivers. So use "scheduledExecutors" to check it.
+        scheduledExecutors.get
+      } else {
+        // This receiver is scheduled by "ReceiverSchedulingPolicy.rescheduleReceiver", so calling
+        // "ReceiverSchedulingPolicy.rescheduleReceiver" again to check it.
+        scheduleReceiver(streamId)
       }
-    } else {
-      // This receiver is scheduled by "ReceiverSchedulingPolicy.rescheduleReceiver", so calling
-      // "ReceiverSchedulingPolicy.rescheduleReceiver" again to check it.
-      if (!scheduleReceiver(streamId).contains(hostPort)) {
-        // Refuse it since it's scheduled to a wrong executor
-        return false
-      }
-    }
 
-    val name = s"${typ}-${streamId}"
-    val receiverTrackingInfo = ReceiverTrackingInfo(
-      streamId,
-      ReceiverState.ACTIVE,
-      scheduledExecutors = None,
-      runningExecutor = Some(hostPort),
-      name = Some(name),
-      endpoint = Some(receiverEndpoint))
-    receiverTrackingInfos.put(streamId, receiverTrackingInfo)
-    listenerBus.post(StreamingListenerReceiverStarted(receiverTrackingInfo.toReceiverInfo))
-    logInfo("Registered receiver for stream " + streamId + " from " + senderAddress)
-    true
+    if (!accetableExecutors.contains(hostPort)) {
+      // Refuse it since it's scheduled to a wrong executor
+      false
+    } else {
+      val name = s"${typ}-${streamId}"
+      val receiverTrackingInfo = ReceiverTrackingInfo(
+        streamId,
+        ReceiverState.ACTIVE,
+        scheduledExecutors = None,
+        runningExecutor = Some(hostPort),
+        name = Some(name),
+        endpoint = Some(receiverEndpoint))
+      receiverTrackingInfos.put(streamId, receiverTrackingInfo)
+      listenerBus.post(StreamingListenerReceiverStarted(receiverTrackingInfo.toReceiverInfo))
+      logInfo("Registered receiver for stream " + streamId + " from " + senderAddress)
+      true
+    }
   }
 
   /** Deregister a receiver */
