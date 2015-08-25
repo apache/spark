@@ -474,8 +474,10 @@ def main():
         target_branch = os.environ["ghprbTargetBranch"]
         changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
         changed_modules = determine_modules_for_files(changed_files)
+        excluded_tags = determine_tags_to_exclude(changed_modules)
     if not changed_modules:
         changed_modules = [modules.root]
+        excluded_tags = []
     print("[info] Found the following changed modules:",
           ", ".join(x.name for x in changed_modules))
 
@@ -489,7 +491,6 @@ def main():
     setup_test_environ(test_environ)
 
     test_modules = determine_modules_to_test(changed_modules)
-    excluded_tags = determine_tags_to_exclude(changed_modules)
 
     # license checks
     run_apache_rat_checks()
