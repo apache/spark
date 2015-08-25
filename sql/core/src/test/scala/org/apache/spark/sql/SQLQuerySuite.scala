@@ -1627,6 +1627,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(null))
   }
 
+  test("precision smaller than scale") {
+    checkAnswer(sql("select 10.00"), Row(BigDecimal("10.00")))
+    checkAnswer(sql("select 1.00"), Row(BigDecimal("1.00")))
+    checkAnswer(sql("select 0.10"), Row(BigDecimal("0.10")))
+    checkAnswer(sql("select 0.01"), Row(BigDecimal("0.01")))
+    checkAnswer(sql("select 0.001"), Row(BigDecimal("0.001")))
+    checkAnswer(sql("select -0.01"), Row(BigDecimal("-0.01")))
+    checkAnswer(sql("select -0.001"), Row(BigDecimal("-0.001")))
+  }
+
   test("external sorting updates peak execution memory") {
     withSQLConf((SQLConf.EXTERNAL_SORT.key, "true")) {
       val sc = sqlContext.sparkContext
