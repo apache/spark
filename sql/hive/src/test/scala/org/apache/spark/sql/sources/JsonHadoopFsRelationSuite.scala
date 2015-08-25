@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import java.math.BigDecimal
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -63,6 +65,31 @@ class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
       val data =
         Row(Seq(1L, 2L, 3L), Map("m1" -> Row(4L))) ::
           Row(Seq(5L, 6L, 7L), Map("m2" -> Row(10L))) :: Nil
+      val df = createDataFrame(sparkContext.parallelize(data), schema)
+
+      // Write the data out.
+      df.write.format(dataSourceName).save(file.getCanonicalPath)
+
+      // Read it back and check the result.
+      checkAnswer(
+        read.format(dataSourceName).schema(schema).load(file.getCanonicalPath),
+        df
+      )
+    }
+  }
+
+  test("SPARK-10196: save decimal type to JSON") {
+    withTempDir { file =>
+      file.delete()
+
+      val schema =
+        new StructType()
+          .add("decimal", DecimalType(7, 2))
+
+      val data =
+        Row(new BigDecimal("10.02")) ::
+          Row(new BigDecimal("20000.99")) ::
+          Row(new BigDecimal("10000")) :: Nil
       val df = createDataFrame(sparkContext.parallelize(data), schema)
 
       // Write the data out.
