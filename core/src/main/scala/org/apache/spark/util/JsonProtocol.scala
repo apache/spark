@@ -362,8 +362,9 @@ private[spark] object JsonProtocol {
         ("Stack Trace" -> stackTrace) ~
         ("Full Stack Trace" -> exceptionFailure.fullStackTrace) ~
         ("Metrics" -> metrics)
-      case ExecutorLostFailure(executorId) =>
-        ("Executor ID" -> executorId)
+      case ExecutorLostFailure(executorId, isNormalExit) =>
+        ("Executor ID" -> executorId) ~
+        ("Normal exit" -> isNormalExit)
       case _ => Utils.emptyJson
     }
     ("Reason" -> reason) ~ json

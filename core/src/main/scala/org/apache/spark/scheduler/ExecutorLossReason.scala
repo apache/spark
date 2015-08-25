@@ -27,24 +27,14 @@ class ExecutorLossReason(val message: String) extends Serializable {
   override def toString: String = message
 }
 
-private[spark] case class ExecutorExitedAbnormally(val exitCode: Int, reason: String)
-  extends ExecutorLossReason(reason) {
-}
-
-private[spark] object ExecutorExitedAbnormally {
-  def apply(exitCode: Int): ExecutorExitedAbnormally = {
-    ExecutorExitedAbnormally(exitCode, ExecutorExitCode.explainExitCode(exitCode))
-  }
-}
-
 private[spark]
-case class ExecutorExitedNormally(val exitCode: Int, reason: String)
+case class ExecutorExited(val exitCode: Int, isNormalExit: Boolean, reason: String)
   extends ExecutorLossReason(reason) {
 }
 
-private[spark] object ExecutorExitedNormally {
-  def apply(exitCode: Int): ExecutorExitedNormally = {
-    ExecutorExitedNormally(exitCode, ExecutorExitCode.explainExitCode(exitCode))
+private[spark] object ExecutorExited {
+  def apply(exitCode: Int, isNormalExit: Boolean): ExecutorExited = {
+    ExecutorExited(exitCode, isNormalExit, ExecutorExitCode.explainExitCode(exitCode))
   }
 }
 

@@ -526,11 +526,11 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     manager.executorAdded()
     assert(manager.resourceOffer("exec1", "host1", ANY).isDefined)
     sched.removeExecutor("execA")
-    manager.executorLost("execA", "host1", ExecutorExitedNormally(143, "Normal termination"))
+    manager.executorLost("execA", "host1", ExecutorExited(143, true, "Normal termination"))
     assert(!sched.taskSetsFailed.contains(taskSet.id))
     assert(manager.resourceOffer("execC", "host2", ANY).isDefined)
     sched.removeExecutor("execC")
-    manager.executorLost("execC", "host2", ExecutorExitedAbnormally(1, "Abnormal termination"))
+    manager.executorLost("execC", "host2", ExecutorExited(1, false, "Abnormal termination"))
     assert(sched.taskSetsFailed.contains(taskSet.id))
   }
 

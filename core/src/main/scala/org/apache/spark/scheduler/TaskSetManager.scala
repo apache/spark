@@ -709,9 +709,11 @@ private[spark] class TaskSetManager(
         }
         ef.exception
 
-      case e: ExecutorNormalExit =>
-        logWarning(s"Task $tid failed because while it was being computed, its executor" +
+      case e: ExecutorLostFailure =>
+        if (!e.isNormalExit) {
+          logWarning (s"Task $tid failed because while it was being computed, its executor" +
           s" exited normally. Not marking the task as failed.")
+        }
         None
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
         logWarning(failureReason)
@@ -726,7 +728,7 @@ private[spark] class TaskSetManager(
       put(info.executorId, clock.getTimeMillis())
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
     addPendingTask(index)
-    if (!isZombie && state != TaskState.KILLED && shouldTaskFailureEventuallyFailJob(reason)) {
+    if (!isZombie && state != TaskState.KILLED && reason.shouldTaskEndEventuallyFailJob) {
       assert (null != failureReason)
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
@@ -740,20 +742,6 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
-
-  /**
-   * Determine if this task failure reason should count towards failing the job. All tasks which
-   * end prematurely should be counted as failures that should kill a job except:
-   *
-   * 1. The task fails because its attempt to commit was denied, preventing spurious stage failures
-   *    in cases where many speculative tasks are launched and denied to commit, and
-   *
-   * 2. A task failed because its executor exited normally before completing the task. For example,
-   *    the cluster manager may have asked the executor to release its resources and shut down.
-   */
-  private def shouldTaskFailureEventuallyFailJob(reason: TaskEndReason): Boolean = {
-    !reason.isInstanceOf[TaskCommitDenied] && !reason.isInstanceOf[ExecutorNormalExit]
-  }
 
   def abort(message: String, exception: Option[Throwable] = None): Unit = sched.synchronized {
     // TODO: Kill running tasks if we were not terminated due to a Mesos error
@@ -826,13 +814,11 @@ private[spark] class TaskSetManager(
       }
     }
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
-      // Also re-enqueue any tasks that were running on the node
-      val executorFailureReason = reason match {
-        case exited: ExecutorExitedNormally =>
-          ExecutorNormalExit(execId, exited.reason, exited.exitCode)
-        case default => ExecutorLostFailure(execId)
+      val isNormalExit: Boolean = reason match {
+        case exited: ExecutorExited => exited.isNormalExit
+        case _ => false
       }
-      handleFailedTask(tid, TaskState.FAILED, executorFailureReason)
+      handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, isNormalExit))
     }
     // recalculate valid locality levels and waits when executor is lost
     recomputeLocality()

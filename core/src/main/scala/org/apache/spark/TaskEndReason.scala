@@ -31,14 +31,18 @@ import org.apache.spark.util.Utils
  * old stages to be resubmitted, such as shuffle map fetch failures.
  */
 @DeveloperApi
-sealed trait TaskEndReason
+sealed trait TaskEndReason {
+  def shouldTaskEndEventuallyFailJob: Boolean
+}
 
 /**
  * :: DeveloperApi ::
  * Task succeeded.
  */
 @DeveloperApi
-case object Success extends TaskEndReason
+case object Success extends TaskEndReason {
+  def shouldTaskEndEventuallyFailJob: Boolean = false
+}
 
 /**
  * :: DeveloperApi ::
@@ -48,6 +52,8 @@ case object Success extends TaskEndReason
 sealed trait TaskFailedReason extends TaskEndReason {
   /** Error message displayed in the web UI. */
   def toErrorString: String
+
+  def shouldTaskEndEventuallyFailJob: Boolean = true
 }
 
 /**
@@ -194,6 +200,7 @@ case object TaskKilled extends TaskFailedReason {
 case class TaskCommitDenied(jobID: Int, partitionID: Int, attemptID: Int) extends TaskFailedReason {
   override def toErrorString: String = s"TaskCommitDenied (Driver denied task commit)" +
     s" for job: $jobID, partition: $partitionID, attempt: $attemptID"
+  override def shouldTaskEndEventuallyFailJob: Boolean = false
 }
 
 /**
@@ -202,24 +209,16 @@ case class TaskCommitDenied(jobID: Int, partitionID: Int, attemptID: Int) extend
  * the task crashed the JVM.
  */
 @DeveloperApi
-case class ExecutorLostFailure(execId: String) extends TaskFailedReason {
-  override def toErrorString: String = s"ExecutorLostFailure (executor ${execId} lost)"
-}
+case class ExecutorLostFailure(execId: String, isNormalExit: Boolean = false) extends TaskFailedReason {
+  override def toErrorString: String = {
+    if (!isNormalExit) {
+      s"ExecutorLostFailure (executor ${execId} exited abnormally)"
+    } else {
+      s"ExecutorLostFailure (executor $execId} exited normally)"
+    }
+  }
 
-/**
- * :: DeveloperApi ::
- * The task failed because the executor that it was running on was prematurely terminated. The
- * executor is forcibly exited but the exit should be considered as part of normal cluster
- * behavior.
- */
-@DeveloperApi
-case class ExecutorNormalExit(
-    execId: String,
-    exitReason: String,
-    exitCode: Int)
-  extends TaskFailedReason {
-  override def toErrorString: String = s"Task had its executor ${execId}" +
-    s" exit normally with exit code $exitCode:\n$exitReason"
+  override def shouldTaskEndEventuallyFailJob: Boolean = !isNormalExit
 }
 
 /**

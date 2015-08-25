@@ -21,7 +21,7 @@ import java.util.Collections
 import java.util.concurrent._
 import java.util.regex.Pattern
 
-import org.apache.spark.scheduler.{ExecutorExitedAbnormally, ExecutorExitedNormally, ExecutorLossReason}
+import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.util.Utils
 
 import scala.collection.JavaConversions._
@@ -67,9 +67,6 @@ private[yarn] class YarnAllocator(
   extends Logging {
 
   import YarnAllocator._
-
-  private val UNKNOWN_CONTAINER_EXIT_STATUS =
-    ExecutorExitedAbnormally(-1, "Executor exited for an unknown reason.")
 
   // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
   if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
@@ -453,11 +450,11 @@ private[yarn] class YarnAllocator(
         // Hadoop 2.2.X added a ContainerExitStatus we should switch to use
         // there are some exit status' we shouldn't necessarily count against us, but for
         // now I think its ok as none of the containers are expected to exit
-        var isExecutorNonZeroExitNormal = false
+        var isNormalExit = false
         var containerExitReason = "Container exited for an unknown reason."
         val exitStatus = completedContainer.getExitStatus
         if (exitStatus == ContainerExitStatus.PREEMPTED) {
-          isExecutorNonZeroExitNormal = true
+          isNormalExit = true
           containerExitReason = s"Container $containerId was preempted."
           logInfo(containerExitReason)
         } else if (exitStatus == -103) { // vmem limit exceeded
@@ -482,14 +479,12 @@ private[yarn] class YarnAllocator(
         }
 
         if (exitStatus == 0) {
-          ExecutorExitedNormally(0, s"Executor for container $containerId exited normally.")
-        } else if (isExecutorNonZeroExitNormal) {
-          ExecutorExitedNormally(completedContainer.getExitStatus, containerExitReason)
+          ExecutorExited(0, true, s"Executor for container $containerId exited normally.")
         } else {
-          ExecutorExitedAbnormally(completedContainer.getExitStatus, containerExitReason)
+          ExecutorExited(completedContainer.getExitStatus, isNormalExit, containerExitReason)
         }
       } else {
-        ExecutorExitedNormally(completedContainer.getExitStatus,
+        ExecutorExited(completedContainer.getExitStatus, true,
           s"Container $containerId exited from explicit termination request.")
       }
 
