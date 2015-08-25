@@ -59,7 +59,7 @@ test_that("SerDe of list of primitive types", {
   expect_equal(class(y[[1]]), "character")
   
   # Empty list
-  x<-list()
+  x <- list()
   y <- callJStatic("SparkRHandler", "echo", x)
   expect_equal(x, y)
 })
