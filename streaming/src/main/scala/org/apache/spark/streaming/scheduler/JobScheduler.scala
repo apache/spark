@@ -19,7 +19,7 @@ package org.apache.spark.streaming.scheduler
 
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.util.{Failure, Success}
 
 import org.apache.spark.Logging
@@ -128,7 +128,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   }
 
   def getPendingTimes(): Seq[Time] = {
-    jobSets.keySet.toSeq
+    jobSets.asScala.keys.toSeq
   }
 
   def reportError(msg: String, e: Throwable) {

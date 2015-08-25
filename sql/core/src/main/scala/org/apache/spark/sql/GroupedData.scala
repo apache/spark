@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
@@ -188,7 +188,7 @@ class GroupedData protected[sql](
    * @since 1.3.0
    */
   def agg(exprs: java.util.Map[String, String]): DataFrame = {
-    agg(exprs.toMap)
+    agg(exprs.asScala.toMap)
   }
 
   /**

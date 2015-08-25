@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.test
 import java.io.File
 import java.util.{Set => JavaSet}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.implicitConversions
 
@@ -36,9 +37,6 @@ import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.{SparkConf, SparkContext}
-
-/* Implicit conversions */
-import scala.collection.JavaConversions._
 
 // SPARK-3729: Test key required to check for initialization errors with config.
 object TestHive
@@ -405,7 +403,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   def reset() {
     try {
       // HACK: Hive is too noisy by default.
-      org.apache.log4j.LogManager.getCurrentLoggers.foreach { log =>
+      org.apache.log4j.LogManager.getCurrentLoggers.asScala.foreach { log =>
         log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
       }
 
@@ -415,9 +413,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       catalog.client.reset()
       catalog.unregisterAllTables()
 
-      FunctionRegistry.getFunctionNames.filterNot(originalUDFs.contains(_)).foreach { udfName =>
-        FunctionRegistry.unregisterTemporaryUDF(udfName)
-      }
+      FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
+        foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
 
       // Some tests corrupt this value on purpose, which breaks the RESET call below.
       hiveconf.set("fs.default.name", new File(".").toURI.toString)

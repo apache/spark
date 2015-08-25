@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.orc
 
 import java.util.Properties
 
+import scala.collection.JavaConverters._
+
 import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -42,9 +44,6 @@ import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.SerializableConfiguration
-
-/* Implicit conversions */
-import scala.collection.JavaConversions._
 
 private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
@@ -97,7 +96,8 @@ private[orc] class OrcOutputWriter(
   private val reusableOutputBuffer = new Array[Any](dataSchema.length)
 
   // Used to convert Catalyst values into Hadoop `Writable`s.
-  private val wrappers = structOI.getAllStructFieldRefs.zip(dataSchema.fields.map(_.dataType))
+  private val wrappers = structOI.getAllStructFieldRefs.asScala
+    .zip(dataSchema.fields.map(_.dataType))
     .map { case (ref, dt) =>
       wrapperFor(ref.getFieldObjectInspector, dt)
     }.toArray

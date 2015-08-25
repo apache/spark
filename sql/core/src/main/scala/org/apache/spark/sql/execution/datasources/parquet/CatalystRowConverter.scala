@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
@@ -183,7 +183,7 @@ private[parquet] class CatalystRowConverter(
     // those missing fields and create converters for them, although values of these fields are
     // always null.
     val paddedParquetFields = {
-      val parquetFields = parquetType.getFields
+      val parquetFields = parquetType.getFields.asScala
       val parquetFieldNames = parquetFields.map(_.getName).toSet
       val missingFields = catalystType.filterNot(f => parquetFieldNames.contains(f.name))
 
@@ -415,8 +415,9 @@ private[parquet] class CatalystRowConverter(
     private val elementConverter: Converter = {
       val repeatedType = parquetSchema.getType(0)
       val elementType = catalystSchema.elementType
+      val parentName = parquetSchema.getName
 
-      if (isElementType(repeatedType, elementType)) {
+      if (isElementType(repeatedType, elementType, parentName)) {
         newConverter(repeatedType, elementType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentArray += value
         })
@@ -453,10 +454,13 @@ private[parquet] class CatalystRowConverter(
      * @see https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules
      */
     // scalastyle:on
-    private def isElementType(parquetRepeatedType: Type, catalystElementType: DataType): Boolean = {
+    private def isElementType(
+        parquetRepeatedType: Type, catalystElementType: DataType, parentName: String): Boolean = {
       (parquetRepeatedType, catalystElementType) match {
         case (t: PrimitiveType, _) => true
         case (t: GroupType, _) if t.getFieldCount > 1 => true
+        case (t: GroupType, _) if t.getFieldCount == 1 && t.getName == "array" => true
+        case (t: GroupType, _) if t.getFieldCount == 1 && t.getName == parentName + "_tuple" => true
         case (t: GroupType, StructType(Array(f))) if f.name == t.getFieldName(0) => true
         case _ => false
       }
@@ -474,15 +478,9 @@ private[parquet] class CatalystRowConverter(
 
       override def getConverter(fieldIndex: Int): Converter = converter
 
-      override def end(): Unit = {
-        converter.updater.end()
-        currentArray += currentElement
-      }
+      override def end(): Unit = currentArray += currentElement
 
-      override def start(): Unit = {
-        converter.updater.start()
-        currentElement = null
-      }
+      override def start(): Unit = currentElement = null
     }
   }
 
