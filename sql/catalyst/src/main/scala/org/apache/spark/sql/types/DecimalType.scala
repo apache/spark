@@ -106,8 +106,8 @@ object DecimalType extends AbstractDataType {
   import scala.math.min
 
   val MAX_PRECISION = 38
-  val MAX_SCALE = 38
-  val SYSTEM_DEFAULT: DecimalType = DecimalType(MAX_PRECISION, 18)
+  val MAX_SCALE = 18
+  val SYSTEM_DEFAULT: DecimalType = DecimalType(MAX_PRECISION, MAX_SCALE)
   val USER_DEFAULT: DecimalType = DecimalType(10, 0)
 
   @deprecated("Does not support unlimited precision, please specify the precision and scale", "1.5")
