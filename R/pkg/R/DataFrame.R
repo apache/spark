@@ -760,7 +760,7 @@ setMethod("first",
             take(x, 1)
           })
 
-# toRDD()
+# toRDD
 #
 # Converts a Spark DataFrame to an RDD while preserving column names.
 #
@@ -833,7 +833,7 @@ setMethod("group_by",
 #' Compute aggregates by specifying a list of columns
 #'
 #' @param x a DataFrame
-#' @rdname DataFrame
+#' @rdname agg
 #' @name agg
 #' @aliases summarize
 #' @export
@@ -843,7 +843,7 @@ setMethod("agg",
             agg(groupBy(x), ...)
           })
 
-#' @rdname DataFrame
+#' @rdname agg
 #' @name summarize
 setMethod("summarize",
           signature(x = "DataFrame"),
