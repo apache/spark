@@ -1124,6 +1124,13 @@ a simple schema, and gradually add more columns to the schema as needed.  In thi
 up with multiple Parquet files with different but mutually compatible schemas.  The Parquet data
 source is now able to automatically detect this case and merge schemas of all these files.
 
+Since schema merging is a relatively expensive operation, and is not a necessity in most cases, we
+turned it off by default starting from 1.5.0.  You may enable it by
+
+1. setting data source option `mergeSchema` to `true` when reading Parquet files (as shown in the
+   examples below), or
+2. setting the global SQL option `spark.sql.parquet.mergeSchema` to `true`.
+
 <div class="codetabs">
 
 <div data-lang="scala"  markdown="1">
@@ -1143,7 +1150,7 @@ val df2 = sc.makeRDD(6 to 10).map(i => (i, i * 3)).toDF("single", "triple")
 df2.write.parquet("data/test_table/key=2")
 
 // Read the partitioned table
-val df3 = sqlContext.read.parquet("data/test_table")
+val df3 = sqlContext.read.option("mergeSchema", "true").parquet("data/test_table")
 df3.printSchema()
 
 // The final schema consists of all 3 columns in the Parquet files together
@@ -1165,16 +1172,16 @@ df3.printSchema()
 # Create a simple DataFrame, stored into a partition directory
 df1 = sqlContext.createDataFrame(sc.parallelize(range(1, 6))\
                                    .map(lambda i: Row(single=i, double=i * 2)))
-df1.save("data/test_table/key=1", "parquet")
+df1.write.parquet("data/test_table/key=1")
 
 # Create another DataFrame in a new partition directory,
 # adding a new column and dropping an existing column
 df2 = sqlContext.createDataFrame(sc.parallelize(range(6, 11))
                                    .map(lambda i: Row(single=i, triple=i * 3)))
-df2.save("data/test_table/key=2", "parquet")
+df2.write.parquet("data/test_table/key=2")
 
 # Read the partitioned table
-df3 = sqlContext.load("data/test_table", "parquet")
+df3 = sqlContext.read.option("mergeSchema", "true").parquet("data/test_table")
 df3.printSchema()
 
 # The final schema consists of all 3 columns in the Parquet files together
@@ -1201,7 +1208,7 @@ saveDF(df1, "data/test_table/key=1", "parquet", "overwrite")
 saveDF(df2, "data/test_table/key=2", "parquet", "overwrite")
 
 # Read the partitioned table
-df3 <- loadDF(sqlContext, "data/test_table", "parquet")
+df3 <- loadDF(sqlContext, "data/test_table", "parquet", mergeSchema="true")
 printSchema(df3)
 
 # The final schema consists of all 3 columns in the Parquet files together
@@ -1301,7 +1308,7 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
   <td><code>spark.sql.parquet.binaryAsString</code></td>
   <td>false</td>
   <td>
-    Some other Parquet-producing systems, in particular Impala and older versions of Spark SQL, do
+    Some other Parquet-producing systems, in particular Impala, Hive, and older versions of Spark SQL, do
     not differentiate between binary data and strings when writing out the Parquet schema. This
     flag tells Spark SQL to interpret binary data as a string to provide compatibility with these systems.
   </td>
@@ -1310,8 +1317,7 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
   <td><code>spark.sql.parquet.int96AsTimestamp</code></td>
   <td>true</td>
   <td>
-    Some Parquet-producing systems, in particular Impala, store Timestamp into INT96. Spark would also
-    store Timestamp as INT96 because we need to avoid precision lost of the nanoseconds field. This
+    Some Parquet-producing systems, in particular Impala and Hive, store Timestamp into INT96.  This
     flag tells Spark SQL to interpret INT96 data as a timestamp to provide compatibility with these systems.
   </td>
 </tr>
@@ -1356,6 +1362,9 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
       <b>Note:</b>
       <ul>
         <li>
+          This option is automatically ignored if <code>spark.speculation</code> is turned on.
+        </li>
+        <li>
           This option must be set via Hadoop <code>Configuration</code> rather than Spark
           <code>SQLConf</code>.
         </li>
@@ -1368,6 +1377,26 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
       Spark SQL comes with a builtin
       <code>org.apache.spark.sql.<br />parquet.DirectParquetOutputCommitter</code>, which can be more
       efficient then the default Parquet output committer when writing data to S3.
+    </p>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.mergeSchema</code></td>
+  <td><code>false</code></td>
+  <td>
+    <p>
+      When true, the Parquet data source merges schemas collected from all data files, otherwise the
+      schema is picked from the summary file or a random data file if no summary file is available.
+    </p>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.mergeSchema</code></td>
+  <td><code>false</code></td>
+  <td>
+    <p>
+      When true, the Parquet data source merges schemas collected from all data files, otherwise the
+      schema is picked from the summary file or a random data file if no summary file is available.
     </p>
   </td>
 </tr>
