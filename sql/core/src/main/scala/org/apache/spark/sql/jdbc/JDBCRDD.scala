@@ -237,7 +237,7 @@ private[sql] class JDBCRDD(
 
   private val columnList_backquote: String = {
     val sb = new StringBuilder()
-    columns.foreach(x => sb.append(",").append("`"+x+"`"))
+    columns.foreach(x => sb.append(",").append("`" + x + "`"))
     if (sb.length == 0) "1" else sb.substring(1)
   }
   /**
