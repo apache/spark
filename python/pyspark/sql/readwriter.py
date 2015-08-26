@@ -15,8 +15,14 @@
 # limitations under the License.
 #
 
+import sys
+
+if sys.version >= '3':
+    basestring = unicode = str
+
 from py4j.java_gateway import JavaClass
 
+from pyspark import RDD
 from pyspark.sql import since
 from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
