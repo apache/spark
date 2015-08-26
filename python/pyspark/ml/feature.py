@@ -818,7 +818,6 @@ class StringIndexerModel(JavaModel):
     Model fitted by StringIndexer.
     """
 
-
 class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
     """
     .. note:: Experimental
@@ -828,23 +827,32 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
     """
     # a placeholder to make the stopwords show up in generated doc
     stopWords = Param(Params._dummy(), "stopWords", "The words to be filtered out")
+    caseSensitive = Param(Params._dummy(), "caseSensitive", "whether to do a case sensitive " +
+                          "comparison over the stop words")
 
+    ENGLISH_STOP_WORDS = SparkContext._jvm.org.apache.spark.ml.feature.StopWords$.ENGLISH_STOP_WORDS
+    
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, stopWords=[]):
+    def __init__(self, inputCol=None, outputCol=None, stopWords=ENGLISH_STOP_WORDS,
+                 caseSensitive=false):
         """
-        Initialize this instace of the StopWordsRemover.
+        __init__(self, inputCol=None, outputCol=None, stopWords=ENGLISH_STOP_WORDS,
+                 caseSensitive=false)
         """
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
                                             self.uid)
         self.stopWords = Param(self, "stopWords", "The words to be filtered out")
+        self.caseSensitive = Param(self._dummy(), "caseSensitive", "whether to do a case " +
+                                   "sensitive comparison over the stop words")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, inputCol=None, outputCol=None, stopWords=[]):
+    def setParams(self, inputCol=None, outputCol=None, stopWords=ENGLISH_STOP_WORDS,
+                  caseSensitive=false):
         """
-        setParams(self, inputCol="input", outputCol="output")
+        setParams(self, inputCol="input", outputCol="output", caseSensitive=false)
         Sets params for this StopWordRemover.
         """
         kwargs = self.setParams._input_kwargs
@@ -862,6 +870,19 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
         Get the stopwords.
         """
         return self.getOrDefault(self.stopWords)
+
+    def setCaseSensitive(self, value):
+        """
+        Set whether to do a case sensitive comparison over the stop words
+        """
+        self._paramMap[self.caseSensitive] = value
+        return self
+
+    def getCaseSensitive(self):
+        """
+        Get whether to do a case sensitive comparison over the stop words.
+        """
+        return self.getOrDefault(self.caseSensitive)
 
 
 @inherit_doc
