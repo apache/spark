@@ -132,21 +132,22 @@ class SecurityManagerSuite extends SparkFunSuite {
     conf.set("spark.ui.view.acls", "*")
     conf.set("spark.modify.acls", "user4")
 
-    val securityManager = new SecurityManager(conf);
+    val securityManager = new SecurityManager(conf)
     assert(securityManager.aclsEnabled() === true)
 
-    // check for viewAcls and modifyAcls with *
+    // check for viewAcls with *
     assert(securityManager.checkUIViewPermissions("user1") === true)
     assert(securityManager.checkUIViewPermissions("user5") === true)
     assert(securityManager.checkUIViewPermissions("user6") === true)
     assert(securityManager.checkModifyPermissions("user4") === true)
     assert(securityManager.checkModifyPermissions("user7") === false)
     assert(securityManager.checkModifyPermissions("user8") === false)
+
+    // check for modifyAcls with *
     securityManager.setModifyAcls(Set("user4"), "*")
     assert(securityManager.checkModifyPermissions("user7") === true)
     assert(securityManager.checkModifyPermissions("user8") === true)
 
-    // check for adminAcls with *
     securityManager.setAdminAcls("user1,user2")
     securityManager.setModifyAcls(Set("user1"), "user2")
     securityManager.setViewAcls(Set("user1"), "user2")
@@ -154,6 +155,8 @@ class SecurityManagerSuite extends SparkFunSuite {
     assert(securityManager.checkUIViewPermissions("user6") === false)
     assert(securityManager.checkModifyPermissions("user7") === false)
     assert(securityManager.checkModifyPermissions("user8") === false)
+
+    // check for adminAcls with *
     securityManager.setAdminAcls("user1,*")
     securityManager.setModifyAcls(Set("user1"), "user2")
     securityManager.setViewAcls(Set("user1"), "user2")

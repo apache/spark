@@ -311,7 +311,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   }
 
   /**
-   * Checking the existence of "*" is necessary as Yarn can't recognize the "*" in "defaultuser,*"
+   * Checking the existence of "*" is necessary as YARN can't recognize the "*" in "defaultuser,*"
    */
   def getViewAcls: String = {
     if (viewAcls.contains("*")) {
@@ -331,7 +331,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   }
 
   /**
-   * Checking the existence of "*" is necessary as Yarn can't recognize the "*" in "defaultuser,*"
+   * Checking the existence of "*" is necessary as YARN can't recognize the "*" in "defaultuser,*"
     */
   def getModifyAcls: String = {
     if (modifyAcls.contains("*")) {
