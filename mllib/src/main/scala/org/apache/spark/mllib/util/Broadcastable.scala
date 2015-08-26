@@ -29,6 +29,8 @@ private[spark] trait Broadcastable[T] {
   /**
    * Checks whether the model object is already broadcast and returns the reference.
    * If not, then broadcasts the model and returns a reference
+   * This is done to prevent the rebroadcasting of model during prediction and should
+   * only be mixed in with a model attribute.
    * @param sc SparkContext that will be used for the broadcast
    * @param modelToBc Model object to broadcast
    * @return the broadcast model
