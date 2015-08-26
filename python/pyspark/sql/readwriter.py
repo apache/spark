@@ -143,6 +143,26 @@ class DataFrameReader(object):
             self.schema(schema)
         return self._df(self._jreader.json(path))
 
+    def json(self, rdd, schema=None):
+        """
+        Loads an RDD of Strings storing JSON objects (one object per record)
+        and returns the result as a :class`DataFrame`.
+
+        If the ``schema`` parameter is not specified, this function goes
+        through the input once to determine the input schema.
+
+        :param rdd: RDD of Strings storing JSON objects.
+        :param schema: an optional :class:`StructType` for the input schema.
+
+        >>> rdd = sc.textFile('python/test_support/sql/people.json')
+        >>> df = sqlContext.read.json(rdd)
+        >>> df.dtypes
+        [('age', 'bigint'), ('name', 'string')]
+        """
+        if schema is not None:
+            self.schema(schema)
+        return self._df(self._jreader.json(rdd._jrdd))
+
     @since(1.4)
     def table(self, tableName):
         """Returns the specified table as a :class:`DataFrame`.
