@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash 
 
 export LD_LIBRARY_PATH=${HOME}/levyx-spark/xenon/dist/lib
 git clone https://github.com/semad/spark.git
