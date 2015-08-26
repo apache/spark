@@ -1702,7 +1702,7 @@ context.awaitTermination();
 If the `checkpointDirectory` exists, then the context will be recreated from the checkpoint data.
 If the directory does not exist (i.e., running for the first time),
 then the function `contextFactory` will be called to create a new
-context and set up the DStreams. See the Scala example
+context and set up the DStreams. See the Java example
 [JavaRecoverableNetworkWordCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaRecoverableNetworkWordCount.java).
 This example appends the word counts of network data into a file.
 

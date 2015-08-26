@@ -357,17 +357,29 @@ class TungstenAggregationIterator(
   // sort-based aggregation (by calling switchToSortBasedAggregation).
   private def processInputs(): Unit = {
     assert(inputIter != null, "attempted to process input when iterator was null")
-    while (!sortBased && inputIter.hasNext) {
-      val newInput = inputIter.next()
-      numInputRows += 1
-      val groupingKey = groupProjection.apply(newInput)
+    if (groupingExpressions.isEmpty) {
+      // If there is no grouping expressions, we can just reuse the same buffer over and over again.
+      // Note that it would be better to eliminate the hash map entirely in the future.
+      val groupingKey = groupProjection.apply(null)
       val buffer: UnsafeRow = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
-      if (buffer == null) {
-        // buffer == null means that we could not allocate more memory.
-        // Now, we need to spill the map and switch to sort-based aggregation.
-        switchToSortBasedAggregation(groupingKey, newInput)
-      } else {
+      while (inputIter.hasNext) {
+        val newInput = inputIter.next()
+        numInputRows += 1
         processRow(buffer, newInput)
+      }
+    } else {
+      while (!sortBased && inputIter.hasNext) {
+        val newInput = inputIter.next()
+        numInputRows += 1
+        val groupingKey = groupProjection.apply(newInput)
+        val buffer: UnsafeRow = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
+        if (buffer == null) {
+          // buffer == null means that we could not allocate more memory.
+          // Now, we need to spill the map and switch to sort-based aggregation.
+          switchToSortBasedAggregation(groupingKey, newInput)
+        } else {
+          processRow(buffer, newInput)
+        }
       }
     }
   }

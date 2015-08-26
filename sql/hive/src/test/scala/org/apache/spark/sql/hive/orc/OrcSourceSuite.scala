@@ -121,6 +121,35 @@ abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT * FROM normal_orc_as_source"),
       (6 to 10).map(i => Row(i, s"part-$i")))
   }
+
+  test("write null values") {
+    sql("DROP TABLE IF EXISTS orcNullValues")
+
+    val df = sql(
+      """
+        |SELECT
+        |  CAST(null as TINYINT),
+        |  CAST(null as SMALLINT),
+        |  CAST(null as INT),
+        |  CAST(null as BIGINT),
+        |  CAST(null as FLOAT),
+        |  CAST(null as DOUBLE),
+        |  CAST(null as DECIMAL(7,2)),
+        |  CAST(null as TIMESTAMP),
+        |  CAST(null as DATE),
+        |  CAST(null as STRING),
+        |  CAST(null as VARCHAR(10))
+        |FROM orc_temp_table limit 1
+      """.stripMargin)
+
+    df.write.format("orc").saveAsTable("orcNullValues")
+
+    checkAnswer(
+      sql("SELECT * FROM orcNullValues"),
+      Row.fromSeq(Seq.fill(11)(null)))
+
+    sql("DROP TABLE IF EXISTS orcNullValues")
+  }
 }
 
 class OrcSourceSuite extends OrcSuite {

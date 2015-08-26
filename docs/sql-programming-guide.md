@@ -28,7 +28,7 @@ All of the examples on this page use sample data included in the Spark distribut
 <div data-lang="scala"  markdown="1">
 
 The entry point into all functionality in Spark SQL is the
-[`SQLContext`](api/scala/index.html#org.apache.spark.sql.`SQLContext`) class, or one of its
+[`SQLContext`](api/scala/index.html#org.apache.spark.sql.SQLContext) class, or one of its
 descendants.  To create a basic `SQLContext`, all you need is a SparkContext.
 
 {% highlight scala %}
