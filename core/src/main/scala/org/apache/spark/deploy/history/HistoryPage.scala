@@ -156,8 +156,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
   private def attemptRow(
       renderAttemptIdColumn: Boolean,
       info: ApplicationHistoryInfo,
-      attempt: ApplicationAttemptInfo,
-      isFirst: Boolean): Seq[Node] = {
+      attempt: ApplicationAttemptInfo): Seq[Node] = {
     val uiAddress = HistoryServer.getAttemptURI(info.id, attempt.attemptId)
     val startTime = UIUtils.formatDate(attempt.startTime)
     val endTime = if (attempt.endTime > 0) UIUtils.formatDate(attempt.endTime) else "-"
@@ -169,21 +168,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       }
     val lastUpdated = UIUtils.formatDate(attempt.lastUpdated)
     <tr>
-      {
-        if (isFirst) {
-          if (info.attempts.size > 1 || renderAttemptIdColumn) {
-            <td rowspan={info.attempts.size.toString} style="background-color: #ffffff">
-              <a href={uiAddress}>{info.id}</a></td>
-            <td rowspan={info.attempts.size.toString} style="background-color: #ffffff">
-              {info.name}</td>
-          } else {
-            <td><a href={uiAddress}>{info.id}</a></td>
-            <td>{info.name}</td>
-          }
-        } else {
-          Nil
-        }
-      }
+      <td><a href={uiAddress}>{info.id}</a></td>
+      <td>{info.name}</td>
       {
         if (renderAttemptIdColumn) {
           if (info.attempts.size > 1 && attempt.attemptId.isDefined) {
@@ -206,12 +192,11 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
   }
 
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
-    attemptRow(false, info, info.attempts.head, true)
+    attemptRow(false, info, info.attempts.head)
   }
 
   private def appWithAttemptRow(info: ApplicationHistoryInfo): Seq[Node] = {
-    attemptRow(true, info, info.attempts.head, true) ++
-      info.attempts.drop(1).flatMap(attemptRow(true, info, _, false))
+      info.attempts.flatMap(attemptRow(true, info, _))
   }
 
   private def makePageLink(linkPage: Int, showIncomplete: Boolean): String = {
