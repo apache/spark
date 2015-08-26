@@ -761,7 +761,7 @@
       <dependency>
         <groupId>com.novocode</groupId>
         <artifactId>junit-interface</artifactId>
-        <version>0.10</version>
+        <version>0.11</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1910,7 +1910,7 @@
               <test.src.tables>src</test.src.tables>
             </systemProperties>
             <failIfNoTests>false</failIfNoTests>
-            <tagsToExclude>${test.exclude.tags}</tagsToExclude>
+            <excludedGroups>${test.exclude.tags}</excludedGroups>
           </configuration>
         </plugin>
         <!-- Scalatest runs all Scala tests -->
@@ -1946,6 +1946,7 @@
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>
             </systemProperties>
+            <tagsToExclude>${test.exclude.tags}</tagsToExclude>
           </configuration>
           <executions>
             <execution>
