@@ -206,7 +206,7 @@ object Strategy {
   }
 
   @deprecated("Use Strategy.defaultStrategy instead.", "1.5.0")
-  @Since("")
+  @Since("1.2.0")
   def defaultStategy(algo: Algo): Strategy = defaultStrategy(algo)
 
 }

@@ -41,10 +41,10 @@ import org.apache.spark.mllib.linalg.Vector
  */
 @Since("1.0.0")
 @DeveloperApi
-class Node @Since("1.0.0") (
+class Node @Since("1.2.0") (
     @Since("1.0.0") val id: Int,
     @Since("1.0.0") var predict: Predict,
-    @Since("1.0.0") var impurity: Double,
+    @Since("1.2.0") var impurity: Double,
     @Since("1.0.0") var isLeaf: Boolean,
     @Since("1.0.0") var split: Option[Split],
     @Since("1.0.0") var leftNode: Option[Node],
