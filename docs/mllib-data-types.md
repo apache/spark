@@ -350,6 +350,9 @@ val mat: RowMatrix = new RowMatrix(rows)
 // Get its size.
 val m = mat.numRows()
 val n = mat.numCols()
+
+// QR decomposition 
+val qrResult = mat.tallSkinnyQR(true)
 {% endhighlight %}
 </div>
 
@@ -370,6 +373,9 @@ RowMatrix mat = new RowMatrix(rows.rdd());
 // Get its size.
 long m = mat.numRows();
 long n = mat.numCols();
+
+// QR decomposition 
+QRDecomposition<RowMatrix, Matrix> result = mat.tallSkinnyQR(true);
 {% endhighlight %}
 </div>
 
