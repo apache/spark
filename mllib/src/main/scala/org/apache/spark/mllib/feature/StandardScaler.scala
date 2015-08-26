@@ -34,7 +34,7 @@ import org.apache.spark.rdd.RDD
  */
 @Since("1.1.0")
 @Experimental
-class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
+class StandardScaler @Since("1.1.0") (withMean: Boolean, withStd: Boolean) extends Logging {
 
   @Since("1.1.0")
   def this() = this(false, true)
@@ -74,11 +74,11 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
  */
 @Since("1.1.0")
 @Experimental
-class StandardScalerModel (
-    val std: Vector,
-    val mean: Vector,
-    var withStd: Boolean,
-    var withMean: Boolean) extends VectorTransformer {
+class StandardScalerModel @Since("1.3.0") (
+    @Since("1.3.0") val std: Vector,
+    @Since("1.1.0") val mean: Vector,
+    @Since("1.3.0") var withStd: Boolean,
+    @Since("1.3.0") var withMean: Boolean) extends VectorTransformer {
 
   /**
    */
