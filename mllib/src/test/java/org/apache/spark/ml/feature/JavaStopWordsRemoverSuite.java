@@ -66,5 +66,7 @@ public class JavaStopWordsRemoverSuite {
       new StructField("raw", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
     });
     DataFrame dataset = jsql.createDataFrame(rdd, schema);
+
+    remover.transform(dataset);
   }
 }

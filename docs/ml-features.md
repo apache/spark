@@ -312,7 +312,7 @@ should be excluded from the input, typically because the words appear
 frequently and don't carry as much meaning.
 
 `StopWordsRemover` takes as input a sequence of strings (e.g. the output
-of a [Tokenizer](ml-features.html#tokenizer) and drops all the stop
+of a [Tokenizer](ml-features.html#tokenizer)) and drops all the stop
 words from the input sequences. The list of stopwords is specified by
 the `stopWords` parameter.  We provide a list of stop words created by
 the [Glasgow Information Retrieval
@@ -326,7 +326,7 @@ Group](http://ir.dcs.gla.ac.uk/resources/linguistic_utils/stop_words) in
 [`StopWordsRemover`](api/scala/index.html#org.apache.spark.ml.feature.StopWordsRemover)
 takes an input column name, an output column name, a list of stop words,
 and a boolean indicating if the matches should be case sensitive (false
-by default.
+by default).
 
 {% highlight scala %}
 import org.apache.spark.ml.feature.StopWordsRemover
@@ -371,7 +371,7 @@ JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(
   RowFactory.create(Arrays.asList("I", "saw", "the", "red", "baloon")),
   RowFactory.create(Arrays.asList("Mary", "had", "a", "little", "lamb"))
 ));
-StructType schema = new StructType(new StructField[]{
+StructType schema = new StructType(new StructField[] {
   new StructField("raw", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
 });
 DataFrame dataset = jsql.createDataFrame(rdd, schema);
@@ -385,7 +385,7 @@ remover.transform(dataset).show();
 
 An [n-gram](https://en.wikipedia.org/wiki/N-gram) is a sequence of $n$ tokens (typically words) for some integer $n$. The `NGram` class can be used to transform input features into $n$-grams.
 
-`NGram` takes as input a sequence of strings (e.g. the output of a [Tokenizer](ml-features.html#tokenizer).  The parameter `n` is used to determine the number of terms in each $n$-gram. The output will consist of a sequence of $n$-grams where each $n$-gram is represented by a space-delimited string of $n$ consecutive words.  If the input sequence contains fewer than `n` strings, no output is produced.
+`NGram` takes as input a sequence of strings (e.g. the output of a [Tokenizer](ml-features.html#tokenizer)).  The parameter `n` is used to determine the number of terms in each $n$-gram. The output will consist of a sequence of $n$-grams where each $n$-gram is represented by a space-delimited string of $n$ consecutive words.  If the input sequence contains fewer than `n` strings, no output is produced.
 
 <div class="codetabs">
 
