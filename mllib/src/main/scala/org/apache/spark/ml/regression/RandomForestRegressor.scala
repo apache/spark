@@ -125,7 +125,7 @@ final class RandomForestRegressionModel private[ml] (
    * Construct a random forest regression model, with all trees weighted equally.
    * @param trees  Component trees
    */
-  def this(trees: Array[DecisionTreeRegressionModel], numFeatures: Int) =
+  private[ml] def this(trees: Array[DecisionTreeRegressionModel], numFeatures: Int) =
     this(Identifiable.randomUID("rfr"), trees, numFeatures)
 
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
@@ -151,7 +151,7 @@ final class RandomForestRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): RandomForestRegressionModel = {
-    copyValues(new RandomForestRegressionModel(uid, _trees, numFeatures), extra)
+    copyValues(new RandomForestRegressionModel(uid, _trees, numFeatures), extra).setParent(parent)
   }
 
   override def toString: String = {

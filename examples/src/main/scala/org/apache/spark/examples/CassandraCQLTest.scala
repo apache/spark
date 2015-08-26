@@ -19,10 +19,7 @@
 package org.apache.spark.examples
 
 import java.nio.ByteBuffer
-
-import scala.collection.JavaConversions._
-import scala.collection.mutable.ListBuffer
-import scala.collection.immutable.Map
+import java.util.Collections
 
 import org.apache.cassandra.hadoop.ConfigHelper
 import org.apache.cassandra.hadoop.cql3.CqlPagingInputFormat
@@ -32,7 +29,6 @@ import org.apache.cassandra.utils.ByteBufferUtil
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 
 
 /*
@@ -121,12 +117,9 @@ object CassandraCQLTest {
 
     val casoutputCF = aggregatedRDD.map {
       case (productId, saleCount) => {
-        val outColFamKey = Map("prod_id" -> ByteBufferUtil.bytes(productId))
-        val outKey: java.util.Map[String, ByteBuffer] = outColFamKey
-        var outColFamVal = new ListBuffer[ByteBuffer]
-        outColFamVal += ByteBufferUtil.bytes(saleCount)
-        val outVal: java.util.List[ByteBuffer] = outColFamVal
-       (outKey, outVal)
+        val outKey = Collections.singletonMap("prod_id", ByteBufferUtil.bytes(productId))
+        val outVal = Collections.singletonList(ByteBufferUtil.bytes(saleCount))
+        (outKey, outVal)
       }
     }
 

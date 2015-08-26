@@ -123,7 +123,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       DoubleType,
       StringType,
       BinaryType,
-      DecimalType.USER_DEFAULT
+      DecimalType.USER_DEFAULT,
+      DecimalType.SYSTEM_DEFAULT
       // ArrayType(IntegerType)
     )
     val converter = UnsafeProjection.create(fieldTypes)
@@ -151,6 +152,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(createdFromNull.getUTF8String(8) === null)
     assert(createdFromNull.getBinary(9) === null)
     assert(createdFromNull.getDecimal(10, 10, 0) === null)
+    assert(createdFromNull.getDecimal(11, 38, 18) === null)
     // assert(createdFromNull.get(11) === null)
 
     // If we have an UnsafeRow with columns that are initially non-null and we null out those
@@ -169,6 +171,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       r.update(8, UTF8String.fromString("hello"))
       r.update(9, "world".getBytes)
       r.setDecimal(10, Decimal(10), 10)
+      r.setDecimal(11, Decimal(10.00, 38, 18), 38)
       // r.update(11, Array(11))
       r
     }
@@ -187,10 +190,17 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     assert(setToNullAfterCreation.getBinary(9) === rowWithNoNullColumns.getBinary(9))
     assert(setToNullAfterCreation.getDecimal(10, 10, 0) ===
       rowWithNoNullColumns.getDecimal(10, 10, 0))
+    assert(setToNullAfterCreation.getDecimal(11, 38, 18) ===
+      rowWithNoNullColumns.getDecimal(11, 38, 18))
     // assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
 
     for (i <- fieldTypes.indices) {
-      setToNullAfterCreation.setNullAt(i)
+      // Cann't call setNullAt() on DecimalType
+      if (i == 11) {
+        setToNullAfterCreation.setDecimal(11, null, 38)
+      } else {
+        setToNullAfterCreation.setNullAt(i)
+      }
     }
     // There are some garbage left in the var-length area
     assert(Arrays.equals(createdFromNull.getBytes, setToNullAfterCreation.getBytes()))
@@ -206,6 +216,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     // setToNullAfterCreation.update(8, UTF8String.fromString("hello"))
     // setToNullAfterCreation.update(9, "world".getBytes)
     setToNullAfterCreation.setDecimal(10, Decimal(10), 10)
+    setToNullAfterCreation.setDecimal(11, Decimal(10.00, 38, 18), 38)
     // setToNullAfterCreation.update(11, Array(11))
 
     assert(setToNullAfterCreation.isNullAt(0) === rowWithNoNullColumns.isNullAt(0))
@@ -220,6 +231,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     // assert(setToNullAfterCreation.get(9) === rowWithNoNullColumns.get(9))
     assert(setToNullAfterCreation.getDecimal(10, 10, 0) ===
       rowWithNoNullColumns.getDecimal(10, 10, 0))
+    assert(setToNullAfterCreation.getDecimal(11, 38, 18) ===
+      rowWithNoNullColumns.getDecimal(11, 38, 18))
     // assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
   }
 

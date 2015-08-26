@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.orc
 
 import java.util.Properties
 
+import scala.collection.JavaConverters._
+
 import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -32,7 +34,6 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -44,11 +45,11 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.SerializableConfiguration
 
-/* Implicit conversions */
-import scala.collection.JavaConversions._
+private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
-private[sql] class DefaultSource extends HadoopFsRelationProvider {
-  def createRelation(
+  override def shortName(): String = "orc"
+
+  override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
       dataSchema: Option[StructType],
@@ -66,7 +67,7 @@ private[orc] class OrcOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
-  extends OutputWriterInternal with SparkHadoopMapRedUtil with HiveInspectors {
+  extends OutputWriter with SparkHadoopMapRedUtil with HiveInspectors {
 
   private val serializer = {
     val table = new Properties()
@@ -110,6 +111,8 @@ private[orc] class OrcOutputWriter(
     ).asInstanceOf[RecordWriter[NullWritable, Writable]]
   }
 
+  override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
+
   private def wrapOrcStruct(
       o: OrcStruct,
       oi: SettableStructObjectInspector,
@@ -117,7 +120,7 @@ private[orc] class OrcOutputWriter(
     val fieldRefs = oi.getAllStructFieldRefs
     val row = a.asInstanceOf[InternalRow]
     var i = 0
-    while (i < fieldRefs.length) {
+    while (i < fieldRefs.size) {
       oi.setStructFieldData(
         o,
         fieldRefs.get(i),
@@ -131,7 +134,7 @@ private[orc] class OrcOutputWriter(
 
   val cachedOrcStruct = structOI.create().asInstanceOf[OrcStruct]
 
-  override def writeInternal(row: InternalRow): Unit = {
+  override protected[sql] def writeInternal(row: InternalRow): Unit = {
     wrapOrcStruct(cachedOrcStruct, structOI, row)
 
     recordWriter.write(
@@ -146,7 +149,6 @@ private[orc] class OrcOutputWriter(
   }
 }
 
-@DeveloperApi
 private[sql] class OrcRelation(
     override val paths: Array[String],
     maybeDataSchema: Option[StructType],
@@ -298,9 +300,11 @@ private[orc] case class OrcTableScan(
     // Sets requested columns
     addColumnIds(attributes, relation, conf)
 
-    if (inputPaths.nonEmpty) {
-      FileInputFormat.setInputPaths(job, inputPaths.map(_.getPath): _*)
+    if (inputPaths.isEmpty) {
+      // the input path probably be pruned, return an empty RDD.
+      return sqlContext.sparkContext.emptyRDD[InternalRow]
     }
+    FileInputFormat.setInputPaths(job, inputPaths.map(_.getPath): _*)
 
     val inputFormatClass =
       classOf[OrcInputFormat]
