@@ -15,15 +15,13 @@
  * limitations under the License.
  */
 
-// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 
 /**
@@ -43,11 +41,9 @@ object TrainValidationSplitExample {
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 
-    val training = sc.parallelize(Seq(
-      LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
-      LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
-      LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
-      LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5))))
+    // Prepare training and test data.
+    val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+    val Array(training, test) = data.randomSplit(Array(0.9, 0.1), seed = 12345)
 
     val lr = new LinearRegression()
 
@@ -64,8 +60,6 @@ object TrainValidationSplitExample {
       .addGrid(lr.regParam, Array(0.1, 0.01))
       .addGrid(lr.fitIntercept, Array(true, false))
       .addGrid(lr.elasticNetParam, Array(0.0, 0.5, 1.0))
-      .addGrid(lr.maxIter, Array(10, 100))
-      .addGrid(lr.tol, Array(1E-5, 1E-6))
       .build()
 
     trainValidationSplit.setEstimatorParamMaps(paramGrid)
@@ -76,22 +70,12 @@ object TrainValidationSplitExample {
     // Run train validation split, and choose the best set of parameters.
     val model = trainValidationSplit.fit(training.toDF())
 
-    // Prepare unlabeled test data.
-    val test = sc.parallelize(Seq(
-      LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
-      LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
-      LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5))))
-
     // Make predictions on test data. model is the model with combination of parameters
     // that performed best.
     model.transform(test.toDF())
       .select("features", "label", "prediction")
-      .collect()
-      .foreach { case Row(features: Vector, label: Double, prediction: Double) =>
-        println(s"($features, $label) --> prediction=$prediction")
-      }
+      .show()
 
     sc.stop()
   }
 }
-// scalastyle:on println

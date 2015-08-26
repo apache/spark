@@ -17,20 +17,16 @@
 
 package org.apache.spark.examples.ml;
 
-import java.util.List;
-
-import com.google.common.collect.Lists;
-
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.evaluation.RegressionEvaluator;
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.regression.LinearRegression;
 import org.apache.spark.ml.tuning.*;
-import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 
 /**
@@ -47,17 +43,16 @@ import org.apache.spark.sql.SQLContext;
 public class JavaTrainValidationSplitExample {
 
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaTrainValidationSplitExample");
+    SparkConf conf = new SparkConf().setAppName("JavaTrainValidationSplitExample").setMaster("local[2]");
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext jsql = new SQLContext(jsc);
 
-    List<LabeledPoint> localTraining = Lists.newArrayList(
-      new LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
-      new LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
-      new LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
-      new LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5)));
+    RDD<LabeledPoint> data = MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt");
+    RDD<LabeledPoint>[] splits = data.randomSplit(new double []{0.9, 0.1}, 12345);
 
-    DataFrame training = jsql.createDataFrame(jsc.parallelize(localTraining), LabeledPoint.class);
+    // Prepare training and test data.
+    DataFrame training = jsql.createDataFrame(splits[0], LabeledPoint.class);
+    DataFrame test = jsql.createDataFrame(splits[1], LabeledPoint.class);
 
     LinearRegression lr = new LinearRegression();
 
@@ -74,8 +69,6 @@ public class JavaTrainValidationSplitExample {
       .addGrid(lr.regParam(), new double[]{0.1, 0.01})
       .addGrid(lr.fitIntercept())
       .addGrid(lr.elasticNetParam(), new double[]{0.0, 0.5, 1.0})
-      .addGrid(lr.maxIter(), new int[]{10, 100})
-      .addGrid(lr.tol(), new double[]{1E-5, 1E-6})
       .build();
 
     trainValidationSplit.setEstimatorParamMaps(paramGrid);
@@ -86,20 +79,11 @@ public class JavaTrainValidationSplitExample {
     // Run train validation split, and choose the best set of parameters.
     TrainValidationSplitModel model = trainValidationSplit.fit(training);
 
-    // Prepare unlabeled test data.
-    List<LabeledPoint> localTest = Lists.newArrayList(
-      new LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
-      new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
-      new LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5)));
-
-    DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), LabeledPoint.class);
-
     // Make predictions on test data. model is the model with combination of parameters
     // that performed best.
-    DataFrame results = model.transform(test);
-    for (Row r: results.select("features", "label", "prediction").collect()) {
-      System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> " + "prediction=" + r.get(2));
-    }
+    model.transform(test)
+      .select("features", "label", "prediction")
+      .show();
 
     jsc.stop();
   }

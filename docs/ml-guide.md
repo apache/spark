@@ -871,45 +871,28 @@ jsc.stop();
 ## Example: Model Selection via Train Validation Split
 In addition to  `CrossValidator` Spark also offers
 [`TrainValidationSplit`](api/scala/index.html#org.apache.spark.ml.tuning.TrainValidationSplit) for hyper-parameter tuning.
-It randomly splits the input dataset into train and validation sets based on ratio passed as parameter
-and use evaluation metric on the validation set to select the best model.
-The use is similar to `CrossValidator`, but simpler and less computationally expensive.
+`TrainValidationSplit` only evaluates each combination of parameters once as opposed to k times in
+ case of `CrossValidator`. It is therefore less expensive, but will not produce as reliable results.
 
-`TrainValidationSplit` takes an `Estimator`, a set of `ParamMap`s, and an
+`TrainValidationSplit` takes an `Estimator`, a set of `ParamMap`s provided in the `estimatorParamMaps` parameter, and an
 [`Evaluator`](api/scala/index.html#org.apache.spark.ml.Evaluator).
-It begins by splitting the dataset into two parts using *trainRatio* parameter
+It begins by splitting the dataset into two parts using `trainRatio` parameter
 which are used as separate training and test datasets. For example with `$trainRatio=0.75$` (default),
-`TrainValidationSplit` will generate training and test dataset pair where 75% of the data is used for training and 25% for validation.
-Similarly to `CrossValidator`, `TrainValidationSplit` also iterates through the set of `ParamMap`s.
+`TrainValidationSplit` will generate a training and test dataset pair where 75% of the data is used for training and 25% for validation.
+Similar to `CrossValidator`, `TrainValidationSplit` also iterates through the set of `ParamMap`s.
 For each combination of parameters, it trains the given `Estimator` and evaluates it using the given `Evaluator`.
 The `ParamMap` which produces the best evaluation metric is selected as the best option.
 `TrainValidationSplit` finally fits the `Estimator` using the best `ParamMap` and the entire dataset.
 
-`TrainValidationSplit` only evaluates each combination of parameters once as opposed to k times in
- case of `CrossValidator`. It is therefore less expensive, but will not produce as reliable results.
-
 <div class="codetabs">
 
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 {% highlight scala %}
-import org.apache.spark.ml.evaluation.RegressionEvaluator
-import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.{SparkConf, SparkContext}
-
-val conf = new SparkConf().setAppName("TrainValidationSplitExample")
-val sc = new SparkContext(conf)
-val sqlContext = new SQLContext(sc)
 import sqlContext.implicits._
 
-val training = sc.parallelize(Seq(
-  LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
-  LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
-  LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
-  LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5))))
+// Prepare training and test data.
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+val Array(training, test) = data.randomSplit(Array(0.9, 0.1), seed = 12345)
 
 val lr = new LinearRegression()
 
@@ -926,8 +909,6 @@ val paramGrid = new ParamGridBuilder()
   .addGrid(lr.regParam, Array(0.1, 0.01))
   .addGrid(lr.fitIntercept, Array(true, false))
   .addGrid(lr.elasticNetParam, Array(0.0, 0.5, 1.0))
-  .addGrid(lr.maxIter, Array(10, 100))
-  .addGrid(lr.tol, Array(1E-5, 1E-6))
   .build()
 
 trainValidationSplit.setEstimatorParamMaps(paramGrid)
@@ -938,54 +919,24 @@ trainValidationSplit.setTrainRatio(0.8)
 // Run train validation split, and choose the best set of parameters.
 val model = trainValidationSplit.fit(training.toDF())
 
-// Prepare unlabeled test data.
-val test = sc.parallelize(Seq(
-  LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
-  LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
-  LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5))))
-
 // Make predictions on test data. model is the model with combination of parameters
 // that performed best.
 model.transform(test.toDF())
   .select("features", "label", "prediction")
-  .collect()
-  .foreach { case Row(features: Vector, label: Double, prediction: Double) =>
-    println(s"($features, $label) --> prediction=$prediction")
-  }
+  .show()
 
 sc.stop()
 {% endhighlight %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
 {% highlight java %}
-import java.util.List;
+RDD<LabeledPoint> data = MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt");
+RDD<LabeledPoint>[] splits = data.randomSplit(new double []{0.9, 0.1}, 12345);
 
-import com.google.common.collect.Lists;
-
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.evaluation.RegressionEvaluator;
-import org.apache.spark.ml.param.ParamMap;
-import org.apache.spark.ml.regression.LinearRegression;
-import org.apache.spark.ml.tuning.*;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
-
-SparkConf conf = new SparkConf().setAppName("JavaTrainValidationSplitExample");
-JavaSparkContext jsc = new JavaSparkContext(conf);
-SQLContext jsql = new SQLContext(jsc);
-
-List<LabeledPoint> localTraining = Lists.newArrayList(
-  new LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
-  new LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
-  new LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
-  new LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5)));
-
-DataFrame training = jsql.createDataFrame(jsc.parallelize(localTraining), LabeledPoint.class);
+// Prepare training and test data.
+DataFrame training = jsql.createDataFrame(splits[0], LabeledPoint.class);
+DataFrame test = jsql.createDataFrame(splits[1], LabeledPoint.class);
 
 LinearRegression lr = new LinearRegression();
 
@@ -1002,8 +953,6 @@ ParamMap[] paramGrid = new ParamGridBuilder()
   .addGrid(lr.regParam(), new double[]{0.1, 0.01})
   .addGrid(lr.fitIntercept())
   .addGrid(lr.elasticNetParam(), new double[]{0.0, 0.5, 1.0})
-  .addGrid(lr.maxIter(), new int[]{10, 100})
-  .addGrid(lr.tol(), new double[]{1E-5, 1E-6})
   .build();
 
 trainValidationSplit.setEstimatorParamMaps(paramGrid);
@@ -1014,20 +963,11 @@ trainValidationSplit.setTrainRatio(0.8);
 // Run train validation split, and choose the best set of parameters.
 TrainValidationSplitModel model = trainValidationSplit.fit(training);
 
-// Prepare unlabeled test data.
-List<LabeledPoint> localTest = Lists.newArrayList(
-  new LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
-  new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
-  new LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5)));
-
-DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), LabeledPoint.class);
-
 // Make predictions on test data. model is the model with combination of parameters
 // that performed best.
-DataFrame results = model.transform(test);
-for (Row r: results.select("features", "label", "prediction").collect()) {
-  System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> " + "prediction=" + r.get(2));
-}
+model.transform(test)
+  .select("features", "label", "prediction")
+  .show();
 
 jsc.stop();
 {% endhighlight %}
