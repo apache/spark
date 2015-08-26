@@ -38,7 +38,9 @@ import org.apache.spark.storage.StorageLevel
  */
 @Since("0.8.0")
 @DeveloperApi
-abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double)
+abstract class GeneralizedLinearModel @Since("1.0.0") (
+    @Since("1.0.0") val weights: Vector,
+    @Since("0.8.0") val intercept: Double)
   extends Serializable {
 
   /**
@@ -107,7 +109,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * The optimizer to solve the problem.
    *
    */
-  @Since("1.0.0")
+  @Since("0.8.0")
   def optimizer: Optimizer
 
   /** Whether to add intercept (default: false). */
