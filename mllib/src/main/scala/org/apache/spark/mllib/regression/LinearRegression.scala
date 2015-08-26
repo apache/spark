@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.regression
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.pmml.PMMLExportable
@@ -30,7 +31,9 @@ import org.apache.spark.rdd.RDD
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
+ *
  */
+@Since("0.8.0")
 class LinearRegressionModel (
     override val weights: Vector,
     override val intercept: Double)
@@ -44,6 +47,7 @@ class LinearRegressionModel (
     weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
   }
 
+  @Since("1.3.0")
   override def save(sc: SparkContext, path: String): Unit = {
     GLMRegressionModel.SaveLoadV1_0.save(sc, path, this.getClass.getName, weights, intercept)
   }
@@ -51,8 +55,10 @@ class LinearRegressionModel (
   override protected def formatVersion: String = "1.0"
 }
 
+@Since("1.3.0")
 object LinearRegressionModel extends Loader[LinearRegressionModel] {
 
+  @Since("1.3.0")
   override def load(sc: SparkContext, path: String): LinearRegressionModel = {
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
     // Hard-code class name string in case it changes in the future
@@ -105,7 +111,9 @@ class LinearRegressionWithSGD private[mllib] (
 
 /**
  * Top-level methods for calling LinearRegression.
+ *
  */
+@Since("0.8.0")
 object LinearRegressionWithSGD {
 
   /**
@@ -121,7 +129,9 @@ object LinearRegressionWithSGD {
    * @param miniBatchFraction Fraction of data to be used per iteration.
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to
    *        the number of features in the data.
+   *
    */
+  @Since("1.0.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -142,7 +152,9 @@ object LinearRegressionWithSGD {
    * @param numIterations Number of iterations of gradient descent to run.
    * @param stepSize Step size to be used for each iteration of gradient descent.
    * @param miniBatchFraction Fraction of data to be used per iteration.
+   *
    */
+  @Since("0.8.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -161,7 +173,9 @@ object LinearRegressionWithSGD {
    * @param stepSize Step size to be used for each iteration of Gradient Descent.
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a LinearRegressionModel which has the weights and offset from training.
+   *
    */
+  @Since("0.8.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
@@ -178,7 +192,9 @@ object LinearRegressionWithSGD {
    *              matrix A as well as the corresponding right hand side label y
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a LinearRegressionModel which has the weights and offset from training.
+   *
    */
+  @Since("0.8.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int): LinearRegressionModel = {

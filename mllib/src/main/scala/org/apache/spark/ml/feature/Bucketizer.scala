@@ -75,7 +75,7 @@ final class Bucketizer(override val uid: String)
     }
     val newCol = bucketizer(dataset($(inputCol)))
     val newField = prepOutputField(dataset.schema)
-    dataset.withColumn($(outputCol), newCol.as($(outputCol), newField.metadata))
+    dataset.withColumn($(outputCol), newCol, newField.metadata)
   }
 
   private def prepOutputField(schema: StructType): StructField = {

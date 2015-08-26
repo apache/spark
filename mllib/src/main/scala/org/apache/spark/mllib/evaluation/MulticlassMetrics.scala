@@ -20,7 +20,7 @@ package org.apache.spark.mllib.evaluation
 import scala.collection.Map
 
 import org.apache.spark.SparkContext._
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.mllib.linalg.{Matrices, Matrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -30,8 +30,8 @@ import org.apache.spark.sql.DataFrame
  * Evaluator for multiclass classification.
  *
  * @param predictionAndLabels an RDD of (prediction, label) pairs.
- * @since 1.1.0
  */
+@Since("1.1.0")
 @Experimental
 class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
 
@@ -65,8 +65,8 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
    * predicted classes are in columns,
    * they are ordered by class label ascending,
    * as in "labels"
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def confusionMatrix: Matrix = {
     val n = labels.size
     val values = Array.ofDim[Double](n * n)
@@ -85,15 +85,15 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
   /**
    * Returns true positive rate for a given label (category)
    * @param label the label.
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def truePositiveRate(label: Double): Double = recall(label)
 
   /**
    * Returns false positive rate for a given label (category)
    * @param label the label.
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def falsePositiveRate(label: Double): Double = {
     val fp = fpByClass.getOrElse(label, 0)
     fp.toDouble / (labelCount - labelCountByClass(label))
@@ -102,8 +102,8 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
   /**
    * Returns precision for a given label (category)
    * @param label the label.
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def precision(label: Double): Double = {
     val tp = tpByClass(label)
     val fp = fpByClass.getOrElse(label, 0)
@@ -113,16 +113,16 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
   /**
    * Returns recall for a given label (category)
    * @param label the label.
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def recall(label: Double): Double = tpByClass(label).toDouble / labelCountByClass(label)
 
   /**
    * Returns f-measure for a given label (category)
    * @param label the label.
    * @param beta the beta parameter.
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def fMeasure(label: Double, beta: Double): Double = {
     val p = precision(label)
     val r = recall(label)
@@ -133,8 +133,8 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
   /**
    * Returns f1-measure for a given label (category)
    * @param label the label.
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def fMeasure(label: Double): Double = fMeasure(label, 1.0)
 
   /**
@@ -187,8 +187,8 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
   /**
    * Returns weighted averaged f-measure
    * @param beta the beta parameter.
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def weightedFMeasure(beta: Double): Double = labelCountByClass.map { case (category, count) =>
     fMeasure(category, beta) * count.toDouble / labelCount
   }.sum

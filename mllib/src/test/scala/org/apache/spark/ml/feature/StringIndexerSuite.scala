@@ -30,7 +30,9 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("params") {
     ParamsSuite.checkParams(new StringIndexer)
     val model = new StringIndexerModel("indexer", Array("a", "b"))
+    val modelWithoutUid = new StringIndexerModel(Array("a", "b"))
     ParamsSuite.checkParams(model)
+    ParamsSuite.checkParams(modelWithoutUid)
   }
 
   test("StringIndexer") {
@@ -143,6 +145,24 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     idxToStr1.transform(df1).select("actual", "expected").collect().foreach {
       case Row(actual, expected) =>
         assert(actual === expected)
+    }
+  }
+
+  test("StringIndexer, IndexToString are inverses") {
+    val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
+    val df = sqlContext.createDataFrame(data).toDF("id", "label")
+    val indexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+      .fit(df)
+    val transformed = indexer.transform(df)
+    val idx2str = new IndexToString()
+      .setInputCol("labelIndex")
+      .setOutputCol("sameLabel")
+      .setLabels(indexer.labels)
+    idx2str.transform(transformed).select("label", "sameLabel").collect().foreach {
+      case Row(a: String, b: String) =>
+        assert(a === b)
     }
   }
 }

@@ -60,14 +60,16 @@ class Params(Identifiable):
 
     __metaclass__ = ABCMeta
 
-    #: internal param map for user-supplied values param map
-    _paramMap = {}
+    def __init__(self):
+        super(Params, self).__init__()
+        #: internal param map for user-supplied values param map
+        self._paramMap = {}
 
-    #: internal param map for default values
-    _defaultParamMap = {}
+        #: internal param map for default values
+        self._defaultParamMap = {}
 
-    #: value returned by :py:func:`params`
-    _params = None
+        #: value returned by :py:func:`params`
+        self._params = None
 
     @property
     def params(self):
@@ -155,7 +157,7 @@ class Params(Identifiable):
         else:
             return self._defaultParamMap[param]
 
-    def extractParamMap(self, extra={}):
+    def extractParamMap(self, extra=None):
         """
         Extracts the embedded default param values and user-supplied
         values, and then merges them with extra values from input into
@@ -165,12 +167,14 @@ class Params(Identifiable):
         :param extra: extra param values
         :return: merged param map
         """
+        if extra is None:
+            extra = dict()
         paramMap = self._defaultParamMap.copy()
         paramMap.update(self._paramMap)
         paramMap.update(extra)
         return paramMap
 
-    def copy(self, extra={}):
+    def copy(self, extra=None):
         """
         Creates a copy of this instance with the same uid and some
         extra params. The default implementation creates a
@@ -181,6 +185,8 @@ class Params(Identifiable):
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """
+        if extra is None:
+            extra = dict()
         that = copy.copy(self)
         that._paramMap = self.extractParamMap(extra)
         return that
@@ -233,7 +239,7 @@ class Params(Identifiable):
             self._defaultParamMap[getattr(self, param)] = value
         return self
 
-    def _copyValues(self, to, extra={}):
+    def _copyValues(self, to, extra=None):
         """
         Copies param values from this instance to another instance for
         params shared by them.
@@ -241,6 +247,8 @@ class Params(Identifiable):
         :param extra: extra params to be copied
         :return: the target instance with param values copied
         """
+        if extra is None:
+            extra = dict()
         paramMap = self.extractParamMap(extra)
         for p in self.params:
             if p in paramMap and to.hasParam(p.name):

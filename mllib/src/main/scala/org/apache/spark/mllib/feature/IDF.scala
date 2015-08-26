@@ -19,7 +19,7 @@ package org.apache.spark.mllib.feature
 
 import breeze.linalg.{DenseVector => BDV}
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.rdd.RDD
@@ -37,6 +37,7 @@ import org.apache.spark.rdd.RDD
  * @param minDocFreq minimum of documents in which a term
  *                   should appear for filtering
  */
+@Since("1.1.0")
 @Experimental
 class IDF(val minDocFreq: Int) {
 
@@ -48,6 +49,7 @@ class IDF(val minDocFreq: Int) {
    * Computes the inverse document frequency.
    * @param dataset an RDD of term frequency vectors
    */
+  @Since("1.1.0")
   def fit(dataset: RDD[Vector]): IDFModel = {
     val idf = dataset.treeAggregate(new IDF.DocumentFrequencyAggregator(
           minDocFreq = minDocFreq))(
@@ -61,6 +63,7 @@ class IDF(val minDocFreq: Int) {
    * Computes the inverse document frequency.
    * @param dataset a JavaRDD of term frequency vectors
    */
+  @Since("1.1.0")
   def fit(dataset: JavaRDD[Vector]): IDFModel = {
     fit(dataset.rdd)
   }
@@ -171,6 +174,7 @@ class IDFModel private[spark] (val idf: Vector) extends Serializable {
    * @param dataset an RDD of term frequency vectors
    * @return an RDD of TF-IDF vectors
    */
+  @Since("1.1.0")
   def transform(dataset: RDD[Vector]): RDD[Vector] = {
     val bcIdf = dataset.context.broadcast(idf)
     dataset.mapPartitions(iter => iter.map(v => IDFModel.transform(bcIdf.value, v)))
@@ -182,6 +186,7 @@ class IDFModel private[spark] (val idf: Vector) extends Serializable {
    * @param v a term frequency vector
    * @return a TF-IDF vector
    */
+  @Since("1.3.0")
   def transform(v: Vector): Vector = IDFModel.transform(idf, v)
 
   /**
@@ -189,6 +194,7 @@ class IDFModel private[spark] (val idf: Vector) extends Serializable {
    * @param dataset a JavaRDD of term frequency vectors
    * @return a JavaRDD of TF-IDF vectors
    */
+  @Since("1.1.0")
   def transform(dataset: JavaRDD[Vector]): JavaRDD[Vector] = {
     transform(dataset.rdd).toJavaRDD()
   }

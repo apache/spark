@@ -45,7 +45,7 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
  * Usage: JavaStatefulNetworkWordCount <hostname> <port>
  * <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive
  * data.
- * <p/>
+ * <p>
  * To run this on your local machine, you need to first run a Netcat server
  * `$ nc -lk 9999`
  * and then run the example

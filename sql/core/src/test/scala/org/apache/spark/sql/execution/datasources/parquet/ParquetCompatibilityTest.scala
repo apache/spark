@@ -17,29 +17,39 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.schema.MessageType
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.QueryTest
 
-abstract class ParquetCompatibilityTest extends QueryTest with ParquetTest with BeforeAndAfterAll {
-  def readParquetSchema(path: String): MessageType = {
+/**
+ * Helper class for testing Parquet compatibility.
+ */
+private[sql] abstract class ParquetCompatibilityTest extends QueryTest with ParquetTest {
+  protected def readParquetSchema(path: String): MessageType = {
     readParquetSchema(path, { path => !path.getName.startsWith("_") })
   }
 
-  def readParquetSchema(path: String, pathFilter: Path => Boolean): MessageType = {
+  protected def readParquetSchema(path: String, pathFilter: Path => Boolean): MessageType = {
     val fsPath = new Path(path)
     val fs = fsPath.getFileSystem(configuration)
     val parquetFiles = fs.listStatus(fsPath, new PathFilter {
       override def accept(path: Path): Boolean = pathFilter(path)
     }).toSeq
 
-    val footers = ParquetFileReader.readAllFootersInParallel(configuration, parquetFiles, true)
-    footers.head.getParquetMetadata.getFileMetaData.getSchema
+    val footers =
+      ParquetFileReader.readAllFootersInParallel(configuration, parquetFiles.asJava, true)
+    footers.iterator().next().getParquetMetadata.getFileMetaData.getSchema
+  }
+
+  protected def logParquetSchema(path: String): Unit = {
+    logInfo(
+      s"""Schema of the Parquet file written by parquet-avro:
+         |${readParquetSchema(path)}
+       """.stripMargin)
   }
 }
 

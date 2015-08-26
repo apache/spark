@@ -22,7 +22,7 @@ import java.util.jar.JarFile
 import java.util.logging.Level
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import com.google.common.io.{ByteStreams, Files}
 
@@ -110,7 +110,7 @@ private[deploy] object RPackageUtils extends Logging {
       print(s"Building R package with the command: $installCmd", printStream)
     }
     try {
-      val builder = new ProcessBuilder(installCmd)
+      val builder = new ProcessBuilder(installCmd.asJava)
       builder.redirectErrorStream(true)
       val env = builder.environment()
       env.clear()

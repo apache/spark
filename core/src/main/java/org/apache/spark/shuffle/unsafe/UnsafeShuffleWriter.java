@@ -24,7 +24,7 @@ import java.util.Iterator;
 
 import scala.Option;
 import scala.Product2;
-import scala.collection.JavaConversions;
+import scala.collection.JavaConverters;
 import scala.collection.immutable.Map;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
@@ -160,7 +160,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    */
   @VisibleForTesting
   public void write(Iterator<Product2<K, V>> records) throws IOException {
-    write(JavaConversions.asScalaIterator(records));
+    write(JavaConverters.asScalaIteratorConverter(records).asScala());
   }
 
   @Override

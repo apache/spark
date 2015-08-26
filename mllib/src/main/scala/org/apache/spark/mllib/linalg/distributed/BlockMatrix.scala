@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.{Logging, Partitioner, SparkException}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -129,6 +129,7 @@ private[mllib] object GridPartitioner {
  * @param nCols Number of columns of this matrix. If the supplied value is less than or equal to
  *              zero, the number of columns will be calculated when `numCols` is invoked.
  */
+@Since("1.3.0")
 @Experimental
 class BlockMatrix(
     val blocks: RDD[((Int, Int), Matrix)],
@@ -150,6 +151,7 @@ class BlockMatrix(
    * @param colsPerBlock Number of columns that make up each block. The blocks forming the final
    *                     columns are not required to have the given number of columns
    */
+  @Since("1.3.0")
   def this(
       blocks: RDD[((Int, Int), Matrix)],
       rowsPerBlock: Int,
@@ -157,11 +159,13 @@ class BlockMatrix(
     this(blocks, rowsPerBlock, colsPerBlock, 0L, 0L)
   }
 
+  @Since("1.3.0")
   override def numRows(): Long = {
     if (nRows <= 0L) estimateDim()
     nRows
   }
 
+  @Since("1.3.0")
   override def numCols(): Long = {
     if (nCols <= 0L) estimateDim()
     nCols
@@ -193,6 +197,7 @@ class BlockMatrix(
    * Validates the block matrix info against the matrix data (`blocks`) and throws an exception if
    * any error is found.
    */
+  @Since("1.3.0")
   def validate(): Unit = {
     logDebug("Validating BlockMatrix...")
     // check if the matrix is larger than the claimed dimensions
@@ -229,18 +234,21 @@ class BlockMatrix(
   }
 
   /** Caches the underlying RDD. */
+  @Since("1.3.0")
   def cache(): this.type = {
     blocks.cache()
     this
   }
 
   /** Persists the underlying RDD with the specified storage level. */
+  @Since("1.3.0")
   def persist(storageLevel: StorageLevel): this.type = {
     blocks.persist(storageLevel)
     this
   }
 
   /** Converts to CoordinateMatrix. */
+  @Since("1.3.0")
   def toCoordinateMatrix(): CoordinateMatrix = {
     val entryRDD = blocks.flatMap { case ((blockRowIndex, blockColIndex), mat) =>
       val rowStart = blockRowIndex.toLong * rowsPerBlock
@@ -255,6 +263,7 @@ class BlockMatrix(
   }
 
   /** Converts to IndexedRowMatrix. The number of columns must be within the integer range. */
+  @Since("1.3.0")
   def toIndexedRowMatrix(): IndexedRowMatrix = {
     require(numCols() < Int.MaxValue, "The number of columns must be within the integer range. " +
       s"numCols: ${numCols()}")
@@ -263,6 +272,7 @@ class BlockMatrix(
   }
 
   /** Collect the distributed matrix on the driver as a `DenseMatrix`. */
+  @Since("1.3.0")
   def toLocalMatrix(): Matrix = {
     require(numRows() < Int.MaxValue, "The number of rows of this matrix should be less than " +
       s"Int.MaxValue. Currently numRows: ${numRows()}")
@@ -287,8 +297,11 @@ class BlockMatrix(
     new DenseMatrix(m, n, values)
   }
 
-  /** Transpose this `BlockMatrix`. Returns a new `BlockMatrix` instance sharing the
-    * same underlying data. Is a lazy operation. */
+  /**
+   * Transpose this `BlockMatrix`. Returns a new `BlockMatrix` instance sharing the
+   * same underlying data. Is a lazy operation.
+   */
+  @Since("1.3.0")
   def transpose: BlockMatrix = {
     val transposedBlocks = blocks.map { case ((blockRowIndex, blockColIndex), mat) =>
       ((blockColIndex, blockRowIndex), mat.transpose)
@@ -302,12 +315,14 @@ class BlockMatrix(
     new BDM[Double](localMat.numRows, localMat.numCols, localMat.toArray)
   }
 
-  /** Adds two block matrices together. The matrices must have the same size and matching
-    * `rowsPerBlock` and `colsPerBlock` values. If one of the blocks that are being added are
-    * instances of [[SparseMatrix]], the resulting sub matrix will also be a [[SparseMatrix]], even
-    * if it is being added to a [[DenseMatrix]]. If two dense matrices are added, the output will
-    * also be a [[DenseMatrix]].
-    */
+  /**
+   * Adds two block matrices together. The matrices must have the same size and matching
+   * `rowsPerBlock` and `colsPerBlock` values. If one of the blocks that are being added are
+   * instances of [[SparseMatrix]], the resulting sub matrix will also be a [[SparseMatrix]], even
+   * if it is being added to a [[DenseMatrix]]. If two dense matrices are added, the output will
+   * also be a [[DenseMatrix]].
+   */
+  @Since("1.3.0")
   def add(other: BlockMatrix): BlockMatrix = {
     require(numRows() == other.numRows(), "Both matrices must have the same number of rows. " +
       s"A.numRows: ${numRows()}, B.numRows: ${other.numRows()}")
@@ -335,12 +350,14 @@ class BlockMatrix(
     }
   }
 
-  /** Left multiplies this [[BlockMatrix]] to `other`, another [[BlockMatrix]]. The `colsPerBlock`
-    * of this matrix must equal the `rowsPerBlock` of `other`. If `other` contains
-    * [[SparseMatrix]], they will have to be converted to a [[DenseMatrix]]. The output
-    * [[BlockMatrix]] will only consist of blocks of [[DenseMatrix]]. This may cause
-    * some performance issues until support for multiplying two sparse matrices is added.
-    */
+  /**
+   * Left multiplies this [[BlockMatrix]] to `other`, another [[BlockMatrix]]. The `colsPerBlock`
+   * of this matrix must equal the `rowsPerBlock` of `other`. If `other` contains
+   * [[SparseMatrix]], they will have to be converted to a [[DenseMatrix]]. The output
+   * [[BlockMatrix]] will only consist of blocks of [[DenseMatrix]]. This may cause
+   * some performance issues until support for multiplying two sparse matrices is added.
+   */
+  @Since("1.3.0")
   def multiply(other: BlockMatrix): BlockMatrix = {
     require(numCols() == other.numRows(), "The number of columns of A and the number of rows " +
       s"of B must be equal. A.numCols: ${numCols()}, B.numRows: ${other.numRows()}. If you " +

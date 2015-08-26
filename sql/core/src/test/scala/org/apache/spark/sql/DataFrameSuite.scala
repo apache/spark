@@ -23,18 +23,12 @@ import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
-import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.execution.datasources.json.JSONRelation
-import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SQLTestUtils}
+import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SharedSQLContext}
 
-class DataFrameSuite extends QueryTest with SQLTestUtils {
-  import org.apache.spark.sql.TestData._
-
-  lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
-  import sqlContext.implicits._
+class DataFrameSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("analysis error should be eagerly reported") {
     // Eager analysis.
@@ -872,5 +866,25 @@ class DataFrameSuite extends QueryTest with SQLTestUtils {
     val expected = (1 to 100).map(_ -> random.nextDouble()).sortBy(_._2).map(_._1)
     val actual = df.sort(rand(seed)).collect().map(_.getInt(0))
     assert(expected === actual)
+  }
+
+  test("SPARK-9323: DataFrame.orderBy should support nested column name") {
+    val df = sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+      """{"a": {"b": 1}}""" :: Nil))
+    checkAnswer(df.orderBy("a.b"), Row(Row(1)))
+  }
+
+  test("SPARK-9950: correctly analyze grouping/aggregating on struct fields") {
+    val df = Seq(("x", (1, 1)), ("y", (2, 2))).toDF("a", "b")
+    checkAnswer(df.groupBy("b._1").agg(sum("b._2")), Row(1, 1) :: Row(2, 2) :: Nil)
+  }
+
+  test("SPARK-10093: Avoid transformations on executors") {
+    val df = Seq((1, 1)).toDF("a", "b")
+    df.where($"a" === 1)
+      .select($"a", $"b", struct($"b"))
+      .orderBy("a")
+      .select(struct($"b"))
+      .collect()
   }
 }

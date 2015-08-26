@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import scala.collection.JavaConversions._
+import java.util.Collections
+
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
@@ -28,7 +30,7 @@ import org.apache.parquet.example.data.simple.SimpleGroup
 import org.apache.parquet.example.data.{Group, GroupWriter}
 import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
-import org.apache.parquet.hadoop.metadata.{CompressionCodecName, FileMetaData, ParquetMetadata}
+import org.apache.parquet.hadoop.metadata.{BlockMetaData, CompressionCodecName, FileMetaData, ParquetMetadata}
 import org.apache.parquet.hadoop.{Footer, ParquetFileWriter, ParquetOutputCommitter, ParquetWriter}
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
@@ -37,6 +39,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
@@ -62,9 +65,8 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
 /**
  * A test suite that tests basic Parquet I/O.
  */
-class ParquetIOSuite extends QueryTest with ParquetTest {
-  lazy val sqlContext = org.apache.spark.sql.test.TestSQLContext
-  import sqlContext.implicits._
+class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
+  import testImplicits._
 
   /**
    * Writes `data` to a Parquet file, reads it back and check file contents.
@@ -205,9 +207,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
   test("compression codec") {
     def compressionCodecFor(path: String): String = {
       val codecs = ParquetTypesConverter
-        .readMetaData(new Path(path), Some(configuration))
-        .getBlocks
-        .flatMap(_.getColumns)
+        .readMetaData(new Path(path), Some(configuration)).getBlocks.asScala
+        .flatMap(_.getColumns.asScala)
         .map(_.getCodec.name())
         .distinct
 
@@ -348,14 +349,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
       """.stripMargin)
 
     withTempPath { location =>
-      val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
+      val extraMetadata = Collections.singletonMap(
+        CatalystReadSupport.SPARK_METADATA_KEY, sparkSchema.toString)
       val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, "Spark")
       val path = new Path(location.getCanonicalPath)
 
       ParquetFileWriter.writeMetadataFile(
         sqlContext.sparkContext.hadoopConfiguration,
         path,
-        new Footer(path, new ParquetMetadata(fileMetadata, Nil)) :: Nil)
+        Collections.singletonList(
+          new Footer(path, new ParquetMetadata(fileMetadata, Collections.emptyList()))))
 
       assertResult(sqlContext.read.parquet(path.toString).schema) {
         StructType(
@@ -386,7 +389,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     } finally {
       // Hadoop 1 doesn't have `Configuration.unset`
       configuration.clear()
-      clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+      clonedConf.asScala.foreach(entry => configuration.set(entry.getKey, entry.getValue))
     }
   }
 
@@ -410,7 +413,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     } finally {
       // Hadoop 1 doesn't have `Configuration.unset`
       configuration.clear()
-      clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+      clonedConf.asScala.foreach(entry => configuration.set(entry.getKey, entry.getValue))
     }
   }
 
@@ -424,7 +427,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
 
       configuration.set(
         "spark.sql.parquet.output.committer.class",
-        classOf[BogusParquetOutputCommitter].getCanonicalName)
+        classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName)
 
       try {
         val message = intercept[SparkException] {
@@ -434,7 +437,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
       } finally {
         // Hadoop 1 doesn't have `Configuration.unset`
         configuration.clear()
-        clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+        clonedConf.asScala.foreach(entry => configuration.set(entry.getKey, entry.getValue))
       }
     }
   }
@@ -450,12 +453,54 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     }.toString
     assert(errorMessage.contains("UnknownHostException"))
   }
+
+  test("SPARK-7837 Do not close output writer twice when commitTask() fails") {
+    val clonedConf = new Configuration(configuration)
+
+    // Using a output committer that always fail when committing a task, so that both
+    // `commitTask()` and `abortTask()` are invoked.
+    configuration.set(
+      "spark.sql.parquet.output.committer.class",
+      classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName)
+
+    try {
+      // Before fixing SPARK-7837, the following code results in an NPE because both
+      // `commitTask()` and `abortTask()` try to close output writers.
+
+      withTempPath { dir =>
+        val m1 = intercept[SparkException] {
+          sqlContext.range(1).coalesce(1).write.parquet(dir.getCanonicalPath)
+        }.getCause.getMessage
+        assert(m1.contains("Intentional exception for testing purposes"))
+      }
+
+      withTempPath { dir =>
+        val m2 = intercept[SparkException] {
+          val df = sqlContext.range(1).select('id as 'a, 'id as 'b).coalesce(1)
+          df.write.partitionBy("a").parquet(dir.getCanonicalPath)
+        }.getCause.getMessage
+        assert(m2.contains("Intentional exception for testing purposes"))
+      }
+    } finally {
+      // Hadoop 1 doesn't have `Configuration.unset`
+      configuration.clear()
+      clonedConf.asScala.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+    }
+  }
 }
 
-class BogusParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
+class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
   extends ParquetOutputCommitter(outputPath, context) {
 
   override def commitJob(jobContext: JobContext): Unit = {
+    sys.error("Intentional exception for testing purposes")
+  }
+}
+
+class TaskCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
+  extends ParquetOutputCommitter(outputPath, context) {
+
+  override def commitTask(context: TaskAttemptContext): Unit = {
     sys.error("Intentional exception for testing purposes")
   }
 }

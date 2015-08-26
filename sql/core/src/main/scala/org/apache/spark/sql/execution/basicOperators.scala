@@ -75,14 +75,16 @@ case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) 
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
+  /** Rewrite the project list to use unsafe expressions as needed. */
+  protected val unsafeProjectList = projectList.map(_ transform {
+    case CreateStruct(children) => CreateStructUnsafe(children)
+    case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+  })
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numRows = longMetric("numRows")
     child.execute().mapPartitions { iter =>
-      this.transformAllExpressions {
-        case CreateStruct(children) => CreateStructUnsafe(children)
-        case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
-      }
-      val project = UnsafeProjection.create(projectList, child.output)
+      val project = UnsafeProjection.create(unsafeProjectList, child.output)
       iter.map { row =>
         numRows += 1
         project(row)
@@ -237,7 +239,10 @@ case class TakeOrderedAndProject(
     projectList: Option[Seq[NamedExpression]],
     child: SparkPlan) extends UnaryNode {
 
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val projectOutput = projectList.map(_.map(_.toAttribute))
+    projectOutput.getOrElse(child.output)
+  }
 
   override def outputPartitioning: Partitioning = SinglePartition
 
@@ -263,6 +268,13 @@ case class TakeOrderedAndProject(
   protected override def doExecute(): RDD[InternalRow] = sparkContext.makeRDD(collectData(), 1)
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
+
+  override def simpleString: String = {
+    val orderByString = sortOrder.mkString("[", ",", "]")
+    val outputString = output.mkString("[", ",", "]")
+
+    s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"
+  }
 }
 
 /**

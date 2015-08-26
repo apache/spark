@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark.sql.hive.aggregate;
+package org.apache.spark.sql.hive.aggregate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -65,7 +65,7 @@ public class MyDoubleAvg extends UserDefinedAggregateFunction {
     return _bufferSchema;
   }
 
-  @Override public DataType returnDataType() {
+  @Override public DataType dataType() {
     return _returnDataType;
   }
 
