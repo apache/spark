@@ -180,7 +180,6 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
       mutable.HashMap(1->"one", 2->"two", 3->"three")))
   }
 
-
   test("ranges") {
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
