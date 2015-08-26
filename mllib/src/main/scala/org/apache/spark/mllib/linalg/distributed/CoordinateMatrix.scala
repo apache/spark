@@ -46,8 +46,8 @@ case class MatrixEntry(i: Long, j: Long, value: Double)
  */
 @Since("1.0.0")
 @Experimental
-class CoordinateMatrix(
-    val entries: RDD[MatrixEntry],
+class CoordinateMatrix @Since("1.0.0") (
+    @Since("1.0.0") val entries: RDD[MatrixEntry],
     private var nRows: Long,
     private var nCols: Long) extends DistributedMatrix {
 
