@@ -19,7 +19,10 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 
+import scala.util.Random
+
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.hive.TestTags.ExtendedHiveTest
 
 /**
  * A framework for running the query tests that are listed as a set of text files.
@@ -51,21 +54,36 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
     Option(System.getProperty(whiteListProperty)).map(_.split(",").toSeq).getOrElse(whiteList)
 
   // Go through all the test cases and add them to scala test.
-  testCases.sorted.foreach {
+  val testsToRun = testCases.sorted.flatMap {
     case (testCaseName, testCaseFile) =>
       if (blackList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_)) {
         logDebug(s"Blacklisted test skipped $testCaseName")
+        None
       } else if (realWhiteList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_) ||
         runAll) {
         // Build a test case and submit it to scala test framework...
-        val queriesString = fileToString(testCaseFile)
-        createQueryTest(testCaseName, queriesString)
+        Some(testCaseName -> testCaseFile)
       } else {
         // Only output warnings for the built in whitelist as this clutters the output when the user
         // trying to execute a single test from the commandline.
         if (System.getProperty(whiteListProperty) == null && !runAll) {
           ignore(testCaseName) {}
         }
+        None
       }
   }
+
+  // Pick a random sample of tests to serve as a "smoke" test. This is used by automated tests when
+  // the sql/ code hasn't been changed, to avoid running the whole test suite for every PR that
+  // touches core code.
+  private val smokeCount = sys.props.getOrElse("spark.hive.smoke.count", "20").toInt
+  private val smokeSet = Random.shuffle(testsToRun).take(smokeCount)
+    .map { case (name, _) => name }.toSet
+
+  testsToRun.foreach { case (testCaseName, testCaseFile) =>
+    val queriesString = fileToString(testCaseFile)
+    val tag = if (!smokeSet.contains(testCaseName)) Some(ExtendedHiveTest) else None
+    createQueryTest(testCaseName, queriesString, tag = tag)
+  }
+
 }
