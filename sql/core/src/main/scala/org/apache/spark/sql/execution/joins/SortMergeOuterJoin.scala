@@ -452,7 +452,7 @@ private class SortMergeFullJoinScanner(
   }
 
   private def canCompare: Boolean = {
-    (leftAdvanced && rightAdvanced ) && (!leftRowKey.allNull || !rightRowKey.allNull)
+    (leftAdvanced && rightAdvanced ) && (!leftRowKey.anyNull || !rightRowKey.anyNull)
   }
 
   // --- Public methods --------------------------------------------------------------------------

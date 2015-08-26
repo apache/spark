@@ -584,16 +584,6 @@ public final class UnsafeRow extends MutableRow {
   }
 
   @Override
-  public boolean allNull() {
-    for (int i = 0; i < numFields; i++) {
-      if (!BitSetMethods.isSet(baseObject, baseOffset, i)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  @Override
   public boolean anyNull() {
     return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes / 8);
   }
