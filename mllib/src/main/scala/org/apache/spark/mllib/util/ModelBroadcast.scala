@@ -17,14 +17,15 @@
 
 package org.apache.spark.mllib.util
 
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.SparkContext
-
 import scala.reflect.ClassTag
 
-private[mllib] trait Broadcastable[T] {
+import org.apache.spark.SparkContext
+import org.apache.spark.broadcast.Broadcast
+
+private[spark] trait Broadcastable[T] {
 
   private var bcModel: Option[Broadcast[T]] = None
+
   /**
    * Checks whether the model object is already broadcast and returns the reference.
    * If not, then broadcasts the model and returns a reference

@@ -21,9 +21,6 @@ import java.lang.{Iterable => JIterable}
 
 import scala.collection.JavaConverters._
 
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.{Logging, SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, SparseVector, Vector}
@@ -31,6 +28,8 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{Broadcastable, Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 
 /**
  * Model for Naive Bayes Classifiers.
@@ -47,7 +46,7 @@ class NaiveBayesModel private[spark] (
     @Since("0.9.0") val pi: Array[Double],
     @Since("0.9.0") val theta: Array[Array[Double]],
     @Since("1.4.0") val modelType: String)
-  extends ClassificationModel with Serializable with Saveable {
+  extends ClassificationModel with Serializable with Saveable with Broadcastable[NaiveBayesModel] {
 
   import NaiveBayes.{Bernoulli, Multinomial, supportedModelTypes}
 
