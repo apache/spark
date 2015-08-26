@@ -113,15 +113,37 @@ sealed trait Vector extends Serializable {
     throw new NotImplementedError(s"copy is not implemented for ${this.getClass}.")
   }
 
-  /** Map the values of this vector using a function and generates a new vector. Performs the
-    * function on only the backing array. For example, an operation such as addition or
-    * subtraction will only be performed on the non-zero values in a `SparseVector`. */
-  private[spark] def map(f: Double => Double): Vector
+  /**
+   * Applies a function `f` to all the active elements of this vector and generates a new vector.
+   *
+   * @param f the function takes one parameter which is the value of the vector with type `Double`.
+   */
+  private[spark] def mapActiveValues(f: Double => Double): Vector
 
-  /** Update all the values of this vector using the function f. Performed in-place on the
-    * backing array. For example, an operation such as addition or subtraction will only be
-    * performed on the non-zero values in a `SparseVector`. */
-  private[spark] def update(f: Double => Double): Vector
+  /**
+   * Applies a function `f` to all the active elements of this vector and generates a new vector.
+   *
+   * @param f the function takes two parameters where the first parameter is the index of
+   *          the vector with type `Int`, and the second parameter is the corresponding value
+   *          with type `Double`.
+   */
+  private[spark] def mapActivePairs(f: (Int, Double) => Double): Vector
+
+  /**
+   * Applies a function `f` to all the elements of this vector and generates a new vector.
+   *
+   * @param f the function takes one parameter which is the value of the vector with type `Double`.
+   */
+  private[spark] def mapValues(f: Double => Double): Vector
+
+  /**
+   * Applies a function `f` to all the elements of this vector and generates a new vector.
+   *
+   * @param f the function takes two parameters where the first parameter is the index of
+   *          the vector with type `Int`, and the second parameter is the corresponding value
+   *          with type `Double`.
+   */
+  private[spark] def mapPairs(f: (Int, Double) => Double): Vector
 
   /**
    * Applies a function `f` to all the active elements of dense and sparse vector.
@@ -574,16 +596,24 @@ class DenseVector @Since("1.0.0") (
     new DenseVector(values.clone())
   }
 
-  private[spark] override def map(f: Double => Double): Vector = new DenseVector(values.map(f))
+  private[spark] override def mapActiveValues(f: Double => Double): Vector = mapValues(f)
 
-  private[spark] override def update(f: Double => Double): Vector = {
-    var i = 0
+  private[spark] def mapActivePairs(f: (Int, Double) => Double): Vector = mapPairs(f)
+
+  private[spark] def mapValues(f: Double => Double): Vector = {
+    new DenseVector(values.map(f))
+  }
+
+  private[spark] def mapPairs(f: (Int, Double) => Double): Vector = {
     val len = values.length
+    val arr = new Array[Double](len)
+    var i = 0
+
     while (i < len) {
-      values(i) = f(values(i))
+      arr(i) = f(i, values(i))
       i += 1
     }
-    this
+    new DenseVector(arr)
   }
 
   private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
@@ -714,17 +744,27 @@ class SparseVector @Since("1.0.0") (
 
   private[spark] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
-  private[spark] override def map(f: Double => Double): Vector =
+  private[spark] override def mapActiveValues(f: Double => Double): Vector =
     new SparseVector(size, indices.clone(), values.map(f))
 
-  private[spark] override def update(f: Double => Double): Vector = {
+  private[spark] def mapActivePairs(f: (Int, Double) => Double): Vector = {
     val len = values.length
+    val arr = new Array[Double](len)
     var i = 0
+
     while (i < len) {
-      values(i) = f(values(i))
+      arr(i) = f(indices(i), values(i))
       i += 1
     }
-    this
+    new SparseVector(size, indices.clone(), arr)
+  }
+
+  private[spark] def mapValues(f: Double => Double): Vector = {
+    this.toDense.mapValues(f).toSparse
+  }
+
+  private[spark] def mapPairs(f: (Int, Double) => Double): Vector = {
+    this.toDense.mapPairs(f).toSparse
   }
 
   private[spark] override def foreachActive(f: (Int, Double) => Unit) = {

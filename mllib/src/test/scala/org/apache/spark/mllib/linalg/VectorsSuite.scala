@@ -277,18 +277,58 @@ class VectorsSuite extends SparkFunSuite with Logging {
     }
   }
 
-  test("map, update") {
+  test("mapActiveValues") {
     val dv1 = Vectors.dense(0.0, 1.2, 3.1, 0.0)
-    val sv1 = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1), (3, 0.0)))
+    val sv1 = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1)))
 
-    val dv2 = dv1.map(_ * 2)
-    val sv2 = sv1.map(_ * 2)
+    val expectedOfDense = Array(1.0, 2.2, 4.1, 1.0)
+    val expectedOfSparse =  Array(0.0, 2.2, 4.1, 0.0)
 
-    dv1.update(_ * 2)
-    sv1.update(_ * 2)
+    val dv2 = dv1.mapActiveValues(_ + 1.0)
+    val sv2 = sv1.mapActiveValues(_ + 1.0)
 
-    assert(dv1.toArray === dv2.toArray)
-    assert(sv1.toArray === sv2.toArray)
+    assert(expectedOfDense === dv2.toArray)
+    assert(expectedOfSparse === sv2.toArray)
+  }
+
+  test("mapValues") {
+    val dv1 = Vectors.dense(0.0, 1.2, 3.1, 0.0)
+    val sv1 = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1)))
+
+    val expected = Array(1.0, 3.4, 7.2, 1.0)
+
+    val dv2 = dv1.mapValues(_ * 2 + 1.0)
+    val sv2 = sv1.mapValues(_ * 2 + 1.0)
+
+    assert(expected === dv2.toArray)
+    assert(expected === sv2.toArray)
+  }
+
+  test("mapActivePairs") {
+    val dv1 = Vectors.dense(0.0, 1.2, 3.1, 0.0)
+    val sv1 = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1)))
+
+    val expectedOfDense = Array(0.0, 2.2, 5.1, 3.0)
+    val expectedOfSparse = Array(0.0, 2.2, 5.1, 0.0)
+
+    val dv2 = dv1.mapActivePairs{ (index, value) => index + value }
+    val sv2 = sv1.mapActivePairs{ (index, value) => index + value }
+
+    assert(expectedOfDense === dv2.toArray)
+    assert(expectedOfSparse === sv2.toArray)
+  }
+
+  test("mapPairs") {
+    val dv1 = Vectors.dense(0.0, 1.2, 3.1, 0.0)
+    val sv1 = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1)))
+
+    val expected = Array(0.0, 2.2, 5.1, 3.0)
+
+    val dv2 = dv1.mapPairs{ (index, value) => index + value }
+    val sv2 = sv1.mapPairs{ (index, value) => index + value }
+
+    assert(expected === dv2.toArray)
+    assert(expected === sv2.toArray)
   }
 
   test("foreachActive") {
