@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.feature.StandardScaler
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.rdd.RDD
@@ -35,8 +35,8 @@ import org.apache.spark.storage.StorageLevel
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  *
- * @since 0.8.0
  */
+@Since("0.8.0")
 @DeveloperApi
 abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double)
   extends Serializable {
@@ -56,8 +56,8 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * @param testData RDD representing data points to be predicted
    * @return RDD[Double] where each entry contains the corresponding prediction
    *
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def predict(testData: RDD[Vector]): RDD[Double] = {
     // A small optimization to avoid serializing the entire model. Only the weightsMatrix
     // and intercept is needed.
@@ -76,8 +76,8 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * @param testData array representing a single data point
    * @return Double prediction from the trained model
    *
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def predict(testData: Vector): Double = {
     predictPoint(testData, weights, intercept)
   }
@@ -95,8 +95,8 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
  * GeneralizedLinearAlgorithm implements methods to train a Generalized Linear Model (GLM).
  * This class should be extended with an Optimizer to create a new GLM.
  *
- * @since 0.8.0
  */
+@Since("0.8.0")
 @DeveloperApi
 abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   extends Logging with Serializable {
@@ -106,8 +106,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   /**
    * The optimizer to solve the problem.
    *
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def optimizer: Optimizer
 
   /** Whether to add intercept (default: false). */
@@ -143,8 +143,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   /**
    * The dimension of training features.
    *
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def getNumFeatures: Int = this.numFeatures
 
   /**
@@ -168,16 +168,16 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   /**
    * Get if the algorithm uses addIntercept
    *
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def isAddIntercept: Boolean = this.addIntercept
 
   /**
    * Set if the algorithm should add an intercept. Default false.
    * We set the default to false because adding the intercept will cause memory allocation.
    *
-   * @since 0.8.0
    */
+  @Since("0.8.0")
   def setIntercept(addIntercept: Boolean): this.type = {
     this.addIntercept = addIntercept
     this
@@ -186,8 +186,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   /**
    * Set if the algorithm should validate data before training. Default true.
    *
-   * @since 0.8.0
    */
+  @Since("0.8.0")
   def setValidateData(validateData: Boolean): this.type = {
     this.validateData = validateData
     this
@@ -197,8 +197,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * Run the algorithm with the configured parameters on an input
    * RDD of LabeledPoint entries.
    *
-   * @since 0.8.0
    */
+  @Since("0.8.0")
   def run(input: RDD[LabeledPoint]): M = {
     if (numFeatures < 0) {
       numFeatures = input.map(_.features.size).first()
@@ -231,8 +231,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * Run the algorithm with the configured parameters on an input RDD
    * of LabeledPoint entries starting from the initial weights provided.
    *
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
 
     if (numFeatures < 0) {

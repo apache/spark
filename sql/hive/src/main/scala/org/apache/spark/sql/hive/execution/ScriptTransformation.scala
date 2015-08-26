@@ -21,7 +21,7 @@ import java.io._
 import java.util.Properties
 import javax.annotation.Nullable
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.serde.serdeConstants
@@ -61,7 +61,7 @@ case class ScriptTransformation(
   protected override def doExecute(): RDD[InternalRow] = {
     def processIterator(inputIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
       val cmd = List("/bin/bash", "-c", script)
-      val builder = new ProcessBuilder(cmd)
+      val builder = new ProcessBuilder(cmd.asJava)
 
       val proc = builder.start()
       val inputStream = proc.getInputStream
@@ -172,10 +172,10 @@ case class ScriptTransformation(
             val fieldList = outputSoi.getAllStructFieldRefs()
             var i = 0
             while (i < dataList.size()) {
-              if (dataList(i) == null) {
+              if (dataList.get(i) == null) {
                 mutableRow.setNullAt(i)
               } else {
-                mutableRow(i) = unwrap(dataList(i), fieldList(i).getFieldObjectInspector)
+                mutableRow(i) = unwrap(dataList.get(i), fieldList.get(i).getFieldObjectInspector)
               }
               i += 1
             }
@@ -307,7 +307,7 @@ case class HiveScriptIOSchema (
       val serde = initSerDe(serdeClass, columns, columnTypes, inputSerdeProps)
       val fieldObjectInspectors = columnTypes.map(toInspector)
       val objectInspector = ObjectInspectorFactory
-        .getStandardStructObjectInspector(columns, fieldObjectInspectors)
+        .getStandardStructObjectInspector(columns.asJava, fieldObjectInspectors.asJava)
         .asInstanceOf[ObjectInspector]
       (serde, objectInspector)
     }
@@ -342,7 +342,7 @@ case class HiveScriptIOSchema (
     propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
 
     val properties = new Properties()
-    properties.putAll(propsMap)
+    properties.putAll(propsMap.asJava)
     serde.initialize(null, properties)
 
     serde

@@ -72,7 +72,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
  * Returns null if the separator is null. Otherwise, concat_ws skips all null values.
  */
 case class ConcatWs(children: Seq[Expression])
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, s"$prettyName requires at least one argument.")
 
@@ -114,8 +114,44 @@ case class ConcatWs(children: Seq[Expression])
         boolean ${ev.isNull} = ${ev.primitive} == null;
       """
     } else {
-      // Contains a mix of strings and array<string>s. Fall back to interpreted mode for now.
-      super.genCode(ctx, ev)
+      val array = ctx.freshName("array")
+      val varargNum = ctx.freshName("varargNum")
+      val idxInVararg = ctx.freshName("idxInVararg")
+
+      val evals = children.map(_.gen(ctx))
+      val (varargCount, varargBuild) = children.tail.zip(evals.tail).map { case (child, eval) =>
+        child.dataType match {
+          case StringType =>
+            ("", // we count all the StringType arguments num at once below.
+              s"$array[$idxInVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.primitive};")
+          case _: ArrayType =>
+            val size = ctx.freshName("n")
+            (s"""
+              if (!${eval.isNull}) {
+                $varargNum += ${eval.primitive}.numElements();
+              }
+            """,
+            s"""
+            if (!${eval.isNull}) {
+              final int $size = ${eval.primitive}.numElements();
+              for (int j = 0; j < $size; j ++) {
+                $array[$idxInVararg ++] = ${ctx.getValue(eval.primitive, StringType, "j")};
+              }
+            }
+            """)
+        }
+      }.unzip
+
+      evals.map(_.code).mkString("\n") +
+      s"""
+        int $varargNum = ${children.count(_.dataType == StringType) - 1};
+        int $idxInVararg = 0;
+        ${varargCount.mkString("\n")}
+        UTF8String[] $array = new UTF8String[$varargNum];
+        ${varargBuild.mkString("\n")}
+        UTF8String ${ev.primitive} = UTF8String.concatWs(${evals.head.primitive}, $array);
+        boolean ${ev.isNull} = ${ev.primitive} == null;
+      """
     }
   }
 }

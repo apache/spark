@@ -37,7 +37,8 @@ object DateTimeUtils {
   type SQLTimestamp = Long
 
   // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
-  final val JULIAN_DAY_OF_EPOCH = 2440587  // and .5
+  // it's 2440587.5, rounding up to compatible with Hive
+  final val JULIAN_DAY_OF_EPOCH = 2440588
   final val SECONDS_PER_DAY = 60 * 60 * 24L
   final val MICROS_PER_SECOND = 1000L * 1000L
   final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
@@ -183,7 +184,7 @@ object DateTimeUtils {
    */
   def fromJulianDay(day: Int, nanoseconds: Long): SQLTimestamp = {
     // use Long to avoid rounding errors
-    val seconds = (day - JULIAN_DAY_OF_EPOCH).toLong * SECONDS_PER_DAY - SECONDS_PER_DAY / 2
+    val seconds = (day - JULIAN_DAY_OF_EPOCH).toLong * SECONDS_PER_DAY
     seconds * MICROS_PER_SECOND + nanoseconds / 1000L
   }
 
@@ -191,7 +192,7 @@ object DateTimeUtils {
    * Returns Julian day and nanoseconds in a day from the number of microseconds
    */
   def toJulianDay(us: SQLTimestamp): (Int, Long) = {
-    val seconds = us / MICROS_PER_SECOND + SECONDS_PER_DAY / 2
+    val seconds = us / MICROS_PER_SECOND
     val day = seconds / SECONDS_PER_DAY + JULIAN_DAY_OF_EPOCH
     val secondsInDay = seconds % SECONDS_PER_DAY
     val nanos = (us % MICROS_PER_SECOND) * 1000L

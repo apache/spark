@@ -53,6 +53,13 @@ private[r] class RBackendHandler(server: RBackend)
 
     if (objId == "SparkRHandler") {
       methodName match {
+        // This function is for test-purpose only
+        case "echo" =>
+          val args = readArgs(numArgs, dis)
+          assert(numArgs == 1)
+
+          writeInt(dos, 0)
+          writeObject(dos, args(0))
         case "stopBackend" =>
           writeInt(dos, 0)
           writeType(dos, "void")
