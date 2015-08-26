@@ -213,10 +213,22 @@ private[spark] object SerDe {
     }
   }
 
-  def writeObject(dos: DataOutputStream, value: Object): Unit = {
-    if (value == null) {
+  def writeObject(dos: DataOutputStream, obj: Object): Unit = {
+    if (obj == null) {
       writeType(dos, "void")
     } else {
+      // Support some Scala types.
+
+      // Convert ArrayType collected from DataFrame to Java array
+      // Collected data of ArrayType from a DataFrame is observed to be of
+      // type "scala.collection.mutable.WrappedArray"
+      val value =
+        if (obj.getClass.getName.startsWith("scala.collection.mutable.WrappedArray")) {
+          obj.asInstanceOf[Seq[Any]].toArray
+        } else {
+          obj
+        }
+
       value.getClass.getName match {
         case "java.lang.Character" =>
           writeType(dos, "character")

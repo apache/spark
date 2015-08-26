@@ -49,6 +49,14 @@ mockLinesNa <- c("{\"name\":\"Bob\",\"age\":16,\"height\":176.5}",
 jsonPathNa <- tempfile(pattern="sparkr-test", fileext=".tmp")
 writeLines(mockLinesNa, jsonPathNa)
 
+# For test complex types in DataFrame
+mockLinesComplexType <- 
+  c("{\"c1\":[1, 2, 3], \"c2\":[\"a\", \"b\", \"c\"], \"c3\":[1.0, 2.0, 3.0]}",
+    "{\"c1\":[4, 5, 6], \"c2\":[\"d\", \"e\", \"f\"], \"c3\":[4.0, 5.0, 6.0]}",
+    "{\"c1\":[7, 8, 9], \"c2\":[\"g\", \"h\", \"i\"], \"c3\":[7.0, 8.0, 9.0]}")
+complexTypeJsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+writeLines(mockLinesComplexType, complexTypeJsonPath)
+
 test_that("infer types", {
   expect_equal(infer_type(1L), "integer")
   expect_equal(infer_type(1.0), "double")
@@ -248,6 +256,20 @@ test_that("create DataFrame with different data types", {
 #  ldf <- collect(df)
 #  expect_equal(ldf[1,], l[[1]])
 #})
+
+test_that("Collect DataFrame with complex types", {
+  # only ArrayType now
+  # TODO: tests for StructType and MapType after they are supported
+  df <- jsonFile(sqlContext, complexTypeJsonPath)
+  
+  ldf <- collect(df)
+  expect_equal(nrow(ldf), 3)
+  expect_equal(ncol(ldf), 3)
+  expect_equal(names(ldf), c("c1", "c2", "c3"))
+  expect_equal(ldf$c1, list(list(1, 2, 3), list(4, 5, 6), list (7, 8, 9)))
+  expect_equal(ldf$c2, list(list("a", "b", "c"), list("d", "e", "f"), list ("g", "h", "i")))
+  expect_equal(ldf$c3, list(list(1.0, 2.0, 3.0), list(4.0, 5.0, 6.0), list (7.0, 8.0, 9.0)))
+})
 
 test_that("jsonFile() on a local file returns a DataFrame", {
   df <- jsonFile(sqlContext, jsonPath)
