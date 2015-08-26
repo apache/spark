@@ -38,16 +38,19 @@ import org.apache.spark.sql.types._
  * Note: Users should not implement this interface.
  */
 @SQLUserDefinedType(udt = classOf[VectorUDT])
+@Since("1.0.0")
 sealed trait Vector extends Serializable {
 
   /**
    * Size of the vector.
    */
+  @Since("1.0.0")
   def size: Int
 
   /**
    * Converts the instance to a double array.
    */
+  @Since("1.0.0")
   def toArray: Array[Double]
 
   override def equals(other: Any): Boolean = {
@@ -99,11 +102,13 @@ sealed trait Vector extends Serializable {
    * Gets the value of the ith element.
    * @param i index
    */
+  @Since("1.1.0")
   def apply(i: Int): Double = toBreeze(i)
 
   /**
    * Makes a deep copy of this vector.
    */
+  @Since("1.1.0")
   def copy: Vector = {
     throw new NotImplementedError(s"copy is not implemented for ${this.getClass}.")
   }
@@ -121,26 +126,31 @@ sealed trait Vector extends Serializable {
    * Number of active entries.  An "active entry" is an element which is explicitly stored,
    * regardless of its value.  Note that inactive entries have value 0.
    */
+  @Since("1.4.0")
   def numActives: Int
 
   /**
    * Number of nonzero elements. This scans all active values and count nonzeros.
    */
+  @Since("1.4.0")
   def numNonzeros: Int
 
   /**
    * Converts this vector to a sparse vector with all explicit zeros removed.
    */
+  @Since("1.4.0")
   def toSparse: SparseVector
 
   /**
    * Converts this vector to a dense vector.
    */
+  @Since("1.4.0")
   def toDense: DenseVector = new DenseVector(this.toArray)
 
   /**
    * Returns a vector in either dense or sparse format, whichever uses less storage.
    */
+  @Since("1.4.0")
   def compressed: Vector = {
     val nnz = numNonzeros
     // A dense vector needs 8 * size + 8 bytes, while a sparse vector needs 12 * nnz + 20 bytes.
@@ -155,6 +165,7 @@ sealed trait Vector extends Serializable {
    * Find the index of a maximal element.  Returns the first maximal element in case of a tie.
    * Returns -1 if vector has length 0.
    */
+  @Since("1.5.0")
   def argmax: Int
 }
 
@@ -532,7 +543,8 @@ object Vectors {
  */
 @Since("1.0.0")
 @SQLUserDefinedType(udt = classOf[VectorUDT])
-class DenseVector(val values: Array[Double]) extends Vector {
+class DenseVector @Since("1.0.0") (
+    @Since("1.0.0") val values: Array[Double]) extends Vector {
 
   @Since("1.0.0")
   override def size: Int = values.length
@@ -632,7 +644,9 @@ class DenseVector(val values: Array[Double]) extends Vector {
 
 @Since("1.3.0")
 object DenseVector {
+
   /** Extracts the value array from a dense vector. */
+  @Since("1.3.0")
   def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
 }
 
@@ -645,10 +659,10 @@ object DenseVector {
  */
 @Since("1.0.0")
 @SQLUserDefinedType(udt = classOf[VectorUDT])
-class SparseVector(
-    override val size: Int,
-    val indices: Array[Int],
-    val values: Array[Double]) extends Vector {
+class SparseVector @Since("1.0.0") (
+    @Since("1.0.0") override val size: Int,
+    @Since("1.0.0") val indices: Array[Int],
+    @Since("1.0.0") val values: Array[Double]) extends Vector {
 
   require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
     s" indices match the dimension of the values. You provided ${indices.length} indices and " +
@@ -819,6 +833,7 @@ class SparseVector(
 
 @Since("1.3.0")
 object SparseVector {
+  @Since("1.3.0")
   def unapply(sv: SparseVector): Option[(Int, Array[Int], Array[Double])] =
     Some((sv.size, sv.indices, sv.values))
 }
