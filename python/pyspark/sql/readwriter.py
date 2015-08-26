@@ -123,45 +123,35 @@ class DataFrameReader(object):
             return self._df(self._jreader.load())
 
     @since(1.4)
-    def json(self, path, schema=None):
+    def json(self, pathOrRdd, schema=None):
         """
-        Loads a JSON file (one object per line) and returns the result as
-        a :class`DataFrame`.
+        Loads a JSON file (one object per line) or an RDD of Strings storing JSON objects
+        (one object per record) and returns the result as a :class`DataFrame`.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
 
-        :param path: string, path to the JSON dataset.
+        :param pathOrRdd: string represents path to the JSON dataset,
+                          or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`StructType` for the input schema.
 
-        >>> df = sqlContext.read.json('python/test_support/sql/people.json')
-        >>> df.dtypes
+        >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
+        >>> df1.dtypes
         [('age', 'bigint'), ('name', 'string')]
-
-        """
-        if schema is not None:
-            self.schema(schema)
-        return self._df(self._jreader.json(path))
-
-    def json(self, rdd, schema=None):
-        """
-        Loads an RDD of Strings storing JSON objects (one object per record)
-        and returns the result as a :class`DataFrame`.
-
-        If the ``schema`` parameter is not specified, this function goes
-        through the input once to determine the input schema.
-
-        :param rdd: RDD of Strings storing JSON objects.
-        :param schema: an optional :class:`StructType` for the input schema.
-
         >>> rdd = sc.textFile('python/test_support/sql/people.json')
-        >>> df = sqlContext.read.json(rdd)
-        >>> df.dtypes
+        >>> df2 = sqlContext.read.json(rdd)
+        >>> df2.dtypes
         [('age', 'bigint'), ('name', 'string')]
+
         """
         if schema is not None:
             self.schema(schema)
-        return self._df(self._jreader.json(rdd._jrdd))
+        if isinstance(pathOrRdd, basestring):
+            return self._df(self._jreader.json(pathOrRdd))
+        elif isinstance(pathOrRdd, RDD):
+            return self._df(self._jreader.json(pathOrRdd._jrdd))
+        else:
+            raise Exception("DataFrameReader.json can only load path or RDD")
 
     @since(1.4)
     def table(self, tableName):
