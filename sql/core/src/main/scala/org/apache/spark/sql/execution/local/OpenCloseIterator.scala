@@ -17,27 +17,26 @@
 
 package org.apache.spark.sql.execution.local
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, Attribute, NamedExpression}
+import org.apache.spark.sql.execution.RowIterator
 
+/**
+ * A special RowIterator that has two extra methods: `open` and `close`, which we can use them to
+ * manage resources in this Iterator.
+ */
+private[sql] abstract class OpenCloseRowIterator extends RowIterator {
 
-case class ProjectNode(projectList: Seq[NamedExpression], child: LocalNode) extends UnaryLocalNode {
+  /**
+   * Initializes the iterator state. Must be called before using this Iterator.
+   *
+   * Implementations of this must also call the `open()` function of its children.
+   */
+  def open(): Unit
 
-  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+  /**
+   * Closes the iterator and releases all resources.
+   *
+   * Implementations of this must also call the `close()` function of its children.
+   */
+  def close(): Unit
 
-  override def execute(): OpenCloseRowIterator = new OpenCloseRowIterator {
-
-    private val project = UnsafeProjection.create(projectList, child.output)
-
-    private val childIter = child.execute()
-
-    override def open(): Unit = childIter.open()
-
-    override def close(): Unit = childIter.close()
-
-    override def getRow: InternalRow = project.apply(childIter.getRow)
-
-    override def advanceNext(): Boolean = childIter.advanceNext()
-
-  }
 }
