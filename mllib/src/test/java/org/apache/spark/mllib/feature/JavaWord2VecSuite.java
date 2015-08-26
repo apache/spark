@@ -18,12 +18,12 @@
 package org.apache.spark.mllib.feature;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.List;
 
 import scala.Tuple2;
 
-import com.google.common.collect.Lists;
-import com.google.common.base.Strings;
+import org.apache.commons.lang.StringUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -50,9 +50,9 @@ public class JavaWord2VecSuite implements Serializable {
   @SuppressWarnings("unchecked")
   public void word2Vec() {
     // The tests are to check Java compatibility.
-    String sentence = Strings.repeat("a b ", 100) + Strings.repeat("a c ", 10);
-    List<String> words = Lists.newArrayList(sentence.split(" "));
-    List<List<String>> localDoc = Lists.newArrayList(words, words);
+    String sentence = StringUtils.repeat("a b ", 100) + StringUtils.repeat("a c ", 10);
+    List<String> words = Arrays.asList(sentence.split(" "));
+    List<List<String>> localDoc = Arrays.asList(words, words);
     JavaRDD<List<String>> doc = sc.parallelize(localDoc);
     Word2Vec word2vec = new Word2Vec()
       .setVectorSize(10)
