@@ -301,10 +301,10 @@ object RandomRDDs {
    */
   @Since("1.3.0")
   def gammaJavaRDD(
-    jsc: JavaSparkContext,
-    shape: Double,
-    scale: Double,
-    size: Long): JavaDoubleRDD = {
+      jsc: JavaSparkContext,
+      shape: Double,
+      scale: Double,
+      size: Long): JavaDoubleRDD = {
     JavaDoubleRDD.fromRDD(gammaRDD(jsc.sc, shape, scale, size))
   }
 
@@ -364,10 +364,10 @@ object RandomRDDs {
    */
   @Since("1.3.0")
   def logNormalJavaRDD(
-    jsc: JavaSparkContext,
-    mean: Double,
-    std: Double,
-    size: Long): JavaDoubleRDD = {
+      jsc: JavaSparkContext,
+      mean: Double,
+      std: Double,
+      size: Long): JavaDoubleRDD = {
     JavaDoubleRDD.fromRDD(logNormalRDD(jsc.sc, mean, std, size))
   }
 
