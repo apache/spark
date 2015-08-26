@@ -131,10 +131,10 @@ private[mllib] object GridPartitioner {
  */
 @Since("1.3.0")
 @Experimental
-class BlockMatrix(
-    val blocks: RDD[((Int, Int), Matrix)],
-    val rowsPerBlock: Int,
-    val colsPerBlock: Int,
+class BlockMatrix @Since("1.3.0") (
+    @Since("1.3.0") val blocks: RDD[((Int, Int), Matrix)],
+    @Since("1.3.0") val rowsPerBlock: Int,
+    @Since("1.3.0") val colsPerBlock: Int,
     private var nRows: Long,
     private var nCols: Long) extends DistributedMatrix with Logging {
 
@@ -171,7 +171,9 @@ class BlockMatrix(
     nCols
   }
 
+  @Since("1.3.0")
   val numRowBlocks = math.ceil(numRows() * 1.0 / rowsPerBlock).toInt
+  @Since("1.3.0")
   val numColBlocks = math.ceil(numCols() * 1.0 / colsPerBlock).toInt
 
   private[mllib] def createPartitioner(): GridPartitioner =

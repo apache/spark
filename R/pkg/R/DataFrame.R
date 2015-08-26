@@ -652,18 +652,49 @@ setMethod("dim",
 setMethod("collect",
           signature(x = "DataFrame"),
           function(x, stringsAsFactors = FALSE) {
-            # listCols is a list of raw vectors, one per column
-            listCols <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToCols", x@sdf)
-            cols <- lapply(listCols, function(col) {
-              objRaw <- rawConnection(col)
-              numRows <- readInt(objRaw)
-              col <- readCol(objRaw, numRows)
-              close(objRaw)
-              col
-            })
-            names(cols) <- columns(x)
-            do.call(cbind.data.frame, list(cols, stringsAsFactors = stringsAsFactors))
-          })
+            names <- columns(x)
+            ncol <- length(names)
+            if (ncol <= 0) {
+              # empty data.frame with 0 columns and 0 rows
+              data.frame()
+            } else {
+              # listCols is a list of columns
+              listCols <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToCols", x@sdf)
+              stopifnot(length(listCols) == ncol)
+              
+              # An empty data.frame with 0 columns and number of rows as collected
+              nrow <- length(listCols[[1]])
+              if (nrow <= 0) {
+                df <- data.frame()
+              } else {
+                df <- data.frame(row.names = 1 : nrow)                
+              }
+              
+              # Append columns one by one
+              for (colIndex in 1 : ncol) {
+                # Note: appending a column of list type into a data.frame so that
+                # data of complex type can be held. But getting a cell from a column
+                # of list type returns a list instead of a vector. So for columns of
+                # non-complex type, append them as vector.
+                col <- listCols[[colIndex]]
+                if (length(col) <= 0) {
+                  df[[names[colIndex]]] <- col
+                } else {
+                  # TODO: more robust check on column of primitive types
+                  vec <- do.call(c, col)
+                  if (class(vec) != "list") {
+                    df[[names[colIndex]]] <- vec                  
+                  } else {
+                    # For columns of complex type, be careful to access them.
+                    # Get a column of complex type returns a list.
+                    # Get a cell from a column of complex type returns a list instead of a vector.
+                    df[[names[colIndex]]] <- col
+                 }
+              }
+            }
+            df
+          }
+        })
 
 #' Limit
 #'
@@ -954,9 +985,11 @@ setMethod("$<-", signature(x = "DataFrame"),
             x
           })
 
+setClassUnion("numericOrcharacter", c("numeric", "character"))
+
 #' @rdname select
 #' @name [[
-setMethod("[[", signature(x = "DataFrame"),
+setMethod("[[", signature(x = "DataFrame", i = "numericOrcharacter"),
           function(x, i) {
             if (is.numeric(i)) {
               cols <- columns(x)
@@ -979,6 +1012,20 @@ setMethod("[", signature(x = "DataFrame", i = "missing"),
             select(x, j)
           })
 
+#' @rdname select
+#' @name [
+setMethod("[", signature(x = "DataFrame", i = "Column"),
+          function(x, i, j, ...) {
+            # It could handle i as "character" but it seems confusing and not required
+            # https://stat.ethz.ch/R-manual/R-devel/library/base/html/Extract.data.frame.html
+            filtered <- filter(x, i)
+            if (!missing(j)) {
+              filtered[, j]
+            } else {
+              filtered
+            }
+          })
+
 #' Select
 #'
 #' Selects a set of columns with names or Column expressions.
@@ -997,8 +1044,12 @@ setMethod("[", signature(x = "DataFrame", i = "missing"),
 #'   # Columns can also be selected using `[[` and `[`
 #'   df[[2]] == df[["age"]]
 #'   df[,2] == df[,"age"]
+#'   df[,c("name", "age")]
 #'   # Similar to R data frames columns can also be selected using `$`
 #'   df$age
+#'   # It can also be subset on rows and Columns
+#'   df[df$name == "Smith", c(1,2)]
+#'   df[df$age %in% c(19, 30), 1:2]
 #' }
 setMethod("select", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {

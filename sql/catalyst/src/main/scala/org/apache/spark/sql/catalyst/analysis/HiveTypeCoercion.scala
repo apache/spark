@@ -396,8 +396,14 @@ object HiveTypeCoercion {
             resultType)
 
         case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val resultType = DecimalType.bounded(p1 - s1 + s2 + max(6, s1 + p2 + 1),
-            max(6, s1 + p2 + 1))
+          var intDig = min(DecimalType.MAX_SCALE, p1 - s1 + s2)
+          var decDig = min(DecimalType.MAX_SCALE, max(6, s1 + p2 + 1))
+          val diff = (intDig + decDig) - DecimalType.MAX_SCALE
+          if (diff > 0) {
+            decDig -= diff / 2 + 1
+            intDig = DecimalType.MAX_SCALE - decDig
+          }
+          val resultType = DecimalType.bounded(intDig + decDig, decDig)
           val widerType = widerDecimalType(p1, s1, p2, s2)
           CheckOverflow(Divide(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
             resultType)

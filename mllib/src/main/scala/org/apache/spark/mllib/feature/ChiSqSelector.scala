@@ -33,7 +33,7 @@ import org.apache.spark.rdd.RDD
  */
 @Since("1.3.0")
 @Experimental
-class ChiSqSelectorModel (
+class ChiSqSelectorModel @Since("1.3.0") (
   @Since("1.3.0") val selectedFeatures: Array[Int]) extends VectorTransformer {
 
   require(isSorted(selectedFeatures), "Array has to be sorted asc")
@@ -112,7 +112,7 @@ class ChiSqSelectorModel (
  */
 @Since("1.3.0")
 @Experimental
-class ChiSqSelector (
+class ChiSqSelector @Since("1.3.0") (
   @Since("1.3.0") val numTopFeatures: Int) extends Serializable {
 
   /**
