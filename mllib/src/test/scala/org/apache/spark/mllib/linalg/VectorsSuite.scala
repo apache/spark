@@ -282,7 +282,7 @@ class VectorsSuite extends SparkFunSuite with Logging {
     val sv1 = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1)))
 
     val expectedOfDense = Array(1.0, 2.2, 4.1, 1.0)
-    val expectedOfSparse =  Array(0.0, 2.2, 4.1, 0.0)
+    val expectedOfSparse = Array(0.0, 2.2, 4.1, 0.0)
 
     val dv2 = dv1.mapActiveValues(_ + 1.0)
     val sv2 = sv1.mapActiveValues(_ + 1.0)
