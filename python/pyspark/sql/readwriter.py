@@ -24,6 +24,16 @@ from pyspark.sql.types import *
 __all__ = ["DataFrameReader", "DataFrameWriter"]
 
 
+def to_str(value):
+    """
+    A wrapper over str(), but convert bool values to lower case string
+    """
+    if isinstance(value, bool):
+        return str(value).lower()
+    else:
+        return str(value)
+
+
 class DataFrameReader(object):
     """
     Interface used to load a :class:`DataFrame` from external storage systems
@@ -77,7 +87,7 @@ class DataFrameReader(object):
     def option(self, key, value):
         """Adds an input option for the underlying data source.
         """
-        self._jreader = self._jreader.option(key, value)
+        self._jreader = self._jreader.option(key, to_str(value))
         return self
 
     @since(1.4)
@@ -85,7 +95,7 @@ class DataFrameReader(object):
         """Adds input options for the underlying data source.
         """
         for k in options:
-            self._jreader = self._jreader.option(k, options[k])
+            self._jreader = self._jreader.option(k, to_str(options[k]))
         return self
 
     @since(1.4)
@@ -97,7 +107,8 @@ class DataFrameReader(object):
         :param schema: optional :class:`StructType` for the input schema.
         :param options: all other string options
 
-        >>> df = sqlContext.read.load('python/test_support/sql/parquet_partitioned')
+        >>> df = sqlContext.read.load('python/test_support/sql/parquet_partitioned', opt1=True,
+        ...     opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
@@ -171,7 +182,7 @@ class DataFrameReader(object):
 
     @since(1.4)
     def jdbc(self, url, table, column=None, lowerBound=None, upperBound=None, numPartitions=None,
-             predicates=None, properties={}):
+             predicates=None, properties=None):
         """
         Construct a :class:`DataFrame` representing the database table accessible
         via JDBC URL `url` named `table` and connection `properties`.
@@ -197,6 +208,8 @@ class DataFrameReader(object):
                            should be included.
         :return: a DataFrame
         """
+        if properties is None:
+            properties = dict()
         jprop = JavaClass("java.util.Properties", self._sqlContext._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
@@ -416,7 +429,7 @@ class DataFrameWriter(object):
         self._jwrite.orc(path)
 
     @since(1.4)
-    def jdbc(self, url, table, mode=None, properties={}):
+    def jdbc(self, url, table, mode=None, properties=None):
         """Saves the content of the :class:`DataFrame` to a external database table via JDBC.
 
         .. note:: Don't create too many partitions in parallel on a large cluster;\
@@ -434,6 +447,8 @@ class DataFrameWriter(object):
                            arbitrary string tag/value. Normally at least a
                            "user" and "password" property should be included.
         """
+        if properties is None:
+            properties = dict()
         jprop = JavaClass("java.util.Properties", self._sqlContext._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])

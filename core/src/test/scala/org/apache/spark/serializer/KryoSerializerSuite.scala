@@ -19,6 +19,7 @@ package org.apache.spark.serializer
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
@@ -173,7 +174,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   test("asJavaIterable") {
     // Serialize a collection wrapped by asJavaIterable
     val ser = new KryoSerializer(conf).newInstance()
-    val a = ser.serialize(scala.collection.convert.WrapAsJava.asJavaIterable(Seq(12345)))
+    val a = ser.serialize(Seq(12345).asJava)
     val b = ser.deserialize[java.lang.Iterable[Int]](a)
     assert(b.iterator().next() === 12345)
 

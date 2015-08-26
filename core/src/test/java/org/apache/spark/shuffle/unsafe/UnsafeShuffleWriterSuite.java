@@ -111,10 +111,11 @@ public class UnsafeShuffleWriterSuite {
     mergedOutputFile = File.createTempFile("mergedoutput", "", tempDir);
     partitionSizesInMergedFile = null;
     spillFilesCreated.clear();
-    conf = new SparkConf();
+    conf = new SparkConf().set("spark.buffer.pageSize", "128m");
     taskMetrics = new TaskMetrics();
 
     when(shuffleMemoryManager.tryToAcquire(anyLong())).then(returnsFirstArg());
+    when(shuffleMemoryManager.pageSizeBytes()).thenReturn(128L * 1024 * 1024);
 
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
     when(blockManager.getDiskWriter(
@@ -190,6 +191,7 @@ public class UnsafeShuffleWriterSuite {
       });
 
     when(taskContext.taskMetrics()).thenReturn(taskMetrics);
+    when(taskContext.internalMetricsToAccumulators()).thenReturn(null);
 
     when(shuffleDep.serializer()).thenReturn(Option.<Serializer>apply(serializer));
     when(shuffleDep.partitioner()).thenReturn(hashPartitioner);
@@ -473,62 +475,22 @@ public class UnsafeShuffleWriterSuite {
 
   @Test
   public void writeRecordsThatAreBiggerThanMaxRecordSize() throws Exception {
-    // Use a custom serializer so that we have exact control over the size of serialized data.
-    final Serializer byteArraySerializer = new Serializer() {
-      @Override
-      public SerializerInstance newInstance() {
-        return new SerializerInstance() {
-          @Override
-          public SerializationStream serializeStream(final OutputStream s) {
-            return new SerializationStream() {
-              @Override
-              public void flush() { }
-
-              @Override
-              public <T> SerializationStream writeObject(T t, ClassTag<T> ev1) {
-                byte[] bytes = (byte[]) t;
-                try {
-                  s.write(bytes);
-                } catch (IOException e) {
-                  throw new RuntimeException(e);
-                }
-                return this;
-              }
-
-              @Override
-              public void close() { }
-            };
-          }
-          public <T> ByteBuffer serialize(T t, ClassTag<T> ev1) { return null; }
-          public DeserializationStream deserializeStream(InputStream s) { return null; }
-          public <T> T deserialize(ByteBuffer b, ClassLoader l, ClassTag<T> ev1) { return null; }
-          public <T> T deserialize(ByteBuffer bytes, ClassTag<T> ev1) { return null; }
-        };
-      }
-    };
-    when(shuffleDep.serializer()).thenReturn(Option.<Serializer>apply(byteArraySerializer));
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
-    // Insert a record and force a spill so that there's something to clean up:
-    writer.insertRecordIntoSorter(new Tuple2<Object, Object>(new byte[1], new byte[1]));
-    writer.forceSorterToSpill();
+    final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<Product2<Object, Object>>();
+    dataToWrite.add(new Tuple2<Object, Object>(1, ByteBuffer.wrap(new byte[1])));
     // We should be able to write a record that's right _at_ the max record size
-    final byte[] atMaxRecordSize = new byte[UnsafeShuffleExternalSorter.MAX_RECORD_SIZE];
+    final byte[] atMaxRecordSize = new byte[writer.maxRecordSizeBytes()];
     new Random(42).nextBytes(atMaxRecordSize);
-    writer.insertRecordIntoSorter(new Tuple2<Object, Object>(new byte[0], atMaxRecordSize));
-    writer.forceSorterToSpill();
-    // Inserting a record that's larger than the max record size should fail:
-    final byte[] exceedsMaxRecordSize = new byte[UnsafeShuffleExternalSorter.MAX_RECORD_SIZE + 1];
+    dataToWrite.add(new Tuple2<Object, Object>(2, ByteBuffer.wrap(atMaxRecordSize)));
+    // Inserting a record that's larger than the max record size
+    final byte[] exceedsMaxRecordSize = new byte[writer.maxRecordSizeBytes() + 1];
     new Random(42).nextBytes(exceedsMaxRecordSize);
-    Product2<Object, Object> hugeRecord =
-      new Tuple2<Object, Object>(new byte[0], exceedsMaxRecordSize);
-    try {
-      // Here, we write through the public `write()` interface instead of the test-only
-      // `insertRecordIntoSorter` interface:
-      writer.write(Collections.singletonList(hugeRecord).iterator());
-      fail("Expected exception to be thrown");
-    } catch (IOException e) {
-      // Pass
-    }
+    dataToWrite.add(new Tuple2<Object, Object>(3, ByteBuffer.wrap(exceedsMaxRecordSize)));
+    writer.write(dataToWrite.iterator());
+    writer.stop(true);
+    assertEquals(
+      HashMultiset.create(dataToWrite),
+      HashMultiset.create(readRecordsFromFile()));
     assertSpillFilesWereCleanedUp();
   }
 
@@ -541,5 +503,58 @@ public class UnsafeShuffleWriterSuite {
     writer.insertRecordIntoSorter(new Tuple2<Object, Object>(2, 2));
     writer.stop(false);
     assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testPeakMemoryUsed() throws Exception {
+    final long recordLengthBytes = 8;
+    final long pageSizeBytes = 256;
+    final long numRecordsPerPage = pageSizeBytes / recordLengthBytes;
+    when(shuffleMemoryManager.pageSizeBytes()).thenReturn(pageSizeBytes);
+    final UnsafeShuffleWriter<Object, Object> writer =
+      new UnsafeShuffleWriter<Object, Object>(
+        blockManager,
+        shuffleBlockResolver,
+        taskMemoryManager,
+        shuffleMemoryManager,
+        new UnsafeShuffleHandle<>(0, 1, shuffleDep),
+        0, // map id
+        taskContext,
+        conf);
+
+    // Peak memory should be monotonically increasing. More specifically, every time
+    // we allocate a new page it should increase by exactly the size of the page.
+    long previousPeakMemory = writer.getPeakMemoryUsedBytes();
+    long newPeakMemory;
+    try {
+      for (int i = 0; i < numRecordsPerPage * 10; i++) {
+        writer.insertRecordIntoSorter(new Tuple2<Object, Object>(1, 1));
+        newPeakMemory = writer.getPeakMemoryUsedBytes();
+        if (i % numRecordsPerPage == 0) {
+          // We allocated a new page for this record, so peak memory should change
+          assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
+        } else {
+          assertEquals(previousPeakMemory, newPeakMemory);
+        }
+        previousPeakMemory = newPeakMemory;
+      }
+
+      // Spilling should not change peak memory
+      writer.forceSorterToSpill();
+      newPeakMemory = writer.getPeakMemoryUsedBytes();
+      assertEquals(previousPeakMemory, newPeakMemory);
+      for (int i = 0; i < numRecordsPerPage; i++) {
+        writer.insertRecordIntoSorter(new Tuple2<Object, Object>(1, 1));
+      }
+      newPeakMemory = writer.getPeakMemoryUsedBytes();
+      assertEquals(previousPeakMemory, newPeakMemory);
+
+      // Closing the writer should not change peak memory
+      writer.closeAndWriteOutput();
+      newPeakMemory = writer.getPeakMemoryUsedBytes();
+      assertEquals(previousPeakMemory, newPeakMemory);
+    } finally {
+      writer.stop(false);
+    }
   }
 }

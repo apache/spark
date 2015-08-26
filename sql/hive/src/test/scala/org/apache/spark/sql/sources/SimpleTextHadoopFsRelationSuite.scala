@@ -22,10 +22,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-/*
-This is commented out due a bug in the data source API (SPARK-9291).
-
-
 class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
   override val dataSourceName: String = classOf[SimpleTextSource].getCanonicalName
 
@@ -54,4 +50,3 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
     }
   }
 }
-*/

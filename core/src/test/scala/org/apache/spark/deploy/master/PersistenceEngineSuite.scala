@@ -73,11 +73,11 @@ class PersistenceEngineSuite extends SparkFunSuite {
     assert(persistenceEngine.read[String]("test_").isEmpty)
 
     // Test deserializing objects that contain RpcEndpointRef
-    val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
+    val testRpcEnv = RpcEnv.create("test", "localhost", 12345, conf, new SecurityManager(conf))
     try {
       // Create a real endpoint so that we can test RpcEndpointRef deserialization
-      val workerEndpoint = rpcEnv.setupEndpoint("worker", new RpcEndpoint {
-        override val rpcEnv: RpcEnv = rpcEnv
+      val workerEndpoint = testRpcEnv.setupEndpoint("worker", new RpcEndpoint {
+        override val rpcEnv: RpcEnv = testRpcEnv
       })
 
       val workerToPersist = new WorkerInfo(
@@ -93,7 +93,8 @@ class PersistenceEngineSuite extends SparkFunSuite {
 
       persistenceEngine.addWorker(workerToPersist)
 
-      val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData(rpcEnv)
+      val (storedApps, storedDrivers, storedWorkers) =
+        persistenceEngine.readPersistedData(testRpcEnv)
 
       assert(storedApps.isEmpty)
       assert(storedDrivers.isEmpty)
@@ -110,8 +111,8 @@ class PersistenceEngineSuite extends SparkFunSuite {
       assert(workerToPersist.webUiPort === recoveryWorkerInfo.webUiPort)
       assert(workerToPersist.publicAddress === recoveryWorkerInfo.publicAddress)
     } finally {
-      rpcEnv.shutdown()
-      rpcEnv.awaitTermination()
+      testRpcEnv.shutdown()
+      testRpcEnv.awaitTermination()
     }
   }
 

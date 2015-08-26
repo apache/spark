@@ -24,10 +24,10 @@ import java.net.URI;
 import java.util.*;
 import java.util.concurrent.*;
 
-import scala.collection.JavaConversions;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
+import scala.collection.JavaConverters;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -51,7 +51,6 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.*;
 import org.apache.spark.api.java.function.*;
-import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.input.PortableDataStream;
 import org.apache.spark.partial.BoundedDouble;
 import org.apache.spark.partial.PartialResult;
@@ -1011,7 +1010,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
-    TaskContext context = new TaskContextImpl(0, 0, 0L, 0, null, null, false, new TaskMetrics());
+    TaskContext context = TaskContext$.MODULE$.empty();
     Assert.assertEquals(1, rdd.iterator(rdd.partitions().get(0), context).next().intValue());
   }
 
@@ -1474,7 +1473,9 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(expected, results);
 
     Partitioner defaultPartitioner = Partitioner.defaultPartitioner(
-        combinedRDD.rdd(), JavaConversions.asScalaBuffer(Lists.<RDD<?>>newArrayList()));
+        combinedRDD.rdd(),
+        JavaConverters.collectionAsScalaIterableConverter(
+            Collections.<RDD<?>>emptyList()).asScala().toSeq());
     combinedRDD = originalRDD.keyBy(keyFunction)
         .combineByKey(
              createCombinerFunction,

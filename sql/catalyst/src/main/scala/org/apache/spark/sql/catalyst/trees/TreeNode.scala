@@ -149,7 +149,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /**
    * Returns a copy of this node where `f` has been applied to all the nodes children.
    */
-  def mapChildren(f: BaseType => BaseType): this.type = {
+  def mapChildren(f: BaseType => BaseType): BaseType = {
     var changed = false
     val newArgs = productIterator.map {
       case arg: TreeNode[_] if containsChild(arg) =>
@@ -170,7 +170,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Returns a copy of this node with the children replaced.
    * TODO: Validate somewhere (in debug mode?) that children are ordered correctly.
    */
-  def withNewChildren(newChildren: Seq[BaseType]): this.type = {
+  def withNewChildren(newChildren: Seq[BaseType]): BaseType = {
     assert(newChildren.size == children.size, "Incorrect number of children")
     var changed = false
     val remainingNewChildren = newChildren.toBuffer
@@ -229,9 +229,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
     // Check if unchanged and then possibly return old copy to avoid gc churn.
     if (this fastEquals afterRule) {
-      transformChildrenDown(rule)
+      transformChildren(rule, (t, r) => t.transformDown(r))
     } else {
-      afterRule.transformChildrenDown(rule)
+      afterRule.transformChildren(rule, (t, r) => t.transformDown(r))
     }
   }
 
@@ -240,11 +240,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * this node.  When `rule` does not apply to a given node it is left unchanged.
    * @param rule the function used to transform this nodes children
    */
-  def transformChildrenDown(rule: PartialFunction[BaseType, BaseType]): this.type = {
+  protected def transformChildren(
+      rule: PartialFunction[BaseType, BaseType],
+      nextOperation: (BaseType, PartialFunction[BaseType, BaseType]) => BaseType): BaseType = {
     var changed = false
     val newArgs = productIterator.map {
       case arg: TreeNode[_] if containsChild(arg) =>
-        val newChild = arg.asInstanceOf[BaseType].transformDown(rule)
+        val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
         if (!(newChild fastEquals arg)) {
           changed = true
           newChild
@@ -252,7 +254,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
           arg
         }
       case Some(arg: TreeNode[_]) if containsChild(arg) =>
-        val newChild = arg.asInstanceOf[BaseType].transformDown(rule)
+        val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
         if (!(newChild fastEquals arg)) {
           changed = true
           Some(newChild)
@@ -263,7 +265,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       case d: DataType => d // Avoid unpacking Structs
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if containsChild(arg) =>
-          val newChild = arg.asInstanceOf[BaseType].transformDown(rule)
+          val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
           if (!(newChild fastEquals arg)) {
             changed = true
             newChild
@@ -285,7 +287,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * @param rule the function use to transform this nodes children
    */
   def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    val afterRuleOnChildren = transformChildrenUp(rule)
+    val afterRuleOnChildren = transformChildren(rule, (t, r) => t.transformUp(r))
     if (this fastEquals afterRuleOnChildren) {
       CurrentOrigin.withOrigin(origin) {
         rule.applyOrElse(this, identity[BaseType])
@@ -295,44 +297,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
       }
     }
-  }
-
-  def transformChildrenUp(rule: PartialFunction[BaseType, BaseType]): this.type = {
-    var changed = false
-    val newArgs = productIterator.map {
-      case arg: TreeNode[_] if containsChild(arg) =>
-        val newChild = arg.asInstanceOf[BaseType].transformUp(rule)
-        if (!(newChild fastEquals arg)) {
-          changed = true
-          newChild
-        } else {
-          arg
-        }
-      case Some(arg: TreeNode[_]) if containsChild(arg) =>
-        val newChild = arg.asInstanceOf[BaseType].transformUp(rule)
-        if (!(newChild fastEquals arg)) {
-          changed = true
-          Some(newChild)
-        } else {
-          Some(arg)
-        }
-      case m: Map[_, _] => m
-      case d: DataType => d // Avoid unpacking Structs
-      case args: Traversable[_] => args.map {
-        case arg: TreeNode[_] if containsChild(arg) =>
-          val newChild = arg.asInstanceOf[BaseType].transformUp(rule)
-          if (!(newChild fastEquals arg)) {
-            changed = true
-            newChild
-          } else {
-            arg
-          }
-        case other => other
-      }
-      case nonChild: AnyRef => nonChild
-      case null => null
-    }.toArray
-    if (changed) makeCopy(newArgs) else this
   }
 
   /**
@@ -348,7 +312,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * that are not present in the productIterator.
    * @param newArgs the new product arguments.
    */
-  def makeCopy(newArgs: Array[AnyRef]): this.type = attachTree(this, "makeCopy") {
+  def makeCopy(newArgs: Array[AnyRef]): BaseType = attachTree(this, "makeCopy") {
     val ctors = getClass.getConstructors.filter(_.getParameterTypes.size != 0)
     if (ctors.isEmpty) {
       sys.error(s"No valid constructor for $nodeName")
@@ -359,9 +323,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       CurrentOrigin.withOrigin(origin) {
         // Skip no-arg constructors that are just there for kryo.
         if (otherCopyArgs.isEmpty) {
-          defaultCtor.newInstance(newArgs: _*).asInstanceOf[this.type]
+          defaultCtor.newInstance(newArgs: _*).asInstanceOf[BaseType]
         } else {
-          defaultCtor.newInstance((newArgs ++ otherCopyArgs).toArray: _*).asInstanceOf[this.type]
+          defaultCtor.newInstance((newArgs ++ otherCopyArgs).toArray: _*).asInstanceOf[BaseType]
         }
       }
     } catch {

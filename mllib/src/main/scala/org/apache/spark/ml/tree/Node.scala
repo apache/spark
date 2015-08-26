@@ -19,8 +19,9 @@ package org.apache.spark.ml.tree
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.{InformationGainStats => OldInformationGainStats,
-  Node => OldNode, Predict => OldPredict}
+  Node => OldNode, Predict => OldPredict, ImpurityStats}
 
 /**
  * :: DeveloperApi ::
@@ -38,8 +39,15 @@ sealed abstract class Node extends Serializable {
   /** Impurity measure at this node (for training data) */
   def impurity: Double
 
+  /**
+   * Statistics aggregated from training data at this node, used to compute prediction, impurity,
+   * and probabilities.
+   * For classification, the array of class counts must be normalized to a probability distribution.
+   */
+  private[ml] def impurityStats: ImpurityCalculator
+
   /** Recursive prediction helper method */
-  private[ml] def predict(features: Vector): Double = prediction
+  private[ml] def predictImpl(features: Vector): LeafNode
 
   /**
    * Get the number of nodes in tree below this node, including leaf nodes.
@@ -64,6 +72,12 @@ sealed abstract class Node extends Serializable {
    * @param id  Node ID using old format IDs
    */
   private[ml] def toOld(id: Int): OldNode
+
+  /**
+   * Trace down the tree, and return the largest feature index used in any split.
+   * @return  Max feature index used in a split, or -1 if there are no splits (single leaf node).
+   */
+  private[ml] def maxSplitFeatureIndex(): Int
 }
 
 private[ml] object Node {
@@ -75,7 +89,8 @@ private[ml] object Node {
     if (oldNode.isLeaf) {
       // TODO: Once the implementation has been moved to this API, then include sufficient
       //       statistics here.
-      new LeafNode(prediction = oldNode.predict.predict, impurity = oldNode.impurity)
+      new LeafNode(prediction = oldNode.predict.predict,
+        impurity = oldNode.impurity, impurityStats = null)
     } else {
       val gain = if (oldNode.stats.nonEmpty) {
         oldNode.stats.get.gain
@@ -85,7 +100,7 @@ private[ml] object Node {
       new InternalNode(prediction = oldNode.predict.predict, impurity = oldNode.impurity,
         gain = gain, leftChild = fromOld(oldNode.leftNode.get, categoricalFeatures),
         rightChild = fromOld(oldNode.rightNode.get, categoricalFeatures),
-        split = Split.fromOld(oldNode.split.get, categoricalFeatures))
+        split = Split.fromOld(oldNode.split.get, categoricalFeatures), impurityStats = null)
     }
   }
 }
@@ -99,11 +114,13 @@ private[ml] object Node {
 @DeveloperApi
 final class LeafNode private[ml] (
     override val prediction: Double,
-    override val impurity: Double) extends Node {
+    override val impurity: Double,
+    override private[ml] val impurityStats: ImpurityCalculator) extends Node {
 
-  override def toString: String = s"LeafNode(prediction = $prediction, impurity = $impurity)"
+  override def toString: String =
+    s"LeafNode(prediction = $prediction, impurity = $impurity)"
 
-  override private[ml] def predict(features: Vector): Double = prediction
+  override private[ml] def predictImpl(features: Vector): LeafNode = this
 
   override private[tree] def numDescendants: Int = 0
 
@@ -115,10 +132,11 @@ final class LeafNode private[ml] (
   override private[tree] def subtreeDepth: Int = 0
 
   override private[ml] def toOld(id: Int): OldNode = {
-    // NOTE: We do NOT store 'prob' in the new API currently.
-    new OldNode(id, new OldPredict(prediction, prob = 0.0), impurity, isLeaf = true,
-      None, None, None, None)
+    new OldNode(id, new OldPredict(prediction, prob = impurityStats.prob(prediction)),
+      impurity, isLeaf = true, None, None, None, None)
   }
+
+  override private[ml] def maxSplitFeatureIndex(): Int = -1
 }
 
 /**
@@ -139,17 +157,18 @@ final class InternalNode private[ml] (
     val gain: Double,
     val leftChild: Node,
     val rightChild: Node,
-    val split: Split) extends Node {
+    val split: Split,
+    override private[ml] val impurityStats: ImpurityCalculator) extends Node {
 
   override def toString: String = {
     s"InternalNode(prediction = $prediction, impurity = $impurity, split = $split)"
   }
 
-  override private[ml] def predict(features: Vector): Double = {
+  override private[ml] def predictImpl(features: Vector): LeafNode = {
     if (split.shouldGoLeft(features)) {
-      leftChild.predict(features)
+      leftChild.predictImpl(features)
     } else {
-      rightChild.predict(features)
+      rightChild.predictImpl(features)
     }
   }
 
@@ -172,13 +191,17 @@ final class InternalNode private[ml] (
   override private[ml] def toOld(id: Int): OldNode = {
     assert(id.toLong * 2 < Int.MaxValue, "Decision Tree could not be converted from new to old API"
       + " since the old API does not support deep trees.")
-    // NOTE: We do NOT store 'prob' in the new API currently.
-    new OldNode(id, new OldPredict(prediction, prob = 0.0), impurity, isLeaf = false,
-      Some(split.toOld), Some(leftChild.toOld(OldNode.leftChildIndex(id))),
+    new OldNode(id, new OldPredict(prediction, prob = impurityStats.prob(prediction)), impurity,
+      isLeaf = false, Some(split.toOld), Some(leftChild.toOld(OldNode.leftChildIndex(id))),
       Some(rightChild.toOld(OldNode.rightChildIndex(id))),
       Some(new OldInformationGainStats(gain, impurity, leftChild.impurity, rightChild.impurity,
         new OldPredict(leftChild.prediction, prob = 0.0),
         new OldPredict(rightChild.prediction, prob = 0.0))))
+  }
+
+  override private[ml] def maxSplitFeatureIndex(): Int = {
+    math.max(split.featureIndex,
+      math.max(leftChild.maxSplitFeatureIndex(), rightChild.maxSplitFeatureIndex()))
   }
 }
 
@@ -223,36 +246,36 @@ private object InternalNode {
  *
  * @param id  We currently use the same indexing as the old implementation in
  *            [[org.apache.spark.mllib.tree.model.Node]], but this will change later.
- * @param predictionStats  Predicted label + class probability (for classification).
- *                         We will later modify this to store aggregate statistics for labels
- *                         to provide all class probabilities (for classification) and maybe a
- *                         distribution (for regression).
  * @param isLeaf  Indicates whether this node will definitely be a leaf in the learned tree,
  *                so that we do not need to consider splitting it further.
- * @param stats  Old structure for storing stats about information gain, prediction, etc.
- *               This is legacy and will be modified in the future.
+ * @param stats  Impurity statistics for this node.
  */
 private[tree] class LearningNode(
     var id: Int,
-    var predictionStats: OldPredict,
-    var impurity: Double,
     var leftChild: Option[LearningNode],
     var rightChild: Option[LearningNode],
     var split: Option[Split],
     var isLeaf: Boolean,
-    var stats: Option[OldInformationGainStats]) extends Serializable {
+    var stats: ImpurityStats) extends Serializable {
 
   /**
    * Convert this [[LearningNode]] to a regular [[Node]], and recurse on any children.
    */
   def toNode: Node = {
     if (leftChild.nonEmpty) {
-      assert(rightChild.nonEmpty && split.nonEmpty && stats.nonEmpty,
+      assert(rightChild.nonEmpty && split.nonEmpty && stats != null,
         "Unknown error during Decision Tree learning.  Could not convert LearningNode to Node.")
-      new InternalNode(predictionStats.predict, impurity, stats.get.gain,
-        leftChild.get.toNode, rightChild.get.toNode, split.get)
+      new InternalNode(stats.impurityCalculator.predict, stats.impurity, stats.gain,
+        leftChild.get.toNode, rightChild.get.toNode, split.get, stats.impurityCalculator)
     } else {
-      new LeafNode(predictionStats.predict, impurity)
+      if (stats.valid) {
+        new LeafNode(stats.impurityCalculator.predict, stats.impurity,
+          stats.impurityCalculator)
+      } else {
+        // Here we want to keep same behavior with the old mllib.DecisionTreeModel
+        new LeafNode(stats.impurityCalculator.predict, -1.0, stats.impurityCalculator)
+      }
+
     }
   }
 
@@ -263,16 +286,14 @@ private[tree] object LearningNode {
   /** Create a node with some of its fields set. */
   def apply(
       id: Int,
-      predictionStats: OldPredict,
-      impurity: Double,
-      isLeaf: Boolean): LearningNode = {
-    new LearningNode(id, predictionStats, impurity, None, None, None, false, None)
+      isLeaf: Boolean,
+      stats: ImpurityStats): LearningNode = {
+    new LearningNode(id, None, None, None, false, stats)
   }
 
   /** Create an empty node with the given node index.  Values must be set later on. */
   def emptyNode(nodeIndex: Int): LearningNode = {
-    new LearningNode(nodeIndex, new OldPredict(Double.NaN, Double.NaN), Double.NaN,
-      None, None, None, false, None)
+    new LearningNode(nodeIndex, None, None, None, false, null)
   }
 
   // The below indexing methods were copied from spark.mllib.tree.model.Node

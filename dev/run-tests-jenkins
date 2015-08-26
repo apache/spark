@@ -48,8 +48,8 @@ COMMIT_URL="https://github.com/apache/spark/commit/${ghprbActualCommit}"
 SHORT_COMMIT_HASH="${ghprbActualCommit:0:7}"
 
 # format: http://linux.die.net/man/1/timeout
-# must be less than the timeout configured on Jenkins (currently 180m)
-TESTS_TIMEOUT="175m"
+# must be less than the timeout configured on Jenkins (currently 300m)
+TESTS_TIMEOUT="250m"
 
 # Array to capture all tests to run on the pull request. These tests are held under the
 #+ dev/tests/ directory.

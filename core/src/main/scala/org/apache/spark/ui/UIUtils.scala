@@ -352,7 +352,8 @@ private[spark] object UIUtils extends Logging {
    */
   private def showDagViz(graphs: Seq[RDDOperationGraph], forJob: Boolean): Seq[Node] = {
     <div>
-      <span class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
+      <span id={if (forJob) "job-dag-viz" else "stage-dag-viz"}
+            class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
         <span class="expand-dag-viz-arrow arrow-closed"></span>
         <a data-toggle="tooltip" title={if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG}
            data-placement="right">

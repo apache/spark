@@ -199,6 +199,17 @@ class ParamsSuite extends SparkFunSuite {
 
     val inArray = ParamValidators.inArray[Int](Array(1, 2))
     assert(inArray(1) && inArray(2) && !inArray(0))
+
+    val arrayLengthGt = ParamValidators.arrayLengthGt[Int](2.0)
+    assert(arrayLengthGt(Array(0, 1, 2)) && !arrayLengthGt(Array(0, 1)))
+  }
+
+  test("Params.copyValues") {
+    val t = new TestParams()
+    val t2 = t.copy(ParamMap.empty)
+    assert(!t2.isSet(t2.maxIter))
+    val t3 = t.copy(ParamMap(t.maxIter -> 20))
+    assert(t3.isSet(t3.maxIter))
   }
 }
 
