@@ -1348,7 +1348,7 @@ class BaseOperator(object):
         return not self == other
 
     def __lt__(self, other):
-        return (type(self) == type(other) and self.task_id < other.task_id)
+        return self.task_id < other.task_id
 
     def __hash__(self):
         return hash(tuple(getattr(self, c, None) for c in self._comps))
@@ -1785,7 +1785,7 @@ class DAG(object):
         return not self == other
 
     def __lt__(self, other):
-        return (type(self) == type(other) and self.dag_id < other.dag_id)
+        return self.dag_id < other.dag_id
 
     def __hash__(self):
         return hash(tuple(getattr(self, c, None) for c in self._comps))
