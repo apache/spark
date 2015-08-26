@@ -221,7 +221,7 @@ model = word2vec.fit(inp)
 synonyms = model.findSynonyms('china', 40)
 
 for word, cosine_distance in synonyms:
-    print "{}: {}".format(word, cosine_distance)
+    print("{}: {}".format(word, cosine_distance))
 {% endhighlight %}
 </div>
 </div>

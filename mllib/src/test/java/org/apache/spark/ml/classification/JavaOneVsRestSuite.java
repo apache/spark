@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification;
 import java.io.Serializable;
 import java.util.List;
 
-import static scala.collection.JavaConversions.seqAsJavaList;
+import scala.collection.JavaConverters;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -55,8 +55,9 @@ public class JavaOneVsRestSuite implements Serializable {
 
         double[] xMean = {5.843, 3.057, 3.758, 1.199};
         double[] xVariance = {0.6856, 0.1899, 3.116, 0.581};
-        List<LabeledPoint> points = seqAsJavaList(generateMultinomialLogisticInput(
-                weights, xMean, xVariance, true, nPoints, 42));
+        List<LabeledPoint> points = JavaConverters.asJavaListConverter(
+            generateMultinomialLogisticInput(weights, xMean, xVariance, true, nPoints, 42)
+        ).asJava();
         datasetRDD = jsc.parallelize(points, 2);
         dataset = jsql.createDataFrame(datasetRDD, LabeledPoint.class);
     }

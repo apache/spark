@@ -53,6 +53,13 @@ private[r] class RBackendHandler(server: RBackend)
 
     if (objId == "SparkRHandler") {
       methodName match {
+        // This function is for test-purpose only
+        case "echo" =>
+          val args = readArgs(numArgs, dis)
+          assert(numArgs == 1)
+
+          writeInt(dos, 0)
+          writeObject(dos, args(0))
         case "stopBackend" =>
           writeInt(dos, 0)
           writeType(dos, "void")
@@ -69,8 +76,11 @@ private[r] class RBackendHandler(server: RBackend)
             case e: Exception =>
               logError(s"Removing $objId failed", e)
               writeInt(dos, -1)
+              writeString(dos, s"Removing $objId failed: ${e.getMessage}")
           }
-        case _ => dos.writeInt(-1)
+        case _ =>
+          dos.writeInt(-1)
+          writeString(dos, s"Error: unknown method $methodName")
       }
     } else {
       handleMethodCall(isStatic, objId, methodName, numArgs, dis, dos)
@@ -146,8 +156,11 @@ private[r] class RBackendHandler(server: RBackend)
       }
     } catch {
       case e: Exception =>
-        logError(s"$methodName on $objId failed", e)
+        logError(s"$methodName on $objId failed")
         writeInt(dos, -1)
+        // Writing the error message of the cause for the exception. This will be returned
+        // to user in the R process.
+        writeString(dos, Utils.exceptionString(e.getCause))
     }
   }
 
@@ -176,6 +189,7 @@ private[r] class RBackendHandler(server: RBackend)
       if (parameterType.isPrimitive) {
         parameterWrapperType = parameterType match {
           case java.lang.Integer.TYPE => classOf[java.lang.Integer]
+          case java.lang.Long.TYPE => classOf[java.lang.Integer]
           case java.lang.Double.TYPE => classOf[java.lang.Double]
           case java.lang.Boolean.TYPE => classOf[java.lang.Boolean]
           case _ => parameterType

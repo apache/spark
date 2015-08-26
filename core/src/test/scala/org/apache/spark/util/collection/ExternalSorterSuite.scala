@@ -692,7 +692,7 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     sortWithoutBreakingSortingContracts(createSparkConf(true, false))
   }
 
-  def sortWithoutBreakingSortingContracts(conf: SparkConf) {
+  private def sortWithoutBreakingSortingContracts(conf: SparkConf) {
     conf.set("spark.shuffle.memoryFraction", "0.01")
     conf.set("spark.shuffle.manager", "sort")
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
@@ -743,5 +743,15 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     }
 
     sorter2.stop()
- }
+  }
+
+  test("sorting updates peak execution memory") {
+    val conf = createSparkConf(loadDefaults = false, kryo = false)
+      .set("spark.shuffle.manager", "sort")
+    sc = new SparkContext("local", "test", conf)
+    // Avoid aggregating here to make sure we're not also using ExternalAppendOnlyMap
+    AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "external sorter") {
+      sc.parallelize(1 to 1000, 2).repartition(100).count()
+    }
+  }
 }

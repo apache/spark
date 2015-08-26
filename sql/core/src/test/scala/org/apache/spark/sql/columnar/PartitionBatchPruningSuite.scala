@@ -17,20 +17,19 @@
 
 package org.apache.spark.sql.columnar
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
+import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestData._
 
-class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfter {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
+class PartitionBatchPruningSuite extends SparkFunSuite with SharedSQLContext {
+  import testImplicits._
 
   private lazy val originalColumnBatchSize = ctx.conf.columnBatchSize
   private lazy val originalInMemoryPartitionPruning = ctx.conf.inMemoryPartitionPruning
 
   override protected def beforeAll(): Unit = {
+    super.beforeAll()
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
     ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, 10)
 
@@ -44,19 +43,17 @@ class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfterAll wi
     ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
     // Enable in-memory table scan accumulators
     ctx.setConf("spark.sql.inMemoryTableScanStatistics.enable", "true")
-  }
-
-  override protected def afterAll(): Unit = {
-    ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
-    ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
-  }
-
-  before {
     ctx.cacheTable("pruningData")
   }
 
-  after {
-    ctx.uncacheTable("pruningData")
+  override protected def afterAll(): Unit = {
+    try {
+      ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
+      ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
+      ctx.uncacheTable("pruningData")
+    } finally {
+      super.afterAll()
+    }
   }
 
   // Comparisons
@@ -110,7 +107,7 @@ class PartitionBatchPruningSuite extends SparkFunSuite with BeforeAndAfterAll wi
       expectedQueryResult: => Seq[Int]): Unit = {
 
     test(query) {
-      val df = ctx.sql(query)
+      val df = sql(query)
       val queryExecution = df.queryExecution
 
       assertResult(expectedQueryResult.toArray, s"Wrong query result: $queryExecution") {
