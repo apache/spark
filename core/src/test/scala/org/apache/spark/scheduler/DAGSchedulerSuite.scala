@@ -1216,7 +1216,7 @@ class DAGSchedulerSuite
 
   private def assertEmptyAfterContextCleaner(): Unit = {
     scheduler.shuffleToMapStage.foreach { case (shuffleId, _) =>
-      sc.cleaner.get.doCleanupShuffle(shuffleId, blocking=true)
+      sc.cleaner.get.doCleanupShuffle(shuffleId, blocking = true)
     }
     assert(scheduler.stageIdToStage.isEmpty)
     assert(scheduler.shuffleToMapStage.isEmpty)
