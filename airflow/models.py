@@ -1766,7 +1766,7 @@ class DAG(object):
             'tasks',
             'parent_dag',
             'start_date',
-            'schedule_interval'
+            'schedule_interval',
             'full_filepath',
             'template_searchpath',
             'last_loaded',
