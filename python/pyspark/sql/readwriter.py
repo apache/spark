@@ -129,7 +129,7 @@ class DataFrameReader(object):
             return self._df(self._jreader.load())
 
     @since(1.4)
-    def json(self, pathOrRdd, schema=None):
+    def json(self, path, schema=None):
         """
         Loads a JSON file (one object per line) or an RDD of Strings storing JSON objects
         (one object per record) and returns the result as a :class`DataFrame`.
@@ -137,7 +137,7 @@ class DataFrameReader(object):
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
 
-        :param pathOrRdd: string represents path to the JSON dataset,
+        :param path: string represents path to the JSON dataset,
                           or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`StructType` for the input schema.
 
@@ -152,12 +152,12 @@ class DataFrameReader(object):
         """
         if schema is not None:
             self.schema(schema)
-        if isinstance(pathOrRdd, basestring):
-            return self._df(self._jreader.json(pathOrRdd))
-        elif isinstance(pathOrRdd, RDD):
-            return self._df(self._jreader.json(pathOrRdd._jrdd))
+        if isinstance(path, basestring):
+            return self._df(self._jreader.json(path))
+        elif isinstance(path, RDD):
+            return self._df(self._jreader.json(path._jrdd))
         else:
-            raise Exception("DataFrameReader.json can only load path or RDD")
+            raise Exception("path can be only string or RDD")
 
     @since(1.4)
     def table(self, tableName):
