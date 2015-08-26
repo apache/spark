@@ -29,6 +29,8 @@ import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 
+import java.util.Arrays;
+
 public class JavaTokenizerSuite {
   private transient JavaSparkContext jsc;
   private transient SQLContext jsql;
@@ -54,7 +56,8 @@ public class JavaTokenizerSuite {
       .setGaps(true)
       .setMinTokenLength(3);
 
-    JavaRDD<TokenizerTestData> rdd = jsc.parallelize(Lists.newArrayList(
+
+    JavaRDD<TokenizerTestData> rdd = jsc.parallelize(Arrays.asList(
       new TokenizerTestData("Test of tok.", new String[] {"Test", "tok."}),
       new TokenizerTestData("Te,st.  punct", new String[] {"Te,st.", "punct"})
     ));
