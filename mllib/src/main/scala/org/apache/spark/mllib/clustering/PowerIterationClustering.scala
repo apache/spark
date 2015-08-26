@@ -68,8 +68,6 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
     private[clustering]
     val thisClassName = "org.apache.spark.mllib.clustering.PowerIterationClusteringModel"
 
-    /**
-     */
     @Since("1.4.0")
     def save(sc: SparkContext, model: PowerIterationClusteringModel, path: String): Unit = {
       val sqlContext = new SQLContext(sc)
