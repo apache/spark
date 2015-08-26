@@ -182,9 +182,10 @@ setMethod("showDF",
 
 #' show
 #'
-#' Print the DataFrame column names and types
+#' Print the first numRows rows of a DataFrame
 #'
 #' @param x A SparkSQL DataFrame
+#' Defaults to print 20 rows.
 #'
 #' @rdname show
 #' @name show
@@ -199,11 +200,7 @@ setMethod("showDF",
 #'}
 setMethod("show", "DataFrame",
           function(object) {
-            cols <- lapply(dtypes(object), function(l) {
-              paste(l, collapse = ":")
-            })
-            s <- paste(cols, collapse = ", ")
-            cat(paste("DataFrame[", s, "]\n", sep = ""))
+            showDF(object)
           })
 
 #' DataTypes
