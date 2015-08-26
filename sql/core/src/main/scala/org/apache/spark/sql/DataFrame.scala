@@ -1175,7 +1175,8 @@ class DataFrame private[sql](
   def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
 
-    val elementTypes = schema.toAttributes.map { attr => (attr.dataType, attr.nullable) }
+    val elementTypes = schema.toAttributes.map {
+      attr => (attr.dataType, attr.nullable, Some(attr.name)) }
     val names = schema.toAttributes.map(_.name)
     val convert = CatalystTypeConverters.createToCatalystConverter(schema)
 
@@ -1203,7 +1204,7 @@ class DataFrame private[sql](
     val dataType = ScalaReflection.schemaFor[B].dataType
     val attributes = AttributeReference(outputColumn, dataType)() :: Nil
     // TODO handle the metadata?
-    val elementTypes = attributes.map { attr => (attr.dataType, attr.nullable) }
+    val elementTypes = attributes.map { attr => (attr.dataType, attr.nullable, Some(attr.name)) }
     val names = attributes.map(_.name)
 
     def rowFunction(row: Row): TraversableOnce[InternalRow] = {

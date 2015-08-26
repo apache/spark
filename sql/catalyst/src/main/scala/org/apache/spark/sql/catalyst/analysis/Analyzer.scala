@@ -147,7 +147,7 @@ class Analyzer(
             case u @ UnresolvedAlias(child) => child match {
               case ne: NamedExpression => ne
               case e if !e.resolved => u
-              case g: Generator if g.elementTypes.size > 1 => MultiAlias(g, Nil)
+              case g: Generator => MultiAlias(g, Nil)
               case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
               case other => Alias(other, s"_c$i")()
             }
@@ -715,13 +715,14 @@ class Analyzer(
 
       if (names.length == elementTypes.length) {
         names.zip(elementTypes).map {
-          case (name, (t, nullable)) =>
+          case (name, (t, nullable, _)) =>
             AttributeReference(name, t, nullable)()
         }
       } else if (names.isEmpty) {
         elementTypes.zipWithIndex.map {
           // keep the default column names as Hive does _c0, _c1, _cN
-          case ((t, nullable), i) => AttributeReference(s"_c$i", t, nullable)()
+          case ((t, nullable, None), i) => AttributeReference(s"_c$i", t, nullable)()
+          case ((t, nullable, Some(name)), i) => AttributeReference(name, t, nullable)()
         }
       } else {
         failAnalysis(
