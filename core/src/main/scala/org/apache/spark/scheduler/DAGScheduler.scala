@@ -700,7 +700,8 @@ class DAGScheduler(
 
   private[scheduler] def cleanUpAfterSchedulerStop() {
     for (job <- activeJobs) {
-      val error = new SparkException(s"Job ${job.jobId} cancelled because SparkContext was shut down")
+      val error =
+        new SparkException(s"Job ${job.jobId} cancelled because SparkContext was shut down")
       job.listener.jobFailed(error)
       // Tell the listeners that all of the running stages have ended.  Don't bother
       // cancelling the stages because if the DAG scheduler is stopped, the entire application
