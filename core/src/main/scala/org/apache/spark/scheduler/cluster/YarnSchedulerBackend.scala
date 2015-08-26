@@ -115,7 +115,7 @@ private[spark] abstract class YarnSchedulerBackend(
      * TaskSetManager that tasks on that lost executor should not count towards a job failure.
      */
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
-      addressToExecutorId.get(rpcAddress).foreach({ executorId =>
+      addressToExecutorId.get(rpcAddress).foreach { executorId =>
         yarnSchedulerEndpoint.askForExecutorLossReason(executorId, { (reason: ExecutorLossReason) =>
           driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
         }, { (e: Throwable) =>
@@ -123,7 +123,7 @@ private[spark] abstract class YarnSchedulerBackend(
             s" for $rpcAddress but got no response. Marking as slave lost.", e)
           driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, SlaveLost()))
         })
-      })
+      }
     }
   }
 
