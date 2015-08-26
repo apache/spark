@@ -43,7 +43,9 @@ import org.apache.spark.util.Utils
  */
 @Since("1.0.0")
 @Experimental
-class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable with Saveable {
+class DecisionTreeModel @Since("1.0.0") (
+    @Since("1.0.0") val topNode: Node,
+    @Since("1.0.0") val algo: Algo) extends Serializable with Saveable {
 
   /**
    * Predict values for a single data point using the model trained.
@@ -110,6 +112,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
   /**
    * Print the full model to a string.
    */
+  @Since("1.2.0")
   def toDebugString: String = {
     val header = toString + "\n"
     header + topNode.subtreeToString(2)

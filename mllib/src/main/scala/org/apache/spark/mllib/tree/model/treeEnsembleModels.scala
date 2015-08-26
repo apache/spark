@@ -48,7 +48,9 @@ import org.apache.spark.util.Utils
  */
 @Since("1.2.0")
 @Experimental
-class RandomForestModel(override val algo: Algo, override val trees: Array[DecisionTreeModel])
+class RandomForestModel @Since("1.2.0") (
+    @Since("1.2.0") override val algo: Algo,
+    @Since("1.2.0") override val trees: Array[DecisionTreeModel])
   extends TreeEnsembleModel(algo, trees, Array.fill(trees.length)(1.0),
     combiningStrategy = if (algo == Classification) Vote else Average)
   with Saveable {
@@ -115,10 +117,10 @@ object RandomForestModel extends Loader[RandomForestModel] {
  */
 @Since("1.2.0")
 @Experimental
-class GradientBoostedTreesModel(
-    override val algo: Algo,
-    override val trees: Array[DecisionTreeModel],
-    override val treeWeights: Array[Double])
+class GradientBoostedTreesModel @Since("1.2.0") (
+    @Since("1.2.0") override val algo: Algo,
+    @Since("1.2.0") override val trees: Array[DecisionTreeModel],
+    @Since("1.2.0") override val treeWeights: Array[Double])
   extends TreeEnsembleModel(algo, trees, treeWeights, combiningStrategy = Sum)
   with Saveable {
 
