@@ -21,7 +21,6 @@ import java.util.Collections
 import java.util.concurrent._
 import java.util.regex.Pattern
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -34,12 +33,10 @@ import org.apache.hadoop.yarn.util.RackResolver
 
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.Utils
+import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /**
  * YarnAllocator is charged with requesting containers from the YARN ResourceManager and deciding
@@ -65,7 +62,7 @@ private[yarn] class YarnAllocator(
     securityMgr: SecurityManager)
   extends Logging {
 
-  import YarnAllocator._
+  import org.apache.spark.deploy.yarn.YarnAllocator._
 
   // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
   if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
