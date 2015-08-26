@@ -17,7 +17,8 @@
 
 package org.apache.spark.ml.feature;
 
-import com.google.common.collect.Lists;
+import java.util.Arrays;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -28,8 +29,6 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
-
-import java.util.Arrays;
 
 public class JavaTokenizerSuite {
   private transient JavaSparkContext jsc;
