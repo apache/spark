@@ -158,7 +158,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     }
     check((1, 3))
     check(Array((1, 3)))
-    check(List((1,3)))
+    check(List((1, 3)))
     check(List[Int]())
     check(List[Int](1, 2, 3))
     check(List[String]())
