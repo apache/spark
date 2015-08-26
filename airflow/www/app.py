@@ -1034,26 +1034,26 @@ class Airflow(BaseView):
         for ti in dag.get_task_instances(session, from_date):
             task_instances[(ti.task_id, ti.execution_date)] = ti
 
-        # if expand_all is passed True, then no timeout is applied
+        # if force_expand is passed True, then no timeout is applied
         # when computing all possible paths through the graph.
         # Otherwise the graph will revert to a quick calculation if it hasn't
         # completed after `timeout_seconds`
-        timeout_seconds = None if request.args.get('expand_all') else 1
+        timeout_seconds = None if request.args.get('force_expand') else 1
 
         def recurse_nodes(t):
             start_time = time.time()
             expanded = []
 
-            def recurse_nodes_inner(task, visited, expand_all):
+            def recurse_nodes_inner(task, visited, force_expand):
                 elapsed = time.time() - start_time
                 if timeout_seconds and elapsed > timeout_seconds:
                     raise ValueError('Recursion timeout')
 
-                if not expand_all:
+                if not force_expand:
                     visited.add(task)
 
                 children = [
-                    recurse_nodes_inner(t, visited, expand_all)
+                    recurse_nodes_inner(t, visited, force_expand)
                     for t in task.upstream_list if t not in visited]
 
                 # D3 tree uses children vs _children to define what is
@@ -1085,18 +1085,18 @@ class Airflow(BaseView):
                     'ui_color': task.ui_color,
                 }
 
-            # try the expensive operation by recursing with expand_all=True
+            # try the expensive operation by recursing with force_expand=True
             # if timeout_seconds elapse, a ValueError is raised
             try:
                 return recurse_nodes_inner(
-                    t, visited=set(), expand_all=True)
+                    t, visited=set(), force_expand=True)
             except ValueError:
                 # start over with a quick calculation
                 logging.debug(
                     'Tree creation timed out; falling back on quick method.')
                 expanded = []
                 start_time = time.time()
-                return recurse_nodes_inner(t, visited=set(), expand_all=False)
+                return recurse_nodes_inner(t, visited=set(), force_expand=False)
 
         if len(dag.roots) > 1:
             # d3 likes a single root
