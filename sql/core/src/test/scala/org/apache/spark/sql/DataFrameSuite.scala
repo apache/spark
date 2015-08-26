@@ -678,6 +678,26 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData.dropDuplicates(Seq("value2")),
       Seq(Row(2, 1, 2), Row(1, 1, 1)))
+
+    checkAnswer(
+      testData.dropDuplicates("key", "value1"),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates("value1", "value2"),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
+
+    checkAnswer(
+      testData.dropDuplicates("key"),
+      Seq(Row(2, 1, 2), Row(1, 1, 1)))
+
+    checkAnswer(
+      testData.dropDuplicates("value1"),
+      Seq(Row(2, 1, 2), Row(1, 2, 1)))
+
+    checkAnswer(
+      testData.dropDuplicates("value2"),
+      Seq(Row(2, 1, 2), Row(1, 1, 1)))
   }
 
   test("SPARK-7150 range api") {
