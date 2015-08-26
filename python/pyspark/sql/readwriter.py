@@ -138,7 +138,7 @@ class DataFrameReader(object):
         through the input once to determine the input schema.
 
         :param path: string represents path to the JSON dataset,
-                          or RDD of Strings storing JSON objects.
+                     or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`StructType` for the input schema.
 
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
