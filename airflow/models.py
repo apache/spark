@@ -1341,7 +1341,8 @@ class BaseOperator(object):
     def __eq__(self, other):
         return (
             type(self) == type(other) and
-            all(self.__dict__[c] == other.__dict__[c] for c in self._comps))
+            all(self.__dict__.get(c, None) == other.__dict__.get(c, None)
+                for c in self._comps))
 
     def __neq__(self, other):
         return not self == other
@@ -1777,7 +1778,8 @@ class DAG(object):
     def __eq__(self, other):
         return (
             type(self) == type(other) and
-            all(self.__dict__[c] == other.__dict__[c] for c in self._comps))
+            all(self.__dict__.get(c, None) == other.__dict__.get(c, None)
+                for c in self._comps))
 
     def __neq__(self, other):
         return not self == other
