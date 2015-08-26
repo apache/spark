@@ -1,0 +1,35 @@
+# cluster-config-reference.yaml
+#
+# Copyright (C) 2013-2015, Levyx, Inc.
+#
+#  NOTICE:  All information contained herein is, and remains the property of
+#  Levyx, Inc.  The intellectual and technical concepts contained herein are
+#  proprietary to Levyx, Inc. and may be covered by U.S. and Foreign Patents,
+#  patents in process, and are protected by trade secret or copyright law.
+#  Dissemination of this information or reproduction of this material is
+#  strictly forbidden unless prior written permission is obtained from Levyx,
+#  Inc.  Access to the source code contained herein is hereby forbidden to
+#  anyone except current Levyx, Inc. employees, managers or contractors who
+#  have executed Confidentiality and Non-disclosure agreements explicitly
+#  covering such access.
+#
+
+imports:
+  - path: templates/cluster-instance-template.jinja
+  - path: templates/cluster-setup-template.jinja
+  - path: templates/cluster-network-template.jinja
+  - path: templates/cluster-firewall-template.jinja
+resources:
+  - name: levyxspark-cluster
+    type: templates/cluster-setup-template.jinja
+    properties:
+      # package: levyxspark
+      projectName: shared-cluster-0
+
+      instanceImage: global/images/levyx-spark-dev-img
+      instanceMachineType: n1-standard-8
+      instanceNumSSDs: 2
+      instanceZone: us-central1-c
+      instanceBootDiskType: pd-standard-1
+      numSlaves: 2
+      startupScript: "echo 'hello world' > /home/helloWorld.txt"

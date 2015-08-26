@@ -1,0 +1,249 @@
+#!/bin/bash
+#
+# deploy.sh
+#
+# Copyright (C) 2013-2015, Levyx, Inc.
+#
+# NOTICE:  All information contained herein is, and remains the property of
+# Levyx, Inc.  The intellectual and technical concepts contained herein are
+# proprietary to Levyx, Inc. and may be covered by U.S. and Foreign Patents,
+# patents in process, and are protected by trade secret or copyright law.
+# Dissemination of this information or reproduction of this material is
+# strictly forbidden unless prior written permission is obtained from Levyx,
+# Inc.  Access to the source code contained herein is hereby forbidden to
+# anyone except current Levyx, Inc. employees, managers or contractors who
+# have executed Confidentiality and Non-disclosure agreements explicitly
+# covering such access.
+#
+# Deploy instance on Google cloud and clone the levyx-spark repo
+#
+# Assumptions:
+# 	1. The instance is created on shared-cluster-0 of Levyx
+#	2. The instance is in us-central1-c zone
+
+# - Check gcloud version with deployment manager
+# - Set git project
+# - Create yaml
+# - Create instance
+# - Display ssh credentials
+# 
+source functions.sh
+
+usage() {
+cat << EOF
+
+  deploy [--help]
+  deploy create [--project|--instance|--name|--quiet|--clone]
+  deploy remove name
+  deploy list
+
+  deploy create
+    --project	GCP project name 	 (Default: shared-cluster-0)
+    --instance	GCP instance type	 (Default: n1-standard-16 + 1 local SSD)
+    --name	GCP instance host prefix (Default: username)
+    --quiet	Disable verbose output when creating GCP instance
+    --clone	Clone levyx-spark from GitHub (requires ssh keys)
+
+  deploy remove [--project]
+    --project	GCP project name 	 (Default: shared-cluster-0)
+    name	GCP instance name, typically username-spark-test
+
+  deploy list 	[--project]
+    --project	GCP project name 	 (Default: shared-cluster-0)
+
+EOF
+	exit 1
+}
+
+DEFAULT_PROJECT=shared-cluster-0
+DEFAULT_INSTANCE=n1-standard-16
+DEFAULT_SSD=1
+DEFAULT_PREFIX=`basename $HOME`
+DEFAULT_SLAVES=0
+
+PGNAME="${YELLOW}[deploy]${NORM}"
+# Assumptions:
+# 1. For this version, we have hardcoded SSDs == 1. This is
+# so that we do not have to deal with creating RAID on
+# the cloud machine and simply the instance creation.
+# 2. Number of slaves == 0 => Single node instance
+PROJECT=""
+INSTANCE=""
+NUM_SSD=$DEFAULT_SSD
+PREFIX=""
+CLONE=0
+SLAVES=$DEFAULT_SLAVES
+
+GCP_YAML_SCRIPT="python ./gen-deploy-config.py"
+YAML_CFG_FILE=cluster-config.yaml
+GIT_CLONE_CMD="git clone https://github.com/levyx/levyx-spark"
+
+DO_CREATE=""
+DO_REMOVE=""
+DO_LIST=""
+
+sanity() {
+	which gcloud >/dev/null 2>&1 \
+		|| err_exit "gcloud not found"
+
+	gcloud deployment-manager -h >/dev/null 2>&1 || \
+		err_exit "gcloud deployment-manager not found, upgrade gcloud"
+	
+	[[ -z $PROJECT ]]  && PROJECT=$DEFAULT_PROJECT
+	[[ -z $INSTANCE ]] && INSTANCE=$DEFAULT_INSTANCE
+	[[ -z $PREFIX ]]   && PREFIX=$DEFAULT_PREFIX
+}
+
+print_config() {
+	echo "Cluster configuration:"
+	echo "	Project:	$BOLD $PROJECT $NORM"
+	echo "	Instance:	$BOLD $INSTANCE $NORM"
+	echo "	SSDs:		$BOLD $NUM_SSD $NORM"
+	echo ""
+	echo "Google cloud configuration:"
+	gcloud config list
+	echo ""
+}
+
+msg() {
+	echo "${PGNAME} $*"
+	echo ""
+}
+
+banner() {
+	echo -n "${YELLOW}"
+cat << EOF
+	o
+	|     	Levyx Spark Cluster Deployment
+	o--o
+EOF
+	echo "${NORM}"
+}
+
+create()
+{
+	sanity
+
+	# Unfortunately gcloud config does not return !0 for an
+	# invalid project => cannot check for $? correctness
+	msg "Setting gcloud project to ${BOLD}${PROJECT} $NORM"
+	gcloud config set project $PROJECT
+	gcloud config set compute/zone us-central1-c
+
+	print_config
+
+	$GCP_YAML_SCRIPT -t $INSTANCE -d $NUM_SSD -s $SLAVES -n $PREFIX -r xe_setup.sh >/dev/null
+	if [ $? -ne 0 ]; then
+		err_exit "$GCP_YAML_SCRIPT failed"
+	fi
+	msg "Generated gcloud cluster config .yaml file"
+	ls -ltr *.yaml | tail -1
+
+	msg "Creating instance"
+	gcloud deployment-manager deployments create \
+			${PREFIX}-spark-test --config $YAML_CFG_FILE
+	if [ $? -ne 0 ]; then
+		echo ""
+		err_exit "Please check gcloud error message..."
+	fi
+
+	msg "Listing instance properties"
+	gcloud compute instances list | grep ${PREFIX}
+
+	if [ $CLONE -eq 1 ]; then
+		msg "Clone git repo ..."
+		gcloud compute ssh ${PREFIX}-master '$GIT_CLONE_CMD'
+		if [ $? -ne 0 ]; then
+			err_exit "$GIT_CLONE_CMD failed"
+		fi
+	fi
+
+	msg "Useful commands:"
+	echo "  ${BOLD}[ssh]${NORM}	gcloud compute ssh ${PREFIX}-master"
+	echo "  ${BOLD}[copy]${NORM}	gcloud compute copy-files"
+	echo "  ${BOLD}[rexec]${NORM}	gcloud compute ssh ${PREFIX}-master 'remote command'"
+	echo ""
+}
+
+remove() {
+	sanity
+
+	# Unfortunately gcloud config does not return !0 for an
+	# invalid project => cannot check for $? correctness
+	msg "Setting gcloud project to ${BOLD}${PROJECT} $NORM"
+	gcloud config set project $PROJECT
+	gcloud config set compute/zone us-central1-c
+
+	gcloud deployment-manager deployments delete -q $INSTANCE
+}
+
+list() {
+	sanity
+
+	# Unfortunately gcloud config does not return !0 for an
+	# invalid project => cannot check for $? correctness
+	msg "Setting gcloud project to ${BOLD}${PROJECT} $NORM"
+	gcloud config set project $PROJECT
+	gcloud config set compute/zone us-central1-c
+
+	gcloud deployment-manager deployments list 
+}
+
+if [ $# -eq 0 ]; then
+	usage 
+fi
+
+case $1 in
+	create) DO_CREATE="true" ;;
+	remove)	DO_REMOVE="true" ;;
+	list)	DO_LIST="true" ;;
+	*)	usage ;;
+esac
+shift
+
+if [ -n "$DO_CREATE" ]; then
+	if [ $# -eq 0 ]; then
+		echo "$PGNAME No args specified. Using defaults ..."
+		echo ""
+	fi
+	while [ "$#" -gt 0 ]; do
+		case $1 in
+			--project)  PROJECT="$2"; shift ;;
+			--instance) INSTANCE="$2"; shift ;;
+			--name)     PREFIX="$2"; shift ;;
+			--clone)    CLONE=1; ;;
+			-h|--help)  usage ;;
+			*) usage ;;
+		esac
+		shift
+	done
+	banner
+	create
+fi
+
+if [ -n "$DO_REMOVE" ]; then
+	if [ $# -eq 0 ]; then
+		echo "$PGNAME Error: No instance specified!"
+		echo ""
+		usage
+	fi
+	while [ "$#" -gt 0 ]; do
+		case $1 in
+			--project)  PROJECT="$2"; INSTANCE="$3"; break ;;
+			*) INSTANCE="$1"; break ;;
+		esac
+	done
+	banner
+	remove
+fi
+
+if [ -n "$DO_LIST" ]; then
+	while [ "$#" -gt 0 ]; do
+		case $1 in
+			--project)  PROJECT="$2"; break ;;
+		esac
+		shift
+	done
+	banner
+	list
+fi
