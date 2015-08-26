@@ -156,11 +156,11 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[Array[Tuple21[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
     kryo.register(classOf[Array[Tuple22[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
 
-
     kryo.register(None.getClass)
     kryo.register(Nil.getClass)
     kryo.register(Class.forName("scala.collection.immutable.$colon$colon"))
     kryo.register(classOf[ArrayBuffer[Any]])
+
     kryo.setClassLoader(classLoader)
     kryo
   }
