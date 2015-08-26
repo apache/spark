@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.{collectionAsScalaIterableConverter, mapAsJavaMapConverter, seqAsJavaListConverter}
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
-import org.apache.parquet.hadoop.ParquetFileReader
-import org.apache.parquet.schema.MessageType
+import org.apache.parquet.hadoop.api.WriteSupport
+import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
+import org.apache.parquet.hadoop.{ParquetFileReader, ParquetWriter}
+import org.apache.parquet.io.api.RecordConsumer
+import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.sql.QueryTest
 
@@ -38,11 +42,10 @@ private[sql] abstract class ParquetCompatibilityTest extends QueryTest with Parq
     val fs = fsPath.getFileSystem(configuration)
     val parquetFiles = fs.listStatus(fsPath, new PathFilter {
       override def accept(path: Path): Boolean = pathFilter(path)
-    }).toSeq
+    }).toSeq.asJava
 
-    val footers =
-      ParquetFileReader.readAllFootersInParallel(configuration, parquetFiles.asJava, true)
-    footers.iterator().next().getParquetMetadata.getFileMetaData.getSchema
+    val footers = ParquetFileReader.readAllFootersInParallel(configuration, parquetFiles, true)
+    footers.asScala.head.getParquetMetadata.getFileMetaData.getSchema
   }
 
   protected def logParquetSchema(path: String): Unit = {
@@ -53,8 +56,58 @@ private[sql] abstract class ParquetCompatibilityTest extends QueryTest with Parq
   }
 }
 
-object ParquetCompatibilityTest {
-  def makeNullable[T <: AnyRef](i: Int)(f: => T): T = {
-    if (i % 3 == 0) null.asInstanceOf[T] else f
+private[sql] object ParquetCompatibilityTest {
+  private class DirectWriteSupport(
+      schema: MessageType, writer: RecordConsumer => Unit, metadata: Map[String, String])
+    extends WriteSupport[Void] {
+
+    private var recordConsumer: RecordConsumer = _
+
+    override def init(configuration: Configuration): WriteContext = {
+      new WriteContext(schema, metadata.asJava)
+    }
+
+    override def write(record: Void): Unit = {
+      writer(recordConsumer)
+    }
+
+    override def prepareForWrite(recordConsumer: RecordConsumer): Unit = {
+      this.recordConsumer = recordConsumer
+    }
+  }
+
+  def writeDirect
+      (path: String, schema: String, metadata: Map[String, String] = Map.empty[String, String])
+      (writer: RecordConsumer => Unit): Unit = {
+    writeDirect(path, MessageTypeParser.parseMessageType(schema), metadata)(writer)
+  }
+
+  def writeDirect
+      (path: String, schema: MessageType, metadata: Map[String, String])
+      (writer: RecordConsumer => Unit): Unit = {
+    val writeSupport = new DirectWriteSupport(schema, writer, metadata)
+    val parquetWriter = new ParquetWriter[Void](new Path(path), writeSupport)
+    try parquetWriter.write(null) finally parquetWriter.close()
+  }
+
+  def message(f: => Unit)(implicit consumer: RecordConsumer): Unit = {
+    consumer.startMessage()
+    f
+    consumer.endMessage()
+  }
+
+  def group(f: => Unit)(implicit consumer: RecordConsumer): Unit = {
+    consumer.startGroup()
+    f
+    consumer.endGroup()
+  }
+
+  def field
+      (name: String, index: Int)
+      (f: => Unit)
+      (implicit consumer: RecordConsumer): Unit = {
+    consumer.startField(name, index)
+    f
+    consumer.endField(name, index)
   }
 }

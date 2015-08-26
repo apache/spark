@@ -33,11 +33,9 @@ class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest with Shar
        """.stripMargin)
 
     checkAnswer(sqlContext.read.parquet(parquetFilePath.toString), (0 until 10).map { i =>
-      def nullable[T <: AnyRef]: ( => T) => T = makeNullable[T](i)
-
       val suits = Array("SPADES", "HEARTS", "DIAMONDS", "CLUBS")
 
-      Row(
+      val nonNullablePrimitiveValues = Seq(
         i % 2 == 0,
         i.toByte,
         (i + 1).toShort,
@@ -50,18 +48,15 @@ class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest with Shar
         s"val_$i",
         s"val_$i",
         // Thrift ENUM values are converted to Parquet binaries containing UTF-8 strings
-        suits(i % 4),
+        suits(i % 4))
 
-        nullable(i % 2 == 0: java.lang.Boolean),
-        nullable(i.toByte: java.lang.Byte),
-        nullable((i + 1).toShort: java.lang.Short),
-        nullable(i + 2: Integer),
-        nullable((i * 10).toLong: java.lang.Long),
-        nullable(i.toDouble + 0.2d: java.lang.Double),
-        nullable(s"val_$i"),
-        nullable(s"val_$i"),
-        nullable(suits(i % 4)),
+      val nullablePrimitiveValues = if (i % 3 == 0) {
+        Seq.fill(nonNullablePrimitiveValues.length)(null)
+      } else {
+        nonNullablePrimitiveValues
+      }
 
+      val complexValues = Seq(
         Seq.tabulate(3)(n => s"arr_${i + n}"),
         // Thrift `SET`s are converted to Parquet `LIST`s
         Seq(i),
@@ -71,6 +66,57 @@ class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest with Shar
             Row(Seq.tabulate(3)(j => i + j + m), s"val_${i + m}")
           }
         }.toMap)
+
+      Row(nonNullablePrimitiveValues ++ nullablePrimitiveValues ++ complexValues: _*)
     })
+  }
+
+  test("SPARK-10136 list of primitive list") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val schema =
+        s"""message ListOfPrimitiveList {
+           |  required group f (LIST) {
+           |    repeated group f_tuple (LIST) {
+           |      repeated int32 f_tuple_tuple;
+           |    }
+           |  }
+           |}
+         """.stripMargin
+
+      writeDirect(path, schema) { implicit consumer =>
+        (0 until 2).foreach { i =>
+          message {
+            field("f", 0) {
+              group {
+                field("f_tuple", 0) {
+                  group {
+                    field("f_tuple_tuple", 0) {
+                      consumer.addInteger(i + 0)
+                      consumer.addInteger(i + 1)
+                    }
+                  }
+
+                  group {
+                    field("f_tuple_tuple", 0) {
+                      consumer.addInteger(i + 2)
+                      consumer.addInteger(i + 3)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      logParquetSchema(path)
+
+      checkAnswer(
+        sqlContext.read.parquet(path),
+        Seq(
+          Row(Seq(Seq(0, 1), Seq(2, 3))),
+          Row(Seq(Seq(1, 2), Seq(3, 4)))))
+    }
   }
 }
