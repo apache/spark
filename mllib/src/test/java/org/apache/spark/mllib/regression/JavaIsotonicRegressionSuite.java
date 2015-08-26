@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.regression;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -36,7 +37,7 @@ public class JavaIsotonicRegressionSuite implements Serializable {
   private transient JavaSparkContext sc;
 
   private List<Tuple3<Double, Double, Double>> generateIsotonicInput(double[] labels) {
-    List<Tuple3<Double, Double, Double>> input = Arrays.asList();
+    ArrayList<Tuple3<Double, Double, Double>> input = new ArrayList(labels.length);
 
     for (int i = 1; i <= labels.length; i++) {
       input.add(new Tuple3<Double, Double, Double>(labels[i-1], (double) i, 1d));
