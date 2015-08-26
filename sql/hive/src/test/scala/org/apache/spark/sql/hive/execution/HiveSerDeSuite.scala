@@ -38,7 +38,7 @@ class HiveSerDeSuite extends HiveComparisonTest with BeforeAndAfterAll {
   }
 
   // table sales is not a cache table, and will be clear after reset
-  createQueryTest("Read with RegexSerDe", "SELECT * FROM sales", reset = false)
+  createQueryTest("Read with RegexSerDe", "SELECT * FROM sales", false)
 
   createQueryTest(
     "Read and write with LazySimpleSerDe (tab separated)",

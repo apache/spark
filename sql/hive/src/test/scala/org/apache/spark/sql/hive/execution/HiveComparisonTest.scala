@@ -21,7 +21,7 @@ import java.io._
 
 import scala.util.control.NonFatal
 
-import org.scalatest.{BeforeAndAfterAll, GivenWhenThen, Tag}
+import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -209,11 +209,7 @@ abstract class HiveComparisonTest
   }
 
   val installHooksCommand = "(?i)SET.*hooks".r
-  def createQueryTest(
-      testCaseName: String,
-      sql: String,
-      tag: Option[Tag] = None,
-      reset: Boolean = true) {
+  def createQueryTest(testCaseName: String, sql: String, reset: Boolean = true) {
     // testCaseName must not contain ':', which is not allowed to appear in a filename of Windows
     assert(!testCaseName.contains(":"))
 
@@ -241,16 +237,7 @@ abstract class HiveComparisonTest
       return
     }
 
-    def createTest(name: String)(fn: => Unit): Unit = {
-      tag match {
-        case Some(tagValue) =>
-          test(name, tagValue)(fn)
-        case None =>
-          test(name)(fn)
-      }
-    }
-
-    createTest(testCaseName) {
+    test(testCaseName) {
       logDebug(s"=== HIVE TEST: $testCaseName ===")
 
       // Clear old output for this testcase.

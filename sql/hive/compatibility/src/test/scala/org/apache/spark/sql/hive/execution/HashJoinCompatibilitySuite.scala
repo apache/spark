@@ -20,13 +20,11 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 
 import org.apache.spark.sql.SQLConf
-import org.apache.spark.sql.hive.ExtendedHiveTest
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
  * Runs the test cases that are included in the hive distribution with hash joins.
  */
-@ExtendedHiveTest
 class HashJoinCompatibilitySuite extends HiveCompatibilitySuite {
   override def beforeAll() {
     super.beforeAll()
