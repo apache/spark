@@ -59,7 +59,7 @@ readString <- function(con) {
   raw <- readBin(con, raw(), stringLen, endian = "big")
   string <- rawToChar(raw)
   Encoding(string) <- "UTF-8"
-  enc2native(string)
+  string 
 }
 
 readInt <- function(con) {

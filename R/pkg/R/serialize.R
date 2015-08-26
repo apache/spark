@@ -79,7 +79,7 @@ writeJobj <- function(con, value) {
 writeString <- function(con, value) {
   utfVal <- enc2utf8(value)
   writeInt(con, as.integer(nchar(utfVal, type = "bytes") + 1))
-  writeBin(utfVal, con, endian = "big")
+  writeBin(utfVal, con, endian = "big", useBytes=TRUE)
 }
 
 writeInt <- function(con, value) {
