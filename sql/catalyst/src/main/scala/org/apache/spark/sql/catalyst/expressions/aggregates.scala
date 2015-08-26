@@ -382,6 +382,20 @@ case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
   override def newInstance(): CountDistinctFunction = new CountDistinctFunction(child :: Nil, this)
 }
 
+/**
+ * Calculate the approximate quantile of a group. Only support AggregateExpression2.
+ *
+ */
+case class ApproxQuantile(
+    child: Expression,
+    quantile: Double,
+    epsilon: Double = 0.5,
+    compressThreshold: Int = 1000) extends UnaryExpression with AggregateExpression {
+  override def nullable: Boolean = false
+  override def dataType: DoubleType.type = DoubleType
+  override def toString: String = s"APPROXIMATE QUANTILE($child)"
+}
+
 case class Average(child: Expression) extends UnaryExpression with PartialAggregate1 {
 
   override def prettyName: String = "avg"

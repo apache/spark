@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import scala.collection.mutable
+
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -301,4 +305,163 @@ case class Sum(child: Expression) extends AlgebraicAggregate {
   }
 
   override val evaluateExpression = Cast(currentSum, resultType)
+}
+
+/**
+ * Calculate the approximate quantile.
+ * @param child
+ * @param quantile
+ * @param epsilon
+ *
+ */
+case class ApproxQuantile(
+    child: Expression,
+    quantile: Double,
+    epsilon: Double = 0.05,
+    compressThreshold: Int = 1000) extends AggregateFunction2 {
+
+  def children: Seq[Expression] = Seq(child)
+
+  def nullable: Boolean = false
+
+  def dataType: DataType = DoubleType
+
+  def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
+
+  def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
+
+  def cloneBufferAttributes: Seq[Attribute] = bufferAttributes.map(_.newInstance())
+
+  private[this] val innerStruct =
+    StructType(
+      StructField("f1", DoubleType, false) ::
+      StructField("f2", IntegerType, false) ::
+      StructField("f3", IntegerType, false) :: Nil)
+
+  val bufferAttributes: Seq[AttributeReference] = Seq(
+    AttributeReference("sampled", ArrayType(innerStruct, false))(),
+    AttributeReference("count", LongType)())
+
+  private[this] def getConstant(count: Long): Double = 2 * epsilon * count
+
+  private[this] def compress(sampled: mutable.Buffer[InternalRow], count: Long): Unit = {
+    var i = 0
+    while (i < sampled.size - 1) {
+      val sample1 = sampled(i)
+      val sample2 = sampled(i + 1)
+      if (sample1.getInt(1) + sample2.getInt(1) +
+        sample2.getInt(2) < math.floor(getConstant(count))) {
+        sampled.update(i + 1,
+          InternalRow(sample2.getDouble(0), sample1.getInt(1) + sample2.getInt(1),
+            sample2.getInt(2)))
+        sampled.remove(i)
+      }
+      i += 1
+    }
+  }
+
+  private[this] def query(sampled: Array[InternalRow], count: Long): Double = {
+    val rank = (quantile * count).toInt
+    var minRank = 0
+    var i = 1
+    while (i < sampled.size) {
+      val curSample = sampled(i)
+      val prevSample = sampled(i - 1)
+      minRank += prevSample.getInt(1)
+      if (minRank + curSample.getInt(1) + curSample.getInt(1) > rank + getConstant(count)) {
+        return prevSample.getDouble(0)
+      }
+      i += 1
+    }
+    return sampled.last.getDouble(0)
+  }
+
+  override def initialize(buffer: MutableRow): Unit = {
+    buffer.update(mutableBufferOffset,
+      new GenericArrayData(Array[InternalRow]().asInstanceOf[Array[Any]]))
+    buffer.setLong(mutableBufferOffset + 1, 0L)
+  }
+
+  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+    val v = child.eval(input)
+    if (v != null) {
+      val inputValue = v.asInstanceOf[Double]
+
+      val sampled: mutable.Buffer[InternalRow] = new mutable.ArrayBuffer[InternalRow]()
+      buffer.getArray(mutableBufferOffset).toArray[InternalRow](innerStruct).copyToBuffer(sampled)
+
+      var count: Long = buffer.getLong(mutableBufferOffset + 1)
+
+      var idx: Int = sampled.indexWhere(_.getDouble(0) > inputValue)
+      if (idx == -1) {
+        idx = sampled.size
+      }
+
+      val delta: Int = if (idx == 0 || idx == sampled.size) {
+        0
+      } else {
+        math.floor(getConstant(count)).toInt
+      }
+
+      val tuple = InternalRow(inputValue, 1, delta)
+      sampled.insert(idx, tuple)
+      count += 1
+
+      if (sampled.size > compressThreshold) {
+        compress(sampled, count)
+      }
+
+      buffer.update(mutableBufferOffset, new GenericArrayData(sampled.toArray))
+      buffer.setLong(mutableBufferOffset + 1, count)
+    }
+  }
+
+  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+    val otherCount = buffer2.getLong(inputBufferOffset + 1)
+    var count: Long = buffer1.getLong(mutableBufferOffset + 1)
+
+    val otherSampled = new mutable.ArrayBuffer[InternalRow]()
+    buffer2.getArray(inputBufferOffset).toArray[InternalRow](innerStruct).copyToBuffer(otherSampled)
+    val sampled: mutable.Buffer[InternalRow] = new mutable.ArrayBuffer[InternalRow]()
+    buffer1.getArray(mutableBufferOffset).toArray[InternalRow](innerStruct).copyToBuffer(sampled)
+
+    if (otherCount > 0 && count > 0) {
+      otherSampled.foreach { sample =>
+        val idx = sampled.indexWhere(s => s.getDouble(0) > sample.getDouble(0))
+        if (idx == 0) {
+          val new_sampled =
+            InternalRow(sampled(0).getDouble(0), sampled(0).getInt(1), sampled(1).getInt(2) / 2)
+          sampled.update(0, new_sampled)
+          val new_sample = InternalRow(sample.getDouble(0), sample.getInt(1), 0)
+          sampled.insert(0, new_sample)
+        } else if (idx == -1) {
+          val new_sampled = InternalRow(sampled(sampled.size - 1).getDouble(0),
+            sampled(sampled.size - 1).getInt(1),
+            (sampled(sampled.size - 2).getInt(2) * 2 * epsilon).toInt)
+          sampled.update(sampled.size - 1, new_sampled)
+          val new_sample = InternalRow(sample.getDouble(0), sample.getInt(1), 0)
+          sampled.insert(sampled.size, new_sample)
+        } else {
+          val new_sample = InternalRow(sample.getDouble(0), sample.getInt(1),
+            (sampled(idx - 1).getInt(2) + sampled(idx).getInt(2)) / 2)
+          sampled.insert(idx, new_sample)
+        }
+      }
+
+      count = count + otherCount
+      compress(sampled, count)
+      buffer1.update(mutableBufferOffset, new GenericArrayData(sampled.toArray))
+      buffer1.setLong(mutableBufferOffset + 1, count)
+    } else if (otherCount > 0) {
+      buffer1.update(mutableBufferOffset, new GenericArrayData(otherSampled.toArray))
+      buffer1.setLong(mutableBufferOffset + 1, otherCount)
+    }
+  }
+
+  override def eval(buffer: InternalRow): Any = {
+    val count: Long = buffer.getLong(mutableBufferOffset + 1)
+    val sampled: Array[InternalRow] =
+      buffer.getArray(mutableBufferOffset).toArray[InternalRow](innerStruct)
+    query(sampled, count)
+  }
 }

@@ -96,6 +96,12 @@ object Utils {
             aggregateFunction = aggregate.Sum(child),
             mode = aggregate.Complete,
             isDistinct = true)
+
+        case expressions.ApproxQuantile(child, quantile, epsilon, threshold) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.ApproxQuantile(child, quantile, epsilon, threshold),
+            mode = aggregate.Complete,
+            isDistinct = false)
       }
       // Check if there is any expressions.AggregateExpression1 left.
       // If so, we cannot convert this plan.

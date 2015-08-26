@@ -157,6 +157,60 @@ object functions {
   }
 
   /**
+   * Aggregate function: returns the approximate quantile in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def approxQuantile(
+      e: Column,
+      quantile: Double,
+      epsilon: Double,
+      compressThreshold: Int): Column = {
+    ApproxQuantile(e.expr, quantile, epsilon, compressThreshold)
+  }
+
+  /**
+   * Aggregate function: returns the approximate quantile in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def approxQuantile(
+      columnName: String,
+      quantile: Double,
+      epsilon: Double,
+      compressThreshold: Int): Column = {
+    approxQuantile(Column(columnName), quantile, epsilon, compressThreshold)
+  }
+
+  /**
+   * Aggregate function: returns the approximate quantile in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def approxQuantile(
+      e: Column,
+      quantile: Double,
+      epsilon: Double): Column = {
+    ApproxQuantile(e.expr, quantile, epsilon)
+  }
+
+  /**
+   * Aggregate function: returns the approximate quantile in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def approxQuantile(
+      columnName: String,
+      quantile: Double,
+      epsilon: Double): Column = {
+    approxQuantile(Column(columnName), quantile, epsilon)
+  }
+
+  /**
    * Aggregate function: returns the average of the values in a group.
    *
    * @group agg_funcs

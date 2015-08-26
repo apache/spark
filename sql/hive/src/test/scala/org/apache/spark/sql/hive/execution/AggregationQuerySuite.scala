@@ -21,6 +21,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -478,6 +479,27 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
         Row(1, 100, 1, 1, null, 1) ::
         Row(1, null, 2, 2, 3, 1) ::
         Row(0, null, 1, 1, null, 0) :: Nil)
+  }
+
+  test("test approximate quantile") {
+    val df = Seq.tabulate(1000)(i => (1.0 * i, 2.0 * i)).toDF("singles", "doubles")
+
+    val expected_1 = 500.0
+    val expected_2 = 1600.0
+
+    val epsilons = List(0.1, 0.05, 0.001)
+
+    for (i <- 0 to 2) {
+      val epsilon = epsilons(i)
+      val result1 = df.groupBy().agg(approxQuantile("singles", 0.5, epsilon)).collect()(0)
+      val result2 = df.groupBy().agg(approxQuantile("doubles", 0.8, epsilon)).collect()(0)
+
+      val error_1 = 2 * 1000 * epsilon
+      val error_2 = 2 * 2000 * epsilon
+
+      assert(math.abs(result1.getDouble(0) - expected_1) < error_1)
+      assert(math.abs(result2.getDouble(0) - expected_2) < error_2)
+    }
   }
 
   test("test Last implemented based on AggregateExpression1") {
