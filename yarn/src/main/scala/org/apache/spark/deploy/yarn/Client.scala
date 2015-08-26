@@ -26,6 +26,9 @@ import java.util.{Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
+
+import org.apache.spark.deploy.rest.yarn.YarnRestSubmissionClient
+
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.reflect.runtime.universe
 import scala.util.{Try, Success, Failure}
@@ -113,10 +116,10 @@ private[spark] class Client(
       appId = newAppResponse.getApplicationId()
 
       // Verify whether the cluster has enough resources for our AM
-      verifyClusterResources(newAppResponse)
+      verifyClusterResources(newAppResponse.getMaximumResourceCapability.getMemory)
 
       // Set up the appropriate contexts to launch our AM
-      val containerContext = createContainerLaunchContext(newAppResponse)
+      val containerContext = createContainerLaunchContext(newAppResponse.getApplicationId)
       val appContext = createApplicationSubmissionContext(newApp, containerContext)
 
       // Finally, submit and monitor the application
@@ -213,8 +216,7 @@ private[spark] class Client(
   /**
    * Fail fast if we have requested more resources per container than is available in the cluster.
    */
-  private def verifyClusterResources(newAppResponse: GetNewApplicationResponse): Unit = {
-    val maxMem = newAppResponse.getMaximumResourceCapability().getMemory()
+  def verifyClusterResources(maxMem: Int): Unit = {
     logInfo("Verifying our application has not requested more than the maximum " +
       s"memory capability of the cluster ($maxMem MB per container)")
     val executorMem = args.executorMemory + executorMemoryOverhead
@@ -631,10 +633,9 @@ private[spark] class Client(
    * Set up a ContainerLaunchContext to launch our ApplicationMaster container.
    * This sets up the launch environment, java options, and the command for launching the AM.
    */
-  private def createContainerLaunchContext(newAppResponse: GetNewApplicationResponse)
+  private[spark] def createContainerLaunchContext(appId: ApplicationId)
     : ContainerLaunchContext = {
     logInfo("Setting up container launch context for our AM")
-    val appId = newAppResponse.getApplicationId
     val appStagingDir = getAppStagingDir(appId)
     val pySparkArchives =
       if (sparkConf.getBoolean("spark.yarn.isPython", false)) {
@@ -981,7 +982,22 @@ object Client extends Logging {
     if (!Utils.isDynamicAllocationEnabled(sparkConf)) {
       sparkConf.setIfMissing("spark.executor.instances", args.numExecutors.toString)
     }
-    new Client(args, sparkConf).run()
+
+    val restEnabled = sparkConf.getBoolean("spark.yarn.rest.enabled", false)
+    println(s"rest enabled: $restEnabled")
+
+    if (restEnabled) {
+      val yarnConf = SparkHadoopUtil.get.newConfiguration(sparkConf).asInstanceOf[YarnConfiguration]
+      val rmWebAddress = yarnConf.get("yarn.resourcemanager.webapp.address")
+      require(rmWebAddress != null, "resource manager web app address is null")
+
+      val restClient = new YarnRestSubmissionClient(rmWebAddress)
+      val appSubmissionInfo = restClient.constructAppSubmissionInfo(args, sparkConf)
+      logInfo(s"Application submission context info:\n${appSubmissionInfo.toJson}")
+      restClient.createSubmission(appSubmissionInfo)
+    } else {
+      new Client(args, sparkConf).run()
+    }
   }
 
   // Alias for the Spark assembly jar and the user jar
