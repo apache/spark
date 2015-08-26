@@ -35,9 +35,9 @@ import org.apache.spark.mllib.util.MLUtils
  */
 @Since("1.3.0")
 @DeveloperApi
-class MultivariateGaussian (
-    val mu: Vector,
-    val sigma: Matrix) extends Serializable {
+class MultivariateGaussian @Since("1.3.0") (
+    @Since("1.3.0") val mu: Vector,
+    @Since("1.3.0") val sigma: Matrix) extends Serializable {
 
   require(sigma.numCols == sigma.numRows, "Covariance matrix must be square")
   require(mu.size == sigma.numCols, "Mean vector length must match covariance matrix size")

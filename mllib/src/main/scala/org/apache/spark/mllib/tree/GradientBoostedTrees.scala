@@ -51,7 +51,7 @@ import org.apache.spark.storage.StorageLevel
  */
 @Since("1.2.0")
 @Experimental
-class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
+class GradientBoostedTrees @Since("1.2.0") (private val boostingStrategy: BoostingStrategy)
   extends Serializable with Logging {
 
   /**

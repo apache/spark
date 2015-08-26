@@ -45,8 +45,8 @@ case class IndexedRow(index: Long, vector: Vector)
  */
 @Since("1.0.0")
 @Experimental
-class IndexedRowMatrix(
-    val rows: RDD[IndexedRow],
+class IndexedRowMatrix @Since("1.0.0") (
+    @Since("1.0.0") val rows: RDD[IndexedRow],
     private var nRows: Long,
     private var nCols: Int) extends DistributedMatrix {
 

@@ -34,10 +34,10 @@ import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
 @Since("1.0.0")
 @DeveloperApi
 case class Split(
-    feature: Int,
-    threshold: Double,
-    featureType: FeatureType,
-    categories: List[Double]) {
+    @Since("1.0.0") feature: Int,
+    @Since("1.0.0") threshold: Double,
+    @Since("1.0.0") featureType: FeatureType,
+    @Since("1.0.0") categories: List[Double]) {
 
   override def toString: String = {
     s"Feature = $feature, threshold = $threshold, featureType = $featureType, " +
