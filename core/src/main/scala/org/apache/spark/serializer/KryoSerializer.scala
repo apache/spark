@@ -39,7 +39,7 @@ import org.apache.spark.network.nio.{GetBlock, GotBlock, PutBlock}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
-import org.apache.spark.util.{BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf}
+import org.apache.spark.util.{Utils, BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf}
 import org.apache.spark.util.collection.CompactBuffer
 
 /**
@@ -133,6 +133,7 @@ class KryoSerializer(conf: SparkConf)
     new AllScalaRegistrar().apply(kryo)
 
     // Register types missed by Chill.
+    // scalastyle:off
     kryo.register(classOf[Array[Tuple1[Any]]])
     kryo.register(classOf[Array[Tuple2[Any, Any]]])
     kryo.register(classOf[Array[Tuple3[Any, Any, Any]]])
@@ -156,9 +157,11 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[Array[Tuple21[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
     kryo.register(classOf[Array[Tuple22[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]])
 
+    // scalastyle:on
+
     kryo.register(None.getClass)
     kryo.register(Nil.getClass)
-    kryo.register(Class.forName("scala.collection.immutable.$colon$colon"))
+    kryo.register(Utils.classForName("scala.collection.immutable.$colon$colon"))
     kryo.register(classOf[ArrayBuffer[Any]])
 
     kryo.setClassLoader(classLoader)
