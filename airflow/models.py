@@ -1351,7 +1351,15 @@ class BaseOperator(object):
         return self.task_id < other.task_id
 
     def __hash__(self):
-        return hash(tuple(getattr(self, c, None) for c in self._comps))
+        hash_components = [type(self)]
+        for c in self._comps:
+            val = getattr(self, c, None)
+            try:
+                hash(val)
+                hash_components.append(val)
+            except TypeError:
+                hash_components.append(repr(val))
+        return hash(tuple(hash_components))
 
     @property
     def schedule_interval(self):
@@ -1788,7 +1796,15 @@ class DAG(object):
         return self.dag_id < other.dag_id
 
     def __hash__(self):
-        return hash(tuple(getattr(self, c, None) for c in self._comps))
+        hash_components = [type(self)]
+        for c in self._comps:
+            val = getattr(self, c, None)
+            try:
+                hash(val)
+                hash_components.append(val)
+            except TypeError:
+                hash_components.append(repr(val))
+        return hash(tuple(hash_components))
 
     @property
     def task_ids(self):
