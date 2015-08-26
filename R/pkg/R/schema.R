@@ -56,7 +56,7 @@ structType.structField <- function(x, ...) {
   })
   stObj <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                        "createStructType",
-                       listToSeq(sfObjList))
+                       sfObjList)
   structType(stObj)
 }
 

@@ -35,10 +35,6 @@ private[r] object SQLUtils {
     new JavaSparkContext(sqlCtx.sparkContext)
   }
 
-  def toSeq[T](arr: Array[T]): Seq[T] = {
-    arr.toSeq
-  }
-
   def createStructType(fields : Seq[StructField]): StructType = {
     StructType(fields)
   }

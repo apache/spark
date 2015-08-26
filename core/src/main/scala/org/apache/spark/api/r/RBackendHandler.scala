@@ -125,10 +125,11 @@ private[r] class RBackendHandler(server: RBackend)
       val methods = cls.getMethods
       val selectedMethods = methods.filter(m => m.getName == methodName)
       if (selectedMethods.length > 0) {
-        val methods = selectedMethods.filter { x =>
-          matchMethod(numArgs, args, x.getParameterTypes)
-        }
-        if (methods.isEmpty) {
+        val (index, convertedArgs) = matchMethod(
+          selectedMethods.map(_.getParameterTypes),
+          args)
+
+        if (index.isEmpty) {
           logWarning(s"cannot find matching method ${cls}.$methodName. "
             + s"Candidates are:")
           selectedMethods.foreach { method =>
@@ -136,18 +137,29 @@ private[r] class RBackendHandler(server: RBackend)
           }
           throw new Exception(s"No matched method found for $cls.$methodName")
         }
-        val ret = methods.head.invoke(obj, args : _*)
+
+        val ret = selectedMethods(index.get).invoke(obj, convertedArgs : _*)
 
         // Write status bit
         writeInt(dos, 0)
         writeObject(dos, ret.asInstanceOf[AnyRef])
       } else if (methodName == "<init>") {
         // methodName should be "<init>" for constructor
-        val ctor = cls.getConstructors.filter { x =>
-          matchMethod(numArgs, args, x.getParameterTypes)
-        }.head
+        val ctors = cls.getConstructors
+        val (index, convertedArgs) = matchMethod(
+          ctors.map(_.getParameterTypes),
+          args)
 
-        val obj = ctor.newInstance(args : _*)
+        if (index.isEmpty) {
+          logWarning(s"cannot find matching constructor for ${cls}. "
+            + s"Candidates are:")
+          ctors.foreach { ctor =>
+            logWarning(s"$cls(${ctor.getParameterTypes.mkString(",")})")
+          }
+          throw new Exception(s"No matched constructor found for $cls")
+        }
+
+        val obj = ctors(index.get).newInstance(convertedArgs : _*)
 
         writeInt(dos, 0)
         writeObject(dos, obj.asInstanceOf[AnyRef])
@@ -171,35 +183,53 @@ private[r] class RBackendHandler(server: RBackend)
     }.toArray
   }
 
-  // Checks if the arguments passed in args matches the parameter types.
-  // NOTE: Currently we do exact match. We may add type conversions later.
+  // Find a matching method in all methods of the same name of a class
+  // according to the passed arguments.
   def matchMethod(
-      numArgs: Int,
-      args: Array[java.lang.Object],
-      parameterTypes: Array[Class[_]]): Boolean = {
-    if (parameterTypes.length != numArgs) {
-      return false
-    }
+      parameterTypesOfMethods: Array[Array[Class[_]]],
+      args: Array[Object]): (Option[Int], Array[Object]) = {
+    val numArgs = args.length
 
-    for (i <- 0 to numArgs - 1) {
-      val parameterType = parameterTypes(i)
-      var parameterWrapperType = parameterType
+    for (index <- 0 to parameterTypesOfMethods.length - 1) {
+      val parameterTypes = parameterTypesOfMethods(index)
 
-      // Convert native parameters to Object types as args is Array[Object] here
-      if (parameterType.isPrimitive) {
-        parameterWrapperType = parameterType match {
-          case java.lang.Integer.TYPE => classOf[java.lang.Integer]
-          case java.lang.Long.TYPE => classOf[java.lang.Integer]
-          case java.lang.Double.TYPE => classOf[java.lang.Double]
-          case java.lang.Boolean.TYPE => classOf[java.lang.Boolean]
-          case _ => parameterType
+      if (parameterTypes.length == numArgs) {
+        val convertedArgs = new Array[Object](numArgs)
+        Array.copy(args, 0, convertedArgs, 0, numArgs)
+
+        var argMatched = true
+        var i = 0
+        while (i < numArgs && argMatched) {
+          val parameterType = parameterTypes(i)
+          var parameterWrapperType = parameterType
+
+          // Convert native parameters to Object types as args is Array[Object] here
+          if (parameterType.isPrimitive) {
+            parameterWrapperType = parameterType match {
+              case java.lang.Integer.TYPE => classOf[java.lang.Integer]
+              case java.lang.Long.TYPE => classOf[java.lang.Integer]
+              case java.lang.Double.TYPE => classOf[java.lang.Double]
+              case java.lang.Boolean.TYPE => classOf[java.lang.Boolean]
+              case _ => parameterType
+            }
+          } else if (parameterType == classOf[Seq[Any]] && args(i).getClass.isArray) {
+            // Convert a Java array to scala Seq
+            convertedArgs(i) = args(i).asInstanceOf[Array[_]].toSeq
+          }
+          if (!parameterWrapperType.isInstance(convertedArgs(i))) {
+            argMatched = false
+          }
+          i = i + 1
+        }
+
+        if (argMatched) {
+          // For now, we return the first matching method.
+          // TODO: find best method in matching methods.
+          return (Some(index), convertedArgs)
         }
       }
-      if (!parameterWrapperType.isInstance(args(i))) {
-        return false
-      }
     }
-    true
+    (None, args)
   }
 }
 
