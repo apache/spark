@@ -235,6 +235,11 @@ private[sql] class JDBCRDD(
     if (sb.length == 0) "1" else sb.substring(1)
   }
 
+  private val columnList_backquote: String = {
+    val sb = new StringBuilder()
+    columns.foreach(x => sb.append(",").append("`"+x+"`"))
+    if (sb.length == 0) "1" else sb.substring(1)
+  }
   /**
    * Converts value to SQL expression.
    */
@@ -341,7 +346,7 @@ private[sql] class JDBCRDD(
 
     val myWhereClause = getWhereClause(part)
 
-    val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause"
+    val sqlText = s"SELECT $columnList_backquote FROM $fqTable $myWhereClause"
     val stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     val rs = stmt.executeQuery()
