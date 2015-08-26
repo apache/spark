@@ -22,7 +22,7 @@ if sys.version > '3':
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import keyword_only
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
 from pyspark.mllib.common import inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 
@@ -829,14 +829,12 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
     stopWords = Param(Params._dummy(), "stopWords", "The words to be filtered out")
     caseSensitive = Param(Params._dummy(), "caseSensitive", "whether to do a case sensitive " +
                           "comparison over the stop words")
-
-    ENGLISH_STOP_WORDS = SparkContext._jvm.org.apache.spark.ml.feature.StopWords$.ENGLISH_STOP_WORDS
     
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, stopWords=ENGLISH_STOP_WORDS,
-                 caseSensitive=false):
+    def __init__(self, inputCol=None, outputCol=None, stopWords=None,
+                 caseSensitive=False):
         """
-        __init__(self, inputCol=None, outputCol=None, stopWords=ENGLISH_STOP_WORDS,
+        __init__(self, inputCol=None, outputCol=None, stopWords=None,
                  caseSensitive=false)
         """
         super(StopWordsRemover, self).__init__()
@@ -845,14 +843,20 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
         self.stopWords = Param(self, "stopWords", "The words to be filtered out")
         self.caseSensitive = Param(self._dummy(), "caseSensitive", "whether to do a case " +
                                    "sensitive comparison over the stop words")
+        stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWords
+        defaultStopWords = stopWordsObj.ENGLISH_STOP_WORDS()
+        print "Constructing java param pair for value "+str(defaultStopWords)
+        print "Input class is "+defaultStopWords.__class__.__name__
+        self._setDefault(stopWords=defaultStopWords)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, inputCol=None, outputCol=None, stopWords=ENGLISH_STOP_WORDS,
-                  caseSensitive=false):
+    def setParams(self, inputCol=None, outputCol=None, stopWords=None,
+                  caseSensitive=False):
         """
-        setParams(self, inputCol="input", outputCol="output", caseSensitive=false)
+        setParams(self, inputCol="input", outputCol="output", stopWords=None,
+                  caseSensitive=false)
         Sets params for this StopWordRemover.
         """
         kwargs = self.setParams._input_kwargs
