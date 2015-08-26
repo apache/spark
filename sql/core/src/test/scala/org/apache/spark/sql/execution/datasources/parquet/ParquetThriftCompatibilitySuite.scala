@@ -74,6 +74,12 @@ class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest with Shar
   test("SPARK-10136 list of primitive list") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
+
+      // This Parquet schema is translated from the following Thrift schema:
+      //
+      //   struct ListOfPrimitiveList {
+      //     1: list<list<i32>> f;
+      //   }
       val schema =
         s"""message ListOfPrimitiveList {
            |  required group f (LIST) {
@@ -84,31 +90,51 @@ class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest with Shar
            |}
          """.stripMargin
 
-      writeDirect(path, schema) { implicit consumer =>
-        (0 until 2).foreach { i =>
-          message {
-            field("f", 0) {
-              group {
-                field("f_tuple", 0) {
-                  group {
-                    field("f_tuple_tuple", 0) {
-                      consumer.addInteger(i + 0)
-                      consumer.addInteger(i + 1)
-                    }
+      writeDirect(path, schema, { rc =>
+        rc.message {
+          rc.field("f", 0) {
+            rc.group {
+              rc.field("f_tuple", 0) {
+                rc.group {
+                  rc.field("f_tuple_tuple", 0) {
+                    rc.addInteger(0)
+                    rc.addInteger(1)
                   }
+                }
 
-                  group {
-                    field("f_tuple_tuple", 0) {
-                      consumer.addInteger(i + 2)
-                      consumer.addInteger(i + 3)
-                    }
+                rc.group {
+                  rc.field("f_tuple_tuple", 0) {
+                    rc.addInteger(2)
+                    rc.addInteger(3)
                   }
                 }
               }
             }
           }
         }
-      }
+      }, { rc =>
+        rc.message {
+          rc.field("f", 0) {
+            rc.group {
+              rc.field("f_tuple", 0) {
+                rc.group {
+                  rc.field("f_tuple_tuple", 0) {
+                    rc.addInteger(4)
+                    rc.addInteger(5)
+                  }
+                }
+
+                rc.group {
+                  rc.field("f_tuple_tuple", 0) {
+                    rc.addInteger(6)
+                    rc.addInteger(7)
+                  }
+                }
+              }
+            }
+          }
+        }
+      })
 
       logParquetSchema(path)
 
@@ -116,7 +142,7 @@ class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest with Shar
         sqlContext.read.parquet(path),
         Seq(
           Row(Seq(Seq(0, 1), Seq(2, 3))),
-          Row(Seq(Seq(1, 2), Seq(3, 4)))))
+          Row(Seq(Seq(4, 5), Seq(6, 7)))))
     }
   }
 }

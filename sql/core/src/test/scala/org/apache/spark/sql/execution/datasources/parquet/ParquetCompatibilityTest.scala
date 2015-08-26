@@ -57,9 +57,32 @@ private[sql] abstract class ParquetCompatibilityTest extends QueryTest with Parq
 }
 
 private[sql] object ParquetCompatibilityTest {
-  private class DirectWriteSupport(
-      schema: MessageType, writer: RecordConsumer => Unit, metadata: Map[String, String])
-    extends WriteSupport[Void] {
+  implicit class RecordConsumerDSL(consumer: RecordConsumer) {
+    def message(f: => Unit): Unit = {
+      consumer.startMessage()
+      f
+      consumer.endMessage()
+    }
+
+    def group(f: => Unit): Unit = {
+      consumer.startGroup()
+      f
+      consumer.endGroup()
+    }
+
+    def field(name: String, index: Int)(f: => Unit): Unit = {
+      consumer.startField(name, index)
+      f
+      consumer.endField(name, index)
+    }
+  }
+
+  /**
+   * A testing Parquet [[WriteSupport]] implementation used to write manually constructed Parquet
+   * records with arbitrary structures.
+   */
+  private class DirectWriteSupport(schema: MessageType, metadata: Map[String, String])
+    extends WriteSupport[RecordConsumer => Unit] {
 
     private var recordConsumer: RecordConsumer = _
 
@@ -67,8 +90,8 @@ private[sql] object ParquetCompatibilityTest {
       new WriteContext(schema, metadata.asJava)
     }
 
-    override def write(record: Void): Unit = {
-      writer(recordConsumer)
+    override def write(recordWriter: RecordConsumer => Unit): Unit = {
+      recordWriter.apply(recordConsumer)
     }
 
     override def prepareForWrite(recordConsumer: RecordConsumer): Unit = {
@@ -76,38 +99,26 @@ private[sql] object ParquetCompatibilityTest {
     }
   }
 
-  def writeDirect
-      (path: String, schema: String, metadata: Map[String, String] = Map.empty[String, String])
-      (writer: RecordConsumer => Unit): Unit = {
-    writeDirect(path, MessageTypeParser.parseMessageType(schema), metadata)(writer)
+  /**
+   * Writes arbitrary messages conforming to a given `schema` to a Parquet file located by `path`.
+   * Records are produced by `recordWriters`.
+   */
+  def writeDirect(path: String, schema: String, recordWriters: (RecordConsumer => Unit)*): Unit = {
+    writeDirect(path, schema, Map.empty[String, String], recordWriters: _*)
   }
 
-  def writeDirect
-      (path: String, schema: MessageType, metadata: Map[String, String])
-      (writer: RecordConsumer => Unit): Unit = {
-    val writeSupport = new DirectWriteSupport(schema, writer, metadata)
-    val parquetWriter = new ParquetWriter[Void](new Path(path), writeSupport)
-    try parquetWriter.write(null) finally parquetWriter.close()
-  }
-
-  def message(f: => Unit)(implicit consumer: RecordConsumer): Unit = {
-    consumer.startMessage()
-    f
-    consumer.endMessage()
-  }
-
-  def group(f: => Unit)(implicit consumer: RecordConsumer): Unit = {
-    consumer.startGroup()
-    f
-    consumer.endGroup()
-  }
-
-  def field
-      (name: String, index: Int)
-      (f: => Unit)
-      (implicit consumer: RecordConsumer): Unit = {
-    consumer.startField(name, index)
-    f
-    consumer.endField(name, index)
+  /**
+   * Writes arbitrary messages conforming to a given `schema` to a Parquet file located by `path`
+   * with given user-defined key-value `metadata`. Records are produced by `recordWriters`.
+   */
+  def writeDirect(
+      path: String,
+      schema: String,
+      metadata: Map[String, String],
+      recordWriters: (RecordConsumer => Unit)*): Unit = {
+    val messageType = MessageTypeParser.parseMessageType(schema)
+    val writeSupport = new DirectWriteSupport(messageType, metadata)
+    val parquetWriter = new ParquetWriter[RecordConsumer => Unit](new Path(path), writeSupport)
+    try recordWriters.foreach(parquetWriter.write) finally parquetWriter.close()
   }
 }
