@@ -126,6 +126,9 @@ object JdbcDialects {
 
   registerDialect(MySQLDialect)
   registerDialect(PostgresDialect)
+  registerDialect(OracleDialect)
+  registerDialect(DB2Dialect)
+  registerDialect(NetezzaDialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
