@@ -39,5 +39,4 @@ case class ProjectNode(projectList: Seq[NamedExpression], child: LocalNode) exte
   }
 
   override def close(): Unit = child.close()
-
 }
