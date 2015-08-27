@@ -229,4 +229,24 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
   }
+
+  test("SPARK-10301") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = sqlContext
+        .range(1)
+        .selectExpr("NAMED_STRUCT('a', id, 'b', id) AS s")
+        .coalesce(1)
+
+      df.write.mode("append").parquet(path)
+
+      val userDefinedSchema = new StructType()
+        .add("s",
+          new StructType()
+            .add("a", LongType, nullable = true),
+          nullable = true)
+
+      checkAnswer(sqlContext.read.schema(userDefinedSchema).parquet(path), Row(Row(0)))
+    }
+  }
 }

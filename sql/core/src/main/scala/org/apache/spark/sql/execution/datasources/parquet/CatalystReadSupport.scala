@@ -25,11 +25,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
 import org.apache.parquet.hadoop.api.{InitContext, ReadSupport}
 import org.apache.parquet.io.api.RecordMaterializer
-import org.apache.parquet.schema.MessageType
+import org.apache.parquet.schema.Type.Repetition
+import org.apache.parquet.schema._
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{MapType, ArrayType, DataType, StructType}
 
 private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with Logging {
   // Called after `init()` when initializing Parquet record reader.
@@ -81,70 +82,10 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
     // `StructType` containing all requested columns.
     val maybeRequestedSchema = Option(conf.get(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA))
 
-    // Below we construct a Parquet schema containing all requested columns.  This schema tells
-    // Parquet which columns to read.
-    //
-    // If `maybeRequestedSchema` is defined, we assemble an equivalent Parquet schema.  Otherwise,
-    // we have to fallback to the full file schema which contains all columns in the file.
-    // Obviously this may waste IO bandwidth since it may read more columns than requested.
-    //
-    // Two things to note:
-    //
-    // 1. It's possible that some requested columns don't exist in the target Parquet file.  For
-    //    example, in the case of schema merging, the globally merged schema may contain extra
-    //    columns gathered from other Parquet files.  These columns will be simply filled with nulls
-    //    when actually reading the target Parquet file.
-    //
-    // 2. When `maybeRequestedSchema` is available, we can't simply convert the Catalyst schema to
-    //    Parquet schema using `CatalystSchemaConverter`, because the mapping is not unique due to
-    //    non-standard behaviors of some Parquet libraries/tools.  For example, a Parquet file
-    //    containing a single integer array field `f1` may have the following legacy 2-level
-    //    structure:
-    //
-    //      message root {
-    //        optional group f1 (LIST) {
-    //          required INT32 element;
-    //        }
-    //      }
-    //
-    //    while `CatalystSchemaConverter` may generate a standard 3-level structure:
-    //
-    //      message root {
-    //        optional group f1 (LIST) {
-    //          repeated group list {
-    //            required INT32 element;
-    //          }
-    //        }
-    //      }
-    //
-    //    Apparently, we can't use the 2nd schema to read the target Parquet file as they have
-    //    different physical structures.
     val parquetRequestedSchema =
       maybeRequestedSchema.fold(context.getFileSchema) { schemaString =>
-        val toParquet = new CatalystSchemaConverter(conf)
-        val fileSchema = context.getFileSchema.asGroupType()
-        val fileFieldNames = fileSchema.getFields.asScala.map(_.getName).toSet
-
-        StructType
-          // Deserializes the Catalyst schema of requested columns
-          .fromString(schemaString)
-          .map { field =>
-            if (fileFieldNames.contains(field.name)) {
-              // If the field exists in the target Parquet file, extracts the field type from the
-              // full file schema and makes a single-field Parquet schema
-              new MessageType("root", fileSchema.getType(field.name))
-            } else {
-              // Otherwise, just resorts to `CatalystSchemaConverter`
-              toParquet.convert(StructType(Array(field)))
-            }
-          }
-          // Merges all single-field Parquet schemas to form a complete schema for all requested
-          // columns.  Note that it's possible that no columns are requested at all (e.g., count
-          // some partition column of a partitioned Parquet table). That's why `fold` is used here
-          // and always fallback to an empty Parquet schema.
-          .fold(new MessageType("root")) {
-            _ union _
-          }
+        val catalystRequestedSchema = StructType.fromString(schemaString)
+        CatalystReadSupport.clipParquetSchema(context.getFileSchema, catalystRequestedSchema)
       }
 
     val metadata =
@@ -160,4 +101,127 @@ private[parquet] object CatalystReadSupport {
   val SPARK_ROW_REQUESTED_SCHEMA = "org.apache.spark.sql.parquet.row.requested_schema"
 
   val SPARK_METADATA_KEY = "org.apache.spark.sql.parquet.row.metadata"
+
+  def clipParquetSchema(parquetSchema: MessageType, catalystSchema: StructType): MessageType = {
+    val clippedGroup = clipParquetType(parquetSchema.asGroupType(), catalystSchema).asGroupType()
+    Types.buildMessage().addFields(clippedGroup.getFields.asScala: _*).named("root")
+  }
+
+  private def clipParquetType(parquetType: Type, catalystType: DataType): Type = {
+    catalystType match {
+      case t: ArrayType if !isPrimitiveCatalystType(t.elementType) =>
+        clipParquetListType(parquetType.asGroupType(), t.elementType)
+
+      case t: MapType if !isPrimitiveCatalystType(t.valueType) =>
+        clipParquetMapType(parquetType.asGroupType(), t.keyType, t.valueType)
+
+      case t: StructType =>
+        clipParquetRecord(parquetType.asGroupType(), t)
+
+      case _ =>
+        parquetType
+    }
+  }
+
+  private def isPrimitiveCatalystType(dataType: DataType): Boolean = {
+    dataType match {
+      case _: ArrayType | _: MapType | _: StructType => false
+      case _ => true
+    }
+  }
+
+  private def clipParquetListType(parquetList: GroupType, elementType: DataType): Type = {
+    // Unannotated repeated group, list element type is just the group itself.  Clip it.
+    if (parquetList.getOriginalType == null && parquetList.isRepetition(Repetition.REPEATED)) {
+      clipParquetType(parquetList, elementType)
+    } else {
+      assert(parquetList.getOriginalType == OriginalType.LIST)
+      assert(parquetList.getFieldCount == 1)
+      assert(parquetList.getType(0).isRepetition(Repetition.REPEATED))
+      assert(!parquetList.getType(0).isPrimitive)
+
+      val repeatedGroup = parquetList.getType(0).asGroupType()
+
+      // If the repeated field is a group with multiple fields, or the repeated field is a group
+      // with one field and is named either "array" or uses the LIST-annotated group's name with
+      // "_tuple" appended then the repeated type is the element type and elements are required.
+      // Build a new LIST-annotated group with clipped `repeatedGroup` as element type and the
+      // only field.
+      if (
+        repeatedGroup.getFieldCount > 1 ||
+        repeatedGroup.getName == "array" ||
+        repeatedGroup.getName == parquetList.getName + "_tuple"
+      ) {
+        Types
+          .buildGroup(parquetList.getRepetition)
+          .as(OriginalType.LIST)
+          .addField(clipParquetType(repeatedGroup, elementType))
+          .named(parquetList.getName)
+      } else {
+        // Otherwise, the repeated field's type is the element type with the repeated field's
+        // repetition.
+        Types
+          .buildGroup(parquetList.getRepetition)
+          .as(OriginalType.LIST)
+          .addField(
+            Types
+              .repeatedGroup()
+              .addField(clipParquetType(repeatedGroup.getType(0), elementType))
+              .named(repeatedGroup.getName))
+          .named(parquetList.getName)
+      }
+    }
+  }
+
+  private def clipParquetMapType(
+      parquetMap: GroupType, keyType: DataType, valueType: DataType): GroupType = {
+    val repeatedGroup = parquetMap.getType(0).asGroupType()
+    val parquetKeyType = repeatedGroup.getType(0)
+    val parquetValueType = repeatedGroup.getType(1)
+
+    val clippedRepeatedGrouop =
+      Types
+        .repeatedGroup()
+        .as(repeatedGroup.getOriginalType)
+        .addField(parquetKeyType)
+        .addField(clipParquetType(parquetValueType, valueType))
+        .named(repeatedGroup.getName)
+
+    Types
+      .buildGroup(parquetMap.getRepetition)
+      .as(parquetMap.getOriginalType)
+      .addField(clippedRepeatedGrouop)
+      .named(parquetMap.getName)
+  }
+
+  private def clipParquetRecord(parquetRecord: GroupType, structType: StructType): GroupType = {
+    val resultFields = {
+      val parquetFields = parquetRecord.getFields.asScala
+
+      val clippedFields = {
+        val catalystFieldNames = structType.fieldNames.toSet
+        parquetFields.collect {
+          case f if catalystFieldNames.contains(f.getName) =>
+            clipParquetType(f, structType.apply(f.getName).dataType)
+        }
+      }
+
+      val paddedFields = {
+        val parquetFieldNames = parquetFields.map(_.getName).toSet
+        val toParquet = new CatalystSchemaConverter(followParquetFormatSpec = true)
+        structType.collect {
+          case f if !parquetFieldNames.contains(f.name) =>
+            toParquet.convertField(f)
+        }
+      }
+
+      (clippedFields ++ paddedFields).sortBy(_.getName)
+    }
+
+    Types
+      .buildGroup(parquetRecord.getRepetition)
+      .as(parquetRecord.getOriginalType)
+      .addFields(resultFields: _*)
+      .named(parquetRecord.getName)
+  }
 }
