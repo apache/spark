@@ -933,7 +933,8 @@ class Vectors(object):
     @staticmethod
     def equals(v1_indices, v1_values, v2_indices, v2_values):
         """
-        Check equality between sparse/dense vectors
+        Check equality between sparse/dense vectors,
+        v1_indices and v2_indices assume to be strictly increasing.
 
         >>> indices = [1, 2, 4]
         >>> values = [1., 3., 2.]
