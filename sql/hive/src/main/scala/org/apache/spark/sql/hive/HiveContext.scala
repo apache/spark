@@ -190,8 +190,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
     // into the isolated client loader
     val metadataConf = new HiveConf()
 
-    val defaltWarehouseLocation = metadataConf.get("hive.metastore.warehouse.dir")
-    logInfo("defalt warehouse location is " + defaltWarehouseLocation)
+    val defaultWarehouseLocation = metadataConf.get("hive.metastore.warehouse.dir")
+    logInfo("default warehouse location is " + defaultWarehouseLocation)
 
     // `configure` goes second to override other settings.
     val allConfig = metadataConf.asScala.map(e => e.getKey -> e.getValue).toMap ++ configure
