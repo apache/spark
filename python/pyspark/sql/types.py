@@ -1244,9 +1244,9 @@ class Row(tuple):
             idx = self.__fields__.index(item)
             return super(Row, self).__getitem__(idx)
         except IndexError:
-            raise AttributeError(item)
+            raise KeyError(item)
         except ValueError:
-            raise AttributeError(item)
+            raise ValueError(item)
 
     def __getattr__(self, item):
         if item.startswith("__"):
