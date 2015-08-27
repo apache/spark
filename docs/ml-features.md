@@ -257,24 +257,37 @@ More details can be found in the API docs for
 [CountVectorizerModel](api/java/org/apache/spark/ml/feature/CountVectorizerModel.html).
 {% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.MinMaxScaler;
-import org.apache.spark.ml.feature.MinMaxScalerModel;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.ml.feature.CountVectorizer;
+import org.apache.spark.ml.feature.CountVectorizerModel;
 import org.apache.spark.sql.DataFrame;
 
-JavaRDD<LabeledPoint> data =
-  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
-DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
-MinMaxScaler scaler = new MinMaxScaler()
-  .setInputCol("features")
-  .setOutputCol("scaledFeatures");
+// Input data: Each row is a bag of words from a sentence or document.
+JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
+  RowFactory.create(Arrays.asList("a b c".split(" "))),
+  RowFactory.create(Arrays.asList("a b b c a".split(" ")))
+));
+StructType schema = new StructType(new StructField[]{
+  new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
+});
+DataFrame documentDF = sqlContext.createDataFrame(jrdd, schema);
 
-// Compute summary statistics and generate MinMaxScalerModel
-MinMaxScalerModel scalerModel = scaler.fit(dataFrame);
+// define CountVectorizerModel with a-priori vocabulary
+CountVectorizerModel cv = new CountVectorizerModel(new String[]{"a", "b", "c"})
+  .setInputCol("text")
+  .setOutputCol("feature");
 
-// rescale each feature to range [min, max].
-DataFrame scaledData = scalerModel.transform(dataFrame);
+// alternatively, fit a CountVectorizerModel from the corpus
+CountVectorizerModel cv2 = new CountVectorizer()
+  .setInputCol("text")
+  .setOutputCol("feature")
+  .setVocabSize(3)
+  .setMinDF(2) // a term must appear in more than 2 documents to be included in the vocabulary
+  .fit(documentDF);
+
+DataFrame result = cv.transform(documentDF);
+for (Row r: result.select("feature").take(3)) {
+  System.out.println(r);
+}
 {% endhighlight %}
 </div>
 </div>
