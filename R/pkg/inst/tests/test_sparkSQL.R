@@ -1060,6 +1060,12 @@ test_that("parquetFile works with multiple input paths", {
   parquetDF <- parquetFile(sqlContext, parquetPath, parquetPath2)
   expect_is(parquetDF, "DataFrame")
   expect_equal(count(parquetDF), count(df) * 2)
+
+  # Test if varargs works with variables
+  saveMode <- "overwrite"
+  mergeSchema <- "true"
+  parquetPath3 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
+  write.df(df, parquetPath2, "parquet", mode = saveMode, mergeSchema = mergeSchema)
 })
 
 test_that("describe() and summarize() on a DataFrame", {
