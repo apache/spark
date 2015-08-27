@@ -314,10 +314,34 @@ frequently and don't carry as much meaning.
 `StopWordsRemover` takes as input a sequence of strings (e.g. the output
 of a [Tokenizer](ml-features.html#tokenizer)) and drops all the stop
 words from the input sequences. The list of stopwords is specified by
-the `stopWords` parameter.  We provide a list of stop words created by
-the [Glasgow Information Retrieval
-Group](http://ir.dcs.gla.ac.uk/resources/linguistic_utils/stop_words) in
-`StopWords.EnglishStopWords`, which is used by default.
+the `stopWords` parameter.  We provide [a list of stop
+words](http://ir.dcs.gla.ac.uk/resources/linguistic_utils/stop_words) by
+default, accessible by calling `getStopWords` on a newly instantiated
+`StopWordsRemover` instance.
+
+**Examples**
+
+Assume that we have the following DataFrame with columns `id` and `raw`:
+
+~~~~
+ id | raw
+----|----------
+ 0  | [I, saw, the, red, baloon]
+ 1  | [Mary, had, a, little, lamb]
+~~~~
+
+Applying `StopWordsRemover` with `raw` as the input column and `filtered` as the output
+column, we should get the following:
+
+~~~~
+ id | raw                         | filtered
+----|-----------------------------|--------------------
+ 0  | [I, saw, the, red, baloon]  |  [saw, red, baloon]
+ 1  | [Mary, had, a, little, lamb]|[Mary, little, lamb]
+~~~~
+
+In `filtered`, the stop words "I", "the", "had", and "a" have been
+filtered out.
 
 <div class="codetabs">
 
@@ -335,9 +359,9 @@ val remover = new StopWordsRemover()
   .setInputCol("raw")
   .setOutputCol("filtered")
 val dataSet = sqlContext.createDataFrame(Seq(
-  (Seq("I", "saw", "the", "red", "baloon")),
-  (Seq("Mary", "had", "a", "little", "lamb"))
-).map(Tuple1.apply)).toDF("raw")
+  (0, Seq("I", "saw", "the", "red", "baloon")),
+  (1, Seq("Mary", "had", "a", "little", "lamb"))
+)).toDF("id", "raw")
 
 remover.transform(dataSet).show()
 {% endhighlight %}
