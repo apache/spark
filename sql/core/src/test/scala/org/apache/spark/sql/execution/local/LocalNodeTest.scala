@@ -93,12 +93,9 @@ class LocalNodeTest extends SparkFunSuite {
   }
 
   protected def dataFrameToSeqScanNode(df: DataFrame): SeqScanNode = {
-    val output = df.queryExecution.sparkPlan.output
-    val converter =
-      CatalystTypeConverters.createToCatalystConverter(StructType.fromAttributes(output))
     new SeqScanNode(
-      output,
-      df.collect().map(r => converter(r).asInstanceOf[InternalRow]))
+      df.queryExecution.sparkPlan.output,
+      df.queryExecution.toRdd.map(_.copy()).collect())
   }
 
 }
