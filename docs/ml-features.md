@@ -211,6 +211,74 @@ for feature in result.select("result").take(3):
 </div>
 </div>
 
+## CountVectorizer
+
+As a transformer, `CountVectorizerModel` converts a collection of text documents to vectors of token counts.
+It takes parameter `vocabulary: Array[String]` and produces sparse representations for the documents over the vocabulary, which can then be passed to other algorithms like LDA.
+
+When an a-priori dictionary is not available, `CountVectorizer` can be used as an Estimator to extract the vocabulary and generates a `CountVectorizerModel`.
+It will select the top `vocabSize` words ordered by term frequency across the corpus.
+An optional parameter "minDF" also affect the fitting process by specifying the minimum number (or fraction if < 1.0) of documents a term must appear in to be included in the vocabulary.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+More details can be found in the API docs for
+[CountVectorizer](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizer) and
+[CountVectorizerModel](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizerModel).
+{% highlight scala %}
+import org.apache.spark.ml.feature.CountVectorizer
+import org.apache.spark.mllib.util.CountVectorizerModel
+
+val df = sqlContext.createDataFrame(Seq(
+  (0, Array("a", "b", "c")),
+  (1, Array("a", "b", "b", "c", "a"))
+)).toDF("id", "words")
+
+// define CountVectorizerModel with a-priori vocabulary
+val cv = new CountVectorizerModel(Array("a", "b", "c"))
+  .setInputCol("words")
+  .setOutputCol("features")
+
+// alternatively, fit a CountVectorizerModel from the corpus
+val cv2: CountVectorizerModel = new CountVectorizer()
+  .setInputCol("words")
+  .setOutputCol("features")
+  .setVocabSize(3)
+  .setMinDF(2) // a term must appear in more than 2 documents to be included in the vocabulary
+  .fit(df)
+
+cv.transform(df).select("features").collect()
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+More details can be found in the API docs for
+[CountVectorizer](api/java/org/apache/spark/ml/feature/CountVectorizer.html) and
+[CountVectorizerModel](api/java/org/apache/spark/ml/feature/CountVectorizerModel.html).
+{% highlight java %}
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.MinMaxScaler;
+import org.apache.spark.ml.feature.MinMaxScalerModel;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.sql.DataFrame;
+
+JavaRDD<LabeledPoint> data =
+  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
+DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
+MinMaxScaler scaler = new MinMaxScaler()
+  .setInputCol("features")
+  .setOutputCol("scaledFeatures");
+
+// Compute summary statistics and generate MinMaxScalerModel
+MinMaxScalerModel scalerModel = scaler.fit(dataFrame);
+
+// rescale each feature to range [min, max].
+DataFrame scaledData = scalerModel.transform(dataFrame);
+{% endhighlight %}
+</div>
+</div>
+
 # Feature Transformers
 
 ## Tokenizer
