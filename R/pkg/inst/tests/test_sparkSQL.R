@@ -64,10 +64,8 @@ test_that("infer types", {
   expect_equal(infer_type(TRUE), "boolean")
   expect_equal(infer_type(as.Date("2015-03-11")), "date")
   expect_equal(infer_type(as.POSIXlt("2015-03-11 12:13:04.043")), "timestamp")
-  expect_equal(infer_type(c(1L, 2L)),
-               list(type = "array", elementType = "integer", containsNull = TRUE))
-  expect_equal(infer_type(list(1L, 2L)),
-               list(type = "array", elementType = "integer", containsNull = TRUE))
+  expect_equal(infer_type(c(1L, 2L)), "array<integer>")
+  expect_equal(infer_type(list(1L, 2L)), "array<integer>")
   testStruct <- infer_type(list(a = 1L, b = "2"))
   expect_equal(class(testStruct), "structType")
   checkStructField(testStruct$fields()[[1]], "a", "IntegerType", TRUE)
@@ -244,8 +242,7 @@ test_that("create DataFrame with different data types", {
   expect_equal(collect(df), data.frame(l, stringsAsFactors = FALSE))
 })
 
-# TODO: enable this test after fix serialization for nested object
-#test_that("create DataFrame with nested array and struct", {
+test_that("create DataFrame with nested array and struct", {
 #  e <- new.env()
 #  assign("n", 3L, envir = e)
 #  l <- list(1:10, list("a", "b"), e, list(a="aa", b=3L))
@@ -255,7 +252,18 @@ test_that("create DataFrame with different data types", {
 #  expect_equal(count(df), 1)
 #  ldf <- collect(df)
 #  expect_equal(ldf[1,], l[[1]])
-#})
+
+  
+  #  ArrayType only for now
+  l <- list(as.list(1:10), list("a", "b"))
+  df <- createDataFrame(sqlContext, list(l), c("a", "b"))
+  expect_equal(dtypes(df), list(c("a", "array<int>"), c("b", "array<string>")))
+  expect_equal(count(df), 1)
+  ldf <- collect(df)
+  expect_equal(names(ldf), c("a", "b"))
+  expect_equal(ldf[1, 1][[1]], l[[1]])
+  expect_equal(ldf[1, 2][[1]], l[[2]])
+})
 
 test_that("Collect DataFrame with complex types", {
   # only ArrayType now
