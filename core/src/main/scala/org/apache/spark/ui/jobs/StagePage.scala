@@ -68,8 +68,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   // if we find that it's okay.
   private val MAX_TIMELINE_TASKS = parent.conf.getInt("spark.ui.timeline.tasks.maximum", 1000)
 
-  private val displayPeakExecutionMemory =
-    parent.conf.getOption("spark.sql.unsafe.enabled").exists(_.toBoolean)
+  private val displayPeakExecutionMemory = parent.conf.getBoolean("spark.sql.unsafe.enabled", true)
 
   def render(request: HttpServletRequest): Seq[Node] = {
     progressListener.synchronized {
@@ -860,7 +859,7 @@ private[ui] class TaskDataSource(
     }
     val peakExecutionMemoryUsed = taskInternalAccumulables
       .find { acc => acc.name == InternalAccumulator.PEAK_EXECUTION_MEMORY }
-      .map { acc => acc.value.toLong }
+      .map { acc => acc.update.getOrElse("0").toLong }
       .getOrElse(0L)
 
     val maybeInput = metrics.flatMap(_.inputMetrics)
@@ -988,8 +987,7 @@ private[ui] class TaskDataSource(
       shuffleRead,
       shuffleWrite,
       bytesSpilled,
-      errorMessage.getOrElse("")
-    )
+      errorMessage.getOrElse(""))
   }
 
   /**
@@ -1194,10 +1192,9 @@ private[ui] class TaskPagedTable(
     desc: Boolean) extends PagedTable[TaskTableRowData] {
 
   // We only track peak memory used for unsafe operators
-  private val displayPeakExecutionMemory =
-    conf.getOption("spark.sql.unsafe.enabled").exists(_.toBoolean)
+  private val displayPeakExecutionMemory = conf.getBoolean("spark.sql.unsafe.enabled", true)
 
-  override def tableId: String = ""
+  override def tableId: String = "task-table"
 
   override def tableCssClass: String = "table table-bordered table-condensed table-striped"
 
@@ -1212,8 +1209,7 @@ private[ui] class TaskPagedTable(
     currentTime,
     pageSize,
     sortColumn,
-    desc
-  )
+    desc)
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
@@ -1277,7 +1273,7 @@ private[ui] class TaskPagedTable(
         Seq(("Errors", ""))
 
     if (!taskHeadersAndCssClasses.map(_._1).contains(sortColumn)) {
-      new IllegalArgumentException(s"Unknown column: $sortColumn")
+      throw new IllegalArgumentException(s"Unknown column: $sortColumn")
     }
 
     val headerRow: Seq[Node] = {

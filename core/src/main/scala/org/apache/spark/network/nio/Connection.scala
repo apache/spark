@@ -23,7 +23,7 @@ import java.nio.channels._
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.LinkedList
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
@@ -145,7 +145,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
   }
 
   def callOnExceptionCallbacks(e: Throwable) {
-    onExceptionCallbacks foreach {
+    onExceptionCallbacks.asScala.foreach {
       callback =>
         try {
           callback(this, e)

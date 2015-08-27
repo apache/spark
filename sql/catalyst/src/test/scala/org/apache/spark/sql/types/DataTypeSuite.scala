@@ -170,6 +170,30 @@ class DataTypeSuite extends SparkFunSuite {
     }
   }
 
+  test("existsRecursively") {
+    val struct = StructType(
+      StructField("a", LongType) ::
+      StructField("b", FloatType) :: Nil)
+    assert(struct.existsRecursively(_.isInstanceOf[LongType]))
+    assert(struct.existsRecursively(_.isInstanceOf[StructType]))
+    assert(!struct.existsRecursively(_.isInstanceOf[IntegerType]))
+
+    val mapType = MapType(struct, StringType)
+    assert(mapType.existsRecursively(_.isInstanceOf[LongType]))
+    assert(mapType.existsRecursively(_.isInstanceOf[StructType]))
+    assert(mapType.existsRecursively(_.isInstanceOf[StringType]))
+    assert(mapType.existsRecursively(_.isInstanceOf[MapType]))
+    assert(!mapType.existsRecursively(_.isInstanceOf[IntegerType]))
+
+    val arrayType = ArrayType(mapType)
+    assert(arrayType.existsRecursively(_.isInstanceOf[LongType]))
+    assert(arrayType.existsRecursively(_.isInstanceOf[StructType]))
+    assert(arrayType.existsRecursively(_.isInstanceOf[StringType]))
+    assert(arrayType.existsRecursively(_.isInstanceOf[MapType]))
+    assert(arrayType.existsRecursively(_.isInstanceOf[ArrayType]))
+    assert(!arrayType.existsRecursively(_.isInstanceOf[IntegerType]))
+  }
+
   def checkDataTypeJsonRepr(dataType: DataType): Unit = {
     test(s"JSON - $dataType") {
       assert(DataType.fromJson(dataType.json) === dataType)

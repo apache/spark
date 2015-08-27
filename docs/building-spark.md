@@ -7,7 +7,8 @@ redirect_from: "building-with-maven.html"
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-Building Spark using Maven requires Maven 3.0.4 or newer and Java 7+.
+Building Spark using Maven requires Maven 3.3.3 or newer and Java 7+.
+The Spark build can supply a suitable Maven binary; see below.
 
 # Building with `build/mvn`
 

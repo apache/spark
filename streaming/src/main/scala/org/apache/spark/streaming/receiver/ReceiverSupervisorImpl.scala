@@ -20,6 +20,7 @@ package org.apache.spark.streaming.receiver
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.base.Throwables
@@ -81,15 +82,20 @@ private[streaming] class ReceiverSupervisorImpl(
           cleanupOldBlocks(threshTime)
         case UpdateRateLimit(eps) =>
           logInfo(s"Received a new rate limit: $eps.")
-          blockGenerator.updateRate(eps)
+          registeredBlockGenerators.foreach { bg =>
+            bg.updateRate(eps)
+          }
       }
     })
 
   /** Unique block ids if one wants to add blocks directly */
   private val newBlockId = new AtomicLong(System.currentTimeMillis())
 
+  private val registeredBlockGenerators = new mutable.ArrayBuffer[BlockGenerator]
+    with mutable.SynchronizedBuffer[BlockGenerator]
+
   /** Divides received data records into data blocks for pushing in BlockManager. */
-  private val blockGenerator = new BlockGenerator(new BlockGeneratorListener {
+  private val defaultBlockGeneratorListener = new BlockGeneratorListener {
     def onAddData(data: Any, metadata: Any): Unit = { }
 
     def onGenerateBlock(blockId: StreamBlockId): Unit = { }
@@ -101,14 +107,15 @@ private[streaming] class ReceiverSupervisorImpl(
     def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]) {
       pushArrayBuffer(arrayBuffer, None, Some(blockId))
     }
-  }, streamId, env.conf)
+  }
+  private val defaultBlockGenerator = createBlockGenerator(defaultBlockGeneratorListener)
 
-  override private[streaming] def getCurrentRateLimit: Option[Long] =
-    Some(blockGenerator.getCurrentLimit)
+  /** Get the current rate limit of the default block generator */
+  override private[streaming] def getCurrentRateLimit: Long = defaultBlockGenerator.getCurrentLimit
 
   /** Push a single record of received data into block generator. */
   def pushSingle(data: Any) {
-    blockGenerator.addData(data)
+    defaultBlockGenerator.addData(data)
   }
 
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
@@ -162,11 +169,11 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
   override protected def onStart() {
-    blockGenerator.start()
+    registeredBlockGenerators.foreach { _.start() }
   }
 
   override protected def onStop(message: String, error: Option[Throwable]) {
-    blockGenerator.stop()
+    registeredBlockGenerators.foreach { _.stop() }
     env.rpcEnv.stop(endpoint)
   }
 
@@ -181,6 +188,16 @@ private[streaming] class ReceiverSupervisorImpl(
     val errorString = error.map(Throwables.getStackTraceAsString).getOrElse("")
     trackerEndpoint.askWithRetry[Boolean](DeregisterReceiver(streamId, message, errorString))
     logInfo("Stopped receiver " + streamId)
+  }
+
+  override def createBlockGenerator(
+      blockGeneratorListener: BlockGeneratorListener): BlockGenerator = {
+    // Cleanup BlockGenerators that have already been stopped
+    registeredBlockGenerators --= registeredBlockGenerators.filter{ _.isStopped() }
+
+    val newBlockGenerator = new BlockGenerator(blockGeneratorListener, streamId, env.conf)
+    registeredBlockGenerators += newBlockGenerator
+    newBlockGenerator
   }
 
   /** Generate new block ID */

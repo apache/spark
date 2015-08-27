@@ -32,7 +32,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql import since
 from pyspark.sql.types import _parse_datatype_json_string
-from pyspark.sql.column import Column, _to_seq, _to_java_column
+from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.types import *
 
@@ -212,8 +212,7 @@ class DataFrame(object):
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
         >>> df.explain()
-        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at applySchemaToPythonRDD at\
-          NativeMethodAccessorImpl.java:...
+        Scan PhysicalRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -224,7 +223,6 @@ class DataFrame(object):
         ...
         == Physical Plan ==
         ...
-        == RDD ==
         """
         if extended:
             print(self._jdf.queryExecution().toString())
@@ -496,7 +494,7 @@ class DataFrame(object):
             if w < 0.0:
                 raise ValueError("Weights must be positive. Found weight value: %s" % w)
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
-        rdd_array = self._jdf.randomSplit(_to_seq(self.sql_ctx._sc, weights), long(seed))
+        rdd_array = self._jdf.randomSplit(_to_list(self.sql_ctx._sc, weights), long(seed))
         return [DataFrame(rdd, self.sql_ctx) for rdd in rdd_array]
 
     @property
@@ -568,8 +566,7 @@ class DataFrame(object):
 
         if on is None or len(on) == 0:
             jdf = self._jdf.join(other._jdf)
-
-        if isinstance(on[0], basestring):
+        elif isinstance(on[0], basestring):
             jdf = self._jdf.join(other._jdf, self._jseq(on))
         else:
             assert isinstance(on[0], Column), "on should be Column or list of Column"
@@ -725,8 +722,6 @@ class DataFrame(object):
         [Row(age=5, name=u'Bob')]
         """
         if isinstance(item, basestring):
-            if item not in self.columns:
-                raise IndexError("no such column: %s" % item)
             jc = self._jdf.apply(item)
             return Column(jc)
         elif isinstance(item, Column):
@@ -1207,7 +1202,9 @@ class DataFrame(object):
     @ignore_unicode_prefix
     @since(1.3)
     def withColumn(self, colName, col):
-        """Returns a new :class:`DataFrame` by adding a column.
+        """
+        Returns a new :class:`DataFrame` by adding a column or replacing the
+        existing column that has the same name.
 
         :param colName: string, name of the new column.
         :param col: a :class:`Column` expression for the new column.
@@ -1215,7 +1212,8 @@ class DataFrame(object):
         >>> df.withColumn('age2', df.age + 2).collect()
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
         """
-        return self.select('*', col.alias(colName))
+        assert isinstance(col, Column), "col should be Column"
+        return DataFrame(self._jdf.withColumn(colName, col._jc), self.sql_ctx)
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -1228,10 +1226,7 @@ class DataFrame(object):
         >>> df.withColumnRenamed('age', 'age2').collect()
         [Row(age2=2, name=u'Alice'), Row(age2=5, name=u'Bob')]
         """
-        cols = [Column(_to_java_column(c)).alias(new)
-                if c == existing else c
-                for c in self.columns]
-        return self.select(*cols)
+        return DataFrame(self._jdf.withColumnRenamed(existing, new), self.sql_ctx)
 
     @since(1.4)
     @ignore_unicode_prefix
