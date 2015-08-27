@@ -270,7 +270,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           $cursor += $writer.write(
             $buffer,
             Platform.BYTE_ARRAY_OFFSET + $cursor,
-            ${convertedElement.primitive}.copy());
+            ${convertedElement.primitive});
         """
       case _ =>
         val writer = getWriter(elementType)
