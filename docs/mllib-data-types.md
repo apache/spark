@@ -337,7 +337,10 @@ limited by the integer range but it should be much smaller in practice.
 <div data-lang="scala" markdown="1">
 
 A [`RowMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.RowMatrix) can be
-created from an `RDD[Vector]` instance.  Then we can compute its column summary statistics.
+created from an `RDD[Vector]` instance.  Then we can compute its column summary statistics and decompositions.
+[QR decomposition](https://en.wikipedia.org/wiki/QR_decomposition) is of the form A = QR where Q is an orthogonal matrix and R is an upper triangular matrix.
+For [singular value decomposition (SVD)](https://en.wikipedia.org/wiki/Singular_value_decomposition) and [principal component analysis (PCA)](https://en.wikipedia.org/wiki/Principal_component_analysis), please refer to [Dimensionality reduction](mllib-dimensionality-reduction.html).
+
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Vector
