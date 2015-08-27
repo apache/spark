@@ -818,6 +818,7 @@ class StringIndexerModel(JavaModel):
     Model fitted by StringIndexer.
     """
 
+
 class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
     """
     .. note:: Experimental
@@ -829,7 +830,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
     stopWords = Param(Params._dummy(), "stopWords", "The words to be filtered out")
     caseSensitive = Param(Params._dummy(), "caseSensitive", "whether to do a case sensitive " +
                           "comparison over the stop words")
-    
+
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, stopWords=None,
                  caseSensitive=False):
@@ -845,8 +846,6 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
                                    "sensitive comparison over the stop words")
         stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWords
         defaultStopWords = stopWordsObj.ENGLISH_STOP_WORDS()
-        print "Constructing java param pair for value "+str(defaultStopWords)
-        print "Input class is "+defaultStopWords.__class__.__name__
         self._setDefault(stopWords=defaultStopWords)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
