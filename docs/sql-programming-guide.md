@@ -1719,7 +1719,7 @@ The following options can be used to configure the version of Hive that is used 
         is not generally recommended for production deployments. 
         <li>A classpath in the standard format for the JVM.  This classpath must include all of Hive 
         and its dependencies, including the correct version of Hadoop.  These jars only need to be
-        present on the driver, but if you are running in yarn client mode then you must ensure
+        present on the driver, but if you are running in yarn cluster mode then you must ensure
         they are packaged with you application.</li>
       </ol>
     </td>
