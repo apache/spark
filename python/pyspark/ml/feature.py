@@ -167,6 +167,65 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
+class DCT(JavaTransformer, HasInputCol, HasOutputCol):
+    """
+    A feature transformer that takes the 1D discrete cosine transform of a real vector. No zero
+    padding is performed on the input vector.
+    It returns a real vector of the same length representing the DCT. The return vector is scaled
+    such that the transform matrix is unitary (aka scaled DCT-II).
+
+    More information on `https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia`.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
+    >>> dct = DCT(inverse=False, inputCol="vec", outputCol="resultVec")
+    >>> dct.transform(df).head().resultVec
+    DenseVector([10.969..., -0.707..., -2.041...])
+    >>> dct.setInverse(True).transform(df).head().resultVec
+    DenseVector([10.993..., -2.012..., -0.320...])
+    """
+
+    # a placeholder to make it appear in the generated doc
+    inverse = Param(Params._dummy(), "inverse", "Set transformer to perform inverse DCT, " +
+                    "default False.")
+
+    @keyword_only
+    def __init__(self, inverse=False, inputCol=None, outputCol=None):
+        """
+        __init__(self, inverse=False, inputCol=None, outputCol=None)
+        """
+        super(DCT, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.DCT", self.uid)
+        self.inverse = Param(self, "inverse", "Set transformer to perform inverse DCT, " +
+                             "default False.")
+        self._setDefault(inverse=False)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, inverse=False, inputCol=None, outputCol=None):
+        """
+        setParams(self, inverse=False, inputCol=None, outputCol=None)
+        Sets params for this DCT.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setInverse(self, value):
+        """
+        Sets the value of :py:attr:`inverse`.
+        """
+        self._paramMap[self.inverse] = value
+        return self
+
+    def getInverse(self):
+        """
+        Gets the value of inverse or its default value.
+        """
+        return self.getOrDefault(self.inverse)
+
+
+@inherit_doc
 class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
     """
     Outputs the Hadamard product (i.e., the element-wise product) of each input vector
