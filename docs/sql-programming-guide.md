@@ -11,7 +11,7 @@ title: Spark SQL and DataFrames
 
 Spark SQL is a Spark module for structured data processing. It provides a programming abstraction called DataFrames and can also act as distributed SQL query engine.
 
-Spark SQL can also be used to read from data from an existing Hive installation.  For more on how to configure this feature, please refer to the [Hive Tables](#hive-tables) section.
+Spark SQL can also be used to read data from an existing Hive installation.  For more on how to configure this feature, please refer to the [Hive Tables](#hive-tables) section.
 
 # DataFrames
 
@@ -1718,7 +1718,9 @@ The following options can be used to configure the version of Hive that is used 
         Use Hive jars of specified version downloaded from Maven repositories.  This configuration
         is not generally recommended for production deployments. 
         <li>A classpath in the standard format for the JVM.  This classpath must include all of Hive 
-        and its dependencies, including the correct version of Hadoop.</li>
+        and its dependencies, including the correct version of Hadoop.  These jars only need to be
+        present on the driver, but if you are running in yarn client mode then you must ensure
+        they are packaged with you application.</li>
       </ol>
     </td>
   </tr>
@@ -2043,12 +2045,13 @@ options.
    `spark.sql.parquet.mergeSchema` to `true`.
  - Resolution of strings to columns in python now supports using dots (`.`) to qualify the column or 
    access nested values.  For example `df['table.column.nestedField']`.  However, this means that if 
-   your column name contains any dots you must now escape them using backticks.   
+   your column name contains any dots you must now escape them using backticks (e.g., ``table.`column.with.dots`.nested``).   
  - In-memory columnar storage partition pruning is on by default. It can be disabled by setting
    `spark.sql.inMemoryColumnarStorage.partitionPruning` to `false`.
  - Unlimited precision decimal columns are no longer supported, instead Spark SQL enforces a maximum
    precision of 38.  When inferring schema from `BigDecimal` objects, a precision of (38, 18) is now
    used. When no precision is specified in DDL then the default remains `Decimal(10, 0)`.
+ - Timestamps are now stored at a precision of 1us, rather than 1ns
  - In the `sql` dialect, floating point numbers are now parsed as decimal.  HiveQL parsing remains
    unchanged.
  - The canonical name of SQL/DataFrame functions are now lower case (e.g. sum vs SUM).
