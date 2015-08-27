@@ -270,7 +270,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
       // Create the table if the table didn't exist.
       if (!tableExists) {
-        val schema = JdbcUtils.schemaString(df, url, connectionProperties)
+        val schema = JdbcUtils.schemaString(df, url)
         val sql = s"CREATE TABLE $table ($schema)"
         conn.prepareStatement(sql).executeUpdate()
       }

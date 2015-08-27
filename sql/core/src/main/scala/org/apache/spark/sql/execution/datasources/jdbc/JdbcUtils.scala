@@ -163,15 +163,13 @@ object JdbcUtils extends Logging {
    */
   def schemaString(
                     df: DataFrame,
-                    url: String,
-                    properties: Properties = new Properties()): String = {
+                    url: String): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
-    val stringDataType = properties.getProperty("dbStringDataType", "TEXT")
     df.schema.fields foreach { field => {
       val name = field.name
       val typ: String =
-        dialect.getJDBCType(field.dataType).map(_.databaseTypeDefinition).getOrElse(
+        dialect.getJDBCType(field.dataType, field.metadata).map(_.databaseTypeDefinition).getOrElse(
           field.dataType match {
             case IntegerType => "INTEGER"
             case LongType => "BIGINT"
@@ -180,7 +178,7 @@ object JdbcUtils extends Logging {
             case ShortType => "INTEGER"
             case ByteType => "BYTE"
             case BooleanType => "BIT(1)"
-            case StringType => stringDataType
+            case StringType => "TEXT"
             case BinaryType => "BLOB"
             case TimestampType => "TIMESTAMP"
             case DateType => "DATE"
@@ -203,7 +201,7 @@ object JdbcUtils extends Logging {
       properties: Properties = new Properties()) {
     val dialect = JdbcDialects.get(url)
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
-      dialect.getJDBCType(field.dataType).map(_.jdbcNullType).getOrElse(
+      dialect.getJDBCType(field.dataType, field.metadata).map(_.jdbcNullType).getOrElse(
         field.dataType match {
           case IntegerType => java.sql.Types.INTEGER
           case LongType => java.sql.Types.BIGINT
