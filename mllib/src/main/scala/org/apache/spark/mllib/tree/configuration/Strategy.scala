@@ -69,20 +69,20 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  */
 @Since("1.0.0")
 @Experimental
-class Strategy (
-    @BeanProperty var algo: Algo,
-    @BeanProperty var impurity: Impurity,
-    @BeanProperty var maxDepth: Int,
-    @BeanProperty var numClasses: Int = 2,
-    @BeanProperty var maxBins: Int = 32,
-    @BeanProperty var quantileCalculationStrategy: QuantileStrategy = Sort,
-    @BeanProperty var categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
-    @BeanProperty var minInstancesPerNode: Int = 1,
-    @BeanProperty var minInfoGain: Double = 0.0,
-    @BeanProperty var maxMemoryInMB: Int = 256,
-    @BeanProperty var subsamplingRate: Double = 1,
-    @BeanProperty var useNodeIdCache: Boolean = false,
-    @BeanProperty var checkpointInterval: Int = 10) extends Serializable {
+class Strategy @Since("1.3.0") (
+    @Since("1.0.0") @BeanProperty var algo: Algo,
+    @Since("1.0.0") @BeanProperty var impurity: Impurity,
+    @Since("1.0.0") @BeanProperty var maxDepth: Int,
+    @Since("1.2.0") @BeanProperty var numClasses: Int = 2,
+    @Since("1.0.0") @BeanProperty var maxBins: Int = 32,
+    @Since("1.0.0") @BeanProperty var quantileCalculationStrategy: QuantileStrategy = Sort,
+    @Since("1.0.0") @BeanProperty var categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
+    @Since("1.2.0") @BeanProperty var minInstancesPerNode: Int = 1,
+    @Since("1.2.0") @BeanProperty var minInfoGain: Double = 0.0,
+    @Since("1.0.0") @BeanProperty var maxMemoryInMB: Int = 256,
+    @Since("1.2.0") @BeanProperty var subsamplingRate: Double = 1,
+    @Since("1.2.0") @BeanProperty var useNodeIdCache: Boolean = false,
+    @Since("1.2.0") @BeanProperty var checkpointInterval: Int = 10) extends Serializable {
 
   /**
    */
@@ -206,6 +206,7 @@ object Strategy {
   }
 
   @deprecated("Use Strategy.defaultStrategy instead.", "1.5.0")
+  @Since("1.2.0")
   def defaultStategy(algo: Algo): Strategy = defaultStrategy(algo)
 
 }
