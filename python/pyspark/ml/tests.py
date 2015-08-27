@@ -267,24 +267,26 @@ class FeatureTests(PySparkTestCase):
         self.assertEquals(transformedDF.head().output, ["a b c d", "b c d e"])
 
 
-
 class HasInducedError(Params):
 
     def __init__(self):
         super(HasInducedError, self).__init__()
-        self.inducedError = Param(self, "inducedError", "Uniformly-distributed error added to feature")
+        self.inducedError = Param(self, "inducedError",
+                                  "Uniformly-distributed error added to feature")
 
     def getInducedError(self):
         return self.getOrDefault(self.inducedError)
+
 
 class InducedErrorModel(Model, HasInducedError):
 
     def __init__(self):
         super(InducedErrorModel, self).__init__()
-    
+
     def _transform(self, dataset):
-        return dataset.withColumn("prediction", 
+        return dataset.withColumn("prediction",
                                   dataset.feature + (rand(0) * self.getInducedError()))
+
 
 class InducedErrorEstimator(Estimator, HasInducedError):
 
@@ -297,14 +299,15 @@ class InducedErrorEstimator(Estimator, HasInducedError):
         self._copyValues(model)
         return model
 
+
 class CrossValidatorTests(PySparkTestCase):
 
     def test_fit_minimize_metric(self):
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame([
-            (10, 10.0), 
-            (50, 50.0), 
-            (100, 100.0), 
+            (10, 10.0),
+            (50, 50.0),
+            (100, 100.0),
             (500, 500.0)] * 10,
             ["feature", "label"])
 
@@ -312,22 +315,23 @@ class CrossValidatorTests(PySparkTestCase):
         evaluator = RegressionEvaluator(metricName="rmse")
 
         grid = (ParamGridBuilder()
-            .addGrid( iee.inducedError, [100.0, 0.0, 10000.0] )
-            .build())
+                .addGrid(iee.inducedError, [100.0, 0.0, 10000.0])
+                .build())
         cv = CrossValidator(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
         cvModel = cv.fit(dataset)
         bestModel = cvModel.bestModel
         bestModelMetric = evaluator.evaluate(bestModel.transform(dataset))
 
-        self.assertEqual(0.0, bestModel.getOrDefault('inducedError'), "Best model should have zero induced error")
+        self.assertEqual(0.0, bestModel.getOrDefault('inducedError'),
+                         "Best model should have zero induced error")
         self.assertEqual(0.0, bestModelMetric, "Best model has RMSE of 0")
 
     def test_fit_maximize_metric(self):
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame([
-            (10, 10.0), 
-            (50, 50.0), 
-            (100, 100.0), 
+            (10, 10.0),
+            (50, 50.0),
+            (100, 100.0),
             (500, 500.0)] * 10,
             ["feature", "label"])
 
@@ -335,14 +339,15 @@ class CrossValidatorTests(PySparkTestCase):
         evaluator = RegressionEvaluator(metricName="r2")
 
         grid = (ParamGridBuilder()
-            .addGrid( iee.inducedError, [100.0, 0.0, 10000.0] )
-            .build())
+                .addGrid(iee.inducedError, [100.0, 0.0, 10000.0])
+                .build())
         cv = CrossValidator(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
         cvModel = cv.fit(dataset)
         bestModel = cvModel.bestModel
         bestModelMetric = evaluator.evaluate(bestModel.transform(dataset))
 
-        self.assertEqual(0.0, bestModel.getOrDefault('inducedError'), "Best model should have zero induced error")
+        self.assertEqual(0.0, bestModel.getOrDefault('inducedError'),
+                         "Best model should have zero induced error")
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
 
 

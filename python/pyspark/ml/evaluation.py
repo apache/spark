@@ -67,6 +67,11 @@ class Evaluator(Params):
             raise ValueError("Params must be a param map but got %s." % type(params))
 
     def isLargerBetter(self):
+        """
+        Indicates whether the metric returned by :py:meth:`evaluate` should be maximized
+        (True, default) or minimized (False).
+        A given evaluator may support multiple metrics which may be maximized or minimized.
+        """
         return True
 
 
@@ -89,6 +94,7 @@ class JavaEvaluator(Evaluator, JavaWrapper):
         return self._java_obj.evaluate(dataset._jdf)
 
     def isLargerBetter(self):
+        self._transfer_params_to_java()
         return self._java_obj.isLargerBetter()
 
 
