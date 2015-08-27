@@ -157,7 +157,7 @@ class DataFrameReader(object):
         elif isinstance(path, RDD):
             return self._df(self._jreader.json(path._jrdd))
         else:
-            raise Exception("path can be only string or RDD")
+            raise TypeError("path can be only string or RDD")
 
     @since(1.4)
     def table(self, tableName):
