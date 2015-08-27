@@ -23,7 +23,7 @@ import java.util.List;
 
 import scala.Tuple2;
 
-import org.apache.commons.lang.StringUtils;
+import com.google.common.base.Strings;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -50,7 +50,7 @@ public class JavaWord2VecSuite implements Serializable {
   @SuppressWarnings("unchecked")
   public void word2Vec() {
     // The tests are to check Java compatibility.
-    String sentence = StringUtils.repeat("a b ", 100) + StringUtils.repeat("a c ", 10);
+    String sentence = Strings.repeat("a b ", 100) + Strings.repeat("a c ", 10);
     List<String> words = Arrays.asList(sentence.split(" "));
     List<List<String>> localDoc = Arrays.asList(words, words);
     JavaRDD<List<String>> doc = sc.parallelize(localDoc);
