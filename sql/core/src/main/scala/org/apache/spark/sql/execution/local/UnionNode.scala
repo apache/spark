@@ -24,52 +24,49 @@ case class UnionNode(children: Seq[LocalNode]) extends LocalNode {
 
   override def output: Seq[Attribute] = children.head.output
 
-  override def execute(): OpenCloseRowIterator = new OpenCloseRowIterator {
+  private[this] var currentChild: LocalNode = _
 
-    private var currentIter: OpenCloseRowIterator = _
+  private[this] var nextChildIndex: Int = _
 
-    private var nextChildIndex: Int = _
+  override def open(): Unit = {
+    currentChild = children.head
+    currentChild.open()
+    nextChildIndex = 1
+  }
 
-    override def open(): Unit = {
-      currentIter = children.head.execute()
-      currentIter.open()
-      nextChildIndex = 1
-    }
-
-    private def advanceToNextChild(): Boolean = {
-      var found = false
-      var exit = false
-      while (!exit && !found) {
-        if (currentIter != null) {
-          currentIter.close()
-        }
-        if (nextChildIndex >= children.size) {
-          found = false
-          exit = true
-        } else {
-          currentIter = children(nextChildIndex).execute()
-          nextChildIndex += 1
-          currentIter.open()
-          found = currentIter.advanceNext()
-        }
+  private def advanceToNextChild(): Boolean = {
+    var found = false
+    var exit = false
+    while (!exit && !found) {
+      if (currentChild != null) {
+        currentChild.close()
       }
-      found
-    }
-
-    override def close(): Unit = {
-      if (currentIter != null) {
-        currentIter.close()
-      }
-    }
-
-    override def getRow: InternalRow = currentIter.getRow
-
-    override def advanceNext(): Boolean = {
-      if (currentIter.advanceNext()) {
-        true
+      if (nextChildIndex >= children.size) {
+        found = false
+        exit = true
       } else {
-        advanceToNextChild()
+        currentChild = children(nextChildIndex)
+        nextChildIndex += 1
+        currentChild.open()
+        found = currentChild.next()
       }
+    }
+    found
+  }
+
+  override def close(): Unit = {
+    if (currentChild != null) {
+      currentChild.close()
+    }
+  }
+
+  override def get(): InternalRow = currentChild.get()
+
+  override def next(): Boolean = {
+    if (currentChild.next()) {
+      true
+    } else {
+      advanceToNextChild()
     }
   }
 }

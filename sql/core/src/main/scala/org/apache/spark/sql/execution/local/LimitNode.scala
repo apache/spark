@@ -23,29 +23,23 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 
 case class LimitNode(limit: Int, child: LocalNode) extends UnaryLocalNode {
 
+  private[this] var count = 0
+
   override def output: Seq[Attribute] = child.output
 
-  override def execute(): OpenCloseRowIterator = new OpenCloseRowIterator {
+  override def open(): Unit = child.open()
 
-    private var count = 0
+  override def close(): Unit = child.close()
 
-    private val childIter = child.execute()
+  override def get(): InternalRow = child.get()
 
-    override def open(): Unit = childIter.open()
-
-    override def close(): Unit = childIter.close()
-
-    override def getRow: InternalRow = childIter.getRow
-
-    override def advanceNext(): Boolean = {
-      if (count < limit) {
-        count += 1
-        childIter.advanceNext()
-      } else {
-        false
-      }
+  override def next(): Boolean = {
+    if (count < limit) {
+      count += 1
+      child.next()
+    } else {
+      false
     }
-
   }
 
 }

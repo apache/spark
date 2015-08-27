@@ -24,28 +24,24 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 
 case class FilterNode(condition: Expression, child: LocalNode) extends UnaryLocalNode {
 
+  private[this] var predicate: (InternalRow) => Boolean = _
+
   override def output: Seq[Attribute] = child.output
 
-  override def execute(): OpenCloseRowIterator = new OpenCloseRowIterator {
-
-    private val childIter = child.execute()
-
-    private val predicate = GeneratePredicate.generate(condition, child.output)
-
-    override def open(): Unit = childIter.open()
-
-    override def close(): Unit = childIter.close()
-
-    override def getRow: InternalRow = childIter.getRow
-
-    override def advanceNext(): Boolean = {
-      var found = false
-      while (!found && childIter.advanceNext()) {
-        found = predicate.apply(childIter.getRow)
-      }
-      found
-    }
-
+  override def open(): Unit = {
+    child.open()
+    predicate = GeneratePredicate.generate(condition, child.output)
   }
 
+  override def next(): Boolean = {
+    var found = false
+    while (!found && child.next()) {
+      found = predicate.apply(child.get())
+    }
+    found
+  }
+
+  override def get(): InternalRow = child.get()
+
+  override def close(): Unit = child.close()
 }

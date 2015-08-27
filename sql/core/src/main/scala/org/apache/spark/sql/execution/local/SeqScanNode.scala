@@ -25,30 +25,25 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
  */
 case class SeqScanNode(output: Seq[Attribute], data: Seq[InternalRow]) extends LeafLocalNode {
 
-  override def execute(): OpenCloseRowIterator = new OpenCloseRowIterator {
+  private[this] var iterator: Iterator[InternalRow] = _
+  private[this] var currentRow: InternalRow = _
 
-    private var iter: Iterator[InternalRow] = _
+  override def open(): Unit = {
+    iterator = data.iterator
+  }
 
-    private var currentRow: InternalRow = _
-
-    override def open(): Unit = {
-      iter = data.iterator
-    }
-
-    override def close(): Unit = {
-      // Do nothing
-    }
-
-    override def getRow: InternalRow = currentRow
-
-    override def advanceNext(): Boolean = {
-      if (iter.hasNext) {
-        currentRow = iter.next()
-        true
-      } else {
-        false
-      }
+  override def next(): Boolean = {
+    if (iterator.hasNext) {
+      currentRow = iterator.next()
+      true
+    } else {
+      false
     }
   }
 
+  override def get(): InternalRow = currentRow
+
+  override def close(): Unit = {
+    // Do nothing
+  }
 }

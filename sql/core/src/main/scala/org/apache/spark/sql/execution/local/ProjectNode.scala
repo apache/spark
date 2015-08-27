@@ -23,21 +23,21 @@ import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, Attribute, N
 
 case class ProjectNode(projectList: Seq[NamedExpression], child: LocalNode) extends UnaryLocalNode {
 
+  private[this] var project: UnsafeProjection = _
+
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  override def execute(): OpenCloseRowIterator = new OpenCloseRowIterator {
-
-    private val project = UnsafeProjection.create(projectList, child.output)
-
-    private val childIter = child.execute()
-
-    override def open(): Unit = childIter.open()
-
-    override def close(): Unit = childIter.close()
-
-    override def getRow: InternalRow = project.apply(childIter.getRow)
-
-    override def advanceNext(): Boolean = childIter.advanceNext()
-
+  override def open(): Unit = {
+    project = UnsafeProjection.create(projectList, child.output)
+    child.open()
   }
+
+  override def next(): Boolean = child.next()
+
+  override def get(): InternalRow = {
+    project.apply(child.get())
+  }
+
+  override def close(): Unit = child.close()
+
 }

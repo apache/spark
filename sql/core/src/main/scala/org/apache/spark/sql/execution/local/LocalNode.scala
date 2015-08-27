@@ -34,24 +34,42 @@ abstract class LocalNode extends TreeNode[LocalNode] {
   def output: Seq[Attribute]
 
   /**
-   * Returns the result of this query as an OpenCloseRowIterator.
+   * Initializes the iterator state. Must be called before calling `next()`.
+   *
+   * Implementations of this must also call the `open()` function of its children.
    */
-  def execute(): OpenCloseRowIterator
+  def open(): Unit
 
   /**
-   * Execute the query and collect all results in the form of a Scala Seq.
+   * Advances the iterator to the next tuple. Returns true if there is at least one more tuple.
+   */
+  def next(): Boolean
+
+  /**
+   * Returns the current tuple.
+   */
+  def get(): InternalRow
+
+  /**
+   * Closes the iterator and releases all resources. It should be idempotent.
+   *
+   * Implementations of this must also call the `close()` function of its children.
+   */
+  def close(): Unit
+
+  /**
+   * Returns the content of the iterator from the beginning to the end in the form of a Scala Seq.
    */
   def collect(): Seq[Row] = {
     val converter = CatalystTypeConverters.createToScalaConverter(StructType.fromAttributes(output))
     val result = new scala.collection.mutable.ArrayBuffer[Row]
-    val iter = execute()
-    iter.open()
+    open()
     try {
-      while (iter.advanceNext()) {
-        result += converter.apply(iter.getRow).asInstanceOf[Row]
+      while (next()) {
+        result += converter.apply(get()).asInstanceOf[Row]
       }
     } finally {
-      iter.close()
+      close()
     }
     result
   }
