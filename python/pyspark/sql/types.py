@@ -537,6 +537,9 @@ class StructType(DataType):
                 return tuple(f.toInternal(obj.get(n)) for n, f in zip(self.names, self.fields))
             elif isinstance(obj, (tuple, list)):
                 return tuple(f.toInternal(v) for f, v in zip(self.fields, obj))
+            elif hasattr(obj, "__dict__"):
+                d = obj.__dict__
+                return tuple(f.toInternal(d.get(n)) for n, f in zip(self.names, self.fields))
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
         else:
@@ -544,6 +547,9 @@ class StructType(DataType):
                 return tuple(obj.get(n) for n in self.names)
             elif isinstance(obj, (list, tuple)):
                 return tuple(obj)
+            elif hasattr(obj, "__dict__"):
+                d = obj.__dict__
+                return tuple(d.get(n) for n in self.names)
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
 
