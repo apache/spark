@@ -31,6 +31,11 @@ import org.apache.spark.mllib.regression.{StreamingDecaySetter, StreamingLinearA
  * of features must be constant. An initial weight
  * vector must be provided.
  *
+ * This class inherits the forgetful algorithm from StreamingLinearAlgorithm
+ * to handle evolution of data source. Users can specify the degree of forgetfulness
+ * by the decay factor or the half-life. Refer to StreamingLinearAlgorithm for
+ * more details.
+ *
  * Use a builder pattern to construct a streaming logistic regression
  * analysis in an application, like:
  *

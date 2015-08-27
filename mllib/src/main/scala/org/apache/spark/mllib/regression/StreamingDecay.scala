@@ -18,23 +18,63 @@
 package org.apache.spark.mllib.regression
 
 import org.apache.spark.Logging
+import org.apache.spark.annotation.Experimental
 
+/**
+ * :: Experimental ::
+ * Supplies an interface for the discount value in
+ * the forgetful update rule in StreamingLinearAlgorithm.
+ * Actual implementation is provided in StreamingDecaySetter[T].
+ */
+@Experimental
 trait StreamingDecay {
+  /**
+   * Derive the discount factor.
+   *
+   * @param numNewDataPoints number of data points for the RDD arriving at time t.
+   * @return Discount factor
+   */
   def getDiscount(numNewDataPoints: Long): Double
 }
 
-private[mllib] trait StreamingDecaySetter[T <: StreamingDecaySetter[T]] extends Logging {
+/**
+ * :: Experimental ::
+ * StreamingDecaySetter provides the concrete implementation
+ * of getDiscount in StreamingDecay and setters for decay factor
+ * and half-life.
+ */
+@Experimental
+private[mllib] trait StreamingDecaySetter[T] extends Logging {
   self: T =>
-  var decayFactor: Double = 0
-  var timeUnit: String = StreamingDecay.BATCHES
+  private var decayFactor: Double = 0
+  private var timeUnit: String = StreamingDecay.BATCHES
 
-  /** Set the decay factor directly (for forgetful algorithms). */
-  def setDecayFactor(a: Double): T = {
-    this.decayFactor = a
+  /**
+   * Set the decay factor for the forgetful algorithms.
+   * The decay factor should be between 0 and 1, inclusive.
+   * decayFactor = 0: only the data from the most recent RDD will be used.
+   * decayFactor = 1: all data since the beginning of the DStream will be used.
+   * decayFactor is default to zero.
+   *
+   * @param decayFactor the decay factor
+   */
+  def setDecayFactor(decayFactor: Double): T = {
+    this.decayFactor = decayFactor
     this
   }
 
-  /** Set the half life and time unit ("batches" or "points") for forgetful algorithms. */
+
+  /**
+   * Set the half life and time unit ("batches" or "points") for the forgetful algorithm.
+   * The half life along with the time unit provides an alternative way to specify decay factor.
+   * The decay factor is calculated such that, for data acquired at time t,
+   * its contribution by time t + halfLife will have dropped to 0.5.
+   * The unit of time can be specified either as batches or points;
+   * see StreamingDecay companion object.
+   *
+   * @param halfLife the half life
+   * @param timeUnit the time unit
+   */
   def setHalfLife(halfLife: Double, timeUnit: String): T = {
     if (timeUnit != StreamingDecay.BATCHES && timeUnit != StreamingDecay.POINTS) {
       throw new IllegalArgumentException("Invalid time unit for decay: " + timeUnit)
@@ -45,13 +85,32 @@ private[mllib] trait StreamingDecaySetter[T <: StreamingDecaySetter[T]] extends 
     this
   }
 
+  /**
+   * Derive the discount factor.
+   *
+   * @param numNewDataPoints number of data points for the RDD arriving at time t.
+   * @return Discount factor
+   */
   def getDiscount(numNewDataPoints: Long): Double = timeUnit match {
     case StreamingDecay.BATCHES => decayFactor
     case StreamingDecay.POINTS => math.pow(decayFactor, numNewDataPoints)
   }
 }
 
+/**
+ * :: Experimental ::
+ * Provides the String constants for allowed time unit in the forgetful algorithm.
+ */
+@Experimental
 object StreamingDecay {
+  /**
+   * Each RDD in the DStream will be treated as 1 time unit.
+   *
+   */
   final val BATCHES = "batches"
+  /**
+   * Each data point will be treated as 1 time unit.
+   *
+   */
   final val POINTS = "points"
 }

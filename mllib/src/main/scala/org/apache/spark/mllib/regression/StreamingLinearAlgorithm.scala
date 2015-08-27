@@ -39,6 +39,23 @@ import org.apache.spark.streaming.dstream.DStream
  * Only weights will be updated, not an intercept. If the model needs
  * an intercept, it should be manually appended to the input data.
  *
+ * StreamingLinearAlgorithm use the forgetful algorithm
+ * to dynamically adjust for evolution of data source. For each batch of data,
+ * we update the model estimates by:
+ *
+ * $$ \theta_{t+1} = \frac{theta_t n_t \alpha + \beta_t m_t}{n_t \alpha + m_t} $$
+ * $$ n_{t+1} = n_t \alpha + m_t $$
+ *
+ * where $\theta_t$ is the model estimate before the data arriving at time t;
+ * $n_t$ is the cumulative contribution of data arriving before time t;
+ * $\beta_t$ is the estimate using data arriving at time t along;
+ * $\m_t$ is the number of data point for data arriving at time t along;
+ * $\alpha$ is the discount factor, $\alpha=0$ only the data from the
+ * most recent RDD will be used, $\alpha=0$ all data since the beginning
+ * of the DStream will be used with equal contributions.
+ *
+ * This updating rule is analogous to an exponentially-weighted moving average.
+ *
  * For example usage, see `StreamingLinearRegressionWithSGD`.
  *
  * NOTE: In some use cases, the order in which trainOn and predictOn
@@ -100,7 +117,9 @@ abstract class StreamingLinearAlgorithm[
         val discount = getDiscount(numNewDataPoints)
 
         val updatedDataWeight = previousDataWeight * discount + numNewDataPoints
-        val lambda = numNewDataPoints / math.max(updatedDataWeight, 1e-16)
+        // updatedDataWeight >= 1 because rdd is not empty;
+        // no need to check division by zero in below
+        val lambda = numNewDataPoints / updatedDataWeight
 
         BLAS.scal(lambda, newModel.weights)
         BLAS.axpy(1-lambda, model.get.weights, newModel.weights)
