@@ -411,6 +411,10 @@ yarn = Module(
         "yarn/",
         "network/yarn/",
     ],
+    sbt_test_goals=[
+        "yarn/test",
+        "network-yarn/test",
+    ],
     test_tags=[
         "org.apache.spark.deploy.yarn.ExtendedYarnTest"
     ]
