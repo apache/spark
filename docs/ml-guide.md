@@ -888,6 +888,13 @@ The `ParamMap` which produces the best evaluation metric is selected as the best
 
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
+import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
+
 import sqlContext.implicits._
 
 // Prepare training and test data.
@@ -931,6 +938,18 @@ sc.stop()
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.ml.evaluation.RegressionEvaluator;
+import org.apache.spark.ml.param.ParamMap;
+import org.apache.spark.ml.regression.LinearRegression;
+import org.apache.spark.ml.tuning.*;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.rdd.RDD;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.SQLContext;
+
 RDD<LabeledPoint> data = MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt");
 RDD<LabeledPoint>[] splits = data.randomSplit(new double []{0.9, 0.1}, 12345);
 

@@ -43,12 +43,12 @@ import org.apache.spark.sql.SQLContext;
 public class JavaTrainValidationSplitExample {
 
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaTrainValidationSplitExample").setMaster("local[2]");
+    SparkConf conf = new SparkConf().setAppName("JavaTrainValidationSplitExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext jsql = new SQLContext(jsc);
 
     RDD<LabeledPoint> data = MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt");
-    RDD<LabeledPoint>[] splits = data.randomSplit(new double []{0.9, 0.1}, 12345);
+    RDD<LabeledPoint>[] splits = data.randomSplit(new double [] {0.9, 0.1}, 12345);
 
     // Prepare training and test data.
     DataFrame training = jsql.createDataFrame(splits[0], LabeledPoint.class);
@@ -66,9 +66,9 @@ public class JavaTrainValidationSplitExample {
     // TrainValidationSplit will try all combinations of values and determine best model using
     // the evaluator.
     ParamMap[] paramGrid = new ParamGridBuilder()
-      .addGrid(lr.regParam(), new double[]{0.1, 0.01})
+      .addGrid(lr.regParam(), new double[] {0.1, 0.01})
       .addGrid(lr.fitIntercept())
-      .addGrid(lr.elasticNetParam(), new double[]{0.0, 0.5, 1.0})
+      .addGrid(lr.elasticNetParam(), new double[] {0.0, 0.5, 1.0})
       .build();
 
     trainValidationSplit.setEstimatorParamMaps(paramGrid);
