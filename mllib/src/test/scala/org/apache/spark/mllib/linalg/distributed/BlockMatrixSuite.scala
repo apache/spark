@@ -296,4 +296,26 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     val A = AT2.transpose
     assert(A.toBreeze() === gridBasedMat.toBreeze())
   }
+
+  test("Block LU Decomposition") {
+    //square matrix, but not fully populated in edge blocks.
+    val blocksForLU: Seq[((Int, Int), Matrix)] = Seq(
+      ((0, 0), new DenseMatrix(2, 2, Array(1.0, 2.0, 3.0, 2.0))),
+      ((0, 1), new DenseMatrix(2, 2, Array(2.0, 1.0, 3.0, 5.0))),
+      ((1, 0), new DenseMatrix(2, 2, Array(3.0, 2.0, 1.0, 1.0))),
+      ((1, 1), new DenseMatrix(2, 2, Array(1.0, 2.0, 0.0, 1.0))),
+      ((0, 2), new DenseMatrix(2, 1, Array(1.0, 1.0))),
+      ((1, 2), new DenseMatrix(2, 1, Array(1.0, 3.0))),
+      ((2, 0), new DenseMatrix(1, 2, Array(1.0, 0.0))),
+      ((2, 1), new DenseMatrix(1, 2, Array(1.0, 2.0))),
+      ((2, 2), new DenseMatrix(1, 1, Array(4.0))))
+    val A = new BlockMatrix(sc.parallelize(blocksForLU), 2, 2)
+    val PLU = A.blockLU;
+    val P = PLU._1;
+    val L = PLU._2;
+    val U = PLU._3
+    val residual = (L.multiply(U)).subtract(P.multiply(A))
+    val error = residual.toLocalMatrix.toArray.reduce(_ + _)
+    assert(error < 2.5e-16) //sb ~ 2.22e-16
+  }
 }
