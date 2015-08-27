@@ -348,7 +348,7 @@ remover.transform(dataSet).show()
 [`StopWordsRemover`](api/java/org/apache/spark/ml/feature/StopWordsRemover.html)
 takes an input column name, an output column name, a list of stop words,
 and a boolean indicating if the matches should be case sensitive (false
-by default.
+by default).
 
 {% highlight java %}
 import java.util.Arrays;
