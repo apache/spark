@@ -21,20 +21,21 @@ import java.io._
 import java.util.Properties
 import javax.annotation.Nullable
 
+import org.apache.hadoop.util.LineReader
+
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
-import org.apache.hadoop.io.Writable
+import org.apache.hadoop.io.{Text, Writable}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, RedirectThread, Utils}
@@ -108,7 +109,7 @@ case class ScriptTransformation(
       val reader = new BufferedReader(new InputStreamReader(inputStream))
       val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] with HiveInspectors {
         var curLine: String = null
-        val scriptOutputStream = new DataInputStream(inputStream)
+        val lineReader = new LineReader(inputStream)
         var scriptOutputWritable: Writable = null
         val reusedWritableObject: Writable = if (null != outputSerde) {
           outputSerde.getSerializedClass().newInstance
@@ -134,15 +135,13 @@ case class ScriptTransformation(
             }
           } else if (scriptOutputWritable == null) {
             scriptOutputWritable = reusedWritableObject
-            try {
-              scriptOutputWritable.readFields(scriptOutputStream)
+            if (0 == lineReader.readLine(scriptOutputWritable.asInstanceOf[Text])) {
+              if (writerThread.exception.isDefined) {
+                throw writerThread.exception.get
+              }
+              false
+            } else {
               true
-            } catch {
-              case _: EOFException =>
-                if (writerThread.exception.isDefined) {
-                  throw writerThread.exception.get
-                }
-                false
             }
           } else {
             true
@@ -222,7 +221,7 @@ private class ScriptTransformationWriterThread(
 
   override def run(): Unit = Utils.logUncaughtExceptions {
     TaskContext.setTaskContext(taskContext)
-
+    val newLineCode = 10
     val dataOutputStream = new DataOutputStream(outputStream)
 
     // We can't use Utils.tryWithSafeFinally here because we also need a `catch` block, so
@@ -248,9 +247,10 @@ private class ScriptTransformationWriterThread(
           }
           outputStream.write(data.getBytes("utf-8"))
         } else {
-          val writable = inputSerde.serialize(
-            row.asInstanceOf[GenericInternalRow].values, inputSoi)
-          prepareWritable(writable, ioschema.outputSerdeProps).write(dataOutputStream)
+          val text = inputSerde.serialize(
+            row.asInstanceOf[GenericInternalRow].values, inputSoi).asInstanceOf[Text]
+          outputStream.write(text.getBytes(), 0, text.getLength())
+          outputStream.write(newLineCode)
         }
       }
       outputStream.close()
@@ -340,6 +340,7 @@ case class HiveScriptIOSchema (
 
     var propsMap = serdeProps.toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
     propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
+    propsMap = propsMap + (serdeConstants.FIELD_DELIM -> "\t")
 
     val properties = new Properties()
     properties.putAll(propsMap.asJava)
