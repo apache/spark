@@ -487,7 +487,7 @@ private[spark] class BlockManagerInfo(
         logInfo("Added %s on ExternalBlockStore on %s (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(externalBlockStoreSize)))
       }
-      if (!blockId.isBroadcast && blockStatus.isCached) {
+      if (!blockId.isBroadcast && (blockStatus.isCached || blockStatus.storageLevel.useOffHeap)) {
         _cachedBlocks += blockId
       }
     } else if (_blocks.containsKey(blockId)) {
