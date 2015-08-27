@@ -171,11 +171,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
    * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.
    *  - allow SQL11 keywords to be used as identifiers
    */
-  private[sql] def defaultOverides() = {
+  private[sql] def defaultOverrides() = {
     setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
   }
 
-  defaultOverides()
+  defaultOverrides()
 
   /**
    * The copy of the Hive client that is used to retrieve metadata from the Hive MetaStore.
