@@ -223,7 +223,7 @@ class CrossValidator(Estimator):
                 # TODO: duplicate evaluator to take extra params from input
                 metric = eva.evaluate(model.transform(validation, epm[j]))
                 metrics[j] += metric
-        
+
         if eva.isLargerBetter():
             bestIndex = np.argmax(metrics)
         else:
