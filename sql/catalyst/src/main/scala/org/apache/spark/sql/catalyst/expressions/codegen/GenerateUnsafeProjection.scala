@@ -211,7 +211,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val numElements = ctx.freshName("numElements")
     val fixedSize = ctx.freshName("fixedSize")
     val numBytes = ctx.freshName("numBytes")
-    val elements = ctx.freshName("elements")
     val cursor = ctx.freshName("cursor")
     val index = ctx.freshName("index")
 
@@ -236,32 +235,17 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         """
       case _ =>
         val writer = getWriter(elementType)
-        val elementSize = s"$writer.getSize($elements[$index])"
-        // TODO(davies): avoid the copy
-        val unsafeType = elementType match {
-          case _: StructType => "UnsafeRow"
-          case _: ArrayType => "UnsafeArrayData"
-          case _: MapType => "UnsafeMapData"
-          case _ => ctx.javaType(elementType)
-        }
         val copy = elementType match {
           // We reuse the buffer during conversion, need copy it before process next element.
           case _: StructType | _: ArrayType | _: MapType => ".copy()"
           case _ => ""
         }
 
-        val newElements = if (elementType == BinaryType) {
-          s"new byte[$numElements][]"
-        } else {
-          s"new $unsafeType[$numElements]"
-        }
         s"""
-          final $unsafeType[] $elements = $newElements;
           for (int $index = 0; $index < $numElements; $index++) {
             ${convertedElement.code}
             if (!${convertedElement.isNull}) {
-              $elements[$index] = ${convertedElement.primitive}$copy;
-              $numBytes += $elementSize;
+              $numBytes += $writer.getSize(${convertedElement.primitive});
             }
           }
         """
@@ -286,21 +270,29 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             ${convertedElement.primitive}.toUnscaledLong());
           $cursor += 8;
         """
+      case _: StructType | _: ArrayType | _: MapType =>
+        val writer = getWriter(elementType)
+        s"""
+          $cursor += $writer.write(
+            $buffer,
+            Platform.BYTE_ARRAY_OFFSET + $cursor,
+            ${convertedElement.primitive}.copy());
+        """
       case _ =>
         val writer = getWriter(elementType)
         s"""
           $cursor += $writer.write(
             $buffer,
             Platform.BYTE_ARRAY_OFFSET + $cursor,
-            $elements[$index]);
+            ${convertedElement.primitive});
         """
     }
 
     val checkNull = elementType match {
       case _ if ctx.isPrimitiveType(elementType) => s"${convertedElement.isNull}"
-      case t: DecimalType => s"$elements[$index] == null" +
-        s" || !$elements[$index].changePrecision(${t.precision}, ${t.scale})"
-      case _ => s"$elements[$index] == null"
+      case t: DecimalType => s"${convertedElement.isNull}" +
+        s" || !${convertedElement.primitive}.changePrecision(${t.precision}, ${t.scale})"
+      case _ => s"${convertedElement.isNull}"
     }
 
     val code = s"""
