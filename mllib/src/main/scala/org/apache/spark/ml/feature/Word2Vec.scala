@@ -49,6 +49,17 @@ private[feature] trait Word2VecBase extends Params
   def getVectorSize: Int = $(vectorSize)
 
   /**
+   * The window size (context words from [-window, window])
+   * @group param
+   */
+  final val windowSize = new IntParam(
+    this, "windowSize", "the window size (context words from [-window, window])")
+  setDefault(windowSize -> 5)
+
+  /** @group getParam */
+  def getWindowSize: Int = $(windowSize)
+
+  /**
    * Number of partitions for sentences of words.
    * @group param
    */
@@ -103,6 +114,9 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
   def setVectorSize(value: Int): this.type = set(vectorSize, value)
 
   /** @group setParam */
+  def setWindowSize(value: Int): this.type = set(windowSize, value)
+
+  /** @group setParam */
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
   /** @group setParam */
@@ -127,6 +141,7 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
       .setNumPartitions($(numPartitions))
       .setSeed($(seed))
       .setVectorSize($(vectorSize))
+      .setWindowSize($(windowSize))
       .fit(input)
     copyValues(new Word2VecModel(uid, wordVectors).setParent(this))
   }
