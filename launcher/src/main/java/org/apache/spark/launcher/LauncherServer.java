@@ -43,6 +43,33 @@ import static org.apache.spark.launcher.LauncherProtocol.*;
  *
  * I/O is currently blocking (one thread per client). Clients have a limited time to connect back
  * to the server, otherwise the server will ignore the connection.
+ *
+ * === Architecture Overview ===
+ *
+ * The launcher server is used when Spark apps are launched as separate processes than the calling
+ * app. It looks more or less like the following:
+ *
+ *         -----------------------                       -----------------------
+ *         |      User App       |     spark-submit      |      Spark App      |
+ *         |                     |  -------------------> |                     |
+ *         |         ------------|                       |-------------        |
+ *         |         |           |        hello          |            |        |
+ *         |         | L. Server |<----------------------| L. Backend |        |
+ *         |         |           |                       |            |        |
+ *         |         -------------                       -----------------------
+ *         |               |     |                              ^
+ *         |               v     |                              |
+ *         |        -------------|                              |
+ *         |        |            |      <per-app channel>       |
+ *         |        | App Handle |<------------------------------
+ *         |        |            |
+ *         -----------------------
+ *
+ * The server is started on demand and remains active while there are active or outstanding clients,
+ * to avoid opening too many ports when multiple clients are launched. Each client is given a unique
+ * secret, and have a limited amount of time to connect back
+ * ({@link SparkLauncher#CHILD_CONNECTION_TIMEOUT}), at which point the server will throw away
+ * that client's state. A client is only allowed to connect back to the server once.
  */
 class LauncherServer implements Closeable {
 
@@ -182,16 +209,7 @@ class LauncherServer implements Closeable {
    */
   void unregister(ChildProcAppHandle handle) {
     pending.remove(handle.getSecret());
-    synchronized(LauncherServer.class) {
-      if (refCount.decrementAndGet() == 0) {
-        try {
-          close();
-          serverInstance = null;
-        } catch (IOException ioe) {
-          // no-op.
-        }
-      }
-    }
+    unref();
   }
 
   private void acceptConnections() {

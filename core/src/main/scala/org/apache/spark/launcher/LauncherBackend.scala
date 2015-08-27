@@ -25,6 +25,8 @@ import org.apache.spark.util.ThreadUtils
 
 /**
  * A trait that can be mixed-in to provide support for talking to a launcher server.
+ *
+ * See `LauncherBackend` for an explanation of how launcher communication works.
  */
 private[spark] trait LauncherBackend {
 
