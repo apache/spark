@@ -467,6 +467,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    */
   def paths: Array[String]
 
+  override def sizeInBytes: Long = cachedLeafStatuses().map(_.getLen).sum
+
   /**
    * Partition columns.  Can be either defined by [[userDefinedPartitionColumns]] or automatically
    * discovered.  Note that they should always be nullable.
