@@ -296,6 +296,8 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       intercept[IllegalArgumentException] {
         sqlContext.read.format("orc").load(path).schema("acol")
       }
+      checkAnswer(sqlContext.read.format("orc").load(path).select("acol").sort("acol"),
+        (0 until 10).map(Row(_)))
     }
   }
 
