@@ -171,9 +171,9 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     } else {
       // Determine which binary search method to use only once.
       partition = binarySearch(rangeBounds, k)
-      // binarySearch either returns the match location or -[insertion point]-1
+      // binarySearch either returns the match location or -[insertion point] - 1
       if (partition < 0) {
-        partition = -partition-1
+        partition = -partition - 1
       }
       if (partition > rangeBounds.length) {
         partition = rangeBounds.length
