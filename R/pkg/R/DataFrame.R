@@ -1172,7 +1172,7 @@ setMethod("withColumn",
 #'
 #' Return a new DataFrame with the specified columns added.
 #'
-#' @param x A DataFrame
+#' @param .data A DataFrame
 #' @param col a named argument of the form name = col
 #' @return A new DataFrame with the new columns added.
 #' @rdname withColumn
@@ -1190,8 +1190,9 @@ setMethod("withColumn",
 #' newDF2 <- transform(df, newCol = df$col1 / 5, newCol2 = df$col1 * 2)
 #' }
 setMethod("mutate",
-          signature(x = "DataFrame"),
-          function(x, ...) {
+          signature(.data = "DataFrame"),
+          function(.data, ...) {
+            x <- .data
             cols <- list(...)
             stopifnot(length(cols) > 0)
             stopifnot(class(cols[[1]]) == "Column")
@@ -1211,9 +1212,9 @@ setMethod("mutate",
 #' @name transform
 #' @aliases withColumn mutate
 setMethod("transform",
-          signature(x = "DataFrame"),
-          function(x, ...) {
-            mutate(x, ...)
+          signature(`_data` = "DataFrame"),
+          function(`_data`, ...) {
+            mutate(`_data`, ...)
           })
 
 #' WithColumnRenamed

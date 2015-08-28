@@ -467,7 +467,7 @@ setGeneric("merge")
 
 #' @rdname withColumn
 #' @export
-setGeneric("mutate", function(x, ...) {standardGeneric("mutate") })
+setGeneric("mutate", function(.data, ...) {standardGeneric("mutate") })
 
 #' @rdname arrange
 #' @export
@@ -509,7 +509,7 @@ setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
 
 #' @rdname withColumn
 #' @export
-setGeneric("transform", function(x, ...) {standardGeneric("transform") })
+setGeneric("transform", function(`_data`, ...) {standardGeneric("transform") })
 
 #' @rdname write.df
 #' @export

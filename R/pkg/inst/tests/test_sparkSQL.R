@@ -1052,6 +1052,13 @@ test_that("mutate(), transform(), rename() and names()", {
   expect_equal(columns(transformedDF)[3], "newAge")
   expect_equal(columns(transformedDF)[4], "newAge2")
   expect_equal(first(filter(transformedDF, transformedDF$name == "Andy"))$newAge, -30)
+
+  # ensure the proper signature is used - otherwise this will fail to run
+  attach(airquality)
+  result <- transform(Ozone, logOzone = log(Ozone))
+  expect_equal(nrow(result), 153)
+  expect_equal(ncol(result), 2)
+  detach(airquality)
 })
 
 test_that("write.df() on DataFrame and works with parquetFile", {
