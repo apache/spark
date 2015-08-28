@@ -15,30 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg;
+package org.apache.spark.launcher
 
-import java.io.Serializable;
-import java.util.Arrays;
+import java.util.{List => JList, Map => JMap}
 
-import scala.Tuple2;
+/**
+ * Exposes AbstractCommandBuilder to the YARN tests, so that they can build classpaths the same
+ * way other cluster managers do.
+ */
+private[spark] class TestClasspathBuilder extends AbstractCommandBuilder {
 
-import org.junit.Test;
-import static org.junit.Assert.*;
+  childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME, sys.props("spark.test.home"))
 
-public class JavaVectorsSuite implements Serializable {
+  override def buildClassPath(extraCp: String): JList[String] = super.buildClassPath(extraCp)
 
-  @Test
-  public void denseArrayConstruction() {
-    Vector v = Vectors.dense(1.0, 2.0, 3.0);
-    assertArrayEquals(new double[]{1.0, 2.0, 3.0}, v.toArray(), 0.0);
-  }
+  /** Not used by the YARN tests. */
+  override def buildCommand(env: JMap[String, String]): JList[String] =
+    throw new UnsupportedOperationException()
 
-  @Test
-  public void sparseArrayConstruction() {
-    @SuppressWarnings("unchecked")
-    Vector v = Vectors.sparse(3, Arrays.asList(
-        new Tuple2<Integer, Double>(0, 2.0),
-        new Tuple2<Integer, Double>(2, 3.0)));
-    assertArrayEquals(new double[]{2.0, 0.0, 3.0}, v.toArray(), 0.0);
-  }
 }
