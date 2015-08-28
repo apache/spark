@@ -14,6 +14,12 @@ DEFAULT_DATE = datetime(2015, 1, 1)
 TEST_DAG_ID = 'unit_tests'
 configuration.test_mode()
 
+try:
+    import cPickle as pickle
+except ImportError:
+    # Python 3
+    import pickle
+
 #utils.initdb()
 
 
@@ -153,14 +159,60 @@ class CoreTest(unittest.TestCase):
         configuration.test_mode()
         self.dagbag = models.DagBag(
             dag_folder=DEV_NULL, include_examples=True)
-        args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
-        dag = DAG(TEST_DAG_ID, default_args=args)
+        self.args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
+        dag = DAG(TEST_DAG_ID, default_args=self.args)
         self.dag = dag
         self.dag_bash = self.dagbag.dags['example_bash_operator']
         self.runme_0 = self.dag_bash.get_task('runme_0')
 
     def test_confirm_unittest_mod(self):
         assert configuration.conf.get('core', 'unit_test_mode')
+
+    def test_rich_comparison_ops(self):
+
+        class DAGsubclass(DAG):
+            pass
+
+        dag_eq = DAG(TEST_DAG_ID, default_args=self.args)
+
+        dag_diff_load_time = DAG(TEST_DAG_ID, default_args=self.args)
+        dag_diff_name = DAG(TEST_DAG_ID + '_neq', default_args=self.args)
+
+        dag_subclass = DAGsubclass(TEST_DAG_ID, default_args=self.args)
+        dag_subclass_diff_name = DAGsubclass(
+            TEST_DAG_ID + '2', default_args=self.args)
+
+        for d in [dag_eq, dag_diff_name, dag_subclass, dag_subclass_diff_name]:
+            d.last_loaded = self.dag.last_loaded
+
+        # test identity equality
+        assert self.dag == self.dag
+
+        # test dag (in)equality based on _comps
+        assert self.dag == dag_eq
+        assert self.dag != dag_diff_name
+        assert self.dag != dag_diff_load_time
+
+        # test dag inequality based on type even if _comps happen to match
+        assert self.dag != dag_subclass
+
+        # a dag should equal an unpickled version of itself
+        assert self.dag == pickle.loads(pickle.dumps(self.dag))
+
+        # dags are ordered based on dag_id no matter what the type is
+        assert self.dag < dag_diff_name
+        assert not self.dag < dag_diff_load_time
+        assert self.dag < dag_subclass_diff_name
+
+        # greater than should have been created automatically by functools
+        assert dag_diff_name > self.dag
+
+        # hashes are non-random and match equality
+        assert hash(self.dag) == hash(self.dag)
+        assert hash(self.dag) == hash(dag_eq)
+        assert hash(self.dag) == hash(pickle.loads(pickle.dumps(self.dag)))
+        assert hash(self.dag) != hash(dag_diff_name)
+        assert hash(self.dag) != hash(dag_subclass)
 
     def test_cli(self):
         from airflow.bin import cli

@@ -1153,6 +1153,7 @@ class Log(Base):
         self.owner = task_instance.task.owner
 
 
+@functools.total_ordering
 class BaseOperator(object):
     """
     Abstract base class for all operators. Since operators create objects that
@@ -1321,6 +1322,49 @@ class BaseOperator(object):
         self._upstream_list = []
         self._downstream_list = []
 
+        self._comps = {
+            'task_id',
+            'dag_id',
+            'owner',
+            'email',
+            'email_on_retry',
+            'retry_delay',
+            'start_date',
+            'schedule_interval',
+            'depends_on_past',
+            'wait_for_downstream',
+            'adhoc',
+            'priority_weight',
+            'sla',
+            'execution_timeout',
+            'on_failure_callback',
+            'on_success_callback',
+            'on_retry_callback',
+        }
+
+    def __eq__(self, other):
+        return (
+            type(self) == type(other) and
+            all(self.__dict__.get(c, None) == other.__dict__.get(c, None)
+                for c in self._comps))
+
+    def __neq__(self, other):
+        return not self == other
+
+    def __lt__(self, other):
+        return self.task_id < other.task_id
+
+    def __hash__(self):
+        hash_components = [type(self)]
+        for c in self._comps:
+            val = getattr(self, c, None)
+            try:
+                hash(val)
+                hash_components.append(val)
+            except TypeError:
+                hash_components.append(repr(val))
+        return hash(tuple(hash_components))
+
     @property
     def schedule_interval(self):
         """
@@ -1339,20 +1383,6 @@ class BaseOperator(object):
             t.priority_weight
             for t in self.get_flat_relatives(upstream=False)
         ]) + self.priority_weight
-
-    def __cmp__(self, other):
-        blacklist = {
-            '_sa_instance_state', '_upstream_list', '_downstream_list', 'dag'}
-        for k in set(self.__dict__) - blacklist:
-            if self.__dict__[k] != other.__dict__[k]:
-                logging.debug(str((
-                    self.dag_id,
-                    self.task_id,
-                    k,
-                    self.__dict__[k],
-                    other.__dict__[k])))
-                return -1
-        return 0
 
     def pre_execute(self, context):
         """
@@ -1670,6 +1700,7 @@ class DagModel(Base):
         return obj
 
 
+@functools.total_ordering
 class DAG(object):
     """
     A dag (directed acyclic graph) is a collection of tasks with directional
@@ -1742,8 +1773,42 @@ class DAG(object):
         self.parent_dag = None  # Gets set when DAGs are loaded
         self.last_loaded = datetime.now()
 
+        self._comps = {
+            'dag_id',
+            'tasks',
+            'parent_dag',
+            'start_date',
+            'schedule_interval',
+            'full_filepath',
+            'template_searchpath',
+            'last_loaded',
+        }
+
     def __repr__(self):
         return "<DAG: {self.dag_id}>".format(self=self)
+
+    def __eq__(self, other):
+        return (
+            type(self) == type(other) and
+            all(self.__dict__.get(c, None) == other.__dict__.get(c, None)
+                for c in self._comps))
+
+    def __neq__(self, other):
+        return not self == other
+
+    def __lt__(self, other):
+        return self.dag_id < other.dag_id
+
+    def __hash__(self):
+        hash_components = [type(self)]
+        for c in self._comps:
+            val = getattr(self, c, None)
+            try:
+                hash(val)
+                hash_components.append(val)
+            except TypeError:
+                hash_components.append(repr(val))
+        return hash(tuple(hash_components))
 
     @property
     def task_ids(self):
@@ -1985,22 +2050,6 @@ class DAG(object):
             if task.task_id == task_id:
                 return task
         raise AirflowException("Task {task_id} not found".format(**locals()))
-
-    def __cmp__(self, other):
-        blacklist = {'_sa_instance_state', 'end_date', 'last_pickled', 'tasks'}
-        for k in set(self.__dict__) - blacklist:
-            if self.__dict__[k] != other.__dict__[k]:
-                return -1
-
-        if len(self.tasks) != len(other.tasks):
-            return -1
-        i = 0
-        for task in self.tasks:
-            if task != other.tasks[i]:
-                return -1
-            i += 1
-        logging.info("Same as before")
-        return 0
 
     def pickle(self, main_session=None):
         session = main_session or settings.Session()
