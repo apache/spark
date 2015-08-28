@@ -382,15 +382,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_contains(null, 1)")
     }
 
-    // In hive, if either argument has a matching type has a null value, return false, even if
-    // the first argument array contains a null and the second argument is null
     checkAnswer(
-      df.selectExpr("array_contains(array(array(1), null)[1], 1)"),
-      Seq(Row(false), Row(false))
+      df.selectExpr("array_contains(array(array(1), null)[0], 1)"),
+      Seq(Row(true), Row(true))
     )
     checkAnswer(
-      df.selectExpr("array_contains(array(0, null), array(1, null)[1])"),
-      Seq(Row(false), Row(false))
+      df.selectExpr("array_contains(array(0, null), array(1, null)[0])"),
+      Seq(Row(true), Row(true))
     )
   }
 }

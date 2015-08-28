@@ -76,10 +76,10 @@ class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ArrayContains(a0, Literal.create(null, IntegerType)), null)
 
     checkEvaluation(ArrayContains(a1, Literal("")), true)
-    checkEvaluation(ArrayContains(a1, Literal("a")), false)
+    checkEvaluation(ArrayContains(a1, Literal("a")), null)
     checkEvaluation(ArrayContains(a1, Literal.create(null, StringType)), null)
 
-    checkEvaluation(ArrayContains(a2, Literal(1L)), false)
+    checkEvaluation(ArrayContains(a2, Literal(1L)), null)
     checkEvaluation(ArrayContains(a2, Literal.create(null, LongType)), null)
   }
 }

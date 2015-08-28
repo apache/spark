@@ -143,11 +143,25 @@ case class ArrayContains(left: Expression, right: Expression)
     }
   }
 
-  override def nullSafeEval(arr: Any, value: Any): Boolean = {
+  override def nullable: Boolean = {
+    val dt = right.dataType
+    left.nullable || dt.isInstanceOf[ArrayType] && dt.asInstanceOf[ArrayType].containsNull
+  }
+
+  override def nullSafeEval(arr: Any, value: Any): Any = {
+    var hasNull = false
     arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
-      if (v == value) return true
+      if (v == null) {
+        hasNull = true
+      } else if (v == value) {
+        return true
+      }
     )
-    false
+    if (hasNull) {
+      null
+    } else {
+      false
+    }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -156,7 +170,10 @@ case class ArrayContains(left: Expression, right: Expression)
       val getValue = ctx.getValue(arr, right.dataType, i)
       s"""
       for (int $i = 0; $i < $arr.numElements(); $i ++) {
-        if (!$arr.isNullAt($i) && ${ctx.genEqual(right.dataType, value, getValue)}) {
+        if ($arr.isNullAt($i)) {
+          ${ev.isNull} = true;
+        } else if (${ctx.genEqual(right.dataType, value, getValue)}) {
+          ${ev.isNull} = false;
           ${ev.primitive} = true;
           break;
         }

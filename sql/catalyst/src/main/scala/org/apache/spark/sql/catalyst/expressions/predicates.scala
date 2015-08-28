@@ -116,7 +116,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
 
   override def children: Seq[Expression] = value +: list
 
-  override def nullable: Boolean = value.nullable
+  override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
@@ -126,7 +126,20 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
     if (evaluatedValue == null) {
       null
     } else {
-      list.exists(e => e.eval(input) == evaluatedValue)
+      var hasNull = false
+      list.foreach { e =>
+        val v = e.eval(input)
+        if (v == evaluatedValue) {
+          return true
+        } else if (v == null) {
+          hasNull = true
+        }
+      }
+      if (hasNull) {
+        null
+      } else {
+        false
+      }
     }
   }
 
@@ -137,7 +150,10 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
       s"""
         if (!${ev.primitive}) {
           ${x.code}
-          if (!${x.isNull} && ${ctx.genEqual(value.dataType, valueGen.primitive, x.primitive)}) {
+          if (${x.isNull}) {
+            ${ev.isNull} = true;
+          } else if (${ctx.genEqual(value.dataType, valueGen.primitive, x.primitive)}) {
+            ${ev.isNull} = false;
             ${ev.primitive} = true;
           }
         }
@@ -163,8 +179,18 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   override def toString: String = s"$child INSET ${hset.mkString("(", ",", ")")}"
 
+  @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
+
+  override def nullable: Boolean = child.nullable || hasNull
+
   protected override def nullSafeEval(value: Any): Any = {
-    hset.contains(value)
+    if (hset.contains(value)) {
+      true
+    } else if (hasNull) {
+      null
+    } else {
+      false
+    }
   }
 
   def getHSet(): Set[Any] = hset
@@ -175,14 +201,19 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     val childGen = child.gen(ctx)
     ctx.references += this
     val hsetTerm = ctx.freshName("hset")
+    val hasNullTerm = ctx.freshName("hasNull")
     ctx.addMutableState(setName, hsetTerm,
       s"$hsetTerm = (($InSetName)expressions[${ctx.references.size - 1}]).getHSet();")
+    ctx.addMutableState("boolean", hasNullTerm, s"$hasNullTerm = $hsetTerm.contains(null);")
     s"""
       ${childGen.code}
       boolean ${ev.isNull} = ${childGen.isNull};
       boolean ${ev.primitive} = false;
       if (!${ev.isNull}) {
         ${ev.primitive} = $hsetTerm.contains(${childGen.primitive});
+        if (!${ev.primitive} && $hasNullTerm) {
+          ${ev.isNull} = true;
+        }
       }
      """
   }
