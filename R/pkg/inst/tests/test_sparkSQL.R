@@ -608,7 +608,7 @@ test_that("subsetting", {
   df4 <- df[df$age %in% c(19, 30), 1:2]
   expect_equal(count(df4), 2)
   expect_equal(columns(df4), c("name", "age"))
-  
+
   df5 <- df[df$age %in% c(19), c(1,2)]
   expect_equal(count(df5), 1)
   expect_equal(columns(df5), c("name", "age"))
@@ -1060,6 +1060,12 @@ test_that("parquetFile works with multiple input paths", {
   parquetDF <- parquetFile(sqlContext, parquetPath, parquetPath2)
   expect_is(parquetDF, "DataFrame")
   expect_equal(count(parquetDF), count(df) * 2)
+
+  # Test if varargs works with variables
+  saveMode <- "overwrite"
+  mergeSchema <- "true"
+  parquetPath3 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
+  write.df(df, parquetPath2, "parquet", mode = saveMode, mergeSchema = mergeSchema)
 })
 
 test_that("describe() and summarize() on a DataFrame", {

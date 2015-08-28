@@ -145,6 +145,12 @@ class PythonOnlyPoint(ExamplePoint):
     __UDT__ = PythonOnlyUDT()
 
 
+class MyObject(object):
+    def __init__(self, key, value):
+        self.key = key
+        self.value = value
+
+
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055
     def test_data_type_eq(self):
@@ -382,6 +388,12 @@ class SQLTests(ReusedPySparkTestCase):
                                    CustomRow(field1=3, field2="row3")])
         df = self.sqlCtx.inferSchema(rdd)
         self.assertEquals(Row(field1=1, field2=u'row1'), df.first())
+
+    def test_create_dataframe_from_objects(self):
+        data = [MyObject(1, "1"), MyObject(2, "2")]
+        df = self.sqlCtx.createDataFrame(data)
+        self.assertEqual(df.dtypes, [("key", "bigint"), ("value", "string")])
+        self.assertEqual(df.first(), Row(key=1, value="1"))
 
     def test_select_null_literal(self):
         df = self.sqlCtx.sql("select null as col")

@@ -661,15 +661,15 @@ setMethod("collect",
               # listCols is a list of columns
               listCols <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToCols", x@sdf)
               stopifnot(length(listCols) == ncol)
-              
+
               # An empty data.frame with 0 columns and number of rows as collected
               nrow <- length(listCols[[1]])
               if (nrow <= 0) {
                 df <- data.frame()
               } else {
-                df <- data.frame(row.names = 1 : nrow)                
+                df <- data.frame(row.names = 1 : nrow)
               }
-              
+
               # Append columns one by one
               for (colIndex in 1 : ncol) {
                 # Note: appending a column of list type into a data.frame so that
@@ -683,7 +683,7 @@ setMethod("collect",
                   # TODO: more robust check on column of primitive types
                   vec <- do.call(c, col)
                   if (class(vec) != "list") {
-                    df[[names[colIndex]]] <- vec                  
+                    df[[names[colIndex]]] <- vec
                   } else {
                     # For columns of complex type, be careful to access them.
                     # Get a column of complex type returns a list.

@@ -306,15 +306,111 @@ regexTokenizer = RegexTokenizer(inputCol="sentence", outputCol="words", pattern=
 </div>
 </div>
 
+## StopWordsRemover
+[Stop words](https://en.wikipedia.org/wiki/Stop_words) are words which
+should be excluded from the input, typically because the words appear
+frequently and don't carry as much meaning.
+
+`StopWordsRemover` takes as input a sequence of strings (e.g. the output
+of a [Tokenizer](ml-features.html#tokenizer)) and drops all the stop
+words from the input sequences. The list of stopwords is specified by
+the `stopWords` parameter.  We provide [a list of stop
+words](http://ir.dcs.gla.ac.uk/resources/linguistic_utils/stop_words) by
+default, accessible by calling `getStopWords` on a newly instantiated
+`StopWordsRemover` instance.
+
+**Examples**
+
+Assume that we have the following DataFrame with columns `id` and `raw`:
+
+~~~~
+ id | raw
+----|----------
+ 0  | [I, saw, the, red, baloon]
+ 1  | [Mary, had, a, little, lamb]
+~~~~
+
+Applying `StopWordsRemover` with `raw` as the input column and `filtered` as the output
+column, we should get the following:
+
+~~~~
+ id | raw                         | filtered
+----|-----------------------------|--------------------
+ 0  | [I, saw, the, red, baloon]  |  [saw, red, baloon]
+ 1  | [Mary, had, a, little, lamb]|[Mary, little, lamb]
+~~~~
+
+In `filtered`, the stop words "I", "the", "had", and "a" have been
+filtered out.
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+
+[`StopWordsRemover`](api/scala/index.html#org.apache.spark.ml.feature.StopWordsRemover)
+takes an input column name, an output column name, a list of stop words,
+and a boolean indicating if the matches should be case sensitive (false
+by default).
+
+{% highlight scala %}
+import org.apache.spark.ml.feature.StopWordsRemover
+
+val remover = new StopWordsRemover()
+  .setInputCol("raw")
+  .setOutputCol("filtered")
+val dataSet = sqlContext.createDataFrame(Seq(
+  (0, Seq("I", "saw", "the", "red", "baloon")),
+  (1, Seq("Mary", "had", "a", "little", "lamb"))
+)).toDF("id", "raw")
+
+remover.transform(dataSet).show()
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+[`StopWordsRemover`](api/java/org/apache/spark/ml/feature/StopWordsRemover.html)
+takes an input column name, an output column name, a list of stop words,
+and a boolean indicating if the matches should be case sensitive (false
+by default).
+
+{% highlight java %}
+import java.util.Arrays;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.StopWordsRemover;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+StopWordsRemover remover = new StopWordsRemover()
+  .setInputCol("raw")
+  .setOutputCol("filtered");
+
+JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(
+  RowFactory.create(Arrays.asList("I", "saw", "the", "red", "baloon")),
+  RowFactory.create(Arrays.asList("Mary", "had", "a", "little", "lamb"))
+));
+StructType schema = new StructType(new StructField[] {
+  new StructField("raw", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
+});
+DataFrame dataset = jsql.createDataFrame(rdd, schema);
+
+remover.transform(dataset).show();
+{% endhighlight %}
+</div>
+</div>
 
 ## $n$-gram
 
 An [n-gram](https://en.wikipedia.org/wiki/N-gram) is a sequence of $n$ tokens (typically words) for some integer $n$. The `NGram` class can be used to transform input features into $n$-grams.
 
-`NGram` takes as input a sequence of strings (e.g. the output of a [Tokenizer](ml-features.html#tokenizer).  The parameter `n` is used to determine the number of terms in each $n$-gram. The output will consist of a sequence of $n$-grams where each $n$-gram is represented by a space-delimited string of $n$ consecutive words.  If the input sequence contains fewer than `n` strings, no output is produced.
+`NGram` takes as input a sequence of strings (e.g. the output of a [Tokenizer](ml-features.html#tokenizer)).  The parameter `n` is used to determine the number of terms in each $n$-gram. The output will consist of a sequence of $n$-grams where each $n$-gram is represented by a space-delimited string of $n$ consecutive words.  If the input sequence contains fewer than `n` strings, no output is produced.
 
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
