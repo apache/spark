@@ -12,8 +12,9 @@ class PostgresOperator(BaseOperator):
     :param postgres_conn_id: reference to a specific postgres database
     :type postgres_conn_id: string
     :param sql: the sql code to be executed
-    :type sql: string or string pointing to a template file. File must have
-        a '.sql' extensions.
+    :type sql: Can receive a str representing a sql statement,
+        a list of str (sql statements), or reference to a template file.
+        Template reference are recognized by str ending in '.sql'
     """
 
     template_fields = ('sql',)
