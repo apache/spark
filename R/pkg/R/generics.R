@@ -507,6 +507,10 @@ setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
   standardGeneric("saveAsTable")
 })
 
+#' @rdname withColumn
+#' @export
+setGeneric("transform", function(x, ...) {standardGeneric("transform") })
+
 #' @rdname write.df
 #' @export
 setGeneric("write.df", function(df, path, ...) { standardGeneric("write.df") })
@@ -530,6 +534,10 @@ setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") 
 #' @rdname showDF
 #' @export
 setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
+
+# @rdname subset
+# @export
+setGeneric("subset", function(x, subset, select, ...) { standardGeneric("subset") })
 
 #' @rdname agg
 #' @export
