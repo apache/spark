@@ -1053,6 +1053,7 @@ test_that("mutate(), transform(), rename() and names()", {
   expect_equal(columns(transformedDF)[4], "newAge2")
   expect_equal(first(filter(transformedDF, transformedDF$name == "Andy"))$newAge, -30)
 
+  # test if transform on local data frames works
   # ensure the proper signature is used - otherwise this will fail to run
   attach(airquality)
   result <- transform(Ozone, logOzone = log(Ozone))
