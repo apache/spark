@@ -385,8 +385,6 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
 
     val thisClassName = "org.apache.spark.mllib.clustering.LocalLDAModel"
 
-
-
     // Store the distribution of terms of each topic and the column index in topicsMatrix
     // as a Row in data.
     case class Data(topic: Vector, index: Int)
@@ -816,7 +814,6 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val newPath = new Path(Loader.dataPath(path), "globalTopicTotals").toUri.toString
-
 
       val dataRDD = sc.parallelize(Seq(Row(Vectors.fromBreeze(globalTopicTotals))))
       sqlContext.createDataFrame(dataRDD, dataSchema).write.parquet(newPath)

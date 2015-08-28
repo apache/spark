@@ -233,7 +233,6 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
 
       // Create Parquet data.
       val nodes = model.topNode.subtreeIterator.toSeq
-
       val dataRDD = sc.parallelize(nodes).map(node => convertNodeDataToRow(NodeData.apply(0, node)))
       sqlContext.createDataFrame(dataRDD, nodeDataSchema).write.parquet(Loader.dataPath(path))
     }

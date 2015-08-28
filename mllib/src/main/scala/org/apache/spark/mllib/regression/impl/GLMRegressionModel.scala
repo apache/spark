@@ -50,7 +50,6 @@ private[regression] object GLMRegressionModel {
         intercept: Double): Unit = {
       val sqlContext = new SQLContext(sc)
 
-
       // Create JSON metadata.
       val metadata = compact(render(
         ("class" -> modelClass) ~ ("version" -> thisFormatVersion) ~
