@@ -230,7 +230,6 @@ class CoreTest(unittest.TestCase):
         cli.initdb(parser.parse_args(['initdb']))
         # cli.upgradedb(parser.parse_args(['upgradedb']))
 
-
     def test_time_sensor(self):
         t = operators.TimeSensor(
             task_id='time_sensor_check',
@@ -250,6 +249,13 @@ class CoreTest(unittest.TestCase):
         t = operators.BashOperator(
             task_id='time_sensor_check',
             bash_command="echo success",
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+    def test_sqlite(self):
+        t = operators.SqliteOperator(
+            task_id='time_sqlite',
+            sql="CREATE TABLE IF NOT EXISTS unitest (dummy VARCHAR(20))",
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
