@@ -872,6 +872,16 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                    Token("TOK_RECORDREADER", readerClause) ::
                    outputClause) :: Nil) =>
 
+            val recordWriter = writerClause match {
+              case Token(writer, Nil) :: Nil => BaseSemanticAnalyzer.unescapeSQLString(writer)
+              case Nil => ""
+            }
+
+            val recordReader = readerClause match {
+              case Token(reader, Nil) :: Nil => BaseSemanticAnalyzer.unescapeSQLString(reader)
+              case Nil => ""
+            }
+
             val (output, schemaLess) = outputClause match {
               case Token("TOK_ALIASLIST", aliases) :: Nil =>
                 (aliases.map { case Token(name, Nil) => AttributeReference(name, StringType)() },
@@ -912,11 +922,12 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             val (outRowFormat, outSerdeClass, outSerdeProps) = matchSerDe(outputSerdeClause)
 
             val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
-
             val schema = HiveScriptIOSchema(
               inRowFormat, outRowFormat,
               inSerdeClass, outSerdeClass,
-              inSerdeProps, outSerdeProps, schemaLess)
+              inSerdeProps, outSerdeProps,
+              schemaLess, recordWriter,
+              recordReader)
 
             Some(
               logical.ScriptTransformation(

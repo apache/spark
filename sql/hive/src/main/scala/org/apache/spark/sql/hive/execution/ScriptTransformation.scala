@@ -21,7 +21,8 @@ import java.io._
 import java.util.Properties
 import javax.annotation.Nullable
 
-import org.apache.hadoop.util.LineReader
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.ql.exec.{RecordWriter, RecordReader}
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -38,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.{CircularBuffer, RedirectThread, Utils}
+import org.apache.spark.util.{SerializableConfiguration, CircularBuffer, RedirectThread, Utils}
 import org.apache.spark.{Logging, TaskContext}
 
 /**
@@ -59,6 +60,9 @@ case class ScriptTransformation(
 
   override def otherCopyArgs: Seq[HiveContext] = sc :: Nil
 
+  private val _broadcastedHiveConf = this.
+    sc.sparkContext.broadcast(new SerializableConfiguration(sc.hiveconf))
+
   protected override def doExecute(): RDD[InternalRow] = {
     def processIterator(inputIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
       val cmd = List("/bin/bash", "-c", script)
@@ -68,6 +72,7 @@ case class ScriptTransformation(
       val inputStream = proc.getInputStream
       val outputStream = proc.getOutputStream
       val errorStream = proc.getErrorStream
+      val localHconf = _broadcastedHiveConf.value.value.asInstanceOf[HiveConf]
 
       // In order to avoid deadlocks, we need to consume the error output of the child process.
       // To avoid issues caused by large error output, we use a circular buffer to limit the amount
@@ -97,19 +102,23 @@ case class ScriptTransformation(
         outputStream,
         proc,
         stderrBuffer,
-        TaskContext.get()
+        TaskContext.get(),
+        localHconf
       )
 
       // This nullability is a performance optimization in order to avoid an Option.foreach() call
       // inside of a loop
-      @Nullable val (outputSerde, outputSoi) = {
-        ioschema.initOutputSerDe(output).getOrElse((null, null))
+      @Nullable val (outputSerde, outputSoi, tableProperties) = {
+        ioschema.initOutputSerDe(output).getOrElse((null, null, null))
       }
 
       val reader = new BufferedReader(new InputStreamReader(inputStream))
       val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] with HiveInspectors {
         var curLine: String = null
-        val lineReader = new LineReader(inputStream)
+        val scriptOutputReader: RecordReader = ioschema.getRecordReader(localHconf)
+
+        scriptOutputReader.initialize(
+          new DataInputStream(inputStream), _broadcastedHiveConf.value.value, tableProperties)
         var scriptOutputWritable: Writable = null
         val reusedWritableObject: Writable = if (null != outputSerde) {
           outputSerde.getSerializedClass().newInstance
@@ -135,7 +144,7 @@ case class ScriptTransformation(
             }
           } else if (scriptOutputWritable == null) {
             scriptOutputWritable = reusedWritableObject
-            if (0 == lineReader.readLine(scriptOutputWritable.asInstanceOf[Text])) {
+            if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
               if (writerThread.exception.isDefined) {
                 throw writerThread.exception.get
               }
@@ -209,7 +218,8 @@ private class ScriptTransformationWriterThread(
     outputStream: OutputStream,
     proc: Process,
     stderrBuffer: CircularBuffer,
-    taskContext: TaskContext
+    taskContext: TaskContext,
+    localHconf: HiveConf
   ) extends Thread("Thread-ScriptTransformation-Feed") with Logging {
 
   setDaemon(true)
@@ -221,9 +231,9 @@ private class ScriptTransformationWriterThread(
 
   override def run(): Unit = Utils.logUncaughtExceptions {
     TaskContext.setTaskContext(taskContext)
-    val newLineCode = 10
     val dataOutputStream = new DataOutputStream(outputStream)
-
+    val scriptInWriter: RecordWriter = ioschema.getRecordWriter(localHconf)
+    scriptInWriter.initialize(dataOutputStream, localHconf)
     // We can't use Utils.tryWithSafeFinally here because we also need a `catch` block, so
     // let's use a variable to record whether the `finally` block was hit due to an exception
     var threwException: Boolean = true
@@ -247,10 +257,9 @@ private class ScriptTransformationWriterThread(
           }
           outputStream.write(data.getBytes("utf-8"))
         } else {
-          val text = inputSerde.serialize(
-            row.asInstanceOf[GenericInternalRow].values, inputSoi).asInstanceOf[Text]
-          outputStream.write(text.getBytes(), 0, text.getLength())
-          outputStream.write(newLineCode)
+          val writable = inputSerde.serialize(
+            row.asInstanceOf[GenericInternalRow].values, inputSoi)
+          scriptInWriter.write(writable)
         }
       }
       outputStream.close()
@@ -290,7 +299,9 @@ case class HiveScriptIOSchema (
     outputSerdeClass: Option[String],
     inputSerdeProps: Seq[(String, String)],
     outputSerdeProps: Seq[(String, String)],
-    schemaLess: Boolean) extends ScriptInputOutputSchema with HiveInspectors {
+    schemaLess: Boolean,
+    recordWriter: String,
+    recordReader: String) extends ScriptInputOutputSchema with HiveInspectors {
 
   private val defaultFormat = Map(
     ("TOK_TABLEROWFORMATFIELD", "\t"),
@@ -300,6 +311,25 @@ case class HiveScriptIOSchema (
   val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
   val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
 
+  def getRecordReader(hConf: HiveConf): RecordReader = {
+    val readerName =
+      if (recordReader == "") {
+        hConf.getVar(HiveConf.ConfVars.HIVESCRIPTRECORDREADER)
+      } else {
+        recordReader
+      }
+    Utils.classForName(readerName).newInstance.asInstanceOf[RecordReader]
+  }
+
+  def getRecordWriter(hConf: HiveConf): RecordWriter = {
+    val writerName =
+      if (recordWriter == "") {
+        hConf.getVar(HiveConf.ConfVars.HIVESCRIPTRECORDWRITER)
+      } else {
+        recordWriter
+      }
+    Utils.classForName(writerName).newInstance.asInstanceOf[RecordWriter]
+  }
 
   def initInputSerDe(input: Seq[Expression]): Option[(AbstractSerDe, ObjectInspector)] = {
     inputSerdeClass.map { serdeClass =>
@@ -313,12 +343,14 @@ case class HiveScriptIOSchema (
     }
   }
 
-  def initOutputSerDe(output: Seq[Attribute]): Option[(AbstractSerDe, StructObjectInspector)] = {
+  def initOutputSerDe(output: Seq[Attribute])
+      : Option[(AbstractSerDe, StructObjectInspector, Properties)] = {
     outputSerdeClass.map { serdeClass =>
       val (columns, columnTypes) = parseAttrs(output)
       val serde = initSerDe(serdeClass, columns, columnTypes, outputSerdeProps)
       val structObjectInspector = serde.getObjectInspector().asInstanceOf[StructObjectInspector]
-      (serde, structObjectInspector)
+      (serde, structObjectInspector,
+        createTableProperties(serdeClass, columns, columnTypes, outputSerdeProps))
     }
   }
 
@@ -328,24 +360,27 @@ case class HiveScriptIOSchema (
     (columns, columnTypes)
   }
 
+  private def createTableProperties(
+      serdeClassName: String,
+      columns: Seq[String],
+      columnTypes: Seq[DataType],
+      serdeProps: Seq[(String, String)]) = {
+    val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
+    var propsMap = serdeProps.toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
+    propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
+    propsMap = propsMap + (serdeConstants.FIELD_DELIM -> "\t")
+    val properties = new Properties()
+    properties.putAll(propsMap.asJava)
+    properties
+  }
+
   private def initSerDe(
       serdeClassName: String,
       columns: Seq[String],
       columnTypes: Seq[DataType],
       serdeProps: Seq[(String, String)]): AbstractSerDe = {
-
     val serde = Utils.classForName(serdeClassName).newInstance.asInstanceOf[AbstractSerDe]
-
-    val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
-
-    var propsMap = serdeProps.toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
-    propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
-    propsMap = propsMap + (serdeConstants.FIELD_DELIM -> "\t")
-
-    val properties = new Properties()
-    properties.putAll(propsMap.asJava)
-    serde.initialize(null, properties)
-
+    serde.initialize(null, createTableProperties(serdeClassName, columns, columnTypes, serdeProps))
     serde
   }
 }
