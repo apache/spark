@@ -103,7 +103,7 @@ public class LogisticRegressionWithElasticNetExample {
     LogisticRegression lr = new LogisticRegression()
       .setMaxIter(10)
       .setRegParam(0.3)
-      .setElasticNetParam(0.8)
+      .setElasticNetParam(0.8);
 
     // Fit the model
     LogisticRegressionModel lrModel = lr.fit(training);
@@ -232,8 +232,120 @@ lrModel.setThreshold(bestThreshold);
 {% endhighlight %}
 </div>
 
+<!--- TODO: Add python model summaries once implemented -->
 <div data-lang="python" markdown="1">
 Logistic regression model summary is not yet supported in Python.
+</div>
+
+</div>
+
+## Example: Linear Regression
+
+The interface for working with linear regression models and model
+summaries is similar to the logistic regression case. The following
+example demonstrates training an elastic net regularized linear
+regression model and extracting model summary statistics.
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.mllib.util.MLUtils
+
+// Load training data
+val training = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+
+val lr = new LinearRegression()
+  .setMaxIter(10)
+  .setRegParam(0.3)
+  .setElasticNetParam(0.8)
+
+// Fit the model
+val lrModel = lr.fit(training)
+
+// Print the weights and intercept for linear regression
+println(s"Weights: ${lrModel.weights} Intercept: ${lrModel.intercept}")
+
+// Summarize the model over the training set and print out some metrics
+val trainingSummary = lrModel.summary
+println(s"numIterations: ${trainingSummary.totalIterations}")
+println(s"objectiveHistory: ${trainingSummary.objectiveHistory.toList}")
+trainingSummary.residuals.show()
+println(s"RMSE: ${trainingSummary.rootMeanSquaredError}")
+println(s"r2: ${trainingSummary.r2}")
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+import org.apache.spark.ml.regression.LinearRegression;
+import org.apache.spark.ml.regression.LinearRegressionModel;
+import org.apache.spark.ml.regression.LinearRegressionTrainingSummary;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.SQLContext;
+
+public class LinearRegressionWithElasticNetExample {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf()
+      .setAppName("Linear Regression with Elastic Net Example");
+
+    SparkContext sc = new SparkContext(conf);
+    SQLContext sql = new SQLContext(sc);
+    String path = "data/mllib/sample_libsvm_data.txt";
+
+    // Load training data
+    DataFrame training = sql.createDataFrame(MLUtils.loadLibSVMFile(sc, path).toJavaRDD(), LabeledPoint.class);
+
+    LinearRegression lr = new LinearRegression()
+      .setMaxIter(10)
+      .setRegParam(0.3)
+      .setElasticNetParam(0.8);
+
+    // Fit the model
+    LinearRegressionModel lrModel = lr.fit(training);
+
+    // Print the weights and intercept for linear regression
+    System.out.println("Weights: " + lrModel.weights() + " Intercept: " + lrModel.intercept());
+
+    // Summarize the model over the training set and print out some metrics
+    LinearRegressionTrainingSummary trainingSummary = lrModel.summary();
+    System.out.println("numIterations: " + trainingSummary.totalIterations());
+    System.out.println("objectiveHistory: " + Vectors.dense(trainingSummary.objectiveHistory()));
+    trainingSummary.residuals().show();
+    System.out.println("RMSE: " + trainingSummary.rootMeanSquaredError());
+    System.out.println("r2: " + trainingSummary.r2());
+  }
+}
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+<!--- TODO: Add python model summaries once implemented -->
+{% highlight python %}
+from pyspark.ml.regression import LinearRegression
+from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.util import MLUtils
+
+# Load training data
+training = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+
+lr = LinearRegression(maxIter=10, regParam=0.3, elasticNetParam=0.8)
+
+# Fit the model
+lrModel = lr.fit(training)
+
+# Print the weights and intercept for linear regression
+print("Weights: " + str(lrModel.weights))
+print("Intercept: " + str(lrModel.intercept))
+
+# Linear regression model summary is not yet supported in Python.
+{% endhighlight %}
 </div>
 
 </div>
