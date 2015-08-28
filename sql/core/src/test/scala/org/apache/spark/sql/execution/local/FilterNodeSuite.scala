@@ -23,7 +23,8 @@ class FilterNodeSuite extends LocalNodeTest with SharedSQLContext {
 
   test("basic") {
     val condition = (testData.col("key") % 2) === 0
-    checkAnswer(testData,
+    checkAnswer(
+      testData,
       node => FilterNode(condition.expr, node),
       testData.filter(condition).collect()
     )
@@ -31,7 +32,8 @@ class FilterNodeSuite extends LocalNodeTest with SharedSQLContext {
 
   test("empty") {
     val condition = (emptyTestData.col("key") % 2) === 0
-    checkAnswer(emptyTestData,
+    checkAnswer(
+      emptyTestData,
       node => FilterNode(condition.expr, node),
       emptyTestData.filter(condition).collect()
     )

@@ -22,14 +22,16 @@ import org.apache.spark.sql.test.SharedSQLContext
 class LimitNodeSuite extends LocalNodeTest with SharedSQLContext {
 
   test("basic") {
-    checkAnswer(testData,
+    checkAnswer(
+      testData,
       node => LimitNode(10, node),
       testData.limit(10).collect()
     )
   }
 
   test("empty") {
-    checkAnswer(emptyTestData,
+    checkAnswer(
+      emptyTestData,
       node => LimitNode(10, node),
       emptyTestData.limit(10).collect()
     )

@@ -24,7 +24,8 @@ class ProjectNodeSuite extends LocalNodeTest with SharedSQLContext {
   test("basic") {
     val output = testData.queryExecution.sparkPlan.output
     val columns = Seq(output(1), output(0))
-    checkAnswer(testData,
+    checkAnswer(
+      testData,
       node => ProjectNode(columns, node),
       testData.select("value", "key").collect()
     )
@@ -33,7 +34,8 @@ class ProjectNodeSuite extends LocalNodeTest with SharedSQLContext {
   test("empty") {
     val output = emptyTestData.queryExecution.sparkPlan.output
     val columns = Seq(output(1), output(0))
-    checkAnswer(emptyTestData,
+    checkAnswer(
+      emptyTestData,
       node => ProjectNode(columns, node),
       emptyTestData.select("value", "key").collect()
     )
