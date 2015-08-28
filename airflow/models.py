@@ -38,9 +38,11 @@ SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
 DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
 XCOM_RETURN_KEY = 'return_value'
 
+ENCRYPTION_ON = False
 try:
     from cryptography.fernet import Fernet
     FERNET = Fernet(conf.get('core', 'FERNET_KEY'))
+    ENCRYPTION_ON = True
 except:
     pass
 
@@ -328,6 +330,9 @@ class Connection(Base):
 
     def get_password(self):
         if self._password and self.is_encrypted:
+            if not ENCRYPTION_ON:
+                raise AirflowException(
+                    "Can't decrypt, configuration is missing")
             return FERNET.decrypt(bytes(self._password, 'utf-8'))
         else:
             return self._password
