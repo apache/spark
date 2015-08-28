@@ -48,7 +48,7 @@ abstract class LocalNode extends TreeNode[LocalNode] {
   /**
    * Returns the current tuple.
    */
-  def get(): InternalRow
+  def fetch(): InternalRow
 
   /**
    * Closes the iterator and releases all resources. It should be idempotent.
@@ -66,7 +66,7 @@ abstract class LocalNode extends TreeNode[LocalNode] {
     open()
     try {
       while (next()) {
-        result += converter.apply(get()).asInstanceOf[Row]
+        result += converter.apply(fetch()).asInstanceOf[Row]
       }
     } finally {
       close()

@@ -60,7 +60,7 @@ case class UnionNode(children: Seq[LocalNode]) extends LocalNode {
     }
   }
 
-  override def get(): InternalRow = currentChild.get()
+  override def fetch(): InternalRow = currentChild.fetch()
 
   override def next(): Boolean = {
     if (currentChild.next()) {

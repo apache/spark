@@ -31,7 +31,7 @@ case class LimitNode(limit: Int, child: LocalNode) extends UnaryLocalNode {
 
   override def close(): Unit = child.close()
 
-  override def get(): InternalRow = child.get()
+  override def fetch(): InternalRow = child.fetch()
 
   override def next(): Boolean = {
     if (count < limit) {
