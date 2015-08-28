@@ -73,6 +73,13 @@ private[spark] abstract class ZippedPartitionsBaseRDD[V: ClassTag](
     super.clearDependencies()
     rdds = null
   }
+
+  protected def tryPrepareChildren() {
+    rdds.foreach {
+      case rdd: MapPartitionsWithPreparationRDD[_, _, _] => rdd.preparedArgument
+      case _ =>
+    }
+  }
 }
 
 private[spark] class ZippedPartitionsRDD2[A: ClassTag, B: ClassTag, V: ClassTag](
@@ -84,6 +91,7 @@ private[spark] class ZippedPartitionsRDD2[A: ClassTag, B: ClassTag, V: ClassTag]
   extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2), preservesPartitioning) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
+    tryPrepareChildren()
     val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
     f(rdd1.iterator(partitions(0), context), rdd2.iterator(partitions(1), context))
   }
@@ -107,6 +115,7 @@ private[spark] class ZippedPartitionsRDD3
   extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3), preservesPartitioning) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
+    tryPrepareChildren()
     val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
     f(rdd1.iterator(partitions(0), context),
       rdd2.iterator(partitions(1), context),
@@ -134,6 +143,7 @@ private[spark] class ZippedPartitionsRDD4
   extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3, rdd4), preservesPartitioning) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
+    tryPrepareChildren()
     val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
     f(rdd1.iterator(partitions(0), context),
       rdd2.iterator(partitions(1), context),

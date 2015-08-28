@@ -38,12 +38,14 @@ private[spark] class MapPartitionsWithPreparationRDD[U: ClassTag, T: ClassTag, M
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
+  lazy val preparedArgument: M = preparePartition()
+
   /**
    * Prepare a partition before computing it from its parent.
    */
   override def compute(partition: Partition, context: TaskContext): Iterator[U] = {
-    val preparedArgument = preparePartition()
+    val prepared = preparedArgument
     val parentIterator = firstParent[T].iterator(partition, context)
-    executePartition(context, partition.index, preparedArgument, parentIterator)
+    executePartition(context, partition.index, prepared, parentIterator)
   }
 }
