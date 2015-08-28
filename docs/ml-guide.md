@@ -21,8 +21,9 @@ title: Spark ML Programming Guide
 \]`
 
 
-The `spark.ml` package aims to provide a uniform set of high-level APIs that help users create and
-tune practical machine learning pipelines.
+The `spark.ml` package aims to provide a uniform set of high-level APIs built on top of
+[DataFrames](sql-programming-guide.html#dataframes) that help users create and tune practical
+machine learning pipelines.
 See the [Algorithm Guides section](#algorithm-guides) below for guides on sub-packages of
 `spark.ml`, including feature transformers unique to the Pipelines API, ensembles, and more.
 
@@ -858,5 +859,3 @@ jsc.stop();
 </div>
 
 </div>
-
----

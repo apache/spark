@@ -68,11 +68,11 @@ We list major functionality from both below, with links to detailed guides.
 **[spark.ml programming guide](ml-guide.html)** provides an overview of the Pipelines API and major
 concepts. It also contains sections on using algorithms within the Pipelines API, for example:
 
-* [Feature extractors and transformers](ml-features.html)
-* [Linear methods](ml-linear-methods.html)
-* [Decision trees](ml-decision-tree.html)
+* [Feature Extraction, Transformation, and Selection](ml-features.html)
+* [Decision Trees for Classification and Regression](ml-decision-tree.html)
 * [Ensembles](ml-ensembles.html)
-* [Artificial neural network](ml-ann.html)
+* [Linear methods with elastic net regularization](ml-linear-methods.html)
+* [Multilayer perceptron classifier](ml-ann.html)
 
 # Dependencies
 
