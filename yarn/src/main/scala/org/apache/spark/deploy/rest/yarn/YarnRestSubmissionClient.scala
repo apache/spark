@@ -26,21 +26,17 @@ import scala.io.Source
 import scala.reflect.{classTag, ClassTag}
 
 import com.fasterxml.jackson.core.JsonProcessingException
-import com.fasterxml.jackson.databind._
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.google.common.base.Charsets
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.records.Resource
-import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.{Records, ConverterUtils}
 
 import org.apache.spark.{SparkConf, Logging}
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.rest.{SubmitRestConnectionException, SubmitRestProtocolException}
+import org.apache.spark.deploy.rest.{SubmitRestProtocolMessage, SubmitRestConnectionException,
+  SubmitRestProtocolException}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments}
 import org.apache.spark.util.Utils
-
 
 /**
  * A client that submits applications to Yarn Resource Manager.
@@ -332,16 +328,11 @@ private[spark] object YarnRestSubmissionClient extends Logging {
 
   val currentUser = UserGroupInformation.getCurrentUser.getShortUserName
 
-  val mapper = new ObjectMapper()
-    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-    .enable(SerializationFeature.INDENT_OUTPUT)
-    .registerModule(DefaultScalaModule)
-
   /** Parse the JSON string into [[YarnSubmitRestProtocolResponse]] */
   def fromJson[T <: YarnSubmitRestProtocolResponse : ClassTag](json: String
       ): YarnSubmitRestProtocolResponse = {
     val clazz = classTag[T].runtimeClass
       .asSubclass[YarnSubmitRestProtocolResponse](classOf[YarnSubmitRestProtocolResponse])
-    mapper.readValue(json, clazz)
+    SubmitRestProtocolMessage.mapper.readValue(json, clazz)
   }
 }
