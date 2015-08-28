@@ -845,9 +845,9 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
                    "but the empty array is ignored and column metadata used instead.")
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, labels=[]):
+    def __init__(self, inputCol=None, outputCol=None, labels=None):
         """
-        __init__(self, inputCol=None, outputCol=None, labels=[])
+        __init__(self, inputCol=None, outputCol=None, labels=None)
         """
         super(IndexToString, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IndexToString",
@@ -860,9 +860,9 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, inputCol=None, outputCol=None, labels=[]):
+    def setParams(self, inputCol=None, outputCol=None, labels=None):
         """
-        setParams(self, inputCol=None, outputCol=None, labels=[])
+        setParams(self, inputCol=None, outputCol=None, labels=None)
         Sets params for this IndexToString
         """
         kwargs = self.setParams._input_kwargs
