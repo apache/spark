@@ -30,7 +30,6 @@ import org.apache.spark.sql.{DataFrame, Row}
 
 
 /**
- * :: Experimental ::
  * Common params for KMeans and KMeansModel
  */
 private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFeaturesCol
