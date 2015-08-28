@@ -152,17 +152,24 @@ class DAGScheduler(
   // may lead to more delay in scheduling if those locations are busy.
   private[scheduler] val REDUCER_PREF_LOCS_FRACTION = 0.2
 
-  // Called by TaskScheduler to report task's starting.
+  /**
+   * Called by the TaskSetManager to report task's starting.
+   */
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
     eventProcessLoop.post(BeginEvent(task, taskInfo))
   }
 
-  // Called to report that a task has completed and results are being fetched remotely.
+  /**
+   * Called by the TaskSetManager to report that a task has completed
+   * and results are being fetched remotely.
+   */
   def taskGettingResult(taskInfo: TaskInfo) {
     eventProcessLoop.post(GettingResultEvent(taskInfo))
   }
 
-  // Called by TaskScheduler to report task completions or failures.
+  /**
+   * Called by the TaskSetManager to report task completions or failures.
+   */
   def taskEnded(
       task: Task[_],
       reason: TaskEndReason,
@@ -188,18 +195,24 @@ class DAGScheduler(
       BlockManagerHeartbeat(blockManagerId), new RpcTimeout(600 seconds, "BlockManagerHeartbeat"))
   }
 
-  // Called by TaskScheduler when an executor fails.
+  /**
+   * Called by TaskScheduler implementation when an executor fails.
+   */
   def executorLost(execId: String): Unit = {
     eventProcessLoop.post(ExecutorLost(execId))
   }
 
-  // Called by TaskScheduler when a host is added
+  /**
+   * Called by TaskScheduler implementation when a host is added.
+   */
   def executorAdded(execId: String, host: String): Unit = {
     eventProcessLoop.post(ExecutorAdded(execId, host))
   }
 
-  // Called by TaskScheduler to cancel an entire TaskSet due to either repeated failures or
-  // cancellation of the job itself.
+  /**
+   * Called by the TaskSetManager to cancel an entire TaskSet due to either repeated failures or
+   * cancellation of the job itself.
+   */
   def taskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable]): Unit = {
     eventProcessLoop.post(TaskSetFailed(taskSet, reason, exception))
   }

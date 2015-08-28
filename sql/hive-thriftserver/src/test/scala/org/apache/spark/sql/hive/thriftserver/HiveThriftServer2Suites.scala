@@ -377,6 +377,60 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       rs2.close()
     }
   }
+
+  test("test add jar") {
+    withMultipleConnectionJdbcStatement(
+      {
+        statement =>
+          val jarFile =
+            "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
+              .split("/")
+              .mkString(File.separator)
+
+          statement.executeQuery(s"ADD JAR $jarFile")
+      },
+
+      {
+        statement =>
+          val queries = Seq(
+            "DROP TABLE IF EXISTS smallKV",
+            "CREATE TABLE smallKV(key INT, val STRING)",
+            s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE smallKV",
+            "DROP TABLE IF EXISTS addJar",
+            """CREATE TABLE addJar(key string)
+              |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'
+            """.stripMargin)
+
+          queries.foreach(statement.execute)
+
+          statement.executeQuery(
+            """
+              |INSERT INTO TABLE addJar SELECT 'k1' as key FROM smallKV limit 1
+            """.stripMargin)
+
+          val actualResult =
+            statement.executeQuery("SELECT key FROM addJar")
+          val actualResultBuffer = new collection.mutable.ArrayBuffer[String]()
+          while (actualResult.next()) {
+            actualResultBuffer += actualResult.getString(1)
+          }
+          actualResult.close()
+
+          val expectedResult =
+            statement.executeQuery("SELECT 'k1'")
+          val expectedResultBuffer = new collection.mutable.ArrayBuffer[String]()
+          while (expectedResult.next()) {
+            expectedResultBuffer += expectedResult.getString(1)
+          }
+          expectedResult.close()
+
+          assert(expectedResultBuffer === actualResultBuffer)
+
+          statement.executeQuery("DROP TABLE IF EXISTS addJar")
+          statement.executeQuery("DROP TABLE IF EXISTS smallKV")
+      }
+    )
+  }
 }
 
 class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
