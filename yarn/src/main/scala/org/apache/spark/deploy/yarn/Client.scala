@@ -19,15 +19,12 @@ package org.apache.spark.deploy.yarn
 
 import java.io.{ByteArrayInputStream, DataInputStream, File, FileOutputStream, IOException,
   OutputStreamWriter}
-import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
+import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
-import java.security.PrivilegedExceptionAction
 import java.util.{Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
-
-import org.apache.spark.deploy.rest.yarn.YarnRestSubmissionClient
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.reflect.runtime.universe
@@ -50,15 +47,15 @@ import org.apache.hadoop.security.token.{TokenIdentifier, Token}
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
-import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.rest.yarn.YarnRestSubmissionClient
 import org.apache.spark.util.Utils
 
 private[spark] class Client(
@@ -984,8 +981,6 @@ object Client extends Logging {
     }
 
     val restEnabled = sparkConf.getBoolean("spark.yarn.rest.enabled", false)
-    println(s"rest enabled: $restEnabled")
-
     if (restEnabled) {
       val yarnConf = SparkHadoopUtil.get.newConfiguration(sparkConf).asInstanceOf[YarnConfiguration]
       val rmWebAddress = yarnConf.get("yarn.resourcemanager.webapp.address")
@@ -993,7 +988,7 @@ object Client extends Logging {
 
       val restClient = new YarnRestSubmissionClient(rmWebAddress)
       val appSubmissionInfo = restClient.constructAppSubmissionInfo(args, sparkConf)
-      logInfo(s"Application submission context info:\n${appSubmissionInfo.toJson}")
+      logDebug(s"Application submission context info:\n${appSubmissionInfo.toJson}")
       restClient.createSubmission(appSubmissionInfo)
     } else {
       new Client(args, sparkConf).run()

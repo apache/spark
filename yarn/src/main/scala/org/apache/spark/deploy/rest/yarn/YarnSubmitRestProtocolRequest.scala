@@ -1,20 +1,39 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.deploy.rest.yarn
 
-import java.io.{DataInputStream, DataInput, ByteArrayInputStream}
+import java.io.{DataInputStream, ByteArrayInputStream}
 import java.net.URI
-
-import com.fasterxml.jackson.annotation.JsonInclude.Include
-import com.fasterxml.jackson.annotation.JsonTypeInfo.{Id, As}
-import org.apache.commons.codec.binary.Base64
-import org.apache.hadoop.security.Credentials
+import java.util
 
 import scala.collection.JavaConversions._
 
-import com.fasterxml.jackson.annotation.{JsonInclude, JsonTypeInfo, JsonProperty, JsonIgnore}
+import org.apache.hadoop.io.Text
+import org.apache.hadoop.security.token.TokenIdentifier
 import org.apache.hadoop.yarn.api.records._
+
+import com.fasterxml.jackson.annotation.{JsonProperty, JsonIgnore}
+import org.apache.commons.codec.binary.Base64
+import org.apache.hadoop.security.Credentials
+
 import org.apache.spark.deploy.rest.{SubmitRestProtocolException, SubmitRestProtocolMessage}
 
-private[rest] class YarnSubmitRestProtocolRequest extends SubmitRestProtocolMessage {
+private[rest] abstract class YarnSubmitRestProtocolRequest extends SubmitRestProtocolMessage {
   @JsonIgnore
   override val action: String = null
 
@@ -26,6 +45,7 @@ private[rest] class YarnSubmitRestProtocolRequest extends SubmitRestProtocolMess
   }
 }
 
+/** Yarn REST application submission protocol */
 private[rest] class ApplicationSubmissionContextInfo extends YarnSubmitRestProtocolRequest {
   @JsonProperty("application-id")
   var applicationId: String = null
@@ -53,7 +73,7 @@ private[rest] class ApplicationSubmissionContextInfo extends YarnSubmitRestProto
   var resource: ResourceInfo = null
 
   @JsonProperty("application-type")
-  var applicationType: String = null
+  var applicationType: String = "SPARK"
 
   @JsonProperty("keep-containers-across-application-attempts")
   var keepContainers: Boolean = false
@@ -76,13 +96,7 @@ private[rest] class ApplicationSubmissionContextInfo extends YarnSubmitRestProto
       resource: Resource,
       tags: Set[String],
       maxAppAttempts: Int = 2,
-      priority: Int = 1,
-      isUnmanagedAM: Boolean = false,
-      cancelTokensWhenComplete: Boolean = true,
-      applicationType: String = "SPARK",
-      keepContainers: Boolean = false,
-      appNodeLabelExpression: String = null,
-      amNodeLabelExpression: String = null): ApplicationSubmissionContextInfo = {
+      priority: Int = 1): ApplicationSubmissionContextInfo = {
     this.applicationId = applicationId
     this.applicationName = applicationName
     this.queue = queue
@@ -92,8 +106,6 @@ private[rest] class ApplicationSubmissionContextInfo extends YarnSubmitRestProto
     this.cancelTokensWhenComplete = cancelTokensWhenComplete
     this.maxAppAttempts = maxAppAttempts
     this.resource = new ResourceInfo().buildFrom(resource)
-    this.applicationType = applicationType
-    this.keepContainers = keepContainers
 
     if (!tags.isEmpty) {
       this.tags = tags.map { t =>
@@ -103,27 +115,11 @@ private[rest] class ApplicationSubmissionContextInfo extends YarnSubmitRestProto
       }
     }
 
-    this.appNodeLabelExpression = appNodeLabelExpression
-    this.amContainerNodeLabelExpression = amNodeLabelExpression
-
     this
-  }
-
-  protected override def doValidate(): Unit = {
-    super.doValidate()
-
-    assertFieldIsSet(applicationId, "application-id")
-    assertFieldIsSet(applicationName, "application-name")
-    assertFieldIsSet(queue, "queue")
-
-    assertFieldIsSet(containerInfo, "am-container-name")
-    containerInfo.validate()
-
-    assertFieldIsSet(resource, "resource")
-    resource.validate()
   }
 }
 
+/** Yarn REST protocol of container launch context */
 private[rest] class ContainerLaunchContextInfo extends YarnSubmitRestProtocolRequest {
   @JsonProperty("local-resources")
   var localResources: JaxbMapWrapper[String, LocalResourceInfo] = null
@@ -182,6 +178,7 @@ private[rest] class ContainerLaunchContextInfo extends YarnSubmitRestProtocolReq
   }
 }
 
+/** Yarn REST protocol of local resource */
 private[rest] class LocalResourceInfo extends YarnSubmitRestProtocolRequest {
   @JsonProperty("resource")
   var url: URI = null
@@ -212,11 +209,14 @@ private[rest] class LocalResourceInfo extends YarnSubmitRestProtocolRequest {
   }
 }
 
+/** Yarn REST protocol of credentials */
 private[rest] class CredentialsInfo extends YarnSubmitRestProtocolRequest {
   var tokens: JaxbMapWrapper[String, String] = null
   var secrets: JaxbMapWrapper[String, String] = null
 
   def buildFrom(credentials: Credentials): CredentialsInfo = {
+    import org.apache.hadoop.security.token.Token
+
     if (!credentials.getAllSecretKeys.isEmpty) {
       secrets = new JaxbMapWrapper[String, String]().buildFrom {
         credentials.getAllSecretKeys.map { key =>
@@ -225,12 +225,27 @@ private[rest] class CredentialsInfo extends YarnSubmitRestProtocolRequest {
       }
     }
 
-    //TODO. How to handle tokens
-    //tokens = new JaxbMapWrapper[String, String]().buildFrom(Map.empty)
+    // Using reflections to get hadoop tokens in Credentials
+    val hadoopTokens = try {
+      val field = credentials.getClass.getDeclaredField("tokenMap")
+      field.setAccessible(true)
+      field.get(credentials).asInstanceOf[util.Map[Text, Token[_ <: TokenIdentifier]]]
+    } catch {
+      case e: Exception =>
+        new util.HashMap[Text, Token[_ <: TokenIdentifier]]()
+    }
+
+    if (!hadoopTokens.isEmpty) {
+      tokens = new JaxbMapWrapper[String, String]().buildFrom {
+        hadoopTokens.map { case (k, v) => (k.toString, v.encodeToUrlString()) }.toMap
+      }
+    }
+
     this
   }
 }
 
+/** Yarn REST protocol of resource */
 private[rest] class ResourceInfo extends YarnSubmitRestProtocolRequest {
   var memory: Int = 0
   var vCores: Int = 0
@@ -240,18 +255,12 @@ private[rest] class ResourceInfo extends YarnSubmitRestProtocolRequest {
     vCores = resource.getVirtualCores
     this
   }
-
-  protected override def doValidate(): Unit = {
-    super.doValidate()
-    assertFieldIsSet(memory, "memory")
-    assertFieldIsSet(vCores, "vCores")
-  }
 }
 
 private[rest] class JaxbMapWrapper[K, V] {
   var entry: List[Entry] = null
 
-  def buildFrom(mapObj: Map[K, V]): JaxbMapWrapper[K, V]= {
+  def buildFrom(mapObj: Map[K, V]): JaxbMapWrapper[K, V] = {
     entry = mapObj.map { case (k, v) =>
       val e = new Entry()
       e.key = k

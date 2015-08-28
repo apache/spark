@@ -1,12 +1,25 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.deploy.rest.yarn
 
 import java.io.{DataOutputStream, FileNotFoundException}
 import java.net.{ConnectException, SocketException, HttpURLConnection, URL}
 import javax.servlet.http.HttpServletResponse
-
-import org.apache.hadoop.util.StringUtils
-import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.spark.deploy.SparkHadoopUtil
 
 import scala.collection.JavaConversions._
 import scala.io.Source
@@ -16,27 +29,46 @@ import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind._
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.google.common.base.Charsets
+import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.records.Resource
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.{Records, ConverterUtils}
 
 import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.rest.{SubmitRestConnectionException, SubmitRestProtocolException}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments}
 import org.apache.spark.util.Utils
 
+
+/**
+ * A client that submits applications to Yarn Resource Manager.
+ *
+ * This client offers 3 functions for you to submit, request the status and kill applications.
+ * the REST URL takes the form http://[host:port]/ws/v1/cluster.
+ *   (1) submit - POST to /apps?user.name=[blabla]
+ *   (2) kill - PUT to /apps/[application-id]/state?user.name=[blabla]
+ *   (3) status - GET /apps/[application-id]/state?user.name=[blabla]
+ *
+ * In the case of (1) and (2), parameters are posted in the HTTP body in the form of JSON fields.
+ * Otherwise, the URL fully specifies the intended action of the client.
+ *
+ * Supported REST protocol of Yarn Resource Manager can be found here:
+ *
+ * http://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/ResourceManagerRest.html
+ */
 private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends Logging {
   import YarnRestSubmissionClient._
 
   Utils.checkHostPort(rmWebAppAddress, "Resource Manager address is illegal")
 
-  def createSubmission(appSubmissionInfo: ApplicationSubmissionContextInfo): Unit = {
-    logWarning(
-      s"""
-         |Submitting applications using Yarn REST API is only supported for Hadoop 2.6+.
-         |Currently it only supports non-secure mode.
-       """.stripMargin)
+  require(!UserGroupInformation.isSecurityEnabled,
+    "Current Yarn rest client cannot support secure mode")
 
+  /** Create a REST application submission connection to RM to submit the application. */
+  def createSubmission(appSubmissionInfo: ApplicationSubmissionContextInfo): Unit = {
+    logWarning("Submitting application using Yarn REST API is only supported for Hadoop 2.5+")
     logInfo("submit a request for submitting a new application in resource manager")
 
     val url = getSubmitUrl(rmWebAppAddress, currentUser)
@@ -45,26 +77,29 @@ private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends L
       val respCode = conn.getResponseCode
       if (respCode == HttpServletResponse.SC_ACCEPTED) {
         val location = conn.getHeaderField("Location")
-        logInfo(s"Return location is $location, you could check the runnning status of " +
-          "application in the web page of resource manager.")
+        logInfo(s"Return location is $location, you could check the running status of " +
+          "application in the web page of RM.")
       } else {
         val respJson = Source.fromInputStream(conn.getErrorStream).mkString
         logError(s"Resource manager responded error message:\n$respJson")
       }
     } catch {
       case e: SubmitRestConnectionException =>
-        logError(s"Unable to connect to resource manager", e)
+        logError(s"Unable to connect to RM", e)
       case t: SubmitRestProtocolException =>
         logError(s"Unable to parse the received JSON message", t)
     }
   }
 
+  /** Construct an application submission context info for the use of application submission */
   def constructAppSubmissionInfo(
       args: ClientArguments,
       sparkConf: SparkConf
     ): ApplicationSubmissionContextInfo = {
 
-    val newApplication = newApplicationSubmission()
+    val newApplication = Option(newApplicationSubmission()).getOrElse {
+      throw new SubmitRestProtocolException("Cannot get the new application result from RM")
+    }
 
     // Create yarn client internally to handle environment related things.
     val client = new Client(args, sparkConf)
@@ -99,8 +134,13 @@ private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends L
       sparkConf.getInt("spark.yarn.maxAppAttempts", 2))
   }
 
-  def requestStateSubmission(applicationId: String, quiet: Boolean = false
-      ): YarnSubmitRestProtocolResponse = {
+  /** REST connection to request current status of application */
+  def requestStateSubmission(
+      applicationId: String,
+      quiet: Boolean = false
+    ): YarnSubmitRestProtocolResponse = {
+    logWarning("Requesting the status of application using Yarn REST API is only supported for " +
+      "Hadoop 2.5+")
     logInfo(s"Submit a request for status of application $applicationId in resource manager")
 
     val url = getStateUrl(rmWebAppAddress, applicationId, currentUser)
@@ -125,7 +165,10 @@ private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends L
     response
   }
 
+  /** REST connection to request to kill the specific application */
   def killSubmission(applicationId: String): YarnSubmitRestProtocolResponse = {
+    logWarning("Submitting a request for killing application using Yarn REST API is only " +
+      "supported for Hadoop 2.5+")
     logInfo(s"Submit a request for killing application $applicationId in resource manager")
 
     val url = getStateUrl(rmWebAppAddress, applicationId, currentUser)
@@ -150,7 +193,10 @@ private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends L
     response
   }
 
+  /** REST connection to request a new application id with available resources from RM */
   private def newApplicationSubmission(): NewApplication = {
+    logWarning("Submitting a request for creating new application using Yarn REST API is only " +
+      "supported for Hadoop 2.5+")
     logInfo(s"Submit a request for creating new application in resource manager")
 
     val url = getNewApplicationUrl(rmWebAppAddress, currentUser)
@@ -159,7 +205,7 @@ private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends L
       val conn = update(url, "POST")
       readResponse[NewApplication](conn) match {
         case n: NewApplication =>
-          logInfo(s"successfully request a new application: ${n.toJson}")
+          logInfo(s"successfully request a new application:\n${n.toJson}")
           newApplication = n
         case unexpected =>
           logError(s"Resource manager responded error message:\n${unexpected.toJson}")
@@ -174,6 +220,7 @@ private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends L
     newApplication
   }
 
+  /** Send a GET request to the specified URL. */
   private def get(url: URL): HttpURLConnection = {
     logDebug(s"Sending GET request to server at $url.")
     val conn = url.openConnection().asInstanceOf[HttpURLConnection]
@@ -182,6 +229,7 @@ private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends L
     conn
   }
 
+  /** Send a POST/PUT request to the specified URL. */
   private def update(url: URL, method: String): HttpURLConnection = {
     logDebug(s"Sending update request to server at $url.")
     val conn = url.openConnection().asInstanceOf[HttpURLConnection]
@@ -189,6 +237,7 @@ private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends L
     conn
   }
 
+  /** Send a POST/PUT request with the given JSON as the body to the specified URL. */
   private def updateJson(url: URL, method: String, json: String): HttpURLConnection = {
     logDebug(s"Sending update request to server at $url:\n$json")
     val conn = url.openConnection().asInstanceOf[HttpURLConnection]
@@ -210,6 +259,11 @@ private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends L
     conn
   }
 
+  /**
+   * Read the response from the server and return it as a validated
+   * [[YarnSubmitRestProtocolResponse]].
+   * If the response represents an error, report the embedded message to the user.
+   */
   private def readResponse[T <: YarnSubmitRestProtocolResponse : ClassTag](
       connection: HttpURLConnection): YarnSubmitRestProtocolResponse = {
     try {
@@ -283,36 +337,11 @@ private[spark] object YarnRestSubmissionClient extends Logging {
     .enable(SerializationFeature.INDENT_OUTPUT)
     .registerModule(DefaultScalaModule)
 
+  /** Parse the JSON string into [[YarnSubmitRestProtocolResponse]] */
   def fromJson[T <: YarnSubmitRestProtocolResponse : ClassTag](json: String
       ): YarnSubmitRestProtocolResponse = {
     val clazz = classTag[T].runtimeClass
       .asSubclass[YarnSubmitRestProtocolResponse](classOf[YarnSubmitRestProtocolResponse])
     mapper.readValue(json, clazz)
-  }
-
-  def main(args: Array[String]): Unit = {
-    // Set an env variable indicating we are running in YARN mode.
-    // Note that any env variable with the SPARK_ prefix gets propagated to all (remote) processes
-    System.setProperty("SPARK_YARN_MODE", "true")
-    val sparkConf = new SparkConf
-
-    val clientArgs = new ClientArguments(args, sparkConf)
-    // to maintain backwards-compatibility
-    if (!Utils.isDynamicAllocationEnabled(sparkConf)) {
-      sparkConf.setIfMissing("spark.executor.instances", clientArgs.numExecutors.toString)
-    }
-
-    val yarnConf = SparkHadoopUtil.get.newConfiguration(sparkConf).asInstanceOf[YarnConfiguration]
-
-    val rmWebAddress = yarnConf.get("yarn.resourcemanager.webapp.address")
-    require(rmWebAddress != null, "resource manager web app address is null")
-
-    val restClient = new YarnRestSubmissionClient(rmWebAddress)
-
-    val appSubmissionInfo = restClient.constructAppSubmissionInfo(clientArgs, sparkConf)
-
-    logInfo(s"Application submission context info:\n${appSubmissionInfo.toJson}")
-
-    restClient.createSubmission(appSubmissionInfo)
   }
 }
