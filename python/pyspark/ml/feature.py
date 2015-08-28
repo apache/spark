@@ -870,14 +870,14 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
 
     def setLabels(self, value):
         """
-        Specify the labels to be used.
+        Sets the value of :py:attr:`labels`.
         """
         self._paramMap[self.labels] = value
         return self
 
     def getLabels(self):
         """
-        Get the labels.
+        Gets the value of :py:attr:`labels` or its default value.
         """
         return self.getOrDefault(self.labels)
 
