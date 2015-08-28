@@ -454,6 +454,16 @@ if 'MySqlOperator' in dir(operators):
                 task_id='basic_mysql', sql=sql, dag=self.dag)
             t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+        def mysql_operator_test_multi(self):
+            sql = [
+                "TRUNCATE TABLE test_airflow",
+                "INSERT INTO test_airflow VALUES ('X')",
+            ]
+            t = operators.MySqlOperator(
+                task_id='basic_mysql', sql=sql, dag=self.dag)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+
 if 'PostgresOperator' in dir(operators):
     # Only testing if the operator is installed
     class PostgresTest(unittest.TestCase):

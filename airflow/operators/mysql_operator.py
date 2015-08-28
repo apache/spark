@@ -27,6 +27,6 @@ class MySqlOperator(BaseOperator):
         self.sql = sql
 
     def execute(self, context):
-        logging.info('Executing: ' + self.sql)
+        logging.info('Executing: ' + str(self.sql))
         hook = MySqlHook(mysql_conn_id=self.mysql_conn_id)
         hook.run(self.sql)
