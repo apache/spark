@@ -99,7 +99,7 @@ object Utils {
 
         case expressions.ApproxCountDistinct(child, rsd) =>
           aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.HyperLogLog(child, rsd),
+            aggregateFunction = aggregate.HyperLogLogPlusPlus(child, rsd),
             mode = aggregate.Complete,
             isDistinct = false)
       }
