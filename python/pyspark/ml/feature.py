@@ -169,20 +169,24 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
 @inherit_doc
 class DCT(JavaTransformer, HasInputCol, HasOutputCol):
     """
-    A feature transformer that takes the 1D discrete cosine transform of a real vector. No zero
-    padding is performed on the input vector.
-    It returns a real vector of the same length representing the DCT. The return vector is scaled
-    such that the transform matrix is unitary (aka scaled DCT-II).
+    A feature transformer that takes the 1D discrete cosine transform
+    of a real vector. No zero padding is performed on the input vector.
+    It returns a real vector of the same length representing the DCT.
+    The return vector is scaled such that the transform matrix is
+    unitary (aka scaled DCT-II).
 
-    More information on `https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia`.
+    More information on
+    `https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia`.
 
     >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
+    >>> df1 = sqlContext.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
     >>> dct = DCT(inverse=False, inputCol="vec", outputCol="resultVec")
-    >>> dct.transform(df).head().resultVec
+    >>> df2 = dct.transform(df1)
+    >>> df2.head().resultVec
     DenseVector([10.969..., -0.707..., -2.041...])
-    >>> dct.setInverse(True).transform(df).head().resultVec
-    DenseVector([10.993..., -2.012..., -0.320...])
+    >>> df3 = DCT(inverse=True, inputCol="resultVec", outputCol="origVec").transform(df2)
+    >>> df3.head().origVec
+    DenseVector([5.0, 8.0, 6.0])
     """
 
     # a placeholder to make it appear in the generated doc
