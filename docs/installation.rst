@@ -85,6 +85,9 @@ As Airflow was built to interact with its metadata using the great SqlAlchemy
 library, you should be able to use any database backend supported as a
 SqlAlchemy backend. We recommend using **MySQL** or **Postgres**.
 
+.. note:: If you decide to use **Postgres**, we recommend using the ``psycopg2`` 
+   driver and specifying it in your SqlAlchemy connection string
+
 Once you've setup your database to host Airflow, you'll need to alter the
 SqlAlchemy connection string located in your configuration file
 ``$AIRFLOW_HOME/airflow.cfg``. You should then also change the "executor"
