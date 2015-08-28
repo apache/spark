@@ -28,7 +28,8 @@ __all__ = ['DecisionTreeRegressor', 'DecisionTreeRegressionModel', 'GBTRegressor
 
 @inherit_doc
 class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                       HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept, HasStandardization):
+                       HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
+                       HasStandardization):
     """
     Linear regression.
 
