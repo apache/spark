@@ -702,7 +702,7 @@ abstract class StddevAgg1(child: Expression) extends UnaryExpression with Partia
     case _ => DoubleType
   }
 
-  def isSample: Boolean 
+  def isSample: Boolean
 
   override def asPartial: SplitEvaluation = {
     val partialStd = Alias(ComputePartialStd(child), "PartialStddev")()
@@ -803,8 +803,11 @@ case class ComputePartialStdFunction (
   }
 }
 
-case class MergePartialStd(child: Expression, isSample: Boolean) extends UnaryExpression with AggregateExpression1 {
-  def this() = this(null, false) //required for serialization
+case class MergePartialStd(
+    child: Expression,
+    isSample: Boolean
+) extends UnaryExpression with AggregateExpression1 {
+  def this() = this(null, false) // required for serialization
 
   override def children: Seq[Expression] = child:: Nil
   override def nullable: Boolean = false
@@ -937,11 +940,11 @@ case class StddevFunction(
     if (curCount == 0) null
     else if (curCount < 2) zero.eval(null)
     else {
-      // when total count > 2, 
+      // when total count > 2,
       // stddev_samp = sqrt(curMk/(curCount - 1))
       // stddev_pop = sqrt(curMk/curCount)
       val varCol = {
-        if(isSample) {
+        if (isSample) {
           Divide(curMk, Cast(Literal(curCount - 1), computeType))
         }
         else {

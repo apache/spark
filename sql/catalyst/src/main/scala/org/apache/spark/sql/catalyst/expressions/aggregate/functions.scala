@@ -302,14 +302,15 @@ abstract class StddevAgg(child: Expression) extends AlgebraicAggregate {
   private val currentAvg = AttributeReference("currentAvg", resultType)()
   private val currentMk = AttributeReference("currentMk", resultType)()
 
-  override val bufferAttributes = preCount :: currentCount :: preAvg :: currentAvg :: currentMk :: Nil
+  override val bufferAttributes = preCount :: currentCount :: preAvg ::
+                                  currentAvg :: currentMk :: Nil
 
   override val initialValues = Seq(
-    /* preCount = */ Cast(Literal(0), resultType), 
+    /* preCount = */ Cast(Literal(0), resultType),
     /* currentCount = */ Cast(Literal(0), resultType),
-    /* preAvg = */ Cast(Literal(0), resultType), 
-    /* currentAvg = */ Cast(Literal(0), resultType), 
-    /* currentMk = */ Cast(Literal(0), resultType) 
+    /* preAvg = */ Cast(Literal(0), resultType),
+    /* currentAvg = */ Cast(Literal(0), resultType),
+    /* currentMk = */ Cast(Literal(0), resultType)
   )
 
   override val updateExpressions = {
@@ -330,7 +331,8 @@ abstract class StddevAgg(child: Expression) extends AlgebraicAggregate {
 
     Seq(
       /* preCount = */ If(IsNull(child), preCount, currentCount),
-      /* currentCount = */ If(IsNull(child), currentCount, Add(currentCount, Cast(Literal(1), resultType))),
+      /* currentCount = */ If(IsNull(child), currentCount,
+                           Add(currentCount, Cast(Literal(1), resultType))),
       /* preAvg = */ If(IsNull(child), preAvg, currentAvg),
       /* currentAvg = */ If(IsNull(child), currentAvg, avgAdd),
       /* currentMk = */ If(IsNull(child), currentMk, mkAdd)
@@ -338,8 +340,8 @@ abstract class StddevAgg(child: Expression) extends AlgebraicAggregate {
   }
 
   override val mergeExpressions = {
-  
-    //count merge
+
+    // count merge
     def countMerge: Expression = {
       currentCount.left + currentCount.right
     }
