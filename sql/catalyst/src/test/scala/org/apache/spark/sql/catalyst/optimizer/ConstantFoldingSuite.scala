@@ -269,15 +269,5 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select('a)
         .where(In(Literal(1), Seq(Literal(1), 'a.attr)))
-
-    optimized = Optimize.execute(originalQuery.analyze)
-
-    correctAnswer =
-      testRelation
-        .select('a)
-        .where(Literal(true))
-        .analyze
-
-    comparePlans(optimized, correctAnswer)
   }
 }
