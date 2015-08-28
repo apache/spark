@@ -19,14 +19,12 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
 import java.net.URL
-import java.nio.charset.StandardCharsets
 import java.sql.{Date, DriverManager, SQLException, Statement}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise, future}
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.sys.process.{Process, ProcessLogger}
 import scala.util.{Random, Try}
 
 import com.google.common.base.Charsets.UTF_8
@@ -41,9 +39,10 @@ import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkFunSuite}
 
 object TestData {
   def getTestDataFilePath(name: String): URL = {
@@ -378,6 +377,60 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       rs2.close()
     }
   }
+
+  test("test add jar") {
+    withMultipleConnectionJdbcStatement(
+      {
+        statement =>
+          val jarFile =
+            "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
+              .split("/")
+              .mkString(File.separator)
+
+          statement.executeQuery(s"ADD JAR $jarFile")
+      },
+
+      {
+        statement =>
+          val queries = Seq(
+            "DROP TABLE IF EXISTS smallKV",
+            "CREATE TABLE smallKV(key INT, val STRING)",
+            s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE smallKV",
+            "DROP TABLE IF EXISTS addJar",
+            """CREATE TABLE addJar(key string)
+              |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'
+            """.stripMargin)
+
+          queries.foreach(statement.execute)
+
+          statement.executeQuery(
+            """
+              |INSERT INTO TABLE addJar SELECT 'k1' as key FROM smallKV limit 1
+            """.stripMargin)
+
+          val actualResult =
+            statement.executeQuery("SELECT key FROM addJar")
+          val actualResultBuffer = new collection.mutable.ArrayBuffer[String]()
+          while (actualResult.next()) {
+            actualResultBuffer += actualResult.getString(1)
+          }
+          actualResult.close()
+
+          val expectedResult =
+            statement.executeQuery("SELECT 'k1'")
+          val expectedResultBuffer = new collection.mutable.ArrayBuffer[String]()
+          while (expectedResult.next()) {
+            expectedResultBuffer += expectedResult.getString(1)
+          }
+          expectedResult.close()
+
+          assert(expectedResultBuffer === actualResultBuffer)
+
+          statement.executeQuery("DROP TABLE IF EXISTS addJar")
+          statement.executeQuery("DROP TABLE IF EXISTS smallKV")
+      }
+    )
+  }
 }
 
 class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
@@ -417,7 +470,7 @@ object ServerMode extends Enumeration {
 }
 
 abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
-  Class.forName(classOf[HiveDriver].getCanonicalName)
+  Utils.classForName(classOf[HiveDriver].getCanonicalName)
 
   private def jdbcUri = if (mode == ServerMode.http) {
     s"""jdbc:hive2://localhost:$serverPort/
@@ -483,7 +536,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
       val tempLog4jConf = Utils.createTempDir().getCanonicalPath
 
       Files.write(
-        """log4j.rootCategory=INFO, console
+        """log4j.rootCategory=DEBUG, console
           |log4j.appender.console=org.apache.log4j.ConsoleAppender
           |log4j.appender.console.target=System.err
           |log4j.appender.console.layout=org.apache.log4j.PatternLayout
@@ -492,7 +545,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
         new File(s"$tempLog4jConf/log4j.properties"),
         UTF_8)
 
-      tempLog4jConf + File.pathSeparator + sys.props("java.class.path")
+      tempLog4jConf
     }
 
     s"""$startScript
@@ -507,6 +560,20 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
        |  --conf spark.ui.enabled=false
      """.stripMargin.split("\\s+").toSeq
   }
+
+  /**
+   * String to scan for when looking for the the thrift binary endpoint running.
+   * This can change across Hive versions.
+   */
+  val THRIFT_BINARY_SERVICE_LIVE = "Starting ThriftBinaryCLIService on port"
+
+  /**
+   * String to scan for when looking for the the thrift HTTP endpoint running.
+   * This can change across Hive versions.
+   */
+  val THRIFT_HTTP_SERVICE_LIVE = "Started ThriftHttpCLIService in http"
+
+  val SERVER_STARTUP_TIMEOUT = 3.minutes
 
   private def startThriftServer(port: Int, attempt: Int) = {
     warehousePath = Utils.createTempDir()
@@ -528,45 +595,59 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
     logInfo(s"Trying to start HiveThriftServer2: port=$port, mode=$mode, attempt=$attempt")
 
-    val env = Seq(
-      // Disables SPARK_TESTING to exclude log4j.properties in test directories.
-      "SPARK_TESTING" -> "0",
-      // Points SPARK_PID_DIR to SPARK_HOME, otherwise only 1 Thrift server instance can be started
-      // at a time, which is not Jenkins friendly.
-      "SPARK_PID_DIR" -> pidDir.getCanonicalPath)
+    logPath = {
+      val lines = Utils.executeAndGetOutput(
+        command = command,
+        extraEnvironment = Map(
+          // Disables SPARK_TESTING to exclude log4j.properties in test directories.
+          "SPARK_TESTING" -> "0",
+          // Points SPARK_PID_DIR to SPARK_HOME, otherwise only 1 Thrift server instance can be
+          // started at a time, which is not Jenkins friendly.
+          "SPARK_PID_DIR" -> pidDir.getCanonicalPath),
+        redirectStderr = true)
 
-    logPath = Process(command, None, env: _*).lines.collectFirst {
-      case line if line.contains(LOG_FILE_MARK) => new File(line.drop(LOG_FILE_MARK.length))
-    }.getOrElse {
-      throw new RuntimeException("Failed to find HiveThriftServer2 log file.")
+      lines.split("\n").collectFirst {
+        case line if line.contains(LOG_FILE_MARK) => new File(line.drop(LOG_FILE_MARK.length))
+      }.getOrElse {
+        throw new RuntimeException("Failed to find HiveThriftServer2 log file.")
+      }
     }
 
     val serverStarted = Promise[Unit]()
 
     // Ensures that the following "tail" command won't fail.
     logPath.createNewFile()
-    logTailingProcess =
+    val successLines = Seq(THRIFT_BINARY_SERVICE_LIVE, THRIFT_HTTP_SERVICE_LIVE)
+
+    logTailingProcess = {
+      val command = s"/usr/bin/env tail -n +0 -f ${logPath.getCanonicalPath}".split(" ")
       // Using "-n +0" to make sure all lines in the log file are checked.
-      Process(s"/usr/bin/env tail -n +0 -f ${logPath.getCanonicalPath}").run(ProcessLogger(
-        (line: String) => {
-          diagnosisBuffer += line
+      val builder = new ProcessBuilder(command: _*)
+      val captureOutput = (line: String) => diagnosisBuffer.synchronized {
+        diagnosisBuffer += line
 
-          if (line.contains("ThriftBinaryCLIService listening on") ||
-              line.contains("Started ThriftHttpCLIService in http")) {
+        successLines.foreach { r =>
+          if (line.contains(r)) {
             serverStarted.trySuccess(())
-          } else if (line.contains("HiveServer2 is stopped")) {
-            // This log line appears when the server fails to start and terminates gracefully (e.g.
-            // because of port contention).
-            serverStarted.tryFailure(new RuntimeException("Failed to start HiveThriftServer2"))
           }
-        }))
+        }
+      }
 
-    Await.result(serverStarted.future, 2.minute)
+        val process = builder.start()
+
+      new ProcessOutputCapturer(process.getInputStream, captureOutput).start()
+      new ProcessOutputCapturer(process.getErrorStream, captureOutput).start()
+      process
+    }
+
+    Await.result(serverStarted.future, SERVER_STARTUP_TIMEOUT)
   }
 
   private def stopThriftServer(): Unit = {
     // The `spark-daemon.sh' script uses kill, which is not synchronous, have to wait for a while.
-    Process(stopScript, None, "SPARK_PID_DIR" -> pidDir.getCanonicalPath).run().exitValue()
+    Utils.executeAndGetOutput(
+      command = Seq(stopScript),
+      extraEnvironment = Map("SPARK_PID_DIR" -> pidDir.getCanonicalPath))
     Thread.sleep(3.seconds.toMillis)
 
     warehousePath.delete()

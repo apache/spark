@@ -25,7 +25,7 @@ import java.security.PrivilegedExceptionAction
 import java.util.{Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.reflect.runtime.universe
 import scala.util.{Try, Success, Failure}
@@ -80,9 +80,11 @@ private[spark] class Client(
   private val isClusterMode = args.isClusterMode
 
   private var loginFromKeytab = false
+  private var principal: String = null
+  private var keytab: String = null
+
   private val fireAndForget = isClusterMode &&
     !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
-
 
   def stop(): Unit = yarnClient.stop()
 
@@ -161,6 +163,23 @@ private[spark] class Client(
     appContext.setQueue(args.amQueue)
     appContext.setAMContainerSpec(containerContext)
     appContext.setApplicationType("SPARK")
+    sparkConf.getOption(CONF_SPARK_YARN_APPLICATION_TAGS)
+      .map(StringUtils.getTrimmedStringCollection(_))
+      .filter(!_.isEmpty())
+      .foreach { tagCollection =>
+        try {
+          // The setApplicationTags method was only introduced in Hadoop 2.4+, so we need to use
+          // reflection to set it, printing a warning if a tag was specified but the YARN version
+          // doesn't support it.
+          val method = appContext.getClass().getMethod(
+            "setApplicationTags", classOf[java.util.Set[String]])
+          method.invoke(appContext, new java.util.HashSet[String](tagCollection))
+        } catch {
+          case e: NoSuchMethodException =>
+            logWarning(s"Ignoring $CONF_SPARK_YARN_APPLICATION_TAGS because this version of " +
+              "YARN does not support it")
+        }
+      }
     sparkConf.getOption("spark.yarn.maxAppAttempts").map(_.toInt) match {
       case Some(v) => appContext.setMaxAppAttempts(v)
       case None => logDebug("spark.yarn.maxAppAttempts is not set. " +
@@ -201,12 +220,14 @@ private[spark] class Client(
     val executorMem = args.executorMemory + executorMemoryOverhead
     if (executorMem > maxMem) {
       throw new IllegalArgumentException(s"Required executor memory (${args.executorMemory}" +
-        s"+$executorMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster!")
+        s"+$executorMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster! " +
+        "Please increase the value of 'yarn.scheduler.maximum-allocation-mb'.")
     }
     val amMem = args.amMemory + amMemoryOverhead
     if (amMem > maxMem) {
       throw new IllegalArgumentException(s"Required AM memory (${args.amMemory}" +
-        s"+$amMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster!")
+        s"+$amMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster! " +
+        "Please increase the value of 'yarn.scheduler.maximum-allocation-mb'.")
     }
     logInfo("Will allocate AM container, with %d MB memory including %d MB overhead".format(
       amMem,
@@ -264,8 +285,8 @@ private[spark] class Client(
     // multiple times, YARN will fail to launch containers for the app with an internal
     // error.
     val distributedUris = new HashSet[String]
-    obtainTokenForHiveMetastore(hadoopConf, credentials)
-    obtainTokenForHBase(hadoopConf, credentials)
+    obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
+    obtainTokenForHBase(sparkConf, hadoopConf, credentials)
 
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
       fs.getDefaultReplication(dst)).toShort
@@ -339,7 +360,7 @@ private[spark] class Client(
     if (loginFromKeytab) {
       logInfo("To enable the AM to login from keytab, credentials are being copied over to the AM" +
         " via the YARN Secure Distributed Cache.")
-      val (_, localizedPath) = distribute(args.keytab,
+      val (_, localizedPath) = distribute(keytab,
         destName = Some(sparkConf.get("spark.yarn.keytab")),
         appMasterOnly = true)
       require(localizedPath != null, "Keytab file already distributed.")
@@ -410,7 +431,7 @@ private[spark] class Client(
     }
 
     // Distribute an archive with Hadoop and Spark configuration for the AM.
-    val (_, confLocalizedPath) = distribute(createConfArchive().getAbsolutePath(),
+    val (_, confLocalizedPath) = distribute(createConfArchive().toURI().getPath(),
       resType = LocalResourceType.ARCHIVE,
       destName = Some(LOCALIZED_CONF_DIR),
       appMasterOnly = true)
@@ -490,7 +511,7 @@ private[spark] class Client(
     val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + stagingDirPath
     YarnSparkHadoopUtil.get.obtainTokensForNamenodes(
       nns, hadoopConf, creds, Some(sparkConf.get("spark.yarn.principal")))
-    val t = creds.getAllTokens
+    val t = creds.getAllTokens.asScala
       .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
       .head
     val newExpiration = t.renew(hadoopConf)
@@ -616,7 +637,7 @@ private[spark] class Client(
     val appId = newAppResponse.getApplicationId
     val appStagingDir = getAppStagingDir(appId)
     val pySparkArchives =
-      if (sys.props.getOrElse("spark.yarn.isPython", "false").toBoolean) {
+      if (sparkConf.getBoolean("spark.yarn.isPython", false)) {
         findPySparkArchives()
       } else {
         Nil
@@ -629,8 +650,8 @@ private[spark] class Client(
     distCacheMgr.setDistArchivesEnv(launchEnv)
 
     val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
-    amContainer.setLocalResources(localResources)
-    amContainer.setEnvironment(launchEnv)
+    amContainer.setLocalResources(localResources.asJava)
+    amContainer.setEnvironment(launchEnv.asJava)
 
     val javaOpts = ListBuffer[String]()
 
@@ -732,9 +753,9 @@ private[spark] class Client(
       }
     val amClass =
       if (isClusterMode) {
-        Class.forName("org.apache.spark.deploy.yarn.ApplicationMaster").getName
+        Utils.classForName("org.apache.spark.deploy.yarn.ApplicationMaster").getName
       } else {
-        Class.forName("org.apache.spark.deploy.yarn.ExecutorLauncher").getName
+        Utils.classForName("org.apache.spark.deploy.yarn.ExecutorLauncher").getName
       }
     if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {
       args.userArgs = ArrayBuffer(args.primaryRFile) ++ args.userArgs
@@ -747,7 +768,6 @@ private[spark] class Client(
         userArgs ++ Seq(
           "--executor-memory", args.executorMemory.toString + "m",
           "--executor-cores", args.executorCores.toString,
-          "--num-executors ", args.numExecutors.toString,
           "--properties-file", buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
             LOCALIZED_CONF_DIR, SPARK_CONF_FILE))
 
@@ -762,10 +782,10 @@ private[spark] class Client(
 
     // TODO: it would be nicer to just make sure there are no null commands here
     val printableCommands = commands.map(s => if (s == null) "null" else s).toList
-    amContainer.setCommands(printableCommands)
+    amContainer.setCommands(printableCommands.asJava)
 
     logDebug("===============================================================================")
-    logDebug("Yarn AM launch context:")
+    logDebug("YARN AM launch context:")
     logDebug(s"    user class: ${Option(args.userClass).getOrElse("N/A")}")
     logDebug("    env:")
     launchEnv.foreach { case (k, v) => logDebug(s"        $k -> $v") }
@@ -777,7 +797,8 @@ private[spark] class Client(
 
     // send the acl settings into YARN to control who has access via YARN interfaces
     val securityManager = new SecurityManager(sparkConf)
-    amContainer.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager))
+    amContainer.setApplicationACLs(
+      YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
     setupSecurityToken(amContainer)
     UserGroupInformation.getCurrentUser().addCredentials(credentials)
 
@@ -785,19 +806,27 @@ private[spark] class Client(
   }
 
   def setupCredentials(): Unit = {
-    if (args.principal != null) {
-      require(args.keytab != null, "Keytab must be specified when principal is specified.")
+    loginFromKeytab = args.principal != null || sparkConf.contains("spark.yarn.principal")
+    if (loginFromKeytab) {
+      principal =
+        if (args.principal != null) args.principal else sparkConf.get("spark.yarn.principal")
+      keytab = {
+        if (args.keytab != null) {
+          args.keytab
+        } else {
+          sparkConf.getOption("spark.yarn.keytab").orNull
+        }
+      }
+
+      require(keytab != null, "Keytab must be specified when principal is specified.")
       logInfo("Attempting to login to the Kerberos" +
-        s" using principal: ${args.principal} and keytab: ${args.keytab}")
-      val f = new File(args.keytab)
+        s" using principal: $principal and keytab: $keytab")
+      val f = new File(keytab)
       // Generate a file name that can be used for the keytab file, that does not conflict
       // with any user file.
       val keytabFileName = f.getName + "-" + UUID.randomUUID().toString
-      UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
-      loginFromKeytab = true
       sparkConf.set("spark.yarn.keytab", keytabFileName)
-      sparkConf.set("spark.yarn.principal", args.principal)
-      logInfo("Successfully logged into the KDC.")
+      sparkConf.set("spark.yarn.principal", principal)
     }
     credentials = UserGroupInformation.getCurrentUser.getCredentials
   }
@@ -938,7 +967,7 @@ private[spark] class Client(
 object Client extends Logging {
   def main(argStrings: Array[String]) {
     if (!sys.props.contains("SPARK_SUBMIT")) {
-      println("WARNING: This client is deprecated and will be removed in a " +
+      logWarning("WARNING: This client is deprecated and will be removed in a " +
         "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
     }
 
@@ -948,6 +977,10 @@ object Client extends Logging {
     val sparkConf = new SparkConf
 
     val args = new ClientArguments(argStrings, sparkConf)
+    // to maintain backwards-compatibility
+    if (!Utils.isDynamicAllocationEnabled(sparkConf)) {
+      sparkConf.setIfMissing("spark.executor.instances", args.numExecutors.toString)
+    }
     new Client(args, sparkConf).run()
   }
 
@@ -971,6 +1004,10 @@ object Client extends Logging {
   // Internal config to propagate the locations of any extra jars to add to the classpath
   // of the executors
   val CONF_SPARK_YARN_SECONDARY_JARS = "spark.yarn.secondary.jars"
+
+  // Comma-separated list of strings to pass through as YARN application tags appearing
+  // in YARN ApplicationReports, which can be used for filtering when querying YARN.
+  val CONF_SPARK_YARN_APPLICATION_TAGS = "spark.yarn.tags"
 
   // Staging directory is private! -> rwx--------
   val STAGING_DIR_PERMISSION: FsPermission =
@@ -1062,20 +1099,10 @@ object Client extends Logging {
     triedDefault.toOption
   }
 
-  /**
-   * In Hadoop 0.23, the MR application classpath comes with the YARN application
-   * classpath. In Hadoop 2.0, it's an array of Strings, and in 2.2+ it's a String.
-   * So we need to use reflection to retrieve it.
-   */
   private[yarn] def getDefaultMRApplicationClasspath: Option[Seq[String]] = {
     val triedDefault = Try[Seq[String]] {
       val field = classOf[MRJobConfig].getField("DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH")
-      val value = if (field.getType == classOf[String]) {
-        StringUtils.getStrings(field.get(null).asInstanceOf[String]).toArray
-      } else {
-        field.get(null).asInstanceOf[Array[String]]
-      }
-      value.toSeq
+      StringUtils.getStrings(field.get(null).asInstanceOf[String]).toSeq
     } recoverWith {
       case e: NoSuchFieldException => Success(Seq.empty[String])
     }
@@ -1162,7 +1189,7 @@ object Client extends Logging {
    *
    * If not a "local:" file and no alternate name, the environment is not modified.
    *
-   * @parma conf      Spark configuration.
+   * @param conf      Spark configuration.
    * @param uri       URI to add to classpath (optional).
    * @param fileName  Alternate name for the file (optional).
    * @param env       Map holding the environment variables.
@@ -1213,8 +1240,11 @@ object Client extends Logging {
   /**
    * Obtains token for the Hive metastore and adds them to the credentials.
    */
-  private def obtainTokenForHiveMetastore(conf: Configuration, credentials: Credentials) {
-    if (UserGroupInformation.isSecurityEnabled) {
+  private def obtainTokenForHiveMetastore(
+      sparkConf: SparkConf,
+      conf: Configuration,
+      credentials: Credentials) {
+    if (shouldGetTokens(sparkConf, "hive") && UserGroupInformation.isSecurityEnabled) {
       val mirror = universe.runtimeMirror(getClass.getClassLoader)
 
       try {
@@ -1271,8 +1301,11 @@ object Client extends Logging {
   /**
    * Obtain security token for HBase.
    */
-  def obtainTokenForHBase(conf: Configuration, credentials: Credentials): Unit = {
-    if (UserGroupInformation.isSecurityEnabled) {
+  def obtainTokenForHBase(
+      sparkConf: SparkConf,
+      conf: Configuration,
+      credentials: Credentials): Unit = {
+    if (shouldGetTokens(sparkConf, "hbase") && UserGroupInformation.isSecurityEnabled) {
       val mirror = universe.runtimeMirror(getClass.getClassLoader)
 
       try {
@@ -1285,11 +1318,12 @@ object Client extends Logging {
 
         logDebug("Attempting to fetch HBase security token.")
 
-        val hbaseConf = confCreate.invoke(null, conf)
-        val token = obtainToken.invoke(null, hbaseConf).asInstanceOf[Token[TokenIdentifier]]
-        credentials.addToken(token.getService, token)
-
-        logInfo("Added HBase security token to credentials.")
+        val hbaseConf = confCreate.invoke(null, conf).asInstanceOf[Configuration]
+        if ("kerberos" == hbaseConf.get("hbase.security.authentication")) {
+          val token = obtainToken.invoke(null, hbaseConf).asInstanceOf[Token[TokenIdentifier]]
+          credentials.addToken(token.getService, token)
+          logInfo("Added HBase security token to credentials.")
+        }
       } catch {
         case e: java.lang.NoSuchMethodException =>
           logInfo("HBase Method not found: " + e)
@@ -1365,6 +1399,15 @@ object Client extends Logging {
    */
   def buildPath(components: String*): String = {
     components.mkString(Path.SEPARATOR)
+  }
+
+  /**
+   * Return whether delegation tokens should be retrieved for the given service when security is
+   * enabled. By default, tokens are retrieved, but that behavior can be changed by setting
+   * a service-specific configuration.
+   */
+  def shouldGetTokens(conf: SparkConf, service: String): Boolean = {
+    conf.getBoolean(s"spark.yarn.security.tokens.${service}.enabled", true)
   }
 
 }

@@ -107,13 +107,8 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.parquet</groupId>
-      <artifactId>parquet-thrift</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.thrift</groupId>
-      <artifactId>libthrift</artifactId>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -133,7 +128,6 @@
             </goals>
             <configuration>
               <sources>
-                <source>src/test/scala</source>
                 <source>src/test/gen-java</source>
               </sources>
             </configuration>

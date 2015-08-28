@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * :: DeveloperApi ::
@@ -44,6 +45,10 @@ case class Aggregate(
     aggregateExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends UnaryNode {
+
+  override private[sql] lazy val metrics = Map(
+    "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: List[Distribution] = {
     if (partial) {
@@ -68,14 +73,14 @@ case class Aggregate(
    *                        output.
    */
   case class ComputedAggregate(
-      unbound: AggregateExpression,
-      aggregate: AggregateExpression,
+      unbound: AggregateExpression1,
+      aggregate: AggregateExpression1,
       resultAttribute: AttributeReference)
 
   /** A list of aggregates that need to be computed for each group. */
   private[this] val computedAggregates = aggregateExpressions.flatMap { agg =>
     agg.collect {
-      case a: AggregateExpression =>
+      case a: AggregateExpression1 =>
         ComputedAggregate(
           a,
           BindReferences.bindReference(a, child.output),
@@ -87,8 +92,8 @@ case class Aggregate(
   private[this] val computedSchema = computedAggregates.map(_.resultAttribute)
 
   /** Creates a new aggregate buffer for a group. */
-  private[this] def newAggregateBuffer(): Array[AggregateFunction] = {
-    val buffer = new Array[AggregateFunction](computedAggregates.length)
+  private[this] def newAggregateBuffer(): Array[AggregateFunction1] = {
+    val buffer = new Array[AggregateFunction1](computedAggregates.length)
     var i = 0
     while (i < computedAggregates.length) {
       buffer(i) = computedAggregates(i).aggregate.newInstance()
@@ -121,12 +126,15 @@ case class Aggregate(
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+    val numInputRows = longMetric("numInputRows")
+    val numOutputRows = longMetric("numOutputRows")
     if (groupingExpressions.isEmpty) {
       child.execute().mapPartitions { iter =>
         val buffer = newAggregateBuffer()
         var currentRow: InternalRow = null
         while (iter.hasNext) {
           currentRow = iter.next()
+          numInputRows += 1
           var i = 0
           while (i < buffer.length) {
             buffer(i).update(currentRow)
@@ -142,16 +150,18 @@ case class Aggregate(
           i += 1
         }
 
+        numOutputRows += 1
         Iterator(resultProjection(aggregateResults))
       }
     } else {
       child.execute().mapPartitions { iter =>
-        val hashTable = new HashMap[InternalRow, Array[AggregateFunction]]
+        val hashTable = new HashMap[InternalRow, Array[AggregateFunction1]]
         val groupingProjection = new InterpretedMutableProjection(groupingExpressions, child.output)
 
         var currentRow: InternalRow = null
         while (iter.hasNext) {
           currentRow = iter.next()
+          numInputRows += 1
           val currentGroup = groupingProjection(currentRow)
           var currentBuffer = hashTable.get(currentGroup)
           if (currentBuffer == null) {
@@ -172,7 +182,7 @@ case class Aggregate(
           private[this] val resultProjection =
             new InterpretedMutableProjection(
               resultExpressions, computedSchema ++ namedGroups.map(_._2))
-          private[this] val joinedRow = new JoinedRow4
+          private[this] val joinedRow = new JoinedRow
 
           override final def hasNext: Boolean = hashTableIter.hasNext
 
@@ -180,6 +190,7 @@ case class Aggregate(
             val currentEntry = hashTableIter.next()
             val currentGroup = currentEntry.getKey
             val currentBuffer = currentEntry.getValue
+            numOutputRows += 1
 
             var i = 0
             while (i < currentBuffer.length) {

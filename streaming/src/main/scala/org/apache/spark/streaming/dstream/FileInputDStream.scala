@@ -28,6 +28,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
+import org.apache.spark.streaming.scheduler.StreamInputInfo
 import org.apache.spark.util.{SerializableConfiguration, TimeStampedHashMap, Utils}
 
 /**
@@ -85,8 +86,10 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
    * Files with mod times older than this "window" of remembering will be ignored. So if new
    * files are visible within this window, then the file will get selected in the next batch.
    */
-  private val minRememberDurationS =
-    Seconds(ssc.conf.getTimeAsSeconds("spark.streaming.minRememberDuration", "60s"))
+  private val minRememberDurationS = {
+    Seconds(ssc.conf.getTimeAsSeconds("spark.streaming.fileStream.minRememberDuration",
+      ssc.conf.get("spark.streaming.minRememberDuration", "60s")))
+  }
 
   // This is a def so that it works during checkpoint recovery:
   private def clock = ssc.scheduler.clock
@@ -144,7 +147,14 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n"))
     batchTimeToSelectedFiles += ((validTime, newFiles))
     recentlySelectedFiles ++= newFiles
-    Some(filesToRDD(newFiles))
+    val rdds = Some(filesToRDD(newFiles))
+    // Copy newFiles to immutable.List to prevent from being modified by the user
+    val metadata = Map(
+      "files" -> newFiles.toList,
+      StreamInputInfo.METADATA_KEY_DESCRIPTION -> newFiles.mkString("\n"))
+    val inputInfo = StreamInputInfo(id, 0, metadata)
+    ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
+    rdds
   }
 
   /** Clear the old time-to-files mappings along with old RDDs */

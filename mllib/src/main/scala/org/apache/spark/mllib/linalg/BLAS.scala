@@ -303,8 +303,8 @@ private[spark] object BLAS extends Serializable with Logging {
       C: DenseMatrix): Unit = {
     require(!C.isTransposed,
       "The matrix C cannot be the product of a transpose() call. C.isTransposed must be false.")
-    if (alpha == 0.0) {
-      logDebug("gemm: alpha is equal to 0. Returning C.")
+    if (alpha == 0.0 && beta == 1.0) {
+      logDebug("gemm: alpha is equal to 0 and beta is equal to 1. Returning C.")
     } else {
       A match {
         case sparse: SparseMatrix => gemm(alpha, sparse, B, beta, C)
@@ -469,7 +469,7 @@ private[spark] object BLAS extends Serializable with Logging {
     require(A.numCols == x.size,
       s"The columns of A don't match the number of elements of x. A: ${A.numCols}, x: ${x.size}")
     require(A.numRows == y.size,
-      s"The rows of A don't match the number of elements of y. A: ${A.numRows}, y:${y.size}}")
+      s"The rows of A don't match the number of elements of y. A: ${A.numRows}, y:${y.size}")
     if (alpha == 0.0) {
       logDebug("gemv: alpha is equal to 0. Returning y.")
     } else {

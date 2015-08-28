@@ -261,7 +261,7 @@ object SparkEnv extends Logging {
 
     // Create an instance of the class with the given name, possibly initializing it with our conf
     def instantiateClass[T](className: String): T = {
-      val cls = Class.forName(className, true, Utils.getContextOrSparkClassLoader)
+      val cls = Utils.classForName(className)
       // Look for a constructor taking a SparkConf and a boolean isDriver, then one taking just
       // SparkConf, then one taking no arguments
       try {
@@ -324,13 +324,15 @@ object SparkEnv extends Logging {
     val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
 
-    val shuffleMemoryManager = new ShuffleMemoryManager(conf)
+    val shuffleMemoryManager = ShuffleMemoryManager.create(conf, numUsableCores)
 
     val blockTransferService =
       conf.get("spark.shuffle.blockTransferService", "netty").toLowerCase match {
         case "netty" =>
           new NettyBlockTransferService(conf, securityManager, numUsableCores)
         case "nio" =>
+          logWarning("NIO-based block transfer service is deprecated, " +
+            "and will be removed in Spark 1.6.0.")
           new NioBlockTransferService(conf, securityManager)
       }
 

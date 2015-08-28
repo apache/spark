@@ -20,11 +20,11 @@ package org.apache.spark.deploy
 import java.io._
 import java.util.concurrent.{Semaphore, TimeUnit}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.api.r.RBackend
+import org.apache.spark.api.r.{RBackend, RUtils}
 import org.apache.spark.util.RedirectThread
 
 /**
@@ -68,12 +68,13 @@ object RRunner {
     if (initialized.tryAcquire(backendTimeout, TimeUnit.SECONDS)) {
       // Launch R
       val returnCode = try {
-        val builder = new ProcessBuilder(Seq(rCommand, rFileNormalized) ++ otherArgs)
+        val builder = new ProcessBuilder((Seq(rCommand, rFileNormalized) ++ otherArgs).asJava)
         val env = builder.environment()
         env.put("EXISTING_SPARKR_BACKEND_PORT", sparkRBackendPort.toString)
-        val sparkHome = System.getenv("SPARK_HOME")
+        val rPackageDir = RUtils.sparkRPackagePath(isDriver = true)
+        env.put("SPARKR_PACKAGE_DIR", rPackageDir)
         env.put("R_PROFILE_USER",
-          Seq(sparkHome, "R", "lib", "SparkR", "profile", "general.R").mkString(File.separator))
+          Seq(rPackageDir, "SparkR", "profile", "general.R").mkString(File.separator))
         builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
         val process = builder.start()
 
@@ -85,7 +86,9 @@ object RRunner {
       }
       System.exit(returnCode)
     } else {
+      // scalastyle:off println
       System.err.println("SparkR backend did not initialize in " + backendTimeout + " seconds")
+      // scalastyle:on println
       System.exit(-1)
     }
   }

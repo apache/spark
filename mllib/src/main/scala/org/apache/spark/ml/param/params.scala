@@ -166,6 +166,11 @@ object ParamValidators {
   def inArray[T](allowed: java.util.List[T]): T => Boolean = { (value: T) =>
     allowed.contains(value)
   }
+
+  /** Check that the array length is greater than lowerBound. */
+  def arrayLengthGt[T](lowerBound: Double): Array[T] => Boolean = { (value: Array[T]) =>
+    value.length > lowerBound
+  }
 }
 
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
@@ -296,6 +301,22 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
 }
 
 /**
+ * :: DeveloperApi ::
+ * Specialized version of [[Param[Array[Int]]]] for Java.
+ */
+@DeveloperApi
+class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[Int] => Boolean)
+  extends Param[Array[Int]](parent, name, doc, isValid) {
+
+  def this(parent: Params, name: String, doc: String) =
+    this(parent, name, doc, ParamValidators.alwaysTrue)
+
+  /** Creates a param pair with a [[java.util.List]] of values (for Java and Python). */
+  def w(value: java.util.List[java.lang.Integer]): ParamPair[Array[Int]] =
+    w(value.asScala.map(_.asInstanceOf[Int]).toArray)
+}
+
+/**
  * :: Experimental ::
  * A param and its value.
  */
@@ -341,9 +362,7 @@ trait Params extends Identifiable with Serializable {
    * those are checked during schema validation.
    */
   def validateParams(): Unit = {
-    params.filter(isDefined).foreach { param =>
-      param.asInstanceOf[Param[Any]].validate($(param))
-    }
+    // Do nothing by default.  Override to handle Param interactions.
   }
 
   /**
@@ -462,11 +481,14 @@ trait Params extends Identifiable with Serializable {
   /**
    * Sets default values for a list of params.
    *
+   * Note: Java developers should use the single-parameter [[setDefault()]].
+   *       Annotating this with varargs can cause compilation failures due to a Scala compiler bug.
+   *       See SPARK-9268.
+   *
    * @param paramPairs  a list of param pairs that specify params and their default values to set
    *                    respectively. Make sure that the params are initialized before this method
    *                    gets called.
    */
-  @varargs
   protected final def setDefault(paramPairs: ParamPair[_]*): this.type = {
     paramPairs.foreach { p =>
       setDefault(p.param.asInstanceOf[Param[Any]], p.value)
@@ -537,13 +559,26 @@ trait Params extends Identifiable with Serializable {
 
   /**
    * Copies param values from this instance to another instance for params shared by them.
-   * @param to the target instance
-   * @param extra extra params to be copied
+   *
+   * This handles default Params and explicitly set Params separately.
+   * Default Params are copied from and to [[defaultParamMap]], and explicitly set Params are
+   * copied from and to [[paramMap]].
+   * Warning: This implicitly assumes that this [[Params]] instance and the target instance
+   *          share the same set of default Params.
+   *
+   * @param to the target instance, which should work with the same set of default Params as this
+   *           source instance
+   * @param extra extra params to be copied to the target's [[paramMap]]
    * @return the target instance with param values copied
    */
   protected def copyValues[T <: Params](to: T, extra: ParamMap = ParamMap.empty): T = {
-    val map = extractParamMap(extra)
+    val map = paramMap ++ extra
     params.foreach { param =>
+      // copy default Params
+      if (defaultParamMap.contains(param) && to.hasParam(param.name)) {
+        to.defaultParamMap.put(to.getParam(param.name), defaultParamMap(param))
+      }
+      // copy explicitly set Params
       if (map.contains(param) && to.hasParam(param.name)) {
         to.set(param.name, map(param))
       }

@@ -62,8 +62,11 @@ private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoa
   extends DeserializationStream {
 
   private val objIn = new ObjectInputStream(in) {
-    override def resolveClass(desc: ObjectStreamClass): Class[_] =
+    override def resolveClass(desc: ObjectStreamClass): Class[_] = {
+      // scalastyle:off classforname
       Class.forName(desc.getName, false, loader)
+      // scalastyle:on classforname
+    }
   }
 
   def readObject[T: ClassTag](): T = objIn.readObject().asInstanceOf[T]

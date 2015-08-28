@@ -30,17 +30,17 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD}
-import org.apache.spark.sql.json.JacksonGenerator
-import org.apache.spark.sql.sources.CreateTableUsingAsSelect
+import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, SQLExecution}
+import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
+import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -51,7 +51,6 @@ private[sql] object DataFrame {
     new DataFrame(sqlContext, logicalPlan)
   }
 }
-
 
 /**
  * :: Experimental ::
@@ -117,6 +116,9 @@ class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
     @DeveloperApi @transient val queryExecution: SQLContext#QueryExecution) extends Serializable {
 
+  // Note for Spark contributors: if adding or updating any action in `DataFrame`, please make sure
+  // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
+
   /**
    * A constructor that automatically analyzes the logical plan.
    *
@@ -138,8 +140,7 @@ class DataFrame private[sql](
     // happen right away to let these side effects take place eagerly.
     case _: Command |
          _: InsertIntoTable |
-         _: CreateTableUsingAsSelect |
-         _: WriteToFile =>
+         _: CreateTableUsingAsSelect =>
       LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
     case _ =>
       queryExecution.analyzed
@@ -167,7 +168,7 @@ class DataFrame private[sql](
   }
 
   /**
-   * Internal API for Python
+   * Compose the string representing rows for output
    * @param _numRows Number of rows to show
    * @param truncate Whether truncate long strings and align cells right
    */
@@ -309,7 +310,9 @@ class DataFrame private[sql](
    * @group basic
    * @since 1.3.0
    */
+  // scalastyle:off println
   def printSchema(): Unit = println(schema.treeString)
+  // scalastyle:on println
 
   /**
    * Prints the plans (logical and physical) to the console for debugging purposes.
@@ -320,7 +323,9 @@ class DataFrame private[sql](
     ExplainCommand(
       queryExecution.logical,
       extended = extended).queryExecution.executedPlan.executeCollect().map {
+      // scalastyle:off println
       r => println(r.getString(0))
+      // scalastyle:on println
     }
   }
 
@@ -393,7 +398,9 @@ class DataFrame private[sql](
    * @group action
    * @since 1.5.0
    */
+  // scalastyle:off println
   def show(numRows: Int, truncate: Boolean): Unit = println(showString(numRows, truncate))
+  // scalastyle:on println
 
   /**
    * Returns a [[DataFrameNaFunctions]] for working with missing data.
@@ -627,6 +634,7 @@ class DataFrame private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
+   * Note that the column name can also reference to a nested column like `a.b`.
    * @group dfops
    * @since 1.3.0
    */
@@ -634,6 +642,7 @@ class DataFrame private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
+   * Note that the column name can also reference to a nested column like `a.b`.
    * @group dfops
    * @since 1.3.0
    */
@@ -675,14 +684,12 @@ class DataFrame private[sql](
       // make it a NamedExpression.
       case Column(u: UnresolvedAttribute) => UnresolvedAlias(u)
       case Column(expr: NamedExpression) => expr
-      // Leave an unaliased explode with an empty list of names since the analzyer will generate the
+      // Leave an unaliased explode with an empty list of names since the analyzer will generate the
       // correct defaults after the nested expression's type has been resolved.
       case Column(explode: Explode) => MultiAlias(explode, Nil)
       case Column(expr: Expression) => Alias(expr, expr.prettyString)()
     }
-    // When user continuously call `select`, speed up analysis by collapsing `Project`
-    import org.apache.spark.sql.catalyst.optimizer.ProjectCollapsing
-    Project(namedExpressions.toSeq, ProjectCollapsing(logicalPlan))
+    Project(namedExpressions.toSeq, logicalPlan)
   }
 
   /**
@@ -1126,7 +1133,8 @@ class DataFrame private[sql](
   /////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns a new [[DataFrame]] by adding a column.
+   * Returns a new [[DataFrame]] by adding a column or replacing the existing column that has
+   * the same name.
    * @group dfops
    * @since 1.3.0
    */
@@ -1141,6 +1149,23 @@ class DataFrame private[sql](
       select(colNames : _*)
     } else {
       select(Column("*"), col.as(colName))
+    }
+  }
+
+  /**
+   * Returns a new [[DataFrame]] by adding a column with metadata.
+   */
+  private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
+    val replaced = schema.exists(f => resolver(f.name, colName))
+    if (replaced) {
+      val colNames = schema.map { field =>
+        val name = field.name
+        if (resolver(name, colName)) col.as(colName, metadata) else Column(name)
+      }
+      select(colNames : _*)
+    } else {
+      select(Column("*"), col.as(colName, metadata))
     }
   }
 
@@ -1277,7 +1302,7 @@ class DataFrame private[sql](
 
     val outputCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
 
-    val ret: Seq[InternalRow] = if (outputCols.nonEmpty) {
+    val ret: Seq[Row] = if (outputCols.nonEmpty) {
       val aggExprs = statistics.flatMap { case (_, colToAgg) =>
         outputCols.map(c => Column(Cast(colToAgg(Column(c).expr), StringType)).as(c))
       }
@@ -1285,19 +1310,18 @@ class DataFrame private[sql](
       val row = agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
 
       // Pivot the data so each summary is one row
-      row.grouped(outputCols.size).toSeq.zip(statistics).map {
-        case (aggregation, (statistic, _)) =>
-          InternalRow(statistic :: aggregation.toList: _*)
+      row.grouped(outputCols.size).toSeq.zip(statistics).map { case (aggregation, (statistic, _)) =>
+        Row(statistic :: aggregation.toList: _*)
       }
     } else {
       // If there are no output columns, just output a single column that contains the stats.
-      statistics.map { case (name, _) => InternalRow(name) }
+      statistics.map { case (name, _) => Row(name) }
     }
 
     // All columns are string type
     val schema = StructType(
       StructField("summary", StringType) :: outputCols.map(StructField(_, StringType))).toAttributes
-    LocalRelation(schema, ret)
+    LocalRelation.fromExternalRows(schema, ret)
   }
 
   /**
@@ -1350,14 +1374,18 @@ class DataFrame private[sql](
    * @group rdd
    * @since 1.3.0
    */
-  def foreach(f: Row => Unit): Unit = rdd.foreach(f)
+  def foreach(f: Row => Unit): Unit = withNewExecutionId {
+    rdd.foreach(f)
+  }
 
   /**
    * Applies a function f to each partition of this [[DataFrame]].
    * @group rdd
    * @since 1.3.0
    */
-  def foreachPartition(f: Iterator[Row] => Unit): Unit = rdd.foreachPartition(f)
+  def foreachPartition(f: Iterator[Row] => Unit): Unit = withNewExecutionId {
+    rdd.foreachPartition(f)
+  }
 
   /**
    * Returns the first `n` rows in the [[DataFrame]].
@@ -1371,14 +1399,18 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()
+  def collect(): Array[Row] = withNewExecutionId {
+    queryExecution.executedPlan.executeCollect()
+  }
 
   /**
    * Returns a Java list that contains all of [[Row]]s in this [[DataFrame]].
    * @group action
    * @since 1.3.0
    */
-  def collectAsList(): java.util.List[Row] = java.util.Arrays.asList(rdd.collect() : _*)
+  def collectAsList(): java.util.List[Row] = withNewExecutionId {
+    java.util.Arrays.asList(rdd.collect() : _*)
+  }
 
   /**
    * Returns the number of rows in the [[DataFrame]].
@@ -1541,6 +1573,21 @@ class DataFrame private[sql](
     }
   }
 
+  /**
+   * Returns a best-effort snapshot of the files that compose this DataFrame. This method simply
+   * asks each constituent BaseRelation for its respective files and takes the union of all results.
+   * Depending on the source relations, this may not find all input files. Duplicates are removed.
+   */
+  def inputFiles: Array[String] = {
+    val files: Seq[String] = logicalPlan.collect {
+      case LogicalRelation(fsBasedRelation: FileRelation) =>
+        fsBasedRelation.inputFiles
+      case fr: FileRelation =>
+        fr.inputFiles
+    }.flatten
+    files.toSet.toArray
+  }
+
   ////////////////////////////////////////////////////////////////////////////
   // for Python API
   ////////////////////////////////////////////////////////////////////////////
@@ -1550,8 +1597,8 @@ class DataFrame private[sql](
    */
   protected[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val structType = schema  // capture it for closure
-    val jrdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType)).toJavaRDD()
-    SerDeUtil.javaToPython(jrdd)
+    val rdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType))
+    EvaluatePython.javaToPython(rdd)
   }
 
   ////////////////////////////////////////////////////////////////////////////
@@ -1609,11 +1656,7 @@ class DataFrame private[sql](
    */
   @deprecated("Use write.parquet(path)", "1.4.0")
   def saveAsParquetFile(path: String): Unit = {
-    if (sqlContext.conf.parquetUseDataSourceApi) {
-      write.format("parquet").mode(SaveMode.ErrorIfExists).save(path)
-    } else {
-      sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
-    }
+    write.format("parquet").mode(SaveMode.ErrorIfExists).save(path)
   }
 
   /**
@@ -1626,8 +1669,12 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().saveAsTable(tableName)`.
    */
@@ -1645,8 +1692,12 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
    */
@@ -1665,8 +1716,12 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().format(source).saveAsTable(tableName)`.
    */
@@ -1685,8 +1740,12 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
    */
@@ -1704,8 +1763,12 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by
    *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.
@@ -1730,8 +1793,12 @@ class DataFrame private[sql](
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * Also note that while this function can persist the table metadata into Hive's metastore,
-   * the table will NOT be accessible from Hive, until SPARK-7550 is resolved.
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
+   *
    * @group output
    * @deprecated As of 1.4.0, replaced by
    *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.
@@ -1844,6 +1911,14 @@ class DataFrame private[sql](
   @deprecated("Use write.mode(SaveMode.Append).saveAsTable(tableName)", "1.4.0")
   def insertInto(tableName: String): Unit = {
     write.mode(SaveMode.Append).insertInto(tableName)
+  }
+
+  /**
+   * Wrap a DataFrame action to track all Spark jobs in the body so that we can connect them with
+   * an execution.
+   */
+  private[sql] def withNewExecutionId[T](body: => T): T = {
+    SQLExecution.withNewExecutionId(sqlContext, queryExecution)(body)
   }
 
   ////////////////////////////////////////////////////////////////////////////

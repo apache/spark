@@ -110,16 +110,8 @@ writeRowSerialize <- function(outputCon, rows) {
 serializeRow <- function(row) {
   rawObj <- rawConnection(raw(0), "wb")
   on.exit(close(rawObj))
-  writeRow(rawObj, row)
+  writeGenericList(rawObj, row)
   rawConnectionValue(rawObj)
-}
-
-writeRow <- function(con, row) {
-  numCols <- length(row)
-  writeInt(con, numCols)
-  for (i in 1:numCols) {
-    writeObject(con, row[[i]])
-  }
 }
 
 writeRaw <- function(con, batch) {
@@ -140,8 +132,8 @@ writeType <- function(con, class) {
                  jobj = "j",
                  environment = "e",
                  Date = "D",
-                 POSIXlt = 't',
-                 POSIXct = 't',
+                 POSIXlt = "t",
+                 POSIXct = "t",
                  stop(paste("Unsupported type for serialization", class)))
   writeBin(charToRaw(type), con)
 }

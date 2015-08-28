@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.TestHive
 
 class HivePlanTest extends QueryTest {
@@ -30,5 +33,20 @@ class HivePlanTest extends QueryTest {
     val correctAnswer = sql("SELECT cast(null as double) FROM t").queryExecution.optimizedPlan
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("window expressions sharing the same partition by and order by clause") {
+    val df = Seq.empty[(Int, String, Int, Int)].toDF("id", "grp", "seq", "val")
+    val window = Window.
+      partitionBy($"grp").
+      orderBy($"val")
+    val query = df.select(
+      $"id",
+      sum($"val").over(window.rowsBetween(-1, 1)),
+      sum($"val").over(window.rangeBetween(-1, 1))
+    )
+    val plan = query.queryExecution.analyzed
+    assert(plan.collect{ case w: logical.Window => w }.size === 1,
+      "Should have only 1 Window operator.")
   }
 }

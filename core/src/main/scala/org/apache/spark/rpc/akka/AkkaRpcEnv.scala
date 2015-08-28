@@ -28,7 +28,7 @@ import akka.actor.{ActorSystem, ExtendedActorSystem, Actor, ActorRef, Props, Add
 import akka.event.Logging.Error
 import akka.pattern.{ask => akkaAsk}
 import akka.remote.{AssociationEvent, AssociatedEvent, DisassociatedEvent, AssociationErrorEvent}
-import com.google.common.util.concurrent.MoreExecutors
+import akka.serialization.JavaSerializer
 
 import org.apache.spark.{SparkException, Logging, SparkConf}
 import org.apache.spark.rpc._
@@ -239,6 +239,12 @@ private[spark] class AkkaRpcEnv private[akka] (
   }
 
   override def toString: String = s"${getClass.getSimpleName}($actorSystem)"
+
+  override def deserialize[T](deserializationAction: () => T): T = {
+    JavaSerializer.currentSystem.withValue(actorSystem.asInstanceOf[ExtendedActorSystem]) {
+      deserializationAction()
+    }
+  }
 }
 
 private[spark] class AkkaRpcEnvFactory extends RpcEnvFactory {
@@ -315,6 +321,12 @@ private[akka] class AkkaRpcEndpointRef(
 
   override def toString: String = s"${getClass.getSimpleName}($actorRef)"
 
+  final override def equals(that: Any): Boolean = that match {
+    case other: AkkaRpcEndpointRef => actorRef == other.actorRef
+    case _ => false
+  }
+
+  final override def hashCode(): Int = if (actorRef == null) 0 else actorRef.hashCode()
 }
 
 /**
