@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.InternalRow
+import scala.util.hashing.MurmurHash3
+
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
@@ -408,6 +409,18 @@ trait Row extends Serializable {
       i += 1
     }
     true
+  }
+
+  override def hashCode: Int = {
+    // Using Scala's Seq hash code implementation.
+    var n = 0
+    var h = MurmurHash3.seqSeed
+    val len = length
+    while (n < len) {
+      h = MurmurHash3.mix(h, apply(n).##)
+      n += 1
+    }
+    MurmurHash3.finalizeHash(h, n)
   }
 
   /* ---------------------- utility methods for Scala ---------------------- */
