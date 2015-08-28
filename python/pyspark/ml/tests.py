@@ -284,6 +284,7 @@ class FeatureTests(PySparkTestCase):
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEquals(transformedDF.head().output, ["a"])
 
+
 class HasInducedError(Params):
 
     def __init__(self):
