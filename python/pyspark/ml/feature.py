@@ -835,17 +835,17 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
     def __init__(self, inputCol=None, outputCol=None, stopWords=None,
                  caseSensitive=False):
         """
-        __init__(self, inputCol=None, outputCol=None, stopWords=None,
+        __init__(self, inputCol=None, outputCol=None, stopWords=None,\
                  caseSensitive=false)
         """
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
                                             self.uid)
         self.stopWords = Param(self, "stopWords", "The words to be filtered out")
-        self.caseSensitive = Param(self._dummy(), "caseSensitive", "whether to do a case " +
+        self.caseSensitive = Param(self, "caseSensitive", "whether to do a case " +
                                    "sensitive comparison over the stop words")
         stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWords
-        defaultStopWords = stopWordsObj.ENGLISH_STOP_WORDS()
+        defaultStopWords = stopWordsObj.English()
         self._setDefault(stopWords=defaultStopWords)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -854,7 +854,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
     def setParams(self, inputCol=None, outputCol=None, stopWords=None,
                   caseSensitive=False):
         """
-        setParams(self, inputCol="input", outputCol="output", stopWords=None,
+        setParams(self, inputCol="input", outputCol="output", stopWords=None,\
                   caseSensitive=false)
         Sets params for this StopWordRemover.
         """
