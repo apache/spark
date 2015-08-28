@@ -33,8 +33,6 @@ import org.apache.spark.sql.{DataFrame, Row}
  * :: Experimental ::
  * Common params for KMeans and KMeansModel
  */
-@Since("1.5.0")
-@Experimental
 private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFeaturesCol
   with HasSeed with HasPredictionCol with HasTol {
 
