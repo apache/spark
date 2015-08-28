@@ -102,6 +102,10 @@ private[parquet] object CatalystReadSupport {
 
   val SPARK_METADATA_KEY = "org.apache.spark.sql.parquet.row.metadata"
 
+  /**
+   * Tailors `parquetSchema` according to `catalystSchema` by removing column paths don't exist
+   * in `catalystSchema`, and adding those only exist in `catalystSchema`.
+   */
   def clipParquetSchema(parquetSchema: MessageType, catalystSchema: StructType): MessageType = {
     val clippedGroup = clipParquetType(parquetSchema.asGroupType(), catalystSchema).asGroupType()
     Types.buildMessage().addFields(clippedGroup.getFields.asScala: _*).named("root")
@@ -131,6 +135,8 @@ private[parquet] object CatalystReadSupport {
   }
 
   private def clipParquetListType(parquetList: GroupType, elementType: DataType): Type = {
+    assert(!isPrimitiveCatalystType(elementType))
+
     // Unannotated repeated group, list element type is just the group itself.  Clip it.
     if (parquetList.getOriginalType == null && parquetList.isRepetition(Repetition.REPEATED)) {
       clipParquetType(parquetList, elementType)
@@ -175,11 +181,13 @@ private[parquet] object CatalystReadSupport {
 
   private def clipParquetMapType(
       parquetMap: GroupType, keyType: DataType, valueType: DataType): GroupType = {
+    assert(!isPrimitiveCatalystType(valueType))
+
     val repeatedGroup = parquetMap.getType(0).asGroupType()
     val parquetKeyType = repeatedGroup.getType(0)
     val parquetValueType = repeatedGroup.getType(1)
 
-    val clippedRepeatedGrouop =
+    val clippedRepeatedGroup =
       Types
         .repeatedGroup()
         .as(repeatedGroup.getOriginalType)
@@ -190,7 +198,7 @@ private[parquet] object CatalystReadSupport {
     Types
       .buildGroup(parquetMap.getRepetition)
       .as(parquetMap.getOriginalType)
-      .addField(clippedRepeatedGrouop)
+      .addField(clippedRepeatedGroup)
       .named(parquetMap.getName)
   }
 
@@ -206,6 +214,11 @@ private[parquet] object CatalystReadSupport {
       }
     }
 
+    // Here we can't use builder methods defined in `Types` to construct the `GroupType` and have to
+    // resort to this deprecated constructor.  The reason is that, `tailoredFields` can be empty,
+    // and `Types` builder methods don't allow constructing empty group types.  For example, query
+    // `SELECT COUNT(1) FROM t` requests for zero columns.
+    // TODO Refactor method signature to return a list of fields instead of a `GroupType`
     new GroupType(
       parquetRecord.getRepetition,
       parquetRecord.getName,
