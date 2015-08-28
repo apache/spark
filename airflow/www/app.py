@@ -1034,79 +1034,60 @@ class Airflow(BaseView):
         for ti in dag.get_task_instances(session, from_date):
             task_instances[(ti.task_id, ti.execution_date)] = ti
 
-        # if force_expand is passed True, then no timeout is applied
-        # when computing all possible paths through the graph.
-        # Otherwise the graph will revert to a quick calculation if it hasn't
-        # completed after `timeout_seconds`
-        timeout_seconds = None if request.args.get('force_expand') else 1
+        expanded = []
 
-        def recurse_nodes(t):
-            start_time = time.time()
-            expanded = []
+        # The default recursion traces every path so that tree view has full
+        # expand/collapse functionality. After 5,000 nodes we stop and fall
+        # back on a quick DFS search for performance. See PR #320.
+        node_count = [0]
+        node_limit = 5000 / len(dag.roots)
 
-            def recurse_nodes_inner(task, visited, force_expand):
-                elapsed = time.time() - start_time
-                if timeout_seconds and elapsed > timeout_seconds:
-                    raise ValueError('Recursion timeout')
+        def recurse_nodes(task, visited):
+            visited.add(task)
+            node_count[0] += 1
 
-                if not force_expand:
-                    visited.add(task)
+            children = [
+                recurse_nodes(t, visited) for t in task.upstream_list
+                if node_count[0] < node_limit or t not in visited]
 
-                children = [
-                    recurse_nodes_inner(t, visited, force_expand)
-                    for t in task.upstream_list if t not in visited]
+            # D3 tree uses children vs _children to define what is
+            # expanded or not. The following block makes it such that
+            # repeated nodes are collapsed by default.
+            children_key = 'children'
+            if task.task_id not in expanded:
+                expanded.append(task.task_id)
+            elif children:
+                children_key = "_children"
 
-                # D3 tree uses children vs _children to define what is
-                # expanded or not. The following block makes it such that
-                # repeated nodes are collapsed by default.
-                children_key = 'children'
-                if task.task_id not in expanded:
-                    expanded.append(task.task_id)
-                elif children:
-                    children_key = "_children"
-
-                return {
-                    'name': task.task_id,
-                    'instances': [
-                        utils.alchemy_to_dict(
-                            task_instances.get((task.task_id, d))) or {
-                                'execution_date': d.isoformat(),
-                                'task_id': task.task_id
-                            }
-                        for d in dates],
-                    children_key: children,
-                    'num_dep': len(task.upstream_list),
-                    'operator': task.task_type,
-                    'retries': task.retries,
-                    'owner': task.owner,
-                    'start_date': task.start_date,
-                    'end_date': task.end_date,
-                    'depends_on_past': task.depends_on_past,
-                    'ui_color': task.ui_color,
-                }
-
-            # try the expensive operation by recursing with force_expand=True
-            # if timeout_seconds elapse, a ValueError is raised
-            try:
-                return recurse_nodes_inner(
-                    t, visited=set(), force_expand=True)
-            except ValueError:
-                # start over with a quick calculation
-                logging.debug(
-                    'Tree creation timed out; falling back on quick method.')
-                expanded = []
-                start_time = time.time()
-                return recurse_nodes_inner(t, visited=set(), force_expand=False)
+            return {
+                'name': task.task_id,
+                'instances': [
+                    utils.alchemy_to_dict(
+                        task_instances.get((task.task_id, d))) or {
+                            'execution_date': d.isoformat(),
+                            'task_id': task.task_id
+                        }
+                    for d in dates],
+                children_key: children,
+                'num_dep': len(task.upstream_list),
+                'operator': task.task_type,
+                'retries': task.retries,
+                'owner': task.owner,
+                'start_date': task.start_date,
+                'end_date': task.end_date,
+                'depends_on_past': task.depends_on_past,
+                'ui_color': task.ui_color,
+            }
 
         if len(dag.roots) > 1:
             # d3 likes a single root
             data = {
                 'name': 'root',
                 'instances': [],
-                'children': [recurse_nodes(t) for t in dag.roots]
+                'children': [recurse_nodes(t, set()) for t in dag.roots]
             }
         elif len(dag.roots) == 1:
-            data = recurse_nodes(dag.roots[0])
+            data = recurse_nodes(dag.roots[0], set())
         else:
             flash("No tasks found.", "error")
             data = []
