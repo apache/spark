@@ -1699,9 +1699,9 @@ setMethod("dropna",
 #' @name na.omit
 #' @export
 setMethod("na.omit",
-          signature(x = "DataFrame"),
-          function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
-            dropna(x, how, minNonNulls, cols)
+          signature(object = "DataFrame"),
+          function(object, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
+            dropna(object, how, minNonNulls, cols)
           })
 
 #' fillna
