@@ -144,8 +144,7 @@ case class ArrayContains(left: Expression, right: Expression)
   }
 
   override def nullable: Boolean = {
-    val dt = right.dataType
-    left.nullable || dt.isInstanceOf[ArrayType] && dt.asInstanceOf[ArrayType].containsNull
+    left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull
   }
 
   override def nullSafeEval(arr: Any, value: Any): Any = {
