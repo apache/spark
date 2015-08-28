@@ -43,7 +43,7 @@ private[r] object SQLUtils {
 
   // Support using regex in string interpolation
   private[this] implicit class RegexContext(sc: StringContext) {
-    def r = new Regex(sc.parts.mkString, sc.parts.tail.map(_ => "x"): _*)
+    def r: Regex = new Regex(sc.parts.mkString, sc.parts.tail.map(_ => "x"): _*)
   }
 
   def getSQLDataType(dataType: String): DataType = {
