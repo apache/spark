@@ -21,9 +21,10 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.util.Loader
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /**
  * Helper methods for import/export of GLM regression models.
@@ -48,7 +49,7 @@ private[regression] object GLMRegressionModel {
         weights: Vector,
         intercept: Double): Unit = {
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
+
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -57,10 +58,12 @@ private[regression] object GLMRegressionModel {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
-      val data = Data(weights, intercept)
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
-      // TODO: repartition with 1 partition after SPARK-5532 gets fixed
-      dataRDD.write.parquet(Loader.dataPath(path))
+      val dataRDD = sc.parallelize(Seq(Row(weights, intercept)), 1)
+      val schema = StructType(
+        StructField("weights", new VectorUDT, nullable = false)::
+        StructField("intercept", DoubleType, nullable = false)::Nil)
+
+      sqlContext.createDataFrame(dataRDD, schema).write.parquet(Loader.dataPath(path))
     }
 
     /**

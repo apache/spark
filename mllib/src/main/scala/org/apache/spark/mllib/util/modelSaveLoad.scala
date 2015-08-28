@@ -105,9 +105,24 @@ private[mllib] object Loader {
    * @tparam Data  Expected data type from which an expected schema can be derived.
    */
   def checkSchema[Data: TypeTag](loadedSchema: StructType): Unit = {
+    val expectedSchema: StructType =
+     ScalaReflection.schemaFor[Data].dataType.asInstanceOf[StructType]
+    checkSchema(expectedSchema, loadedSchema)
+  }
+
+  /**
+   * Check the schema of loaded model data.
+   *
+   * This checks every field in the expected schema to make sure that a field with the same
+   * name and DataType appears in the loaded schema.  Note that this does NOT check metadata
+   * or containsNull.
+   *
+   * @param expectedSchema  Schema for model data .
+   * @param loadedSchema  Schema for model data loaded from file.
+   */
+  def checkSchema(expectedSchema: StructType, loadedSchema: StructType): Unit = {
     // Check schema explicitly since erasure makes it hard to use match-case for checking.
-    val expectedFields: Array[StructField] =
-      ScalaReflection.schemaFor[Data].dataType.asInstanceOf[StructType].fields
+    val expectedFields: Array[StructField] = expectedSchema.fields
     val loadedFields: Map[String, DataType] =
       loadedSchema.map(field => field.name -> field.dataType).toMap
     expectedFields.foreach { field =>

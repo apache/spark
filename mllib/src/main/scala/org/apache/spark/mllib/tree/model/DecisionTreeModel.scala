@@ -31,7 +31,8 @@ import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 /**
@@ -201,7 +202,6 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
 
     def save(sc: SparkContext, path: String, model: DecisionTreeModel): Unit = {
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
 
       // SPARK-6120: We do a hacky check here so users understand why save() is failing
       //             when they run the ML guide example.
@@ -233,11 +233,35 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
 
       // Create Parquet data.
       val nodes = model.topNode.subtreeIterator.toSeq
-      val dataRDD: DataFrame = sc.parallelize(nodes)
-        .map(NodeData.apply(0, _))
-        .toDF()
-      dataRDD.write.parquet(Loader.dataPath(path))
+
+      val dataRDD = sc.parallelize(nodes).map(node => convertNodeDataToRow(NodeData.apply(0, node)))
+      sqlContext.createDataFrame(dataRDD, nodeDataSchema).write.parquet(Loader.dataPath(path))
     }
+
+    def convertNodeDataToRow(nodeData: NodeData): Row = {
+      Row(
+        nodeData.treeId, nodeData.nodeId, nodeData.predict,
+        nodeData.impurity, nodeData.isLeaf, nodeData.split,
+        nodeData.leftNodeId, nodeData.rightNodeId, nodeData.infoGain)
+    }
+
+    val nodeDataSchema = StructType(
+      StructField("treeId", IntegerType, nullable = false)::
+      StructField("nodeId", IntegerType, nullable = false)::
+      StructField("predict", StructType(
+        StructField("predict", DoubleType, nullable = false)::
+        StructField("prob", DoubleType, nullable = false)::Nil), nullable = false)::
+      StructField("impurity", DoubleType, nullable = false)::
+      StructField("isLeaf", BooleanType, nullable = false)::
+      StructField("split", StructType(
+        StructField("feature", IntegerType, nullable = false)::
+        StructField("threshold", DoubleType, nullable = false)::
+        StructField("featureType", IntegerType, nullable = false)::
+        StructField("categories", ArrayType(DoubleType, containsNull = false),
+        nullable = false)::Nil), nullable = true)::
+      StructField("leftNodeId", IntegerType, nullable = true)::
+      StructField("rightNodeId", IntegerType, nullable = true)::
+      StructField("infoGain", DoubleType, nullable = true)::Nil)
 
     def load(sc: SparkContext, path: String, algo: String, numNodes: Int): DecisionTreeModel = {
       val datapath = Loader.dataPath(path)
@@ -245,7 +269,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       // Load Parquet data.
       val dataRDD = sqlContext.read.parquet(datapath)
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
-      Loader.checkSchema[NodeData](dataRDD.schema)
+      Loader.checkSchema(nodeDataSchema, dataRDD.schema)
       val nodes = dataRDD.map(NodeData.apply)
       // Build node data into a tree.
       val trees = constructTrees(nodes)

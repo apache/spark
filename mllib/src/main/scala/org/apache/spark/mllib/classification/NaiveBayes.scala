@@ -30,7 +30,8 @@ import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, SparseVect
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, StringType, StructField, StructType}
 
 /**
  * Model for Naive Bayes Classifiers.
@@ -193,7 +194,6 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
     def save(sc: SparkContext, path: String, data: Data): Unit = {
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -202,9 +202,16 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
-      dataRDD.write.parquet(dataPath(path))
+      val dataRDD = sc.parallelize(Seq(Row(data.labels, data.pi, data.theta, data.modelType)), 1)
+      sqlContext.createDataFrame(dataRDD, schema).write.parquet(dataPath(path))
     }
+
+    private val schema = StructType(
+      StructField("labels", ArrayType(DoubleType, containsNull = false), nullable = false)::
+      StructField("pi", ArrayType(DoubleType, containsNull = false), nullable = false)::
+      StructField("theta", ArrayType(
+        ArrayType(DoubleType, containsNull = false), containsNull = false), nullable = false)::
+      StructField("modelType", StringType, nullable = false)::Nil)
 
     @Since("1.3.0")
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
@@ -212,7 +219,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       // Load Parquet data.
       val dataRDD = sqlContext.read.parquet(dataPath(path))
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
-      checkSchema[Data](dataRDD.schema)
+      checkSchema(schema, dataRDD.schema)
       val dataArray = dataRDD.select("labels", "pi", "theta", "modelType").take(1)
       assert(dataArray.length == 1, s"Unable to load NaiveBayesModel data from: ${dataPath(path)}")
       val data = dataArray(0)
@@ -240,7 +247,6 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
     def save(sc: SparkContext, path: String, data: Data): Unit = {
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -249,16 +255,23 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
-      dataRDD.write.parquet(dataPath(path))
+      val dataRDD = sc.parallelize(Seq(Row(data.labels, data.pi, data.theta)), 1)
+      sqlContext.createDataFrame(dataRDD, schema).write.parquet(dataPath(path))
     }
+
+    private val schema = StructType(
+      StructField("labels", ArrayType(DoubleType, containsNull = false), nullable = false)::
+      StructField("pi", ArrayType(DoubleType, containsNull = false), nullable = false)::
+      StructField("theta", ArrayType(
+          ArrayType(DoubleType, containsNull = false), containsNull = false), nullable = false)::
+        Nil)
 
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
       val sqlContext = new SQLContext(sc)
       // Load Parquet data.
       val dataRDD = sqlContext.read.parquet(dataPath(path))
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
-      checkSchema[Data](dataRDD.schema)
+      checkSchema(schema, dataRDD.schema)
       val dataArray = dataRDD.select("labels", "pi", "theta").take(1)
       assert(dataArray.length == 1, s"Unable to load NaiveBayesModel data from: ${dataPath(path)}")
       val data = dataArray(0)

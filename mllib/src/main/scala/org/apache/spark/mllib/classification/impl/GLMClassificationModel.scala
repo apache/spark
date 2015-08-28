@@ -21,9 +21,10 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.util.Loader
 import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.types.{StructType, StructField, DoubleType}
 
 /**
  * Helper class for import/export of GLM classification models.
@@ -51,8 +52,8 @@ private[classification] object GLMClassificationModel {
         weights: Vector,
         intercept: Double,
         threshold: Option[Double]): Unit = {
+
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -61,8 +62,13 @@ private[classification] object GLMClassificationModel {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
-      val data = Data(weights, intercept, threshold)
-      sc.parallelize(Seq(data), 1).toDF().write.parquet(Loader.dataPath(path))
+      val dataRDD = sc.parallelize(Seq(Row(weights, intercept, threshold.getOrElse(null))), 1)
+      val schema = StructType(
+        StructField("weights", new VectorUDT, nullable = false)::
+        StructField("intercept", DoubleType, nullable = false)::
+        StructField("threshold", DoubleType, nullable = true)::Nil)
+
+      sqlContext.createDataFrame(dataRDD, schema).write.parquet(Loader.dataPath(path))
     }
 
     /**
