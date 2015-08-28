@@ -52,7 +52,6 @@ private[classification] object GLMClassificationModel {
         weights: Vector,
         intercept: Double,
         threshold: Option[Double]): Unit = {
-
       val sqlContext = new SQLContext(sc)
 
       // Create JSON metadata.

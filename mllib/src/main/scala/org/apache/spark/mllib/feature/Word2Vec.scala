@@ -39,7 +39,7 @@ import org.apache.spark.rdd._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.sql.{SQLContext, Row}
-import org.apache.spark.sql.types.{ArrayType, FloatType, StringType, StructType, StructField}
+import org.apache.spark.sql.types.{ArrayType, FloatType, StringType, StructField, StructType}
 
 /**
  *  Entry in vocabulary

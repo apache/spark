@@ -814,7 +814,6 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val newPath = new Path(Loader.dataPath(path), "globalTopicTotals").toUri.toString
-
       val dataRDD = sc.parallelize(Seq(Row(Vectors.fromBreeze(globalTopicTotals))))
       sqlContext.createDataFrame(dataRDD, dataSchema).write.parquet(newPath)
 

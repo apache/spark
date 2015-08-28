@@ -26,13 +26,12 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Matrix, MatrixUDT}
+import org.apache.spark.mllib.linalg.{Matrix, MatrixUDT, Vector, VectorUDT}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.{MLUtils, Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.types.{StructType, StructField, DoubleType}
-
 
 /**
  * :: Experimental ::
