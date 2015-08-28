@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.IOException
+import java.util.{Collections, Arrays}
 
-import scala.collection.JavaConversions._
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
@@ -104,11 +104,10 @@ private[parquet] object ParquetTypesConverter extends Logging {
       extraMetadata,
       "Spark")
 
-    ParquetRelation.enableLogForwarding()
     ParquetFileWriter.writeMetadataFile(
       conf,
       path,
-      new Footer(path, new ParquetMetadata(metaData, Nil)) :: Nil)
+      Arrays.asList(new Footer(path, new ParquetMetadata(metaData, Collections.emptyList()))))
   }
 
   /**
@@ -139,8 +138,6 @@ private[parquet] object ParquetTypesConverter extends Logging {
           val name = status.getPath.getName
           (name(0) == '.' || name(0) == '_') && name != ParquetFileWriter.PARQUET_METADATA_FILE
         }
-
-    ParquetRelation.enableLogForwarding()
 
     // NOTE (lian): Parquet "_metadata" file can be very slow if the file consists of lots of row
     // groups. Since Parquet schema is replicated among all row groups, we only need to touch a

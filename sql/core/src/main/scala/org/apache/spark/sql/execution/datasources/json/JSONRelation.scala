@@ -111,15 +111,6 @@ private[sql] class JSONRelation(
     jsonSchema
   }
 
-  override private[sql] def buildScan(
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      inputPaths: Array[String],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
-    refresh()
-    super.buildScan(requiredColumns, filters, inputPaths, broadcastedConf)
-  }
-
   override def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],

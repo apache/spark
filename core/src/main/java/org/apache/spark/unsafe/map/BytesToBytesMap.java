@@ -92,9 +92,9 @@ public final class BytesToBytesMap {
 
   /**
    * The maximum number of keys that BytesToBytesMap supports. The hash table has to be
-   * power-of-2-sized and its backing Java array can contain at most (1 << 30) elements, since
-   * that's the largest power-of-2 that's less than Integer.MAX_VALUE. We need two long array
-   * entries per key, giving us a maximum capacity of (1 << 29).
+   * power-of-2-sized and its backing Java array can contain at most (1 &lt;&lt; 30) elements,
+   * since that's the largest power-of-2 that's less than Integer.MAX_VALUE. We need two long array
+   * entries per key, giving us a maximum capacity of (1 &lt;&lt; 29).
    */
   @VisibleForTesting
   static final int MAX_CAPACITY = (1 << 29);

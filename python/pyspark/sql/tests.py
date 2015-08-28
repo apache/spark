@@ -145,6 +145,12 @@ class PythonOnlyPoint(ExamplePoint):
     __UDT__ = PythonOnlyUDT()
 
 
+class MyObject(object):
+    def __init__(self, key, value):
+        self.key = key
+        self.value = value
+
+
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055
     def test_data_type_eq(self):
@@ -382,6 +388,12 @@ class SQLTests(ReusedPySparkTestCase):
                                    CustomRow(field1=3, field2="row3")])
         df = self.sqlCtx.inferSchema(rdd)
         self.assertEquals(Row(field1=1, field2=u'row1'), df.first())
+
+    def test_create_dataframe_from_objects(self):
+        data = [MyObject(1, "1"), MyObject(2, "2")]
+        df = self.sqlCtx.createDataFrame(data)
+        self.assertEqual(df.dtypes, [("key", "bigint"), ("value", "string")])
+        self.assertEqual(df.first(), Row(key=1, value="1"))
 
     def test_select_null_literal(self):
         df = self.sqlCtx.sql("select null as col")
@@ -1034,6 +1046,10 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.sqlCtx.createDataFrame([(1, 2)], ["a", "b"])
         self.assertRaisesRegexp(IllegalArgumentException, "1024 is not in the permitted values",
                                 lambda: df.select(sha2(df.a, 1024)).collect())
+
+    def test_with_column_with_existing_name(self):
+        keys = self.df.withColumn("key", self.df.key).select("key").collect()
+        self.assertEqual([r.key for r in keys], list(range(100)))
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):

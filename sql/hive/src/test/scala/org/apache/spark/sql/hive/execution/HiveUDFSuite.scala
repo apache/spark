@@ -18,8 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.{DataInput, DataOutput}
-import java.util
-import java.util.Properties
+import java.util.{ArrayList, Arrays, Properties}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFAverage, GenericUDF}
@@ -32,8 +31,6 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
 import org.apache.spark.sql.hive.test.TestHive
 
 import org.apache.spark.util.Utils
-
-import scala.collection.JavaConversions._
 
 case class Fields(f1: Int, f2: Int, f3: Int, f4: Int, f5: Int)
 
@@ -276,6 +273,11 @@ class HiveUDFSuite extends QueryTest {
     checkAnswer(
       sql("SELECT testStringStringUDF(\"hello\", s) FROM stringTable"),
       Seq(Row("hello world"), Row("hello goodbye")))
+
+    checkAnswer(
+      sql("SELECT testStringStringUDF(\"\", testStringStringUDF(\"hello\", s)) FROM stringTable"),
+      Seq(Row(" hello world"), Row(" hello goodbye")))
+
     sql("DROP TEMPORARY FUNCTION IF EXISTS testStringStringUDF")
 
     TestHive.reset()
@@ -321,11 +323,11 @@ class PairSerDe extends AbstractSerDe {
   override def getObjectInspector: ObjectInspector = {
     ObjectInspectorFactory
       .getStandardStructObjectInspector(
-        Seq("pair"),
-        Seq(ObjectInspectorFactory.getStandardStructObjectInspector(
-          Seq("id", "value"),
-          Seq(PrimitiveObjectInspectorFactory.javaIntObjectInspector,
-              PrimitiveObjectInspectorFactory.javaIntObjectInspector))
+        Arrays.asList("pair"),
+        Arrays.asList(ObjectInspectorFactory.getStandardStructObjectInspector(
+          Arrays.asList("id", "value"),
+          Arrays.asList(PrimitiveObjectInspectorFactory.javaIntObjectInspector,
+                        PrimitiveObjectInspectorFactory.javaIntObjectInspector))
     ))
   }
 
@@ -338,10 +340,10 @@ class PairSerDe extends AbstractSerDe {
   override def deserialize(value: Writable): AnyRef = {
     val pair = value.asInstanceOf[TestPair]
 
-    val row = new util.ArrayList[util.ArrayList[AnyRef]]
-    row.add(new util.ArrayList[AnyRef](2))
-    row(0).add(Integer.valueOf(pair.entry._1))
-    row(0).add(Integer.valueOf(pair.entry._2))
+    val row = new ArrayList[ArrayList[AnyRef]]
+    row.add(new ArrayList[AnyRef](2))
+    row.get(0).add(Integer.valueOf(pair.entry._1))
+    row.get(0).add(Integer.valueOf(pair.entry._2))
 
     row
   }
@@ -350,9 +352,9 @@ class PairSerDe extends AbstractSerDe {
 class PairUDF extends GenericUDF {
   override def initialize(p1: Array[ObjectInspector]): ObjectInspector =
     ObjectInspectorFactory.getStandardStructObjectInspector(
-      Seq("id", "value"),
-      Seq(PrimitiveObjectInspectorFactory.javaIntObjectInspector,
-        PrimitiveObjectInspectorFactory.javaIntObjectInspector)
+      Arrays.asList("id", "value"),
+      Arrays.asList(PrimitiveObjectInspectorFactory.javaIntObjectInspector,
+                    PrimitiveObjectInspectorFactory.javaIntObjectInspector)
   )
 
   override def evaluate(args: Array[DeferredObject]): AnyRef = {

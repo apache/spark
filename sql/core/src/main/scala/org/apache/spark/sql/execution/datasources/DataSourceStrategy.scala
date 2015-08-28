@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
-import org.apache.spark.sql.catalyst.{InternalRow, expressions}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, expressions}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
@@ -344,45 +345,47 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
    */
   protected[sql] def selectFilters(filters: Seq[Expression]) = {
     def translate(predicate: Expression): Option[Filter] = predicate match {
-      case expressions.EqualTo(a: Attribute, Literal(v, _)) =>
-        Some(sources.EqualTo(a.name, v))
-      case expressions.EqualTo(Literal(v, _), a: Attribute) =>
-        Some(sources.EqualTo(a.name, v))
+      case expressions.EqualTo(a: Attribute, Literal(v, t)) =>
+        Some(sources.EqualTo(a.name, convertToScala(v, t)))
+      case expressions.EqualTo(Literal(v, t), a: Attribute) =>
+        Some(sources.EqualTo(a.name, convertToScala(v, t)))
 
-      case expressions.EqualNullSafe(a: Attribute, Literal(v, _)) =>
-        Some(sources.EqualNullSafe(a.name, v))
-      case expressions.EqualNullSafe(Literal(v, _), a: Attribute) =>
-        Some(sources.EqualNullSafe(a.name, v))
+      case expressions.EqualNullSafe(a: Attribute, Literal(v, t)) =>
+        Some(sources.EqualNullSafe(a.name, convertToScala(v, t)))
+      case expressions.EqualNullSafe(Literal(v, t), a: Attribute) =>
+        Some(sources.EqualNullSafe(a.name, convertToScala(v, t)))
 
-      case expressions.GreaterThan(a: Attribute, Literal(v, _)) =>
-        Some(sources.GreaterThan(a.name, v))
-      case expressions.GreaterThan(Literal(v, _), a: Attribute) =>
-        Some(sources.LessThan(a.name, v))
+      case expressions.GreaterThan(a: Attribute, Literal(v, t)) =>
+        Some(sources.GreaterThan(a.name, convertToScala(v, t)))
+      case expressions.GreaterThan(Literal(v, t), a: Attribute) =>
+        Some(sources.LessThan(a.name, convertToScala(v, t)))
 
-      case expressions.LessThan(a: Attribute, Literal(v, _)) =>
-        Some(sources.LessThan(a.name, v))
-      case expressions.LessThan(Literal(v, _), a: Attribute) =>
-        Some(sources.GreaterThan(a.name, v))
+      case expressions.LessThan(a: Attribute, Literal(v, t)) =>
+        Some(sources.LessThan(a.name, convertToScala(v, t)))
+      case expressions.LessThan(Literal(v, t), a: Attribute) =>
+        Some(sources.GreaterThan(a.name, convertToScala(v, t)))
 
-      case expressions.GreaterThanOrEqual(a: Attribute, Literal(v, _)) =>
-        Some(sources.GreaterThanOrEqual(a.name, v))
-      case expressions.GreaterThanOrEqual(Literal(v, _), a: Attribute) =>
-        Some(sources.LessThanOrEqual(a.name, v))
+      case expressions.GreaterThanOrEqual(a: Attribute, Literal(v, t)) =>
+        Some(sources.GreaterThanOrEqual(a.name, convertToScala(v, t)))
+      case expressions.GreaterThanOrEqual(Literal(v, t), a: Attribute) =>
+        Some(sources.LessThanOrEqual(a.name, convertToScala(v, t)))
 
-      case expressions.LessThanOrEqual(a: Attribute, Literal(v, _)) =>
-        Some(sources.LessThanOrEqual(a.name, v))
-      case expressions.LessThanOrEqual(Literal(v, _), a: Attribute) =>
-        Some(sources.GreaterThanOrEqual(a.name, v))
+      case expressions.LessThanOrEqual(a: Attribute, Literal(v, t)) =>
+        Some(sources.LessThanOrEqual(a.name, convertToScala(v, t)))
+      case expressions.LessThanOrEqual(Literal(v, t), a: Attribute) =>
+        Some(sources.GreaterThanOrEqual(a.name, convertToScala(v, t)))
 
       case expressions.InSet(a: Attribute, set) =>
-        Some(sources.In(a.name, set.toArray))
+        val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
+        Some(sources.In(a.name, set.toArray.map(toScala)))
 
       // Because we only convert In to InSet in Optimizer when there are more than certain
       // items. So it is possible we still get an In expression here that needs to be pushed
       // down.
       case expressions.In(a: Attribute, list) if !list.exists(!_.isInstanceOf[Literal]) =>
         val hSet = list.map(e => e.eval(EmptyRow))
-        Some(sources.In(a.name, hSet.toArray))
+        val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
+        Some(sources.In(a.name, hSet.toArray.map(toScala)))
 
       case expressions.IsNull(a: Attribute) =>
         Some(sources.IsNull(a.name))
