@@ -972,13 +972,13 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     "simple nested struct",
 
     parquetSchema =
-      s"""message root {
-         |  required group f0 {
-         |    optional int32 f00;
-         |    optional int32 f01;
-         |  }
-         |}
-       """.stripMargin,
+      """message root {
+        |  required group f0 {
+        |    optional int32 f00;
+        |    optional int32 f01;
+        |  }
+        |}
+      """.stripMargin,
 
     catalystSchema = {
       val f0Type = new StructType().add("f00", IntegerType, nullable = true)
@@ -988,28 +988,28 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     },
 
     expectedSchema =
-      s"""message root {
-         |  required group f0 {
-         |    optional int32 f00;
-         |  }
-         |  optional int32 f1;
-         |}
-       """.stripMargin)
+      """message root {
+        |  required group f0 {
+        |    optional int32 f00;
+        |  }
+        |  optional int32 f1;
+        |}
+      """.stripMargin)
 
   testSchemaClipping(
     "parquet-protobuf style array",
 
     parquetSchema =
-      s"""message root {
-         |  required group f0 {
-         |    repeated binary f00 (UTF8);
-         |    repeated group f01 {
-         |      optional int32 f010;
-         |      optional double f011;
-         |    }
-         |  }
-         |}
-       """.stripMargin,
+      """message root {
+        |  required group f0 {
+        |    repeated binary f00 (UTF8);
+        |    repeated group f01 {
+        |      optional int32 f010;
+        |      optional double f011;
+        |    }
+        |  }
+        |}
+      """.stripMargin,
 
     catalystSchema = {
       val f11Type = new StructType().add("f011", DoubleType, nullable = true)
@@ -1024,41 +1024,41 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     },
 
     expectedSchema =
-      s"""message root {
-         |  required group f0 {
-         |    repeated binary f00 (UTF8);
-         |    repeated group f01 {
-         |      optional double f011;
-         |    }
-         |  }
-         |
-         |  optional group f1 (LIST) {
-         |    repeated group list {
-         |      optional int32 element;
-         |    }
-         |  }
-         |}
-       """.stripMargin)
+      """message root {
+        |  required group f0 {
+        |    repeated binary f00 (UTF8);
+        |    repeated group f01 {
+        |      optional double f011;
+        |    }
+        |  }
+        |
+        |  optional group f1 (LIST) {
+        |    repeated group list {
+        |      optional int32 element;
+        |    }
+        |  }
+        |}
+      """.stripMargin)
 
   testSchemaClipping(
     "parquet-thrift style array",
 
     parquetSchema =
-      s"""message root {
-         |  required group f0 {
-         |    optional group f00 {
-         |      repeated binary f00_tuple (UTF8);
-         |    }
-         |
-         |    optional group f01 (LIST) {
-         |      repeated group f01_tuple {
-         |        optional int32 f010;
-         |        optional double f011;
-         |      }
-         |    }
-         |  }
-         |}
-       """.stripMargin,
+      """message root {
+        |  required group f0 {
+        |    optional group f00 {
+        |      repeated binary f00_tuple (UTF8);
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group f01_tuple {
+        |        optional int32 f010;
+        |        optional double f011;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
 
     catalystSchema = {
       val f11ElementType = new StructType()
@@ -1073,41 +1073,41 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     },
 
     expectedSchema =
-      s"""message root {
-         |  required group f0 {
-         |    optional group f00 {
-         |      repeated binary f00_tuple (UTF8);
-         |    }
-         |
-         |    optional group f01 (LIST) {
-         |      repeated group f01_tuple {
-         |        optional double f011;
-         |        optional int64 f012;
-         |      }
-         |    }
-         |  }
-         |}
-       """.stripMargin)
+      """message root {
+        |  required group f0 {
+        |    optional group f00 {
+        |      repeated binary f00_tuple (UTF8);
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group f01_tuple {
+        |        optional double f011;
+        |        optional int64 f012;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
 
   testSchemaClipping(
     "parquet-avro style array",
 
     parquetSchema =
-      s"""message root {
-         |  required group f0 {
-         |    optional group f00 {
-         |      repeated binary array (UTF8);
-         |    }
-         |
-         |    optional group f01 (LIST) {
-         |      repeated group array {
-         |        optional int32 f010;
-         |        optional double f011;
-         |      }
-         |    }
-         |  }
-         |}
-       """.stripMargin,
+      """message root {
+        |  required group f0 {
+        |    optional group f00 {
+        |      repeated binary array (UTF8);
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group array {
+        |        optional int32 f010;
+        |        optional double f011;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
 
     catalystSchema = {
       val f11ElementType = new StructType()
@@ -1122,45 +1122,45 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     },
 
     expectedSchema =
-      s"""message root {
-         |  required group f0 {
-         |    optional group f00 {
-         |      repeated binary array (UTF8);
-         |    }
-         |
-         |    optional group f01 (LIST) {
-         |      repeated group array {
-         |        optional double f011;
-         |        optional int64 f012;
-         |      }
-         |    }
-         |  }
-         |}
-       """.stripMargin)
+      """message root {
+        |  required group f0 {
+        |    optional group f00 {
+        |      repeated binary array (UTF8);
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group array {
+        |        optional double f011;
+        |        optional int64 f012;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
 
   testSchemaClipping(
     "parquet-hive style array",
 
     parquetSchema =
-      s"""message root {
-         |  optional group f0 {
-         |    optional group f00 (LIST) {
-         |      repeated group bag {
-         |        optional binary array_element;
-         |      }
-         |    }
-         |
-         |    optional group f01 (LIST) {
-         |      repeated group bag {
-         |        optional group array_element {
-         |          optional int32 f010;
-         |          optional double f011;
-         |        }
-         |      }
-         |    }
-         |  }
-         |}
-       """.stripMargin,
+      """message root {
+        |  optional group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated group bag {
+        |        optional binary array_element;
+        |      }
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group bag {
+        |        optional group array_element {
+        |          optional int32 f010;
+        |          optional double f011;
+        |        }
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
 
     catalystSchema = {
       val f01ElementType = new StructType()
@@ -1175,23 +1175,39 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     },
 
     expectedSchema =
-      s"""message root {
-         |  optional group f0 {
-         |    optional group f00 (LIST) {
-         |      repeated group bag {
-         |        optional binary array_element;
-         |      }
-         |    }
-         |
-         |    optional group f01 (LIST) {
-         |      repeated group bag {
-         |        optional group array_element {
-         |          optional double f011;
-         |          optional int64 f012;
-         |        }
-         |      }
-         |    }
-         |  }
-         |}
-       """.stripMargin)
+      """message root {
+        |  optional group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated group bag {
+        |        optional binary array_element;
+        |      }
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group bag {
+        |        optional group array_element {
+        |          optional double f011;
+        |          optional int64 f012;
+        |        }
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "empty requested schema",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    required int32 f00;
+        |    required int64 f01;
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = new StructType(),
+
+    expectedSchema = "message root {}")
 }

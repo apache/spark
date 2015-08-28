@@ -30,7 +30,7 @@ import org.apache.parquet.schema._
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.{MapType, ArrayType, DataType, StructType}
+import org.apache.spark.sql.types._
 
 private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with Logging {
   // Called after `init()` when initializing Parquet record reader.
@@ -195,33 +195,21 @@ private[parquet] object CatalystReadSupport {
   }
 
   private def clipParquetRecord(parquetRecord: GroupType, structType: StructType): GroupType = {
-    val resultFields = {
-      val parquetFields = parquetRecord.getFields.asScala
-
-      val clippedFields = {
-        val catalystFieldNames = structType.fieldNames.toSet
-        parquetFields.collect {
-          case f if catalystFieldNames.contains(f.getName) =>
-            clipParquetType(f, structType.apply(f.getName).dataType)
-        }
+    val tailoredFields = {
+      val parquetFieldMap = parquetRecord.getFields.asScala.map(f => f.getName -> f).toMap
+      val toParquet = new CatalystSchemaConverter(followParquetFormatSpec = true)
+      structType.map { f =>
+        parquetFieldMap
+          .get(f.name)
+          .map(clipParquetType(_, f.dataType))
+          .getOrElse(toParquet.convertField(f))
       }
-
-      val paddedFields = {
-        val parquetFieldNames = parquetFields.map(_.getName).toSet
-        val toParquet = new CatalystSchemaConverter(followParquetFormatSpec = true)
-        structType.collect {
-          case f if !parquetFieldNames.contains(f.name) =>
-            toParquet.convertField(f)
-        }
-      }
-
-      (clippedFields ++ paddedFields).sortBy(_.getName)
     }
 
-    Types
-      .buildGroup(parquetRecord.getRepetition)
-      .as(parquetRecord.getOriginalType)
-      .addFields(resultFields: _*)
-      .named(parquetRecord.getName)
+    new GroupType(
+      parquetRecord.getRepetition,
+      parquetRecord.getName,
+      parquetRecord.getOriginalType,
+      tailoredFields.asJava)
   }
 }
