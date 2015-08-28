@@ -52,7 +52,8 @@ for root, dirs, files in os.walk(plugins_folder, followlinks=True):
                         issubclass(obj, AirflowPlugin) and
                         obj is not AirflowPlugin):
                     obj.validate()
-                    plugins.append(obj)
+                    if obj not in plugins:
+                        plugins.append(obj)
 
         except Exception as e:
             logging.exception(e)
