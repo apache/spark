@@ -249,6 +249,146 @@ case class Min(child: Expression) extends AlgebraicAggregate {
   override val evaluateExpression = min
 }
 
+// Compute the sample standard deviation of a column
+case class Stddev(child: Expression) extends StddevAgg(child) {
+
+  override def isSample: Boolean = true
+}
+
+// Compute the population standard deviation of a column
+case class StddevPop(child: Expression) extends StddevAgg(child) {
+
+  override def isSample: Boolean = false
+}
+
+// Compute the sample standard deviation of a column
+case class StddevSamp(child: Expression) extends StddevAgg(child) {
+
+  override def isSample: Boolean = true
+}
+
+// Compute standard deviation based on online algorithm specified here:
+// http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+abstract class StddevAgg(child: Expression) extends AlgebraicAggregate {
+
+  override def children: Seq[Expression] = child :: Nil
+
+  override def nullable: Boolean = true
+
+  def isSample: Boolean
+
+  // Return data type.
+  override def dataType: DataType = resultType
+
+  // Expected input data type.
+  // TODO: Right now, we replace old aggregate functions (based on AggregateExpression1) to the
+  // new version at planning time (after analysis phase). For now, NullType is added at here
+  // to make it resolved when we have cases like `select stddev(null)`.
+  // We can use our analyzer to cast NullType to the default data type of the NumericType once
+  // we remove the old aggregate functions. Then, we will not need NullType at here.
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
+
+  private val resultType = child.dataType match {
+    case DecimalType.Fixed(p, s) =>
+      DecimalType.bounded(p + 14, s + 4)
+    case _ => DoubleType
+  }
+
+  private val zero = Cast(Literal(0), resultType)
+
+  private val preCount = AttributeReference("preCount", resultType)()
+  private val currentCount = AttributeReference("currentCount", resultType)()
+  private val preAvg = AttributeReference("preAvg", resultType)()
+  private val currentAvg = AttributeReference("currentAvg", resultType)()
+  private val currentMk = AttributeReference("currentMk", resultType)()
+
+  override val bufferAttributes = preCount :: currentCount :: preAvg :: currentAvg :: currentMk :: Nil
+
+  override val initialValues = Seq(
+    /* preCount = */ Cast(Literal(0), resultType), 
+    /* currentCount = */ Cast(Literal(0), resultType),
+    /* preAvg = */ Cast(Literal(0), resultType), 
+    /* currentAvg = */ Cast(Literal(0), resultType), 
+    /* currentMk = */ Cast(Literal(0), resultType) 
+  )
+
+  override val updateExpressions = {
+
+    // update average
+    // avg = avg + (value - avg)/count
+    def avgAdd: Expression = {
+      currentAvg + ((Cast(child, resultType) - currentAvg) / currentCount)
+    }
+
+    // update sum of square of difference from mean
+    // Mk = Mk + (value - preAvg) * (value - updatedAvg)
+    def mkAdd: Expression = {
+      val delta1 = Cast(child, resultType) - preAvg
+      val delta2 = Cast(child, resultType) - currentAvg
+      currentMk + (delta1 * delta2)
+    }
+
+    Seq(
+      /* preCount = */ If(IsNull(child), preCount, currentCount),
+      /* currentCount = */ If(IsNull(child), currentCount, Add(currentCount, Cast(Literal(1), resultType))),
+      /* preAvg = */ If(IsNull(child), preAvg, currentAvg),
+      /* currentAvg = */ If(IsNull(child), currentAvg, avgAdd),
+      /* currentMk = */ If(IsNull(child), currentMk, mkAdd)
+    )
+  }
+
+  override val mergeExpressions = {
+  
+    //count merge
+    def countMerge: Expression = {
+      currentCount.left + currentCount.right
+    }
+
+    // average merge
+    def avgMerge: Expression = {
+      ((currentAvg.left * preCount) + (currentAvg.right * currentCount.right)) /
+      (preCount + currentCount.right)
+    }
+
+    // update sum of square differences
+    def mkMerge: Expression = {
+      val avgDelta = currentAvg.right - preAvg
+      val mkDelta = (avgDelta * avgDelta) * (preCount * currentCount.right) /
+        (preCount + currentCount.right)
+
+      currentMk.left + currentMk.right + mkDelta
+    }
+
+    Seq(
+      /* preCount = */ currentCount.left,
+      /* currentCount = */ countMerge,
+      /* preAvg = */ currentAvg.left,
+      /* currentAvg = */ avgMerge,
+      /* currentMk = */ mkMerge
+    )
+  }
+
+  override val evaluateExpression = {
+    // when currentCount == 0, return null
+    // when currentCount == 1, return 0
+    // when currentCount >1
+    // stddev_samp = sqrt (currentMk/(currentCount -1))
+    // stddev_pop = sqrt (currentMk/currentCount)
+    val varCol = {
+      if (isSample) {
+        currentMk / Cast((currentCount - Cast(Literal(1), resultType)), resultType)
+      }
+      else {
+        currentMk / currentCount
+      }
+    }
+
+    If(EqualTo(currentCount, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
+      If(EqualTo(currentCount, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
+        Cast(Sqrt(varCol), resultType)))
+  }
+}
+
 case class Sum(child: Expression) extends AlgebraicAggregate {
 
   override def children: Seq[Expression] = child :: Nil

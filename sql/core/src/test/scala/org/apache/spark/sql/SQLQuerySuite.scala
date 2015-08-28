@@ -742,6 +742,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("stddev agg") {
+    checkAnswer(
+      sql("SELECT a, stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2 GROUP BY a"),
+      (1 to 3).map(i => Row(i, math.sqrt(1/2.0), math.sqrt(1/4.0), math.sqrt(1/2.0))))
+  }
+
   test("inner join where, one match per row") {
     checkAnswer(
       sql("SELECT * FROM upperCaseData JOIN lowerCaseData WHERE n = N"),

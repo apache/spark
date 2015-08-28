@@ -689,7 +689,7 @@ case class LastFunction(expr: Expression, base: AggregateExpression1) extends Ag
 
 // Compute standard deviation based on online algorithm specified here:
 // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
-abstract class StddevAgg(child: Expression) extends UnaryExpression with PartialAggregate1 {
+abstract class StddevAgg1(child: Expression) extends UnaryExpression with PartialAggregate1 {
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
@@ -697,14 +697,14 @@ abstract class StddevAgg(child: Expression) extends UnaryExpression with Partial
     case _ => DoubleType
   }
 
-  def isSampleStddev: Boolean 
+  def isSample: Boolean 
 
   override def asPartial: SplitEvaluation = {
     val partialStd = Alias(ComputePartialStd(child), "PartialStddev")()
-    SplitEvaluation(MergePartialStd(partialStd.toAttribute, isSampleStddev), partialStd :: Nil)
+    SplitEvaluation(MergePartialStd(partialStd.toAttribute, isSample), partialStd :: Nil)
   }
 
-  override def newInstance(): StddevFunction = new StddevFunction(child, this, isSampleStddev)
+  override def newInstance(): StddevFunction = new StddevFunction(child, this, isSample)
 
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForNumericExpr(child.dataType, "function stddev")
@@ -712,24 +712,24 @@ abstract class StddevAgg(child: Expression) extends UnaryExpression with Partial
 }
 
 // Compute the sample standard deviation of a column
-case class Stddev(child: Expression) extends StddevAgg(child) {
+case class Stddev(child: Expression) extends StddevAgg1(child) {
 
   override def toString: String = s"STDDEV($child)"
-  override def isSampleStddev: Boolean = true
+  override def isSample: Boolean = true
 }
 
 // Compute the population standard deviation of a column
-case class StddevPop(child: Expression) extends StddevAgg(child) {
+case class StddevPop(child: Expression) extends StddevAgg1(child) {
 
   override def toString: String = s"STDDEV_POP($child)"
-  override def isSampleStddev: Boolean = false
+  override def isSample: Boolean = false
 }
 
 // Compute the sample standard deviation of a column
-case class StddevSamp(child: Expression) extends StddevAgg(child) {
+case class StddevSamp(child: Expression) extends StddevAgg1(child) {
 
   override def toString: String = s"STDDEV_SAMP($child)"
-  override def isSampleStddev: Boolean = true
+  override def isSample: Boolean = true
 }
 
 case class ComputePartialStd(child: Expression) extends UnaryExpression with AggregateExpression1 {
@@ -877,7 +877,7 @@ case class MergePartialStdFunction(
       // when total count > 2
       // stddev_samp = sqrt (combineMk/(combineCount -1))
       // stddev_pop = sqrt (combineMk/combineCount)
-      val cov = {
+      val varCol = {
         if (isSample) {
           Divide(combineMk, Cast(Literal(count - 1), computeType))
         }
@@ -885,7 +885,7 @@ case class MergePartialStdFunction(
           Divide(combineMk, Cast(Literal(count), computeType))
         }
       }
-      Sqrt(cov).eval(null)
+      Sqrt(varCol).eval(null)
     }
   }
 }
@@ -935,7 +935,7 @@ case class StddevFunction(
       // when total count > 2, 
       // stddev_samp = sqrt(curMk/(curCount - 1))
       // stddev_pop = sqrt(curMk/curCount)
-      val cov = {
+      val varCol = {
         if(isSample) {
           Divide(curMk, Cast(Literal(curCount - 1), computeType))
         }
@@ -943,7 +943,7 @@ case class StddevFunction(
           Divide(curMk, Cast(Literal(curCount), computeType))
         }
       }
-      Sqrt(cov).eval(null)
+      Sqrt(varCol).eval(null)
     }
   }
 }
