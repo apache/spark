@@ -32,7 +32,7 @@ import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors, VectorU
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.types.{IntegerType, LongType, DoubleType, StructField, StructType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StructField, StructType}
 import org.apache.spark.util.BoundedPriorityQueue
 
 /**

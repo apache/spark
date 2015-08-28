@@ -31,7 +31,7 @@ import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.{MLUtils, Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SQLContext, Row}
-import org.apache.spark.sql.types.{StructType, StructField, DoubleType}
+import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /**
  * :: Experimental ::

@@ -37,7 +37,7 @@ import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.types.{ArrayType, IntegerType, DoubleType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, StructField, StructType}
 import org.apache.spark.storage.StorageLevel
 
 /**

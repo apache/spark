@@ -24,7 +24,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.util.Loader
 import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.types.{StructType, StructField, DoubleType}
+import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /**
  * Helper class for import/export of GLM classification models.
