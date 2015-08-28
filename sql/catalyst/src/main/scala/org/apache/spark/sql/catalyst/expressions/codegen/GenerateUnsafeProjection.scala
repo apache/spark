@@ -222,27 +222,24 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val convertedElement: GeneratedExpressionCode = createConvertCode(ctx, element, elementType)
 
     // go through the input array to calculate how many bytes we need.
-    val calculateNumBytes = elementType match {
+    val (calculateNumBytesSimple, calculateNumBytesComplex) = elementType match {
       case _ if ctx.isPrimitiveType(elementType) =>
         // Should we do word align?
         val elementSize = elementType.defaultSize
-        s"""
+        (s"""
           $numBytes += $elementSize * $numElements;
-        """
+          """, "")
       case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS =>
-        s"""
+        (s"""
           $numBytes += 8 * $numElements;
-        """
+          """, "")
       case _ =>
         val writer = getWriter(elementType)
-        s"""
-          for (int $index = 0; $index < $numElements; $index++) {
-            ${convertedElement.code}
-            if (!${convertedElement.isNull}) {
-              $numBytes += $writer.getSize(${convertedElement.primitive});
-            }
+        ("", s"""
+          if (!${convertedElement.isNull}) {
+            $numBytes += $writer.getSize(${convertedElement.primitive});
           }
-        """
+          """)
     }
 
     val writeElement = elementType match {
@@ -301,7 +298,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           final int $fixedSize = 4 * $numElements;
           int $numBytes = $fixedSize;
 
-          $calculateNumBytes
+          $calculateNumBytesSimple
 
           if ($numBytes > $buffer.length) {
             $buffer = new byte[$numBytes];
@@ -310,6 +307,13 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           int $cursor = $fixedSize;
           for (int $index = 0; $index < $numElements; $index++) {
             ${convertedElement.code}
+            $calculateNumBytesComplex
+            if ($buffer.length < $numBytes) {
+              byte[] newBuffer = new byte[$numBytes * 2];
+              Platform.copyMemory($buffer, Platform.BYTE_ARRAY_OFFSET,
+                newBuffer, Platform.BYTE_ARRAY_OFFSET, $buffer.length);
+              $buffer = newBuffer;
+            }
             if ($checkNull) {
               // If element is null, write the negative value address into offset region.
               Platform.putInt($buffer, Platform.BYTE_ARRAY_OFFSET + 4 * $index, -$cursor);
