@@ -874,13 +874,13 @@ jsc.stop();
 </div>
 
 ## Example: Model Selection via Train Validation Split
-In addition to  `CrossValidator` Spark also offers
-[`TrainValidationSplit`](api/scala/index.html#org.apache.spark.ml.tuning.TrainValidationSplit) for hyper-parameter tuning.
+In addition to  `CrossValidator` Spark also offers `TrainValidationSplit` for hyper-parameter tuning.
 `TrainValidationSplit` only evaluates each combination of parameters once as opposed to k times in
- case of `CrossValidator`. It is therefore less expensive, but will not produce as reliable results.
+ case of `CrossValidator`. It is therefore less expensive,
+ but will not produce as reliable results when the training dataset is not sufficiently large..
 
-`TrainValidationSplit` takes an `Estimator`, a set of `ParamMap`s provided in the `estimatorParamMaps` parameter, and an
-[`Evaluator`](api/scala/index.html#org.apache.spark.ml.Evaluator).
+`TrainValidationSplit` takes an `Estimator`, a set of `ParamMap`s provided in the `estimatorParamMaps` parameter,
+and an `Evaluator`.
 It begins by splitting the dataset into two parts using `trainRatio` parameter
 which are used as separate training and test datasets. For example with `$trainRatio=0.75$` (default),
 `TrainValidationSplit` will generate a training and test dataset pair where 75% of the data is used for training and 25% for validation.
@@ -897,22 +897,12 @@ import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
-
-import sqlContext.implicits._
 
 // Prepare training and test data.
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
 val Array(training, test) = data.randomSplit(Array(0.9, 0.1), seed = 12345)
 
 val lr = new LinearRegression()
-
-// In this case the estimator is simply the linear regression.
-// A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
-val trainValidationSplit = new TrainValidationSplit()
-  .setEstimator(lr)
-  .setEvaluator(new RegressionEvaluator)
 
 // We use a ParamGridBuilder to construct a grid of parameters to search over.
 // TrainValidationSplit will try all combinations of values and determine best model using
@@ -923,28 +913,30 @@ val paramGrid = new ParamGridBuilder()
   .addGrid(lr.elasticNetParam, Array(0.0, 0.5, 1.0))
   .build()
 
-trainValidationSplit.setEstimatorParamMaps(paramGrid)
+// In this case the estimator is simply the linear regression.
+// A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+val trainValidationSplit = new TrainValidationSplit()
+  .setEstimator(lr)
+  .setEvaluator(new RegressionEvaluator)
+  .setEstimatorParamMaps(paramGrid)
 
 // 80% of the data will be used for training and the remaining 20% for validation.
 trainValidationSplit.setTrainRatio(0.8)
 
 // Run train validation split, and choose the best set of parameters.
-val model = trainValidationSplit.fit(training.toDF())
+val model = trainValidationSplit.fit(training)
 
 // Make predictions on test data. model is the model with combination of parameters
 // that performed best.
-model.transform(test.toDF())
+model.transform(test)
   .select("features", "label", "prediction")
   .show()
 
-sc.stop()
 {% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.evaluation.RegressionEvaluator;
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.regression.LinearRegression;
@@ -953,33 +945,33 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
 
-RDD<LabeledPoint> data = MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt");
-RDD<LabeledPoint>[] splits = data.randomSplit(new double []{0.9, 0.1}, 12345);
+DataFrame data = jsql.createDataFrame(
+  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt"),
+  LabeledPoint.class);
 
 // Prepare training and test data.
-DataFrame training = jsql.createDataFrame(splits[0], LabeledPoint.class);
-DataFrame test = jsql.createDataFrame(splits[1], LabeledPoint.class);
+DataFrame[] splits = data.randomSplit(new double [] {0.9, 0.1}, 12345);
+DataFrame training = splits[0];
+DataFrame test = splits[1];
 
 LinearRegression lr = new LinearRegression();
-
-// In this case the estimator is simply the linear regression.
-// A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
-TrainValidationSplit trainValidationSplit = new TrainValidationSplit()
-  .setEstimator(lr)
-  .setEvaluator(new RegressionEvaluator());
 
 // We use a ParamGridBuilder to construct a grid of parameters to search over.
 // TrainValidationSplit will try all combinations of values and determine best model using
 // the evaluator.
 ParamMap[] paramGrid = new ParamGridBuilder()
-  .addGrid(lr.regParam(), new double[]{0.1, 0.01})
+  .addGrid(lr.regParam(), new double[] {0.1, 0.01})
   .addGrid(lr.fitIntercept())
-  .addGrid(lr.elasticNetParam(), new double[]{0.0, 0.5, 1.0})
+  .addGrid(lr.elasticNetParam(), new double[] {0.0, 0.5, 1.0})
   .build();
 
-trainValidationSplit.setEstimatorParamMaps(paramGrid);
+// In this case the estimator is simply the linear regression.
+// A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+TrainValidationSplit trainValidationSplit = new TrainValidationSplit()
+  .setEstimator(lr)
+  .setEvaluator(new RegressionEvaluator())
+  .setEstimatorParamMaps(paramGrid);
 
 // 80% of the data will be used for training and the remaining 20% for validation.
 trainValidationSplit.setTrainRatio(0.8);
@@ -993,7 +985,6 @@ model.transform(test)
   .select("features", "label", "prediction")
   .show();
 
-jsc.stop();
 {% endhighlight %}
 </div>
 

@@ -25,7 +25,6 @@ import org.apache.spark.ml.regression.LinearRegression;
 import org.apache.spark.ml.tuning.*;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
 
@@ -47,20 +46,16 @@ public class JavaTrainValidationSplitExample {
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext jsql = new SQLContext(jsc);
 
-    RDD<LabeledPoint> data = MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt");
-    RDD<LabeledPoint>[] splits = data.randomSplit(new double [] {0.9, 0.1}, 12345);
+    DataFrame data = jsql.createDataFrame(
+      MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt"),
+      LabeledPoint.class);
 
     // Prepare training and test data.
-    DataFrame training = jsql.createDataFrame(splits[0], LabeledPoint.class);
-    DataFrame test = jsql.createDataFrame(splits[1], LabeledPoint.class);
+    DataFrame[] splits = data.randomSplit(new double [] {0.9, 0.1}, 12345);
+    DataFrame training = splits[0];
+    DataFrame test = splits[1];
 
     LinearRegression lr = new LinearRegression();
-
-    // In this case the estimator is simply the linear regression.
-    // A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
-    TrainValidationSplit trainValidationSplit = new TrainValidationSplit()
-      .setEstimator(lr)
-      .setEvaluator(new RegressionEvaluator());
 
     // We use a ParamGridBuilder to construct a grid of parameters to search over.
     // TrainValidationSplit will try all combinations of values and determine best model using
@@ -71,7 +66,12 @@ public class JavaTrainValidationSplitExample {
       .addGrid(lr.elasticNetParam(), new double[] {0.0, 0.5, 1.0})
       .build();
 
-    trainValidationSplit.setEstimatorParamMaps(paramGrid);
+    // In this case the estimator is simply the linear regression.
+    // A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+    TrainValidationSplit trainValidationSplit = new TrainValidationSplit()
+      .setEstimator(lr)
+      .setEvaluator(new RegressionEvaluator())
+      .setEstimatorParamMaps(paramGrid);
 
     // 80% of the data will be used for training and the remaining 20% for validation.
     trainValidationSplit.setTrainRatio(0.8);
