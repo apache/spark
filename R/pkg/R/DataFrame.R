@@ -956,7 +956,7 @@ setMethod("$<-", signature(x = "DataFrame"),
 
 setClassUnion("numericOrcharacter", c("numeric", "character"))
 
-#' @rdname select
+#' @rdname subset
 #' @name [[
 setMethod("[[", signature(x = "DataFrame", i = "numericOrcharacter"),
           function(x, i) {
@@ -967,7 +967,7 @@ setMethod("[[", signature(x = "DataFrame", i = "numericOrcharacter"),
             getColumn(x, i)
           })
 
-#' @rdname select
+#' @rdname subset
 #' @name [
 setMethod("[", signature(x = "DataFrame", i = "missing"),
           function(x, i, j, ...) {
@@ -981,7 +981,7 @@ setMethod("[", signature(x = "DataFrame", i = "missing"),
             select(x, j)
           })
 
-#' @rdname select
+#' @rdname subset
 #' @name [
 setMethod("[", signature(x = "DataFrame", i = "Column"),
           function(x, i, j, ...) {
@@ -989,10 +989,41 @@ setMethod("[", signature(x = "DataFrame", i = "Column"),
             # https://stat.ethz.ch/R-manual/R-devel/library/base/html/Extract.data.frame.html
             filtered <- filter(x, i)
             if (!missing(j)) {
-              filtered[, j]
+              filtered[, j, ...]
             } else {
               filtered
             }
+          })
+
+#' Subset
+#'
+#' Return subsets of DataFrame according to given conditions
+#' @param x A DataFrame
+#' @param subset A logical expression to filter on rows
+#' @param select expression for the single Column or a list of columns to select from the DataFrame
+#' @return A new DataFrame containing only the rows that meet the condition with selected columns
+#' @export
+#' @rdname subset
+#' @name subset
+#' @aliases [
+#' @family subsetting functions
+#' @examples
+#' \dontrun{
+#'   # Columns can be selected using `[[` and `[`
+#'   df[[2]] == df[["age"]]
+#'   df[,2] == df[,"age"]
+#'   df[,c("name", "age")]
+#'   # Or to filter rows
+#'   df[df$age > 20,]
+#'   # DataFrame can be subset on both rows and Columns
+#'   df[df$name == "Smith", c(1,2)]
+#'   df[df$age %in% c(19, 30), 1:2]
+#'   subset(df, df$age %in% c(19, 30), 1:2)
+#'   subset(df, df$age %in% c(19), select = c(1,2))
+#' }
+setMethod("subset", signature(x = "DataFrame"),
+          function(x, subset, select, ...) {
+            x[subset, select, ...]
           })
 
 #' Select
@@ -1003,6 +1034,8 @@ setMethod("[", signature(x = "DataFrame", i = "Column"),
 #' @return A new DataFrame with selected columns
 #' @export
 #' @rdname select
+#' @name select
+#' @family subsetting functions
 #' @examples
 #' \dontrun{
 #'   select(df, "*")
@@ -1010,15 +1043,8 @@ setMethod("[", signature(x = "DataFrame", i = "Column"),
 #'   select(df, df$name, df$age + 1)
 #'   select(df, c("col1", "col2"))
 #'   select(df, list(df$name, df$age + 1))
-#'   # Columns can also be selected using `[[` and `[`
-#'   df[[2]] == df[["age"]]
-#'   df[,2] == df[,"age"]
-#'   df[,c("name", "age")]
 #'   # Similar to R data frames columns can also be selected using `$`
 #'   df$age
-#'   # It can also be subset on rows and Columns
-#'   df[df$name == "Smith", c(1,2)]
-#'   df[df$age %in% c(19, 30), 1:2]
 #' }
 setMethod("select", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
@@ -1090,7 +1116,7 @@ setMethod("selectExpr",
 #' @return A DataFrame with the new column added.
 #' @rdname withColumn
 #' @name withColumn
-#' @aliases mutate
+#' @aliases mutate transform
 #' @export
 #' @examples
 #'\dontrun{
@@ -1110,11 +1136,12 @@ setMethod("withColumn",
 #'
 #' Return a new DataFrame with the specified columns added.
 #'
-#' @param x A DataFrame
+#' @param .data A DataFrame
 #' @param col a named argument of the form name = col
 #' @return A new DataFrame with the new columns added.
 #' @rdname withColumn
 #' @name mutate
+#' @aliases withColumn transform
 #' @export
 #' @examples
 #'\dontrun{
@@ -1124,10 +1151,12 @@ setMethod("withColumn",
 #' df <- jsonFile(sqlContext, path)
 #' newDF <- mutate(df, newCol = df$col1 * 5, newCol2 = df$col1 * 2)
 #' names(newDF) # Will contain newCol, newCol2
+#' newDF2 <- transform(df, newCol = df$col1 / 5, newCol2 = df$col1 * 2)
 #' }
 setMethod("mutate",
-          signature(x = "DataFrame"),
-          function(x, ...) {
+          signature(.data = "DataFrame"),
+          function(.data, ...) {
+            x <- .data
             cols <- list(...)
             stopifnot(length(cols) > 0)
             stopifnot(class(cols[[1]]) == "Column")
@@ -1140,6 +1169,16 @@ setMethod("mutate",
               }
             }
             do.call(select, c(x, x$"*", cols))
+          })
+
+#' @export
+#' @rdname withColumn
+#' @name transform
+#' @aliases withColumn mutate
+setMethod("transform",
+          signature(`_data` = "DataFrame"),
+          function(`_data`, ...) {
+            mutate(`_data`, ...)
           })
 
 #' WithColumnRenamed
@@ -1269,6 +1308,7 @@ setMethod("orderBy",
 #' @return A DataFrame containing only the rows that meet the condition.
 #' @rdname filter
 #' @name filter
+#' @family subsetting functions
 #' @export
 #' @examples
 #'\dontrun{
