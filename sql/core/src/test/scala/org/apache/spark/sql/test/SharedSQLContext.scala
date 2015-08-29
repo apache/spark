@@ -23,7 +23,7 @@ import org.apache.spark.sql.{ColumnName, SQLContext}
 /**
  * Helper trait for SQL test suites where all tests share a single [[TestSQLContext]].
  */
-private[sql] trait SharedSQLContext extends SQLTestUtils {
+trait SharedSQLContext extends SQLTestUtils {
 
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
