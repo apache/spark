@@ -21,19 +21,11 @@ title: Spark ML Programming Guide
 \]`
 
 
-Spark 1.2 introduced a new package called `spark.ml`, which aims to provide a uniform set of
-high-level APIs that help users create and tune practical machine learning pipelines.
-
-*Graduated from Alpha!*  The Pipelines API is no longer an alpha component, although many elements of it are still `Experimental` or `DeveloperApi`.
-
-Note that we will keep supporting and adding features to `spark.mllib` along with the
-development of `spark.ml`.
-Users should be comfortable using `spark.mllib` features and expect more features coming.
-Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
-to `spark.ml`.
-
-See the [Algorithm Guides section](#algorithm-guides) below for guides on sub-packages of `spark.ml`, including feature transformers unique to the Pipelines API, ensembles, and more.
-
+The `spark.ml` package aims to provide a uniform set of high-level APIs built on top of
+[DataFrames](sql-programming-guide.html#dataframes) that help users create and tune practical
+machine learning pipelines.
+See the [Algorithm Guides section](#algorithm-guides) below for guides on sub-packages of
+`spark.ml`, including feature transformers unique to the Pipelines API, ensembles, and more.
 
 **Table of Contents**
 
@@ -171,7 +163,7 @@ This is useful if there are two algorithms with the `maxIter` parameter in a `Pi
 
 # Algorithm Guides
 
-There are now several algorithms in the Pipelines API which are not in the lower-level MLlib API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines, and ensembles, which fit naturally into the `Estimator` abstraction in the Pipelines.
+There are now several algorithms in the Pipelines API which are not in the `spark.mllib` API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines, and ensembles, which fit naturally into the `Estimator` abstraction in the Pipelines.
 
 **Pipelines API Algorithm Guides**
 
@@ -643,6 +635,13 @@ An important task in ML is *model selection*, or using data to find the best mod
 Currently, `spark.ml` supports model selection using the [`CrossValidator`](api/scala/index.html#org.apache.spark.ml.tuning.CrossValidator) class, which takes an `Estimator`, a set of `ParamMap`s, and an [`Evaluator`](api/scala/index.html#org.apache.spark.ml.Evaluator).
 `CrossValidator` begins by splitting the dataset into a set of *folds* which are used as separate training and test datasets; e.g., with `$k=3$` folds, `CrossValidator` will generate 3 (training, test) dataset pairs, each of which uses 2/3 of the data for training and 1/3 for testing.
 `CrossValidator` iterates through the set of `ParamMap`s. For each `ParamMap`, it trains the given `Estimator` and evaluates it using the given `Evaluator`.
+
+The `Evaluator` can be a [`RegressionEvaluator`](api/scala/index.html#org.apache.spark.ml.RegressionEvaluator)
+for regression problems, a [`BinaryClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.BinaryClassificationEvaluator)
+for binary data or a [`MultiClassClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.MultiClassClassificationEvaluator)
+for multiclass problems. The default metric used to choose the best `ParamMap` can be overriden by the setMetric
+method in each of these evaluators.
+
 The `ParamMap` which produces the best evaluation metric (averaged over the `$k$` folds) is selected as the best model.
 `CrossValidator` finally fits the `Estimator` using the best `ParamMap` and the entire dataset.
 
@@ -708,9 +707,12 @@ val pipeline = new Pipeline()
 // We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
 // This will allow us to jointly choose parameters for all Pipeline stages.
 // A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+// Note that the evaluator here is a BinaryClassificationEvaluator and the default metric
+// used is areaUnderROC.
 val crossval = new CrossValidator()
   .setEstimator(pipeline)
   .setEvaluator(new BinaryClassificationEvaluator)
+
 // We use a ParamGridBuilder to construct a grid of parameters to search over.
 // With 3 values for hashingTF.numFeatures and 2 values for lr.regParam,
 // this grid will have 3 x 2 = 6 parameter settings for CrossValidator to choose from.
@@ -831,9 +833,12 @@ Pipeline pipeline = new Pipeline()
 // We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
 // This will allow us to jointly choose parameters for all Pipeline stages.
 // A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+// Note that the evaluator here is a BinaryClassificationEvaluator and the default metric
+// used is areaUnderROC.
 CrossValidator crossval = new CrossValidator()
     .setEstimator(pipeline)
     .setEvaluator(new BinaryClassificationEvaluator());
+
 // We use a ParamGridBuilder to construct a grid of parameters to search over.
 // With 3 values for hashingTF.numFeatures and 2 values for lr.regParam,
 // this grid will have 3 x 2 = 6 parameter settings for CrossValidator to choose from.
@@ -868,34 +873,119 @@ jsc.stop();
 
 </div>
 
-# Dependencies
+## Example: Model Selection via Train Validation Split
+In addition to  `CrossValidator` Spark also offers `TrainValidationSplit` for hyper-parameter tuning.
+`TrainValidationSplit` only evaluates each combination of parameters once as opposed to k times in
+ case of `CrossValidator`. It is therefore less expensive,
+ but will not produce as reliable results when the training dataset is not sufficiently large..
 
-Spark ML currently depends on MLlib and has the same dependencies.
-Please see the [MLlib Dependencies guide](mllib-guide.html#dependencies) for more info.
+`TrainValidationSplit` takes an `Estimator`, a set of `ParamMap`s provided in the `estimatorParamMaps` parameter,
+and an `Evaluator`.
+It begins by splitting the dataset into two parts using `trainRatio` parameter
+which are used as separate training and test datasets. For example with `$trainRatio=0.75$` (default),
+`TrainValidationSplit` will generate a training and test dataset pair where 75% of the data is used for training and 25% for validation.
+Similar to `CrossValidator`, `TrainValidationSplit` also iterates through the set of `ParamMap`s.
+For each combination of parameters, it trains the given `Estimator` and evaluates it using the given `Evaluator`.
+The `ParamMap` which produces the best evaluation metric is selected as the best option.
+`TrainValidationSplit` finally fits the `Estimator` using the best `ParamMap` and the entire dataset.
 
-Spark ML also depends upon Spark SQL, but the relevant parts of Spark SQL do not bring additional dependencies.
+<div class="codetabs">
 
-# Migration Guide
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
+import org.apache.spark.mllib.util.MLUtils
 
-## From 1.3 to 1.4
+// Prepare training and test data.
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+val Array(training, test) = data.randomSplit(Array(0.9, 0.1), seed = 12345)
 
-Several major API changes occurred, including:
-* `Param` and other APIs for specifying parameters
-* `uid` unique IDs for Pipeline components
-* Reorganization of certain classes
-Since the `spark.ml` API was an Alpha Component in Spark 1.3, we do not list all changes here.
+val lr = new LinearRegression()
 
-However, now that `spark.ml` is no longer an Alpha Component, we will provide details on any API changes for future releases.
+// We use a ParamGridBuilder to construct a grid of parameters to search over.
+// TrainValidationSplit will try all combinations of values and determine best model using
+// the evaluator.
+val paramGrid = new ParamGridBuilder()
+  .addGrid(lr.regParam, Array(0.1, 0.01))
+  .addGrid(lr.fitIntercept, Array(true, false))
+  .addGrid(lr.elasticNetParam, Array(0.0, 0.5, 1.0))
+  .build()
 
-## From 1.2 to 1.3
+// In this case the estimator is simply the linear regression.
+// A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+val trainValidationSplit = new TrainValidationSplit()
+  .setEstimator(lr)
+  .setEvaluator(new RegressionEvaluator)
+  .setEstimatorParamMaps(paramGrid)
 
-The main API changes are from Spark SQL.  We list the most important changes here:
+// 80% of the data will be used for training and the remaining 20% for validation.
+trainValidationSplit.setTrainRatio(0.8)
 
-* The old [SchemaRDD](http://spark.apache.org/docs/1.2.1/api/scala/index.html#org.apache.spark.sql.SchemaRDD) has been replaced with [DataFrame](api/scala/index.html#org.apache.spark.sql.DataFrame) with a somewhat modified API.  All algorithms in Spark ML which used to use SchemaRDD now use DataFrame.
-* In Spark 1.2, we used implicit conversions from `RDD`s of `LabeledPoint` into `SchemaRDD`s by calling `import sqlContext._` where `sqlContext` was an instance of `SQLContext`.  These implicits have been moved, so we now call `import sqlContext.implicits._`.
-* Java APIs for SQL have also changed accordingly.  Please see the examples above and the [Spark SQL Programming Guide](sql-programming-guide.html) for details.
+// Run train validation split, and choose the best set of parameters.
+val model = trainValidationSplit.fit(training)
 
-Other changes were in `LogisticRegression`:
+// Make predictions on test data. model is the model with combination of parameters
+// that performed best.
+model.transform(test)
+  .select("features", "label", "prediction")
+  .show()
 
-* The `scoreCol` output column (with default value "score") was renamed to be `probabilityCol` (with default value "probability").  The type was originally `Double` (for the probability of class 1.0), but it is now `Vector` (for the probability of each class, to support multiclass classification in the future).
-* In Spark 1.2, `LogisticRegressionModel` did not include an intercept.  In Spark 1.3, it includes an intercept; however, it will always be 0.0 since it uses the default settings for [spark.mllib.LogisticRegressionWithLBFGS](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS).  The option to use an intercept will be added in the future.
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+import org.apache.spark.ml.evaluation.RegressionEvaluator;
+import org.apache.spark.ml.param.ParamMap;
+import org.apache.spark.ml.regression.LinearRegression;
+import org.apache.spark.ml.tuning.*;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.rdd.RDD;
+import org.apache.spark.sql.DataFrame;
+
+DataFrame data = jsql.createDataFrame(
+  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt"),
+  LabeledPoint.class);
+
+// Prepare training and test data.
+DataFrame[] splits = data.randomSplit(new double [] {0.9, 0.1}, 12345);
+DataFrame training = splits[0];
+DataFrame test = splits[1];
+
+LinearRegression lr = new LinearRegression();
+
+// We use a ParamGridBuilder to construct a grid of parameters to search over.
+// TrainValidationSplit will try all combinations of values and determine best model using
+// the evaluator.
+ParamMap[] paramGrid = new ParamGridBuilder()
+  .addGrid(lr.regParam(), new double[] {0.1, 0.01})
+  .addGrid(lr.fitIntercept())
+  .addGrid(lr.elasticNetParam(), new double[] {0.0, 0.5, 1.0})
+  .build();
+
+// In this case the estimator is simply the linear regression.
+// A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+TrainValidationSplit trainValidationSplit = new TrainValidationSplit()
+  .setEstimator(lr)
+  .setEvaluator(new RegressionEvaluator())
+  .setEstimatorParamMaps(paramGrid);
+
+// 80% of the data will be used for training and the remaining 20% for validation.
+trainValidationSplit.setTrainRatio(0.8);
+
+// Run train validation split, and choose the best set of parameters.
+TrainValidationSplitModel model = trainValidationSplit.fit(training);
+
+// Make predictions on test data. model is the model with combination of parameters
+// that performed best.
+model.transform(test)
+  .select("features", "label", "prediction")
+  .show();
+
+{% endhighlight %}
+</div>
+
+</div>

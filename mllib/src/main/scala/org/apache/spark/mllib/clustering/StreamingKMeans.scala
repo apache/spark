@@ -66,9 +66,10 @@ import org.apache.spark.util.random.XORShiftRandom
  */
 @Since("1.2.0")
 @Experimental
-class StreamingKMeansModel(
-    override val clusterCenters: Array[Vector],
-    val clusterWeights: Array[Double]) extends KMeansModel(clusterCenters) with Logging {
+class StreamingKMeansModel @Since("1.2.0") (
+    @Since("1.2.0") override val clusterCenters: Array[Vector],
+    @Since("1.2.0") val clusterWeights: Array[Double])
+  extends KMeansModel(clusterCenters) with Logging {
 
   /**
    * Perform a k-means update on a batch of data.
@@ -168,10 +169,10 @@ class StreamingKMeansModel(
  */
 @Since("1.2.0")
 @Experimental
-class StreamingKMeans(
-    var k: Int,
-    var decayFactor: Double,
-    var timeUnit: String) extends Logging with Serializable {
+class StreamingKMeans @Since("1.2.0") (
+    @Since("1.2.0") var k: Int,
+    @Since("1.2.0") var decayFactor: Double,
+    @Since("1.2.0") var timeUnit: String) extends Logging with Serializable {
 
   @Since("1.2.0")
   def this() = this(2, 1.0, StreamingKMeans.BATCHES)

@@ -41,15 +41,15 @@ import org.apache.spark.mllib.linalg.Vector
  */
 @Since("1.0.0")
 @DeveloperApi
-class Node (
-    val id: Int,
-    var predict: Predict,
-    var impurity: Double,
-    var isLeaf: Boolean,
-    var split: Option[Split],
-    var leftNode: Option[Node],
-    var rightNode: Option[Node],
-    var stats: Option[InformationGainStats]) extends Serializable with Logging {
+class Node @Since("1.2.0") (
+    @Since("1.0.0") val id: Int,
+    @Since("1.0.0") var predict: Predict,
+    @Since("1.2.0") var impurity: Double,
+    @Since("1.0.0") var isLeaf: Boolean,
+    @Since("1.0.0") var split: Option[Split],
+    @Since("1.0.0") var leftNode: Option[Node],
+    @Since("1.0.0") var rightNode: Option[Node],
+    @Since("1.0.0") var stats: Option[InformationGainStats]) extends Serializable with Logging {
 
   override def toString: String = {
     s"id = $id, isLeaf = $isLeaf, predict = $predict, impurity = $impurity, " +

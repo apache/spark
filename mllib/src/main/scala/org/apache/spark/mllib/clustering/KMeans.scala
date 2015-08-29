@@ -37,6 +37,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * This is an iterative algorithm that will make multiple passes over the data, so any RDDs given
  * to it should be cached by the user.
  */
+@Since("0.8.0")
 class KMeans private (
     private var k: Int,
     private var maxIterations: Int,

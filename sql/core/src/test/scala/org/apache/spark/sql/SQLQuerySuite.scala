@@ -1622,9 +1622,40 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(sql("select 10.3000 / 3.0"), Row(BigDecimal("3.4333333")))
     checkAnswer(sql("select 10.30000 / 30.0"), Row(BigDecimal("0.343333333")))
     checkAnswer(sql("select 10.300000000000000000 / 3.00000000000000000"),
-      Row(BigDecimal("3.4333333333333333333333333333333333333", new MathContext(38))))
+      Row(BigDecimal("3.433333333333333333333333333", new MathContext(38))))
     checkAnswer(sql("select 10.3000000000000000000 / 3.00000000000000000"),
-      Row(null))
+      Row(BigDecimal("3.4333333333333333333333333333", new MathContext(38))))
+  }
+
+  test("SPARK-10215 Div of Decimal returns null") {
+    val d = Decimal(1.12321)
+    val df = Seq((d, 1)).toDF("a", "b")
+
+    checkAnswer(
+      df.selectExpr("b * a / b"),
+      Seq(Row(d.toBigDecimal)))
+    checkAnswer(
+      df.selectExpr("b * a / b / b"),
+      Seq(Row(d.toBigDecimal)))
+    checkAnswer(
+      df.selectExpr("b * a + b"),
+      Seq(Row(BigDecimal(2.12321))))
+    checkAnswer(
+      df.selectExpr("b * a - b"),
+      Seq(Row(BigDecimal(0.12321))))
+    checkAnswer(
+      df.selectExpr("b * a * b"),
+      Seq(Row(d.toBigDecimal)))
+  }
+
+  test("precision smaller than scale") {
+    checkAnswer(sql("select 10.00"), Row(BigDecimal("10.00")))
+    checkAnswer(sql("select 1.00"), Row(BigDecimal("1.00")))
+    checkAnswer(sql("select 0.10"), Row(BigDecimal("0.10")))
+    checkAnswer(sql("select 0.01"), Row(BigDecimal("0.01")))
+    checkAnswer(sql("select 0.001"), Row(BigDecimal("0.001")))
+    checkAnswer(sql("select -0.01"), Row(BigDecimal("-0.01")))
+    checkAnswer(sql("select -0.001"), Row(BigDecimal("-0.001")))
   }
 
   test("external sorting updates peak execution memory") {

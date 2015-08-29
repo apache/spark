@@ -34,6 +34,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.Logging
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -77,7 +78,8 @@ private[orc] class OrcOutputWriter(
     }.mkString(":"))
 
     val serde = new OrcSerde
-    serde.initialize(context.getConfiguration, table)
+    val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+    serde.initialize(configuration, table)
     serde
   }
 
@@ -109,9 +111,10 @@ private[orc] class OrcOutputWriter(
   private lazy val recordWriter: RecordWriter[NullWritable, Writable] = {
     recordWriterInstantiated = true
 
-    val conf = context.getConfiguration
+    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
     val uniqueWriteJobId = conf.get("spark.sql.sources.writeJobUUID")
-    val partition = context.getTaskAttemptID.getTaskID.getId
+    val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
+    val partition = taskAttemptId.getTaskID.getId
     val filename = f"part-r-$partition%05d-$uniqueWriteJobId.orc"
 
     new OrcOutputFormat().getRecordWriter(

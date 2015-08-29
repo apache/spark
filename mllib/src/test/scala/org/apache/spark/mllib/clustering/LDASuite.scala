@@ -68,6 +68,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     // Train a model
     val lda = new LDA()
     lda.setK(k)
+      .setOptimizer(new EMLDAOptimizer)
       .setDocConcentration(topicSmoothing)
       .setTopicConcentration(termSmoothing)
       .setMaxIterations(5)
