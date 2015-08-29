@@ -219,8 +219,8 @@ println("Model 1 was fit using parameters: " + model1.parent.extractParamMap)
 // We may alternatively specify parameters using a ParamMap,
 // which supports several methods for specifying parameters.
 val paramMap = ParamMap(lr.maxIter -> 20)
-paramMap.put(lr.maxIter, 30) // Specify 1 Param.  This overwrites the original maxIter.
-paramMap.put(lr.regParam -> 0.1, lr.threshold -> 0.55) // Specify multiple Params.
+  .put(lr.maxIter, 30) // Specify 1 Param.  This overwrites the original maxIter.
+  .put(lr.regParam -> 0.1, lr.threshold -> 0.55) // Specify multiple Params.
 
 // One can also combine ParamMaps.
 val paramMap2 = ParamMap(lr.probabilityCol -> "myProbability") // Change output column name
@@ -257,30 +257,23 @@ model2.transform(test)
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.Row;
-
-SparkConf conf = new SparkConf().setAppName("JavaSimpleParamsExample");
-JavaSparkContext jsc = new JavaSparkContext(conf);
-SQLContext jsql = new SQLContext(jsc);
 
 // Prepare training data.
 // We use LabeledPoint, which is a JavaBean.  Spark SQL can convert RDDs of JavaBeans
 // into DataFrames, where it uses the bean metadata to infer the schema.
-List<LabeledPoint> localTraining = Arrays.asList(
+DataFrame training = sqlContext.createDataFrame(Arrays.asList(
   new LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
   new LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
   new LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
-  new LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5)));
-DataFrame training = jsql.createDataFrame(jsc.parallelize(localTraining), LabeledPoint.class);
+  new LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5))
+), LabeledPoint.class);
 
 // Create a LogisticRegression instance.  This instance is an Estimator.
 LogisticRegression lr = new LogisticRegression();
@@ -300,14 +293,14 @@ LogisticRegressionModel model1 = lr.fit(training);
 System.out.println("Model 1 was fit using parameters: " + model1.parent().extractParamMap());
 
 // We may alternatively specify parameters using a ParamMap.
-ParamMap paramMap = new ParamMap();
-paramMap.put(lr.maxIter().w(20)); // Specify 1 Param.
-paramMap.put(lr.maxIter(), 30); // This overwrites the original maxIter.
-paramMap.put(lr.regParam().w(0.1), lr.threshold().w(0.55)); // Specify multiple Params.
+ParamMap paramMap = new ParamMap()
+  .put(lr.maxIter().w(20)) // Specify 1 Param.
+  .put(lr.maxIter(), 30) // This overwrites the original maxIter.
+  .put(lr.regParam().w(0.1), lr.threshold().w(0.55)); // Specify multiple Params.
 
 // One can also combine ParamMaps.
-ParamMap paramMap2 = new ParamMap();
-paramMap2.put(lr.probabilityCol().w("myProbability")); // Change output column name
+ParamMap paramMap2 = new ParamMap()
+  .put(lr.probabilityCol().w("myProbability")); // Change output column name
 ParamMap paramMapCombined = paramMap.$plus$plus(paramMap2);
 
 // Now learn a new model using the paramMapCombined parameters.
@@ -316,11 +309,11 @@ LogisticRegressionModel model2 = lr.fit(training, paramMapCombined);
 System.out.println("Model 2 was fit using parameters: " + model2.parent().extractParamMap());
 
 // Prepare test documents.
-List<LabeledPoint> localTest = Arrays.asList(
-    new LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
-    new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
-    new LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5)));
-DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), LabeledPoint.class);
+DataFrame test = sqlContext.createDataFrame(Arrays.asList(
+  new LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
+  new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
+  new LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5))
+), LabeledPoint.class);
 
 // Make predictions on test documents using the Transformer.transform() method.
 // LogisticRegression.transform will only use the 'features' column.
@@ -332,28 +325,23 @@ for (Row r: results.select("features", "label", "myProbability", "prediction").c
       + ", prediction=" + r.get(3));
 }
 
-jsc.stop();
 {% endhighlight %}
 </div>
 
 <div data-lang="python">
 {% highlight python %}
-from pyspark import SparkContext
-from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.linalg import Vectors
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.param import Param, Params
-from pyspark.sql import Row, SQLContext
-
-sc = SparkContext(appName="SimpleParamsExample")
-sqlContext = SQLContext(sc)
 
 # Prepare training data.
 # We use LabeledPoint.
-# Spark SQL can convert RDDs of LabeledPoints into DataFrames.
-training = sc.parallelize([LabeledPoint(1.0, [0.0, 1.1,  0.1]),
-                           LabeledPoint(0.0, [2.0, 1.0, -1.0]),
-                           LabeledPoint(0.0, [2.0, 1.3,  1.0]),
-                           LabeledPoint(1.0, [0.0, 1.2, -0.5])])
+# Spark SQL can convert a list of LabeledPoints into DataFrames.
+training = sqlContext.createDataFrame([
+    (1.0, Vectors.dense([0.0, 1.1, 0.1])),
+    (0.0, Vectors.dense([2.0, 1.0, -1.0])),
+    (0.0, Vectors.dense([2.0, 1.3, 1.0])),
+    (1.0, Vectors.dense([0.0, 1.2, -0.5]))], ["label", "features"])
 
 # Create a LogisticRegression instance. This instance is an Estimator.
 lr = LogisticRegression(maxIter=10, regParam=0.01)
@@ -361,7 +349,7 @@ lr = LogisticRegression(maxIter=10, regParam=0.01)
 print "LogisticRegression parameters:\n" + lr.explainParams() + "\n"
 
 # Learn a LogisticRegression model. This uses the parameters stored in lr.
-model1 = lr.fit(training.toDF())
+model1 = lr.fit(training)
 
 # Since model1 is a Model (i.e., a transformer produced by an Estimator),
 # we can view the parameters it used during fit().
@@ -382,25 +370,25 @@ paramMapCombined.update(paramMap2)
 
 # Now learn a new model using the paramMapCombined parameters.
 # paramMapCombined overrides all parameters set earlier via lr.set* methods.
-model2 = lr.fit(training.toDF(), paramMapCombined)
+model2 = lr.fit(training, paramMapCombined)
 print "Model 2 was fit using parameters: "
 print model2.extractParamMap()
 
 # Prepare test data
-test = sc.parallelize([LabeledPoint(1.0, [-1.0, 1.5,  1.3]),
-                       LabeledPoint(0.0, [ 3.0, 2.0, -0.1]),
-                       LabeledPoint(1.0, [ 0.0, 2.2, -1.5])])
+test = sqlContext.createDataFrame([
+    (1.0, Vectors.dense([-1.0, 1.5, 1.3])),
+    (0.0, Vectors.dense([3.0, 2.0, -0.1])),
+    (1.0, Vectors.dense([0.0, 2.2, -1.5]))], ["label", "features"])
 
 # Make predictions on test data using the Transformer.transform() method.
 # LogisticRegression.transform will only use the 'features' column.
 # Note that model2.transform() outputs a "myProbability" column instead of the usual
 # 'probability' column since we renamed the lr.probabilityCol parameter previously.
-prediction = model2.transform(test.toDF())
+prediction = model2.transform(test)
 selected = prediction.select("features", "label", "myProbability", "prediction")
 for row in selected.collect():
     print row
 
-sc.stop()
 {% endhighlight %}
 </div>
 
@@ -469,8 +457,6 @@ model.transform(test.toDF)
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineModel;
 import org.apache.spark.ml.PipelineStage;
@@ -479,7 +465,6 @@ import org.apache.spark.ml.feature.HashingTF;
 import org.apache.spark.ml.feature.Tokenizer;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
 
 // Labeled and unlabeled instance types.
 // Spark SQL can infer schema from Java Beans.
@@ -511,18 +496,13 @@ public class LabeledDocument extends Document implements Serializable {
   public void setLabel(double label) { this.label = label; }
 }
 
-// Set up contexts.
-SparkConf conf = new SparkConf().setAppName("JavaSimpleTextClassificationPipeline");
-JavaSparkContext jsc = new JavaSparkContext(conf);
-SQLContext jsql = new SQLContext(jsc);
-
 // Prepare training documents, which are labeled.
-List<LabeledDocument> localTraining = Arrays.asList(
+DataFrame training = sqlContext.createDataFrame(Arrays.asList(
   new LabeledDocument(0L, "a b c d e spark", 1.0),
   new LabeledDocument(1L, "b d", 0.0),
   new LabeledDocument(2L, "spark f g h", 1.0),
-  new LabeledDocument(3L, "hadoop mapreduce", 0.0));
-DataFrame training = jsql.createDataFrame(jsc.parallelize(localTraining), LabeledDocument.class);
+  new LabeledDocument(3L, "hadoop mapreduce", 0.0)
+), LabeledDocument.class);
 
 // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
 Tokenizer tokenizer = new Tokenizer()
@@ -542,12 +522,12 @@ Pipeline pipeline = new Pipeline()
 PipelineModel model = pipeline.fit(training);
 
 // Prepare test documents, which are unlabeled.
-List<Document> localTest = Arrays.asList(
+DataFrame test = sqlContext.createDataFrame(Arrays.asList(
   new Document(4L, "spark i j k"),
   new Document(5L, "l m n"),
   new Document(6L, "mapreduce spark"),
-  new Document(7L, "apache hadoop"));
-DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
+  new Document(7L, "apache hadoop")
+), Document.class);
 
 // Make predictions on test documents.
 DataFrame predictions = model.transform(test);
@@ -556,28 +536,23 @@ for (Row r: predictions.select("id", "text", "probability", "prediction").collec
       + ", prediction=" + r.get(3));
 }
 
-jsc.stop();
 {% endhighlight %}
 </div>
 
 <div data-lang="python">
 {% highlight python %}
-from pyspark import SparkContext
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.feature import HashingTF, Tokenizer
-from pyspark.sql import Row, SQLContext
-
-sc = SparkContext(appName="SimpleTextClassificationPipeline")
-sqlContext = SQLContext(sc)
+from pyspark.sql import Row
 
 # Prepare training documents, which are labeled.
 LabeledDocument = Row("id", "text", "label")
-training = sc.parallelize([(0L, "a b c d e spark", 1.0),
-                           (1L, "b d", 0.0),
-                           (2L, "spark f g h", 1.0),
-                           (3L, "hadoop mapreduce", 0.0)]) \
-    .map(lambda x: LabeledDocument(*x)).toDF()
+training = sqlContext.createDataFrame([
+    (0L, "a b c d e spark", 1.0),
+    (1L, "b d", 0.0),
+    (2L, "spark f g h", 1.0),
+    (3L, "hadoop mapreduce", 0.0)], ["id", "text", "label"])
 
 # Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
 tokenizer = Tokenizer(inputCol="text", outputCol="words")
@@ -589,12 +564,11 @@ pipeline = Pipeline(stages=[tokenizer, hashingTF, lr])
 model = pipeline.fit(training)
 
 # Prepare test documents, which are unlabeled.
-Document = Row("id", "text")
-test = sc.parallelize([(4L, "spark i j k"),
-                       (5L, "l m n"),
-                       (6L, "mapreduce spark"),
-                       (7L, "apache hadoop")]) \
-    .map(lambda x: Document(*x)).toDF()
+test = sqlContext.createDataFrame([
+    (4L, "spark i j k"),
+    (5L, "l m n"),
+    (6L, "mapreduce spark"),
+    (7L, "apache hadoop")], ["id", "text"])
 
 # Make predictions on test documents and print columns of interest.
 prediction = model.transform(test)
@@ -602,7 +576,6 @@ selected = prediction.select("id", "text", "prediction")
 for row in selected.collect():
     print(row)
 
-sc.stop()
 {% endhighlight %}
 </div>
 
@@ -721,8 +694,6 @@ cvModel.transform(test)
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineStage;
 import org.apache.spark.ml.classification.LogisticRegression;
@@ -735,7 +706,6 @@ import org.apache.spark.ml.tuning.CrossValidatorModel;
 import org.apache.spark.ml.tuning.ParamGridBuilder;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
 
 // Labeled and unlabeled instance types.
 // Spark SQL can infer schema from Java Beans.
@@ -767,12 +737,9 @@ public class LabeledDocument extends Document implements Serializable {
   public void setLabel(double label) { this.label = label; }
 }
 
-SparkConf conf = new SparkConf().setAppName("JavaCrossValidatorExample");
-JavaSparkContext jsc = new JavaSparkContext(conf);
-SQLContext jsql = new SQLContext(jsc);
 
 // Prepare training documents, which are labeled.
-List<LabeledDocument> localTraining = Arrays.asList(
+DataFrame training = sqlContext.createDataFrame(Arrays.asList(
   new LabeledDocument(0L, "a b c d e spark", 1.0),
   new LabeledDocument(1L, "b d", 0.0),
   new LabeledDocument(2L, "spark f g h", 1.0),
@@ -784,8 +751,8 @@ List<LabeledDocument> localTraining = Arrays.asList(
   new LabeledDocument(8L, "e spark program", 1.0),
   new LabeledDocument(9L, "a e c l", 0.0),
   new LabeledDocument(10L, "spark compile", 1.0),
-  new LabeledDocument(11L, "hadoop software", 0.0));
-DataFrame training = jsql.createDataFrame(jsc.parallelize(localTraining), LabeledDocument.class);
+  new LabeledDocument(11L, "hadoop software", 0.0)
+), LabeledDocument.class);
 
 // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
 Tokenizer tokenizer = new Tokenizer()
@@ -801,15 +768,6 @@ LogisticRegression lr = new LogisticRegression()
 Pipeline pipeline = new Pipeline()
   .setStages(new PipelineStage[] {tokenizer, hashingTF, lr});
 
-// We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
-// This will allow us to jointly choose parameters for all Pipeline stages.
-// A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
-// Note that the evaluator here is a BinaryClassificationEvaluator and its default metric
-// is areaUnderROC.
-CrossValidator crossval = new CrossValidator()
-    .setEstimator(pipeline)
-    .setEvaluator(new BinaryClassificationEvaluator());
-
 // We use a ParamGridBuilder to construct a grid of parameters to search over.
 // With 3 values for hashingTF.numFeatures and 2 values for lr.regParam,
 // this grid will have 3 x 2 = 6 parameter settings for CrossValidator to choose from.
@@ -817,19 +775,28 @@ ParamMap[] paramGrid = new ParamGridBuilder()
     .addGrid(hashingTF.numFeatures(), new int[]{10, 100, 1000})
     .addGrid(lr.regParam(), new double[]{0.1, 0.01})
     .build();
-crossval.setEstimatorParamMaps(paramGrid);
-crossval.setNumFolds(2); // Use 3+ in practice
+
+// We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
+// This will allow us to jointly choose parameters for all Pipeline stages.
+// A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+// Note that the evaluator here is a BinaryClassificationEvaluator and its default metric
+// is areaUnderROC.
+CrossValidator cv = new CrossValidator()
+  .setEstimator(pipeline)
+  .setEvaluator(new BinaryClassificationEvaluator())
+  .setEstimatorParamMaps(paramGrid)
+  .setNumFolds(2); // Use 3+ in practice
 
 // Run cross-validation, and choose the best set of parameters.
-CrossValidatorModel cvModel = crossval.fit(training);
+CrossValidatorModel cvModel = cv.fit(training);
 
-// Prepare test documents, which are unlabeled.
-List<Document> localTest = Arrays.asList(
+// Prepare test documents, which are unlabeled.L
+DataFrame test = sqlContext.createDataFrame(Arrays.asList(
   new Document(4L, "spark i j k"),
   new Document(5L, "l m n"),
   new Document(6L, "mapreduce spark"),
-  new Document(7L, "apache hadoop"));
-DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
+  new Document(7L, "apache hadoop")
+), Document.class);
 
 // Make predictions on test documents. cvModel uses the best model found (lrModel).
 DataFrame predictions = cvModel.transform(test);
@@ -889,9 +856,8 @@ val trainValidationSplit = new TrainValidationSplit()
   .setEstimator(lr)
   .setEvaluator(new RegressionEvaluator)
   .setEstimatorParamMaps(paramGrid)
-
-// 80% of the data will be used for training and the remaining 20% for validation.
-trainValidationSplit.setTrainRatio(0.8)
+  // 80% of the data will be used for training and the remaining 20% for validation.
+  .setTrainRatio(0.8)
 
 // Run train validation split, and choose the best set of parameters.
 val model = trainValidationSplit.fit(training)
@@ -916,12 +882,12 @@ import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 
-DataFrame data = jsql.createDataFrame(
+DataFrame data = sqlContext.createDataFrame(
   MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt"),
   LabeledPoint.class);
 
 // Prepare training and test data.
-DataFrame[] splits = data.randomSplit(new double [] {0.9, 0.1}, 12345);
+DataFrame[] splits = data.randomSplit(new double[] {0.9, 0.1}, 12345);
 DataFrame training = splits[0];
 DataFrame test = splits[1];
 
@@ -941,10 +907,9 @@ ParamMap[] paramGrid = new ParamGridBuilder()
 TrainValidationSplit trainValidationSplit = new TrainValidationSplit()
   .setEstimator(lr)
   .setEvaluator(new RegressionEvaluator())
-  .setEstimatorParamMaps(paramGrid);
-
-// 80% of the data will be used for training and the remaining 20% for validation.
-trainValidationSplit.setTrainRatio(0.8);
+  .setEstimatorParamMaps(paramGrid)
+  // 80% of the data will be used for training and the remaining 20% for validation.
+  .setTrainRatio(0.8);
 
 // Run train validation split, and choose the best set of parameters.
 TrainValidationSplitModel model = trainValidationSplit.fit(training);
