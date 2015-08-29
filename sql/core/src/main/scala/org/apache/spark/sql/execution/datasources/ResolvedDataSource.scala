@@ -90,7 +90,11 @@ object ResolvedDataSource extends Logging {
     val relation = userSpecifiedSchema match {
       case Some(schema: StructType) => clazz.newInstance() match {
         case dataSource: SchemaRelationProvider =>
-          dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
+          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+          if (caseInsensitiveOptions.contains("paths")) {
+            throw new AnalysisException(s"$className does not support paths option.")
+          }
+          dataSource.createRelation(sqlContext, caseInsensitiveOptions, schema)
         case dataSource: HadoopFsRelationProvider =>
           val maybePartitionsSchema = if (partitionColumns.isEmpty) {
             None
@@ -100,10 +104,10 @@ object ResolvedDataSource extends Logging {
 
           val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
-            require(
-              !(caseInsensitiveOptions.get("paths").isDefined &&
-                caseInsensitiveOptions.get("path").isDefined),
-              "Both path and paths options are provided.")
+            if (caseInsensitiveOptions.contains("paths") &&
+              caseInsensitiveOptions.contains("path")) {
+              throw new AnalysisException(s"Both path and paths options are present.")
+            }
             caseInsensitiveOptions.get("paths")
               .map(_.split(",").map(StringUtils.unEscapeString(_, '\\', ',')))
               .getOrElse(Array(caseInsensitiveOptions("path")))
@@ -132,14 +136,18 @@ object ResolvedDataSource extends Logging {
 
       case None => clazz.newInstance() match {
         case dataSource: RelationProvider =>
-          dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
+          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+          if (caseInsensitiveOptions.contains("paths")) {
+            throw new AnalysisException(s"$className does not support paths option.")
+          }
+          dataSource.createRelation(sqlContext, caseInsensitiveOptions)
         case dataSource: HadoopFsRelationProvider =>
           val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
-            require(
-              !(caseInsensitiveOptions.get("paths").isDefined &&
-                caseInsensitiveOptions.get("path").isDefined),
-              "Both path and paths options are provided.")
+            if (caseInsensitiveOptions.contains("paths") &&
+              caseInsensitiveOptions.contains("path")) {
+              throw new AnalysisException(s"Both path and paths options are present.")
+            }
             caseInsensitiveOptions.get("paths")
               .map(_.split(",").map(StringUtils.unEscapeString(_, '\\', ',')))
               .getOrElse(Array(caseInsensitiveOptions("path")))
