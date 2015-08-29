@@ -170,7 +170,7 @@ This file is divided into 3 sections:
 
   <!-- As of SPARK-10330 JobContext methods should not be called directly -->
   <check customId="jobcontext" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
-    <parameters><parameter name="regex">^getConfiguration|getTaskAttemptID$</parameter></parameters>
+    <parameters><parameter name="regex">^getConfiguration$|^getTaskAttemptID$</parameter></parameters>
     <customMessage>Instead of calling .getConfiguration() or .getTaskAttemptID() directly,
     use SparkHadoopUtil's getConfigurationFromJobContext() and getTaskAttemptIDFromTaskAttemptContext() methods.
     </customMessage>
