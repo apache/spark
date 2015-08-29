@@ -21,7 +21,7 @@ else:
     for _executor in _executors:
         globals()[_executor.__name__] = _executor
     if _EXECUTOR in globals():
-        DEFAULT_EXECUTOR = globals()[_EXECUTOR]
+        DEFAULT_EXECUTOR = globals()[_EXECUTOR]()
     else:
         raise AirflowException("Executor {0} not supported.".format(_EXECUTOR))
 
