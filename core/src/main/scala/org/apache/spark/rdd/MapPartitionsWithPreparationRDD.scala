@@ -24,6 +24,8 @@ import org.apache.spark.{Partition, Partitioner, TaskContext}
 /**
  * An RDD that applies a user provided function to every partition of the parent RDD, and
  * additionally allows the user to prepare each partition before computing the parent partition.
+ *
+ * TODO(davies): remove this once SPARK-10342 is fixed
  */
 private[spark] class MapPartitionsWithPreparationRDD[U: ClassTag, T: ClassTag, M: ClassTag](
     prev: RDD[T],
@@ -38,13 +40,24 @@ private[spark] class MapPartitionsWithPreparationRDD[U: ClassTag, T: ClassTag, M
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
-  lazy val preparedArgument: M = preparePartition()
+  private[this] var preparedArgument: Option[M] = None
+
+  def prepare(): Unit = {
+    // This could be called multiple times
+    if (preparedArgument.isEmpty) {
+      preparedArgument = Some(preparePartition())
+    }
+  }
 
   /**
    * Prepare a partition before computing it from its parent.
    */
   override def compute(partition: Partition, context: TaskContext): Iterator[U] = {
-    val prepared = preparedArgument
+    prepare()
+    // The same RDD could be called multiple times in one task, each call of compute() should
+    // have sep
+    val prepared = preparedArgument.get
+    preparedArgument = None
     val parentIterator = firstParent[T].iterator(partition, context)
     executePartition(context, partition.index, prepared, parentIterator)
   }

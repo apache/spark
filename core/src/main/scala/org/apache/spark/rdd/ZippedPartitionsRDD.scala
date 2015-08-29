@@ -76,7 +76,7 @@ private[spark] abstract class ZippedPartitionsBaseRDD[V: ClassTag](
 
   protected def tryPrepareChildren() {
     rdds.foreach {
-      case rdd: MapPartitionsWithPreparationRDD[_, _, _] => rdd.preparedArgument
+      case rdd: MapPartitionsWithPreparationRDD[_, _, _] => rdd.prepare()
       case _ =>
     }
   }
