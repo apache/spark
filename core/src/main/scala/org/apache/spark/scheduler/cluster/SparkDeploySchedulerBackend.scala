@@ -33,11 +33,13 @@ private[spark] class SparkDeploySchedulerBackend(
     masters: Array[String])
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
   with AppClientListener
-  with LauncherBackend
   with Logging {
 
   private var client: AppClient = null
   private var stopping = false
+  private var launcherBackend = new LauncherBackend() {
+    override protected def onStopRequest(): Unit = stop(SparkAppHandle.State.KILLED)
+  }
 
   @volatile var shutdownCallback: SparkDeploySchedulerBackend => Unit = _
   @volatile private var appId: String = _
@@ -49,7 +51,7 @@ private[spark] class SparkDeploySchedulerBackend(
 
   override def start() {
     super.start()
-    connectToLauncher()
+    launcherBackend.connect()
 
     // The endpoint for executors to talk to us
     val driverUrl = rpcEnv.uriOf(SparkEnv.driverActorSystemName,
@@ -90,9 +92,9 @@ private[spark] class SparkDeploySchedulerBackend(
       command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
     client = new AppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
-    updateLauncherState(SparkAppHandle.State.SUBMITTED)
+    launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
     waitForRegistration()
-    updateLauncherState(SparkAppHandle.State.RUNNING)
+    launcherBackend.setState(SparkAppHandle.State.RUNNING)
   }
 
   override def stop(): Unit = synchronized {
@@ -103,7 +105,7 @@ private[spark] class SparkDeploySchedulerBackend(
     logInfo("Connected to Spark cluster with app ID " + appId)
     this.appId = appId
     notifyContext()
-    updateLauncherAppId(appId)
+    launcherBackend.setAppId(appId)
   }
 
   override def disconnected() {
@@ -116,7 +118,7 @@ private[spark] class SparkDeploySchedulerBackend(
   override def dead(reason: String) {
     notifyContext()
     if (!stopping) {
-      updateLauncherState(SparkAppHandle.State.KILLED)
+      launcherBackend.setState(SparkAppHandle.State.KILLED)
       logError("Application has been killed. Reason: " + reason)
       try {
         scheduler.error(reason)
@@ -188,12 +190,12 @@ private[spark] class SparkDeploySchedulerBackend(
     registrationBarrier.release()
   }
 
-  override protected def launcherRequestedStop(): Unit = {
-    stop(SparkAppHandle.State.KILLED)
-  }
-
   private def stop(finalState: SparkAppHandle.State): Unit = synchronized {
     stopping = true
+
+    launcherBackend.setState(finalState)
+    launcherBackend.close()
+
     super.stop()
     client.stop()
 
@@ -201,9 +203,6 @@ private[spark] class SparkDeploySchedulerBackend(
     if (callback != null) {
       callback(this)
     }
-
-    updateLauncherState(finalState)
-    closeLauncherConnection()
   }
 
 }

@@ -24,16 +24,19 @@ import org.apache.spark.launcher.LauncherProtocol._
 import org.apache.spark.util.ThreadUtils
 
 /**
- * A trait that can be mixed-in to provide support for talking to a launcher server.
+ * A class that can be used to talk to a launcher server. Users should extend this class to
+ * provide implementation for the abstract methods.
  *
- * See `LauncherBackend` for an explanation of how launcher communication works.
+ * See `LauncherServer` for an explanation of how launcher communication works.
  */
-private[spark] trait LauncherBackend {
+private[spark] abstract class LauncherBackend {
 
   private var clientThread: Thread = _
   private var connection: BackendConnection = _
+  private var lastState: SparkAppHandle.State = _
+  @volatile private var _isConnected = false
 
-  def connectToLauncher(): Unit = {
+  def connect(): Unit = {
     val port = sys.env.get(LauncherProtocol.ENV_LAUNCHER_PORT).map(_.toInt)
     val secret = sys.env.get(LauncherProtocol.ENV_LAUNCHER_SECRET)
     if (port != None && secret != None) {
@@ -42,10 +45,11 @@ private[spark] trait LauncherBackend {
       connection.send(new Hello(secret.get, SPARK_VERSION))
       clientThread = LauncherBackend.threadFactory.newThread(connection)
       clientThread.start()
+      _isConnected = true
     }
   }
 
-  def closeLauncherConnection(): Unit = {
+  def close(): Unit = {
     if (connection != null) {
       try {
         connection.close()
@@ -57,32 +61,51 @@ private[spark] trait LauncherBackend {
     }
   }
 
-  def updateLauncherAppId(appId: String): Unit = {
+  def setAppId(appId: String): Unit = {
     if (connection != null) {
       connection.send(new SetAppId(appId))
     }
   }
 
-  def updateLauncherState(state: SparkAppHandle.State): Unit = {
-    if (connection != null) {
+  def setState(state: SparkAppHandle.State): Unit = {
+    if (connection != null && lastState != state) {
       connection.send(new SetState(state))
+      lastState = state
     }
   }
+
+  /** Return whether the launcher handle is still connected to this backend. */
+  def isConnected(): Boolean = _isConnected
 
   /**
    * Implementations should provide this method, which should try to stop the application
    * as gracefully as possible.
    */
-  protected def launcherRequestedStop(): Unit
+  protected def onStopRequest(): Unit
+
+  /**
+   * Callback for when the launcher handle disconnects from this backend.
+   */
+  protected def onDisconnected() : Unit = { }
+
 
   private class BackendConnection(s: Socket) extends LauncherConnection(s) {
 
     override protected def handle(m: Message): Unit = m match {
       case _: Stop =>
-        launcherRequestedStop()
+        onStopRequest()
 
       case _ =>
         throw new IllegalArgumentException(s"Unexpected message type: ${m.getClass().getName()}")
+    }
+
+    override def close(): Unit = {
+      try {
+        super.close()
+      } finally {
+        onDisconnected()
+        _isConnected = false
+      }
     }
 
   }

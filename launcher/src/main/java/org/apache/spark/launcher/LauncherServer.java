@@ -70,6 +70,12 @@ import static org.apache.spark.launcher.LauncherProtocol.*;
  * secret, and have a limited amount of time to connect back
  * ({@link SparkLauncher#CHILD_CONNECTION_TIMEOUT}), at which point the server will throw away
  * that client's state. A client is only allowed to connect back to the server once.
+ *
+ * The launcher server listens on the localhost only, so it doesn't need access controls (aside from
+ * the per-app secret) nor encryption. It thus requires that the launched app has a local process
+ * that communicates with the server. In cluster mode, this means that the client that launches the
+ * application must remain alive for the duration of the application (or until the app handle is
+ * disconnected).
  */
 class LauncherServer implements Closeable {
 

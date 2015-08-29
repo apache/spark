@@ -215,6 +215,7 @@ public class SparkLauncher {
    * Use this method with caution. It is possible to create an invalid Spark command by passing
    * unknown arguments to this method, since those are allowed for forward compatibility.
    *
+   * @since 1.5.0
    * @param arg Argument to add.
    * @return This launcher.
    */
@@ -236,6 +237,7 @@ public class SparkLauncher {
    * Use this method with caution. It is possible to create an invalid Spark command by passing
    * unknown arguments to this method, since those are allowed for forward compatibility.
    *
+   * @since 1.5.0
    * @param name Name of argument to add.
    * @param value Value of the argument.
    * @return This launcher.
@@ -353,7 +355,7 @@ public class SparkLauncher {
    * This method returns a handle that provides information about the running application and can
    * be used to do basic interaction with it.
    *
-   * @since 1.5.0
+   * @since 1.6.0
    * @param listeners Listeners to add to the handle before the app is launched.
    * @return A handle for the launched application.
    */

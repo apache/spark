@@ -98,12 +98,15 @@ private[spark] class LocalBackend(
     conf: SparkConf,
     scheduler: TaskSchedulerImpl,
     val totalCores: Int)
-  extends SchedulerBackend with ExecutorBackend with LauncherBackend with Logging {
+  extends SchedulerBackend with ExecutorBackend with Logging {
 
   private val appId = "local-" + System.currentTimeMillis
   private var localEndpoint: RpcEndpointRef = null
   private val userClassPath = getUserClasspath(conf)
   private val listenerBus = scheduler.sc.listenerBus
+  private val launcherBackend = new LauncherBackend() {
+    override def onStopRequest(): Unit = stop(SparkAppHandle.State.KILLED)
+  }
 
   /**
    * Returns a list of URLs representing the user classpath.
@@ -115,7 +118,7 @@ private[spark] class LocalBackend(
     userClassPathStr.map(_.split(File.pathSeparator)).toSeq.flatten.map(new File(_).toURI.toURL)
   }
 
-  connectToLauncher()
+  launcherBackend.connect()
 
   override def start() {
     val rpcEnv = SparkEnv.get.rpcEnv
@@ -125,8 +128,8 @@ private[spark] class LocalBackend(
       System.currentTimeMillis,
       executorEndpoint.localExecutorId,
       new ExecutorInfo(executorEndpoint.localExecutorHostname, totalCores, Map.empty)))
-    updateLauncherAppId(appId)
-    updateLauncherState(SparkAppHandle.State.RUNNING)
+    launcherBackend.setAppId(appId)
+    launcherBackend.setState(SparkAppHandle.State.RUNNING)
   }
 
   override def stop() {
@@ -150,14 +153,12 @@ private[spark] class LocalBackend(
 
   override def applicationId(): String = appId
 
-  override def launcherRequestedStop(): Unit = stop(SparkAppHandle.State.KILLED)
-
   private def stop(finalState: SparkAppHandle.State): Unit = {
     localEndpoint.ask(StopExecutor)
     try {
-      updateLauncherState(finalState)
+      launcherBackend.setState(finalState)
     } finally {
-      closeLauncherConnection()
+      launcherBackend.close()
     }
   }
 

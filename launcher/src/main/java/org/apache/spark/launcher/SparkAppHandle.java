@@ -22,7 +22,7 @@ package org.apache.spark.launcher;
  * <p/>
  * Provides runtime information about the underlying Spark application, and actions to control it.
  *
- * @since 1.5.0
+ * @since 1.6.0
  */
 public interface SparkAppHandle {
 
@@ -30,7 +30,7 @@ public interface SparkAppHandle {
    * Represents the application's state. A state can be "final", in which case it will not change
    * after it's reached, and means the application is not running anymore.
    *
-   * @since 1.5.0
+   * @since 1.6.0
    */
   public enum State {
     /** The application has not reported back yet. */
@@ -102,7 +102,7 @@ public interface SparkAppHandle {
    * Listener for updates to a handle's state. The callbacks do not receive information about
    * what exactly has changed, just that an update has occurred.
    *
-   * @since 1.5.0
+   * @since 1.6.0
    */
   public interface Listener {
 

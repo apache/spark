@@ -127,41 +127,7 @@ abstract class BaseYarnClusterSuite
       extraConf: Map[String, String] = Map(),
       extraEnv: Map[String, String] = Map()): Unit = {
     val master = if (clientMode) "yarn-client" else "yarn-cluster"
-    val props = new Properties()
-
-    props.setProperty("spark.yarn.jar", "local:" + fakeSparkJar.getAbsolutePath())
-
-    val testClasspath = new TestClasspathBuilder()
-      .buildClassPath(
-        logConfDir.getAbsolutePath() +
-        File.pathSeparator +
-        extraClassPath.mkString(File.pathSeparator))
-      .asScala
-      .mkString(File.pathSeparator)
-
-    props.setProperty("spark.driver.extraClassPath", testClasspath)
-    props.setProperty("spark.executor.extraClassPath", testClasspath)
-
-    // SPARK-4267: make sure java options are propagated correctly.
-    props.setProperty("spark.driver.extraJavaOptions", "-Dfoo=\"one two three\"")
-    props.setProperty("spark.executor.extraJavaOptions", "-Dfoo=\"one two three\"")
-
-    yarnCluster.getConfig.asScala.foreach { e =>
-      props.setProperty("spark.hadoop." + e.getKey(), e.getValue())
-    }
-
-    sys.props.foreach { case (k, v) =>
-      if (k.startsWith("spark.")) {
-        props.setProperty(k, v)
-      }
-    }
-
-    extraConf.foreach { case (k, v) => props.setProperty(k, v) }
-
-    val propsFile = createConfFile(childClasspath = childClasspath, extraConf = extraConf)
-    val writer = new OutputStreamWriter(new FileOutputStream(propsFile), UTF_8)
-    props.store(writer, "Spark properties.")
-    writer.close()
+    val propsFile = createConfFile(extraClassPath = extraClassPath, extraConf = extraConf)
 
     val extraJarArgs = if (extraJars.nonEmpty) Seq("--jars", extraJars.mkString(",")) else Nil
     val mainArgs =
@@ -205,12 +171,26 @@ abstract class BaseYarnClusterSuite
   }
 
   protected def createConfFile(
-      childClasspath: String,
+      extraClassPath: Seq[String] = Nil,
       extraConf: Map[String, String] = Map()): String = {
     val props = new Properties()
     props.put("spark.yarn.jar", "local:" + fakeSparkJar.getAbsolutePath())
-    props.put("spark.driver.extraClassPath", childClasspath)
-    props.put("spark.executor.extraClassPath", childClasspath)
+
+    val testClasspath = new TestClasspathBuilder()
+      .buildClassPath(
+        logConfDir.getAbsolutePath() +
+        File.pathSeparator +
+        extraClassPath.mkString(File.pathSeparator))
+      .asScala
+      .mkString(File.pathSeparator)
+
+    props.put("spark.driver.extraClassPath", testClasspath)
+    props.put("spark.executor.extraClassPath", testClasspath)
+
+    // SPARK-4267: make sure java options are propagated correctly.
+    props.setProperty("spark.driver.extraJavaOptions", "-Dfoo=\"one two three\"")
+    props.setProperty("spark.executor.extraJavaOptions", "-Dfoo=\"one two three\"")
+
     yarnCluster.getConfig().asScala.foreach { e =>
       props.setProperty("spark.hadoop." + e.getKey(), e.getValue())
     }
