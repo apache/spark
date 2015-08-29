@@ -186,26 +186,18 @@ This example covers the concepts of `Estimator`, `Transformer`, and `Param`.
 
 <div data-lang="scala">
 {% highlight scala %}
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.sql.{Row, SQLContext}
-
-val conf = new SparkConf().setAppName("SimpleParamsExample")
-val sc = new SparkContext(conf)
-val sqlContext = new SQLContext(sc)
-import sqlContext.implicits._
+import org.apache.spark.sql.Row
 
 // Prepare training data.
-// We use LabeledPoint, which is a case class.  Spark SQL can convert RDDs of case classes
-// into DataFrames, where it uses the case class metadata to infer the schema.
-val training = sc.parallelize(Seq(
-  LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
-  LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
-  LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
-  LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5))))
+val training = sqlContext.createDataFrame(Seq(
+  (1.0, Vectors.dense(0.0, 1.1, 0.1)),
+  (0.0, Vectors.dense(2.0, 1.0, -1.0)),
+  (0.0, Vectors.dense(2.0, 1.3, 1.0)),
+  (1.0, Vectors.dense(0.0, 1.2, -0.5))
+)).toDF("label", "features")
 
 // Create a LogisticRegression instance.  This instance is an Estimator.
 val lr = new LogisticRegression()
@@ -217,7 +209,7 @@ lr.setMaxIter(10)
   .setRegParam(0.01)
 
 // Learn a LogisticRegression model.  This uses the parameters stored in lr.
-val model1 = lr.fit(training.toDF)
+val model1 = lr.fit(training)
 // Since model1 is a Model (i.e., a Transformer produced by an Estimator),
 // we can view the parameters it used during fit().
 // This prints the parameter (name: value) pairs, where names are unique IDs for this
@@ -236,27 +228,27 @@ val paramMapCombined = paramMap ++ paramMap2
 
 // Now learn a new model using the paramMapCombined parameters.
 // paramMapCombined overrides all parameters set earlier via lr.set* methods.
-val model2 = lr.fit(training.toDF, paramMapCombined)
+val model2 = lr.fit(training, paramMapCombined)
 println("Model 2 was fit using parameters: " + model2.parent.extractParamMap)
 
 // Prepare test data.
-val test = sc.parallelize(Seq(
-  LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
-  LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
-  LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5))))
+val test = sqlContext.createDataFrame(Seq(
+  (1.0, Vectors.dense(-1.0, 1.5, 1.3)),
+  (0.0, Vectors.dense(3.0, 2.0, -0.1)),
+  (1.0, Vectors.dense(0.0, 2.2, -1.5))
+)).toDF("label", "features")
 
 // Make predictions on test data using the Transformer.transform() method.
 // LogisticRegression.transform will only use the 'features' column.
 // Note that model2.transform() outputs a 'myProbability' column instead of the usual
 // 'probability' column since we renamed the lr.probabilityCol parameter previously.
-model2.transform(test.toDF)
+model2.transform(test)
   .select("features", "label", "myProbability", "prediction")
   .collect()
   .foreach { case Row(features: Vector, label: Double, prob: Vector, prediction: Double) =>
     println(s"($features, $label) -> prob=$prob, prediction=$prediction")
   }
 
-sc.stop()
 {% endhighlight %}
 </div>
 
@@ -422,30 +414,19 @@ This example follows the simple text document `Pipeline` illustrated in the figu
 
 <div data-lang="scala">
 {% highlight scala %}
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.sql.{Row, SQLContext}
-
-// Labeled and unlabeled instance types.
-// Spark SQL can infer schema from case classes.
-case class LabeledDocument(id: Long, text: String, label: Double)
-case class Document(id: Long, text: String)
-
-// Set up contexts.  Import implicit conversions to DataFrame from sqlContext.
-val conf = new SparkConf().setAppName("SimpleTextClassificationPipeline")
-val sc = new SparkContext(conf)
-val sqlContext = new SQLContext(sc)
-import sqlContext.implicits._
+import org.apache.spark.sql.Row
 
 // Prepare training documents, which are labeled.
-val training = sc.parallelize(Seq(
-  LabeledDocument(0L, "a b c d e spark", 1.0),
-  LabeledDocument(1L, "b d", 0.0),
-  LabeledDocument(2L, "spark f g h", 1.0),
-  LabeledDocument(3L, "hadoop mapreduce", 0.0)))
+val training = sqlContext.createDataFrame(Seq(
+  (0L, "a b c d e spark", 1.0),
+  (1L, "b d", 0.0),
+  (2L, "spark f g h", 1.0),
+  (3L, "hadoop mapreduce", 0.0)
+)).toDF("id", "text", "label")
 
 // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
 val tokenizer = new Tokenizer()
@@ -462,14 +443,15 @@ val pipeline = new Pipeline()
   .setStages(Array(tokenizer, hashingTF, lr))
 
 // Fit the pipeline to training documents.
-val model = pipeline.fit(training.toDF)
+val model = pipeline.fit(training)
 
 // Prepare test documents, which are unlabeled.
-val test = sc.parallelize(Seq(
-  Document(4L, "spark i j k"),
-  Document(5L, "l m n"),
-  Document(6L, "mapreduce spark"),
-  Document(7L, "apache hadoop")))
+val test = sqlContext.createDataFrame(Seq(
+  (4L, "spark i j k"),
+  (5L, "l m n"),
+  (6L, "mapreduce spark"),
+  (7L, "apache hadoop")
+)).toDF("id", "text")
 
 // Make predictions on test documents.
 model.transform(test.toDF)
@@ -479,7 +461,6 @@ model.transform(test.toDF)
     println(s"($id, $text) --> prob=$prob, prediction=$prediction")
   }
 
-sc.stop()
 {% endhighlight %}
 </div>
 
@@ -638,8 +619,8 @@ Currently, `spark.ml` supports model selection using the [`CrossValidator`](api/
 
 The `Evaluator` can be a [`RegressionEvaluator`](api/scala/index.html#org.apache.spark.ml.RegressionEvaluator)
 for regression problems, a [`BinaryClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.BinaryClassificationEvaluator)
-for binary data or a [`MultiClassClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.MultiClassClassificationEvaluator)
-for multiclass problems. The default metric used to choose the best `ParamMap` can be overriden by the setMetric
+for binary data, or a [`MultiClassClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.MultiClassClassificationEvaluator)
+for multiclass problems. The default metric used to choose the best `ParamMap` can be overriden by the `setMetric`
 method in each of these evaluators.
 
 The `ParamMap` which produces the best evaluation metric (averaged over the `$k$` folds) is selected as the best model.
@@ -658,39 +639,29 @@ However, it is also a well-established method for choosing parameters which is m
 
 <div data-lang="scala">
 {% highlight scala %}
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
 import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.sql.{Row, SQLContext}
-
-// Labeled and unlabeled instance types.
-// Spark SQL can infer schema from case classes.
-case class LabeledDocument(id: Long, text: String, label: Double)
-case class Document(id: Long, text: String)
-
-val conf = new SparkConf().setAppName("CrossValidatorExample")
-val sc = new SparkContext(conf)
-val sqlContext = new SQLContext(sc)
-import sqlContext.implicits._
+import org.apache.spark.sql.Row
 
 // Prepare training documents, which are labeled.
-val training = sc.parallelize(Seq(
-  LabeledDocument(0L, "a b c d e spark", 1.0),
-  LabeledDocument(1L, "b d", 0.0),
-  LabeledDocument(2L, "spark f g h", 1.0),
-  LabeledDocument(3L, "hadoop mapreduce", 0.0),
-  LabeledDocument(4L, "b spark who", 1.0),
-  LabeledDocument(5L, "g d a y", 0.0),
-  LabeledDocument(6L, "spark fly", 1.0),
-  LabeledDocument(7L, "was mapreduce", 0.0),
-  LabeledDocument(8L, "e spark program", 1.0),
-  LabeledDocument(9L, "a e c l", 0.0),
-  LabeledDocument(10L, "spark compile", 1.0),
-  LabeledDocument(11L, "hadoop software", 0.0)))
+val training = sqlContext.createDataFrame(Seq(
+  (0L, "a b c d e spark", 1.0),
+  (1L, "b d", 0.0),
+  (2L, "spark f g h", 1.0),
+  (3L, "hadoop mapreduce", 0.0),
+  (4L, "b spark who", 1.0),
+  (5L, "g d a y", 0.0),
+  (6L, "spark fly", 1.0),
+  (7L, "was mapreduce", 0.0),
+  (8L, "e spark program", 1.0),
+  (9L, "a e c l", 0.0),
+  (10L, "spark compile", 1.0),
+  (11L, "hadoop software", 0.0)
+)).toDF("id", "text", "label")
 
 // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
 val tokenizer = new Tokenizer()
@@ -704,15 +675,6 @@ val lr = new LogisticRegression()
 val pipeline = new Pipeline()
   .setStages(Array(tokenizer, hashingTF, lr))
 
-// We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
-// This will allow us to jointly choose parameters for all Pipeline stages.
-// A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
-// Note that the evaluator here is a BinaryClassificationEvaluator and the default metric
-// used is areaUnderROC.
-val crossval = new CrossValidator()
-  .setEstimator(pipeline)
-  .setEvaluator(new BinaryClassificationEvaluator)
-
 // We use a ParamGridBuilder to construct a grid of parameters to search over.
 // With 3 values for hashingTF.numFeatures and 2 values for lr.regParam,
 // this grid will have 3 x 2 = 6 parameter settings for CrossValidator to choose from.
@@ -720,28 +682,37 @@ val paramGrid = new ParamGridBuilder()
   .addGrid(hashingTF.numFeatures, Array(10, 100, 1000))
   .addGrid(lr.regParam, Array(0.1, 0.01))
   .build()
-crossval.setEstimatorParamMaps(paramGrid)
-crossval.setNumFolds(2) // Use 3+ in practice
+
+// We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
+// This will allow us to jointly choose parameters for all Pipeline stages.
+// A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+// Note that the evaluator here is a BinaryClassificationEvaluator and its default metric
+// is areaUnderROC.
+val cv = new CrossValidator()
+  .setEstimator(pipeline)
+  .setEvaluator(new BinaryClassificationEvaluator)
+  .setEstimatorParamMaps(paramGrid)
+  .setNumFolds(2) // Use 3+ in practice
 
 // Run cross-validation, and choose the best set of parameters.
-val cvModel = crossval.fit(training.toDF)
+val cvModel = cv.fit(training)
 
 // Prepare test documents, which are unlabeled.
-val test = sc.parallelize(Seq(
-  Document(4L, "spark i j k"),
-  Document(5L, "l m n"),
-  Document(6L, "mapreduce spark"),
-  Document(7L, "apache hadoop")))
+val test = sqlContext.createDataFrame(Seq(
+  (4L, "spark i j k"),
+  (5L, "l m n"),
+  (6L, "mapreduce spark"),
+  (7L, "apache hadoop")
+)).toDF("id", "text")
 
 // Make predictions on test documents. cvModel uses the best model found (lrModel).
-cvModel.transform(test.toDF)
+cvModel.transform(test)
   .select("id", "text", "probability", "prediction")
   .collect()
   .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
-  println(s"($id, $text) --> prob=$prob, prediction=$prediction")
-}
+    println(s"($id, $text) --> prob=$prob, prediction=$prediction")
+  }
 
-sc.stop()
 {% endhighlight %}
 </div>
 
@@ -833,8 +804,8 @@ Pipeline pipeline = new Pipeline()
 // We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
 // This will allow us to jointly choose parameters for all Pipeline stages.
 // A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
-// Note that the evaluator here is a BinaryClassificationEvaluator and the default metric
-// used is areaUnderROC.
+// Note that the evaluator here is a BinaryClassificationEvaluator and its default metric
+// is areaUnderROC.
 CrossValidator crossval = new CrossValidator()
     .setEstimator(pipeline)
     .setEvaluator(new BinaryClassificationEvaluator());
@@ -867,7 +838,6 @@ for (Row r: predictions.select("id", "text", "probability", "prediction").collec
       + ", prediction=" + r.get(3));
 }
 
-jsc.stop();
 {% endhighlight %}
 </div>
 
@@ -909,7 +879,7 @@ val lr = new LinearRegression()
 // the evaluator.
 val paramGrid = new ParamGridBuilder()
   .addGrid(lr.regParam, Array(0.1, 0.01))
-  .addGrid(lr.fitIntercept, Array(true, false))
+  .addGrid(lr.fitIntercept)
   .addGrid(lr.elasticNetParam, Array(0.0, 0.5, 1.0))
   .build()
 
