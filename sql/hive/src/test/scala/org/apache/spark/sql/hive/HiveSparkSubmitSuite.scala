@@ -273,19 +273,22 @@ object SparkSQLConfTest extends Logging {
 }
 
 object SPARK_9757 extends QueryTest with Logging {
-  val sparkContext = new SparkContext(
-    new SparkConf()
-      .set("spark.sql.hive.metastore.version", "0.13.1")
-      .set("spark.sql.hive.metastore.jars", "maven"))
+  import org.apache.spark.sql.functions._
 
-  protected val sqlContext: SQLContext = new TestHiveContext(sparkContext)
+  var sqlContext: SQLContext = _
 
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
 
-    import sqlContext.implicits._
+    val sparkContext = new SparkContext(
+      new SparkConf()
+        .set("spark.sql.hive.metastore.version", "0.13.1")
+        .set("spark.sql.hive.metastore.jars", "maven"))
 
-    import org.apache.spark.sql.functions._
+    val hiveContext = new TestHiveContext(sparkContext)
+    sqlContext = hiveContext
+
+    import hiveContext.implicits._
 
     val dir = Utils.createTempDir()
     dir.delete()
