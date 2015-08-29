@@ -119,20 +119,24 @@ private[sql] abstract class SQLImplicits {
    * Pimp my library decorator for tungsten caching of DataFrames.
    * @since 1.5.1
    */
-  implicit class TungstenCache(df: DataFrame) {
+  implicit class TungstenCache(df: DataFrame) extends Serializable {
     /**
      * Packs the rows of [[df]] into contiguous blocks of memory.
      */
     def tungstenCache(): DataFrame = {
+      val schema = df.schema
+      // Should UnsafeProjection be serializable?
+      // TODO: store numFields and rowSizeInBytes inline in MemoryBlock
+      val rowSizeInBytes: Int = UnsafeProjection.create(schema).apply(
+          InternalRow.fromSeq(df.rdd.take(1)(0).toSeq)).getSizeInBytes
       val cachedRDD = df.rdd.mapPartitions { iter =>
         val buffers = new ArrayBuffer[MemoryBlock]()
+        val convertToUnsafe = UnsafeProjection.create(schema)
         val memoryAllocator = new UnsafeMemoryAllocator()
-        val convertToUnsafe = UnsafeProjection.create(df.schema)
         iter.foreach { row =>
           val unsafeRow = convertToUnsafe.apply(InternalRow.fromSeq(row.toSeq))
-
           // insert unsaferows into memory buffer
-          val block = memoryAllocator.allocate(unsafeRow.getSizeInBytes)
+          val block = memoryAllocator.allocate(rowSizeInBytes)
           unsafeRow.writeToMemory(block.getBaseObject, block.getBaseOffset)
           buffers.append(block)
         }
@@ -146,20 +150,34 @@ private[sql] abstract class SQLImplicits {
         override val schema = df.schema
         override val needConversion = false
 
-        // unpack the byteBuffer back into rows, cachedRDD captured in closure
-        override def buildScan(): RDD[Row] = cachedRDD.flatMap { buffers =>
+        /**
+         * Unpacks cached RDD ofByteBuffers into rows
+         */
+        override def buildScan(): RDD[Row] = {
+          // avoid closure capture
+          val numFields = this.schema.length
+          val rowSize = rowSizeInBytes
+          println(schema)
+          println(s"numFields: $numFields, rowSize: $rowSize")
 
-          // turn buffers back into an iterator of UnsafeRows
-          buffers.map { block =>
-            val unsafeRow = new UnsafeRow()
-            unsafeRow.pointTo(
-              block.getBaseObject,
-              block.getBaseOffset,
-              ???, // num fields
-              ??? // getSizeInBytes
-            )
-          }
-        }.asInstanceOf[RDD[Row]]
+          cachedRDD.flatMap { buffers =>
+            // turn buffers back into an iterator of UnsafeRows
+            val rowBuffer = buffers.map { block =>
+              val unsafeRow = new UnsafeRow()
+              unsafeRow.pointTo(
+                block.getBaseObject,
+                block.getBaseOffset,
+                numFields,
+                rowSize
+              )
+              println(s"baseObject: ${unsafeRow.getBaseObject}, offset: ${unsafeRow.getBaseOffset}")
+              println(s"numFields: ${unsafeRow.numFields()}, 0: ${unsafeRow.getInt(0)}, 1: ${unsafeRow.getUTF8String(1)}")
+              println("-" * 10)
+              unsafeRow
+            }
+            rowBuffer
+          }.asInstanceOf[RDD[Row]]
+        }
       }
       DataFrame(_sqlContext, LogicalRelation(baseRelation))
     }

@@ -582,7 +582,9 @@ public final class UnsafeRow extends MutableRow {
     StringBuilder build = new StringBuilder("[");
     for (int i = 0; i < sizeInBytes; i += 8) {
       build.append(java.lang.Long.toHexString(Platform.getLong(baseObject, baseOffset + i)));
-      build.append(',');
+      if (i <= sizeInBytes-1)  {
+        build.append(',');
+      }
     }
     build.append(']');
     return build.toString();
