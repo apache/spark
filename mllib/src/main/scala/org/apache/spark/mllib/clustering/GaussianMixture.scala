@@ -53,6 +53,7 @@ import org.apache.spark.util.Utils
  * @param maxIterations The maximum number of iterations to perform
  */
 @Experimental
+@Since("1.3.0")
 class GaussianMixture private (
     private var k: Int,
     private var convergenceTol: Double,

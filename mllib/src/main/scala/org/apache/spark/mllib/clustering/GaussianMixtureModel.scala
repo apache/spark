@@ -46,9 +46,9 @@ import org.apache.spark.sql.{SQLContext, Row}
  */
 @Since("1.3.0")
 @Experimental
-class GaussianMixtureModel(
-  val weights: Array[Double],
-  val gaussians: Array[MultivariateGaussian]) extends Serializable with Saveable {
+class GaussianMixtureModel @Since("1.3.0") (
+  @Since("1.3.0") val weights: Array[Double],
+  @Since("1.3.0") val gaussians: Array[MultivariateGaussian]) extends Serializable with Saveable {
 
   require(weights.length == gaussians.length, "Length of weight and Gaussian arrays must match")
 
@@ -178,7 +178,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
           (weight, new MultivariateGaussian(mu, sigma))
       }.unzip
 
-      return new GaussianMixtureModel(weights.toArray, gaussians.toArray)
+      new GaussianMixtureModel(weights.toArray, gaussians.toArray)
     }
   }
 

@@ -32,7 +32,8 @@ import org.apache.spark.sql.DataFrame
  */
 @Since("1.2.0")
 @Experimental
-class RegressionMetrics(predictionAndObservations: RDD[(Double, Double)]) extends Logging {
+class RegressionMetrics @Since("1.2.0") (
+    predictionAndObservations: RDD[(Double, Double)]) extends Logging {
 
   /**
    * An auxiliary constructor taking a DataFrame.

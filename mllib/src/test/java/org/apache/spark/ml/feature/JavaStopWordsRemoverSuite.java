@@ -20,7 +20,6 @@ package org.apache.spark.ml.feature;
 import java.util.Arrays;
 
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -28,15 +27,22 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 
-public class JavaTokenizerSuite {
+
+public class JavaStopWordsRemoverSuite {
+
   private transient JavaSparkContext jsc;
   private transient SQLContext jsql;
 
   @Before
   public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaTokenizerSuite");
+    jsc = new JavaSparkContext("local", "JavaStopWordsRemoverSuite");
     jsql = new SQLContext(jsc);
   }
 
@@ -47,27 +53,20 @@ public class JavaTokenizerSuite {
   }
 
   @Test
-  public void regexTokenizer() {
-    RegexTokenizer myRegExTokenizer = new RegexTokenizer()
-      .setInputCol("rawText")
-      .setOutputCol("tokens")
-      .setPattern("\\s")
-      .setGaps(true)
-      .setMinTokenLength(3);
+  public void javaCompatibilityTest() {
+    StopWordsRemover remover = new StopWordsRemover()
+      .setInputCol("raw")
+      .setOutputCol("filtered");
 
-
-    JavaRDD<TokenizerTestData> rdd = jsc.parallelize(Arrays.asList(
-      new TokenizerTestData("Test of tok.", new String[] {"Test", "tok."}),
-      new TokenizerTestData("Te,st.  punct", new String[] {"Te,st.", "punct"})
+    JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(
+      RowFactory.create(Arrays.asList("I", "saw", "the", "red", "baloon")),
+      RowFactory.create(Arrays.asList("Mary", "had", "a", "little", "lamb"))
     ));
-    DataFrame dataset = jsql.createDataFrame(rdd, TokenizerTestData.class);
+    StructType schema = new StructType(new StructField[] {
+      new StructField("raw", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
+    });
+    DataFrame dataset = jsql.createDataFrame(rdd, schema);
 
-    Row[] pairs = myRegExTokenizer.transform(dataset)
-      .select("tokens", "wantedTokens")
-      .collect();
-
-    for (Row r : pairs) {
-      Assert.assertEquals(r.get(0), r.get(1));
-    }
+    remover.transform(dataset).collect();
   }
 }

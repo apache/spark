@@ -82,12 +82,15 @@ class AssociationRules private[fpm] (
     }.filter(_.confidence >= minConfidence)
   }
 
+  /** Java-friendly version of [[run]]. */
+  @Since("1.5.0")
   def run[Item](freqItemsets: JavaRDD[FreqItemset[Item]]): JavaRDD[Rule[Item]] = {
     val tag = fakeClassTag[Item]
     run(freqItemsets.rdd)(tag)
   }
 }
 
+@Since("1.5.0")
 object AssociationRules {
 
   /**
@@ -104,8 +107,8 @@ object AssociationRules {
   @Since("1.5.0")
   @Experimental
   class Rule[Item] private[fpm] (
-      val antecedent: Array[Item],
-      val consequent: Array[Item],
+      @Since("1.5.0") val antecedent: Array[Item],
+      @Since("1.5.0") val consequent: Array[Item],
       freqUnion: Double,
       freqAntecedent: Double) extends Serializable {
 

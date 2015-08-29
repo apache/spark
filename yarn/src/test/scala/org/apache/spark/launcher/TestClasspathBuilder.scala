@@ -15,31 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.model
+package org.apache.spark.launcher
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import java.util.{List => JList, Map => JMap}
 
 /**
- * Predicted value for a node
- * @param predict predicted value
- * @param prob probability of the label (classification only)
+ * Exposes AbstractCommandBuilder to the YARN tests, so that they can build classpaths the same
+ * way other cluster managers do.
  */
-@Since("1.2.0")
-@DeveloperApi
-class Predict @Since("1.2.0") (
-    @Since("1.2.0") val predict: Double,
-    @Since("1.2.0") val prob: Double = 0.0) extends Serializable {
+private[spark] class TestClasspathBuilder extends AbstractCommandBuilder {
 
-  override def toString: String = s"$predict (prob = $prob)"
+  childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME, sys.props("spark.test.home"))
 
-  override def equals(other: Any): Boolean = {
-    other match {
-      case p: Predict => predict == p.predict && prob == p.prob
-      case _ => false
-    }
-  }
+  override def buildClassPath(extraCp: String): JList[String] = super.buildClassPath(extraCp)
 
-  override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(predict: java.lang.Double, prob: java.lang.Double)
-  }
+  /** Not used by the YARN tests. */
+  override def buildCommand(env: JMap[String, String]): JList[String] =
+    throw new UnsupportedOperationException()
+
 }
