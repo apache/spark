@@ -1,7 +1,5 @@
 from __future__ import print_function
-from builtins import str
-from builtins import input
-from builtins import object
+from builtins import str, input, object
 from past.builtins import basestring
 from copy import copy
 from datetime import datetime, timedelta
@@ -18,6 +16,10 @@ import shutil
 import signal
 import smtplib
 from tempfile import mkdtemp
+
+from alembic.config import Config
+from alembic import command
+from alembic.migration import MigrationContext
 
 from contextlib import contextmanager
 
@@ -89,8 +91,7 @@ def pessimistic_connection_handling():
 
 def initdb():
     from airflow import models
-    logging.info("Creating all tables")
-    models.Base.metadata.create_all(settings.engine)
+    upgradedb()
 
     # Creating the local_mysql DB connection
     C = models.Connection
@@ -192,6 +193,17 @@ def initdb():
     models.DagBag(sync_to_db=True)
 
 
+def upgradedb():
+    logging.info("Creating tables")
+    package_dir = os.path.abspath(os.path.dirname(__file__))
+    directory = os.path.join(package_dir, 'migrations')
+    config = Config(os.path.join(package_dir, 'alembic.ini'))
+    config.set_main_option('script_location', directory)
+    config.set_main_option('sqlalchemy.url',
+                           conf.get('core', 'SQL_ALCHEMY_CONN'))
+    command.upgrade(config, 'head')
+
+
 def resetdb():
     '''
     Clear out the database
@@ -200,6 +212,9 @@ def resetdb():
 
     logging.info("Dropping tables that exist")
     models.Base.metadata.drop_all(settings.engine)
+    mc = MigrationContext.configure(settings.engine)
+    if mc._version.exists(settings.engine):
+        mc._version.drop(settings.engine)
     initdb()
 
 
@@ -207,8 +222,8 @@ def validate_key(k, max_length=250):
     if not isinstance(k, basestring):
         raise TypeError("The key has to be a string")
     elif len(k) > max_length:
-        raise AirflowException("The key has to be less than {0} characters".format(
-            max_length))
+        raise AirflowException(
+            "The key has to be less than {0} characters".format(max_length))
     elif not re.match(r'^[A-Za-z0-9_\-\.]+$', k):
         raise AirflowException(
             "The key ({k}) has to be made of alphanumeric characters, dashes, "
@@ -467,6 +482,24 @@ class timeout(object):
 
     def __exit__(self, type, value, traceback):
         signal.alarm(0)
+
+
+def is_container(obj):
+    """
+    Test if an object is a container (iterable) but not a string
+    """
+    return hasattr(obj, '__iter__') and not isinstance(obj, basestring)
+
+
+def as_tuple(obj):
+    """
+    If obj is a container, returns obj as a tuple.
+    Otherwise, returns a tuple containing obj.
+    """
+    if is_container(obj):
+        return tuple(obj)
+    else:
+        return tuple([obj])
 
 
 def round_time(dt, delta):

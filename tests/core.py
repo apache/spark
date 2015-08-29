@@ -8,21 +8,29 @@ from airflow import jobs, models, DAG, executors, utils, operators
 from airflow.www.app import app
 from airflow import utils
 
-NUM_EXAMPLE_DAGS = 5
+NUM_EXAMPLE_DAGS = 6
 DEV_NULL = '/dev/null'
 LOCAL_EXECUTOR = executors.LocalExecutor()
-DEFAULT_DATE = datetime(2015, 8, 1)
+DEFAULT_DATE = datetime(2015, 1, 1)
 TEST_DAG_ID = 'unit_tests'
 configuration.test_mode()
+
+try:
+    import cPickle as pickle
+except ImportError:
+    # Python 3
+    import pickle
+
+#utils.initdb()
 
 
 class TransferTests(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        utils.initdb()
         args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
         dag = DAG(TEST_DAG_ID, default_args=args)
+        dag.clear(start_date=DEFAULT_DATE, end_date=datetime.now())
         self.dag = dag
 
     def test_mysql_to_hive(self):
@@ -54,7 +62,6 @@ class HivePrestoTest(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        utils.initdb()
         args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
         dag = DAG(TEST_DAG_ID, default_args=args)
         self.dag = dag
@@ -151,18 +158,78 @@ class CoreTest(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        utils.initdb()
         self.dagbag = models.DagBag(
             dag_folder=DEV_NULL, include_examples=True)
-        utils.initdb()
-        args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
-        dag = DAG(TEST_DAG_ID, default_args=args)
+        self.args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
+        dag = DAG(TEST_DAG_ID, default_args=self.args)
         self.dag = dag
         self.dag_bash = self.dagbag.dags['example_bash_operator']
         self.runme_0 = self.dag_bash.get_task('runme_0')
 
     def test_confirm_unittest_mod(self):
         assert configuration.conf.get('core', 'unit_test_mode')
+
+    def test_rich_comparison_ops(self):
+
+        class DAGsubclass(DAG):
+            pass
+
+        dag_eq = DAG(TEST_DAG_ID, default_args=self.args)
+
+        dag_diff_load_time = DAG(TEST_DAG_ID, default_args=self.args)
+        dag_diff_name = DAG(TEST_DAG_ID + '_neq', default_args=self.args)
+
+        dag_subclass = DAGsubclass(TEST_DAG_ID, default_args=self.args)
+        dag_subclass_diff_name = DAGsubclass(
+            TEST_DAG_ID + '2', default_args=self.args)
+
+        for d in [dag_eq, dag_diff_name, dag_subclass, dag_subclass_diff_name]:
+            d.last_loaded = self.dag.last_loaded
+
+        # test identity equality
+        assert self.dag == self.dag
+
+        # test dag (in)equality based on _comps
+        assert self.dag == dag_eq
+        assert self.dag != dag_diff_name
+        assert self.dag != dag_diff_load_time
+
+        # test dag inequality based on type even if _comps happen to match
+        assert self.dag != dag_subclass
+
+        # a dag should equal an unpickled version of itself
+        assert self.dag == pickle.loads(pickle.dumps(self.dag))
+
+        # dags are ordered based on dag_id no matter what the type is
+        assert self.dag < dag_diff_name
+        assert not self.dag < dag_diff_load_time
+        assert self.dag < dag_subclass_diff_name
+
+        # greater than should have been created automatically by functools
+        assert dag_diff_name > self.dag
+
+        # hashes are non-random and match equality
+        assert hash(self.dag) == hash(self.dag)
+        assert hash(self.dag) == hash(dag_eq)
+        assert hash(self.dag) == hash(pickle.loads(pickle.dumps(self.dag)))
+        assert hash(self.dag) != hash(dag_diff_name)
+        assert hash(self.dag) != hash(dag_subclass)
+
+    def test_cli(self):
+        from airflow.bin import cli
+        parser = cli.get_parser()
+        args = parser.parse_args(['list_dags'])
+        cli.list_dags(args)
+
+        for dag_id in self.dagbag.dags.keys():
+            args = parser.parse_args(['list_tasks', dag_id])
+            cli.list_tasks(args)
+
+        args = parser.parse_args(['list_tasks', 'example_bash_operator', '--tree'])
+        cli.list_tasks(args)
+
+        cli.initdb(parser.parse_args(['initdb']))
+        # cli.upgradedb(parser.parse_args(['upgradedb']))
 
     def test_time_sensor(self):
         t = operators.TimeSensor(
@@ -171,10 +238,25 @@ class CoreTest(unittest.TestCase):
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+    def test_clear_api(self):
+        task = self.dag_bash.tasks[0]
+        task.clear(
+            start_date=DEFAULT_DATE, end_date=DEFAULT_DATE,
+            upstream=True, downstream=True)
+        ti = models.TaskInstance(task=task, execution_date=DEFAULT_DATE)
+        ti.are_dependents_done()
+
     def test_bash_operator(self):
         t = operators.BashOperator(
             task_id='time_sensor_check',
             bash_command="echo success",
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+    def test_sqlite(self):
+        t = operators.SqliteOperator(
+            task_id='time_sqlite',
+            sql="CREATE TABLE IF NOT EXISTS unitest (dummy VARCHAR(20))",
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
@@ -188,7 +270,7 @@ class CoreTest(unittest.TestCase):
     def test_external_task_sensor(self):
         t = operators.ExternalTaskSensor(
             task_id='test_external_task_sensor_check',
-            external_dag_id='core_test',
+            external_dag_id=TEST_DAG_ID,
             external_task_id='time_sensor_check',
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
@@ -196,7 +278,7 @@ class CoreTest(unittest.TestCase):
     def test_external_task_sensor_delta(self):
         t = operators.ExternalTaskSensor(
             task_id='test_external_task_sensor_check_delta',
-            external_dag_id='core_test',
+            external_dag_id=TEST_DAG_ID,
             external_task_id='time_sensor_check',
             execution_delta=timedelta(0),
             allowed_states=['success'],
@@ -250,7 +332,6 @@ class WebUiTests(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        utils.initdb()
         app.config['TESTING'] = True
         self.app = app.test_client()
 
@@ -317,16 +398,31 @@ class WebUiTests(unittest.TestCase):
             'dag_id=example_bash_operator&future=true&past=false&'
             'upstream=true&downstream=false&'
             'execution_date=2015-01-01T00:00:00&'
-            'origin=http%3A%2F%2Fjn8.brain.musta.ch%3A8080%2Fadmin%2Fairflow'
-            '%2Ftree%3Fnum_runs%3D65%26dag_id%3Dexample_bash_operator')
+            'origin=/admin')
         assert "Wait a minute" in response.data
         response = self.app.get(
             '/admin/airflow/action?action=clear&task_id=run_this_last&'
             'dag_id=example_bash_operator&future=true&past=false&'
             'upstream=true&downstream=false&'
             'execution_date=2015-01-01T00:00:00&confirmed=true&'
-            'origin=http%3A%2F%2Fjn8.brain.musta.ch%3A8080%2Fadmin%2Fairflow'
-            '%2Ftree%3Fnum_runs%3D65%26dag_id%3Dexample_bash_operator')
+            'origin=/admin')
+        url = (
+            '/admin/airflow/action?action=success&task_id=runme_0&'
+            'dag_id=example_bash_operator&upstream=false&'
+            'downstream=false&execution_date=2015-08-12&'
+            'origin=/admin')
+        response = self.app.get(url)
+        assert "Wait a minute" in response.data
+        response = self.app.get(url + "&confirmed=true")
+        url = (
+            "/admin/airflow/action?action=run&task_id=runme_0&"
+            "dag_id=example_bash_operator&force=true&deps=true&"
+            "execution_date=2015-08-12T00:00:00&origin=/admin")
+        response = self.app.get(url)
+        response = self.app.get(
+            "/admin/airflow/refresh?dag_id=example_bash_operator")
+        response = self.app.get("/admin/airflow/refresh_all")
+        response = self.app.get("/admin/airflow/paused?dag_id=example_python_operator&is_paused=false")
 
     def test_charts(self):
         response = self.app.get(
@@ -345,7 +441,6 @@ if 'MySqlOperator' in dir(operators):
 
         def setUp(self):
             configuration.test_mode()
-            utils.initdb()
             args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
             dag = DAG(TEST_DAG_ID, default_args=args)
             self.dag = dag
@@ -360,13 +455,22 @@ if 'MySqlOperator' in dir(operators):
                 task_id='basic_mysql', sql=sql, dag=self.dag)
             t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+        def mysql_operator_test_multi(self):
+            sql = [
+                "TRUNCATE TABLE test_airflow",
+                "INSERT INTO test_airflow VALUES ('X')",
+            ]
+            t = operators.MySqlOperator(
+                task_id='basic_mysql', sql=sql, dag=self.dag)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+
 if 'PostgresOperator' in dir(operators):
     # Only testing if the operator is installed
     class PostgresTest(unittest.TestCase):
 
         def setUp(self):
             configuration.test_mode()
-            utils.initdb()
             args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
             dag = DAG(TEST_DAG_ID, default_args=args)
             self.dag = dag
@@ -396,7 +500,6 @@ class HttpOpSensorTest(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        utils.initdb()
         args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
         dag = DAG(TEST_DAG_ID, default_args=args)
         self.dag = dag

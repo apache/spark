@@ -5,6 +5,22 @@ from configparser import ConfigParser
 import errno
 import logging
 import os
+import sys
+import textwrap
+
+
+try:
+    from cryptography.fernet import Fernet
+except:
+    pass
+
+
+def generate_fernet_key():
+    try:
+        FERNET_KEY = Fernet.generate_key()
+    except NameError:
+        FERNET_KEY = "cryptography_not_found_storing_passwords_in_plain_text"
+    return FERNET_KEY
 
 
 class AirflowConfigException(Exception):
@@ -37,6 +53,7 @@ defaults = {
     },
     'celery': {
         'default_queue': 'default',
+        'flower_port': '5555'
     },
     'smtp': {
         'smtp_starttls': True,
@@ -77,6 +94,8 @@ load_examples = True
 # Where your Airflow plugins are stored
 plugins_folder = {AIRFLOW_HOME}/plugins
 
+# Secret key to save connection passwords in the db
+fernet_key = {FERNET_KEY}
 
 [webserver]
 # The base url of your website as airflow cannot guess what domain or
@@ -138,7 +157,7 @@ celery_result_backend = db+mysql://airflow:airflow@localhost:3306/airflow
 
 # Celery Flower is a sweet UI for Celery. Airflow has a shortcut to start
 # it `airflow flower`. This defines the port that Celery Flower runs on
-flower_port = 8383
+flower_port = 5555
 
 # Default queue that tasks get assigned to and that worker listen on.
 default_queue = default
@@ -209,15 +228,25 @@ class ConfigParserWithDefaults(ConfigParser):
         section = str(section).lower()
         key = str(key).lower()
         d = self.defaults
-        try:
+
+        # environment variables get precedence
+        # must have format AIRFLOW__{SESTION}__{KEY} (note double underscore)
+        env_var = 'AIRFLOW__{S}__{K}'.format(S=section.upper(), K=key.upper())
+        if env_var in os.environ:
+            return os.environ[env_var]
+
+        # ...then the config file
+        elif self.has_option(section, key):
             return ConfigParser.get(self, section, key)
-        except:
-            if section not in d or key not in d[section]:
-                raise AirflowConfigException(
-                    "section/key [{section}/{key}] not found "
-                    "in config".format(**locals()))
-            else:
-                return d[section][key]
+
+        # ...then the defaults
+        elif section in d and key in d[section]:
+            return d[section][key]
+
+        else:
+            raise AirflowConfigException(
+                "section/key [{section}/{key}] not found "
+                "in config".format(**locals()))
 
     def getboolean(self, section, key):
         val = str(self.get(section, key)).lower().strip()
@@ -269,6 +298,7 @@ if not os.path.isfile(AIRFLOW_CONFIG):
     when it is missing. The right way to change your configuration is to alter
     your configuration file, not this code.
     """
+    FERNET_KEY = generate_fernet_key()
     logging.info("Creating new config file in: " + AIRFLOW_CONFIG)
     f = open(AIRFLOW_CONFIG, 'w')
     f.write(DEFAULT_CONFIG.format(**locals()))
@@ -290,3 +320,21 @@ def test_mode():
 
 conf = ConfigParserWithDefaults(defaults)
 conf.read(AIRFLOW_CONFIG)
+if 'cryptography' in sys.modules and not conf.has_option('core', 'fernet_key'):
+    logging.warning(textwrap.dedent("""
+
+        Your system supports encrypted passwords for Airflow connections but is
+        currently storing them in plaintext! To turn on encryption, add a
+        "fernet_key" option to the "core" section of your airflow.cfg file,
+        like this:
+
+            [core]
+            fernet_key = <YOUR FERNET KEY>
+
+        Your airflow.cfg file is located at: {cfg}.
+        If you need to generate a fernet key, you can run this code:
+
+            from airflow.configuration import generate_fernet_key
+            generate_fernet_key()
+
+        """.format(cfg=AIRFLOW_CONFIG)))

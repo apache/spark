@@ -62,6 +62,7 @@ def backfill(args):
         mark_success=args.mark_success,
         include_adhoc=args.include_adhoc,
         local=args.local,
+        donot_pickle=args.donot_pickle,
         ignore_dependencies=args.ignore_dependencies)
 
 
@@ -323,6 +324,11 @@ def resetdb(args):
         print("Bail.")
 
 
+def upgradedb(args):
+    print("DB: " + conf.get('core', 'SQL_ALCHEMY_CONN'))
+    utils.upgradedb()
+
+
 def version(args):
     print(settings.HEADER + "  v" + airflow.__version__)
 
@@ -357,6 +363,13 @@ def get_parser():
     parser_backfill.add_argument(
         "-l", "--local",
         help="Run the task using the LocalExecutor", action="store_true")
+    parser_backfill.add_argument(
+        "-x", "--donot_pickle",
+        help=(
+            "Do not attempt to pickle the DAG object to send over "
+            "to the workers, just tell the workers to run their version "
+            "of the code."),
+        action="store_true")
     parser_backfill.add_argument(
         "-a", "--include_adhoc",
         help="Include dags with the adhoc parameter.", action="store_true")
@@ -502,6 +515,10 @@ def get_parser():
     parser_resetdb = subparsers.add_parser('resetdb', help=ht)
     parser_resetdb.set_defaults(func=resetdb)
 
+    ht = "Upgrade metadata database to latest version"
+    parser_upgradedb = subparsers.add_parser('upgradedb', help=ht)
+    parser_upgradedb.set_defaults(func=upgradedb)
+
     ht = "List the DAGs"
     parser_list_dags = subparsers.add_parser('list_dags', help=ht)
     parser_list_dags.add_argument(
@@ -536,7 +553,7 @@ def get_parser():
     parser_flower = subparsers.add_parser('flower', help=ht)
     parser_flower.add_argument(
         "-p", "--port", help="The port",
-        default='5555')
+        default=conf.get('celery', 'FLOWER_PORT'))
     parser_flower.add_argument(
         "-a", "--broker_api", help="Broker api")
     parser_flower.set_defaults(func=flower)

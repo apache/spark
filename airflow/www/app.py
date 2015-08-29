@@ -13,6 +13,7 @@ import os
 import socket
 import sys
 
+from flask._compat import PY2
 from flask import (
     Flask, url_for, Markup, Blueprint, redirect,
     flash, Response, render_template)
@@ -218,6 +219,7 @@ class DagModelView(wwwutils.SuperUserMixin, ModelView):
     form_widget_args = {
         'last_scheduler_run': {'disabled': True},
         'fileloc': {'disabled': True},
+        'is_paused': {'disabled': True},
         'last_pickled': {'disabled': True},
         'pickle_id': {'disabled': True},
         'last_loaded': {'disabled': True},
@@ -798,6 +800,7 @@ class Airflow(BaseView):
                     log += "Failed to fetch log file.".format(**locals())
             session.commit()
             session.close()
+        log = log.decode('utf-8') if PY2 else log
 
         title = "Log"
 
@@ -817,6 +820,12 @@ class Airflow(BaseView):
         dttm = dateutil.parser.parse(execution_date)
         form = DateTimeForm(data={'execution_date': dttm})
         dag = dagbag.get_dag(dag_id)
+        if not dag or task_id not in dag.task_ids:
+            flash(
+                "Task [{}.{}] doesn't seem to exist"
+                " at the moment".format(dag_id, task_id),
+                "error")
+            return redirect('/admin/')
         task = dag.get_task(task_id)
         task = copy.copy(task)
         task.resolve_template_files()
@@ -1095,7 +1104,7 @@ class Airflow(BaseView):
         dag = dagbag.get_dag(dag_id)
         if dag_id not in dagbag.dags:
             flash('DAG "{0}" seems to be missing.'.format(dag_id), "error")
-            return redirect('/admin/dagmodel/')
+            return redirect('/admin/')
 
         root = request.args.get('root')
         if root:
@@ -1258,6 +1267,25 @@ class Airflow(BaseView):
             demo_mode=conf.getboolean('webserver', 'demo_mode'),
             root=root,
         )
+
+    @expose('/paused')
+    @login_required
+    def paused(self):
+        DagModel = models.DagModel
+        dag_id = request.args.get('dag_id')
+        session = settings.Session()
+        orm_dag = session.query(
+            DagModel).filter(DagModel.dag_id == dag_id).first()
+        if request.args.get('is_paused') == 'false':
+            orm_dag.is_paused = True
+        else:
+            orm_dag.is_paused = False
+        session.merge(orm_dag)
+        session.commit()
+        session.close()
+
+        dagbag.get_dag(dag_id)
+        return "OK"
 
     @expose('/refresh')
     @login_required
@@ -1568,7 +1596,7 @@ class TaskInstanceModelView(ModelViewOnly):
     verbose_name = "task instance"
     column_filters = (
         'state', 'dag_id', 'task_id', 'execution_date', 'hostname',
-        'queue', 'pool')
+        'queue', 'pool', 'operator')
     named_filter_urls = True
     column_formatters = dict(
         log=log_link, task_id=task_instance_link,
@@ -1581,9 +1609,9 @@ class TaskInstanceModelView(ModelViewOnly):
     column_searchable_list = ('dag_id', 'task_id', 'state')
     column_default_sort = ('start_date', True)
     column_list = (
-        'state', 'dag_id', 'task_id', 'execution_date',
+        'state', 'dag_id', 'task_id', 'execution_date', 'operator',
         'start_date', 'end_date', 'duration', 'job_id', 'hostname',
-        'unixname', 'priority_weight', 'log')
+        'unixname', 'priority_weight', 'queued_dttm', 'log')
     can_delete = True
     page_size = 500
 mv = TaskInstanceModelView(
@@ -1599,11 +1627,25 @@ admin._menu = admin._menu[:-1]
 class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
     create_template = 'airflow/conn_create.html'
     edit_template = 'airflow/conn_edit.html'
+    list_template = 'airflow/conn_list.html'
+    form_columns = (
+        'conn_id',
+        'conn_type',
+        'host',
+        'schema',
+        'login',
+        'password',
+        'port',
+        'extra',
+    )
     verbose_name = "Connection"
     verbose_name_plural = "Connections"
     column_default_sort = ('conn_id', False)
-    column_list = ('conn_id', 'conn_type', 'host', 'port')
-    form_overrides = dict(password=VisiblePasswordField)
+    column_list = ('conn_id', 'conn_type', 'host', 'port', 'is_encrypted',)
+    form_overrides = dict(_password=VisiblePasswordField)
+    form_widget_args = {
+        'is_encrypted': {'disabled': True},
+    }
     # Used to customized the form, the forms elements get rendered
     # and results are stored in the extra field as json. All of these
     # need to be prefixed with extra__ and then the conn_type ___ as in
@@ -1640,6 +1682,21 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
                 key:formdata[key]
                 for key in self.form_extra_fields.keys() if key in formdata}
             model.extra = json.dumps(extra)
+
+    @classmethod
+    def is_secure(self):
+        """
+        Used to display a message in the Connection list view making it clear
+        that the passwords can't be encrypted.
+        """
+        is_secure = False
+        try:
+            import cryptography
+            conf.get('core', 'fernet_key')
+            is_secure = True
+        except:
+            pass
+        return is_secure
 
     def on_form_prefill(self, form, id):
         try:

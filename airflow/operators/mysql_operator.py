@@ -12,8 +12,9 @@ class MySqlOperator(BaseOperator):
     :param mysql_conn_id: reference to a specific mysql database
     :type mysql_conn_id: string
     :param sql: the sql code to be executed
-    :type sql: string or string pointing to a template file. File must have
-        a '.sql' extensions.
+    :type sql: Can receive a str representing a sql statement,
+        a list of str (sql statements), or reference to a template file.
+        Template reference are recognized by str ending in '.sql'
     """
 
     template_fields = ('sql',)
@@ -27,6 +28,6 @@ class MySqlOperator(BaseOperator):
         self.sql = sql
 
     def execute(self, context):
-        logging.info('Executing: ' + self.sql)
+        logging.info('Executing: ' + str(self.sql))
         hook = MySqlHook(mysql_conn_id=self.mysql_conn_id)
         hook.run(self.sql)

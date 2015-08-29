@@ -3,6 +3,9 @@
 Airflow is a platform to programmatically author, schedule and monitor 
 data pipelines.
 
+When workflows are defined as code, they becomes more maintainable, 
+versionable, testable, and collaborative.
+
 ![img] (http://i.imgur.com/6Gs4hxT.gif)
 
 Use Airflow to author workflows as directed acyclic graphs (DAGs) of tasks. 
@@ -25,14 +28,22 @@ As the Airflow community grows, we'd like to keep track of who is using
 the platform. Please send a PR with your company name and @githubhandle 
 if you may.
 
+Currently **officialy** using Airflow:
+
 * Airbnb [@mistercrunch]
 * Agari [@r39132]
 * [Cotap](https://github.com/cotap/) [[@maraca](https://github.com/maraca) & [@richardchew](https://github.com/richardchew)]
 * Lyft
 * Stripe [@jbalogh]
 * Wooga
+* Xoom [[@gepser](https://github.com/gepser) & [@omarvides](https://github.com/omarvides)]
 * Yahoo!
+* [Jampp](https://github.com/jampphq)
 
-## Documentation
+## Links 
 
-[Full documentation on pythonhosted.com](http://pythonhosted.org/airflow/)
+* [Full documentation on pythonhosted.com](http://pythonhosted.org/airflow/)
+* [Airflow Google Group (mailing list / forum)](https://groups.google.com/forum/#!forum/airbnb_airflow) 
+* [Airbnb Blog Post about Airflow](http://nerds.airbnb.com/airflow/)
+* [Hadoop Summit Airflow Video](https://www.youtube.com/watch?v=oYp49mBwH60)
+* [Docker Airflow (externally maintained)](https://github.com/puckel/docker-airflow)

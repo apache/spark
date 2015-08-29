@@ -3,9 +3,9 @@ Installation
 Setting up the sandbox from the :doc:`start` section was easy, now
 working towards a production grade environment is a bit more work.
 
-Note that Airflow is only
-tested under Python 2.7.* as many of our dependencies don't support
-python3 (as of 2015-06).
+As of August 2015, Airflow has experimental support for Python 3. Any issues should be reported (or fixed!).
+The only major regression is that ``HDFSHooks`` do not work (due to a ``snakebite`` dependency)
+
 
 Extra Packages
 ''''''''''''''
@@ -48,6 +48,32 @@ Here's the list of the subpackages and what they enable:
 +-------------+------------------------------------+------------------------------------------------+
 |  devel      | ``pip install airflow[devel]``     | All Airflow features + useful dev tools        |
 +-------------+------------------------------------+------------------------------------------------+
+|  crypto     | ``pip install airflow[crypto]``    | Encrypt passwords in metadata db               |
++-------------+------------------------------------+------------------------------------------------+
+
+
+Configuration
+'''''''''''''
+
+The first time you run Airflow, it will create a file called ``airflow.cfg`` in
+your ``$AIRFLOW_HOME`` directory (``~/airflow`` by
+default). This file contains Airflow's configuration and you
+can edit it to change any of the settings. You can also set options with environment variables by using this format:
+``$AIRFLOW__{SECTION}__{KEY}`` (note the double underscores).
+
+For example, the
+metadata database connection string can either be set in ``airflow.cfg`` like this:
+
+.. code-block:: bash
+
+    [core]
+    sql_alchemy_conn = my_conn_string
+
+or by creating a corresponding environment variable:
+
+.. code-block:: bash
+
+    AIRFLOW__CORE__SQL_ALCHEMY_CONN=my_conn_string
 
 
 Setting up a Backend
@@ -58,6 +84,9 @@ setting up a real database backend and switching to the LocalExecutor.
 As Airflow was built to interact with its metadata using the great SqlAlchemy
 library, you should be able to use any database backend supported as a
 SqlAlchemy backend. We recommend using **MySQL** or **Postgres**.
+
+.. note:: If you decide to use **Postgres**, we recommend using the ``psycopg2`` 
+   driver and specifying it in your SqlAlchemy connection string
 
 Once you've setup your database to host Airflow, you'll need to alter the
 SqlAlchemy connection string located in your configuration file
@@ -78,6 +107,11 @@ handled in the ``Admin->Connection`` section of the UI. The pipeline code you
 will author will reference the 'conn_id' of the Connection objects.
 
 .. image:: img/connections.png
+
+By default, Airflow will save the passwords for the connection in plain text
+within the metadata database. The ``crypto`` package is highly recommended
+during installation. The ``crypto`` package does require that your operating
+system have libffi-dev installed.
 
 
 Scaling Out
