@@ -1037,10 +1037,7 @@ setMethod("[", signature(x = "DataFrame", i = "Column"),
 #' @rdname subset
 #' @name subset
 #' @aliases [
-#' \seealso{
-#'   \code{\link{select}}
-#'   \code{\link{filter}}
-#' }
+#' @family subsetting functions
 #' @examples
 #' \dontrun{
 #'   # Columns can be selected using `[[` and `[`
@@ -1069,9 +1066,7 @@ setMethod("subset", signature(x = "DataFrame"),
 #' @export
 #' @rdname select
 #' @name select
-#' \seealso{
-#'   \code{\link{subset}}
-#' }
+#' @family subsetting functions
 #' @examples
 #' \dontrun{
 #'   select(df, "*")
@@ -1344,6 +1339,7 @@ setMethod("orderBy",
 #' @return A DataFrame containing only the rows that meet the condition.
 #' @rdname filter
 #' @name filter
+#' @family subsetting functions
 #' @export
 #' @examples
 #'\dontrun{
