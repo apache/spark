@@ -23,6 +23,7 @@ import java.net.SocketAddress;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
@@ -70,7 +71,7 @@ public class TransportClient implements Closeable {
 
   private final Channel channel;
   private final TransportResponseHandler handler;
-  private String clientId;
+  @Nullable private String clientId;
 
   public TransportClient(Channel channel, TransportResponseHandler handler) {
     this.channel = Preconditions.checkNotNull(channel);
