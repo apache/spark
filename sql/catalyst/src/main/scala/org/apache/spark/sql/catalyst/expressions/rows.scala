@@ -27,6 +27,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  * and equals/hashCode by `genericGet`.
  */
 trait BaseGenericInternalRow extends InternalRow {
+
   protected def genericGet(ordinal: Int): Any
 
   // default implementation (slow)
