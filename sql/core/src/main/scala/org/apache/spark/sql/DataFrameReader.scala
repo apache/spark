@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.util.Properties
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
@@ -286,6 +287,17 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   def table(tableName: String): DataFrame = {
     DataFrame(sqlContext, sqlContext.catalog.lookupRelation(Seq(tableName)))
+  }
+
+  /**
+   * Sets paths for a data source.
+   * Only used if the source is a HadoopFsRelationProvider.
+   *
+   * @since 1.6.0
+   */
+  def paths(path: String*): DataFrameReader = {
+    this.extraOptions += ("paths" -> path.map(StringUtils.escapeString(_, '\\', ',')).mkString(","))
+    this
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////
