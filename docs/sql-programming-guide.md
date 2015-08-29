@@ -1405,16 +1405,6 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
     </p>
   </td>
 </tr>
-<tr>
-  <td><code>spark.sql.parquet.mergeSchema</code></td>
-  <td><code>false</code></td>
-  <td>
-    <p>
-      When true, the Parquet data source merges schemas collected from all data files, otherwise the
-      schema is picked from the summary file or a random data file if no summary file is available.
-    </p>
-  </td>
-</tr>
 </table>
 
 ## JSON Datasets
