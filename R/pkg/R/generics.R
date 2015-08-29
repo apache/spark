@@ -413,7 +413,7 @@ setGeneric("dropna",
 #' @rdname nafunctions
 #' @export
 setGeneric("na.omit",
-           function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
+           function(object, ...) {
              standardGeneric("na.omit")
            })
 

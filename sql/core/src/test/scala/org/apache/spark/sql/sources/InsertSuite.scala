@@ -167,21 +167,6 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     )
   }
 
-  test("save directly to the path of a JSON table") {
-    caseInsensitiveContext.table("jt").selectExpr("a * 5 as a", "b")
-      .write.mode(SaveMode.Overwrite).json(path.toString)
-    checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
-      (1 to 10).map(i => Row(i * 5, s"str$i"))
-    )
-
-    caseInsensitiveContext.table("jt").write.mode(SaveMode.Overwrite).json(path.toString)
-    checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
-      (1 to 10).map(i => Row(i, s"str$i"))
-    )
-  }
-
   test("it is not allowed to write to a table while querying it.") {
     val message = intercept[AnalysisException] {
       sql(

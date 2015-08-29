@@ -21,19 +21,11 @@ title: Spark ML Programming Guide
 \]`
 
 
-Spark 1.2 introduced a new package called `spark.ml`, which aims to provide a uniform set of
-high-level APIs that help users create and tune practical machine learning pipelines.
-
-*Graduated from Alpha!*  The Pipelines API is no longer an alpha component, although many elements of it are still `Experimental` or `DeveloperApi`.
-
-Note that we will keep supporting and adding features to `spark.mllib` along with the
-development of `spark.ml`.
-Users should be comfortable using `spark.mllib` features and expect more features coming.
-Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
-to `spark.ml`.
-
-See the [Algorithm Guides section](#algorithm-guides) below for guides on sub-packages of `spark.ml`, including feature transformers unique to the Pipelines API, ensembles, and more.
-
+The `spark.ml` package aims to provide a uniform set of high-level APIs built on top of
+[DataFrames](sql-programming-guide.html#dataframes) that help users create and tune practical
+machine learning pipelines.
+See the [Algorithm Guides section](#algorithm-guides) below for guides on sub-packages of
+`spark.ml`, including feature transformers unique to the Pipelines API, ensembles, and more.
 
 **Table of Contents**
 
@@ -171,7 +163,7 @@ This is useful if there are two algorithms with the `maxIter` parameter in a `Pi
 
 # Algorithm Guides
 
-There are now several algorithms in the Pipelines API which are not in the lower-level MLlib API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines, and ensembles, which fit naturally into the `Estimator` abstraction in the Pipelines.
+There are now several algorithms in the Pipelines API which are not in the `spark.mllib` API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines, and ensembles, which fit naturally into the `Estimator` abstraction in the Pipelines.
 
 **Pipelines API Algorithm Guides**
 
@@ -643,6 +635,13 @@ An important task in ML is *model selection*, or using data to find the best mod
 Currently, `spark.ml` supports model selection using the [`CrossValidator`](api/scala/index.html#org.apache.spark.ml.tuning.CrossValidator) class, which takes an `Estimator`, a set of `ParamMap`s, and an [`Evaluator`](api/scala/index.html#org.apache.spark.ml.Evaluator).
 `CrossValidator` begins by splitting the dataset into a set of *folds* which are used as separate training and test datasets; e.g., with `$k=3$` folds, `CrossValidator` will generate 3 (training, test) dataset pairs, each of which uses 2/3 of the data for training and 1/3 for testing.
 `CrossValidator` iterates through the set of `ParamMap`s. For each `ParamMap`, it trains the given `Estimator` and evaluates it using the given `Evaluator`.
+
+The `Evaluator` can be a [`RegressionEvaluator`](api/scala/index.html#org.apache.spark.ml.RegressionEvaluator)
+for regression problems, a [`BinaryClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.BinaryClassificationEvaluator)
+for binary data or a [`MultiClassClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.MultiClassClassificationEvaluator)
+for multiclass problems. The default metric used to choose the best `ParamMap` can be overriden by the setMetric
+method in each of these evaluators.
+
 The `ParamMap` which produces the best evaluation metric (averaged over the `$k$` folds) is selected as the best model.
 `CrossValidator` finally fits the `Estimator` using the best `ParamMap` and the entire dataset.
 
@@ -708,9 +707,12 @@ val pipeline = new Pipeline()
 // We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
 // This will allow us to jointly choose parameters for all Pipeline stages.
 // A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+// Note that the evaluator here is a BinaryClassificationEvaluator and the default metric
+// used is areaUnderROC.
 val crossval = new CrossValidator()
   .setEstimator(pipeline)
   .setEvaluator(new BinaryClassificationEvaluator)
+
 // We use a ParamGridBuilder to construct a grid of parameters to search over.
 // With 3 values for hashingTF.numFeatures and 2 values for lr.regParam,
 // this grid will have 3 x 2 = 6 parameter settings for CrossValidator to choose from.
@@ -831,9 +833,12 @@ Pipeline pipeline = new Pipeline()
 // We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
 // This will allow us to jointly choose parameters for all Pipeline stages.
 // A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+// Note that the evaluator here is a BinaryClassificationEvaluator and the default metric
+// used is areaUnderROC.
 CrossValidator crossval = new CrossValidator()
     .setEstimator(pipeline)
     .setEvaluator(new BinaryClassificationEvaluator());
+
 // We use a ParamGridBuilder to construct a grid of parameters to search over.
 // With 3 values for hashingTF.numFeatures and 2 values for lr.regParam,
 // this grid will have 3 x 2 = 6 parameter settings for CrossValidator to choose from.
@@ -993,35 +998,3 @@ jsc.stop();
 </div>
 
 </div>
-
-# Dependencies
-
-Spark ML currently depends on MLlib and has the same dependencies.
-Please see the [MLlib Dependencies guide](mllib-guide.html#dependencies) for more info.
-
-Spark ML also depends upon Spark SQL, but the relevant parts of Spark SQL do not bring additional dependencies.
-
-# Migration Guide
-
-## From 1.3 to 1.4
-
-Several major API changes occurred, including:
-* `Param` and other APIs for specifying parameters
-* `uid` unique IDs for Pipeline components
-* Reorganization of certain classes
-Since the `spark.ml` API was an Alpha Component in Spark 1.3, we do not list all changes here.
-
-However, now that `spark.ml` is no longer an Alpha Component, we will provide details on any API changes for future releases.
-
-## From 1.2 to 1.3
-
-The main API changes are from Spark SQL.  We list the most important changes here:
-
-* The old [SchemaRDD](http://spark.apache.org/docs/1.2.1/api/scala/index.html#org.apache.spark.sql.SchemaRDD) has been replaced with [DataFrame](api/scala/index.html#org.apache.spark.sql.DataFrame) with a somewhat modified API.  All algorithms in Spark ML which used to use SchemaRDD now use DataFrame.
-* In Spark 1.2, we used implicit conversions from `RDD`s of `LabeledPoint` into `SchemaRDD`s by calling `import sqlContext._` where `sqlContext` was an instance of `SQLContext`.  These implicits have been moved, so we now call `import sqlContext.implicits._`.
-* Java APIs for SQL have also changed accordingly.  Please see the examples above and the [Spark SQL Programming Guide](sql-programming-guide.html) for details.
-
-Other changes were in `LogisticRegression`:
-
-* The `scoreCol` output column (with default value "score") was renamed to be `probabilityCol` (with default value "probability").  The type was originally `Double` (for the probability of class 1.0), but it is now `Vector` (for the probability of each class, to support multiclass classification in the future).
-* In Spark 1.2, `LogisticRegressionModel` did not include an intercept.  In Spark 1.3, it includes an intercept; however, it will always be 0.0 since it uses the default settings for [spark.mllib.LogisticRegressionWithLBFGS](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS).  The option to use an intercept will be added in the future.

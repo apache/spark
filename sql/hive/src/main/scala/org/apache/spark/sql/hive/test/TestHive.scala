@@ -434,7 +434,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         case (k, v) =>
           metadataHive.runSqlHive(s"SET $k=$v")
       }
-      defaultOverides()
+      defaultOverrides()
 
       runSqlHive("USE default")
 
