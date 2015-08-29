@@ -37,8 +37,7 @@ trait SharedSQLContext extends SQLTestUtils {
    * The [[TestSQLContext]] to use for all tests in this suite.
    */
   protected def ctx: TestSQLContext = _ctx
-  protected def sqlContext: TestSQLContext = _ctx
-  protected override def _sqlContext: SQLContext = _ctx
+  protected def sqlContext: SQLContext = _ctx
 
   /**
    * Initialize the [[TestSQLContext]].

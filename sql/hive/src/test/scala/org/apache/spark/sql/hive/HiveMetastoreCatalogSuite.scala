@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import java.io.File
 
 import org.apache.spark.sql.hive.client.{ExternalTable, ManagedTable}
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.sources.DataSourceTest
@@ -52,8 +52,10 @@ class HiveMetastoreCatalogSuite extends SparkFunSuite with Logging {
   }
 }
 
-class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with SQLTestUtils {
-  override def _sqlContext: SQLContext = TestHive
+class DataSourceWithHiveMetastoreCatalogSuite
+  extends DataSourceTest with TestHiveSingleton with SQLTestUtils {
+
+  override def sqlContext: SQLContext = TestHive
   import testImplicits._
 
   private val testDF = range(1, 3).select(

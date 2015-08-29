@@ -19,12 +19,12 @@ package org.apache.spark.sql.hive
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.Row
 
-class ListTablesSuite extends QueryTest with BeforeAndAfterAll {
+class ListTablesSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterAll {
 
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 

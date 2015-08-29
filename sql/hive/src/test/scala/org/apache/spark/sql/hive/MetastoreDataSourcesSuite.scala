@@ -28,7 +28,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.client.{HiveTable, ManagedTable}
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
@@ -39,10 +39,8 @@ import org.apache.spark.util.Utils
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
  */
-class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
-  with Logging {
-  override def _sqlContext: SQLContext = TestHive
-  private val sqlContext = _sqlContext
+class MetastoreDataSourcesSuite
+  extends QueryTest with TestHiveSingleton with SQLTestUtils with BeforeAndAfterAll with Logging {
 
   var jsonFilePath: String = _
 

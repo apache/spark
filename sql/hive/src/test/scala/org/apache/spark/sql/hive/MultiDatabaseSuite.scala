@@ -17,20 +17,17 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.{AnalysisException, QueryTest, SQLContext, SaveMode}
 
-class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
-  override val _sqlContext: HiveContext = TestHive
-  private val sqlContext = _sqlContext
+class MultiDatabaseSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
-  private val df = sqlContext.range(10).coalesce(1)
+  private lazy val df = sqlContext.range(10).coalesce(1)
 
   private def checkTablePath(dbName: String, tableName: String): Unit = {
-    // val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    val metastoreTable = sqlContext.catalog.client.getTable(dbName, tableName)
-    val expectedPath = sqlContext.catalog.client.getDatabase(dbName).location + "/" + tableName
+    val metastoreTable = hiveContext.catalog.client.getTable(dbName, tableName)
+    val expectedPath = hiveContext.catalog.client.getDatabase(dbName).location + "/" + tableName
 
     assert(metastoreTable.serdeProperties("path") === expectedPath)
   }
@@ -220,7 +217,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
 
           df.write.parquet(s"$path/p=2")
           sql("ALTER TABLE t ADD PARTITION (p=2)")
-          sqlContext.refreshTable("t")
+          hiveContext.refreshTable("t")
           checkAnswer(
             sqlContext.table("t"),
             df.withColumn("p", lit(1)).unionAll(df.withColumn("p", lit(2))))
@@ -252,7 +249,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils {
 
         df.write.parquet(s"$path/p=2")
         sql(s"ALTER TABLE $db.t ADD PARTITION (p=2)")
-        sqlContext.refreshTable(s"$db.t")
+        hiveContext.refreshTable(s"$db.t")
         checkAnswer(
           sqlContext.table(s"$db.t"),
           df.withColumn("p", lit(1)).unionAll(df.withColumn("p", lit(2))))

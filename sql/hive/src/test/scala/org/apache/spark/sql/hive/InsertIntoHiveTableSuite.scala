@@ -24,7 +24,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.{QueryTest, _}
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -35,7 +35,7 @@ case class TestData(key: Int, value: String)
 
 case class ThreeCloumntable(key: Int, value: String, key1: String)
 
-class InsertIntoHiveTableSuite extends QueryTest with BeforeAndAfter {
+class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
 

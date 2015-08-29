@@ -23,13 +23,12 @@ import java.util.{Locale, TimeZone}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.execution.datasources.parquet.ParquetCompatibilityTest
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.{Row, SQLConf, SQLContext}
+import org.apache.spark.sql.{Row, SQLConf}
 
-class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with BeforeAndAfterAll {
-  override def _sqlContext: SQLContext = TestHive
-  private val sqlContext = _sqlContext
+class ParquetHiveCompatibilitySuite
+  extends ParquetCompatibilityTest with TestHiveSingleton with BeforeAndAfterAll {
 
   /**
    * Set the staging directory (and hence path to ignore Parquet files under)

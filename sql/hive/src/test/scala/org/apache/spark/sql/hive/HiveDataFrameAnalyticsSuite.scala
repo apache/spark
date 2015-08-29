@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.scalatest.BeforeAndAfterAll
@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfterAll
 // TODO ideally we should put the test suite into the package `sql`, as
 // `hive` package is optional in compiling, however, `SQLContext.sql` doesn't
 // support the `cube` or `rollup` yet.
-class HiveDataFrameAnalyticsSuite extends QueryTest with BeforeAndAfterAll {
+class HiveDataFrameAnalyticsSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterAll {
   private var testData: DataFrame = _
 
   override def beforeAll() {

@@ -21,9 +21,9 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHive}
 
-class HivePlanTest extends QueryTest {
+class HivePlanTest extends QueryTest with TestHiveSingleton {
   import TestHive._
   import TestHive.implicits._
 
