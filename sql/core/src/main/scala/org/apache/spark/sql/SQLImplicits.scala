@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql
 
+import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow, SpecificMutableRow}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.sources.{TableScan, BaseRelation}
 import org.apache.spark.sql.types.StructField
+import org.apache.spark.unsafe.memory.{UnsafeMemoryAllocator, MemoryBlock}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -109,5 +113,55 @@ private[sql] abstract class SQLImplicits {
     }
     DataFrameHolder(
       _sqlContext.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
+  }
+
+  /**
+   * Pimp my library decorator for tungsten caching of DataFrames.
+   * @since 1.5.1
+   */
+  implicit class TungstenCache(df: DataFrame) {
+    /**
+     * Packs the rows of [[df]] into contiguous blocks of memory.
+     */
+    def tungstenCache(): DataFrame = {
+      val cachedRDD = df.rdd.mapPartitions { iter =>
+        val buffers = new ArrayBuffer[MemoryBlock]()
+        val memoryAllocator = new UnsafeMemoryAllocator()
+        val convertToUnsafe = UnsafeProjection.create(df.schema)
+        iter.foreach { row =>
+          val unsafeRow = convertToUnsafe.apply(InternalRow.fromSeq(row.toSeq))
+
+          // insert unsaferows into memory buffer
+          val block = memoryAllocator.allocate(unsafeRow.getSizeInBytes)
+          unsafeRow.writeToMemory(block.getBaseObject, block.getBaseOffset)
+          buffers.append(block)
+        }
+
+        Iterator(buffers)
+      }.cache()
+
+      // baseRelation holds on to the cached RDD that holds RowBuffers
+      val baseRelation: BaseRelation = new BaseRelation with TableScan {
+        override val sqlContext = _sqlContext
+        override val schema = df.schema
+        override val needConversion = false
+
+        // unpack the byteBuffer back into rows, cachedRDD captured in closure
+        override def buildScan(): RDD[Row] = cachedRDD.flatMap { buffers =>
+
+          // turn buffers back into an iterator of UnsafeRows
+          buffers.map { block =>
+            val unsafeRow = new UnsafeRow()
+            unsafeRow.pointTo(
+              block.getBaseObject,
+              block.getBaseOffset,
+              ???, // num fields
+              ??? // getSizeInBytes
+            )
+          }
+        }.asInstanceOf[RDD[Row]]
+      }
+      DataFrame(_sqlContext, LogicalRelation(baseRelation))
+    }
   }
 }
