@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter}
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.sql._
@@ -145,7 +146,8 @@ private[sql] abstract class BaseWriterContainer(
           "because spark.speculation is configured to be true.")
       defaultOutputCommitter
     } else {
-      val committerClass = context.getConfiguration.getClass(
+      val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+      val committerClass = configuration.getClass(
         SQLConf.OUTPUT_COMMITTER_CLASS.key, null, classOf[OutputCommitter])
 
       Option(committerClass).map { clazz =>
@@ -227,7 +229,8 @@ private[sql] class DefaultWriterContainer(
 
   def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
     executorSideSetup(taskContext)
-    taskAttemptContext.getConfiguration.set("spark.sql.sources.output.path", outputPath)
+    val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
+    configuration.set("spark.sql.sources.output.path", outputPath)
     val writer = outputWriterFactory.newInstance(getWorkPath, dataSchema, taskAttemptContext)
     writer.initConverter(dataSchema)
 
@@ -395,7 +398,8 @@ private[sql] class DynamicPartitionWriterContainer(
     def newOutputWriter(key: InternalRow): OutputWriter = {
       val partitionPath = getPartitionString(key).getString(0)
       val path = new Path(getWorkPath, partitionPath)
-      taskAttemptContext.getConfiguration.set(
+      val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
+      configuration.set(
         "spark.sql.sources.output.path", new Path(outputPath, partitionPath).toString)
       val newWriter = outputWriterFactory.newInstance(path.toString, dataSchema, taskAttemptContext)
       newWriter.initConverter(dataSchema)
