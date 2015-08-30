@@ -23,7 +23,6 @@ from sqlalchemy import (
     Index, BigInteger)
 from sqlalchemy import case, func, or_, and_
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import relationship, synonym
 
@@ -310,11 +309,11 @@ class Connection(Base):
     conn_id = Column(String(ID_LEN))
     conn_type = Column(String(500))
     env_variable = Column(String(500))
-    _host = Column('host', String(500))
-    _schema = Column('schema', String(500))
-    _login = Column('login', String(500))
+    host = Column(String(500))
+    schema = Column(String(500))
+    login = Column(String(500))
     _password = Column('password', String(500))
-    _port = Column('port', Integer())
+    port = Column(Integer())
     is_encrypted = Column(Boolean, unique=False, default=False)
     extra = Column(String(5000))
 
@@ -322,17 +321,29 @@ class Connection(Base):
             self, conn_id=None, conn_type=None,
             host=None, login=None, password=None,
             schema=None, port=None, extra=None,
-            env_variable=None):
+            uri=None):
         self.conn_id = conn_id
         self.conn_type = conn_type
-        self.host = host
-        self.login = login
-        self.password = password
-        self.schema = schema
-        self.port = port
-        self.env_variable = env_variable
-        self._uri = None
-        self.extra = extra
+        if uri:
+            parse_from_uri(uri)
+        else:
+            self.host = host
+            self.login = login
+            self.password = password
+            self.schema = schema
+            self.port = port
+            self.extra = extra
+
+    def parse_from_uri(self, uri):
+        temp_uri = urlparse(uri)
+        hostname = temp_uri.hostname or ''
+        if '%2f' in hostname:
+            hostname = hostname.replace('%2f', '/').replace('%2F', '/')
+        self.host = hostname
+        self.schema = temp_uri.path[1:]
+        self.login = temp_uri.username
+        self.password = temp_uri.password
+        self.port = temp_uri.port
 
     def get_password(self):
         if self._password and self.is_encrypted:
@@ -379,70 +390,6 @@ class Connection(Base):
                 return hooks.MsSqlHook(mssql_conn_id=self.conn_id)
         except:
             return None
-
-    @property
-    def uri(self):
-        if self._uri is None:
-            self._uri = urlparse(os.environ.get(self.env_variable))
-        return self._uri
-
-    @hybrid_property
-    def host(self):
-        if self.env_variable:
-            hostname = self.uri.hostname or ''
-            if '%2f' in hostname:
-                hostname = hostname.replace('%2f', '/').replace('%2F', '/')
-            return hostname
-        else:
-            return self._host
-
-    @host.setter
-    def host(self, val):
-        self._host = val
-
-    @hybrid_property
-    def schema(self):
-        if self.env_variable:
-            return self.uri.path[1:]
-        else:
-            return self._schema
-
-    @schema.setter
-    def schema(self, val):
-        self._schema = val
-
-    @hybrid_property
-    def login(self):
-        if self.env_variable:
-            return self.uri.username
-        else:
-            return self._login
-
-    @login.setter
-    def login(self, val):
-        self._login = val
-
-    @hybrid_property
-    def password(self):
-        if self.env_variable:
-            return self.uri.password
-        else:
-            return self._password
-
-    @password.setter
-    def password(self, val):
-        self._password = val
-
-    @hybrid_property
-    def port(self):
-        if self.env_variable:
-            return self.uri.port
-        else:
-            return self._port
-
-    @port.setter
-    def port(self, val):
-        self._port = val
 
     def __repr__(self):
         return self.conn_id
