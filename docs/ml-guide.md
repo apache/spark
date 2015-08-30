@@ -191,7 +191,7 @@ import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.sql.Row
 
-// Prepare training data.
+// Prepare training data from a list of (label, features) tuples.
 val training = sqlContext.createDataFrame(Seq(
   (1.0, Vectors.dense(0.0, 1.1, 0.1)),
   (0.0, Vectors.dense(2.0, 1.0, -1.0)),
@@ -334,9 +334,7 @@ from pyspark.mllib.linalg import Vectors
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.param import Param, Params
 
-# Prepare training data.
-# We use LabeledPoint.
-# Spark SQL can convert a list of LabeledPoints into DataFrames.
+# Prepare training data from a list of (label, features) tuples.
 training = sqlContext.createDataFrame([
     (1.0, Vectors.dense([0.0, 1.1, 0.1])),
     (0.0, Vectors.dense([2.0, 1.0, -1.0])),
@@ -408,7 +406,7 @@ import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.Row
 
-// Prepare training documents, which are labeled.
+// Prepare training documents from a list of (id, text, label) tuples.
 val training = sqlContext.createDataFrame(Seq(
   (0L, "a b c d e spark", 1.0),
   (1L, "b d", 0.0),
@@ -433,7 +431,7 @@ val pipeline = new Pipeline()
 // Fit the pipeline to training documents.
 val model = pipeline.fit(training)
 
-// Prepare test documents, which are unlabeled.
+// Prepare test documents, which are unlabeled (id, text) tuples.
 val test = sqlContext.createDataFrame(Seq(
   (4L, "spark i j k"),
   (5L, "l m n"),
@@ -546,7 +544,7 @@ from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.sql import Row
 
-# Prepare training documents, which are labeled.
+# Prepare training documents from a list of (id, text, label) tuples.
 LabeledDocument = Row("id", "text", "label")
 training = sqlContext.createDataFrame([
     (0L, "a b c d e spark", 1.0),
@@ -563,7 +561,7 @@ pipeline = Pipeline(stages=[tokenizer, hashingTF, lr])
 # Fit the pipeline to training documents.
 model = pipeline.fit(training)
 
-# Prepare test documents, which are unlabeled.
+# Prepare test documents, which are unlabeled (id, text) tuples.
 test = sqlContext.createDataFrame([
     (4L, "spark i j k"),
     (5L, "l m n"),
@@ -620,7 +618,7 @@ import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.Row
 
-// Prepare training documents, which are labeled.
+// Prepare training data from a list of (id, text, label) tuples.
 val training = sqlContext.createDataFrame(Seq(
   (0L, "a b c d e spark", 1.0),
   (1L, "b d", 0.0),
@@ -670,7 +668,7 @@ val cv = new CrossValidator()
 // Run cross-validation, and choose the best set of parameters.
 val cvModel = cv.fit(training)
 
-// Prepare test documents, which are unlabeled.
+// Prepare test documents, which are unlabeled (id, text) tuples.
 val test = sqlContext.createDataFrame(Seq(
   (4L, "spark i j k"),
   (5L, "l m n"),
@@ -790,7 +788,7 @@ CrossValidator cv = new CrossValidator()
 // Run cross-validation, and choose the best set of parameters.
 CrossValidatorModel cvModel = cv.fit(training);
 
-// Prepare test documents, which are unlabeled.L
+// Prepare test documents, which are unlabeled.
 DataFrame test = sqlContext.createDataFrame(Arrays.asList(
   new Document(4L, "spark i j k"),
   new Document(5L, "l m n"),
@@ -908,8 +906,7 @@ TrainValidationSplit trainValidationSplit = new TrainValidationSplit()
   .setEstimator(lr)
   .setEvaluator(new RegressionEvaluator())
   .setEstimatorParamMaps(paramGrid)
-  // 80% of the data will be used for training and the remaining 20% for validation.
-  .setTrainRatio(0.8);
+  .setTrainRatio(0.8); // 80% for training and the remaining 20% for validation
 
 // Run train validation split, and choose the best set of parameters.
 TrainValidationSplitModel model = trainValidationSplit.fit(training);
