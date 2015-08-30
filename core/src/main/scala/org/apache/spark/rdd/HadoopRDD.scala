@@ -105,7 +105,8 @@ class HadoopRDD[K, V](
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
-    minPartitions: Int)
+    minPartitions: Int,
+    @transient inputSplitsCache: Option[Array[InputSplit]] = None)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
   if (initLocalJobConfFuncOpt.isDefined) {
@@ -197,14 +198,17 @@ class HadoopRDD[K, V](
   }
 
   override def getPartitions: Array[Partition] = {
-    val jobConf = getJobConf()
-    // add the credentials here as this can be called before SparkContext initialized
-    SparkHadoopUtil.get.addCredentials(jobConf)
-    val inputFormat = getInputFormat(jobConf)
-    if (inputFormat.isInstanceOf[Configurable]) {
-      inputFormat.asInstanceOf[Configurable].setConf(jobConf)
+    // First check whether input splits are already computed
+    val inputSplits: Array[InputSplit] = inputSplitsCache.getOrElse {
+      val jobConf = getJobConf()
+      // Add the credentials here as this can be called before SparkContext initialized
+      SparkHadoopUtil.get.addCredentials(jobConf)
+      val inputFormat = getInputFormat(jobConf)
+      if (inputFormat.isInstanceOf[Configurable]) {
+        inputFormat.asInstanceOf[Configurable].setConf(jobConf)
+      }
+      inputFormat.getSplits(jobConf, minPartitions)
     }
-    val inputSplits = inputFormat.getSplits(jobConf, minPartitions)
     val array = new Array[Partition](inputSplits.size)
     for (i <- 0 until inputSplits.size) {
       array(i) = new HadoopPartition(id, i, inputSplits(i))

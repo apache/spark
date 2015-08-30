@@ -311,6 +311,13 @@ private[spark] object SQLConf {
     defaultValue = Some(false),
     doc = "When true, enable filter pushdown for ORC files.")
 
+  val HIVE_PARALLEL_FILE_LISTING_ENABLED = booleanConf("spark.sql.hive.parallelFileListing",
+    defaultValue = Some(false),
+    doc = "When true, input files for multiple partitions will be listed in parallel in any " +
+      "partitioned Hive table backed by Hadoop storage such as HDFS and S3.  The parallelism " +
+      "is controlled by \"mapreduce.input.fileinputformat.list-status.num-threads\"."
+  )
+
   val HIVE_VERIFY_PARTITION_PATH = booleanConf("spark.sql.hive.verifyPartitionPath",
     defaultValue = Some(false),
     doc = "<TODO>")
@@ -471,6 +478,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 
   private[spark] def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
+
+  private[spark] def parallelFileListing: Boolean = getConf(HIVE_PARALLEL_FILE_LISTING_ENABLED)
 
   private[spark] def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
