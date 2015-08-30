@@ -391,11 +391,16 @@ public final class UnsafeRow extends MutableRow {
 
   @Override
   public UTF8String getUTF8String(int ordinal) {
-    if (isNullAt(ordinal)) return null;
-    final long offsetAndSize = getLong(ordinal);
-    final int offset = (int) (offsetAndSize >> 32);
-    final int size = (int) (offsetAndSize & ((1L << 32) - 1));
-    return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
+    if (isNullAt(ordinal)) {
+      return null;
+    } else if (baseObject == null) { // off-heap storage
+      return UTF8String.fromBytes(getBinary(ordinal));
+    } else {
+      final long offsetAndSize = getLong(ordinal);
+      final int offset = (int) (offsetAndSize >> 32);
+      final int size = (int) (offsetAndSize & ((1L << 32) - 1));
+      return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
+    }
   }
 
   @Override
@@ -577,7 +582,9 @@ public final class UnsafeRow extends MutableRow {
     StringBuilder build = new StringBuilder("[");
     for (int i = 0; i < sizeInBytes; i += 8) {
       build.append(java.lang.Long.toHexString(Platform.getLong(baseObject, baseOffset + i)));
-      build.append(',');
+      if (i <= sizeInBytes-1)  {
+        build.append(',');
+      }
     }
     build.append(']');
     return build.toString();

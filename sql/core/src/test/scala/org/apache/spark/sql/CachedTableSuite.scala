@@ -26,7 +26,7 @@ import org.apache.spark.Accumulators
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.storage.{StorageLevel, RDDBlockId}
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 private case class BigData(s: String)
 
@@ -75,17 +75,17 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
   }
 
   test("unpersist an uncached table will not raise exception") {
-    assert(None == ctx.cacheManager.lookupCachedData(testData))
+    assert(None === ctx.cacheManager.lookupCachedData(testData))
     testData.unpersist(blocking = true)
-    assert(None == ctx.cacheManager.lookupCachedData(testData))
+    assert(None === ctx.cacheManager.lookupCachedData(testData))
     testData.unpersist(blocking = false)
-    assert(None == ctx.cacheManager.lookupCachedData(testData))
+    assert(None === ctx.cacheManager.lookupCachedData(testData))
     testData.persist()
-    assert(None != ctx.cacheManager.lookupCachedData(testData))
+    assert(None !== ctx.cacheManager.lookupCachedData(testData))
     testData.unpersist(blocking = true)
-    assert(None == ctx.cacheManager.lookupCachedData(testData))
+    assert(None === ctx.cacheManager.lookupCachedData(testData))
     testData.unpersist(blocking = false)
-    assert(None == ctx.cacheManager.lookupCachedData(testData))
+    assert(None === ctx.cacheManager.lookupCachedData(testData))
   }
 
   test("cache table as select") {
@@ -333,7 +333,13 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
       val accsSize = Accumulators.originals.size
       ctx.uncacheTable("t1")
       ctx.uncacheTable("t2")
-      assert((accsSize - 2) == Accumulators.originals.size)
+      assert((accsSize - 2) === Accumulators.originals.size)
     }
+  }
+
+  test("tungsten cache table and read") {
+    val data = testData
+    val tungstenCached = data.tungstenCache()
+    assert(tungstenCached.collect() === testData.collect())
   }
 }
