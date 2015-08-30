@@ -74,10 +74,13 @@ private[spark] abstract class ZippedPartitionsBaseRDD[V: ClassTag](
     rdds = null
   }
 
-  protected def tryPrepareChildren() {
-    rdds.foreach {
+  /**
+   * Call the prepare method of every children that has one.
+   * This is needed for reserving execution memory in advance.
+   */
+  protected def tryPrepareChildren(): Unit = {
+    getNarrowAncestors.collect {
       case rdd: MapPartitionsWithPreparationRDD[_, _, _] => rdd.prepare()
-      case _ =>
     }
   }
 }

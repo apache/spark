@@ -52,6 +52,7 @@ class MapPartitionsWithPreparationRDDSuite extends SparkFunSuite with LocalSpark
     assert(result === Array(10, 20, 30))
 
     TestObject.things.clear()
+    // Zip two of these RDDs, both should be prepared before the parent is executed
     val rdd2 = new MapPartitionsWithPreparationRDD[Int, Int, Unit](
       parent, preparePartition, executePartition)
     val result2 = rdd.zipPartitions(rdd2)((a, b) => a).collect()

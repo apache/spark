@@ -40,21 +40,21 @@ private[spark] class MapPartitionsWithPreparationRDD[U: ClassTag, T: ClassTag, M
 
   private[this] var preparedArgument: Option[M] = None
 
-  def prepare(): Unit = {
-    // This could be called multiple times
+  def prepare(): M = {
+    // This could be called multiple times, by compute or parent's compute
     if (preparedArgument.isEmpty) {
       preparedArgument = Some(preparePartition())
     }
+    preparedArgument.get
   }
 
   /**
    * Prepare a partition before computing it from its parent.
    */
   override def compute(partition: Partition, context: TaskContext): Iterator[U] = {
-    prepare()
+    val prepared = prepare()
     // The same RDD could be called multiple times in one task, each call of compute() should
     // have separate prepared argument.
-    val prepared = preparedArgument.get
     preparedArgument = None
     val parentIterator = firstParent[T].iterator(partition, context)
     executePartition(context, partition.index, prepared, parentIterator)
