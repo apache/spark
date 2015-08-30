@@ -790,24 +790,41 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     [(0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)]
     """
 
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "A handler in case of invalid column.")
+
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None):
+    def __init__(self, handleInvalid="error", inputCol=None, outputCol=None):
         """
         __init__(self, inputCol=None, outputCol=None)
         """
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
+        self.handleInvalid = Param(self, "handleInvalid", "A handler in case of invalid column.")
+        self._setDefault(handleInvalid="error")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, inputCol=None, outputCol=None):
+    def setParams(self, handleInvalid="error", inputCol=None, outputCol=None):
         """
         setParams(self, inputCol=None, outputCol=None)
         Sets params for this StringIndexer.
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        self._paramMap[self.handleInvalid] = value
+        return self
+
+    def getHandleInvalid(self):
+        """
+        Gets the value of handleInvalid or its default value.
+        """
+        return self.getOrDefault(self.handleInvalid)
 
     def _create_model(self, java_model):
         return StringIndexerModel(java_model)
