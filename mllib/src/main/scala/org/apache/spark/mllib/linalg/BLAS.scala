@@ -305,6 +305,8 @@ private[spark] object BLAS extends Serializable with Logging {
       "The matrix C cannot be the product of a transpose() call. C.isTransposed must be false.")
     if (alpha == 0.0 && beta == 1.0) {
       logDebug("gemm: alpha is equal to 0 and beta is equal to 1. Returning C.")
+    } else if (alpha == 0.0) {
+      f2jBLAS.dscal(C.values.length, beta, C.values, 1)
     } else {
       A match {
         case sparse: SparseMatrix => gemm(alpha, sparse, B, beta, C)
@@ -409,7 +411,7 @@ private[spark] object BLAS extends Serializable with Logging {
       }
     } else {
       // Scale matrix first if `beta` is not equal to 0.0
-      if (beta != 0.0) {
+      if (beta != 1.0) {
         f2jBLAS.dscal(C.values.length, beta, C.values, 1)
       }
       // Perform matrix multiplication and add to C. The rows of A are multiplied by the columns of
@@ -470,8 +472,10 @@ private[spark] object BLAS extends Serializable with Logging {
       s"The columns of A don't match the number of elements of x. A: ${A.numCols}, x: ${x.size}")
     require(A.numRows == y.size,
       s"The rows of A don't match the number of elements of y. A: ${A.numRows}, y:${y.size}")
-    if (alpha == 0.0) {
-      logDebug("gemv: alpha is equal to 0. Returning y.")
+    if (alpha == 0.0 && beta == 1.0) {
+      logDebug("gemv: alpha is equal to 0 and beta is equal to 1. Returning y.")
+    } else if (alpha == 0.0) {
+      scal(beta, y)
     } else {
       (A, x) match {
         case (smA: SparseMatrix, dvx: DenseVector) =>
@@ -604,7 +608,7 @@ private[spark] object BLAS extends Serializable with Logging {
         rowCounter += 1
       }
     } else {
-      scal(beta, y)
+      if (beta != 1.0) scal(beta, y)
 
       var colCounterForA = 0
       var k = 0
@@ -659,7 +663,7 @@ private[spark] object BLAS extends Serializable with Logging {
         rowCounter += 1
       }
     } else {
-      scal(beta, y)
+      if (beta != 1.0) scal(beta, y)
       // Perform matrix-vector multiplication and add to y
       var colCounterForA = 0
       while (colCounterForA < nA) {
