@@ -410,7 +410,7 @@ private[spark] object BLAS extends Serializable with Logging {
         }
       }
     } else {
-      // Scale matrix first if `beta` is not equal to 0.0
+      // Scale matrix first if `beta` is not equal to 1.0
       if (beta != 1.0) {
         f2jBLAS.dscal(C.values.length, beta, C.values, 1)
       }
@@ -530,11 +530,6 @@ private[spark] object BLAS extends Serializable with Logging {
     val xValues = x.values
     val yValues = y.values
 
-    if (alpha == 0.0) {
-      scal(beta, y)
-      return
-    }
-
     if (A.isTransposed) {
       var rowCounterForA = 0
       while (rowCounterForA < mA) {
@@ -584,11 +579,6 @@ private[spark] object BLAS extends Serializable with Logging {
     val Avals = A.values
     val Arows = if (!A.isTransposed) A.rowIndices else A.colPtrs
     val Acols = if (!A.isTransposed) A.colPtrs else A.rowIndices
-
-    if (alpha == 0.0) {
-      scal(beta, y)
-      return
-    }
 
     if (A.isTransposed) {
       var rowCounter = 0
