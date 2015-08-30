@@ -1,5 +1,6 @@
 from builtins import object
 import logging
+import os
 import random
 
 from airflow import settings
@@ -33,7 +34,11 @@ class BaseHook(object):
         return db
 
     def get_connection(self, conn_id):
-        conn = random.choice(self.get_connections(conn_id))
+        if os.environ.get(conn_id):
+            temp_uri = urlparse(os.environ.get(conn_id))
+            conn = Connection(uri=temp_uri)
+        if conn is None:
+            conn = random.choice(self.get_connections(conn_id))
         if conn.host:
             logging.info("Using connection to: " + conn.host)
         return conn
