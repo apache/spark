@@ -24,61 +24,74 @@ title: Spark ML Programming Guide
 The `spark.ml` package aims to provide a uniform set of high-level APIs built on top of
 [DataFrames](sql-programming-guide.html#dataframes) that help users create and tune practical
 machine learning pipelines.
-See the [Algorithm Guides section](#algorithm-guides) below for guides on sub-packages of
+See the [algorithm guides](#algorithm-guides) section below for guides on sub-packages of
 `spark.ml`, including feature transformers unique to the Pipelines API, ensembles, and more.
 
-**Table of Contents**
+**Table of contents**
 
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-# Main Concepts
+# Main concepts
 
-Spark ML standardizes APIs for machine learning algorithms to make it easier to combine multiple algorithms into a single pipeline, or workflow.  This section covers the key concepts introduced by the Spark ML API.
+Spark ML standardizes APIs for machine learning algorithms to make it easier to combine multiple
+algorithms into a single pipeline, or workflow.
+This section covers the key concepts introduced by the Spark ML API, where the pipeline concept is
+mostly inspired by the [scikit-learn](http://scikit-learn.org/) project.
 
-* **[ML Dataset](ml-guide.html#ml-dataset)**: Spark ML uses the [`DataFrame`](api/scala/index.html#org.apache.spark.sql.DataFrame) from Spark SQL as a dataset which can hold a variety of data types.
-E.g., a dataset could have different columns storing text, feature vectors, true labels, and predictions.
+* **[`DataFrame`](ml-guide.html#dataframe)**: Spark ML uses `DataFrame` from Spark SQL as an ML
+  dataset, which can hold a variety of data types.
+  E.g., a `DataFrame` could have different columns storing text, feature vectors, true labels, and predictions.
 
 * **[`Transformer`](ml-guide.html#transformers)**: A `Transformer` is an algorithm which can transform one `DataFrame` into another `DataFrame`.
-E.g., an ML model is a `Transformer` which transforms an RDD with features into an RDD with predictions.
+E.g., an ML model is a `Transformer` which transforms `DataFrame` with features into a `DataFrame` with predictions.
 
 * **[`Estimator`](ml-guide.html#estimators)**: An `Estimator` is an algorithm which can be fit on a `DataFrame` to produce a `Transformer`.
-E.g., a learning algorithm is an `Estimator` which trains on a dataset and produces a model.
+E.g., a learning algorithm is an `Estimator` which trains on a `DataFrame` and produces a model.
 
 * **[`Pipeline`](ml-guide.html#pipeline)**: A `Pipeline` chains multiple `Transformer`s and `Estimator`s together to specify an ML workflow.
 
-* **[`Param`](ml-guide.html#parameters)**: All `Transformer`s and `Estimator`s now share a common API for specifying parameters.
+* **[`Parameter`](ml-guide.html#parameters)**: All `Transformer`s and `Estimator`s now share a common API for specifying parameters.
 
-## ML Dataset
+## DataFrame
 
 Machine learning can be applied to a wide variety of data types, such as vectors, text, images, and structured data.
-Spark ML adopts the [`DataFrame`](api/scala/index.html#org.apache.spark.sql.DataFrame) from Spark SQL in order to support a variety of data types under a unified Dataset concept.
+Spark ML adopts the `DataFrame` from Spark SQL in order to support a variety of data types.
 
 `DataFrame` supports many basic and structured types; see the [Spark SQL datatype reference](sql-programming-guide.html#spark-sql-datatype-reference) for a list of supported types.
-In addition to the types listed in the Spark SQL guide, `DataFrame` can use ML [`Vector`](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) types.
+In addition to the types listed in the Spark SQL guide, `DataFrame` can use ML [`Vector`](mllib-data-types.html#local-vector) types.
 
 A `DataFrame` can be created either implicitly or explicitly from a regular `RDD`.  See the code examples below and the [Spark SQL programming guide](sql-programming-guide.html) for examples.
 
 Columns in a `DataFrame` are named.  The code examples below use names such as "text," "features," and "label."
 
-## ML Algorithms
+## Pipeline components
 
 ### Transformers
 
-A [`Transformer`](api/scala/index.html#org.apache.spark.ml.Transformer) is an abstraction which includes feature transformers and learned models.  Technically, a `Transformer` implements a method `transform()` which converts one `DataFrame` into another, generally by appending one or more columns.
+A `Transformer` is an abstraction that includes feature transformers and learned models.
+Technically, a `Transformer` implements a method `transform()`, which converts one `DataFrame` into
+another, generally by appending one or more columns.
 For example:
 
-* A feature transformer might take a dataset, read a column (e.g., text), convert it into a new column (e.g., feature vectors), append the new column to the dataset, and output the updated dataset.
-* A learning model might take a dataset, read the column containing feature vectors, predict the label for each feature vector, append the labels as a new column, and output the updated dataset.
+* A feature transformer might take a `DataFrame`, read a column (e.g., text), map it into a new
+  column (e.g., feature vectors), and output a new `DataFrame` with the mapped column appended.
+* A learning model might take a `DataFrame`, read the column containing feature vectors, predict the
+  label for each feature vector, and output a new `DataFrame` with predicted labels appended as a
+  column.
 
 ### Estimators
 
-An [`Estimator`](api/scala/index.html#org.apache.spark.ml.Estimator) abstracts the concept of a learning algorithm or any algorithm which fits or trains on data.  Technically, an `Estimator` implements a method `fit()` which accepts a `DataFrame` and produces a `Transformer`.
-For example, a learning algorithm such as `LogisticRegression` is an `Estimator`, and calling `fit()` trains a `LogisticRegressionModel`, which is a `Transformer`.
+An `Estimator` abstracts the concept of a learning algorithm or any algorithm that fits or trains on
+data.
+Technically, an `Estimator` implements a method `fit()`, which accepts a `DataFrame` and produces a
+`Model`, which is a `Transformer`.
+For example, a learning algorithm such as `LogisticRegression` is an `Estimator`, and calling
+`fit()` trains a `LogisticRegressionModel`, which is a `Model` and hence a `Transformer`.
 
-### Properties of ML Algorithms
+### Properties of pipeline components
 
-`Transformer`s and `Estimator`s are both stateless.  In the future, stateful algorithms may be supported via alternative concepts.
+`Transformer.transform()`s and `Estimator.fit()`s are both stateless.  In the future, stateful algorithms may be supported via alternative concepts.
 
 Each instance of a `Transformer` or `Estimator` has a unique ID, which is useful in specifying parameters (discussed below).
 
@@ -91,15 +104,16 @@ E.g., a simple text document processing workflow might include several stages:
 * Convert each document's words into a numerical feature vector.
 * Learn a prediction model using the feature vectors and labels.
 
-Spark ML represents such a workflow as a [`Pipeline`](api/scala/index.html#org.apache.spark.ml.Pipeline),
-which consists of a sequence of [`PipelineStage`s](api/scala/index.html#org.apache.spark.ml.PipelineStage) (`Transformer`s and `Estimator`s) to be run in a specific order.  We will use this simple workflow as a running example in this section.
+Spark ML represents such a workflow as a `Pipeline`, which consists of a sequence of
+`PipelineStage`s (`Transformer`s and `Estimator`s) to be run in a specific order.
+We will use this simple workflow as a running example in this section.
 
-### How It Works
+### How it works
 
 A `Pipeline` is specified as a sequence of stages, and each stage is either a `Transformer` or an `Estimator`.
-These stages are run in order, and the input dataset is modified as it passes through each stage.
-For `Transformer` stages, the `transform()` method is called on the dataset.
-For `Estimator` stages, the `fit()` method is called to produce a `Transformer` (which becomes part of the `PipelineModel`, or fitted `Pipeline`), and that `Transformer`'s `transform()` method is called on the dataset.
+These stages are run in order, and the input `DataFrame` is transformed as it passes through each stage.
+For `Transformer` stages, the `transform()` method is called on the `DataFrame`.
+For `Estimator` stages, the `fit()` method is called to produce a `Transformer` (which becomes part of the `PipelineModel`, or fitted `Pipeline`), and that `Transformer`'s `transform()` method is called on the `DataFrame`.
 
 We illustrate this for the simple text document workflow.  The figure below is for the *training time* usage of a `Pipeline`.
 
@@ -115,14 +129,17 @@ We illustrate this for the simple text document workflow.  The figure below is f
 Above, the top row represents a `Pipeline` with three stages.
 The first two (`Tokenizer` and `HashingTF`) are `Transformer`s (blue), and the third (`LogisticRegression`) is an `Estimator` (red).
 The bottom row represents data flowing through the pipeline, where cylinders indicate `DataFrame`s.
-The `Pipeline.fit()` method is called on the original dataset which has raw text documents and labels.
-The `Tokenizer.transform()` method splits the raw text documents into words, adding a new column with words into the dataset.
-The `HashingTF.transform()` method converts the words column into feature vectors, adding a new column with those vectors to the dataset.
+The `Pipeline.fit()` method is called on the original `DataFrame`, which has raw text documents and labels.
+The `Tokenizer.transform()` method splits the raw text documents into words, adding a new column with words to the `DataFrame`.
+The `HashingTF.transform()` method converts the words column into feature vectors, adding a new column with those vectors to the `DataFrame`.
 Now, since `LogisticRegression` is an `Estimator`, the `Pipeline` first calls `LogisticRegression.fit()` to produce a `LogisticRegressionModel`.
-If the `Pipeline` had more stages, it would call the `LogisticRegressionModel`'s `transform()` method on the dataset before passing the dataset to the next stage.
+If the `Pipeline` had more stages, it would call the `LogisticRegressionModel`'s `transform()`
+method on the `DataFrame` before passing the `DataFrame` to the next stage.
 
 A `Pipeline` is an `Estimator`.
-Thus, after a `Pipeline`'s `fit()` method runs, it produces a `PipelineModel` which is a `Transformer`.  This `PipelineModel` is used at *test time*; the figure below illustrates this usage.
+Thus, after a `Pipeline`'s `fit()` method runs, it produces a `PipelineModel`, which is a
+`Transformer`.
+This `PipelineModel` is used at *test time*; the figure below illustrates this usage.
 
 <p style="text-align: center;">
   <img
@@ -134,7 +151,8 @@ Thus, after a `Pipeline`'s `fit()` method runs, it produces a `PipelineModel` wh
 </p>
 
 In the figure above, the `PipelineModel` has the same number of stages as the original `Pipeline`, but all `Estimator`s in the original `Pipeline` have become `Transformer`s.
-When the `PipelineModel`'s `transform()` method is called on a test dataset, the data are passed through the `Pipeline` in order.
+When the `PipelineModel`'s `transform()` method is called on a test dataset, the data are passed
+through the fitted pipeline in order.
 Each stage's `transform()` method updates the dataset and passes it to the next stage.
 
 `Pipeline`s and `PipelineModel`s help to ensure that training and test data go through identical feature processing steps.
@@ -143,40 +161,48 @@ Each stage's `transform()` method updates the dataset and passes it to the next 
 
 *DAG `Pipeline`s*: A `Pipeline`'s stages are specified as an ordered array.  The examples given here are all for linear `Pipeline`s, i.e., `Pipeline`s in which each stage uses data produced by the previous stage.  It is possible to create non-linear `Pipeline`s as long as the data flow graph forms a Directed Acyclic Graph (DAG).  This graph is currently specified implicitly based on the input and output column names of each stage (generally specified as parameters).  If the `Pipeline` forms a DAG, then the stages must be specified in topological order.
 
-*Runtime checking*: Since `Pipeline`s can operate on datasets with varied types, they cannot use compile-time type checking.  `Pipeline`s and `PipelineModel`s instead do runtime checking before actually running the `Pipeline`.  This type checking is done using the dataset *schema*, a description of the data types of columns in the `DataFrame`.
+*Runtime checking*: Since `Pipeline`s can operate on `DataFrame`s with varied types, they cannot use
+compile-time type checking.
+`Pipeline`s and `PipelineModel`s instead do runtime checking before actually running the `Pipeline`.
+This type checking is done using the `DataFrame` *schema*, a description of the data types of columns in the `DataFrame`.
 
 ## Parameters
 
 Spark ML `Estimator`s and `Transformer`s use a uniform API for specifying parameters.
 
-A [`Param`](api/scala/index.html#org.apache.spark.ml.param.Param) is a named parameter with self-contained documentation.
-A [`ParamMap`](api/scala/index.html#org.apache.spark.ml.param.ParamMap) is a set of (parameter, value) pairs.
+A `Param` is a named parameter with self-contained documentation.
+A `ParamMap` is a set of (parameter, value) pairs.
 
 There are two main ways to pass parameters to an algorithm:
 
-1. Set parameters for an instance.  E.g., if `lr` is an instance of `LogisticRegression`, one could call `lr.setMaxIter(10)` to make `lr.fit()` use at most 10 iterations.  This API resembles the API used in MLlib.
+1. Set parameters for an instance.  E.g., if `lr` is an instance of `LogisticRegression`, one could
+   call `lr.setMaxIter(10)` to make `lr.fit()` use at most 10 iterations.
+   This API resembles the API used in `spark.mllib` package.
 2. Pass a `ParamMap` to `fit()` or `transform()`.  Any parameters in the `ParamMap` will override parameters previously specified via setter methods.
 
 Parameters belong to specific instances of `Estimator`s and `Transformer`s.
 For example, if we have two `LogisticRegression` instances `lr1` and `lr2`, then we can build a `ParamMap` with both `maxIter` parameters specified: `ParamMap(lr1.maxIter -> 10, lr2.maxIter -> 20)`.
 This is useful if there are two algorithms with the `maxIter` parameter in a `Pipeline`.
 
-# Algorithm Guides
+# Algorithm guides
 
 There are now several algorithms in the Pipelines API which are not in the `spark.mllib` API, so we link to documentation for them here.  These algorithms are mostly feature transformers, which fit naturally into the `Transformer` abstraction in Pipelines, and ensembles, which fit naturally into the `Estimator` abstraction in the Pipelines.
 
-**Pipelines API Algorithm Guides**
-
-* [Feature Extraction, Transformation, and Selection](ml-features.html)
-* [Decision Trees for Classification and Regression](ml-decision-tree.html)
+* [Feature extraction, transformation, and selection](ml-features.html)
+* [Decision Trees for classification and regression](ml-decision-tree.html)
 * [Ensembles](ml-ensembles.html)
 * [Linear methods with elastic net regularization](ml-linear-methods.html)
 * [Multilayer perceptron classifier](ml-ann.html)
 
-# Code Examples
+# Code examples
 
 This section gives code examples illustrating the functionality discussed above.
-There is not yet documentation for specific algorithms in Spark ML.  For more info, please refer to the [API Documentation](api/scala/index.html#org.apache.spark.ml.package).  Spark ML algorithms are currently wrappers for MLlib algorithms, and the [MLlib programming guide](mllib-guide.html) has details on specific algorithms.
+For more info, please refer to the API documentation
+([Scala](api/scala/index.html#org.apache.spark.ml.package),
+[Java](api/java/org/apache/spark/ml/package-summary.html),
+and [Python](api/python/pyspark.ml.html)).
+Some Spark ML algorithms are wrappers for `spark.mllib` algorithms, and the
+[MLlib programming guide](mllib-guide.html) has details on specific algorithms.
 
 ## Example: Estimator, Transformer, and Param
 
@@ -627,7 +653,7 @@ sc.stop()
 
 </div>
 
-## Example: Model Selection via Cross-Validation
+## Example: model selection via cross-validation
 
 An important task in ML is *model selection*, or using data to find the best model or parameters for a given task.  This is also called *tuning*.
 `Pipeline`s facilitate model selection by making it easy to tune an entire `Pipeline` at once, rather than tuning each element in the `Pipeline` separately.
@@ -873,11 +899,11 @@ jsc.stop();
 
 </div>
 
-## Example: Model Selection via Train Validation Split
+## Example: model selection via train validation split
 In addition to  `CrossValidator` Spark also offers `TrainValidationSplit` for hyper-parameter tuning.
 `TrainValidationSplit` only evaluates each combination of parameters once as opposed to k times in
  case of `CrossValidator`. It is therefore less expensive,
- but will not produce as reliable results when the training dataset is not sufficiently large..
+ but will not produce as reliable results when the training dataset is not sufficiently large.
 
 `TrainValidationSplit` takes an `Estimator`, a set of `ParamMap`s provided in the `estimatorParamMaps` parameter,
 and an `Evaluator`.
