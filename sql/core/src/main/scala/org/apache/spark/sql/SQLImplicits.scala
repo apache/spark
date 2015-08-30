@@ -125,8 +125,7 @@ private[sql] abstract class SQLImplicits {
      */
     def tungstenCache(): DataFrame = {
       val schema = df.schema
-      // Should UnsafeProjection be serializable?
-      // TODO: store numFields and rowSizeInBytes inline in MemoryBlock
+      // Should code gen object by UnsafeProjection be serializable?
       val rowSizeInBytes: Int = UnsafeProjection.create(schema).apply(
           InternalRow.fromSeq(df.rdd.take(1)(0).toSeq)).getSizeInBytes
       val cachedRDD = df.rdd.mapPartitions { iter =>
@@ -135,34 +134,25 @@ private[sql] abstract class SQLImplicits {
         val memoryAllocator = new UnsafeMemoryAllocator()
         iter.foreach { row =>
           val unsafeRow = convertToUnsafe.apply(InternalRow.fromSeq(row.toSeq))
-          // insert unsaferows into memory buffer
           val block = memoryAllocator.allocate(rowSizeInBytes)
           unsafeRow.writeToMemory(block.getBaseObject, block.getBaseOffset)
           buffers.append(block)
         }
-
         Iterator(buffers)
       }.cache()
 
-      // baseRelation holds on to the cached RDD that holds RowBuffers
       val baseRelation: BaseRelation = new BaseRelation with TableScan {
         override val sqlContext = _sqlContext
         override val schema = df.schema
         override val needConversion = false
 
-        /**
-         * Unpacks cached RDD ofByteBuffers into rows
-         */
         override def buildScan(): RDD[Row] = {
           // avoid closure capture
           val numFields = this.schema.length
           val rowSize = rowSizeInBytes
-          println(schema)
-          println(s"numFields: $numFields, rowSize: $rowSize")
 
           cachedRDD.flatMap { buffers =>
-            // turn buffers back into an iterator of UnsafeRows
-            val rowBuffer = buffers.map { block =>
+            buffers.map { block =>
               val unsafeRow = new UnsafeRow()
               unsafeRow.pointTo(
                 block.getBaseObject,
@@ -170,12 +160,8 @@ private[sql] abstract class SQLImplicits {
                 numFields,
                 rowSize
               )
-              println(s"baseObject: ${unsafeRow.getBaseObject}, offset: ${unsafeRow.getBaseOffset}")
-              println(s"numFields: ${unsafeRow.numFields()}, 0: ${unsafeRow.getInt(0)}, 1: ${unsafeRow.getUTF8String(1)}")
-              println("-" * 10)
               unsafeRow
             }
-            rowBuffer
           }.asInstanceOf[RDD[Row]]
         }
       }
