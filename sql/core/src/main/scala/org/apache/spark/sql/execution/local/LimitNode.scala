@@ -20,30 +20,26 @@ package org.apache.spark.sql.execution.local
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
-/**
- * An operator that scans some local data collection in the form of Scala Seq.
- */
-case class SeqScanNode(output: Seq[Attribute], data: Seq[InternalRow]) extends LeafLocalNode {
 
-  private[this] var iterator: Iterator[InternalRow] = _
-  private[this] var currentRow: InternalRow = _
+case class LimitNode(limit: Int, child: LocalNode) extends UnaryLocalNode {
 
-  override def open(): Unit = {
-    iterator = data.iterator
-  }
+  private[this] var count = 0
+
+  override def output: Seq[Attribute] = child.output
+
+  override def open(): Unit = child.open()
+
+  override def close(): Unit = child.close()
+
+  override def fetch(): InternalRow = child.fetch()
 
   override def next(): Boolean = {
-    if (iterator.hasNext) {
-      currentRow = iterator.next()
-      true
+    if (count < limit) {
+      count += 1
+      child.next()
     } else {
       false
     }
   }
 
-  override def fetch(): InternalRow = currentRow
-
-  override def close(): Unit = {
-    // Do nothing
-  }
 }

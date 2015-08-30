@@ -20,30 +20,53 @@ package org.apache.spark.sql.execution.local
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
-/**
- * An operator that scans some local data collection in the form of Scala Seq.
- */
-case class SeqScanNode(output: Seq[Attribute], data: Seq[InternalRow]) extends LeafLocalNode {
+case class UnionNode(children: Seq[LocalNode]) extends LocalNode {
 
-  private[this] var iterator: Iterator[InternalRow] = _
-  private[this] var currentRow: InternalRow = _
+  override def output: Seq[Attribute] = children.head.output
+
+  private[this] var currentChild: LocalNode = _
+
+  private[this] var nextChildIndex: Int = _
 
   override def open(): Unit = {
-    iterator = data.iterator
+    currentChild = children.head
+    currentChild.open()
+    nextChildIndex = 1
   }
 
-  override def next(): Boolean = {
-    if (iterator.hasNext) {
-      currentRow = iterator.next()
-      true
-    } else {
-      false
+  private def advanceToNextChild(): Boolean = {
+    var found = false
+    var exit = false
+    while (!exit && !found) {
+      if (currentChild != null) {
+        currentChild.close()
+      }
+      if (nextChildIndex >= children.size) {
+        found = false
+        exit = true
+      } else {
+        currentChild = children(nextChildIndex)
+        nextChildIndex += 1
+        currentChild.open()
+        found = currentChild.next()
+      }
+    }
+    found
+  }
+
+  override def close(): Unit = {
+    if (currentChild != null) {
+      currentChild.close()
     }
   }
 
-  override def fetch(): InternalRow = currentRow
+  override def fetch(): InternalRow = currentChild.fetch()
 
-  override def close(): Unit = {
-    // Do nothing
+  override def next(): Boolean = {
+    if (currentChild.next()) {
+      true
+    } else {
+      advanceToNextChild()
+    }
   }
 }

@@ -34,8 +34,8 @@ case class ProjectNode(projectList: Seq[NamedExpression], child: LocalNode) exte
 
   override def next(): Boolean = child.next()
 
-  override def get(): InternalRow = {
-    project.apply(child.get())
+  override def fetch(): InternalRow = {
+    project.apply(child.fetch())
   }
 
   override def close(): Unit = child.close()

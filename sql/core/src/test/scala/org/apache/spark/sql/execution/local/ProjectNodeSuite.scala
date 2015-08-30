@@ -17,33 +17,28 @@
 
 package org.apache.spark.sql.execution.local
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.test.SharedSQLContext
 
-/**
- * An operator that scans some local data collection in the form of Scala Seq.
- */
-case class SeqScanNode(output: Seq[Attribute], data: Seq[InternalRow]) extends LeafLocalNode {
+class ProjectNodeSuite extends LocalNodeTest with SharedSQLContext {
 
-  private[this] var iterator: Iterator[InternalRow] = _
-  private[this] var currentRow: InternalRow = _
-
-  override def open(): Unit = {
-    iterator = data.iterator
+  test("basic") {
+    val output = testData.queryExecution.sparkPlan.output
+    val columns = Seq(output(1), output(0))
+    checkAnswer(
+      testData,
+      node => ProjectNode(columns, node),
+      testData.select("value", "key").collect()
+    )
   }
 
-  override def next(): Boolean = {
-    if (iterator.hasNext) {
-      currentRow = iterator.next()
-      true
-    } else {
-      false
-    }
+  test("empty") {
+    val output = emptyTestData.queryExecution.sparkPlan.output
+    val columns = Seq(output(1), output(0))
+    checkAnswer(
+      emptyTestData,
+      node => ProjectNode(columns, node),
+      emptyTestData.select("value", "key").collect()
+    )
   }
 
-  override def fetch(): InternalRow = currentRow
-
-  override def close(): Unit = {
-    // Do nothing
-  }
 }
