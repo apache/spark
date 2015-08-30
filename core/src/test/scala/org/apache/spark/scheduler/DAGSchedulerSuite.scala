@@ -812,6 +812,58 @@ class DAGSchedulerSuite
   }
 
   /**
+   * We lose an executor after completing some shuffle map tasks on it.  Those tasks get
+   * resubmitted, and when they finish the job completes normally
+   */
+  test("register map outputs correctly after ExecutorLost and task Resubmitted") {
+    val firstRDD = new MyRDD(sc, 3, Nil)
+    val firstShuffleDep = new ShuffleDependency(firstRDD, null)
+    val reduceRdd = new MyRDD(sc, 5, List(firstShuffleDep))
+    submit(reduceRdd, Array(0))
+
+    // complete some of the tasks from the first stage, on one host
+    runEvent(CompletionEvent(
+      taskSets(0).tasks(0), Success,
+      makeMapStatus("hostA", reduceRdd.partitions.length), null, createFakeTaskInfo(), null))
+    runEvent(CompletionEvent(
+      taskSets(0).tasks(1), Success,
+      makeMapStatus("hostA", reduceRdd.partitions.length), null, createFakeTaskInfo(), null))
+
+    // now that host goes down
+    runEvent(ExecutorLost("exec-hostA"))
+
+    // so we resubmit those tasks
+    runEvent(CompletionEvent(
+      taskSets(0).tasks(0), Resubmitted, null, null, createFakeTaskInfo(), null))
+    runEvent(CompletionEvent(
+      taskSets(0).tasks(1), Resubmitted, null, null, createFakeTaskInfo(), null))
+
+    // now complete everything on a different host
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostB", reduceRdd.partitions.length)),
+      (Success, makeMapStatus("hostB", reduceRdd.partitions.length)),
+      (Success, makeMapStatus("hostB", reduceRdd.partitions.length))
+    ))
+
+    // now we should submit stage 1, and the map output from stage 0 should be registered
+
+    // check that we have all the map output for stage 0
+    (0 until reduceRdd.partitions.length).foreach { reduceIdx =>
+      val statuses = mapOutputTracker.getMapSizesByExecutorId(0, reduceIdx)
+      // really we should have already thrown an exception rather than fail either of these
+      // asserts, but just to be extra defensive let's double check the statuses are OK
+      assert(statuses != null)
+      assert(statuses.nonEmpty)
+    }
+
+    // and check that stage 1 has been submitted
+    assert(taskSets.size == 2)
+    val stage1TaskSet = taskSets(1)
+    assert(stage1TaskSet.stageId == 1)
+    assert(stage1TaskSet.stageAttemptId == 0)
+  }
+
+  /**
    * Makes sure that failures of stage used by multiple jobs are correctly handled.
    *
    * This test creates the following dependency graph:
