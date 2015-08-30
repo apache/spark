@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql
 
+
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow, SpecificMutableRow}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.sources.{TableScan, BaseRelation}
@@ -116,24 +118,32 @@ private[sql] abstract class SQLImplicits {
   }
 
   /**
+   * ::Experimental::
+   *
    * Pimp my library decorator for tungsten caching of DataFrames.
    * @since 1.5.1
    */
-  implicit class TungstenCache(df: DataFrame) extends Serializable {
+  @Experimental
+  private[sql] implicit class TungstenCache(df: DataFrame) extends Serializable {
     /**
      * Packs the rows of [[df]] into contiguous blocks of memory.
      */
     def tungstenCache(): DataFrame = {
       val schema = df.schema
-      // Should code gen object by UnsafeProjection be serializable?
-      val rowSizeInBytes: Int = UnsafeProjection.create(schema).apply(
-          InternalRow.fromSeq(df.rdd.take(1)(0).toSeq)).getSizeInBytes
-      val cachedRDD = df.rdd.mapPartitions { iter =>
+
+      val convert = CatalystTypeConverters.createToCatalystConverter(schema)
+      val internalRows = df.rdd.map(convert(_).asInstanceOf[InternalRow])
+      val rowSizeInBytes: Int = UnsafeProjection
+        .create(schema)
+        .apply(internalRows.first())
+        .getSizeInBytes
+      val cachedRDD = internalRows.mapPartitions { iter =>
         val buffers = new ArrayBuffer[MemoryBlock]()
+        // TODO?: make UnsafeProjection.create code gen serializable
         val convertToUnsafe = UnsafeProjection.create(schema)
         val memoryAllocator = new UnsafeMemoryAllocator()
         iter.foreach { row =>
-          val unsafeRow = convertToUnsafe.apply(InternalRow.fromSeq(row.toSeq))
+          val unsafeRow = convertToUnsafe.apply(row)
           val block = memoryAllocator.allocate(rowSizeInBytes)
           unsafeRow.writeToMemory(block.getBaseObject, block.getBaseOffset)
           buffers.append(block)
