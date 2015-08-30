@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.util.{Map => JMap}
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConverters.{collectionAsScalaIterableConverter, mapAsJavaMapConverter, mapAsScalaMapConverter}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
@@ -107,26 +107,33 @@ private[parquet] object CatalystReadSupport {
    * in `catalystSchema`, and adding those only exist in `catalystSchema`.
    */
   def clipParquetSchema(parquetSchema: MessageType, catalystSchema: StructType): MessageType = {
-    val clippedGroup = clipParquetType(parquetSchema.asGroupType(), catalystSchema).asGroupType()
-    Types.buildMessage().addFields(clippedGroup.getFields.asScala: _*).named("root")
+    val clippedParquetFields = clipParquetGroupFields(parquetSchema.asGroupType(), catalystSchema)
+    Types.buildMessage().addFields(clippedParquetFields: _*).named("root")
   }
 
   private def clipParquetType(parquetType: Type, catalystType: DataType): Type = {
     catalystType match {
       case t: ArrayType if !isPrimitiveCatalystType(t.elementType) =>
+        // Only clips array types with nested type as element type.
         clipParquetListType(parquetType.asGroupType(), t.elementType)
 
       case t: MapType if !isPrimitiveCatalystType(t.valueType) =>
+        // Only clips map types with nested type as value type.
         clipParquetMapType(parquetType.asGroupType(), t.keyType, t.valueType)
 
       case t: StructType =>
-        clipParquetRecord(parquetType.asGroupType(), t)
+        clipParquetGroup(parquetType.asGroupType(), t)
 
       case _ =>
         parquetType
     }
   }
 
+  /**
+   * Whether a Catalyst [[DataType]] is primitive.  Primitive [[DataType]] is not equivalent to
+   * [[AtomicType]].  For example, [[CalendarIntervalType]] is primitive, but it's not an
+   * [[AtomicType]].
+   */
   private def isPrimitiveCatalystType(dataType: DataType): Boolean = {
     dataType match {
       case _: ArrayType | _: MapType | _: StructType => false
@@ -134,16 +141,33 @@ private[parquet] object CatalystReadSupport {
     }
   }
 
+  /**
+   * Clips a Parquet [[GroupType]] which corresponds to a Catalyst [[ArrayType]].  The element type
+   * of the [[ArrayType]] should also be a nested type, namely an [[ArrayType]], a [[MapType]], or a
+   * [[StructType]].
+   */
   private def clipParquetListType(parquetList: GroupType, elementType: DataType): Type = {
+    // Precondition of this method, should only be called for lists with nested element types.
     assert(!isPrimitiveCatalystType(elementType))
 
-    // Unannotated repeated group, list element type is just the group itself.  Clip it.
+    // Unannotated repeated group should be interpreted as required list of required element, so
+    // list element type is just the group itself.  Clip it.
     if (parquetList.getOriginalType == null && parquetList.isRepetition(Repetition.REPEATED)) {
       clipParquetType(parquetList, elementType)
     } else {
-      assert(parquetList.getOriginalType == OriginalType.LIST)
-      assert(parquetList.getFieldCount == 1)
-      assert(parquetList.getType(0).isRepetition(Repetition.REPEATED))
+      assert(
+        parquetList.getOriginalType == OriginalType.LIST,
+        "Invalid Parquet schema. " +
+          "Original type of annotated Parquet lists must be LIST: " +
+          parquetList.toString)
+
+      assert(
+        parquetList.getFieldCount == 1 && parquetList.getType(0).isRepetition(Repetition.REPEATED),
+        "Invalid Parquet schema. " +
+          "LIST-annotated group should only have exactly one repeated field: " +
+          parquetList)
+
+      // Precondition of this method, should only be called for lists with nested element types.
       assert(!parquetList.getType(0).isPrimitive)
 
       val repeatedGroup = parquetList.getType(0).asGroupType()
@@ -179,8 +203,14 @@ private[parquet] object CatalystReadSupport {
     }
   }
 
+  /**
+   * Clips a Parquet [[GroupType]] which corresponds to a Catalyst [[MapType]].  The value type
+   * of the [[MapType]] should also be a nested type, namely an [[ArrayType]], a [[MapType]], or a
+   * [[StructType]].  Note that key type of any [[MapType]] is always a primitive type.
+   */
   private def clipParquetMapType(
       parquetMap: GroupType, keyType: DataType, valueType: DataType): GroupType = {
+    // Precondition of this method, should only be called for maps with nested value types.
     assert(!isPrimitiveCatalystType(valueType))
 
     val repeatedGroup = parquetMap.getType(0).asGroupType()
@@ -202,27 +232,37 @@ private[parquet] object CatalystReadSupport {
       .named(parquetMap.getName)
   }
 
-  private def clipParquetRecord(parquetRecord: GroupType, structType: StructType): GroupType = {
-    val tailoredFields = {
-      val parquetFieldMap = parquetRecord.getFields.asScala.map(f => f.getName -> f).toMap
-      val toParquet = new CatalystSchemaConverter(followParquetFormatSpec = true)
-      structType.map { f =>
-        parquetFieldMap
-          .get(f.name)
-          .map(clipParquetType(_, f.dataType))
-          .getOrElse(toParquet.convertField(f))
-      }
-    }
+  /**
+   * Clips a Parquet [[GroupType]] which corresponds to a Catalyst [[StructType]].
+   *
+   * @return A clipped [[GroupType]], which has at least one field.
+   * @note Parquet doesn't allow creating empty [[GroupType]] instances except for empty
+   *       [[MessageType]].  Because it's legal to construct an empty requested schema for column
+   *       pruning.
+   */
+  private def clipParquetGroup(parquetRecord: GroupType, structType: StructType): GroupType = {
+    val clippedParquetFields = clipParquetGroupFields(parquetRecord, structType)
+    Types
+      .buildGroup(parquetRecord.getRepetition)
+      .as(parquetRecord.getOriginalType)
+      .addFields(clippedParquetFields: _*)
+      .named(parquetRecord.getName)
+  }
 
-    // Here we can't use builder methods defined in `Types` to construct the `GroupType` and have to
-    // resort to this deprecated constructor.  The reason is that, `tailoredFields` can be empty,
-    // and `Types` builder methods don't allow constructing empty group types.  For example, query
-    // `SELECT COUNT(1) FROM t` requests for zero columns.
-    // TODO Refactor method signature to return a list of fields instead of a `GroupType`
-    new GroupType(
-      parquetRecord.getRepetition,
-      parquetRecord.getName,
-      parquetRecord.getOriginalType,
-      tailoredFields.asJava)
+  /**
+   * Clips a Parquet [[GroupType]] which corresponds to a Catalyst [[StructType]].
+   *
+   * @return A list of clipped [[GroupType]] fields, which can be empty.
+   */
+  private def clipParquetGroupFields(
+      parquetRecord: GroupType, structType: StructType): Seq[Type] = {
+    val parquetFieldMap = parquetRecord.getFields.asScala.map(f => f.getName -> f).toMap
+    val toParquet = new CatalystSchemaConverter(followParquetFormatSpec = true)
+    structType.map { f =>
+      parquetFieldMap
+        .get(f.name)
+        .map(clipParquetType(_, f.dataType))
+        .getOrElse(toParquet.convertField(f))
+    }
   }
 }
