@@ -190,7 +190,7 @@ private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends L
   }
 
   /** REST connection to request a new application id with available resources from RM */
-  private def newApplicationSubmission(): NewApplication = {
+  def newApplicationSubmission(): NewApplication = {
     logWarning("Submitting a request for creating new application using Yarn REST API is only " +
       "supported for Hadoop 2.5+")
     logInfo(s"Submit a request for creating new application in resource manager")
@@ -265,7 +265,7 @@ private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends L
     try {
       val respCode = connection.getResponseCode
       val dataStream =
-        if (respCode == HttpServletResponse.SC_OK || respCode == HttpServletResponse.SC_ACCEPTED) {
+        if (respCode == HttpServletResponse.SC_OK) {
           connection.getInputStream
         } else {
           connection.getErrorStream
@@ -333,6 +333,6 @@ private[spark] object YarnRestSubmissionClient extends Logging {
       ): YarnSubmitRestProtocolResponse = {
     val clazz = classTag[T].runtimeClass
       .asSubclass[YarnSubmitRestProtocolResponse](classOf[YarnSubmitRestProtocolResponse])
-    SubmitRestProtocolMessage.mapper.readValue(json, clazz)
+    SubmitRestProtocolMessage.fromJson(json, clazz)
   }
 }

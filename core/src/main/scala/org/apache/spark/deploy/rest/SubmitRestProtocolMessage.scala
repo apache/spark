@@ -99,7 +99,7 @@ private[rest] abstract class SubmitRestProtocolMessage {
  */
 private[spark] object SubmitRestProtocolMessage {
   private val packagePrefix = this.getClass.getPackage.getName
-  val mapper = new ObjectMapper()
+  private val mapper = new ObjectMapper()
     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
     .enable(SerializationFeature.INDENT_OUTPUT)
     .registerModule(DefaultScalaModule)
