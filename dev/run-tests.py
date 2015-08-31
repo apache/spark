@@ -496,6 +496,8 @@ def main():
 
     # spark build
     build_apache_spark(build_tool, hadoop_version)
+    if should_run_build_tests:
+        run_build_tests()
 
     # backwards compatibility checks
     detect_binary_inop_with_mima()
@@ -508,8 +510,6 @@ def main():
         run_python_tests(modules_with_python_tests, opts.parallelism)
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()
-    if should_run_build_tests:
-        run_build_tests()
 
 
 def _test():
