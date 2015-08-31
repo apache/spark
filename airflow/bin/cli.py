@@ -335,6 +335,7 @@ def version(args):
 
 def flower(args):
     broka = conf.get('celery', 'BROKER_URL')
+    args.port = args.port or conf.get('celery', 'FLOWER_PORT')
     port = '--port=' + args.port
     api = ''
     if args.broker_api:
@@ -552,8 +553,7 @@ def get_parser():
     ht = "Start a Celery Flower"
     parser_flower = subparsers.add_parser('flower', help=ht)
     parser_flower.add_argument(
-        "-p", "--port", help="The port",
-        default=conf.get('celery', 'FLOWER_PORT'))
+        "-p", "--port", help="The port")
     parser_flower.add_argument(
         "-a", "--broker_api", help="Broker api")
     parser_flower.set_defaults(func=flower)
