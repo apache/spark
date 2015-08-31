@@ -21,7 +21,7 @@ import java.io.{DataOutputStream, FileNotFoundException}
 import java.net.{ConnectException, SocketException, HttpURLConnection, URL}
 import javax.servlet.http.HttpServletResponse
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.io.Source
 import scala.reflect.{classTag, ClassTag}
 
@@ -118,7 +118,7 @@ private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends L
     val tags = sparkConf.getOption(Client.CONF_SPARK_YARN_APPLICATION_TAGS)
       .map(StringUtils.getTrimmedStringCollection(_))
       .filter(!_.isEmpty)
-      .map(_.toSet)
+      .map(_.asScala.toSet)
 
     new ApplicationSubmissionContextInfo().buildFrom(
       newApplication.applicationId,

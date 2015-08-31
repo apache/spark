@@ -21,7 +21,7 @@ import java.io.{DataInputStream, ByteArrayInputStream}
 import java.net.URI
 import java.util
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.token.TokenIdentifier
@@ -140,17 +140,17 @@ private[rest] class ContainerLaunchContextInfo extends YarnSubmitRestProtocolReq
   def buildFrom(containerContext: ContainerLaunchContext): ContainerLaunchContextInfo = {
     if (!containerContext.getLocalResources.isEmpty) {
       localResources = new JaxbMapWrapper[String, LocalResourceInfo].buildFrom(
-        containerContext.getLocalResources
+        containerContext.getLocalResources.asScala
           .mapValues(r => new LocalResourceInfo().buildFrom(r)).toMap)
     }
 
     if (!containerContext.getEnvironment.isEmpty) {
       environment = new JaxbMapWrapper[String, String]().buildFrom(
-        containerContext.getEnvironment.toMap)
+        containerContext.getEnvironment.asScala.toMap)
     }
 
     if (!containerContext.getCommands.isEmpty) {
-      val commandStr = containerContext.getCommands.mkString(" ")
+      val commandStr = containerContext.getCommands.asScala.mkString(" ")
       val t = new Command
       t.command = commandStr
       commands = List(t)
@@ -158,7 +158,7 @@ private[rest] class ContainerLaunchContextInfo extends YarnSubmitRestProtocolReq
 
     if (!containerContext.getServiceData.isEmpty) {
       serviceData = new JaxbMapWrapper[String, String]().buildFrom {
-        containerContext.getServiceData.mapValues { bytes =>
+        containerContext.getServiceData.asScala.mapValues { bytes =>
           Base64.encodeBase64URLSafeString(bytes.array())
         }.toMap
       }
@@ -171,7 +171,7 @@ private[rest] class ContainerLaunchContextInfo extends YarnSubmitRestProtocolReq
 
     if (!containerContext.getApplicationACLs.isEmpty) {
       acls = new JaxbMapWrapper[ApplicationAccessType, String]().buildFrom(
-        containerContext.getApplicationACLs.toMap)
+        containerContext.getApplicationACLs.asScala.toMap)
     }
 
     this
@@ -219,7 +219,7 @@ private[rest] class CredentialsInfo extends YarnSubmitRestProtocolRequest {
 
     if (!credentials.getAllSecretKeys.isEmpty) {
       secrets = new JaxbMapWrapper[String, String]().buildFrom {
-        credentials.getAllSecretKeys.map { key =>
+        credentials.getAllSecretKeys.asScala.map { key =>
           (key.toString, Base64.encodeBase64String(credentials.getSecretKey(key)))
         }.toMap
       }
@@ -237,7 +237,7 @@ private[rest] class CredentialsInfo extends YarnSubmitRestProtocolRequest {
 
     if (!hadoopTokens.isEmpty) {
       tokens = new JaxbMapWrapper[String, String]().buildFrom {
-        hadoopTokens.map { case (k, v) => (k.toString, v.encodeToUrlString()) }.toMap
+        hadoopTokens.asScala.map { case (k, v) => (k.toString, v.encodeToUrlString()) }.toMap
       }
     }
 
@@ -276,4 +276,3 @@ private[rest] class JaxbMapWrapper[K, V] {
     var value: V = null.asInstanceOf[V]
   }
 }
-
