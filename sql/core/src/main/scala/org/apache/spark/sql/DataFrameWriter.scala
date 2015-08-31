@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -109,7 +111,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def options(options: java.util.Map[String, String]): DataFrameWriter = {
-    this.options(scala.collection.JavaConversions.mapAsScalaMap(options))
+    this.options(options.asScala)
     this
   }
 
@@ -218,7 +220,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       case _ =>
         val cmd =
           CreateTableUsingAsSelect(
-            tableIdent.unquotedString,
+            tableIdent,
             source,
             temporary = false,
             partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
@@ -244,7 +246,13 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *                             should be included.
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
-    val conn = JdbcUtils.createConnection(url, connectionProperties)
+    val props = new Properties()
+    extraOptions.foreach { case (key, value) =>
+      props.put(key, value)
+    }
+    // connectionProperties should override settings in extraOptions
+    props.putAll(connectionProperties)
+    val conn = JdbcUtils.createConnection(url, props)
 
     try {
       var tableExists = JdbcUtils.tableExists(conn, table)
@@ -272,7 +280,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       conn.close()
     }
 
-    JdbcUtils.saveTable(df, url, table, connectionProperties)
+    JdbcUtils.saveTable(df, url, table, props)
   }
 
   /**

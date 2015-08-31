@@ -20,7 +20,7 @@ package org.apache.spark.streaming.flume
 import java.net.InetSocketAddress
 import java.util.concurrent.{LinkedBlockingQueue, Executors}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -94,9 +94,7 @@ private[streaming] class FlumePollingReceiver(
   override def onStop(): Unit = {
     logInfo("Shutting down Flume Polling Receiver")
     receiverExecutor.shutdownNow()
-    connections.foreach(connection => {
-      connection.transceiver.close()
-    })
+    connections.asScala.foreach(_.transceiver.close())
     channelFactory.releaseExternalResources()
   }
 

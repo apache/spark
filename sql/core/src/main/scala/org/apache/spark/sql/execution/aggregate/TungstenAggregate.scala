@@ -104,7 +104,7 @@ case class TungstenAggregate(
         } else {
           // This is a grouped aggregate and the input iterator is empty,
           // so return an empty iterator.
-          Iterator[UnsafeRow]()
+          Iterator.empty
         }
       } else {
         aggregationIterator.start(parentIterator)
@@ -127,11 +127,12 @@ case class TungstenAggregate(
     testFallbackStartsAt match {
       case None =>
         val keyString = groupingExpressions.mkString("[", ",", "]")
-        val valueString = allAggregateExpressions.mkString("[", ",", "]")
-        s"TungstenAggregate(key=$keyString, value=$valueString"
+        val functionString = allAggregateExpressions.mkString("[", ",", "]")
+        val outputString = output.mkString("[", ",", "]")
+        s"TungstenAggregate(key=$keyString, functions=$functionString, output=$outputString)"
       case Some(fallbackStartsAt) =>
         s"TungstenAggregateWithControlledFallback $groupingExpressions " +
-          s"$allAggregateExpressions fallbackStartsAt=$fallbackStartsAt"
+          s"$allAggregateExpressions $resultExpressions fallbackStartsAt=$fallbackStartsAt"
     }
   }
 }

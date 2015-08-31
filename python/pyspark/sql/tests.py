@@ -145,6 +145,12 @@ class PythonOnlyPoint(ExamplePoint):
     __UDT__ = PythonOnlyUDT()
 
 
+class MyObject(object):
+    def __init__(self, key, value):
+        self.key = key
+        self.value = value
+
+
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055
     def test_data_type_eq(self):
@@ -382,6 +388,12 @@ class SQLTests(ReusedPySparkTestCase):
                                    CustomRow(field1=3, field2="row3")])
         df = self.sqlCtx.inferSchema(rdd)
         self.assertEquals(Row(field1=1, field2=u'row1'), df.first())
+
+    def test_create_dataframe_from_objects(self):
+        data = [MyObject(1, "1"), MyObject(2, "2")]
+        df = self.sqlCtx.createDataFrame(data)
+        self.assertEqual(df.dtypes, [("key", "bigint"), ("value", "string")])
+        self.assertEqual(df.first(), Row(key=1, value="1"))
 
     def test_select_null_literal(self):
         df = self.sqlCtx.sql("select null as col")
@@ -770,7 +782,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(isinstance(df['key'], Column))
         self.assertTrue(isinstance(df[0], Column))
         self.assertRaises(IndexError, lambda: df[2])
-        self.assertRaises(IndexError, lambda: df["bad_key"])
+        self.assertRaises(AnalysisException, lambda: df["bad_key"])
         self.assertRaises(TypeError, lambda: df[{}])
 
     def test_column_name_with_non_ascii(self):
@@ -794,7 +806,9 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.sc.parallelize([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})]).toDF()
         self.assertEqual(1, df.select(df.l[0]).first()[0])
         self.assertEqual(1, df.select(df.r["a"]).first()[0])
+        self.assertEqual(1, df.select(df["r.a"]).first()[0])
         self.assertEqual("b", df.select(df.r["b"]).first()[0])
+        self.assertEqual("b", df.select(df["r.b"]).first()[0])
         self.assertEqual("v", df.select(df.d["k"]).first()[0])
 
     def test_infer_long_type(self):
@@ -1033,6 +1047,10 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertRaisesRegexp(IllegalArgumentException, "1024 is not in the permitted values",
                                 lambda: df.select(sha2(df.a, 1024)).collect())
 
+    def test_with_column_with_existing_name(self):
+        keys = self.df.withColumn("key", self.df.key).select("key").collect()
+        self.assertEqual([r.key for r in keys], list(range(100)))
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
@@ -1123,6 +1141,29 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         ]
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[:len(r)])
+
+    def test_window_functions_without_partitionBy(self):
+        df = self.sqlCtx.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
+        w = Window.orderBy("key", df.value)
+        from pyspark.sql import functions as F
+        sel = df.select(df.value, df.key,
+                        F.max("key").over(w.rowsBetween(0, 1)),
+                        F.min("key").over(w.rowsBetween(0, 1)),
+                        F.count("key").over(w.rowsBetween(float('-inf'), float('inf'))),
+                        F.rowNumber().over(w),
+                        F.rank().over(w),
+                        F.denseRank().over(w),
+                        F.ntile(2).over(w))
+        rs = sorted(sel.collect())
+        expected = [
+            ("1", 1, 1, 1, 4, 1, 1, 1, 1),
+            ("2", 1, 1, 1, 4, 2, 2, 2, 1),
+            ("2", 1, 2, 1, 4, 3, 2, 2, 2),
+            ("2", 2, 2, 2, 4, 4, 4, 3, 2)
+        ]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
+
 
 if __name__ == "__main__":
     unittest.main()

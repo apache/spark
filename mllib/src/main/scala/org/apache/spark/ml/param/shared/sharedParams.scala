@@ -342,4 +342,19 @@ private[ml] trait HasStepSize extends Params {
   /** @group getParam */
   final def getStepSize: Double = $(stepSize)
 }
+
+/**
+ * Trait for shared param weightCol.
+ */
+private[ml] trait HasWeightCol extends Params {
+
+  /**
+   * Param for weight column name. If this is not set or empty, we treat all instance weights as 1.0..
+   * @group param
+   */
+  final val weightCol: Param[String] = new Param[String](this, "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
+
+  /** @group getParam */
+  final def getWeightCol: String = $(weightCol)
+}
 // scalastyle:on

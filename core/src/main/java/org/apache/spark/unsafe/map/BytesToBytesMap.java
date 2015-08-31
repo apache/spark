@@ -17,25 +17,24 @@
 
 package org.apache.spark.unsafe.map;
 
-import java.lang.Override;
-import java.lang.UnsupportedOperationException;
+import javax.annotation.Nullable;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-
-import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.shuffle.ShuffleMemoryManager;
-import org.apache.spark.unsafe.*;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.bitset.BitSet;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
-import org.apache.spark.unsafe.memory.*;
+import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryLocation;
+import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
 /**
  * An append-only hash map where keys and values are contiguous regions of bytes.
@@ -93,9 +92,9 @@ public final class BytesToBytesMap {
 
   /**
    * The maximum number of keys that BytesToBytesMap supports. The hash table has to be
-   * power-of-2-sized and its backing Java array can contain at most (1 << 30) elements, since
-   * that's the largest power-of-2 that's less than Integer.MAX_VALUE. We need two long array
-   * entries per key, giving us a maximum capacity of (1 << 29).
+   * power-of-2-sized and its backing Java array can contain at most (1 &lt;&lt; 30) elements,
+   * since that's the largest power-of-2 that's less than Integer.MAX_VALUE. We need two long array
+   * entries per key, giving us a maximum capacity of (1 &lt;&lt; 29).
    */
   @VisibleForTesting
   static final int MAX_CAPACITY = (1 << 29);
@@ -328,6 +327,20 @@ public final class BytesToBytesMap {
       Object keyBaseObject,
       long keyBaseOffset,
       int keyRowLengthBytes) {
+    safeLookup(keyBaseObject, keyBaseOffset, keyRowLengthBytes, loc);
+    return loc;
+  }
+
+  /**
+   * Looks up a key, and saves the result in provided `loc`.
+   *
+   * This is a thread-safe version of `lookup`, could be used by multiple threads.
+   */
+  public void safeLookup(
+      Object keyBaseObject,
+      long keyBaseOffset,
+      int keyRowLengthBytes,
+      Location loc) {
     assert(bitset != null);
     assert(longArray != null);
 
@@ -343,7 +356,8 @@ public final class BytesToBytesMap {
       }
       if (!bitset.isSet(pos)) {
         // This is a new key.
-        return loc.with(pos, hashcode, false);
+        loc.with(pos, hashcode, false);
+        return;
       } else {
         long stored = longArray.get(pos * 2 + 1);
         if ((int) (stored) == hashcode) {
@@ -361,7 +375,7 @@ public final class BytesToBytesMap {
               keyRowLengthBytes
             );
             if (areEqual) {
-              return loc;
+              return;
             } else {
               if (enablePerfMetrics) {
                 numHashCollisions++;

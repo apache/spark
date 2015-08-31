@@ -389,7 +389,8 @@ Apart from these, the following properties are also available, and may be useful
     Implementation to use for transferring shuffle and cached blocks between executors. There
     are two implementations available: <code>netty</code> and <code>nio</code>. Netty-based
     block transfer is intended to be simpler but equally efficient and is the default option
-    starting in 1.2.
+    starting in 1.2, and <code>nio</code> block transfer is deprecated in Spark 1.5.0 and will
+    be removed in Spark 1.6.0.
   </td>
 </tr>
 <tr>
@@ -905,16 +906,6 @@ Apart from these, the following properties are also available, and may be useful
 #### Networking
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
-<tr>
-  <td><code>spark.akka.failure-detector.threshold</code></td>
-  <td>300.0</td>
-  <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
-     enabled again, if you plan to use this feature (Not recommended). This maps to akka's
-     `akka.remote.transport-failure-detector.threshold`. Tune this in combination of
-     `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
-  </td>
-</tr>
 <tr>
   <td><code>spark.akka.frameSize</code></td>
   <td>128</td>
@@ -1560,7 +1551,11 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>PYSPARK_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark.</td>
+    <td>Python binary executable to use for PySpark in both driver and workers (default is `python`).</td>
+  </tr>
+  <tr>
+    <td><code>PYSPARK_DRIVER_PYTHON</code></td>
+    <td>Python binary executable to use for PySpark in driver only (default is PYSPARK_PYTHON).</td>
   </tr>
   <tr>
     <td><code>SPARK_LOCAL_IP</code></td>

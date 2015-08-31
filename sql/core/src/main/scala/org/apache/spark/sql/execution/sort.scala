@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{SparkEnv, InternalAccumulator, TaskContext}
 import org.apache.spark.rdd.{MapPartitionsWithPreparationRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{UnspecifiedDistribution, OrderedDistribution, Distribution}
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
+import org.apache.spark.{SparkEnv, InternalAccumulator, TaskContext}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines various sort operators.
@@ -122,7 +122,6 @@ case class TungstenSort(
   protected override def doExecute(): RDD[InternalRow] = {
     val schema = child.schema
     val childOutput = child.output
-    val pageSize = SparkEnv.get.shuffleMemoryManager.pageSizeBytes
 
     /**
      * Set up the sorter in each partition before computing the parent partition.
@@ -143,6 +142,7 @@ case class TungstenSort(
         }
       }
 
+      val pageSize = SparkEnv.get.shuffleMemoryManager.pageSizeBytes
       val sorter = new UnsafeExternalRowSorter(
         schema, ordering, prefixComparator, prefixComputer, pageSize)
       if (testSpillFrequency > 0) {
