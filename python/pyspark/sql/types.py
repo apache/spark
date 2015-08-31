@@ -1283,7 +1283,7 @@ class DatetimeConverter(object):
     def convert(self, obj, gateway_client):
         Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
         seconds = (calendar.timegm(obj.utctimetuple()) if obj.tzinfo
-                  else time.mktime(obj.timetuple()))
+                   else time.mktime(obj.timetuple()))
         return Timestamp(int(seconds) * 1000 + obj.microsecond // 1000)
 
 
