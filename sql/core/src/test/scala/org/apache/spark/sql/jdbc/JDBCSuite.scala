@@ -407,6 +407,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
   test("Default jdbc dialect registration") {
     assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") == MySQLDialect)
     assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
+    assert(JdbcDialects.get("jdbc:db2://127.0.0.1/db") == DB2Dialect)
     assert(JdbcDialects.get("test.invalid") == NoopDialect)
   }
 
@@ -442,5 +443,11 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(!agg.canHandle("jdbc:h2"))
     assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
     assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
+  }
+
+  test("DB2Dialect type mapping") {
+    val db2Dialect = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    assert(db2Dialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
+    assert(db2Dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
   }
 }
