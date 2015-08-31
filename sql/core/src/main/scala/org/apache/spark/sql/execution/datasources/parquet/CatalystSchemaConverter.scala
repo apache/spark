@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.schema.OriginalType._
@@ -82,7 +82,7 @@ private[parquet] class CatalystSchemaConverter(
   def convert(parquetSchema: MessageType): StructType = convert(parquetSchema.asGroupType())
 
   private def convert(parquetSchema: GroupType): StructType = {
-    val fields = parquetSchema.getFields.map { field =>
+    val fields = parquetSchema.getFields.asScala.map { field =>
       field.getRepetition match {
         case OPTIONAL =>
           StructField(field.getName, convertField(field), nullable = true)

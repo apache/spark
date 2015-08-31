@@ -53,7 +53,7 @@ private[mllib] object PMMLModelExportFactory {
           throw new IllegalArgumentException(
             "PMML Export not supported for Multinomial Logistic Regression")
         }
-      case decsionTreeModel : DecisionTreeModel => new DecisionTreePMMLModelExport(decsionTreeModel)
+      case decisionTreeModel : DecisionTreeModel => new DecisionTreePMMLModelExport(decisionTreeModel)
       case _ =>
         throw new IllegalArgumentException(
           "PMML Export not supported for model: " + model.getClass.getName)

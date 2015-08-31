@@ -225,9 +225,9 @@ if [[ "$1" == "publish-snapshot" ]]; then
 
   $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $PUBLISH_PROFILES \
     -Phive-thriftserver deploy
-  ./dev/change-scala-version.sh 2.10
+  ./dev/change-scala-version.sh 2.11
   $MVN -DzincPort=$ZINC_PORT -Dscala-2.11 --settings $tmp_settings \
-    -DskipTests $PUBLISH_PROFILES deploy
+    -DskipTests $PUBLISH_PROFILES clean deploy
 
   # Clean-up Zinc nailgun process
   /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill

@@ -22,6 +22,8 @@ import org.apache.spark.mllib.classification.{LogisticRegressionModel, SVMModel}
 import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.{LassoModel, LinearRegressionModel, RidgeRegressionModel}
+import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
+import org.apache.spark.mllib.tree.model.{DecisionTreeModel, Node, Predict, Split}
 import org.apache.spark.mllib.util.LinearDataGenerator
 
 class PMMLModelExportFactorySuite extends SparkFunSuite {
@@ -90,5 +92,22 @@ class PMMLModelExportFactorySuite extends SparkFunSuite {
     intercept[IllegalArgumentException] {
       PMMLModelExportFactory.createPMMLModelExport(invalidModel)
     }
+  }
+
+  test("PMMLModelExportFactory should create DecisionTreePMMLModelExport " +
+    "when passing in DecisionTreeModel"){
+    // instantiate a MLLib DecisionTreeModel with Regression and with 3 nodes with continuous
+    // feature type
+    val mlLeftNode = new Node(2, new Predict(0.5, 0.5), 0.2, true, None, None, None, None)
+    val mlRightNode = new Node(3, new Predict(1.0, 0.5), 0.2, true, None, None, None, None)
+    val split = new Split(100, 10.00, FeatureType.Continuous, Nil)
+    val mlTopNode = new Node(1, new Predict(0.0, 0.1), 0.2, false,
+      Some(split), Some(mlLeftNode), Some(mlRightNode), None)
+
+    val decisionTreeModel = new DecisionTreeModel(mlTopNode, Algo.Regression)
+
+    // get the pmml exporter for the DT and verify its the right exporter
+    val pmmlExporterForDT = PMMLModelExportFactory.createPMMLModelExport(decisionTreeModel)
+    assert(pmmlExporterForDT.isInstanceOf[DecisionTreePMMLModelExport])
   }
 }

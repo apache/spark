@@ -21,7 +21,7 @@ import java.io.File
 import java.util.concurrent.locks.ReentrantLock
 import java.util.{Collections, List => JList}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, HashSet}
 
 import com.google.common.collect.HashBiMap
@@ -233,7 +233,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     stateLock.synchronized {
       val filters = Filters.newBuilder().setRefuseSeconds(5).build()
-      for (offer <- offers) {
+      for (offer <- offers.asScala) {
         val offerAttributes = toAttributeMap(offer.getAttributesList)
         val meetsConstraints = matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
         val slaveId = offer.getSlaveId.getValue
@@ -251,21 +251,21 @@ private[spark] class CoarseMesosSchedulerBackend(
           val cpusToUse = math.min(cpus, maxCores - totalCoresAcquired)
           totalCoresAcquired += cpusToUse
           val taskId = newMesosTaskId()
-          taskIdToSlaveId(taskId) = slaveId
+          taskIdToSlaveId.put(taskId, slaveId)
           slaveIdsWithExecutors += slaveId
           coresByTaskId(taskId) = cpusToUse
           // Gather cpu resources from the available resources and use them in the task.
           val (remainingResources, cpuResourcesToUse) =
             partitionResources(offer.getResourcesList, "cpus", cpusToUse)
           val (_, memResourcesToUse) =
-            partitionResources(remainingResources, "mem", calculateTotalMemory(sc))
+            partitionResources(remainingResources.asJava, "mem", calculateTotalMemory(sc))
           val taskBuilder = MesosTaskInfo.newBuilder()
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
             .setSlaveId(offer.getSlaveId)
             .setCommand(createCommand(offer, cpusToUse + extraCoresPerSlave, taskId))
             .setName("Task " + taskId)
-            .addAllResources(cpuResourcesToUse)
-            .addAllResources(memResourcesToUse)
+            .addAllResources(cpuResourcesToUse.asJava)
+            .addAllResources(memResourcesToUse.asJava)
 
           sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
             MesosSchedulerBackendUtil
@@ -314,9 +314,9 @@ private[spark] class CoarseMesosSchedulerBackend(
       }
 
       if (TaskState.isFinished(TaskState.fromMesos(state))) {
-        val slaveId = taskIdToSlaveId(taskId)
+        val slaveId = taskIdToSlaveId.get(taskId)
         slaveIdsWithExecutors -= slaveId
-        taskIdToSlaveId -= taskId
+        taskIdToSlaveId.remove(taskId)
         // Remove the cores we have remembered for this task, if it's in the hashmap
         for (cores <- coresByTaskId.get(taskId)) {
           totalCoresAcquired -= cores
@@ -361,7 +361,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     stateLock.synchronized {
       if (slaveIdsWithExecutors.contains(slaveId)) {
         val slaveIdToTaskId = taskIdToSlaveId.inverse()
-        if (slaveIdToTaskId.contains(slaveId)) {
+        if (slaveIdToTaskId.containsKey(slaveId)) {
           val taskId: Int = slaveIdToTaskId.get(slaveId)
           taskIdToSlaveId.remove(taskId)
           removeExecutor(sparkExecutorId(slaveId, taskId.toString), reason)
@@ -411,7 +411,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     val slaveIdToTaskId = taskIdToSlaveId.inverse()
     for (executorId <- executorIds) {
       val slaveId = executorId.split("/")(0)
-      if (slaveIdToTaskId.contains(slaveId)) {
+      if (slaveIdToTaskId.containsKey(slaveId)) {
         mesosDriver.killTask(
           TaskID.newBuilder().setValue(slaveIdToTaskId.get(slaveId).toString).build())
         pendingRemovedSlaveIds += slaveId

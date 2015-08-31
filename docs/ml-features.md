@@ -55,7 +55,7 @@ rescaledData.select("features", "label").take(3).foreach(println)
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import com.google.common.collect.Lists;
+import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.HashingTF;
@@ -70,7 +70,7 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
   RowFactory.create(0, "Hi I heard about Spark"),
   RowFactory.create(0, "I wish Java could use case classes"),
   RowFactory.create(1, "Logistic regression models are neat")
@@ -153,7 +153,7 @@ result.select("result").take(3).foreach(println)
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import com.google.common.collect.Lists;
+import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -167,10 +167,10 @@ JavaSparkContext jsc = ...
 SQLContext sqlContext = ...
 
 // Input data: Each row is a bag of words from a sentence or document.
-JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
-  RowFactory.create(Lists.newArrayList("Hi I heard about Spark".split(" "))),
-  RowFactory.create(Lists.newArrayList("I wish Java could use case classes".split(" "))),
-  RowFactory.create(Lists.newArrayList("Logistic regression models are neat".split(" ")))
+JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
+  RowFactory.create(Arrays.asList("Hi I heard about Spark".split(" "))),
+  RowFactory.create(Arrays.asList("I wish Java could use case classes".split(" "))),
+  RowFactory.create(Arrays.asList("Logistic regression models are neat".split(" ")))
 ));
 StructType schema = new StructType(new StructField[]{
   new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
@@ -248,7 +248,7 @@ regexTokenized.select("words", "label").take(3).foreach(println)
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import com.google.common.collect.Lists;
+import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.RegexTokenizer;
@@ -262,7 +262,7 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
   RowFactory.create(0, "Hi I heard about Spark"),
   RowFactory.create(1, "I wish Java could use case classes"),
   RowFactory.create(2, "Logistic,regression,models,are,neat")
@@ -341,7 +341,7 @@ ngramDataFrame.take(3).map(_.getAs[Stream[String]]("ngrams").toList).foreach(pri
 [`NGram`](api/java/org/apache/spark/ml/feature/NGram.html) takes an input column name, an output column name, and an optional length parameter n (n=2 by default).
 
 {% highlight java %}
-import com.google.common.collect.Lists;
+import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.NGram;
@@ -354,10 +354,10 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
-  RowFactory.create(0D, Lists.newArrayList("Hi", "I", "heard", "about", "Spark")),
-  RowFactory.create(1D, Lists.newArrayList("I", "wish", "Java", "could", "use", "case", "classes")),
-  RowFactory.create(2D, Lists.newArrayList("Logistic", "regression", "models", "are", "neat"))
+JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
+  RowFactory.create(0.0, Arrays.asList("Hi", "I", "heard", "about", "Spark")),
+  RowFactory.create(1.0, Arrays.asList("I", "wish", "Java", "could", "use", "case", "classes")),
+  RowFactory.create(2.0, Arrays.asList("Logistic", "regression", "models", "are", "neat"))
 ));
 StructType schema = new StructType(new StructField[]{
   new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
@@ -427,7 +427,7 @@ binarizedFeatures.collect().foreach(println)
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import com.google.common.collect.Lists;
+import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.Binarizer;
@@ -439,7 +439,7 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
   RowFactory.create(0, 0.1),
   RowFactory.create(1, 0.8),
   RowFactory.create(2, 0.2)
@@ -511,7 +511,7 @@ result.show()
 <div data-lang="java" markdown="1">
 See the [Java API documentation](api/java/org/apache/spark/ml/feature/PCA.html) for API details.
 {% highlight java %}
-import com.google.common.collect.Lists;
+import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -529,7 +529,7 @@ import org.apache.spark.sql.types.StructType;
 
 JavaSparkContext jsc = ...
 SQLContext jsql = ...
-JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
+JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
   RowFactory.create(Vectors.sparse(5, new int[]{1, 3}, new double[]{1.0, 7.0})),
   RowFactory.create(Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0)),
   RowFactory.create(Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0))
@@ -593,7 +593,7 @@ polyDF.select("polyFeatures").take(3).foreach(println)
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import com.google.common.collect.Lists;
+import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -614,7 +614,7 @@ PolynomialExpansion polyExpansion = new PolynomialExpansion()
   .setInputCol("features")
   .setOutputCol("polyFeatures")
   .setDegree(3);
-JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
+JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
   RowFactory.create(Vectors.dense(-2.0, 2.3)),
   RowFactory.create(Vectors.dense(0.0, 0.0)),
   RowFactory.create(Vectors.dense(0.6, -1.1))
@@ -649,12 +649,87 @@ for expanded in polyDF.select("polyFeatures").take(3):
 </div>
 </div>
 
+## Discrete Cosine Transform (DCT)
+
+The [Discrete Cosine
+Transform](https://en.wikipedia.org/wiki/Discrete_cosine_transform)
+transforms a length $N$ real-valued sequence in the time domain into
+another length $N$ real-valued sequence in the frequency domain. A
+[DCT](api/scala/index.html#org.apache.spark.ml.feature.DCT) class
+provides this functionality, implementing the
+[DCT-II](https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II)
+and scaling the result by $1/\sqrt{2}$ such that the representing matrix
+for the transform is unitary. No shift is applied to the transformed
+sequence (e.g. the $0$th element of the transformed sequence is the
+$0$th DCT coefficient and _not_ the $N/2$th).
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+import org.apache.spark.ml.feature.DCT
+import org.apache.spark.mllib.linalg.Vectors
+
+val data = Seq(
+  Vectors.dense(0.0, 1.0, -2.0, 3.0),
+  Vectors.dense(-1.0, 2.0, 4.0, -7.0),
+  Vectors.dense(14.0, -2.0, -5.0, 1.0))
+val df = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
+val dct = new DCT()
+  .setInputCol("features")
+  .setOutputCol("featuresDCT")
+  .setInverse(false)
+val dctDf = dct.transform(df)
+dctDf.select("featuresDCT").show(3)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+import java.util.Arrays;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.ml.feature.DCT;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.VectorUDT;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
+  RowFactory.create(Vectors.dense(0.0, 1.0, -2.0, 3.0)),
+  RowFactory.create(Vectors.dense(-1.0, 2.0, 4.0, -7.0)),
+  RowFactory.create(Vectors.dense(14.0, -2.0, -5.0, 1.0))
+));
+StructType schema = new StructType(new StructField[] {
+  new StructField("features", new VectorUDT(), false, Metadata.empty()),
+});
+DataFrame df = jsql.createDataFrame(data, schema);
+DCT dct = new DCT()
+  .setInputCol("features")
+  .setOutputCol("featuresDCT")
+  .setInverse(false);
+DataFrame dctDf = dct.transform(df);
+dctDf.select("featuresDCT").show(3);
+{% endhighlight %}
+</div>
+</div>
+
 ## StringIndexer
 
 `StringIndexer` encodes a string column of labels to a column of label indices.
 The indices are in `[0, numLabels)`, ordered by label frequencies.
 So the most frequent label gets index `0`.
-If the input column is numeric, we cast it to string and index the string values.
+If the input column is numeric, we cast it to string and index the string 
+values. When downstream pipeline components such as `Estimator` or 
+`Transformer` make use of this string-indexed label, you must set the input 
+column of the component to this string-indexed column name. In many cases, 
+you can set the input column with `setInputCol`.
 
 **Examples**
 
@@ -798,7 +873,7 @@ encoded.select("id", "categoryVec").foreach(println)
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import com.google.common.collect.Lists;
+import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.OneHotEncoder;
@@ -812,7 +887,7 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
     RowFactory.create(0, "a"),
     RowFactory.create(1, "b"),
     RowFactory.create(2, "c"),
@@ -1058,6 +1133,7 @@ val scaledData = scalerModel.transform(dataFrame)
 {% highlight java %}
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.StandardScaler;
+import org.apache.spark.ml.feature.StandardScalerModel;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.sql.DataFrame;
@@ -1094,6 +1170,76 @@ scalerModel = scaler.fit(dataFrame)
 
 # Normalize each feature to have unit standard deviation.
 scaledData = scalerModel.transform(dataFrame)
+{% endhighlight %}
+</div>
+</div>
+
+## MinMaxScaler
+
+`MinMaxScaler` transforms a dataset of `Vector` rows, rescaling each feature to a specific range (often [0, 1]).  It takes parameters:
+
+* `min`: 0.0 by default. Lower bound after transformation, shared by all features.
+* `max`: 1.0 by default. Upper bound after transformation, shared by all features.
+
+`MinMaxScaler` computes summary statistics on a data set and produces a `MinMaxScalerModel`. The model can then transform each feature individually such that it is in the given range.
+
+The rescaled value for a feature E is calculated as,
+`\begin{equation}
+  Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
+\end{equation}`
+For the case `E_{max} == E_{min}`, `Rescaled(e_i) = 0.5 * (max + min)`
+
+Note that since zero values will probably be transformed to non-zero values, output of the transformer will be DenseVector even for sparse input.
+
+The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [0, 1].
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+More details can be found in the API docs for
+[MinMaxScaler](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScaler) and
+[MinMaxScalerModel](api/scala/index.html#org.apache.spark.ml.feature.MinMaxScalerModel).
+{% highlight scala %}
+import org.apache.spark.ml.feature.MinMaxScaler
+import org.apache.spark.mllib.util.MLUtils
+
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+val dataFrame = sqlContext.createDataFrame(data)
+val scaler = new MinMaxScaler()
+  .setInputCol("features")
+  .setOutputCol("scaledFeatures")
+
+// Compute summary statistics and generate MinMaxScalerModel
+val scalerModel = scaler.fit(dataFrame)
+
+// rescale each feature to range [min, max].
+val scaledData = scalerModel.transform(dataFrame)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+More details can be found in the API docs for
+[MinMaxScaler](api/java/org/apache/spark/ml/feature/MinMaxScaler.html) and
+[MinMaxScalerModel](api/java/org/apache/spark/ml/feature/MinMaxScalerModel.html).
+{% highlight java %}
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.MinMaxScaler;
+import org.apache.spark.ml.feature.MinMaxScalerModel;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.sql.DataFrame;
+
+JavaRDD<LabeledPoint> data =
+  MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
+DataFrame dataFrame = jsql.createDataFrame(data, LabeledPoint.class);
+MinMaxScaler scaler = new MinMaxScaler()
+  .setInputCol("features")
+  .setOutputCol("scaledFeatures");
+
+// Compute summary statistics and generate MinMaxScalerModel
+MinMaxScalerModel scalerModel = scaler.fit(dataFrame);
+
+// rescale each feature to range [min, max].
+DataFrame scaledData = scalerModel.transform(dataFrame);
 {% endhighlight %}
 </div>
 </div>
@@ -1135,7 +1281,7 @@ val bucketedData = bucketizer.transform(dataFrame)
 
 <div data-lang="java">
 {% highlight java %}
-import com.google.common.collect.Lists;
+import java.util.Arrays;
 
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
@@ -1147,7 +1293,7 @@ import org.apache.spark.sql.types.StructType;
 
 double[] splits = {Double.NEGATIVE_INFINITY, -0.5, 0.0, 0.5, Double.POSITIVE_INFINITY};
 
-JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
+JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
   RowFactory.create(-0.5),
   RowFactory.create(-0.3),
   RowFactory.create(0.0),
@@ -1236,7 +1382,7 @@ transformer.transform(dataFrame).show()
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import com.google.common.collect.Lists;
+import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.ElementwiseProduct;
@@ -1252,7 +1398,7 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
 // Create some vector data; also works for sparse vectors
-JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
   RowFactory.create("a", Vectors.dense(1.0, 2.0, 3.0)),
   RowFactory.create("b", Vectors.dense(4.0, 5.0, 6.0))
 ));
@@ -1404,3 +1550,242 @@ print(output.select("features", "clicked").first())
 
 # Feature Selectors
 
+## VectorSlicer
+
+`VectorSlicer` is a transformer that takes a feature vector and outputs a new feature vector with a
+sub-array of the original features. It is useful for extracting features from a vector column.
+
+`VectorSlicer` accepts a vector column with a specified indices, then outputs a new vector column
+whose values are selected via those indices. There are two types of indices, 
+
+ 1. Integer indices that represents the indices into the vector, `setIndices()`;
+
+ 2. String indices that represents the names of features into the vector, `setNames()`. 
+ *This requires the vector column to have an `AttributeGroup` since the implementation matches on
+ the name field of an `Attribute`.*
+
+Specification by integer and string are both acceptable. Moreover, you can use integer index and 
+string name simultaneously. At least one feature must be selected. Duplicate features are not
+allowed, so there can be no overlap between selected indices and names. Note that if names of
+features are selected, an exception will be threw out when encountering with empty input attributes.
+
+The output vector will order features with the selected indices first (in the order given),
+followed by the selected names (in the order given).
+
+**Examples**
+
+Suppose that we have a DataFrame with the column `userFeatures`:
+
+~~~
+ userFeatures     
+------------------
+ [0.0, 10.0, 0.5] 
+~~~
+
+`userFeatures` is a vector column that contains three user features. Assuming that the first column
+of `userFeatures` are all zeros, so we want to remove it and only the last two columns are selected.
+The `VectorSlicer` selects the last two elements with `setIndices(1, 2)` then produces a new vector
+column named `features`:
+
+~~~
+ userFeatures     | features
+------------------|-----------------------------
+ [0.0, 10.0, 0.5] | [10.0, 0.5]
+~~~
+
+Suppose also that we have a potential input attributes for the `userFeatures`, i.e. 
+`["f1", "f2", "f3"]`, then we can use `setNames("f2", "f3")` to select them.
+
+~~~
+ userFeatures     | features
+------------------|-----------------------------
+ [0.0, 10.0, 0.5] | [10.0, 0.5]
+ ["f1", "f2", "f3"] | ["f2", "f3"]
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+[`VectorSlicer`](api/scala/index.html#org.apache.spark.ml.feature.VectorSlicer) takes an input
+column name with specified indices or names and an output column name.
+
+{% highlight scala %}
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
+import org.apache.spark.ml.feature.VectorSlicer
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+
+val data = Array(
+  Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
+  Vectors.dense(-2.0, 2.3, 0.0)
+)
+
+val defaultAttr = NumericAttribute.defaultAttr
+val attrs = Array("f1", "f2", "f3").map(defaultAttr.withName)
+val attrGroup = new AttributeGroup("userFeatures", attrs.asInstanceOf[Array[Attribute]])
+
+val dataRDD = sc.parallelize(data).map(Row.apply)
+val dataset = sqlContext.createDataFrame(dataRDD, StructType(attrGroup.toStructField()))
+
+val slicer = new VectorSlicer().setInputCol("userFeatures").setOutputCol("features")
+
+slicer.setIndices(1).setNames("f3")
+// or slicer.setIndices(Array(1, 2)), or slicer.setNames(Array("f2", "f3"))
+
+val output = slicer.transform(dataset)
+println(output.select("userFeatures", "features").first())
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+[`VectorSlicer`](api/java/org/apache/spark/ml/feature/VectorSlicer.html) takes an input column name
+with specified indices or names and an output column name.
+
+{% highlight java %}
+import java.util.Arrays;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.types.*;
+import static org.apache.spark.sql.types.DataTypes.*;
+
+Attribute[] attrs = new Attribute[]{
+  NumericAttribute.defaultAttr().withName("f1"),
+  NumericAttribute.defaultAttr().withName("f2"),
+  NumericAttribute.defaultAttr().withName("f3")
+};
+AttributeGroup group = new AttributeGroup("userFeatures", attrs);
+
+JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+  RowFactory.create(Vectors.sparse(3, new int[]{0, 1}, new double[]{-2.0, 2.3})),
+  RowFactory.create(Vectors.dense(-2.0, 2.3, 0.0))
+));
+
+DataFrame dataset = jsql.createDataFrame(jrdd, (new StructType()).add(group.toStructField()));
+
+VectorSlicer vectorSlicer = new VectorSlicer()
+  .setInputCol("userFeatures").setOutputCol("features");
+
+vectorSlicer.setIndices(new int[]{1}).setNames(new String[]{"f3"});
+// or slicer.setIndices(new int[]{1, 2}), or slicer.setNames(new String[]{"f2", "f3"})
+
+DataFrame output = vectorSlicer.transform(dataset);
+
+System.out.println(output.select("userFeatures", "features").first());
+{% endhighlight %}
+</div>
+</div>
+
+## RFormula
+
+`RFormula` selects columns specified by an [R model formula](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/formula.html). It produces a vector column of features and a double column of labels. Like when formulas are used in R for linear regression, string input columns will be one-hot encoded, and numeric columns will be cast to doubles. If not already present in the DataFrame, the output label column will be created from the specified response variable in the formula.
+
+**Examples**
+
+Assume that we have a DataFrame with the columns `id`, `country`, `hour`, and `clicked`:
+
+~~~
+id | country | hour | clicked
+---|---------|------|---------
+ 7 | "US"    | 18   | 1.0
+ 8 | "CA"    | 12   | 0.0
+ 9 | "NZ"    | 15   | 0.0
+~~~
+
+If we use `RFormula` with a formula string of `clicked ~ country + hour`, which indicates that we want to
+predict `clicked` based on `country` and `hour`, after transformation we should get the following DataFrame:
+
+~~~
+id | country | hour | clicked | features         | label
+---|---------|------|---------|------------------|-------
+ 7 | "US"    | 18   | 1.0     | [0.0, 0.0, 18.0] | 1.0
+ 8 | "CA"    | 12   | 0.0     | [0.0, 1.0, 12.0] | 0.0
+ 9 | "NZ"    | 15   | 0.0     | [1.0, 0.0, 15.0] | 0.0
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+[`RFormula`](api/scala/index.html#org.apache.spark.ml.feature.RFormula) takes an R formula string, and optional parameters for the names of its output columns.
+
+{% highlight scala %}
+import org.apache.spark.ml.feature.RFormula
+
+val dataset = sqlContext.createDataFrame(Seq(
+  (7, "US", 18, 1.0),
+  (8, "CA", 12, 0.0),
+  (9, "NZ", 15, 0.0)
+)).toDF("id", "country", "hour", "clicked")
+val formula = new RFormula()
+  .setFormula("clicked ~ country + hour")
+  .setFeaturesCol("features")
+  .setLabelCol("label")
+val output = formula.fit(dataset).transform(dataset)
+output.select("features", "label").show()
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+[`RFormula`](api/java/org/apache/spark/ml/feature/RFormula.html) takes an R formula string, and optional parameters for the names of its output columns.
+
+{% highlight java %}
+import java.util.Arrays;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.RFormula;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.types.*;
+import static org.apache.spark.sql.types.DataTypes.*;
+
+StructType schema = createStructType(new StructField[] {
+  createStructField("id", IntegerType, false),
+  createStructField("country", StringType, false),
+  createStructField("hour", IntegerType, false),
+  createStructField("clicked", DoubleType, false)
+});
+JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(
+  RowFactory.create(7, "US", 18, 1.0),
+  RowFactory.create(8, "CA", 12, 0.0),
+  RowFactory.create(9, "NZ", 15, 0.0)
+));
+DataFrame dataset = sqlContext.createDataFrame(rdd, schema);
+
+RFormula formula = new RFormula()
+  .setFormula("clicked ~ country + hour")
+  .setFeaturesCol("features")
+  .setLabelCol("label");
+
+DataFrame output = formula.fit(dataset).transform(dataset);
+output.select("features", "label").show();
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+[`RFormula`](api/python/pyspark.ml.html#pyspark.ml.feature.RFormula) takes an R formula string, and optional parameters for the names of its output columns.
+
+{% highlight python %}
+from pyspark.ml.feature import RFormula
+
+dataset = sqlContext.createDataFrame(
+    [(7, "US", 18, 1.0),
+     (8, "CA", 12, 0.0),
+     (9, "NZ", 15, 0.0)],
+    ["id", "country", "hour", "clicked"])
+formula = RFormula(
+    formula="clicked ~ country + hour",
+    featuresCol="features",
+    labelCol="label")
+output = formula.fit(dataset).transform(dataset)
+output.select("features", "label").show()
+{% endhighlight %}
+</div>
+</div>
