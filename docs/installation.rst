@@ -85,7 +85,7 @@ As Airflow was built to interact with its metadata using the great SqlAlchemy
 library, you should be able to use any database backend supported as a
 SqlAlchemy backend. We recommend using **MySQL** or **Postgres**.
 
-.. note:: If you decide to use **Postgres**, we recommend using the ``psycopg2`` 
+.. note:: If you decide to use **Postgres**, we recommend using the ``psycopg2``
    driver and specifying it in your SqlAlchemy connection string
 
 Once you've setup your database to host Airflow, you'll need to alter the
@@ -113,6 +113,11 @@ within the metadata database. The ``crypto`` package is highly recommended
 during installation. The ``crypto`` package does require that your operating
 system have libffi-dev installed.
 
+Connections in Airflow pipelines can be created using environment variables.
+The environment variable needs to have a prefix of ``AIRFLOW_CONN_`` for
+Airflow with the value in a URI format to use the connection properly. Please
+see the :doc:`concepts` documentation for more information on environment
+variables and connections.
 
 Scaling Out
 '''''''''''
