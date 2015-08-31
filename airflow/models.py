@@ -324,7 +324,7 @@ class Connection(Base):
         self.conn_id = conn_id
         self.conn_type = conn_type
         if uri:
-            parse_from_uri(uri)
+            self.parse_from_uri(uri)
         else:
             self.host = host
             self.login = login
