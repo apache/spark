@@ -27,10 +27,11 @@ import org.apache.hadoop.hive.ql.exec.{RecordWriter, RecordReader}
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
-import org.apache.hadoop.io.{Text, Writable}
+import org.apache.hadoop.io.Writable
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -72,7 +73,7 @@ case class ScriptTransformation(
       val inputStream = proc.getInputStream
       val outputStream = proc.getOutputStream
       val errorStream = proc.getErrorStream
-      val localHconf = _broadcastedHiveConf.value.value.asInstanceOf[HiveConf]
+      val localHconf = _broadcastedHiveConf.value.value
 
       // In order to avoid deadlocks, we need to consume the error output of the child process.
       // To avoid issues caused by large error output, we use a circular buffer to limit the amount
@@ -219,7 +220,7 @@ private class ScriptTransformationWriterThread(
     proc: Process,
     stderrBuffer: CircularBuffer,
     taskContext: TaskContext,
-    localHconf: HiveConf
+    localHconf: Configuration
   ) extends Thread("Thread-ScriptTransformation-Feed") with Logging {
 
   setDaemon(true)
@@ -311,20 +312,20 @@ case class HiveScriptIOSchema (
   val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
   val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
 
-  def getRecordReader(hConf: HiveConf): RecordReader = {
+  def getRecordReader(conf: Configuration): RecordReader = {
     val readerName =
       if (recordReader == "") {
-        hConf.getVar(HiveConf.ConfVars.HIVESCRIPTRECORDREADER)
+        HiveConf.getVar(conf, HiveConf.ConfVars.HIVESCRIPTRECORDREADER)
       } else {
         recordReader
       }
     Utils.classForName(readerName).newInstance.asInstanceOf[RecordReader]
   }
 
-  def getRecordWriter(hConf: HiveConf): RecordWriter = {
+  def getRecordWriter(conf: Configuration): RecordWriter = {
     val writerName =
       if (recordWriter == "") {
-        hConf.getVar(HiveConf.ConfVars.HIVESCRIPTRECORDWRITER)
+        HiveConf.getVar(conf, HiveConf.ConfVars.HIVESCRIPTRECORDWRITER)
       } else {
         recordWriter
       }
