@@ -113,7 +113,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
       val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
         Map(), Set(),
         Array(6), Gini, QuantileStrategy.Sort,
-        0, 0, 0.0, 0, 0
+        0, 0, 0.0, 0, 0, 0.to(5).toArray
       )
       val featureSamples = Array.fill(200000)(math.random)
       val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
@@ -130,7 +130,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
       val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
         Map(), Set(),
         Array(5), Gini, QuantileStrategy.Sort,
-        0, 0, 0.0, 0, 0
+        0, 0, 0.0, 0, 0, 0.to(4).toArray
       )
       val featureSamples = Array(1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3).map(_.toDouble)
       val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
@@ -146,7 +146,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
       val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
         Map(), Set(),
         Array(3), Gini, QuantileStrategy.Sort,
-        0, 0, 0.0, 0, 0
+        0, 0, 0.0, 0, 0, 0.to(2).toArray
       )
       val featureSamples = Array(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 4, 5).map(_.toDouble)
       val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
@@ -162,7 +162,7 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
       val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
         Map(), Set(),
         Array(3), Gini, QuantileStrategy.Sort,
-        0, 0, 0.0, 0, 0
+        0, 0, 0.0, 0, 0, 0.to(2).toArray
       )
       val featureSamples = Array(0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2).map(_.toDouble)
       val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
