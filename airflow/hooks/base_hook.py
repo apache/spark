@@ -7,6 +7,8 @@ from airflow import settings
 from airflow.models import Connection
 from airflow.utils import AirflowException
 
+CONN_ENV_PREFIX = 'AIRFLOW_CONN_'
+
 
 class BaseHook(object):
     """
@@ -34,10 +36,11 @@ class BaseHook(object):
         return db
 
     def get_connection(self, conn_id):
-        if os.environ.get(conn_id):
-            temp_uri = urlparse(os.environ.get(conn_id))
-            conn = Connection(uri=temp_uri)
-        if conn is None:
+        environment_uri = os.environ.get(CONN_ENV_PREFIX + conn_id)
+        conn = None
+        if environment_uri:
+            conn = Connection(uri=environment_uri)
+        else:
             conn = random.choice(self.get_connections(conn_id))
         if conn.host:
             logging.info("Using connection to: " + conn.host)
