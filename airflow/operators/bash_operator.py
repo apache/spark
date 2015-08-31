@@ -57,7 +57,7 @@ class BashOperator(BaseOperator):
                 self.sp = sp
 
                 logging.info("Output:")
-                for line in iter(sp.stdout.readline, ''):
+                for line in iter(sp.stdout.readline, b''):
                     logging.info(line.strip())
                 sp.wait()
                 logging.info("Command exited with "
