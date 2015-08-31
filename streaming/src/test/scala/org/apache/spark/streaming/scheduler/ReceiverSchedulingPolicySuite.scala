@@ -39,7 +39,7 @@ class ReceiverSchedulingPolicySuite extends SparkFunSuite {
     assert(scheduledExecutors.toSet === Set("host1", "host2"))
   }
 
-  test("rescheduleReceiver: return all idle executors if more than 3 idle executors") {
+  test("rescheduleReceiver: return all idle executors if there are any idle executors") {
     val executors = Seq("host1", "host2", "host3", "host4", "host5")
     // host3 is idle
     val receiverTrackingInfoMap = Map(
@@ -49,22 +49,22 @@ class ReceiverSchedulingPolicySuite extends SparkFunSuite {
     assert(scheduledExecutors.toSet === Set("host2", "host3", "host4", "host5"))
   }
 
-  test("rescheduleReceiver: return 3 best options if less than 3 idle executors") {
+  test("rescheduleReceiver: return all executors that have minimum weight if no idle executors") {
     val executors = Seq("host1", "host2", "host3", "host4", "host5")
-    // Weights: host1 = 1.5, host2 = 0.5, host3 = 1.0
-    // host4 and host5 are idle
+    // Weights: host1 = 1.5, host2 = 0.5, host3 = 1.0, host4 = 0.5, host5 = 0.5
     val receiverTrackingInfoMap = Map(
       0 -> ReceiverTrackingInfo(0, ReceiverState.ACTIVE, None, Some("host1")),
       1 -> ReceiverTrackingInfo(1, ReceiverState.SCHEDULED, Some(Seq("host2", "host3")), None),
-      2 -> ReceiverTrackingInfo(1, ReceiverState.SCHEDULED, Some(Seq("host1", "host3")), None))
+      2 -> ReceiverTrackingInfo(2, ReceiverState.SCHEDULED, Some(Seq("host1", "host3")), None),
+      3 -> ReceiverTrackingInfo(4, ReceiverState.SCHEDULED, Some(Seq("host4", "host5")), None))
     val scheduledExecutors = receiverSchedulingPolicy.rescheduleReceiver(
-      3, None, receiverTrackingInfoMap, executors)
+      4, None, receiverTrackingInfoMap, executors)
     assert(scheduledExecutors.toSet === Set("host2", "host4", "host5"))
   }
 
   test("scheduleReceivers: " +
     "schedule receivers evenly when there are more receivers than executors") {
-    val receivers = (0 until 6).map(new DummyReceiver(_))
+    val receivers = (0 until 6).map(new RateTestReceiver(_))
     val executors = (10000 until 10003).map(port => s"localhost:${port}")
     val scheduledExecutors = receiverSchedulingPolicy.scheduleReceivers(receivers, executors)
     val numReceiversOnExecutor = mutable.HashMap[String, Int]()
@@ -79,7 +79,7 @@ class ReceiverSchedulingPolicySuite extends SparkFunSuite {
 
   test("scheduleReceivers: " +
     "schedule receivers evenly when there are more executors than receivers") {
-    val receivers = (0 until 3).map(new DummyReceiver(_))
+    val receivers = (0 until 3).map(new RateTestReceiver(_))
     val executors = (10000 until 10006).map(port => s"localhost:${port}")
     val scheduledExecutors = receiverSchedulingPolicy.scheduleReceivers(receivers, executors)
     val numReceiversOnExecutor = mutable.HashMap[String, Int]()
@@ -94,8 +94,8 @@ class ReceiverSchedulingPolicySuite extends SparkFunSuite {
   }
 
   test("scheduleReceivers: schedule receivers evenly when the preferredLocations are even") {
-    val receivers = (0 until 3).map(new DummyReceiver(_)) ++
-      (3 until 6).map(new DummyReceiver(_, Some("localhost")))
+    val receivers = (0 until 3).map(new RateTestReceiver(_)) ++
+      (3 until 6).map(new RateTestReceiver(_, Some("localhost")))
     val executors = (10000 until 10003).map(port => s"localhost:${port}") ++
       (10003 until 10006).map(port => s"localhost2:${port}")
     val scheduledExecutors = receiverSchedulingPolicy.scheduleReceivers(receivers, executors)
@@ -121,10 +121,11 @@ class ReceiverSchedulingPolicySuite extends SparkFunSuite {
   }
 
   test("scheduleReceivers: return empty scheduled executors if no executors") {
-    val receivers = (0 until 3).map(new DummyReceiver(_))
+    val receivers = (0 until 3).map(new RateTestReceiver(_))
     val scheduledExecutors = receiverSchedulingPolicy.scheduleReceivers(receivers, Seq.empty)
     scheduledExecutors.foreach { case (receiverId, executors) =>
       assert(executors.isEmpty)
     }
   }
+
 }

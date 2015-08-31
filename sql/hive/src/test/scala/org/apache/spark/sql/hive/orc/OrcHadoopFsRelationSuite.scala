@@ -48,11 +48,9 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        load(
-          source = dataSourceName,
-          options = Map(
-            "path" -> file.getCanonicalPath,
-            "dataSchema" -> dataSchemaWithPartition.json)))
+        read.options(Map(
+          "path" -> file.getCanonicalPath,
+          "dataSchema" -> dataSchemaWithPartition.json)).format(dataSourceName).load())
     }
   }
 }

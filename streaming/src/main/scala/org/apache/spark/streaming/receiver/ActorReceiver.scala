@@ -36,7 +36,7 @@ import org.apache.spark.storage.StorageLevel
  * A helper with set of defaults for supervisor strategy
  */
 @DeveloperApi
-@deprecated("Use org.apache.spark.streaming.akka.ActorSupervisorStrategy instead", "1.5.0")
+@deprecated("Use org.apache.spark.streaming.akka.ActorSupervisorStrategy instead", "1.6.0")
 object ActorSupervisorStrategy {
 
   val defaultStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange =
@@ -70,7 +70,7 @@ object ActorSupervisorStrategy {
  *       should be same.
  */
 @DeveloperApi
-@deprecated("Use org.apache.spark.streaming.akka.ActorHelper instead", "1.5.0")
+@deprecated("Use org.apache.spark.streaming.akka.ActorHelper instead", "1.6.0")
 trait ActorHelper extends Logging{
 
   self: Actor => // to ensure that this can be added to Actor classes only
@@ -109,7 +109,7 @@ trait ActorHelper extends Logging{
  * [[org.apache.spark.streaming.receiver.ActorHelper]].
  */
 @DeveloperApi
-@deprecated("Use org.apache.spark.streaming.akka.Statistics instead", "1.5.0")
+@deprecated("Use org.apache.spark.streaming.akka.Statistics instead", "1.6.0")
 case class Statistics(numberOfMsgs: Int,
   numberOfWorkers: Int,
   numberOfHiccups: Int,
@@ -147,7 +147,7 @@ private[streaming] class ActorReceiver[T: ClassTag](
     receiverSupervisorStrategy: SupervisorStrategy
   ) extends Receiver[T](storageLevel) with Logging {
 
-  protected lazy val supervisor = SparkEnv.get.actorSystem.actorOf(Props(new Supervisor),
+  protected lazy val actorSupervisor = SparkEnv.get.actorSystem.actorOf(Props(new Supervisor),
     "Supervisor" + streamId)
 
   class Supervisor extends Actor {
@@ -194,11 +194,11 @@ private[streaming] class ActorReceiver[T: ClassTag](
   }
 
   def onStart(): Unit = {
-    supervisor
-    logInfo("Supervision tree for receivers initialized at:" + supervisor.path)
+    actorSupervisor
+    logInfo("Supervision tree for receivers initialized at:" + actorSupervisor.path)
   }
 
   def onStop(): Unit = {
-    supervisor ! PoisonPill
+    actorSupervisor ! PoisonPill
   }
 }

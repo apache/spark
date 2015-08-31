@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.akka
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.duration._
 
@@ -57,8 +57,10 @@ class AkkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter 
     ssc = new StreamingContext(sparkConf, Milliseconds(500))
 
     val akkaConf = ConfigFactory.parseMap(
-      Map("akka.actor.provider" -> "akka.remote.RemoteActorRefProvider",
-        "akka.remote.netty.tcp.transport-class" -> "akka.remote.transport.netty.NettyTransport"))
+      Map(
+        "akka.actor.provider" -> "akka.remote.RemoteActorRefProvider",
+        "akka.remote.netty.tcp.transport-class" -> "akka.remote.transport.netty.NettyTransport").
+        asJava)
     actorSystem = ActorSystem("test", akkaConf)
     CachedActorSystem.set(actorSystem)
     actorSystem.actorOf(Props(classOf[FeederActor]), "FeederActor")

@@ -720,4 +720,18 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.nanSafeCompareFloats(Float.PositiveInfinity, Float.NaN) === -1)
     assert(Utils.nanSafeCompareFloats(Float.NegativeInfinity, Float.NaN) === -1)
   }
+
+  test("isDynamicAllocationEnabled") {
+    val conf = new SparkConf()
+    assert(Utils.isDynamicAllocationEnabled(conf) === false)
+    assert(Utils.isDynamicAllocationEnabled(
+      conf.set("spark.dynamicAllocation.enabled", "false")) === false)
+    assert(Utils.isDynamicAllocationEnabled(
+      conf.set("spark.dynamicAllocation.enabled", "true")) === true)
+    assert(Utils.isDynamicAllocationEnabled(
+      conf.set("spark.executor.instances", "1")) === false)
+    assert(Utils.isDynamicAllocationEnabled(
+      conf.set("spark.executor.instances", "0")) === true)
+  }
+
 }

@@ -20,7 +20,6 @@ package org.apache.spark.streaming.akka
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConversions._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
@@ -147,7 +146,7 @@ private[streaming] class ActorReceiver[T: ClassTag](
     receiverSupervisorStrategy: SupervisorStrategy
   ) extends Receiver[T](storageLevel) with Logging {
 
-  protected lazy val supervisor = actorSystemCreator().actorOf(Props(new Supervisor),
+  protected lazy val actorSupervisor = actorSystemCreator().actorOf(Props(new Supervisor),
     "Supervisor" + streamId)
 
   class Supervisor extends Actor {
@@ -194,11 +193,11 @@ private[streaming] class ActorReceiver[T: ClassTag](
   }
 
   def onStart(): Unit = {
-    supervisor
-    logInfo("Supervision tree for receivers initialized at:" + supervisor.path)
+    actorSupervisor
+    logInfo("Supervision tree for receivers initialized at:" + actorSupervisor.path)
   }
 
   def onStop(): Unit = {
-    supervisor ! PoisonPill
+    actorSupervisor ! PoisonPill
   }
 }

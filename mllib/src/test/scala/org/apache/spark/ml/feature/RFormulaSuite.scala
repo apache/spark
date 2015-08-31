@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -104,5 +105,22 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
       ).toDF("id", "a", "b", "features", "label")
     assert(result.schema.toString == resultSchema.toString)
     assert(result.collect() === expected.collect())
+  }
+
+  test("attribute generation") {
+    val formula = new RFormula().setFormula("id ~ a + b")
+    val original = sqlContext.createDataFrame(
+      Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5))
+    ).toDF("id", "a", "b")
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val attrs = AttributeGroup.fromStructField(result.schema("features"))
+    val expectedAttrs = new AttributeGroup(
+      "features",
+      Array(
+        new BinaryAttribute(Some("a__bar"), Some(1)),
+        new BinaryAttribute(Some("a__foo"), Some(2)),
+        new NumericAttribute(Some("b"), Some(3))))
+    assert(attrs === expectedAttrs)
   }
 }

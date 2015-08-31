@@ -121,7 +121,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
     numSlices <- length(coll)
 
   sliceLen <- ceiling(length(coll) / numSlices)
-  slices <- split(coll, rep(1:(numSlices + 1), each = sliceLen)[1:length(coll)])
+  slices <- split(coll, rep(1: (numSlices + 1), each = sliceLen)[1:length(coll)])
 
   # Serialize each slice: obtain a list of raws, or a list of lists (slices) of
   # 2-tuples of raws

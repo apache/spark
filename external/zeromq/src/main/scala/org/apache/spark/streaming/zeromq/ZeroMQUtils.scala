@@ -17,20 +17,20 @@
 
 package org.apache.spark.streaming.zeromq
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
-import scala.collection.JavaConversions._
 
 import akka.actor.{ActorSystem, Props, SupervisorStrategy}
 import akka.util.ByteString
 import akka.zeromq.Subscribe
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.api.java.function.{Function => JFunction}
+import org.apache.spark.SparkEnv
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.akka.{ActorSupervisorStrategy, ActorSystemFactory, AkkaUtils}
 import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaStreamingContext}
-import org.apache.spark.streaming.dstream.{ReceiverInputDStream}
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
 object ZeroMQUtils {
   /**
@@ -47,7 +47,7 @@ object ZeroMQUtils {
    * @param supervisorStrategy the supervisor strategy (default:
    *                           ActorSupervisorStrategy.defaultStrategy)
    */
-  @deprecated("Use createStream with actorSystemCreator instead", "1.5.0")
+  @deprecated("Use createStream with actorSystemCreator instead", "1.6.0")
   def createStream[T: ClassTag](
       ssc: StreamingContext,
       publisherUrl: String,
@@ -102,7 +102,7 @@ object ZeroMQUtils {
    * @param storageLevel Storage level to use for storing the received objects
    * @param supervisorStrategy the supervisor strategy
    */
-  @deprecated("Use createStream with actorSystemFactory instead", "1.5.0")
+  @deprecated("Use createStream with actorSystemFactory instead", "1.6.0")
   def createStream[T](
       jssc: JavaStreamingContext,
       publisherUrl: String,
@@ -142,7 +142,8 @@ object ZeroMQUtils {
     ): JavaReceiverInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    val fn = (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).toIterator
+    val fn = (x: Seq[ByteString]) =>
+      bytesToObjects.call(x.map(_.toArray).toArray).iterator().asScala
     createStream[T](jssc.ssc, () => actorSystemFactory.create(),
       publisherUrl, subscribe, fn, storageLevel, supervisorStrategy)
   }
@@ -158,7 +159,7 @@ object ZeroMQUtils {
    *                       where sequence refer to a frame and sub sequence refer to its payload.
    * @param storageLevel   RDD storage level.
    */
-  @deprecated("Use createStream with actorSystemFactory instead", "1.5.0")
+  @deprecated("Use createStream with actorSystemFactory instead", "1.6.0")
   def createStream[T](
       jssc: JavaStreamingContext,
       publisherUrl: String,
@@ -194,7 +195,8 @@ object ZeroMQUtils {
     ): JavaReceiverInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    val fn = (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).toIterator
+    val fn = (x: Seq[ByteString]) =>
+      bytesToObjects.call(x.map(_.toArray).toArray).iterator().asScala
     createStream[T](
       jssc.ssc, () => actorSystemFactory.create(), publisherUrl, subscribe, fn, storageLevel)
   }
@@ -210,7 +212,7 @@ object ZeroMQUtils {
    *                       bytes, where sequence refer to a frame and sub sequence refer to its
    *                       payload.
    */
-  @deprecated("Use createStream with actorSystemFactory instead", "1.5.0")
+  @deprecated("Use createStream with actorSystemFactory instead", "1.6.0")
   def createStream[T](
       jssc: JavaStreamingContext,
       publisherUrl: String,
@@ -244,7 +246,8 @@ object ZeroMQUtils {
     ): JavaReceiverInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    val fn = (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).toIterator
+    val fn = (x: Seq[ByteString]) =>
+      bytesToObjects.call(x.map(_.toArray).toArray).iterator().asScala
     createStream[T](jssc.ssc, () => actorSystemFactory.create(), publisherUrl, subscribe, fn)
   }
 }
