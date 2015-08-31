@@ -29,7 +29,9 @@ import org.apache.spark.sql.types._
  *
  * Note: The returned UnsafeRow will be pointed to a scratch buffer inside the projection.
  */
-object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafeProjection] {
+abstract class AbstractGenerateUnsafeProjection[OutType <: AnyRef]
+    extends CodeGenerator[Seq[Expression], OutType] {
+  protected def projectionType: String
 
   private val StringWriter = classOf[UnsafeRowWriters.UTF8StringWriter].getName
   private val BinaryWriter = classOf[UnsafeRowWriters.BinaryWriter].getName
@@ -122,7 +124,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
    */
   private def createCodeForStruct(
       ctx: CodeGenContext,
-      row: String,
+      rowNames: Seq[String],
       inputs: Seq[GeneratedExpressionCode],
       inputTypes: Seq[DataType]): GeneratedExpressionCode = {
 
@@ -183,7 +185,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val code = s"""
       $cursor = $fixedSize;
       $output.pointTo($buffer, Platform.BYTE_ARRAY_OFFSET, ${inputTypes.length}, $cursor);
-      ${ctx.splitExpressions(row, convertedFields)}
+      ${ctx.splitExpressions(rowNames, convertedFields)}
       """
     GeneratedExpressionCode(code, "false", output)
   }
@@ -400,7 +402,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         val fieldIsNull = s"$tmp.isNullAt($i)"
         GeneratedExpressionCode("", fieldIsNull, getFieldCode)
       }
-      val converter = createCodeForStruct(ctx, tmp, fieldEvals, fieldTypes)
+      val converter = createCodeForStruct(ctx, Seq(tmp), fieldEvals, fieldTypes)
       val code = s"""
         ${input.code}
          UnsafeRow $output = null;
@@ -427,16 +429,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   def createCode(ctx: CodeGenContext, expressions: Seq[Expression]): GeneratedExpressionCode = {
     val exprEvals = expressions.map(e => e.gen(ctx))
     val exprTypes = expressions.map(_.dataType)
-    createCodeForStruct(ctx, "i", exprEvals, exprTypes)
+    createCodeForStruct(ctx, inputNames, exprEvals, exprTypes)
   }
 
-  protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
-    in.map(ExpressionCanonicalizer.execute)
-
-  protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
-    in.map(BindReferences.bindReference(_, inputSchema))
-
-  protected def create(expressions: Seq[Expression]): UnsafeProjection = {
+  protected def create(expressions: Seq[Expression]): OutType = {
     val ctx = newCodeGenContext()
 
     val eval = createCode(ctx, expressions)
@@ -446,24 +442,26 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         return new SpecificUnsafeProjection(exprs);
       }
 
-      class SpecificUnsafeProjection extends ${classOf[UnsafeProjection].getName} {
+      class SpecificUnsafeProjection extends $projectionType {
 
         private $exprType[] expressions;
 
         ${declareMutableStates(ctx)}
         ${declareAddedFunctions(ctx)}
+        ${declareJoinedRow(ctx)}
 
         public SpecificUnsafeProjection($exprType[] expressions) {
           this.expressions = expressions;
           ${initMutableStates(ctx)}
         }
 
-        // Scala.Function1 need this
-        public Object apply(Object row) {
-          return apply((InternalRow) row);
+        // Scala.Function1/Function2 need this
+        public Object apply(${input("Object _")}) {
+          return apply(${input("(InternalRow) _")});
         }
 
-        public UnsafeRow apply(InternalRow i) {
+        public UnsafeRow apply(${input("InternalRow ")}) {
+          ${initJoinedRow(ctx)}
           ${eval.code}
           return ${eval.primitive};
         }
@@ -473,6 +471,18 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
     val c = compile(code)
-    c.generate(ctx.references.toArray).asInstanceOf[UnsafeProjection]
+    c.generate(ctx.references.toArray).asInstanceOf[OutType]
   }
+}
+
+object GenerateUnsafeProjection
+  extends AbstractGenerateUnsafeProjection[UnsafeProjection]
+  with ExpressionCodeGen[Expression, UnsafeProjection] {
+  override protected def projectionType = classOf[UnsafeProjection].getName
+}
+
+object GenerateUnsafeJoinedProjection
+  extends AbstractGenerateUnsafeProjection[UnsafeJoinedProjection]
+  with JoinedExpressionCodeGen[UnsafeJoinedProjection] {
+  override protected def projectionType = classOf[UnsafeJoinedProjection].getName
 }

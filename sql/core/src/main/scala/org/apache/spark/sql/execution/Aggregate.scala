@@ -179,10 +179,11 @@ case class Aggregate(
         new Iterator[InternalRow] {
           private[this] val hashTableIter = hashTable.entrySet().iterator()
           private[this] val aggregateResults = new GenericMutableRow(computedAggregates.length)
-          private[this] val resultProjection =
-            new InterpretedMutableProjection(
-              resultExpressions, computedSchema ++ namedGroups.map(_._2))
-          private[this] val joinedRow = new JoinedRow
+          private[this] val resultProjection = new InterpretedMutableJoinedProjection(
+            resultExpressions,
+            computedSchema,
+            namedGroups.map(_._2)
+          )
 
           override final def hasNext: Boolean = hashTableIter.hasNext
 
@@ -199,7 +200,7 @@ case class Aggregate(
               aggregateResults(i) = currentBuffer(i).eval(EmptyRow)
               i += 1
             }
-            resultProjection(joinedRow(aggregateResults, currentGroup))
+            resultProjection(aggregateResults, currentGroup)
           }
         }
       }

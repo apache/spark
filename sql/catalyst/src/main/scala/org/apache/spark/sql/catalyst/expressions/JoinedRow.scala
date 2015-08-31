@@ -27,109 +27,160 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  * be instantiated once per thread and reused.
  */
 class JoinedRow extends InternalRow {
-  private[this] var row1: InternalRow = _
-  private[this] var row2: InternalRow = _
+  private[this] var numLeftFields = 0
+  private[this] val rows = new Array[InternalRow](2)
+
+  /**
+   * Determine the index of the row for for a given ordinal:
+   * 1. Subtract the number of fields in the left row from the ordinal; if this result is negative
+   *    the ordinal maps the left row, otherwise it maps to the right row.
+   * 2. Isolate the sign bit of this result by means of a bitwise 'and' and a right shift:
+   *    1 = left row, 0 = right row.
+   * 3. Flip the sign bit in order to get the proper index.
+   *
+   * @param i ordinal to determine the row index for.
+   * @return the row index.
+   */
+  @inline
+  private[this] def row(i: Int) = ((i - numLeftFields) >>> 31) ^ 1
+
+  @inline
+  private[this] def ordinal(i: Int, row: Int) = i - row * numLeftFields
 
   def this(left: InternalRow, right: InternalRow) = {
     this()
-    row1 = left
-    row2 = right
+    rows(0) = left
+    rows(1) = right
+    numLeftFields = left.numFields
   }
 
   /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
-  def apply(r1: InternalRow, r2: InternalRow): JoinedRow = {
-    row1 = r1
-    row2 = r2
+  def apply(r1: InternalRow, r2: InternalRow): InternalRow = {
+    rows(0) = r1
+    rows(1) = r2
+    numLeftFields = r1.numFields
     this
   }
 
   /** Updates this JoinedRow by updating its left base row.  Returns itself. */
-  def withLeft(newLeft: InternalRow): JoinedRow = {
-    row1 = newLeft
+  def withLeft(newLeft: InternalRow): InternalRow = {
+    rows(0) = newLeft
+    numLeftFields = newLeft.numFields
     this
   }
 
   /** Updates this JoinedRow by updating its right base row.  Returns itself. */
-  def withRight(newRight: InternalRow): JoinedRow = {
-    row2 = newRight
+  def withRight(newRight: InternalRow): InternalRow = {
+    rows(1) = newRight
     this
   }
 
+  // TODO move left & right to Internal row?
+  def left: InternalRow = rows(0)
+
+  def right: InternalRow = rows(1)
+
   override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = {
+    val row1 = rows(0)
+    val row2 = rows(1)
     assert(fieldTypes.length == row1.numFields + row2.numFields)
     val (left, right) = fieldTypes.splitAt(row1.numFields)
     row1.toSeq(left) ++ row2.toSeq(right)
   }
 
-  override def numFields: Int = row1.numFields + row2.numFields
+  override def numFields: Int = rows(0).numFields + rows(1).numFields
 
-  override def get(i: Int, dt: DataType): AnyRef =
-    if (i < row1.numFields) row1.get(i, dt) else row2.get(i - row1.numFields, dt)
+  override def get(i: Int, dt: DataType): AnyRef = {
+    val r = row(i)
+    rows(r).get(ordinal(i, r), dt)
+  }
 
-  override def isNullAt(i: Int): Boolean =
-    if (i < row1.numFields) row1.isNullAt(i) else row2.isNullAt(i - row1.numFields)
+  override def isNullAt(i: Int): Boolean = {
+    val r = row(i)
+    rows(r).isNullAt(ordinal(i, r))
+  }
 
-  override def getBoolean(i: Int): Boolean =
-    if (i < row1.numFields) row1.getBoolean(i) else row2.getBoolean(i - row1.numFields)
+  override def getBoolean(i: Int): Boolean = {
+    val r = row(i)
+    rows(r).getBoolean(ordinal(i, r))
+  }
 
-  override def getByte(i: Int): Byte =
-    if (i < row1.numFields) row1.getByte(i) else row2.getByte(i - row1.numFields)
+  override def getByte(i: Int): Byte = {
+    val r = row(i)
+    rows(r).getByte(ordinal(i, r))
+  }
 
-  override def getShort(i: Int): Short =
-    if (i < row1.numFields) row1.getShort(i) else row2.getShort(i - row1.numFields)
+  override def getShort(i: Int): Short = {
+    val r = row(i)
+    rows(r).getShort(ordinal(i, r))
+  }
 
-  override def getInt(i: Int): Int =
-    if (i < row1.numFields) row1.getInt(i) else row2.getInt(i - row1.numFields)
+  override def getInt(i: Int): Int = {
+    val r = row(i)
+    rows(r).getInt(ordinal(i, r))
+  }
 
-  override def getLong(i: Int): Long =
-    if (i < row1.numFields) row1.getLong(i) else row2.getLong(i - row1.numFields)
+  override def getLong(i: Int): Long = {
+    val r = row(i)
+    rows(r).getLong(ordinal(i, r))
+  }
 
-  override def getFloat(i: Int): Float =
-    if (i < row1.numFields) row1.getFloat(i) else row2.getFloat(i - row1.numFields)
+  override def getFloat(i: Int): Float = {
+    val r = row(i)
+    rows(r).getFloat(ordinal(i, r))
+  }
 
-  override def getDouble(i: Int): Double =
-    if (i < row1.numFields) row1.getDouble(i) else row2.getDouble(i - row1.numFields)
+  override def getDouble(i: Int): Double = {
+    val r = row(i)
+    rows(r).getDouble(ordinal(i, r))
+  }
 
   override def getDecimal(i: Int, precision: Int, scale: Int): Decimal = {
-    if (i < row1.numFields) {
-      row1.getDecimal(i, precision, scale)
-    } else {
-      row2.getDecimal(i - row1.numFields, precision, scale)
-    }
+    val r = row(i)
+    rows(r).getDecimal(ordinal(i, r), precision, scale)
   }
 
-  override def getUTF8String(i: Int): UTF8String =
-    if (i < row1.numFields) row1.getUTF8String(i) else row2.getUTF8String(i - row1.numFields)
+  override def getUTF8String(i: Int): UTF8String = {
+    val r = row(i)
+    rows(r).getUTF8String(ordinal(i, r))
+  }
 
-  override def getBinary(i: Int): Array[Byte] =
-    if (i < row1.numFields) row1.getBinary(i) else row2.getBinary(i - row1.numFields)
+  override def getBinary(i: Int): Array[Byte] = {
+    val r = row(i)
+    rows(r).getBinary(ordinal(i, r))
+  }
 
-  override def getArray(i: Int): ArrayData =
-    if (i < row1.numFields) row1.getArray(i) else row2.getArray(i - row1.numFields)
+  override def getArray(i: Int): ArrayData = {
+    val r = row(i)
+    rows(r).getArray(ordinal(i, r))
+  }
 
-  override def getInterval(i: Int): CalendarInterval =
-    if (i < row1.numFields) row1.getInterval(i) else row2.getInterval(i - row1.numFields)
+  override def getInterval(i: Int): CalendarInterval = {
+    val r = row(i)
+    rows(r).getInterval(ordinal(i, r))
+  }
 
-  override def getMap(i: Int): MapData =
-    if (i < row1.numFields) row1.getMap(i) else row2.getMap(i - row1.numFields)
+  override def getMap(i: Int): MapData = {
+    val r = row(i)
+    rows(r).getMap(ordinal(i, r))
+  }
 
   override def getStruct(i: Int, numFields: Int): InternalRow = {
-    if (i < row1.numFields) {
-      row1.getStruct(i, numFields)
-    } else {
-      row2.getStruct(i - row1.numFields, numFields)
-    }
+    val r = row(i)
+    rows(r).getStruct(ordinal(i, r), numFields)
   }
 
-  override def anyNull: Boolean = row1.anyNull || row2.anyNull
+  override def anyNull: Boolean = rows(0).anyNull || rows(1).anyNull
 
   override def copy(): InternalRow = {
-    val copy1 = row1.copy()
-    val copy2 = row2.copy()
+    val copy1 = rows(0).copy()
+    val copy2 = rows(1).copy()
     new JoinedRow(copy1, copy2)
   }
 
   override def toString: String = {
+    val row1 = rows(0)
+    val row2 = rows(1)
     // Make sure toString never throws NullPointerException.
     if ((row1 eq null) && (row2 eq null)) {
       "[ empty row ]"

@@ -26,13 +26,8 @@ import org.apache.spark.sql.types._
  * Generates byte code that produces a [[MutableRow]] object that can update itself based on a new
  * input [[InternalRow]] for a fixed set of [[Expression Expressions]].
  */
-object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection] {
-
-  protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
-    in.map(ExpressionCanonicalizer.execute)
-
-  protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
-    in.map(BindReferences.bindReference(_, inputSchema))
+object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
+   with ExpressionCodeGen[Expression, Projection] {
 
   private def createCodeForStruct(
       ctx: CodeGenContext,
@@ -55,7 +50,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
         }
       """
     }
-    val allFields = ctx.splitExpressions(tmp, fieldWriters)
+    val allFields = ctx.splitExpressions(Seq(tmp), fieldWriters)
     val code = s"""
       final InternalRow $tmp = $input;
       this.$values = new Object[${schema.length}];
@@ -144,7 +139,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
             }
           """
     }
-    val allExpressions = ctx.splitExpressions("i", expressionCodes)
+    val allExpressions = ctx.splitExpressions(inputNames, expressionCodes)
     val code = s"""
       public Object generate($exprType[] expr) {
         return new SpecificSafeProjection(expr);

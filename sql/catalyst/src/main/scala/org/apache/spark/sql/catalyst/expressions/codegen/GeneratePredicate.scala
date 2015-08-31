@@ -34,8 +34,10 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
 
   protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer.execute(in)
 
-  protected def bind(in: Expression, inputSchema: Seq[Attribute]): Expression =
-    BindReferences.bindReference(in, inputSchema)
+  def generate(in: Expression, inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
+    val bound = BindReferences.bindReference(in, inputSchema)
+    generate(bound)
+  }
 
   protected def create(predicate: Expression): ((InternalRow) => Boolean) = {
     val ctx = newCodeGenContext()

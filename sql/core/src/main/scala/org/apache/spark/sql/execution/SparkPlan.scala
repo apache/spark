@@ -245,6 +245,29 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
   }
 
+  protected def newJoinedProjection(
+      expressions: Seq[Expression],
+      leftInputSchema: Seq[Attribute],
+      rightInputSchema: Seq[Attribute]): JoinedProjection = {
+    log.debug(s"Creating Joined Projection: $expressions, leftInputSchema: $leftInputSchema" +
+        s", rightInputSchema: $rightInputSchema, codegen:$codegenEnabled")
+    if (codegenEnabled) {
+      try {
+        GenerateJoinedProjection.generate(expressions, leftInputSchema, rightInputSchema)
+      } catch {
+        case e: Exception =>
+          if (isTesting) {
+            throw e
+          } else {
+            log.error("Failed to generate joined projection, fallback to interpret", e)
+            new InterpretedJoinedProjection(expressions, leftInputSchema, rightInputSchema)
+          }
+      }
+    } else {
+      new InterpretedJoinedProjection(expressions, leftInputSchema, rightInputSchema)
+    }
+  }
+
   protected def newMutableProjection(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute]): () => MutableProjection = {
@@ -264,6 +287,33 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       }
     } else {
       () => new InterpretedMutableProjection(expressions, inputSchema)
+    }
+  }
+
+  protected def newMutableJoinedProjection(
+      expressions: Seq[Expression],
+      leftInputSchema: Seq[Attribute],
+      rightInputSchema: Seq[Attribute]): () => MutableJoinedProjection = {
+    log.debug(
+      s"Creating Mutable Joined Projection: $expressions, leftInputSchema: $leftInputSchema" +
+        s", rightInputSchema: $rightInputSchema, codegen:$codegenEnabled")
+    if(codegenEnabled) {
+      try {
+        GenerateMutableJoinedProjection.generate(expressions, leftInputSchema, rightInputSchema)
+      } catch {
+        case e: Exception =>
+          if (isTesting) {
+            throw e
+          } else {
+            log.error("Failed to generate mutable joined projection, fallback to interpreted", e)
+            () => new InterpretedMutableJoinedProjection(
+              expressions,
+              leftInputSchema,
+              rightInputSchema)
+          }
+      }
+    } else {
+      () => new InterpretedMutableJoinedProjection(expressions, leftInputSchema, rightInputSchema)
     }
   }
 

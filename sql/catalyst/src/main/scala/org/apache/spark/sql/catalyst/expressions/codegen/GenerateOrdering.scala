@@ -34,13 +34,8 @@ class BaseOrdering extends Ordering[InternalRow] {
 /**
  * Generates bytecode for an [[Ordering]] of rows for a given set of expressions.
  */
-object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalRow]] with Logging {
-
-  protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
-    in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[SortOrder])
-
-  protected def bind(in: Seq[SortOrder], inputSchema: Seq[Attribute]): Seq[SortOrder] =
-    in.map(BindReferences.bindReference(_, inputSchema))
+object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalRow]] with Logging
+    with ExpressionCodeGen[SortOrder, Ordering[InternalRow]] {
 
   /**
    * Creates a code gen ordering for sorting this schema, in ascending order.

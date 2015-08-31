@@ -273,7 +273,7 @@ class CodeGenContext {
    *
    * @param row the variable name of row that is used by expressions
    */
-  def splitExpressions(row: String, expressions: Seq[String]): String = {
+  def splitExpressions(row: Seq[String], expressions: Seq[String]): String = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
@@ -291,10 +291,17 @@ class CodeGenContext {
       blocks.head
     } else {
       val apply = freshName("apply")
+      def useJoinedRow(output: String) = {
+        if (references.nonEmpty && row.size > 1) output
+        else ""
+      }
+      val functionParams = row.map("InternalRow " + _).mkString(", ") +
+        useJoinedRow(", JoinedRow i")
+      val functionCall = row.mkString(", ") + useJoinedRow(", i")
       val functions = blocks.zipWithIndex.map { case (body, i) =>
         val name = s"${apply}_$i"
         val code = s"""
-           |private void $name(InternalRow $row) {
+           |private void $name($functionParams) {
            |  $body
            |}
          """.stripMargin
@@ -302,7 +309,7 @@ class CodeGenContext {
          name
       }
 
-      functions.map(name => s"$name($row);").mkString("\n")
+      functions.map(name => s"$name($functionCall);").mkString("\n")
     }
   }
 }
@@ -325,6 +332,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected val exprType: String = classOf[Expression].getName
   protected val mutableRowType: String = classOf[MutableRow].getName
   protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
+  protected val joinedRowType: String = classOf[JoinedRow].getName
 
   protected def declareMutableStates(ctx: CodeGenContext): String = {
     ctx.mutableStates.map { case (javaType, variableName, _) =>
@@ -340,6 +348,16 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     ctx.addedFuntions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
   }
 
+  protected def declareJoinedRow(ctx: CodeGenContext): String = ""
+
+  protected def initJoinedRow(ctx: CodeGenContext): String = ""
+
+  protected def joinedRowArg(ctx: CodeGenContext, prefix: String): String = ""
+
+  protected def inputNames: Seq[String] = Seq("i")
+
+  protected def input(prefix: String) = inputNames.map(n => s"$prefix$n").mkString(", ")
+
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
    * already available.
@@ -351,9 +369,6 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * cosmetically.
    */
   protected def canonicalize(in: InType): InType
-
-  /** Binds an input expression to a given input schema */
-  protected def bind(in: InType, inputSchema: Seq[Attribute]): InType
 
   /**
    * Compile the Java source code into a Java class, using Janino.
@@ -417,10 +432,6 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         }
       })
 
-  /** Generates the requested evaluator binding the given expression(s) to the inputSchema. */
-  def generate(expressions: InType, inputSchema: Seq[Attribute]): OutType =
-    generate(bind(expressions, inputSchema))
-
   /** Generates the requested evaluator given already bound expression(s). */
   def generate(expressions: InType): OutType = create(canonicalize(expressions))
 
@@ -431,4 +442,52 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   def newCodeGenContext(): CodeGenContext = {
     new CodeGenContext
   }
+}
+
+trait ExpressionCodeGen[InType <: Expression, OutType <: AnyRef] {
+  self : CodeGenerator[Seq[InType], OutType] =>
+
+  /** Generates the requested evaluator binding the given expression(s) to the inputSchema. */
+  def generate(in: Seq[InType], inputSchema: Seq[Attribute]): OutType = {
+    val bound = in.map(BindReferences.bindReference(_, inputSchema))
+    generate(bound)
+  }
+
+  override protected def canonicalize(in: Seq[InType]): Seq[InType] =
+    in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[InType])
+}
+
+trait JoinedExpressionCodeGen[OutType <: AnyRef] {
+  self: CodeGenerator[Seq[Expression], OutType] =>
+
+  /** Generates the requested evaluator binding the given expression(s) to the inputSchema. */
+  def generate(in: Seq[Expression],
+      leftInputSchema: Seq[Attribute],
+      rightInputSchema: Seq[Attribute]): OutType = {
+    val bound = BindReferences.bindJoinReferences(in, leftInputSchema, rightInputSchema)
+    generate(bound)
+  }
+
+  override protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
+    in.map(ExpressionCanonicalizer.execute)
+
+  override protected def declareJoinedRow(ctx: CodeGenContext): String = {
+    if (ctx.references.nonEmpty) {
+      s"private $joinedRowType i = new $joinedRowType();"
+    } else ""
+  }
+
+  override protected def initJoinedRow(ctx: CodeGenContext): String = {
+    if (ctx.references.nonEmpty) {
+      "i.apply(left, right);"
+    } else ""
+  }
+
+  override protected def joinedRowArg(ctx: CodeGenContext, prefix: String): String = {
+    if (ctx.references.nonEmpty) {
+      s"$prefix i"
+    } else ""
+  }
+
+  override protected def inputNames = Seq("left", "right")
 }

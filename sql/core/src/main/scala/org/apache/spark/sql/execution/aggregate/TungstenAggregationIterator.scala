@@ -70,6 +70,8 @@ import org.apache.spark.sql.types.StructType
  *   expressions for generating output rows.
  * @param newMutableProjection
  *   the function used to create mutable projections.
+ * @param newMutableJoinedProjection
+ *   the function used to create mutable join projections.
  * @param originalInputAttributes
  *   attributes of representing input rows from `inputIter`.
  */
@@ -80,6 +82,8 @@ class TungstenAggregationIterator(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+    newMutableJoinedProjection:
+    (Seq[Expression], Seq[Attribute], Seq[Attribute]) => (() => MutableJoinedProjection),
     originalInputAttributes: Seq[Attribute],
     testFallbackStartsAt: Option[Int],
     numInputRows: LongSQLMetric,
@@ -180,18 +184,20 @@ class TungstenAggregationIterator(
       inputAttributes: Seq[Attribute]): (UnsafeRow, InternalRow) => Unit = {
 
     val aggregationBufferAttributes = allAggregateFunctions.flatMap(_.bufferAttributes)
-    val joinedRow = new JoinedRow()
 
     aggregationMode match {
       // Partial-only
       case (Some(Partial), None) =>
         val updateExpressions = allAggregateFunctions.flatMap(_.updateExpressions)
         val algebraicUpdateProjection =
-          newMutableProjection(updateExpressions, aggregationBufferAttributes ++ inputAttributes)()
+          newMutableJoinedProjection(
+            updateExpressions,
+            aggregationBufferAttributes,
+            inputAttributes)()
 
         (currentBuffer: UnsafeRow, row: InternalRow) => {
           algebraicUpdateProjection.target(currentBuffer)
-          algebraicUpdateProjection(joinedRow(currentBuffer, row))
+          algebraicUpdateProjection(currentBuffer, row)
         }
 
       // PartialMerge-only or Final-only
@@ -199,14 +205,15 @@ class TungstenAggregationIterator(
         val mergeExpressions = allAggregateFunctions.flatMap(_.mergeExpressions)
         // This projection is used to merge buffer values for all AlgebraicAggregates.
         val algebraicMergeProjection =
-          newMutableProjection(
+          newMutableJoinedProjection(
             mergeExpressions,
-            aggregationBufferAttributes ++ inputAttributes)()
+            aggregationBufferAttributes,
+            inputAttributes)()
 
         (currentBuffer: UnsafeRow, row: InternalRow) => {
           // Process all algebraic aggregate functions.
           algebraicMergeProjection.target(currentBuffer)
-          algebraicMergeProjection(joinedRow(currentBuffer, row))
+          algebraicMergeProjection(currentBuffer, row)
         }
 
       // Final-Complete
@@ -221,9 +228,10 @@ class TungstenAggregationIterator(
         val mergeExpressions =
           nonCompleteAggregateFunctions.flatMap(_.mergeExpressions) ++ completeOffsetExpressions
         val finalAlgebraicMergeProjection =
-          newMutableProjection(
+          newMutableJoinedProjection(
             mergeExpressions,
-            aggregationBufferAttributes ++ inputAttributes)()
+            aggregationBufferAttributes,
+            inputAttributes)()
 
         // We do not touch buffer values of aggregate functions with the Final mode.
         val finalOffsetExpressions =
@@ -231,16 +239,18 @@ class TungstenAggregationIterator(
         val updateExpressions =
           finalOffsetExpressions ++ completeAggregateFunctions.flatMap(_.updateExpressions)
         val completeAlgebraicUpdateProjection =
-          newMutableProjection(updateExpressions, aggregationBufferAttributes ++ inputAttributes)()
+          newMutableJoinedProjection(
+            updateExpressions,
+            aggregationBufferAttributes,
+            inputAttributes)()
 
         (currentBuffer: UnsafeRow, row: InternalRow) => {
-          val input = joinedRow(currentBuffer, row)
           // For all aggregate functions with mode Complete, update the given currentBuffer.
-          completeAlgebraicUpdateProjection.target(currentBuffer)(input)
+          completeAlgebraicUpdateProjection.target(currentBuffer)(currentBuffer, row)
 
           // For all aggregate functions with mode Final, merge buffer values in row to
           // currentBuffer.
-          finalAlgebraicMergeProjection.target(currentBuffer)(input)
+          finalAlgebraicMergeProjection.target(currentBuffer)(currentBuffer, row)
         }
 
       // Complete-only
@@ -251,12 +261,15 @@ class TungstenAggregationIterator(
         val updateExpressions =
           completeAggregateFunctions.flatMap(_.updateExpressions)
         val completeAlgebraicUpdateProjection =
-          newMutableProjection(updateExpressions, aggregationBufferAttributes ++ inputAttributes)()
+          newMutableJoinedProjection(
+            updateExpressions,
+            aggregationBufferAttributes,
+            inputAttributes)()
 
         (currentBuffer: UnsafeRow, row: InternalRow) => {
           completeAlgebraicUpdateProjection.target(currentBuffer)
           // For all aggregate functions with mode Complete, update the given currentBuffer.
-          completeAlgebraicUpdateProjection(joinedRow(currentBuffer, row))
+          completeAlgebraicUpdateProjection(currentBuffer, row)
         }
 
       // Grouping only.
@@ -264,7 +277,7 @@ class TungstenAggregationIterator(
 
       case other =>
         throw new IllegalStateException(
-          s"${aggregationMode} should not be passed into TungstenAggregationIterator.")
+          s"$aggregationMode should not be passed into TungstenAggregationIterator.")
     }
   }
 
@@ -289,12 +302,11 @@ class TungstenAggregationIterator(
       // Final-only, Complete-only and Final-Complete: a output row is generated based on
       // resultExpressions.
       case (Some(Final), None) | (Some(Final) | None, Some(Complete)) =>
-        val joinedRow = new JoinedRow()
         val resultProjection =
-          UnsafeProjection.create(resultExpressions, groupingAttributes ++ bufferAttributes)
+          UnsafeJoinedProjection.create(resultExpressions, groupingAttributes, bufferAttributes)
 
         (currentGroupingKey: UnsafeRow, currentBuffer: UnsafeRow) => {
-          resultProjection(joinedRow(currentGroupingKey, currentBuffer))
+          resultProjection(currentGroupingKey, currentBuffer)
         }
 
       // Grouping-only: a output row is generated from values of grouping expressions.
@@ -308,7 +320,7 @@ class TungstenAggregationIterator(
 
       case other =>
         throw new IllegalStateException(
-          s"${aggregationMode} should not be passed into TungstenAggregationIterator.")
+          s"$aggregationMode should not be passed into TungstenAggregationIterator.")
     }
   }
 

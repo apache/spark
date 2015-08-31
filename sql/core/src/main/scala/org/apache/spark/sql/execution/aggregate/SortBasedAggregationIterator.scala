@@ -38,6 +38,8 @@ class SortBasedAggregationIterator(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+    newMutableJoinedProjection:
+    (Seq[Expression], Seq[Attribute], Seq[Attribute]) => (() => MutableJoinedProjection),
     outputsUnsafeRows: Boolean,
     numInputRows: LongSQLMetric,
     numOutputRows: LongSQLMetric)
@@ -51,6 +53,7 @@ class SortBasedAggregationIterator(
     initialInputBufferOffset,
     resultExpressions,
     newMutableProjection,
+    newMutableJoinedProjection,
     outputsUnsafeRows) {
 
   override protected def newBuffer: MutableRow = {
@@ -182,6 +185,8 @@ object SortBasedAggregationIterator {
       initialInputBufferOffset: Int,
       resultExpressions: Seq[NamedExpression],
       newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+      newMutableJoinedProjection:
+        (Seq[Expression], Seq[Attribute], Seq[Attribute]) => (() => MutableJoinedProjection),
       newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
       inputAttributes: Seq[Attribute],
       inputIter: Iterator[InternalRow],
@@ -208,6 +213,7 @@ object SortBasedAggregationIterator {
       initialInputBufferOffset,
       resultExpressions,
       newMutableProjection,
+      newMutableJoinedProjection,
       outputsUnsafeRows,
       numInputRows,
       numOutputRows)

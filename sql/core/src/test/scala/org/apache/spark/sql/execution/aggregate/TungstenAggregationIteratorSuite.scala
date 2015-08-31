@@ -37,9 +37,14 @@ class TungstenAggregationIteratorSuite extends SparkFunSuite with SharedSQLConte
       val newMutableProjection = (expr: Seq[Expression], schema: Seq[Attribute]) => {
         () => new InterpretedMutableProjection(expr, schema)
       }
+      val newMutableJoinedProjection =
+        (expr: Seq[Expression], l: Seq[Attribute], r: Seq[Attribute]) => {
+        () => new InterpretedMutableJoinedProjection(expr, l, r)
+      }
       val dummyAccum = SQLMetrics.createLongMetric(ctx.sparkContext, "dummy")
       iter = new TungstenAggregationIterator(Seq.empty, Seq.empty, Seq.empty, 0,
-        Seq.empty, newMutableProjection, Seq.empty, None, dummyAccum, dummyAccum)
+        Seq.empty, newMutableProjection, newMutableJoinedProjection, Seq.empty, None,
+        dummyAccum, dummyAccum)
       val numPages = iter.getHashMap.getNumDataPages
       assert(numPages === 1)
     } finally {

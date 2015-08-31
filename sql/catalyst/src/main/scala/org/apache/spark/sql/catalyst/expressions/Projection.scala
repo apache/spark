@@ -18,9 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
-import org.apache.spark.sql.types.{DataType, Decimal, StructType, _}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeJoinedProjection, GenerateSafeProjection, GenerateUnsafeProjection}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
@@ -50,6 +49,28 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   }
 
   override def toString(): String = s"Row => [${exprArray.mkString(",")}]"
+}
+
+/**
+ * A [[JoinedProjection]] that is calculated by calling the `eval` of each of the specified
+ * expressions.
+ *
+ * @param expressions a sequence of expressions that determine the value of each column of the
+ *                    output row.
+ */
+class InterpretedJoinedProjection(expressions: Seq[Expression]) extends JoinedProjection {
+  def this(expressions: Seq[Expression], leftInputSchema: Seq[Attribute], rightInputSchema:
+      Seq[Attribute]) = {
+    this(BindReferences.bindJoinReferences(expressions, leftInputSchema, rightInputSchema))
+  }
+
+  private[this] val projection = new InterpretedProjection(expressions)
+
+  private[this] val join = new JoinedRow
+
+  def apply(left: InternalRow, right: InternalRow): InternalRow = {
+    projection(join(left, right))
+  }
 }
 
 /**
@@ -83,6 +104,35 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
       i += 1
     }
     mutableRow
+  }
+}
+
+/**
+ * A [[MutableJoinedProjection]] that is calculated by calling `eval` on each of the specified
+ * expressions.
+ * @param expressions a sequence of expressions that determine the value of each column of the
+ *                    output row.
+ */
+class InterpretedMutableJoinedProjection(expressions: Seq[Expression])
+    extends MutableJoinedProjection {
+  def this(expressions: Seq[Expression], leftInputSchema: Seq[Attribute], rightInputSchema:
+      Seq[Attribute]) = {
+    this(BindReferences.bindJoinReferences(expressions, leftInputSchema, rightInputSchema))
+  }
+
+  private[this] val projection = new InterpretedMutableProjection(expressions)
+
+  private[this] val join = new JoinedRow
+
+  override def currentValue: InternalRow = projection.currentValue
+
+  override def target(row: MutableRow): MutableJoinedProjection = {
+    projection.target(row)
+    this
+  }
+
+  override def apply(left: InternalRow, right: InternalRow): InternalRow = {
+    projection(join(left, right))
   }
 }
 
@@ -132,6 +182,35 @@ object UnsafeProjection {
    */
   def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): UnsafeProjection = {
     create(exprs.map(BindReferences.bindReference(_, inputSchema)))
+  }
+}
+
+/**
+ * A joined projection that returns UnsafeRow.
+ */
+abstract class UnsafeJoinedProjection extends JoinedProjection {
+  override def apply(left: InternalRow, right: InternalRow): UnsafeRow
+}
+
+object UnsafeJoinedProjection {
+
+  /**
+   * Returns an UnsafeProjection for given sequence of Expressions (bounded).
+   */
+  def create(exprs: Seq[Expression]): UnsafeJoinedProjection = {
+    GenerateUnsafeJoinedProjection.generate(exprs)
+  }
+
+  def create(expr: Expression): UnsafeJoinedProjection = create(Seq(expr))
+
+  /**
+   * Returns an UnsafeProjection for given sequence of Expressions, which will be bound to
+   * `inputSchema`.
+   */
+  def create(exprs: Seq[Expression],
+      leftInputSchema: Seq[Attribute],
+      rightInputSchema: Seq[Attribute]): UnsafeJoinedProjection = {
+    create(BindReferences.bindJoinReferences(exprs, leftInputSchema, rightInputSchema))
   }
 }
 
