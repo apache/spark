@@ -55,10 +55,10 @@ private[mllib] object TreeModelUtils {
   }
 
   /** Build a pmml tree stub given the root mllib node. */
-  private def buildStub(rootDTNode: Node): (PMMLNode,List[MiningField], List[DataField]) = {
+  private def buildStub(rootDTNode: Node): (PMMLNode, List[MiningField], List[DataField]) = {
 
     val miningFields = MutableList[MiningField]()
-    val dataFields = mutable.HashMap[String,DataField]()
+    val dataFields = mutable.HashMap[String, DataField]()
 
     def buildStubInternal(rootNode: Node): PMMLNode = {
 
@@ -67,17 +67,17 @@ private[mllib] object TreeModelUtils {
 
       if (!rootNode.isLeaf) {
 
-        if(rootNode.split.isDefined){
+        if (rootNode.split.isDefined) {
           val fieldName = FieldName.create(FieldNamePrefix + rootNode.split.get.feature)
           val dataField = getDataField(rootNode, fieldName).get
 
-          if(! dataFields.get(dataField.getName.getValue).isDefined){
+          if (!dataFields.get(dataField.getName.getValue).isDefined) {
             dataFields.put(dataField.getName.getValue, dataField)
             miningFields += new MiningField()
               .withName(dataField.getName)
               .withUsageType(FieldUsageType.ACTIVE)
 
-          }else if(dataField.getOpType != OpType.CONTINUOUS.value()){
+          } else if (dataField.getOpType != OpType.CONTINUOUS.value()) {
             appendCategories(
               dataFields.get(dataField.getName.getValue).get,
               dataField.getValues.asScala.toList)
@@ -96,7 +96,7 @@ private[mllib] object TreeModelUtils {
           val rightNode = buildStubInternal(rootNode.rightNode.get)
           rootPMMLNode.withNodes(rightNode)
         }
-      }else{
+      } else {
         rootPMMLNode.withPredicate(getPredicate(rootNode, None))
       }
       rootPMMLNode
@@ -109,14 +109,14 @@ private[mllib] object TreeModelUtils {
   }
 
 
-  private def appendCategories(dtField: DataField, values:List[PMMLValue]): DataField = {
-    if(dtField.getOpType == OpType.CATEGORICAL){
+  private def appendCategories(dtField: DataField, values: List[PMMLValue]): DataField = {
+    if (dtField.getOpType == OpType.CATEGORICAL) {
 
       val existingValues = dtField.getValues.asScala
-        .groupBy{case category=> category.getValue}.toMap
+        .groupBy { case category => category.getValue }.toMap
 
       values.foreach(category => {
-        if(!existingValues.get(category.getValue).isDefined){
+        if (!existingValues.get(category.getValue).isDefined) {
           dtField.withValues(category)
         }
       })
