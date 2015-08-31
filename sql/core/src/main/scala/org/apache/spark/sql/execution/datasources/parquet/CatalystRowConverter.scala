@@ -196,6 +196,13 @@ private[parquet] class CatalystRowConverter(
       }
     }
 
+    if (paddedParquetFields.length != catalystType.length) {
+      throw new UnsupportedOperationException(
+        "A Parquet file's schema has different number of fields with the table schema. " +
+          "Please enable schema merging by setting \"mergeSchema\" to true when load " +
+          "a Parquet dataset or set spark.sql.parquet.mergeSchema to true in SQLConf.")
+    }
+
     paddedParquetFields.zip(catalystType).zipWithIndex.map {
       case ((parquetFieldType, catalystField), ordinal) =>
         // Converted field value should be set to the `ordinal`-th cell of `currentRow`

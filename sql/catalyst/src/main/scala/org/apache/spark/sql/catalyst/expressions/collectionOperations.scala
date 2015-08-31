@@ -19,9 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{
-  CodegenFallback, CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, CodegenFallback, GeneratedExpressionCode}
 import org.apache.spark.sql.types._
 
 /**
@@ -145,46 +143,42 @@ case class ArrayContains(left: Expression, right: Expression)
     }
   }
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = {
+    left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull
+  }
 
-  override def eval(input: InternalRow): Boolean = {
-    val arr = left.eval(input)
-    if (arr == null) {
-      false
-    } else {
-      val value = right.eval(input)
-      if (value == null) {
-        false
-      } else {
-        arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
-          if (v == value) return true
-        )
-        false
+  override def nullSafeEval(arr: Any, value: Any): Any = {
+    var hasNull = false
+    arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
+      if (v == null) {
+        hasNull = true
+      } else if (v == value) {
+        return true
       }
+    )
+    if (hasNull) {
+      null
+    } else {
+      false
     }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val arrGen = left.gen(ctx)
-    val elementGen = right.gen(ctx)
-    val i = ctx.freshName("i")
-    val getValue = ctx.getValue(arrGen.primitive, right.dataType, i)
-    s"""
-      ${arrGen.code}
-      boolean ${ev.isNull} = false;
-      boolean ${ev.primitive} = false;
-      if (!${arrGen.isNull}) {
-        ${elementGen.code}
-        if (!${elementGen.isNull}) {
-          for (int $i = 0; $i < ${arrGen.primitive}.numElements(); $i ++) {
-            if (${ctx.genEqual(right.dataType, elementGen.primitive, getValue)}) {
-              ${ev.primitive} = true;
-              break;
-            }
-          }
+    nullSafeCodeGen(ctx, ev, (arr, value) => {
+      val i = ctx.freshName("i")
+      val getValue = ctx.getValue(arr, right.dataType, i)
+      s"""
+      for (int $i = 0; $i < $arr.numElements(); $i ++) {
+        if ($arr.isNullAt($i)) {
+          ${ev.isNull} = true;
+        } else if (${ctx.genEqual(right.dataType, value, getValue)}) {
+          ${ev.isNull} = false;
+          ${ev.primitive} = true;
+          break;
         }
       }
      """
+    })
   }
 
   override def prettyName: String = "array_contains"
