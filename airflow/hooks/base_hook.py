@@ -18,7 +18,8 @@ class BaseHook(object):
     def __init__(self, source):
         pass
 
-    def get_connections(self, conn_id):
+    @classmethod
+    def get_connections(cls, conn_id):
         session = settings.Session()
         db = (
             session.query(Connection)
@@ -32,11 +33,17 @@ class BaseHook(object):
         session.close()
         return db
 
-    def get_connection(self, conn_id):
-        conn = random.choice(self.get_connections(conn_id))
+    @classmethod
+    def get_connection(cls, conn_id):
+        conn = random.choice(cls.get_connections(conn_id))
         if conn.host:
             logging.info("Using connection to: " + conn.host)
         return conn
+
+    @classmethod
+    def get_hook(cls, conn_id):
+        connection = cls.get_connection(conn_id)
+        return connection.get_hook()
 
     def get_conn(self):
         raise NotImplemented()

@@ -5,7 +5,6 @@ from airflow import configuration
 configuration.test_mode()
 from airflow import jobs, models, DAG, executors, utils, operators
 from airflow.www.app import app
-from airflow import utils
 
 NUM_EXAMPLE_DAGS = 6
 DEV_NULL = '/dev/null'
@@ -19,8 +18,6 @@ try:
 except ImportError:
     # Python 3
     import pickle
-
-#utils.initdb()
 
 
 class TransferTests(unittest.TestCase):
@@ -40,6 +37,22 @@ class TransferTests(unittest.TestCase):
             sql=sql,
             hive_table='airflow.test_mysql_to_hive',
             recreate=True,
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+    def test_mysql_to_mysql(self):
+        sql = "SELECT * FROM task_instance LIMIT 1000;"
+        t = operators.GenericTransfer(
+            task_id='test_m2m',
+            preoperator=[
+                "DROP TABLE IF EXISTS test_mysql_to_mysql",
+                "CREATE TABLE IF NOT EXISTS "
+                    "test_mysql_to_mysql LIKE task_instance"
+            ],
+            source_conn_id='airflow_db',
+            destination_conn_id='airflow_db',
+            destination_table="test_mysql_to_mysql",
+            sql=sql,
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
@@ -224,7 +237,8 @@ class CoreTest(unittest.TestCase):
             args = parser.parse_args(['list_tasks', dag_id])
             cli.list_tasks(args)
 
-        args = parser.parse_args(['list_tasks', 'example_bash_operator', '--tree'])
+        args = parser.parse_args([
+            'list_tasks', 'example_bash_operator', '--tree'])
         cli.list_tasks(args)
 
         cli.initdb(parser.parse_args(['initdb']))
@@ -421,7 +435,9 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(
             "/admin/airflow/refresh?dag_id=example_bash_operator")
         response = self.app.get("/admin/airflow/refresh_all")
-        response = self.app.get("/admin/airflow/paused?dag_id=example_python_operator&is_paused=false")
+        response = self.app.get(
+            "/admin/airflow/paused?"
+            "dag_id=example_python_operator&is_paused=false")
 
     def test_charts(self):
         response = self.app.get(
