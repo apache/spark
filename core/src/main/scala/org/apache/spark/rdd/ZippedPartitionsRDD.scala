@@ -75,11 +75,11 @@ private[spark] abstract class ZippedPartitionsBaseRDD[V: ClassTag](
   }
 
   /**
-   * Call the prepare method of every children that has one.
+   * Call the prepare method of every parent that has one.
    * This is needed for reserving execution memory in advance.
    */
-  protected def tryPrepareChildren(): Unit = {
-    getNarrowAncestors.collect {
+  protected def tryPrepareParents(): Unit = {
+    rdds.collect {
       case rdd: MapPartitionsWithPreparationRDD[_, _, _] => rdd.prepare()
     }
   }
@@ -94,7 +94,7 @@ private[spark] class ZippedPartitionsRDD2[A: ClassTag, B: ClassTag, V: ClassTag]
   extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2), preservesPartitioning) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
-    tryPrepareChildren()
+    tryPrepareParents()
     val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
     f(rdd1.iterator(partitions(0), context), rdd2.iterator(partitions(1), context))
   }
@@ -118,7 +118,7 @@ private[spark] class ZippedPartitionsRDD3
   extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3), preservesPartitioning) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
-    tryPrepareChildren()
+    tryPrepareParents()
     val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
     f(rdd1.iterator(partitions(0), context),
       rdd2.iterator(partitions(1), context),
@@ -146,7 +146,7 @@ private[spark] class ZippedPartitionsRDD4
   extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3, rdd4), preservesPartitioning) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
-    tryPrepareChildren()
+    tryPrepareParents()
     val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
     f(rdd1.iterator(partitions(0), context),
       rdd2.iterator(partitions(1), context),

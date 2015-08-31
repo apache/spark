@@ -17,6 +17,7 @@
 
 package org.apache.spark.rdd
 
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, Partitioner, TaskContext}
@@ -38,24 +39,27 @@ private[spark] class MapPartitionsWithPreparationRDD[U: ClassTag, T: ClassTag, M
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
-  private[this] var preparedArgument: Option[M] = None
+  // In certain join operations, prepare can be called on the same partition multiple times.
+  // In this case, we need to ensure that each call to compute gets a separate prepare argument.
+  private[this] var preparedArguments: ArrayBuffer[M] = new ArrayBuffer[M]
 
-  def prepare(): M = {
-    // This could be called multiple times, by compute or parent's compute
-    if (preparedArgument.isEmpty) {
-      preparedArgument = Some(preparePartition())
-    }
-    preparedArgument.get
+  /**
+   * Prepare a partition for a single call to compute.
+   */
+  def prepare(): Unit = {
+    preparedArguments += preparePartition()
   }
 
   /**
    * Prepare a partition before computing it from its parent.
    */
   override def compute(partition: Partition, context: TaskContext): Iterator[U] = {
-    val prepared = prepare()
-    // The same RDD could be called multiple times in one task, each call of compute() should
-    // have separate prepared argument.
-    preparedArgument = None
+    val prepared =
+      if (preparedArguments.isEmpty) {
+        preparePartition()
+      } else {
+        preparedArguments.remove(0)
+      }
     val parentIterator = firstParent[T].iterator(partition, context)
     executePartition(context, partition.index, prepared, parentIterator)
   }
