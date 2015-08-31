@@ -25,6 +25,7 @@ import org.apache.spark.shuffle.ShuffleMemoryManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkSqlSerializer
+import org.apache.spark.sql.execution.local.LocalNode
 import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
@@ -38,7 +39,7 @@ import org.apache.spark.{SparkConf, SparkEnv}
  * Interface for a hashed relation by some key. Use [[HashedRelation.apply]] to create a concrete
  * object.
  */
-private[joins] sealed trait HashedRelation {
+private[execution] sealed trait HashedRelation {
   def get(key: InternalRow): Seq[InternalRow]
 
   // This is a helper method to implement Externalizable, and is used by
@@ -111,7 +112,7 @@ final class UniqueKeyHashedRelation(private var hashTable: JavaHashMap[InternalR
 // TODO(rxin): a version of [[HashedRelation]] backed by arrays for consecutive integer keys.
 
 
-private[joins] object HashedRelation {
+private[execution] object HashedRelation {
 
   def apply(
       input: Iterator[InternalRow],
@@ -136,6 +137,55 @@ private[joins] object HashedRelation {
     while (input.hasNext) {
       currentRow = input.next()
       numInputRows += 1
+      val rowKey = keyGenerator(currentRow)
+      if (!rowKey.anyNull) {
+        val existingMatchList = hashTable.get(rowKey)
+        val matchList = if (existingMatchList == null) {
+          val newMatchList = new CompactBuffer[InternalRow]()
+          hashTable.put(rowKey.copy(), newMatchList)
+          newMatchList
+        } else {
+          keyIsUnique = false
+          existingMatchList
+        }
+        matchList += currentRow.copy()
+      }
+    }
+
+    if (keyIsUnique) {
+      val uniqHashTable = new JavaHashMap[InternalRow, InternalRow](hashTable.size)
+      val iter = hashTable.entrySet().iterator()
+      while (iter.hasNext) {
+        val entry = iter.next()
+        uniqHashTable.put(entry.getKey, entry.getValue()(0))
+      }
+      new UniqueKeyHashedRelation(uniqHashTable)
+    } else {
+      new GeneralHashedRelation(hashTable)
+    }
+  }
+
+  def createLocalHashedRelation(
+      input: LocalNode,
+      keyGenerator: Projection,
+      sizeEstimate: Int = 64): HashedRelation = {
+
+    if (keyGenerator.isInstanceOf[UnsafeProjection]) {
+      return UnsafeHashedRelation(
+        input, keyGenerator.asInstanceOf[UnsafeProjection], sizeEstimate)
+    }
+
+    // TODO: Use Spark's HashMap implementation.
+    val hashTable = new JavaHashMap[InternalRow, CompactBuffer[InternalRow]](sizeEstimate)
+    var currentRow: InternalRow = null
+
+    // Whether the join key is unique. If the key is unique, we can convert the underlying
+    // hash map into one specialized for this.
+    var keyIsUnique = true
+
+    // Create a mapping of buildKeys -> rows
+    while (input.next()) {
+      currentRow = input.fetch()
       val rowKey = keyGenerator(currentRow)
       if (!rowKey.anyNull) {
         val existingMatchList = hashTable.get(rowKey)
@@ -362,7 +412,7 @@ private[joins] final class UnsafeHashedRelation(
   }
 }
 
-private[joins] object UnsafeHashedRelation {
+private[execution] object UnsafeHashedRelation {
 
   def apply(
       input: Iterator[InternalRow],
@@ -377,6 +427,34 @@ private[joins] object UnsafeHashedRelation {
     while (input.hasNext) {
       val unsafeRow = input.next().asInstanceOf[UnsafeRow]
       numInputRows += 1
+      val rowKey = keyGenerator(unsafeRow)
+      if (!rowKey.anyNull) {
+        val existingMatchList = hashTable.get(rowKey)
+        val matchList = if (existingMatchList == null) {
+          val newMatchList = new CompactBuffer[UnsafeRow]()
+          hashTable.put(rowKey.copy(), newMatchList)
+          newMatchList
+        } else {
+          existingMatchList
+        }
+        matchList += unsafeRow.copy()
+      }
+    }
+
+    new UnsafeHashedRelation(hashTable)
+  }
+
+  def apply(
+    input: LocalNode,
+    keyGenerator: UnsafeProjection,
+    sizeEstimate: Int): HashedRelation = {
+
+    // Use a Java hash table here because unsafe maps expect fixed size records
+    val hashTable = new JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]](sizeEstimate)
+
+    // Create a mapping of buildKeys -> rows
+    while (input.next()) {
+      val unsafeRow = input.fetch().asInstanceOf[UnsafeRow]
       val rowKey = keyGenerator(unsafeRow)
       if (!rowKey.anyNull) {
         val existingMatchList = hashTable.get(rowKey)
