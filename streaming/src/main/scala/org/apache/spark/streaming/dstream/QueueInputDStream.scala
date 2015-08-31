@@ -27,7 +27,7 @@ import org.apache.spark.streaming.{Time, StreamingContext}
 
 private[streaming]
 class QueueInputDStream[T: ClassTag](
-    @transient ssc: StreamingContext,
+    ssc: StreamingContext,
     val queue: Queue[RDD[T]],
     oneAtATime: Boolean,
     defaultRDD: RDD[T]
@@ -52,7 +52,7 @@ class QueueInputDStream[T: ClassTag](
       if (oneAtATime) {
         Some(buffer.head)
       } else {
-        Some(new UnionRDD(ssc.sc, buffer.toSeq))
+        Some(new UnionRDD(context.sc, buffer.toSeq))
       }
     } else if (defaultRDD != null) {
       Some(defaultRDD)
