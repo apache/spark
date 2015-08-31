@@ -149,9 +149,20 @@ private[spark] class NodeIdCache(
   }
 
   /**
+   * Call this after training is finished to delete any remaining checkpoints &
+   * unpersist RDD's.
+   */
+  def cleanupCache(): Unit = {
+    if (prevNodeIdsForInstances != null) {
+      prevNodeIdsForInstances.unpersist()
+    }
+    deleteAllCheckpoints()
+  }
+
+  /**
    * Call this after training is finished to delete any remaining checkpoints.
    */
-  def deleteAllCheckpoints(): Unit = {
+  private def deleteAllCheckpoints(): Unit = {
     while (checkpointQueue.nonEmpty) {
       val old = checkpointQueue.dequeue()
       if (old.getCheckpointFile.isDefined) {
