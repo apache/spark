@@ -215,12 +215,14 @@ class ALSModel private[ml] (
       .select(dataset("*"),
         predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
   }
+
   @Since("1.3.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
     SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
   }
+
   @Since("1.5.0")
   override def copy(extra: ParamMap): ALSModel = {
     val copied = new ALSModel(uid, rank, userFactors, itemFactors)
@@ -333,6 +335,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
     setNumItemBlocks(value)
     this
   }
+
   @Since("1.3.0")
   override def fit(dataset: DataFrame): ALSModel = {
     import dataset.sqlContext.implicits._
@@ -352,10 +355,12 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
     val model = new ALSModel(uid, $(rank), userDF, itemDF).setParent(this)
     copyValues(model)
   }
+
   @Since("1.3.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
+
   @Since("1.5.0")
   override def copy(extra: ParamMap): ALS = defaultCopy(extra)
 }
