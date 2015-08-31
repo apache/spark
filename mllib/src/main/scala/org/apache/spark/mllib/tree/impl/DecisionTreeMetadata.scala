@@ -30,12 +30,14 @@ import org.apache.spark.rdd.RDD
 /**
  * Learning and dataset metadata for DecisionTree.
  *
+ * @param numFeatures   Total number of features (including single class)
  * @param numClasses    For classification: labels can take values {0, ..., numClasses - 1}.
  *                      For regression: fixed at 0 (no meaning).
  * @param maxBins  Maximum number of bins, for all features.
  * @param featureArity  Map: categorical feature index --> arity.
  *                      I.e., the feature takes values in {0, ..., arity - 1}.
  * @param numBins  Number of bins for each feature.
+ * @param featureIndexes Indexes of usable (e.g non-single-class) features.
  */
 private[spark] class DecisionTreeMetadata(
     val numFeatures: Int,
@@ -115,9 +117,9 @@ private[spark] object DecisionTreeMetadata extends Logging {
     // Construct the feature indexes that we can use (one category features are not useful)
     val featureIndexes = if (strategy.categoricalFeaturesInfo.nonEmpty) {
       val singleCategoryIndexes = strategy.categoricalFeaturesInfo.filter(_._2 < 2).map(_._1).toSet
-      0.to(numFeatures).filterNot(singleCategoryIndexes.contains)
+      0.to(numFeatures-1).filterNot(singleCategoryIndexes.contains)
     } else {
-      0.to(numFeatures)
+      0.to(numFeatures-1)
     }
     val numActiveFeatures = featureIndexes.size
     val numExamples = input.count()

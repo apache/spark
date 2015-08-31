@@ -329,13 +329,9 @@ private[ml] object RandomForest extends Logging {
         featureIndexIdx += 1
       }
     } else {
-      // Use all features
-      val numFeatures = agg.metadata.numFeatures
-      var featureIndex = 0
-      while (featureIndex < numFeatures) {
+      agg.metadata.featureIndexes.foreach{featureIndex =>
         val binIndex = treePoint.binnedFeatures(featureIndex)
         agg.update(featureIndex, binIndex, label, instanceWeight)
-        featureIndex += 1
       }
     }
   }
@@ -863,10 +859,8 @@ private[ml] object RandomForest extends Logging {
 
     logDebug("isMulticlass = " + metadata.isMulticlass)
 
-    val numFeatures = metadata.numFeatures
-
     // Sample the input only if there are continuous features.
-    val hasContinuousFeatures = Range(0, numFeatures).exists(metadata.isContinuous)
+    val hasContinuousFeatures = metadata.featureIndexes.exists(metadata.isContinuous)
     val sampledInput = if (hasContinuousFeatures) {
       // Calculate the number of samples for approximate quantile calculation.
       val requiredSamples = math.max(metadata.maxBins * metadata.maxBins, 10000)
@@ -881,12 +875,11 @@ private[ml] object RandomForest extends Logging {
       new Array[LabeledPoint](0)
     }
 
-    val splits = new Array[Array[Split]](numFeatures)
+    val splits = new Array[Array[Split]](metadata.numFeatures)
 
     // Find all splits.
     // Iterate over all features.
-    var featureIndex = 0
-    while (featureIndex < numFeatures) {
+    metadata.featureIndexes.foreach{featureIndex =>
       if (metadata.isContinuous(featureIndex)) {
         val featureSamples = sampledInput.map(_.features(featureIndex))
         val featureSplits = findSplitsForContinuousFeature(featureSamples, metadata, featureIndex)
@@ -927,7 +920,6 @@ private[ml] object RandomForest extends Logging {
           splits(featureIndex) = new Array[Split](0)
         }
       }
-      featureIndex += 1
     }
     splits
   }
