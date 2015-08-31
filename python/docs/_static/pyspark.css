@@ -1,0 +1,11 @@
+body {
+    background-color: #ffffff;
+}
+
+div.sphinxsidebar {
+    width: 260px;
+}
+
+div.bodywrapper {
+    margin: 0 0 0 260px;
+}
