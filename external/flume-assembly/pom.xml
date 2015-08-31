@@ -69,6 +69,11 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
+      <groupId>commons-lang</groupId>
+      <artifactId>commons-lang</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
       <groupId>commons-net</groupId>
       <artifactId>commons-net</artifactId>
       <scope>provided</scope>
@@ -89,6 +94,12 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.avro</groupId>
+      <artifactId>avro-mapred</artifactId>
+      <classifier>${avro.mapred.classifier}</classifier>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>
       <scope>provided</scope>
@@ -104,7 +115,6 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <outputFile>${project.build.directory}/scala-${scala.binary.version}/spark-streaming-flume-assembly-${project.version}.jar</outputFile>
           <artifactSet>
             <includes>
               <include>*:*</include>

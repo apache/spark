@@ -30,8 +30,8 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.rpc._
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
-import org.apache.spark.SparkException
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv,
+  SparkException, SparkUserAppException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
@@ -530,6 +530,10 @@ private[spark] class ApplicationMaster(
             e.getCause match {
               case _: InterruptedException =>
                 // Reporter thread can interrupt to stop user class
+              case SparkUserAppException(exitCode) =>
+                val msg = s"User application exited with status $exitCode"
+                logError(msg)
+                finish(FinalApplicationStatus.FAILED, exitCode, msg)
               case cause: Throwable =>
                 logError("User class threw exception: " + cause, cause)
                 finish(FinalApplicationStatus.FAILED,
