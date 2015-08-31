@@ -521,7 +521,7 @@ object Vectors {
   }
 
   /** Max number of nonzero entries used in computing hash code. */
-  private[linalg] val MAX_HASH_NNZ = 64
+  private[linalg] val MAX_HASH_NNZ = 128
 }
 
 /**
