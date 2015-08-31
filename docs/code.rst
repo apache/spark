@@ -42,6 +42,7 @@ Operator API
         DummyOperator,
         EmailOperator,
         ExternalTaskSensor,
+        GenericTransfer,
         HdfsSensor,
         Hive2SambaOperator,
         HiveOperator,
