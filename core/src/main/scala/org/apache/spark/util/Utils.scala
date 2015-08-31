@@ -775,6 +775,14 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * If SPARK_USE_HOSTNAME is set to true, it will get the local machine's hostname automatically;
+   * If SPARK_USE_HOSTNAME is not set or set to false, but SPARK_LOCAL_HOSTNAME is set to some value, 
+   * the returned hostname will be the value that users specified;
+   * If SPARK_USE_HOSTNAME is not set or set to false, and SPARK_LOCAL_HOSTNAME is not set either,
+   * then it will return the local machine's IP address instead.
+   */
+  private val useHostname  : Boolean = sys.env.getOrElse("SPARK_USE_HOSTNAME", false).asInstanceOf[Boolean]
   private var customHostname: Option[String] = sys.env.get("SPARK_LOCAL_HOSTNAME")
 
   /**
@@ -791,7 +799,11 @@ private[spark] object Utils extends Logging {
    * Get the local machine's hostname.
    */
   def localHostName(): String = {
-    customHostname.getOrElse(localIpAddress.getHostName)
+    if(useHostname){
+      customHostname.getOrElse(localIpAddress.getHostName)
+    }else{
+      customHostname.getOrElse(localIpAddress.getHostAddress)
+    }
   }
 
   /**
