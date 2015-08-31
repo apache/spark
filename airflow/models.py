@@ -308,7 +308,6 @@ class Connection(Base):
     id = Column(Integer(), primary_key=True)
     conn_id = Column(String(ID_LEN))
     conn_type = Column(String(500))
-    env_variable = Column(String(500))
     host = Column(String(500))
     schema = Column(String(500))
     login = Column(String(500))
