@@ -166,6 +166,99 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         return self.getOrDefault(self.splits)
 
+@inherit_doc
+class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
+    """
+    Extracts a vocabulary from document collections and generates a [[CountVectorizerModel]].
+    """
+
+    # a placeholder to make it appear in the generated doc
+    minTF = Param(
+        Params._dummy(), "minTF", "Filter to ignore rare words in" +
+        " a document. For each document, terms with frequency/count less than the given" +
+        " threshold are ignored. If this is an integer >= 1, then this specifies a count (of" +
+        " times the term must appear in the document); if this is a double in [0,1), then this " +
+        "specifies a fraction (out of the document's token count). Note that the parameter is only " +
+        "used in transform of CountVectorizerModel and does not affect fitting.")
+    minDF = Param(
+        Params._dummy(), "minDF", "Specifies the minimum number of" +
+        " different documents a term must appear in to be included in the vocabulary." +
+        " If this is an integer >= 1, this specifies the number of documents the term must" +
+        " appear in; if this is a double in [0,1), then this specifies the fraction of documents.")
+    vocabSize = Param(
+        Params._dummy(), "vocabSize", "max size of the vocabulary")
+
+    @keyword_only
+    def __init__(self, minTF=None, minDF=None, vocabSize=None, inputCol=None, outputCol=None):
+        """
+        __init__(self, minTF=None, minDF=None, vocabSize=None, inputCol=None, outputCol=None)
+        """
+        super(CountVectorizer, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizer",
+                                            self.uid)
+        minTF = Param(
+            self, "minTF", "Filter to ignore rare words in" +
+            " a document. For each document, terms with frequency/count less than the given" +
+            " threshold are ignored. If this is an integer >= 1, then this specifies a count (of" +
+            " times the term must appear in the document); if this is a double in [0,1), then this " +
+            "specifies a fraction (out of the document's token count). Note that the parameter is only " +
+            "used in transform of CountVectorizerModel and does not affect fitting.")
+        minDF = Param(
+            self, "minDF", "Specifies the minimum number of" +
+            " different documents a term must appear in to be included in the vocabulary." +
+            " If this is an integer >= 1, this specifies the number of documents the term must" +
+            " appear in; if this is a double in [0,1), then this specifies the fraction of documents.")
+        vocabSize = Param(
+            self, "vocabSize", "max size of the vocabulary")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, minTF=None, minDF=None, vocabSize=None, inputCol=None, outputCol=None):
+        """
+        setParams(self, minTF=None, minDF=None, vocabSize=None, inputCol=None, outputCol=None)
+        Set the params for the CountVectorizer
+        """
+
+    def setMinTF(self, value):
+        """
+        Sets the value of :py:attr:`minTF`.
+        """
+        self._paramMap[self.minTF] = value
+        return self
+
+    def getMinTF(self):
+        """
+        Gets the value of minTF or its default value.
+        """
+        return self.getOrDefault(self.minTF)
+
+    def setMinDF(self, value):
+        """
+        Sets the value of :py:attr:`minDF`.
+        """
+        self._paramMap[self.minDF] = value
+        return self
+
+    def getMinDF(self):
+        """
+        Gets the value of minDF or its default value.
+        """
+        return self.getOrDefault(self.minDF)
+
+    def setVocabSize(self, value):
+        """
+        Sets the value of :py:attr:`vocabSize`.
+        """
+        self._paramMap[self.vocabSize] = value
+        return self
+
+    def getVocabSize(self):
+        """
+        Gets the value of vocabSize or its default value.
+        """
+        return self.getOrDefault(self.vocabSize)
+
 
 @inherit_doc
 class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
