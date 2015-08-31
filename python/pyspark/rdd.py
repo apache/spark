@@ -1013,6 +1013,28 @@ class RDD(object):
 
         return self.mapPartitions(lambda i: [StatCounter(i)]).reduce(redFunc)
 
+    def statsByKey(self):
+        """
+        Return an RDD of (key, L{StatCounter}) pairs.
+
+        >>> x = sc.parallelize([("key_a", 1.0), ("key_a", 2.0), ("key_b", 2.0), ("key_b", 3.0)])
+        >>> s = sorted(x.statsByKey().collect())
+        >>> s[0]
+        ('key_a', (count: 2, mean: 1.5, stdev: 0.5, max: 2.0, min: 1.0))
+        >>> s[1]
+        ('key_b', (count: 2, mean: 2.5, stdev: 0.5, max: 3.0, min: 2.0))
+        """
+        def new_counter(val):
+            return StatCounter([val])
+
+        def merge_val_counter(counter, val):
+            return counter.merge(val)
+
+        def redFunc(left_counter, right_counter):
+            return left_counter.mergeStats(right_counter)
+
+        return self.combineByKey(new_counter, merge_val_counter, redFunc)
+
     def histogram(self, buckets):
         """
         Compute a histogram using the provided buckets. The buckets

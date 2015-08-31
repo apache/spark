@@ -2006,6 +2006,28 @@ class NumPyTests(PySparkTestCase):
         self.assertSequenceEqual(
             [0.6666666666666666, 0.6666666666666666], stats_sample_dict['variance'].tolist())
 
+    def test_stats_by_key(self):
+        keyed_arrays = [
+            ("key_a", np.array([1.0, 1.0])), ("key_a", np.array([2.0, 2.0])),
+            ("key_a", np.array([3.0, 3.0])),
+            ("key_b", np.array([2.0, 2.0])), ("key_b", np.array([3.0, 3.0])),
+            ("key_b", np.array([4.0, 4.0]))
+        ]
+        x = self.sc.parallelize(keyed_arrays)
+        s = x.statsByKey()
+        self.assertSequenceEqual(["key_a", "key_b"], s.keys().collect())
+
+        c = dict(s.collect())
+        self.assertSequenceEqual([2.0, 2.0], c['key_a'].mean().tolist())
+        self.assertSequenceEqual([1.0, 1.0], c['key_a'].min().tolist())
+        self.assertSequenceEqual([3.0, 3.0], c['key_a'].max().tolist())
+        self.assertSequenceEqual([1.0, 1.0], c['key_a'].sampleStdev().tolist())
+
+        self.assertSequenceEqual([3.0, 3.0], c['key_b'].mean().tolist())
+        self.assertSequenceEqual([2.0, 2.0], c['key_b'].min().tolist())
+        self.assertSequenceEqual([4.0, 4.0], c['key_b'].max().tolist())
+        self.assertSequenceEqual([1.0, 1.0], c['key_b'].sampleStdev().tolist())
+
 
 if __name__ == "__main__":
     if not _have_scipy:
