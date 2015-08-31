@@ -17,13 +17,31 @@
 
 package org.apache.spark.sql.execution.local
 
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row, SQLConf}
 import org.apache.spark.sql.test.SQLTestUtils
 
 class LocalNodeTest extends SparkFunSuite {
+
+  protected val conf = new SQLConf
+
+  /**
+   * Sets all configurations specified in `pairs`, calls `f`, and then restore all configurations.
+   */
+  protected def withConf(pairs: (String, String)*)(f: => Unit): Unit = {
+    val (keys, values) = pairs.unzip
+    val currentValues = keys.map(key => Try(conf.getConfString(key)).toOption)
+    (keys, values).zipped.foreach(conf.setConfString)
+    try f finally {
+      keys.zip(currentValues).foreach {
+        case (key, Some(value)) => conf.setConfString(key, value)
+        case (key, None) => conf.unsetConf(key)
+      }
+    }
+  }
 
   /**
    * Runs the LocalNode and makes sure the answer matches the expected result.
@@ -92,6 +110,7 @@ class LocalNodeTest extends SparkFunSuite {
 
   protected def dataFrameToSeqScanNode(df: DataFrame): SeqScanNode = {
     new SeqScanNode(
+      conf,
       df.queryExecution.sparkPlan.output,
       df.queryExecution.toRdd.map(_.copy()).collect())
   }

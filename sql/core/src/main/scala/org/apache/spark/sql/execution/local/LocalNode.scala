@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.local
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{SQLConf, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.StructType
  * Before consuming the iterator, open function must be called.
  * After consuming the iterator, close function must be called.
  */
-abstract class LocalNode extends TreeNode[LocalNode] {
+abstract class LocalNode(conf: SQLConf) extends TreeNode[LocalNode] {
 
   def output: Seq[Attribute]
 
@@ -76,12 +76,12 @@ abstract class LocalNode extends TreeNode[LocalNode] {
 }
 
 
-abstract class LeafLocalNode extends LocalNode {
+abstract class LeafLocalNode(conf: SQLConf) extends LocalNode(conf) {
   override def children: Seq[LocalNode] = Seq.empty
 }
 
 
-abstract class UnaryLocalNode extends LocalNode {
+abstract class UnaryLocalNode(conf: SQLConf) extends LocalNode(conf) {
 
   def child: LocalNode
 
