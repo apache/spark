@@ -217,10 +217,19 @@ private[rest] class CredentialsInfo extends YarnSubmitRestProtocolRequest {
   def buildFrom(credentials: Credentials): CredentialsInfo = {
     import org.apache.hadoop.security.token.Token
 
-    if (!credentials.getAllSecretKeys.isEmpty) {
+    val hadoopSecrets = try {
+      val field = credentials.getClass.getDeclaredField("secretKeysMap")
+      field.setAccessible(true)
+      field.get(credentials).asInstanceOf[util.Map[Text, Array[Byte]]]
+    } catch {
+      case e: Exception =>
+        new util.HashMap[Text, Array[Byte]]()
+    }
+
+    if (!hadoopSecrets.isEmpty) {
       secrets = new JaxbMapWrapper[String, String]().buildFrom {
-        credentials.getAllSecretKeys.asScala.map { key =>
-          (key.toString, Base64.encodeBase64String(credentials.getSecretKey(key)))
+        hadoopSecrets.asScala.map { case (k, v) =>
+          (k.toString, Base64.encodeBase64String(v))
         }.toMap
       }
     }
