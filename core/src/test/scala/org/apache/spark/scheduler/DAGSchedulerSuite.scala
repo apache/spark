@@ -513,7 +513,9 @@ class DAGSchedulerSuite
    * @param attemptIdx - The current attempt count
    * @param numShufflePartitions - The number of partitions in the next stage
    */
-  def completeNextShuffleMapSuccesfully(stageId: Int, attemptIdx: Int,
+  def completeNextShuffleMapSuccesfully(
+      stageId: Int,
+      attemptIdx: Int,
       numShufflePartitions: Int): Unit = {
     val stageAttempt = taskSets.last
     checkStageId(stageId, attemptIdx, stageAttempt)
@@ -528,7 +530,8 @@ class DAGSchedulerSuite
    * @param attemptIdx - The current attempt count
    * @param shuffleDep - The shuffle dependency of the stage with a fetch failure
    */
-  def completeNextStageWithFetchFailure(stageId: Int,
+  def completeNextStageWithFetchFailure(
+      stageId: Int,
       attemptIdx: Int,
       shuffleDep: ShuffleDependency[_, _, _]): Unit = {
     val stageAttempt = taskSets.last
