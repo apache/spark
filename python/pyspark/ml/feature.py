@@ -951,7 +951,7 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     string values using either the ML attributes of the input column, or if provided using the
     labels supplied by the user.
     All original columns are kept during transformation.
-    See L{StringIndexer} for converting strings into indices
+    See L{StringIndexer} for converting strings into indices.
     """
 
     # a placeholder to make the labels show up in generated doc
