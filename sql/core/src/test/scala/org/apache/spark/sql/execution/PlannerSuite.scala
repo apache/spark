@@ -147,7 +147,7 @@ class PlannerSuite extends SparkFunSuite {
     {
       val query =
         testData.select('key, 'value).sort('key).limit(2).logicalPlan
-      val planned = planner.TakeOrderedAndProject(query)
+      val planned = planner.TakeOrdered(query)
       assert(planned.head.isInstanceOf[execution.TakeOrderedAndProject])
       assert(planned.head.output === testData.select('key, 'value).logicalPlan.output)
     }
@@ -157,7 +157,7 @@ class PlannerSuite extends SparkFunSuite {
       // into it.
       val query =
         testData.select('key, 'value).sort('key).select('value, 'key).limit(2).logicalPlan
-      val planned = planner.TakeOrderedAndProject(query)
+      val planned = planner.TakeOrdered(query)
       assert(planned.head.isInstanceOf[execution.TakeOrderedAndProject])
       assert(planned.head.output === testData.select('value, 'key).logicalPlan.output)
     }
