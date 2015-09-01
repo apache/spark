@@ -267,6 +267,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
   import org.apache.spark.ml.recommendation.ALS.Rating
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("als"))
 
   /** @group setParam */
