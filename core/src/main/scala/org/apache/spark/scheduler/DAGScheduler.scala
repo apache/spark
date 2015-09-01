@@ -130,10 +130,7 @@ class DAGScheduler(
   /** If enabled, FetchFailed will not cause stage retry, in order to surface the problem. */
   private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)
 
-  private val messageScheduler =
-    ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
-
-  private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
+  private[scheduler] var eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
   // Flag to control if reduce tasks are assigned preferred locations
@@ -1114,21 +1111,10 @@ class DAGScheduler(
               s"longer running")
           }
 
-          if (disallowStageRetryForTest) {
-            abortStage(failedStage, "Fetch failure will not retry stage due to testing config",
-              None)
-          } else if (failedStages.isEmpty) {
-            // Don't schedule an event to resubmit failed stages if failed isn't empty, because
-            // in that case the event will already have been scheduled.
-            // TODO: Cancel running tasks in the stage
-            logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
-              s"$failedStage (${failedStage.name}) due to fetch failure")
-            messageScheduler.schedule(new Runnable {
-              override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
-            }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
-          }
+          val failedStagesWasEmpty = failedStages.isEmpty
           failedStages += failedStage
           failedStages += mapStage
+
           // Mark the map whose fetch failed as broken in the map stage
           if (mapId != -1) {
             mapStage.removeOutputLoc(mapId, bmAddress)
@@ -1139,6 +1125,20 @@ class DAGScheduler(
           if (bmAddress != null) {
             handleExecutorLost(bmAddress.executorId, fetchFailed = true, Some(task.epoch))
           }
+
+          if (disallowStageRetryForTest) {
+            abortStage(failedStage, "Fetch failure will not retry stage due to testing config",
+              None)
+          } else if (failedStagesWasEmpty) {
+            // Don't schedule an event to resubmit failed stages if failed isn't empty, because
+            // in that case the event will already have been scheduled.
+            // TODO: Cancel running tasks in the stage
+            logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
+              s"$failedStage (${failedStage.name}) due to fetch failure")
+            eventProcessLoop.post(ResubmitFailedStages)
+
+          }
+
         }
 
       case commitDenied: TaskCommitDenied =>
@@ -1431,7 +1431,6 @@ class DAGScheduler(
 
   def stop() {
     logInfo("Stopping DAGScheduler")
-    messageScheduler.shutdownNow()
     eventProcessLoop.stop()
     taskScheduler.stop()
   }
