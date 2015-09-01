@@ -968,8 +968,8 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IndexToString",
                                             self.uid)
         self.labels = Param(self, "labels",
-                            "Optional array of labels to be provided by the user, if not supplied or " +
-                            "empty, column metadata is read for labels")
+                            "Optional array of labels to be provided by the user, if not " +
+                            "supplied or empty, column metadata is read for labels")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
