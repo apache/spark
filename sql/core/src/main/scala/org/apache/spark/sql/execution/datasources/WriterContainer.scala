@@ -194,8 +194,7 @@ private[sql] abstract class BaseWriterContainer(
   }
 
   def commitTask(): Unit = {
-    SparkHadoopMapRedUtil.commitTask(
-      outputCommitter, taskAttemptContext, jobId.getId, taskId.getId, taskAttemptId.getId)
+    SparkHadoopMapRedUtil.commitTask(outputCommitter, taskAttemptContext, jobId.getId, taskId.getId)
   }
 
   def abortTask(): Unit = {

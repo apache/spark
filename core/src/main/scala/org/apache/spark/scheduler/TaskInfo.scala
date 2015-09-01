@@ -29,7 +29,7 @@ import org.apache.spark.annotation.DeveloperApi
 class TaskInfo(
     val taskId: Long,
     val index: Int,
-    val attempt: Int,
+    val attempt: Int, // this is a task attempt number, not a globally-unique task attempt id
     val launchTime: Long,
     val executorId: String,
     val host: String,
