@@ -945,6 +945,7 @@ class StringIndexerModel(JavaModel):
 class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     """
     .. note:: Experimental
+
     A [[Transformer]] that maps a column of string indices back to a new column of corresponding
     string values using either the ML attributes of the input column, or if provided using the
     labels supplied by the user.
@@ -977,7 +978,7 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     def setParams(self, inputCol=None, outputCol=None, labels=None):
         """
         setParams(self, inputCol=None, outputCol=None, labels=None)
-        Sets params for this IndexToString
+        Sets params for this IndexToString.
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
