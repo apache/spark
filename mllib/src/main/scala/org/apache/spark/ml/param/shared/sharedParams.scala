@@ -218,7 +218,7 @@ private[ml] trait HasOutputCol extends Params {
 }
 
 /**
- * Trait for shared param checkpointInterval (default: 10).
+ * Trait for shared param checkpointInterval.
  */
 private[ml] trait HasCheckpointInterval extends Params {
 
@@ -227,8 +227,6 @@ private[ml] trait HasCheckpointInterval extends Params {
    * @group param
    */
   final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "checkpoint interval (>= 1). E.g. 10 means that the cache will get checkpointed every 10 iterations.", ParamValidators.gtEq(1))
-
-  setDefault(checkpointInterval, 10)
 
   /** @group getParam */
   final def getCheckpointInterval: Int = $(checkpointInterval)
