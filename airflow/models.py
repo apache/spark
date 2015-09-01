@@ -66,7 +66,7 @@ def clear_task_instances(tis, session):
         else:
             session.delete(ti)
     if job_ids:
-        from airflow.jobs import BaseJob as BJ  # HA!
+        from airflow.jobs import BaseJob as BJ
         for job in session.query(BJ).filter(BJ.id.in_(job_ids)).all():
             job.state = State.SHUTDOWN
 

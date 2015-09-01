@@ -114,7 +114,7 @@ class HivePrestoTest(unittest.TestCase):
     def test_hdfs_sensor(self):
         t = operators.HdfsSensor(
             task_id='hdfs_sensor_check',
-            filepath='/user/hive/warehouse/airflow.db/static_babynames',
+            filepath='hdfs://user/hive/warehouse/airflow.db/static_babynames',
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
@@ -467,7 +467,10 @@ if 'MySqlOperator' in dir(operators):
             );
             """
             t = operators.MySqlOperator(
-                task_id='basic_mysql', sql=sql, dag=self.dag)
+                task_id='basic_mysql',
+                sql=sql,
+                mysql_conn_id='airflow_db',
+                dag=self.dag)
             t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
         def mysql_operator_test_multi(self):
@@ -476,7 +479,9 @@ if 'MySqlOperator' in dir(operators):
                 "INSERT INTO test_airflow VALUES ('X')",
             ]
             t = operators.MySqlOperator(
-                task_id='basic_mysql', sql=sql, dag=self.dag)
+                task_id='mysql_operator_test_multi',
+                mysql_conn_id='airflow_db',
+                sql=sql, dag=self.dag)
             t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
 

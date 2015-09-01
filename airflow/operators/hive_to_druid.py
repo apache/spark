@@ -25,6 +25,9 @@ class HiveToDruidTransfer(BaseOperator):
     :type druid_ingest_conn_id: str
     :param metastore_conn_id: the metastore connection id
     :type metastore_conn_id: str
+    :param hadoop_dependency_coordinates: list of coordinates to squeeze
+        int the ingest json
+    :type hadoop_dependency_coordinates: list of str
     """
 
     template_fields = ('sql', 'intervals')
@@ -41,6 +44,7 @@ class HiveToDruidTransfer(BaseOperator):
             hive_cli_conn_id='hiveserver2_default',
             druid_ingest_conn_id='druid_ingest_default',
             metastore_conn_id='metastore_default',
+            hadoop_dependency_coordinates=None,
             intervals=None,
             *args, **kwargs):
         super(HiveToDruidTransfer, self).__init__(*args, **kwargs)
@@ -52,6 +56,7 @@ class HiveToDruidTransfer(BaseOperator):
             "name": "count",
             "type": "count"}]
         self.hive_cli_conn_id = hive_cli_conn_id
+        self.hadoop_dependency_coordinates = hadoop_dependency_coordinates
         self.druid_ingest_conn_id = druid_ingest_conn_id
         self.metastore_conn_id = metastore_conn_id
 
@@ -100,7 +105,8 @@ class HiveToDruidTransfer(BaseOperator):
             datasource=self.druid_datasource,
             intervals=self.intervals,
             static_path=static_path, ts_dim=self.ts_dim,
-            columns=columns, metric_spec=self.metric_spec)
+            columns=columns, metric_spec=self.metric_spec,
+            hadoop_dependency_coordinates=self.hadoop_dependency_coordinates)
         logging.info("Load seems to have succeeded!")
 
         logging.info(
