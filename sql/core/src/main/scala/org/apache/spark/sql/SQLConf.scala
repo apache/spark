@@ -290,9 +290,9 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     doc = "Enables Parquet filter push-down optimization when set to true.")
 
-  val PARQUET_FOLLOW_PARQUET_FORMAT_SPEC = booleanConf(
-    key = "spark.sql.parquet.followParquetFormatSpec",
-    defaultValue = Some(false),
+  val PARQUET_WRITE_LEGACY_FORMAT = booleanConf(
+    key = "spark.sql.parquet.writeLegacyFormat",
+    defaultValue = Some(true),
     doc = "Whether to follow Parquet's format specification when converting Parquet schema to " +
       "Spark SQL schema and vice versa.",
     isPublic = false)
@@ -304,8 +304,7 @@ private[spark] object SQLConf {
       "subclass of org.apache.hadoop.mapreduce.OutputCommitter.  Typically, it's also a subclass " +
       "of org.apache.parquet.hadoop.ParquetOutputCommitter.  NOTE: 1. Instead of SQLConf, this " +
       "option must be set in Hadoop Configuration.  2. This option overrides " +
-      "\"spark.sql.sources.outputCommitterClass\"."
-  )
+      "\"spark.sql.sources.outputCommitterClass\".")
 
   val ORC_FILTER_PUSHDOWN_ENABLED = booleanConf("spark.sql.orc.filterPushdown",
     defaultValue = Some(false),
@@ -497,7 +496,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
 
-  private[spark] def followParquetFormatSpec: Boolean = getConf(PARQUET_FOLLOW_PARQUET_FORMAT_SPEC)
+  private[spark] def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
   private[spark] def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 
