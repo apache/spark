@@ -384,7 +384,7 @@ object ALS extends Logging {
    */
   @DeveloperApi
   @Since("1.3.0")
-  case class Rating @Since("1.3.0") [@specialized(Int, Long) ID](
+  case class Rating [@specialized(Int, Long) ID] @Since("1.3.0")(
       @Since("1.3.0") user: ID,
       @Since("1.3.0") item: ID,
       @Since("1.3.0") rating: Float)
