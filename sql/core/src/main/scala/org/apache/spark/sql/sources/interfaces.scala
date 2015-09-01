@@ -436,7 +436,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
           Try(fs.listStatus(qualified)).getOrElse(Array.empty)
         }.filterNot { status =>
           val name = status.getPath.getName
-          name.toLowerCase == "_temporary" || name.startsWith(".")
+          // Is it safe to replace "_temporary" to "_"?
+          name.startsWith(".") || name.startsWith("_")
         }
 
         val (dirs, files) = statuses.partition(_.isDir)
