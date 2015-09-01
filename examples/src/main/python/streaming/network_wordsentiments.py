@@ -17,8 +17,8 @@
 
 """
  Shows the most positive words in UTF8 encoded, '\n' delimited text directly received the network
- every 5 seconds. The streaming data is joined with a static RDD of the word-sentiment file
- provided by http://alexdavies.net/twitter-sentiment-analysis/
+ every 5 seconds. The streaming data is joined with a static RDD of the AFINN word list
+ (http://neuro.imm.dtu.dk/wiki/AFINN)
 
  Usage: network_wordcount.py <hostname> <port>
    <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive data.
@@ -32,6 +32,7 @@
 from __future__ import print_function
 
 import sys
+import urllib2
 
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
@@ -51,9 +52,11 @@ if __name__ == "__main__":
     sc = SparkContext(appName="PythonStreamingNetworkWordSentiments")
     ssc = StreamingContext(sc, 5)
 
-    file_path = "examples/src/main/resources/twitter_sentiment_list.txt"
-    word_sentiments = ssc.sparkContext.textFile(file_path) \
-        .map(lambda line: tuple(line.split(",")[:-1]))
+    word_sentiments_uri = "http://raw.githubusercontent.com/fnielsen/afinn/master/afinn/data/" + \
+                          "AFINN-111.txt"
+    word_sentiments_lines = urllib2.urlopen(word_sentiments_uri).read().split("\n")
+    word_sentiments = ssc.sparkContext.parallelize(word_sentiments_lines) \
+        .map(lambda line: tuple(line.split("\t")))
 
     lines = ssc.socketTextStream(sys.argv[1], int(sys.argv[2]))
 
@@ -64,7 +67,7 @@ if __name__ == "__main__":
     happiest_words = word_counts.transform(lambda rdd: word_sentiments.join(rdd)) \
         .map(lambda (word, tuple): (word, float(tuple[0]) * tuple[1])) \
         .map(lambda (word, happiness): (happiness, word)) \
-        .transform(lambda rdd: rdd.sortByKey())
+        .transform(lambda rdd: rdd.sortByKey(False))
 
     happiest_words.foreachRDD(print_happiest_words)
 

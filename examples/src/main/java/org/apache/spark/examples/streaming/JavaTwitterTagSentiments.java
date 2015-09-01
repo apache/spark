@@ -17,6 +17,7 @@
 
 package org.apache.spark.examples.streaming;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.function.FlatMapFunction;
@@ -32,19 +33,20 @@ import org.apache.spark.streaming.twitter.TwitterUtils;
 import scala.Tuple2;
 import twitter4j.Status;
 
+import java.io.IOException;
+import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
 
 /**
- * Inspired by TwitterPopularTags, this example program displays the most positive
- * hash tags by joining the streaming twitter data with a static RDD of
- * the word-sentiment file provided by http://alexdavies.net/twitter-sentiment-analysis/
+ * Displays the most positive hash tags by joining the streaming Twitter data with a static RDD of
+ * the AFINN word list (http://neuro.imm.dtu.dk/wiki/AFINN)
  */
 public class JavaTwitterTagSentiments {
     private JavaTwitterTagSentiments() {
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
         if (args.length < 4) {
             System.err.println("Usage: JavaTwitterTagSentiments <consumer key> <consumer secret>" +
                     " <access token> <access token secret> [<filters>]");
@@ -82,13 +84,17 @@ public class JavaTwitterTagSentiments {
             }
         });
 
-        String wordSentimentFilePath = "examples/src/main/resources/twitter_sentiment_list.txt";
-        final JavaPairRDD<String, Double> wordSentiments = jssc.sc().textFile(wordSentimentFilePath)
+        String wordSentimentURI =
+                "https://raw.githubusercontent.com/fnielsen/afinn/master/afinn/data/AFINN-111.txt";
+        String[] wordSentimentLines = IOUtils.toString(URI.create(wordSentimentURI)).split("\n");
+        final JavaPairRDD<String, Double> wordSentiments = jssc.sparkContext().parallelize(
+                Arrays.asList(wordSentimentLines))
                 .mapToPair(new PairFunction<String, String, Double>(){
                    @Override
                     public Tuple2<String, Double> call(String line) {
-                       String[] columns = line.split(",");
-                       return new Tuple2<String, Double>(columns[0], Double.parseDouble(columns[1]));
+                       String[] columns = line.split("\t");
+                       return new Tuple2<String, Double>(columns[0],
+                               Double.parseDouble(columns[1]));
                    }
                 });
 
@@ -109,9 +115,9 @@ public class JavaTwitterTagSentiments {
                     }
                 }, new Duration(10000));
 
-        JavaPairDStream<String, Tuple2<Double, Integer>> joinedTuples = hashTagTotals.transformToPair(
-                new Function<JavaPairRDD<String, Integer>, JavaPairRDD<String,
-                        Tuple2<Double, Integer>>>() {
+        JavaPairDStream<String, Tuple2<Double, Integer>> joinedTuples =
+                hashTagTotals.transformToPair(new Function<JavaPairRDD<String, Integer>,
+                        JavaPairRDD<String, Tuple2<Double, Integer>>>() {
                     @Override
                     public JavaPairRDD<String, Tuple2<Double, Integer>> call(JavaPairRDD<String,
                             Integer> topicCount)
@@ -141,17 +147,17 @@ public class JavaTwitterTagSentiments {
             }
         });
 
-        JavaPairDStream<Double, String> happiest60 = happinessTopicPairs.transformToPair(
+        JavaPairDStream<Double, String> happiest10 = happinessTopicPairs.transformToPair(
                 new Function<JavaPairRDD<Double, String>, JavaPairRDD<Double, String>>() {
                     @Override
                     public JavaPairRDD<Double, String> call(JavaPairRDD<Double,
                             String> happinessAndTopics) throws Exception {
-                        return happinessAndTopics.sortByKey();
+                        return happinessAndTopics.sortByKey(false);
                     }
                 }
         );
 
-        happiest60.foreachRDD(new Function<JavaPairRDD<Double, String>, Void>() {
+        happiest10.foreachRDD(new Function<JavaPairRDD<Double, String>, Void>() {
             @Override
             public Void call(JavaPairRDD<Double, String> happinessTopicPairs) throws Exception {
                 List<Tuple2<Double, String>> topList = happinessTopicPairs.take(10);

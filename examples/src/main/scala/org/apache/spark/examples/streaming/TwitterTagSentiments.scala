@@ -23,9 +23,8 @@ import org.apache.spark.streaming.twitter.TwitterUtils
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 /**
- * Inspired by TwitterPopularTags, this example program displays the most positive
- * hash tags by joining the streaming twitter data with a static RDD of
- * the word-sentiment file provided by http://alexdavies.net/twitter-sentiment-analysis/
+ * Displays the most positive hash tags by joining the streaming Twitter data with a static RDD of
+ * the AFINN word list (http://neuro.imm.dtu.dk/wiki/AFINN)
  */
 object TwitterTagSentiments {
   def main(args: Array[String]) {
@@ -50,11 +49,14 @@ object TwitterTagSentiments {
     val stream = TwitterUtils.createStream(ssc, None, filters)
 
     val hashTags = stream.flatMap(status => status.getText.split(" ").filter(_.startsWith("#")))
-    val wordSentimentFilePath = "examples/src/main/resources/twitter_sentiment_list.txt"
-    val wordSentiments = ssc.sparkContext.textFile(wordSentimentFilePath).map { line =>
-      val Array(word, happinessValue, _) = line.split(",")
+
+    val wordSentimentURI =
+      "https://raw.githubusercontent.com/fnielsen/afinn/master/afinn/data/AFINN-111.txt"
+    val wordSentimentLines = scala.io.Source.fromURL(wordSentimentURI).mkString.split("\n")
+    val wordSentiments = ssc.sparkContext.parallelize(wordSentimentLines).map { line =>
+      val Array(word, happinessValue) = line.split("\t")
       (word, happinessValue)
-    }
+    } cache()
 
     val happiest60 = hashTags.map(hashTag => (hashTag.tail, 1))
       .reduceByKeyAndWindow(_ + _, Seconds(60))
