@@ -259,6 +259,17 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         """
         return self.getOrDefault(self.vocabSize)
 
+    def _create_model(self, java_model):
+        return CountVectorizerModel(java_model)
+
+
+class CountVectorizerModel(JavaModel):
+    """
+    Model fitted by CountVectorizer.
+    """
+
+
+
 
 @inherit_doc
 class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
