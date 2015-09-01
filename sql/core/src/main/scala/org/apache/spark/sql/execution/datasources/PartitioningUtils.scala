@@ -49,6 +49,10 @@ private[sql] object PartitioningUtils {
     require(columnNames.size == literals.size)
   }
 
+  private[sql] object PartitionValues {
+    val empty = PartitionValues(Seq.empty, Seq.empty)
+  }
+
   /**
    * Given a group of qualified paths, tries to parse them and returns a partition specification.
    * For example, given:
@@ -81,7 +85,14 @@ private[sql] object PartitioningUtils {
       parsePartition(path, defaultPartitionName, typeInference).map(path -> _)
     }
 
-    if (pathsWithPartitionValues.isEmpty) {
+    val ep = pathsWithPartitionValues.filter(_._2 == PartitionValues.empty)
+    // Make sure all data are either partitioned or non-partitioned.
+    // The consistency detail will be validated by resolvePartitions
+    assert(ep.length == 0 || ep.length == pathsWithPartitionValues.length,
+      s"Conflicting directory structures detected with ${ep.length} non-partitioned files " +
+        s"and ${pathsWithPartitionValues.length - ep.length} partitioned files")
+
+    if (pathsWithPartitionValues.isEmpty || ep.length == pathsWithPartitionValues.length) {
       // This dataset is not partitioned.
       PartitionSpec.emptySpec
     } else {
@@ -146,9 +157,8 @@ private[sql] object PartitioningUtils {
       chopped = chopped.getParent
       finished = maybeColumn.isEmpty || chopped.getParent == null
     }
-
     if (columns.isEmpty) {
-      None
+      Some(PartitionValues.empty)
     } else {
       val (columnNames, values) = columns.reverse.unzip
       Some(PartitionValues(columnNames, values))

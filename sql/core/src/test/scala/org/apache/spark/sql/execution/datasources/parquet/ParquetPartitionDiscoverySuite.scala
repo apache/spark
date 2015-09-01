@@ -103,6 +103,18 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     checkThrows[AssertionError]("file://path/a=", "Empty partition column value")
   }
 
+  test("parse invalid partitioned directories") {
+    val paths = Seq(
+      "hdfs://host:9000/invalidPath",
+      "hdfs://host:9000/path/a=10/b=20",
+      "hdfs://host:9000/path/a=10.5/b=hello")
+
+    val exception = intercept[Exception] {
+      parsePartitions(paths.map(new Path(_)), defaultPartitionName, true)
+    }
+    assert(exception.getMessage().contains("Conflicting directory structures detected"))
+  }
+
   test("parse partitions") {
     def check(paths: Seq[String], spec: PartitionSpec): Unit = {
       assert(parsePartitions(paths.map(new Path(_)), defaultPartitionName, true) === spec)
