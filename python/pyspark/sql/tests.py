@@ -1164,6 +1164,9 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[:len(r)])
 
+    def test_datetype_equal_zero(self):
+        dt = DateType()
+        self.assertEqual(dt.fromInternal(0), datetime.date(1970, 1, 1))
 
 if __name__ == "__main__":
     unittest.main()
