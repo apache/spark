@@ -19,7 +19,8 @@ package org.apache.spark.mllib.classification
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.{StreamingDecaySetter, StreamingLinearAlgorithm}
+import org.apache.spark.mllib.regression.StreamingDecay.TimeUnit
+import org.apache.spark.mllib.regression.StreamingLinearAlgorithm
 
 /**
  * Train or predict a logistic regression model on streaming data. Training uses
@@ -31,9 +32,9 @@ import org.apache.spark.mllib.regression.{StreamingDecaySetter, StreamingLinearA
  * of features must be constant. An initial weight
  * vector must be provided.
  *
- * This class inherits the forgetful algorithm from StreamingLinearAlgorithm
+ * This class inherits the forgetful algorithm from [[StreamingLinearAlgorithm]]
  * to handle evolution of data source. Users can specify the degree of forgetfulness
- * by the decay factor or the half-life. Refer to StreamingLinearAlgorithm for
+ * by the decay factor or the half-life. Refer to [[StreamingLinearAlgorithm]] for
  * more details.
  *
  * Use a builder pattern to construct a streaming logistic regression
@@ -54,7 +55,6 @@ class StreamingLogisticRegressionWithSGD private[mllib] (
     private var miniBatchFraction: Double,
     private var regParam: Double)
   extends StreamingLinearAlgorithm[LogisticRegressionModel, LogisticRegressionWithSGD]
-  with StreamingDecaySetter[StreamingLogisticRegressionWithSGD]
   with Serializable {
 
   /**
@@ -103,6 +103,16 @@ class StreamingLogisticRegressionWithSGD private[mllib] (
   @Since("1.3.0")
   def setInitialWeights(initialWeights: Vector): this.type = {
     this.model = Some(algorithm.createModel(initialWeights, 0.0))
+    this
+  }
+
+  override def setDecayFactor(decayFactor: Double): this.type = {
+    super.setDecayFactor(decayFactor)
+    this
+  }
+
+  override def setHalfLife(halfLife: Double, timeUnit: TimeUnit): this.type = {
+    super.setHalfLife(halfLife, timeUnit)
     this
   }
 }
