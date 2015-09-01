@@ -170,6 +170,12 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
 class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
     """
     Extracts a vocabulary from document collections and generates a [[CountVectorizerModel]].
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> input = [(0, ["a", "b", "c", "d"])]
+    >>> df = sqlContext.createDataFrame(input, ["id", "words"])
+    >>> model = CountVectorizer(inputCol="words", outputCol="features").fit(df)
+    >>> sorted(map(str, model.vocabulary))
+    ['a', 'b', 'c', 'd']
     """
 
     # a placeholder to make it appear in the generated doc
@@ -219,6 +225,8 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         setParams(self, minTF=None, minDF=None, vocabSize=None, inputCol=None, outputCol=None)
         Set the params for the CountVectorizer
         """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
 
     def setMinTF(self, value):
         """
@@ -268,6 +276,12 @@ class CountVectorizerModel(JavaModel):
     Model fitted by CountVectorizer.
     """
 
+    @property
+    def vocabulary(self):
+        """
+        An array of terms in the vocabulary.
+        """
+        return self._call_java("vocabulary")
 
 
 
