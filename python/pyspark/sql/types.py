@@ -1292,7 +1292,9 @@ class DatetimeConverter(object):
         Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
         seconds = (calendar.timegm(obj.utctimetuple()) if obj.tzinfo
                    else time.mktime(obj.timetuple()))
-        return Timestamp(int(seconds) * 1000 + obj.microsecond // 1000)
+        t = Timestamp(int(seconds) * 1000)
+        t.setNanos(obj.microsecond * 1000)
+        return t
 
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeConverter())
