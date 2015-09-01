@@ -168,10 +168,12 @@ class DateType(AtomicType):
         return True
 
     def toInternal(self, d):
-        return d and d.toordinal() - self.EPOCH_ORDINAL
+        if d is not None:
+            return d.toordinal() - self.EPOCH_ORDINAL
 
     def fromInternal(self, v):
-        return v and datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
+        if v is not None:
+            return datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
 
 
 class TimestampType(AtomicType):
