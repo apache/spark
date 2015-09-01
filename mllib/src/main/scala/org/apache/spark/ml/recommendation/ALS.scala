@@ -384,7 +384,10 @@ object ALS extends Logging {
    */
   @DeveloperApi
   @Since("1.3.0")
-  case class Rating[@specialized(Int, Long) ID](user: ID, item: ID, rating: Float)
+  case class Rating @Since("1.3.0") [@specialized(Int, Long) ID](
+      @Since("1.3.0") user: ID,
+      @Since("1.3.0") item: ID,
+      @Since("1.3.0") rating: Float)
 
   /** Trait for least squares solvers applied to the normal equation. */
   private[recommendation] trait LeastSquaresNESolver extends Serializable {
