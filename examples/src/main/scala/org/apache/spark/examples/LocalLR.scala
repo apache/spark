@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.util.Random
@@ -77,3 +78,4 @@ object LocalLR {
     println("Final w: " + w)
   }
 }
+// scalastyle:on println

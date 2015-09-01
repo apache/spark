@@ -39,11 +39,6 @@
 
   <dependencies>
     <dependency>
-      <groupId>${jline.groupid}</groupId>
-      <artifactId>jline</artifactId>
-      <version>${jline.version}</version>
-    </dependency>
-    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
@@ -93,7 +88,7 @@
     </dependency>
     <dependency>
       <groupId>org.mockito</groupId>
-      <artifactId>mockito-all</artifactId>
+      <artifactId>mockito-core</artifactId>
       <scope>test</scope>
     </dependency>
 
@@ -138,7 +133,6 @@
             </goals>
             <configuration>
               <sources>
-                <source>src/main/scala</source>
                 <source>${extra.source.dir}</source>
               </sources>
             </configuration>
@@ -151,7 +145,6 @@
             </goals>
             <configuration>
               <sources>
-                <source>src/test/scala</source>
                 <source>${extra.testsource.dir}</source>
               </sources>
             </configuration>
@@ -161,6 +154,20 @@
     </plugins>
   </build>
   <profiles>
+    <profile>
+      <id>scala-2.10</id>
+      <activation>
+        <property><name>!scala-2.11</name></property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>${jline.groupid}</groupId>
+          <artifactId>jline</artifactId>
+          <version>${jline.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+
     <profile>
       <id>scala-2.11</id>
       <activation>

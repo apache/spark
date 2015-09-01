@@ -33,6 +33,7 @@ guaranteed to find a globally optimal solution, and when run multiple times on
 a given dataset, the algorithm returns the best clustering result).
 * *initializationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged.
+* *initialModel* is an optional set of cluster centers used for initialization. If this parameter is supplied, only one run is performed.
 
 **Examples**
 
@@ -327,11 +328,17 @@ which contains the computed clustering assignments.
 import org.apache.spark.mllib.clustering.{PowerIterationClustering, PowerIterationClusteringModel}
 import org.apache.spark.mllib.linalg.Vectors
 
-val similarities: RDD[(Long, Long, Double)] = ...
+// Load and parse the data
+val data = sc.textFile("data/mllib/pic_data.txt")
+val similarities = data.map { line =>
+  val parts = line.split(' ')
+  (parts(0).toLong, parts(1).toLong, parts(2).toDouble)
+}
 
+// Cluster the data into two classes using PowerIterationClustering
 val pic = new PowerIterationClustering()
-  .setK(3)
-  .setMaxIterations(20)
+  .setK(2)
+  .setMaxIterations(10)
 val model = pic.run(similarities)
 
 model.assignments.foreach { a =>
@@ -363,11 +370,22 @@ import scala.Tuple2;
 import scala.Tuple3;
 
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.clustering.PowerIterationClustering;
 import org.apache.spark.mllib.clustering.PowerIterationClusteringModel;
 
-JavaRDD<Tuple3<Long, Long, Double>> similarities = ...
+// Load and parse the data
+JavaRDD<String> data = sc.textFile("data/mllib/pic_data.txt");
+JavaRDD<Tuple3<Long, Long, Double>> similarities = data.map(
+  new Function<String, Tuple3<Long, Long, Double>>() {
+    public Tuple3<Long, Long, Double> call(String line) {
+      String[] parts = line.split(" ");
+      return new Tuple3<>(new Long(parts[0]), new Long(parts[1]), new Double(parts[2]));
+    }
+  }
+);
 
+// Cluster the data into two classes using PowerIterationClustering
 PowerIterationClustering pic = new PowerIterationClustering()
   .setK(2)
   .setMaxIterations(10);
@@ -383,6 +401,35 @@ PowerIterationClusteringModel sameModel = PowerIterationClusteringModel.load(sc.
 {% endhighlight %}
 </div>
 
+<div data-lang="python" markdown="1">
+
+[`PowerIterationClustering`](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering)
+implements the PIC algorithm.
+It takes an `RDD` of `(srcId: Long, dstId: Long, similarity: Double)` tuples representing the
+affinity matrix.
+Calling `PowerIterationClustering.run` returns a
+[`PowerIterationClusteringModel`](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering),
+which contains the computed clustering assignments.
+
+{% highlight python %}
+from __future__ import print_function
+from pyspark.mllib.clustering import PowerIterationClustering, PowerIterationClusteringModel
+
+# Load and parse the data
+data = sc.textFile("data/mllib/pic_data.txt")
+similarities = data.map(lambda line: tuple([float(x) for x in line.split(' ')]))
+
+# Cluster the data into two classes using PowerIterationClustering
+model = PowerIterationClustering.train(similarities, 2, 10)
+
+model.assignments().foreach(lambda x: print(str(x.id) + " -> " + str(x.cluster)))
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = PowerIterationClusteringModel.load(sc, "myModelPath")
+{% endhighlight %}
+</div>
+
 </div>
 
 ## Latent Dirichlet allocation (LDA)
@@ -391,28 +438,125 @@ PowerIterationClusteringModel sameModel = PowerIterationClusteringModel.load(sc.
 is a topic model which infers topics from a collection of text documents.
 LDA can be thought of as a clustering algorithm as follows:
 
-* Topics correspond to cluster centers, and documents correspond to examples (rows) in a dataset.
-* Topics and documents both exist in a feature space, where feature vectors are vectors of word counts.
-* Rather than estimating a clustering using a traditional distance, LDA uses a function based
- on a statistical model of how text documents are generated.
+* Topics correspond to cluster centers, and documents correspond to
+examples (rows) in a dataset.
+* Topics and documents both exist in a feature space, where feature
+vectors are vectors of word counts (bag of words).
+* Rather than estimating a clustering using a traditional distance, LDA
+uses a function based on a statistical model of how text documents are
+generated.
 
-LDA takes in a collection of documents as vectors of word counts.
-It supports different inference algorithms via `setOptimizer` function. EMLDAOptimizer learns clustering using [expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
-on the likelihood function and yields comprehensive results, while OnlineLDAOptimizer uses iterative mini-batch sampling for [online variational inference](https://www.cs.princeton.edu/~blei/papers/HoffmanBleiBach2010b.pdf) and is generally memory friendly. After fitting on the documents, LDA provides:
+LDA supports different inference algorithms via `setOptimizer` function.
+`EMLDAOptimizer` learns clustering using
+[expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
+on the likelihood function and yields comprehensive results, while
+`OnlineLDAOptimizer` uses iterative mini-batch sampling for [online
+variational
+inference](https://www.cs.princeton.edu/~blei/papers/HoffmanBleiBach2010b.pdf)
+and is generally memory friendly.
 
-* Topics: Inferred topics, each of which is a probability distribution over terms (words).
-* Topic distributions for documents: For each document in the training set, LDA gives a probability distribution over topics. (EM only)
-
-LDA takes the following parameters:
+LDA takes in a collection of documents as vectors of word counts and the
+following parameters (set using the builder pattern):
 
 * `k`: Number of topics (i.e., cluster centers)
-* `maxIterations`: Limit on the number of iterations of EM used for learning
-* `docConcentration`: Hyperparameter for prior over documents' distributions over topics. Currently must be > 1, where larger values encourage smoother inferred distributions.
-* `topicConcentration`: Hyperparameter for prior over topics' distributions over terms (words). Currently must be > 1, where larger values encourage smoother inferred distributions.
-* `checkpointInterval`: If using checkpointing (set in the Spark configuration), this parameter specifies the frequency with which checkpoints will be created.  If `maxIterations` is large, using checkpointing can help reduce shuffle file sizes on disk and help with failure recovery.
+* `optimizer`: Optimizer to use for learning the LDA model, either
+`EMLDAOptimizer` or `OnlineLDAOptimizer`
+* `docConcentration`: Dirichlet parameter for prior over documents'
+distributions over topics. Larger values encourage smoother inferred
+distributions.
+* `topicConcentration`: Dirichlet parameter for prior over topics'
+distributions over terms (words). Larger values encourage smoother
+inferred distributions.
+* `maxIterations`: Limit on the number of iterations.
+* `checkpointInterval`: If using checkpointing (set in the Spark
+configuration), this parameter specifies the frequency with which
+checkpoints will be created.  If `maxIterations` is large, using
+checkpointing can help reduce shuffle file sizes on disk and help with
+failure recovery.
 
-*Note*: LDA is a new feature with some missing functionality.  In particular, it does not yet
-support prediction on new documents, and it does not have a Python API.  These will be added in the future.
+
+All of MLlib's LDA models support:
+
+* `describeTopics`: Returns topics as arrays of most important terms and
+term weights
+* `topicsMatrix`: Returns a `vocabSize` by `k` matrix where each column
+is a topic
+
+*Note*: LDA is still an experimental feature under active development.
+As a result, certain features are only available in one of the two
+optimizers / models generated by the optimizer. Currently, a distributed
+model can be converted into a local model, but not vice-versa.
+
+The following discussion will describe each optimizer/model pair
+separately.
+
+**Expectation Maximization**
+
+Implemented in
+[`EMLDAOptimizer`](api/scala/index.html#org.apache.spark.mllib.clustering.EMLDAOptimizer)
+and
+[`DistributedLDAModel`](api/scala/index.html#org.apache.spark.mllib.clustering.DistributedLDAModel).
+
+For the parameters provided to `LDA`:
+
+* `docConcentration`: Only symmetric priors are supported, so all values
+in the provided `k`-dimensional vector must be identical. All values
+must also be $> 1.0$. Providing `Vector(-1)` results in default behavior
+(uniform `k` dimensional vector with value $(50 / k) + 1$
+* `topicConcentration`: Only symmetric priors supported. Values must be
+$> 1.0$. Providing `-1` results in defaulting to a value of $0.1 + 1$.
+* `maxIterations`: The maximum number of EM iterations.
+
+`EMLDAOptimizer` produces a `DistributedLDAModel`, which stores not only
+the inferred topics but also the full training corpus and topic
+distributions for each document in the training corpus. A
+`DistributedLDAModel` supports:
+
+ * `topTopicsPerDocument`: The top topics and their weights for
+ each document in the training corpus
+ * `topDocumentsPerTopic`: The top documents for each topic and
+ the corresponding weight of the topic in the documents.
+ * `logPrior`: log probability of the estimated topics and
+ document-topic distributions given the hyperparameters
+ `docConcentration` and `topicConcentration`
+ * `logLikelihood`: log likelihood of the training corpus, given the
+ inferred topics and document-topic distributions
+
+**Online Variational Bayes**
+
+Implemented in
+[`OnlineLDAOptimizer`](api/scala/org/apache/spark/mllib/clustering/OnlineLDAOptimizer.html)
+and
+[`LocalLDAModel`](api/scala/org/apache/spark/mllib/clustering/LocalLDAModel.html).
+
+For the parameters provided to `LDA`:
+
+* `docConcentration`: Asymmetric priors can be used by passing in a
+vector with values equal to the Dirichlet parameter in each of the `k`
+dimensions. Values should be $>= 0$. Providing `Vector(-1)` results in
+default behavior (uniform `k` dimensional vector with value $(1.0 / k)$)
+* `topicConcentration`: Only symmetric priors supported. Values must be
+$>= 0$. Providing `-1` results in defaulting to a value of $(1.0 / k)$.
+* `maxIterations`: Maximum number of minibatches to submit.
+
+In addition, `OnlineLDAOptimizer` accepts the following parameters:
+
+* `miniBatchFraction`: Fraction of corpus sampled and used at each
+iteration
+* `optimizeDocConcentration`: If set to true, performs maximum-likelihood
+estimation of the hyperparameter `docConcentration` (aka `alpha`)
+after each minibatch and sets the optimized `docConcentration` in the
+returned `LocalLDAModel`
+* `tau0` and `kappa`: Used for learning-rate decay, which is computed by
+$(\tau_0 + iter)^{-\kappa}$ where $iter$ is the current number of iterations.
+
+`OnlineLDAOptimizer` produces a `LocalLDAModel`, which only stores the
+inferred topics. A `LocalLDAModel` supports:
+
+* `logLikelihood(documents)`: Calculates a lower bound on the provided
+`documents` given the inferred topics.
+* `logPerplexity(documents)`: Calculates an upper bound on the
+perplexity of the provided `documents` given the inferred topics.
 
 **Examples**
 
@@ -425,7 +569,7 @@ to the algorithm. We then output the topics, represented as probability distribu
 <div data-lang="scala" markdown="1">
 
 {% highlight scala %}
-import org.apache.spark.mllib.clustering.LDA
+import org.apache.spark.mllib.clustering.{LDA, DistributedLDAModel}
 import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
@@ -445,6 +589,11 @@ for (topic <- Range(0, 3)) {
   for (word <- Range(0, ldaModel.vocabSize)) { print(" " + topics(word, topic)); }
   println()
 }
+
+// Save and load model.
+ldaModel.save(sc, "myLDAModel")
+val sameModel = DistributedLDAModel.load(sc, "myLDAModel")
+
 {% endhighlight %}
 </div>
 
@@ -504,8 +653,39 @@ public class JavaLDAExample {
       }
       System.out.println();
     }
+
+    ldaModel.save(sc.sc(), "myLDAModel");
+    DistributedLDAModel sameModel = DistributedLDAModel.load(sc.sc(), "myLDAModel");
   }
 }
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+{% highlight python %}
+from pyspark.mllib.clustering import LDA, LDAModel
+from pyspark.mllib.linalg import Vectors
+
+# Load and parse the data
+data = sc.textFile("data/mllib/sample_lda_data.txt")
+parsedData = data.map(lambda line: Vectors.dense([float(x) for x in line.strip().split(' ')]))
+# Index documents with unique IDs
+corpus = parsedData.zipWithIndex().map(lambda x: [x[1], x[0]]).cache()
+
+# Cluster the documents into three topics using LDA
+ldaModel = LDA.train(corpus, k=3)
+
+# Output topics. Each is a distribution over words (matching word count vectors)
+print("Learned topics (as distributions over vocab of " + str(ldaModel.vocabSize()) + " words):")
+topics = ldaModel.topicsMatrix()
+for topic in range(3):
+    print("Topic " + str(topic) + ":")
+    for word in range(0, ldaModel.vocabSize()):
+        print(" " + str(topics[word][topic]))
+		
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = LDAModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
@@ -593,6 +773,50 @@ ssc.start()
 ssc.awaitTermination()
 
 {% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+First we import the neccessary classes.
+
+{% highlight python %}
+from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.clustering import StreamingKMeans
+{% endhighlight %}
+
+Then we make an input stream of vectors for training, as well as a stream of labeled data
+points for testing. We assume a StreamingContext `ssc` has been created, see
+[Spark Streaming Programming Guide](streaming-programming-guide.html#initializing) for more info.
+
+{% highlight python %}
+def parse(lp):
+    label = float(lp[lp.find('(') + 1: lp.find(',')])
+    vec = Vectors.dense(lp[lp.find('[') + 1: lp.find(']')].split(','))
+    return LabeledPoint(label, vec)
+
+trainingData = ssc.textFileStream("/training/data/dir").map(Vectors.parse)
+testData = ssc.textFileStream("/testing/data/dir").map(parse)
+{% endhighlight %}
+
+We create a model with random clusters and specify the number of clusters to find
+
+{% highlight python %}
+model = StreamingKMeans(k=2, decayFactor=1.0).setRandomCenters(3, 1.0, 0)
+{% endhighlight %}
+
+Now register the streams for training and testing and start the job, printing
+the predicted cluster assignments on new data points as they arrive.
+
+{% highlight python %}
+model.trainOn(trainingData)
+print(model.predictOnValues(testData.map(lambda lp: (lp.label, lp.features))))
+
+ssc.start()
+ssc.awaitTermination()
+{% endhighlight %}
+</div>
+
+</div>
 
 As you add new text files with data the cluster centers will update. Each training
 point should be formatted as `[x1, x2, x3]`, and each test data point
@@ -600,7 +824,3 @@ should be formatted as `(y, [x1, x2, x3])`, where `y` is some useful label or id
 (e.g. a true category assignment). Anytime a text file is placed in `/training/data/dir`
 the model will update. Anytime a text file is placed in `/testing/data/dir`
 you will see predictions. With new data, the cluster centers will change!
-
-</div>
-
-</div>

@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.param.Param
+import org.apache.spark.ml.param.{ParamMap, Param}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}

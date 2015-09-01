@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -191,34 +192,31 @@ final class MutableAny extends MutableValue {
  * based on the dataTypes of each column.  The intent is to decrease garbage when modifying the
  * values of primitive columns.
  */
-final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableRow {
+final class SpecificMutableRow(val values: Array[MutableValue])
+  extends MutableRow with BaseGenericInternalRow {
 
   def this(dataTypes: Seq[DataType]) =
     this(
       dataTypes.map {
-        case IntegerType => new MutableInt
-        case ByteType => new MutableByte
-        case FloatType => new MutableFloat
-        case ShortType => new MutableShort
-        case DoubleType => new MutableDouble
         case BooleanType => new MutableBoolean
-        case LongType => new MutableLong
-        case DateType => new MutableInt // We use INT for DATE internally
-        case TimestampType => new MutableLong  // We use Long for Timestamp internally
+        case ByteType => new MutableByte
+        case ShortType => new MutableShort
+        // We use INT for DATE internally
+        case IntegerType | DateType => new MutableInt
+        // We use Long for Timestamp internally
+        case LongType | TimestampType => new MutableLong
+        case FloatType => new MutableFloat
+        case DoubleType => new MutableDouble
         case _ => new MutableAny
       }.toArray)
 
   def this() = this(Seq.empty)
 
-  override def length: Int = values.length
-
-  override def toSeq: Seq[Any] = values.map(_.boxed).toSeq
+  override def numFields: Int = values.length
 
   override def setNullAt(i: Int): Unit = {
     values(i).isNull = true
   }
-
-  override def apply(i: Int): Any = values(i).boxed
 
   override def isNullAt(i: Int): Boolean = values(i).isNull
 
@@ -230,8 +228,10 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
       i += 1
     }
 
-    new GenericRow(newValues)
+    new GenericInternalRow(newValues)
   }
+
+  override protected def genericGet(i: Int): Any = values(i).boxed
 
   override def update(ordinal: Int, value: Any) {
     if (value == null) {
@@ -240,11 +240,6 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
       values(ordinal).update(value)
     }
   }
-
-  override def setString(ordinal: Int, value: String): Unit =
-    update(ordinal, UTF8String.fromString(value))
-
-  override def getString(ordinal: Int): String = apply(ordinal).toString
 
   override def setInt(ordinal: Int, value: Int): Unit = {
     val currentValue = values(ordinal).asInstanceOf[MutableInt]
@@ -314,9 +309,5 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def getByte(i: Int): Byte = {
     values(i).asInstanceOf[MutableByte].value
-  }
-
-  override def getAs[T](i: Int): T = {
-    values(i).boxed.asInstanceOf[T]
   }
 }

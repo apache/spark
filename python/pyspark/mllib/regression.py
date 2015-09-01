@@ -19,6 +19,7 @@ import numpy as np
 from numpy import array
 
 from pyspark import RDD
+from pyspark.streaming.dstream import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
 from pyspark.mllib.linalg import SparseVector, Vectors, _convert_to_vector
 from pyspark.mllib.util import Saveable, Loader
@@ -96,9 +97,11 @@ class LinearRegressionModelBase(LinearModel):
 
     def predict(self, x):
         """
-        Predict the value of the dependent variable given a vector x
-        containing values for the independent variables.
+        Predict the value of the dependent variable given a vector or
+        an RDD of vectors containing values for the independent variables.
         """
+        if isinstance(x, RDD):
+            return x.map(self.predict)
         x = _convert_to_vector(x)
         return self.weights.dot(x) + self.intercept
 
@@ -123,6 +126,8 @@ class LinearRegressionModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5
+    True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> lrm.save(sc, path)
@@ -133,10 +138,11 @@ class LinearRegressionModel(LinearRegressionModelBase):
     True
     >>> abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> from shutil import rmtree
     >>> try:
-    ...    os.removedirs(path)
+    ...     rmtree(path)
     ... except:
-    ...    pass
+    ...     pass
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(1, {0: 0.0})),
     ...     LabeledPoint(1.0, SparseVector(1, {0: 1.0})),
@@ -201,8 +207,10 @@ class LinearRegressionWithSGD(object):
         Train a linear regression model using Stochastic Gradient
         Descent (SGD).
         This solves the least squares regression formulation
-                f(weights) = 1/n ||A weights-y||^2^
-        (which is the mean squared error).
+
+            f(weights) = 1/(2n) ||A weights - y||^2,
+
+        which is the mean squared error.
         Here the data matrix has n rows, and the input RDD holds the
         set of rows of A, each with its corresponding right hand side
         label y. See also the documentation for the precise formulation.
@@ -265,6 +273,8 @@ class LassoModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5
+    True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> lrm.save(sc, path)
@@ -275,8 +285,9 @@ class LassoModel(LinearRegressionModelBase):
     True
     >>> abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> from shutil import rmtree
     >>> try:
-    ...    os.removedirs(path)
+    ...    rmtree(path)
     ... except:
     ...    pass
     >>> data = [
@@ -325,7 +336,9 @@ class LassoWithSGD(object):
         Stochastic Gradient Descent.
         This solves the l1-regularized least squares regression
         formulation
-            f(weights) = 1/2n ||A weights-y||^2^  + regParam ||weights||_1
+
+            f(weights) = 1/(2n) ||A weights - y||^2  + regParam ||weights||_1.
+
         Here the data matrix has n rows, and the input RDD holds the
         set of rows of A, each with its corresponding right hand side
         label y. See also the documentation for the precise formulation.
@@ -379,6 +392,8 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> abs(lrm.predict(sc.parallelize([[1.0]])).collect()[0] - 1) < 0.5
+    True
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
     >>> lrm.save(sc, path)
@@ -389,8 +404,9 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     True
     >>> abs(sameModel.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
+    >>> from shutil import rmtree
     >>> try:
-    ...    os.removedirs(path)
+    ...    rmtree(path)
     ... except:
     ...    pass
     >>> data = [
@@ -439,7 +455,9 @@ class RidgeRegressionWithSGD(object):
         Stochastic Gradient Descent.
         This solves the l2-regularized least squares regression
         formulation
-            f(weights) = 1/2n ||A weights-y||^2^  + regParam/2 ||weights||^2^
+
+            f(weights) = 1/(2n) ||A weights - y||^2 + regParam/2 ||weights||^2.
+
         Here the data matrix has n rows, and the input RDD holds the
         set of rows of A, each with its corresponding right hand side
         label y. See also the documentation for the precise formulation.
@@ -500,8 +518,9 @@ class IsotonicRegressionModel(Saveable, Loader):
     2.0
     >>> sameModel.predict(5)
     16.5
+    >>> from shutil import rmtree
     >>> try:
-    ...     os.removedirs(path)
+    ...     rmtree(path)
     ... except OSError:
     ...     pass
     """
@@ -564,6 +583,95 @@ class IsotonicRegression(object):
         boundaries, predictions = callMLlibFunc("trainIsotonicRegressionModel",
                                                 data.map(_convert_to_vector), bool(isotonic))
         return IsotonicRegressionModel(boundaries.toArray(), predictions.toArray(), isotonic)
+
+
+class StreamingLinearAlgorithm(object):
+    """
+    Base class that has to be inherited by any StreamingLinearAlgorithm.
+
+    Prevents reimplementation of methods predictOn and predictOnValues.
+    """
+    def __init__(self, model):
+        self._model = model
+
+    def latestModel(self):
+        """
+        Returns the latest model.
+        """
+        return self._model
+
+    def _validate(self, dstream):
+        if not isinstance(dstream, DStream):
+            raise TypeError(
+                "dstream should be a DStream object, got %s" % type(dstream))
+        if not self._model:
+            raise ValueError(
+                "Model must be intialized using setInitialWeights")
+
+    def predictOn(self, dstream):
+        """
+        Make predictions on a dstream.
+
+        :return: Transformed dstream object.
+        """
+        self._validate(dstream)
+        return dstream.map(lambda x: self._model.predict(x))
+
+    def predictOnValues(self, dstream):
+        """
+        Make predictions on a keyed dstream.
+
+        :return: Transformed dstream object.
+        """
+        self._validate(dstream)
+        return dstream.mapValues(lambda x: self._model.predict(x))
+
+
+@inherit_doc
+class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
+    """
+    Run LinearRegression with SGD on a batch of data.
+
+    The problem minimized is (1 / n_samples) * (y - weights'X)**2.
+    After training on a batch of data, the weights obtained at the end of
+    training are used as initial weights for the next batch.
+
+    :param: stepSize Step size for each iteration of gradient descent.
+    :param: numIterations Total number of iterations run.
+    :param: miniBatchFraction Fraction of data on which SGD is run for each
+                              iteration.
+    """
+    def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0):
+        self.stepSize = stepSize
+        self.numIterations = numIterations
+        self.miniBatchFraction = miniBatchFraction
+        self._model = None
+        super(StreamingLinearRegressionWithSGD, self).__init__(
+            model=self._model)
+
+    def setInitialWeights(self, initialWeights):
+        """
+        Set the initial value of weights.
+
+        This must be set before running trainOn and predictOn
+        """
+        initialWeights = _convert_to_vector(initialWeights)
+        self._model = LinearRegressionModel(initialWeights, 0)
+        return self
+
+    def trainOn(self, dstream):
+        """Train the model on the incoming dstream."""
+        self._validate(dstream)
+
+        def update(rdd):
+            # LinearRegressionWithSGD.train raises an error for an empty RDD.
+            if not rdd.isEmpty():
+                self._model = LinearRegressionWithSGD.train(
+                    rdd, self.numIterations, self.stepSize,
+                    self.miniBatchFraction, self._model.weights,
+                    self._model.intercept)
+
+        dstream.foreachRDD(update)
 
 
 def _test():

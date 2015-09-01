@@ -83,4 +83,6 @@ final class Binarizer(override val uid: String)
     val outputFields = inputFields :+ attr.toStructField()
     StructType(outputFields)
   }
+
+  override def copy(extra: ParamMap): Binarizer = defaultCopy(extra)
 }

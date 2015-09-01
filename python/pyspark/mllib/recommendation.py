@@ -106,8 +106,9 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     0.4...
     >>> sameModel.predictAll(testset).collect()
     [Rating(...
+    >>> from shutil import rmtree
     >>> try:
-    ...     os.removedirs(path)
+    ...     rmtree(path)
     ... except OSError:
     ...     pass
     """

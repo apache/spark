@@ -56,6 +56,7 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
    Utils.loadDefaultSparkProperties(conf, propertiesFile)
 
   private def printUsageAndExit(exitCode: Int) {
+    // scalastyle:off println
     System.err.println(
       """
       |Usage: HistoryServer [options]
@@ -84,6 +85,7 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
       |  spark.history.fs.updateInterval    How often to reload log data from storage
       |                                     (in seconds, default: 10)
       |""".stripMargin)
+    // scalastyle:on println
     System.exit(exitCode)
   }
 

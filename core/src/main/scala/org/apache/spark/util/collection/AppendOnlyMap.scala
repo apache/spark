@@ -32,7 +32,7 @@ import org.apache.spark.annotation.DeveloperApi
  * size, which is guaranteed to explore all spaces for each key (see
  * http://en.wikipedia.org/wiki/Quadratic_probing).
  *
- * The map can support up to `536870912 (2 ^ 29)` elements.
+ * The map can support up to `375809638 (0.7 * 2 ^ 29)` elements.
  *
  * TODO: Cache the hash values of each key? java.util.HashMap does that.
  */
@@ -199,11 +199,8 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
 
   /** Increase table size by 1, rehashing if necessary */
   private def incrementSize() {
-    if (curSize == MAXIMUM_CAPACITY) {
-      throw new IllegalStateException(s"Can't put more that ${MAXIMUM_CAPACITY} elements")
-    }
     curSize += 1
-    if (curSize > growThreshold && capacity < MAXIMUM_CAPACITY) {
+    if (curSize > growThreshold) {
       growTable()
     }
   }
@@ -216,7 +213,8 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
   /** Double the table's size and re-hash everything */
   protected def growTable() {
     // capacity < MAXIMUM_CAPACITY (2 ^ 29) so capacity * 2 won't overflow
-    val newCapacity = (capacity * 2).min(MAXIMUM_CAPACITY)
+    val newCapacity = capacity * 2
+    require(newCapacity <= MAXIMUM_CAPACITY, s"Can't contain more than ${growThreshold} elements")
     val newData = new Array[AnyRef](2 * newCapacity)
     val newMask = newCapacity - 1
     // Insert all our old values into the new array. Note that because our old keys are

@@ -17,9 +17,10 @@
 
 package org.apache.spark.ml.tree
 
+import org.apache.spark.ml.classification.ClassifierParams
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed}
+import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed, HasThresholds}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
@@ -162,7 +163,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
       oldAlgo: OldAlgo.Algo,
       oldImpurity: OldImpurity,
       subsamplingRate: Double): OldStrategy = {
-    val strategy = OldStrategy.defaultStategy(oldAlgo)
+    val strategy = OldStrategy.defaultStrategy(oldAlgo)
     strategy.impurity = oldImpurity
     strategy.checkpointInterval = getCheckpointInterval
     strategy.maxBins = getMaxBins

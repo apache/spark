@@ -22,7 +22,7 @@ import java.text.SimpleDateFormat
 import java.util.{Date, HashMap => JHashMap}
 
 import scala.collection.{Map, mutable}
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 import scala.util.DynamicVariable
@@ -44,7 +44,7 @@ import org.apache.spark.executor.{DataWriteMethod, OutputMetrics}
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.util.random.StratifiedSamplingUtils
 
@@ -312,14 +312,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     } : Iterator[JHashMap[K, V]]
 
     val mergeMaps = (m1: JHashMap[K, V], m2: JHashMap[K, V]) => {
-      m2.foreach { pair =>
+      m2.asScala.foreach { pair =>
         val old = m1.get(pair._1)
         m1.put(pair._1, if (old == null) pair._2 else cleanedF(old, pair._2))
       }
       m1
     } : JHashMap[K, V]
 
-    self.mapPartitions(reducePartition).reduce(mergeMaps)
+    self.mapPartitions(reducePartition).reduce(mergeMaps).asScala
   }
 
   /** Alias for reduceByKeyLocally */
@@ -881,7 +881,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           }
           buf
         } : Seq[V]
-        val res = self.context.runJob(self, process, Array(index), false)
+        val res = self.context.runJob(self, process, Array(index))
         res(0)
       case None =>
         self.filter(_._1 == key).map(_._2).collect()
@@ -1002,7 +1002,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
-    val wrappedConf = new SerializableWritable(job.getConfiguration)
+    val wrappedConf = new SerializableConfiguration(job.getConfiguration)
     val outfmt = job.getOutputFormatClass
     val jobFormat = outfmt.newInstance
 
@@ -1065,7 +1065,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def saveAsHadoopDataset(conf: JobConf): Unit = self.withScope {
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
     val hadoopConf = conf
-    val wrappedConf = new SerializableWritable(hadoopConf)
+    val wrappedConf = new SerializableConfiguration(hadoopConf)
     val outputFormatInstance = hadoopConf.getOutputFormat
     val keyClass = hadoopConf.getOutputKeyClass
     val valueClass = hadoopConf.getOutputValueClass

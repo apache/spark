@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming.clickstream
 
 import java.net.ServerSocket
@@ -108,3 +109,4 @@ object PageViewGenerator {
     }
   }
 }
+// scalastyle:on println
