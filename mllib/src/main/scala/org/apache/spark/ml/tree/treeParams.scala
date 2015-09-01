@@ -97,7 +97,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams with HasCheckpointI
     " trees.")
 
   setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1, minInfoGain -> 0.0,
-    maxMemoryInMB -> 256, cacheNodeIds -> false)
+    maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
 
   /** @group setParam */
   def setMaxDepth(value: Int): this.type = set(maxDepth, value)
@@ -135,7 +135,15 @@ private[ml] trait DecisionTreeParams extends PredictorParams with HasCheckpointI
   /** @group expertGetParam */
   final def getCacheNodeIds: Boolean = $(cacheNodeIds)
 
-  /** @group expertSetParam */
+  /**
+   * Specifies how often to checkpoint the cached node IDs.
+   * E.g. 10 means that the cache will get checkpointed every 10 iterations.
+   * This is only used if cacheNodeIds is true and if the checkpoint directory is set in
+   * [[org.apache.spark.SparkContext]].
+   * Must be >= 1.
+   * (default = 10)
+   * @group expertSetParam
+   */
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
