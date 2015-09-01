@@ -69,12 +69,14 @@ private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends L
 
     val url = getSubmitUrl(rmWebAppAddress, currentUser)
     try {
+      val applicationId = appSubmissionInfo.applicationId
       val conn = updateJson(url, "POST", appSubmissionInfo.toJson)
       val respCode = conn.getResponseCode
       if (respCode == HttpServletResponse.SC_ACCEPTED) {
         val location = conn.getHeaderField("Location")
         logInfo(s"Return location is $location, you could check the running status of " +
           "application in the web page of RM.")
+        pollApplicationStatus(applicationId)
       } else {
         val respJson = Source.fromInputStream(conn.getErrorStream).mkString
         logError(s"Resource manager responded error message:\n$respJson")
@@ -216,6 +218,24 @@ private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends L
     newApplication
   }
 
+  /**
+   * Poll the status of specified application and log it. This retries up to a fixed number of
+   * times before giving up.
+   */
+  private def pollApplicationStatus(applicationId: String): Unit = {
+    for (i <- 1 to REPORT_APPLICATION_STATUS_MAX_TRIES) {
+      val response = requestStateSubmission(applicationId, quiet = true)
+      response match {
+        case t: AppState =>
+          logInfo(s"State of application $applicationId is now ${t.state}")
+        case unexpected =>
+          logError(s"Unexpected type of return message: ${unexpected.toJson}")
+          return
+      }
+      Thread.sleep(REPORT_APPLICATION_STATUS_INTERVAL)
+    }
+  }
+
   /** Send a GET request to the specified URL. */
   private def get(url: URL): HttpURLConnection = {
     logDebug(s"Sending GET request to server at $url.")
@@ -325,6 +345,8 @@ private[spark] class YarnRestSubmissionClient(rmWebAppAddress: String) extends L
 
 private[spark] object YarnRestSubmissionClient extends Logging {
   val PROTOCOL_VERSION = "v1"
+  val REPORT_APPLICATION_STATUS_INTERVAL = 1000
+  val REPORT_APPLICATION_STATUS_MAX_TRIES = 10
 
   val currentUser = UserGroupInformation.getCurrentUser.getShortUserName
 
