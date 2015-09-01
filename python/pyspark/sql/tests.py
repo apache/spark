@@ -167,6 +167,11 @@ class DataTypeTests(unittest.TestCase):
         t3 = DecimalType(8)
         self.assertNotEqual(t2, t3)
 
+    # regression test for SPARK-10392
+    def test_datetype_equal_zero(self):
+        dt = DateType()
+        self.assertEqual(dt.fromInternal(0), datetime.date(1970, 1, 1))
+
 
 class SQLTests(ReusedPySparkTestCase):
 
@@ -1164,9 +1169,6 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[:len(r)])
 
-    def test_datetype_equal_zero(self):
-        dt = DateType()
-        self.assertEqual(dt.fromInternal(0), datetime.date(1970, 1, 1))
 
 if __name__ == "__main__":
     unittest.main()
