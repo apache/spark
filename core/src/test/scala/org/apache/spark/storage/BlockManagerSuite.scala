@@ -833,7 +833,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // Make sure get a1 doesn't hang and returns None.
     failAfter(1 second) {
-      assert(store.getSingle("a1") == None, "a1 should not be in store")
+      assert(store.getSingle("a1").isEmpty, "a1 should not be in store")
     }
   }
 
