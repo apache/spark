@@ -23,7 +23,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.{execution, AnalysisException, SaveMode}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 
@@ -134,6 +134,19 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
       assert(fs.exists(summaryPath))
       assert(fs.exists(commonSummaryPath))
+    }
+  }
+
+  test("SPARK-10334 Projections and filters should be kept in physical plan") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      sqlContext.range(2).select('id as 'a, 'id as 'b).write.partitionBy("b").parquet(path)
+      val df = sqlContext.read.parquet(path).filter('a === 0).select('b)
+      val physicalPlan = df.queryExecution.executedPlan
+
+      assert(physicalPlan.collect { case p: execution.Project => p }.length === 1)
+      assert(physicalPlan.collect { case p: execution.Filter => p }.length === 1)
     }
   }
 }

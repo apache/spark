@@ -14,9 +14,9 @@ primitives and higher-level pipeline APIs.
 It divides into two packages:
 
 * [`spark.mllib`](mllib-guide.html#mllib-types-algorithms-and-utilities) contains the original API
-  built on top of RDDs.
+  built on top of [RDDs](programming-guide.html#resilient-distributed-datasets-rdds).
 * [`spark.ml`](mllib-guide.html#sparkml-high-level-apis-for-ml-pipelines) provides higher-level API
-  built on top of DataFrames for constructing ML pipelines.
+  built on top of [DataFrames](sql-programming-guide.html#dataframes) for constructing ML pipelines.
 
 Using `spark.ml` is recommended because with DataFrames the API is more versatile and flexible.
 But we will keep supporting `spark.mllib` along with the development of `spark.ml`.
@@ -57,19 +57,19 @@ We list major functionality from both below, with links to detailed guides.
   * [FP-growth](mllib-frequent-pattern-mining.html#fp-growth)
   * [association rules](mllib-frequent-pattern-mining.html#association-rules)
   * [PrefixSpan](mllib-frequent-pattern-mining.html#prefix-span)
-* [Evaluation Metrics](mllib-evaluation-metrics.html)
+* [Evaluation metrics](mllib-evaluation-metrics.html)
+* [PMML model export](mllib-pmml-model-export.html)
 * [Optimization (developer)](mllib-optimization.html)
   * [stochastic gradient descent](mllib-optimization.html#stochastic-gradient-descent-sgd)
   * [limited-memory BFGS (L-BFGS)](mllib-optimization.html#limited-memory-bfgs-l-bfgs)
-* [PMML model export](mllib-pmml-model-export.html)
 
 # spark.ml: high-level APIs for ML pipelines
 
 **[spark.ml programming guide](ml-guide.html)** provides an overview of the Pipelines API and major
 concepts. It also contains sections on using algorithms within the Pipelines API, for example:
 
-* [Feature Extraction, Transformation, and Selection](ml-features.html)
-* [Decision Trees for Classification and Regression](ml-decision-tree.html)
+* [Feature extraction, transformation, and selection](ml-features.html)
+* [Decision trees for classification and regression](ml-decision-tree.html)
 * [Ensembles](ml-ensembles.html)
 * [Linear methods with elastic net regularization](ml-linear-methods.html)
 * [Multilayer perceptron classifier](ml-ann.html)

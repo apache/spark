@@ -35,13 +35,13 @@ case class FilterNode(condition: Expression, child: LocalNode) extends UnaryLoca
 
   override def next(): Boolean = {
     var found = false
-    while (child.next() && !found) {
-      found = predicate.apply(child.get())
+    while (!found && child.next()) {
+      found = predicate.apply(child.fetch())
     }
     found
   }
 
-  override def get(): InternalRow = child.get()
+  override def fetch(): InternalRow = child.fetch()
 
   override def close(): Unit = child.close()
 }
