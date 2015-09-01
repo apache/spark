@@ -78,8 +78,9 @@ class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
     val topology = FeedForwardTopology.multiLayerPerceptron(layerSizes, false)
     val initialWeights = FeedForwardModel(topology, 23124).weights()
     val trainer = new FeedForwardTrainer(topology, 2, 2)
-    trainer.SGDOptimizer.setNumIterations(2000)
-    trainer.setWeights(initialWeights)
+    //trainer.SGDOptimizer.setNumIterations(2000)
+    trainer.LBFGSOptimizer.setConvergenceTol(1e-4).setNumIterations(20)
+    trainer.setWeights(initialWeights).setStackSize(1)
     val model = trainer.train(rddData)
     val predictionAndLabels = rddData.map { case (input, label) =>
       (model.predict(input), label)
