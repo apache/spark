@@ -23,7 +23,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
-import scala.collection.JavaConversions;
+import scala.collection.JavaConverters;
 import scala.collection.Seq;
 
 import com.google.common.collect.ImmutableMap;
@@ -96,7 +96,7 @@ public class JavaDataFrameSuite {
     df.groupBy().agg(countDistinct("key", "value"));
     df.groupBy().agg(countDistinct(col("key"), col("value")));
     df.select(coalesce(col("key")));
-    
+
     // Varargs with mathfunctions
     DataFrame df2 = context.table("testData2");
     df2.select(exp("a"), exp("b"));
@@ -172,7 +172,7 @@ public class JavaDataFrameSuite {
     Seq<Integer> outputBuffer = (Seq<Integer>) first.getJavaMap(2).get("hello");
     Assert.assertArrayEquals(
       bean.getC().get("hello"),
-      Ints.toArray(JavaConversions.seqAsJavaList(outputBuffer)));
+      Ints.toArray(JavaConverters.seqAsJavaListConverter(outputBuffer).asJava()));
     Seq<String> d = first.getAs(3);
     Assert.assertEquals(bean.getD().size(), d.length());
     for (int i = 0; i < d.length(); i++) {
@@ -206,7 +206,7 @@ public class JavaDataFrameSuite {
       count++;
     }
   }
-  
+
   @Test
   public void testFrequentItems() {
     DataFrame df = context.table("testData2");

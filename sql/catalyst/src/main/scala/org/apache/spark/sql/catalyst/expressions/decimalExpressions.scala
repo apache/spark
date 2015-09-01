@@ -66,10 +66,44 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
  * An expression used to wrap the children when promote the precision of DecimalType to avoid
  * promote multiple times.
  */
-case class ChangeDecimalPrecision(child: Expression) extends UnaryExpression {
+case class PromotePrecision(child: Expression) extends UnaryExpression {
   override def dataType: DataType = child.dataType
   override def eval(input: InternalRow): Any = child.eval(input)
   override def gen(ctx: CodeGenContext): GeneratedExpressionCode = child.gen(ctx)
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = ""
-  override def prettyName: String = "change_decimal_precision"
+  override def prettyName: String = "promote_precision"
+}
+
+/**
+ * Rounds the decimal to given scale and check whether the decimal can fit in provided precision
+ * or not, returns null if not.
+ */
+case class CheckOverflow(child: Expression, dataType: DecimalType) extends UnaryExpression {
+
+  override def nullable: Boolean = true
+
+  override def nullSafeEval(input: Any): Any = {
+    val d = input.asInstanceOf[Decimal].clone()
+    if (d.changePrecision(dataType.precision, dataType.scale)) {
+      d
+    } else {
+      null
+    }
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    nullSafeCodeGen(ctx, ev, eval => {
+      val tmp = ctx.freshName("tmp")
+      s"""
+         | Decimal $tmp = $eval.clone();
+         | if ($tmp.changePrecision(${dataType.precision}, ${dataType.scale})) {
+         |   ${ev.primitive} = $tmp;
+         | } else {
+         |   ${ev.isNull} = true;
+         | }
+       """.stripMargin
+    })
+  }
+
+  override def toString: String = s"CheckOverflow($child, $dataType)"
 }

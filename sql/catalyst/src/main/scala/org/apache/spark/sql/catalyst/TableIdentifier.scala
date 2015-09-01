@@ -25,7 +25,9 @@ private[sql] case class TableIdentifier(table: String, database: Option[String] 
 
   def toSeq: Seq[String] = database.toSeq :+ table
 
-  override def toString: String = toSeq.map("`" + _ + "`").mkString(".")
+  override def toString: String = quotedString
+
+  def quotedString: String = toSeq.map("`" + _ + "`").mkString(".")
 
   def unquotedString: String = toSeq.mkString(".")
 }
