@@ -312,19 +312,11 @@ class BlockMatrix @Since("1.3.0") (
     new BlockMatrix(transposedBlocks, colsPerBlock, rowsPerBlock, nCols, nRows)
   }
 
-//  /** Collects data and assembles a local dense breeze matrix (for test only). */
-//  private[mllib] def toBreeze(): BDM[Double] = {
-//    val localMat = toLocalMatrix()
-//    new BDM[Double](localMat.numRows, localMat.numCols, localMat.toArray)
-//  }
-
-
   /** Collects data and assembles a local dense breeze matrix (for test only). */
-  def toBreeze(): BDM[Double] = {
+  private[mllib] def toBreeze(): BDM[Double] = {
     val localMat = toLocalMatrix()
     new BDM[Double](localMat.numRows, localMat.numCols, localMat.toArray)
   }
-
 
   /**
    * Adds two block matrices together. The matrices must have the same size and matching
@@ -465,7 +457,7 @@ class BlockMatrix @Since("1.3.0") (
     * @return BlockMatrix Schur Complement as BlockMatrix
     * @since 1.6.0
   */
-   def SchurComplement: BlockMatrix ={
+    private[mllib] def SchurComplement: BlockMatrix ={
      require(this.numRowBlocks == this.numColBlocks, "Block Matrix must be square.")
      require(this.numRowBlocks > 1, "Block Matrix must be larger than one block.")
      val topRange = (0,0); val botRange=(1, this.numColBlocks-1)
@@ -491,7 +483,7 @@ class BlockMatrix @Since("1.3.0") (
     * @since 1.6.0
     */
 
-  def subBlock(blockRowRange: (Int,Int), blockColRange: (Int,Int)): BlockMatrix = {
+  private[mllib] def subBlock(blockRowRange: (Int,Int), blockColRange: (Int,Int)): BlockMatrix = {
     //  Extracts BlockMatrix elements from a specified range of block indices
     //  Creating a Sub BlockMatrix of rectangular shape.
     //  Also reindexes so that the upper left block is always (0, 0)
@@ -505,17 +497,6 @@ class BlockMatrix @Since("1.3.0") (
       case(((x, y), matrix) ) => ((x-rowMin, y-colMin), matrix)
     }
     return new BlockMatrix(extractedSeq, rowsPerBlock, colsPerBlock)
-  }
-
-
-  def shiftIndices(blockRowRange: (Int,Int), blockColRange: (Int,Int)):
-                   RDD[((Int,Int), Matrix)] = {
-    // This routine recovers the absolute indexing of the block matrices for reassembly
-    val rowMin = blockRowRange._1;    val colMin = blockColRange._1;
-    val extractedSeq = this.blocks.map{   // shifting indices
-      case(((x, y), matrix) ) => ((x+rowMin, y+colMin), matrix)
-    }
-    return extractedSeq
   }
 
   /** computes the LU decomposition of a Single Block from BlockMatrix using the Breeze LU method.  The
@@ -543,19 +524,6 @@ class BlockMatrix @Since("1.3.0") (
     return List(P, L, U)
   }
 
-  /** computes the block Transpose of a BlockMatrix.
-    * for a block matrix with ((i,j), m) entries, this routine returns ((j,i), m) as the entries
-    * (the standard transpose returns ((j,i), m.transpose))
-    *
-    * @param thisBlockMatrix
-    * @return
-    */
-  def blockTranspose: BlockMatrix = {
-     return new BlockMatrix(
-       this.blocks.map{case(((x,y),matrix) ) => ((y,x),matrix)},
-       this.rowsPerBlock, this.colsPerBlock)
-   }
-
   /** Computes the LU Decomposition of a Square Matrix.  For a matrix A of size (n x n)
     * LU decomposition computes the Lower Triangular Matrix L, the Upper Triangular Matrix U,
     * along with a Permutation Matrix P, such that PA=LU.
@@ -572,9 +540,6 @@ class BlockMatrix @Since("1.3.0") (
     *
     * @return P,L,U as a Tuple of BlockMatrix
   */
-
-
-
 
   def blockLU:  (BlockMatrix, BlockMatrix, BlockMatrix) = {
 
@@ -601,7 +566,7 @@ class BlockMatrix @Since("1.3.0") (
       // This routine recovers the absolute indexing of the block matrices for reassembly
       val rowMin = blockRowRange._1;    val colMin = blockColRange._1;
       val extractedSeq = M.blocks.map{   // shifting indices
-                        case(((x, y), matrix) ) => ((x+rowMin, y+colMin), matrix)
+                        case(((x, y), matrix)) => ((x+rowMin, y+colMin), matrix)
       }
       return extractedSeq
     }

@@ -55,6 +55,8 @@ This lists functionality included in `spark.mllib`, the main MLlib API.
   * [stochastic gradient descent](mllib-optimization.html#stochastic-gradient-descent-sgd)
   * [limited-memory BFGS (L-BFGS)](mllib-optimization.html#limited-memory-bfgs-l-bfgs)
 * [PMML model export](mllib-pmml-model-export.html)
+* [Matrix Factorization](mllib-matrix-factorization.html)
+  * [LU Factorization](mllib-matrix-factorization.html#lu-factorization)
 
 MLlib is under active development.
 The APIs marked `Experimental`/`DeveloperApi` may change in future releases,
