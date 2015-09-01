@@ -67,6 +67,26 @@ class ReceiverTrackerSuite extends TestSuiteBase {
     }
   }
 
+  test("should restart receiver after stopping it") {
+    withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
+      @volatile var startTimes = 0
+      ssc.addStreamingListener(new StreamingListener {
+        override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
+          startTimes += 1
+        }
+      })
+      val input = ssc.receiverStream(new StoppableReceiver)
+      val output = new TestOutputStream(input)
+      output.register()
+      ssc.start()
+      StoppableReceiver.shouldStop = true
+      eventually(timeout(10 seconds), interval(10 millis)) {
+        // The receiver is stopped once, so if it's restarted, it should be started twice.
+        assert(startTimes === 2)
+      }
+    }
+  }
+
   test("receiver timeout") {
     val conf = new SparkConf().
       setMaster("local[1]").
@@ -101,8 +121,8 @@ class ReceiverTrackerSuite extends TestSuiteBase {
       // time in this test.
       set("spark.streaming.receiver.launching.timeout", "10s")
     withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
-      CancellableTestReceiver.reset()
-      ssc.receiverStream(new CancellableTestReceiver).foreachRDD { rdd =>
+      StoppableReceiver.shouldStop = false
+      ssc.receiverStream(new StoppableReceiver).foreachRDD { rdd =>
         rdd.foreach { v =>
           // We don't care about the output
         }
@@ -144,7 +164,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
 
         // Cancel the receiver so that ReceiverTracker can restart it and release the executor for
         // the long running Spark job
-        CancellableTestReceiver.cancel()
+        StoppableReceiver.shouldStop = true
         // However, because there is only one executor and it's occupied by the running job, the
         // receiver should not be able to start in 10 seconds. Then ReceiverTracker should throw
         // TimeoutException.
@@ -176,42 +196,6 @@ private[streaming] object RestartReceiverTimeoutHelper {
 
   def reset(): Unit = synchronized {
     _exitJob = false
-  }
-}
-
-private[streaming] class CancellableTestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
-
-  def onStart() {
-    val thread = new Thread() {
-      override def run() {
-        while (!CancellableTestReceiver.isCancelled) {
-          Thread.sleep(10)
-        }
-        CancellableTestReceiver.this.stop("Cancelled")
-      }
-    }
-    thread.start()
-  }
-
-  def onStop() {
-    CancellableTestReceiver.cancel()
-  }
-}
-
-private[streaming] object CancellableTestReceiver {
-
-  private var cancelled = false
-
-  def isCancelled: Boolean = synchronized {
-    cancelled
-  }
-
-  def cancel(): Unit = synchronized {
-    cancelled = true
-  }
-
-  def reset(): Unit = synchronized {
-    cancelled = false
   }
 }
 
@@ -284,4 +268,35 @@ private[streaming] object RateTestReceiver {
   }
 
   def getActive(): Option[RateTestReceiver] = Option(activeReceiver)
+}
+
+/**
+ * A custom receiver that could be stopped via StoppableReceiver.shouldStop
+ */
+class StoppableReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
+
+  var receivingThreadOption: Option[Thread] = None
+
+  def onStart() {
+    val thread = new Thread() {
+      override def run() {
+        while (!StoppableReceiver.shouldStop) {
+          Thread.sleep(10)
+        }
+        StoppableReceiver.this.stop("stop")
+      }
+    }
+    thread.start()
+  }
+
+  def onStop() {
+    StoppableReceiver.shouldStop = true
+    receivingThreadOption.foreach(_.join())
+    // Reset it so as to restart it
+    StoppableReceiver.shouldStop = false
+  }
+}
+
+object StoppableReceiver {
+  @volatile var shouldStop = false
 }
