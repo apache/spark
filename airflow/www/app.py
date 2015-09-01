@@ -183,6 +183,18 @@ class GraphForm(Form):
     ))
 
 
+class TreeForm(Form):
+    base_date = DateTimeField(
+        "Anchor date", widget=DateTimePickerWidget(), default=datetime.now())
+    num_runs = SelectField("Number of runs", default=25, choices=(
+        (5, "5"),
+        (25, "25"),
+        (50, "50"),
+        (100, "100"),
+        (365, "365"),
+    ))
+
+
 @app.route('/')
 def index():
     return redirect(url_for('admin.index'))
@@ -1007,11 +1019,15 @@ class Airflow(BaseView):
         session = settings.Session()
 
         base_date = request.args.get('base_date')
+        num_runs = request.args.get('num_runs')
+        num_runs = int(num_runs) if num_runs else 25
+
         if not base_date:
-            base_date = datetime.now()
+            base_date = dag.latest_execution_date or datetime.now()
         else:
             base_date = dateutil.parser.parse(base_date)
         base_date = utils.round_time(base_date, dag.schedule_interval)
+        form = TreeForm(data={'base_date': base_date, 'num_runs': num_runs})
 
         start_date = dag.start_date
         if not start_date and 'start_date' in dag.default_args:
@@ -1023,8 +1039,6 @@ class Airflow(BaseView):
             base_date -= offset
             base_date -= timedelta(microseconds=base_date.microsecond)
 
-        num_runs = request.args.get('num_runs')
-        num_runs = int(num_runs) if num_runs else 25
         from_date = (base_date - (num_runs * dag.schedule_interval))
 
         dates = utils.date_range(
@@ -1091,6 +1105,7 @@ class Airflow(BaseView):
                 key=lambda x: x.__name__
             ),
             root=root,
+            form=form,
             dag=dag, data=data, blur=blur)
 
     @expose('/graph')
