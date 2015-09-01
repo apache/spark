@@ -31,7 +31,7 @@ else:
     import unittest
 
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
-from pyspark.sql import DataFrame, SQLContext
+from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.param import Param, Params
@@ -258,7 +258,7 @@ class FeatureTests(PySparkTestCase):
     def test_ngram(self):
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame([
-            ([["a", "b", "c", "d", "e"]])], ["input"])
+            Row(input=["a", "b", "c", "d", "e"])])
         ngram0 = NGram(n=4, inputCol="input", outputCol="output")
         self.assertEqual(ngram0.getN(), 4)
         self.assertEqual(ngram0.getInputCol(), "input")
@@ -268,9 +268,7 @@ class FeatureTests(PySparkTestCase):
 
     def test_stopwordsremover(self):
         sqlContext = SQLContext(self.sc)
-        data = ["a", "panda"]
-        dataset = sqlContext.createDataFrame([
-            ([data])], ["input"])
+        dataset = sqlContext.createDataFrame([Row(input=["a", "panda"])])
         stopWordRemover = StopWordsRemover(inputCol="input", outputCol="output")
         # Default
         self.assertEquals(stopWordRemover.getInputCol(), "input")
