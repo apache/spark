@@ -50,15 +50,16 @@ from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, IllegalArgumentException
 
 
-class UTC(datetime.tzinfo):
-    """UTC"""
-    ZERO = datetime.timedelta(0)
+class UTCOffsetTimezone(datetime.tzinfo):
+    """
+    Specifies timezone in UTC offset
+    """
+
+    def __init__(self, offset=0):
+        self.ZERO = datetime.timedelta(hours=offset)
 
     def utcoffset(self, dt):
         return self.ZERO
-
-    def tzname(self, dt):
-        return "UTC"
 
     def dst(self, dt):
         return self.ZERO
@@ -841,13 +842,22 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(0, df.filter(df.date > date).count())
         self.assertEqual(0, df.filter(df.time > time).count())
 
+    def test_filter_with_datetime_timezone(self):
+        dt1 = datetime.datetime(2015, 4, 17, 23, 1, 2, 3000, tzinfo=UTCOffsetTimezone(0))
+        dt2 = datetime.datetime(2015, 4, 17, 23, 1, 2, 3000, tzinfo=UTCOffsetTimezone(1))
+        row = Row(date=dt1)
+        df = self.sqlCtx.createDataFrame([row])
+        self.assertEqual(0, df.filter(df.date == dt2).count())
+        self.assertEqual(1, df.filter(df.date > dt2).count())
+        self.assertEqual(0, df.filter(df.date < dt2).count())
+
     def test_time_with_timezone(self):
         day = datetime.date.today()
         now = datetime.datetime.now()
         ts = time.mktime(now.timetuple())
         # class in __main__ is not serializable
-        from pyspark.sql.tests import UTC
-        utc = UTC()
+        from pyspark.sql.tests import UTCOffsetTimezone
+        utc = UTCOffsetTimezone()
         utcnow = datetime.datetime.utcfromtimestamp(ts)  # without microseconds
         # add microseconds to utcnow (keeping year,month,day,hour,minute,second)
         utcnow = datetime.datetime(*(utcnow.timetuple()[:6] + (now.microsecond, utc)))
