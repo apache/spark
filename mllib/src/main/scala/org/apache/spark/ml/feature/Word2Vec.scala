@@ -49,7 +49,7 @@ private[feature] trait Word2VecBase extends Params
   def getVectorSize: Int = $(vectorSize)
 
   /**
-   * The window size (context words from [-window, window])
+   * The window size (context words from [-window, window]).
    * @group param
    */
   final val windowSize = new IntParam(
