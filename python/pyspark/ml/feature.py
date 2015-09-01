@@ -946,6 +946,7 @@ class StringIndexerModel(JavaModel):
 class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     """
     .. note:: Experimental
+
     A [[Transformer]] that maps a column of string indices back to a new column of corresponding
     string values using either the ML attributes of the input column, or if provided using the
     labels supplied by the user.
@@ -955,9 +956,8 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
 
     # a placeholder to make the labels show up in generated doc
     labels = Param(Params._dummy(), "labels",
-                   "Optional labels to be provided by the user, if not supplied column " +
-                   "metadata is read for labels. The default value is an empty array, " +
-                   "but the empty array is ignored and column metadata used instead.")
+                   "Optional array of labels to be provided by the user, if not supplied or " +
+                   "empty, column metadata is read for labels")
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, labels=None):
@@ -968,9 +968,8 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IndexToString",
                                             self.uid)
         self.labels = Param(self, "labels",
-                            "Optional labels to be provided by the user, if not supplied column " +
-                            "metadata is read for labels. The default value is an empty array, " +
-                            "but the empty array is ignored and column metadata used instead.")
+                            "Optional array of labels to be provided by the user, if not supplied or " +
+                            "empty, column metadata is read for labels")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -978,7 +977,7 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     def setParams(self, inputCol=None, outputCol=None, labels=None):
         """
         setParams(self, inputCol=None, outputCol=None, labels=None)
-        Sets params for this IndexToString
+        Sets params for this IndexToString.
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
