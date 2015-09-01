@@ -113,31 +113,6 @@ private[parquet] class CatalystPrimitiveConverter(val updater: ParentContainerUp
  * When used as a root converter, [[NoopUpdater]] should be used since root converters don't have
  * any "parent" container.
  *
- * @note Constructor argument [[parquetType]] refers to requested fields of the actual schema of the
- *       Parquet file being read, while constructor argument [[catalystType]] refers to requested
- *       fields of the global schema.  The key difference is that, in case of schema merging,
- *       [[parquetType]] can be a subset of [[catalystType]].  For example, it's possible to have
- *       the following [[catalystType]]:
- *       {{{
- *         new StructType()
- *           .add("f1", IntegerType, nullable = false)
- *           .add("f2", StringType, nullable = true)
- *           .add("f3", new StructType()
- *             .add("f31", DoubleType, nullable = false)
- *             .add("f32", IntegerType, nullable = true)
- *             .add("f33", StringType, nullable = true), nullable = false)
- *       }}}
- *       and the following [[parquetType]] (`f2` and `f32` are missing):
- *       {{{
- *         message root {
- *           required int32 f1;
- *           required group f3 {
- *             required double f31;
- *             optional binary f33 (utf8);
- *           }
- *         }
- *       }}}
- *
  * @param parquetType Parquet schema of Parquet records
  * @param catalystType Spark SQL schema that corresponds to the Parquet record type
  * @param updater An updater which propagates converted field values to the parent container
@@ -179,31 +154,7 @@ private[parquet] class CatalystRowConverter(
 
   // Converters for each field.
   private val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
-    // In case of schema merging, `parquetType` can be a subset of `catalystType`.  We need to pad
-    // those missing fields and create converters for them, although values of these fields are
-    // always null.
-    val paddedParquetFields = {
-      val parquetFields = parquetType.getFields.asScala
-      val parquetFieldNames = parquetFields.map(_.getName).toSet
-      val missingFields = catalystType.filterNot(f => parquetFieldNames.contains(f.name))
-
-      // We don't need to worry about feature flag arguments like `assumeBinaryIsString` when
-      // creating the schema converter here, since values of missing fields are always null.
-      val toParquet = new CatalystSchemaConverter()
-
-      (parquetFields ++ missingFields.map(toParquet.convertField)).sortBy { f =>
-        catalystType.indexWhere(_.name == f.getName)
-      }
-    }
-
-    if (paddedParquetFields.length != catalystType.length) {
-      throw new UnsupportedOperationException(
-        "A Parquet file's schema has different number of fields with the table schema. " +
-          "Please enable schema merging by setting \"mergeSchema\" to true when load " +
-          "a Parquet dataset or set spark.sql.parquet.mergeSchema to true in SQLConf.")
-    }
-
-    paddedParquetFields.zip(catalystType).zipWithIndex.map {
+    parquetType.getFields.asScala.zip(catalystType).zipWithIndex.map {
       case ((parquetFieldType, catalystField), ordinal) =>
         // Converted field value should be set to the `ordinal`-th cell of `currentRow`
         newConverter(parquetFieldType, catalystField.dataType, new RowUpdater(currentRow, ordinal))
