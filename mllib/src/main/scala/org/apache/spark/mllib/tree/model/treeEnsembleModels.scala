@@ -449,8 +449,8 @@ private[tree] object TreeEnsembleModel extends Logging {
         tree.topNode.subtreeIterator.toSeq.map(node =>
           DecisionTreeModel.SaveLoadV1_0.convertNodeDataToRow(NodeData(treeId, node)))
       }
-      sqlContext.createDataFrame(dataRDD, DecisionTreeModel.SaveLoadV1_0.nodeDataSchema).
-        write.parquet(Loader.dataPath(path))
+      sqlContext.createDataFrame(dataRDD, DecisionTreeModel.SaveLoadV1_0.nodeDataSchema)
+        .write.parquet(Loader.dataPath(path))
     }
 
     /**

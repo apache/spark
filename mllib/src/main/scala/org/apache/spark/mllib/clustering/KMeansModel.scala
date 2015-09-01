@@ -129,14 +129,15 @@ object KMeansModel extends Loader[KMeansModel] {
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("k" -> model.k)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
-      val dataRDD = sc.parallelize(model.clusterCenters.zipWithIndex).map { case (point, id) =>
-        Row(id, point)
+      val dataRDD = sc.parallelize(model.clusterCenters.zipWithIndex).map {
+        case (point, id) => Row(id, point)
       }
       sqlContext.createDataFrame(dataRDD, schema).write.parquet(Loader.dataPath(path))
     }
+
     private val schema = StructType(
-      StructField("id", IntegerType, nullable = false)::
-      StructField("point", new VectorUDT, nullable = false)::Nil)
+      Seq(StructField("id", IntegerType, nullable = false),
+      StructField("point", new VectorUDT, nullable = false)))
 
     def load(sc: SparkContext, path: String): KMeansModel = {
       implicit val formats = DefaultFormats

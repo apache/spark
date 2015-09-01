@@ -359,16 +359,16 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("rank" -> model.rank)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
-      val schema = StructType(
-        StructField("id", IntegerType, nullable = false)::
-        StructField("features", ArrayType(DoubleType, containsNull = false), nullable = false)::Nil)
-
       val userFeatureRDD = model.userFeatures.map(uf => Row(uf._1, uf._2))
       val productFeatureRDD = model.productFeatures.map(pf => Row(pf._1, pf._2))
 
       sqlContext.createDataFrame(userFeatureRDD, schema).write.parquet(userPath(path))
       sqlContext.createDataFrame(productFeatureRDD, schema).write.parquet(productPath(path))
     }
+
+    private val schema = StructType(
+      Seq(StructField("id", IntegerType, nullable = false),
+      StructField("features", ArrayType(DoubleType, containsNull = false), nullable = false)))
 
     def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
       implicit val formats = DefaultFormats

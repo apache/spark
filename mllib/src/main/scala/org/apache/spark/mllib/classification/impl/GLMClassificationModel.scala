@@ -62,13 +62,14 @@ private[classification] object GLMClassificationModel {
 
       // Create Parquet data.
       val dataRDD = sc.parallelize(Seq(Row(weights, intercept, threshold.getOrElse(null))), 1)
-      val schema = StructType(
-        StructField("weights", new VectorUDT, nullable = false)::
-        StructField("intercept", DoubleType, nullable = false)::
-        StructField("threshold", DoubleType, nullable = true)::Nil)
-
       sqlContext.createDataFrame(dataRDD, schema).write.parquet(Loader.dataPath(path))
     }
+
+    private val schema = StructType(
+      Seq(StructField("weights", new VectorUDT, nullable = false),
+      StructField("intercept", DoubleType, nullable = false),
+      StructField("threshold", DoubleType, nullable = true)))
+
 
     /**
      * Helper method for loading GLM classification model data.

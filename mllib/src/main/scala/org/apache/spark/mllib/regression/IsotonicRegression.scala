@@ -204,8 +204,8 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
     }
 
     private val schema = StructType(
-      StructField("boundary", DoubleType, nullable = false)::
-      StructField("prediction", DoubleType, nullable = true)::Nil)
+      Seq(StructField("boundary", DoubleType, nullable = false),
+      StructField("prediction", DoubleType, nullable = true)))
 
     def load(sc: SparkContext, path: String): (Array[Double], Array[Double]) = {
       val sqlContext = new SQLContext(sc)

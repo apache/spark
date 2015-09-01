@@ -162,13 +162,13 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
         Row(weights(i), gaussians(i).mu, gaussians(i).sigma)
       }
       val dataRDD: RDD[Row] = sc.parallelize(dataArray, 1)
-
       sqlContext.createDataFrame(dataRDD, schema).write.parquet(Loader.dataPath(path))
     }
+
     private val schema = StructType(
-      StructField("weight", DoubleType, nullable = false)::
-      StructField("mu", new VectorUDT, nullable = false)::
-      StructField("sigma", new MatrixUDT, nullable = false)::Nil)
+      Seq(StructField("weight", DoubleType, nullable = false),
+      StructField("mu", new VectorUDT, nullable = false),
+      StructField("sigma", new MatrixUDT, nullable = false)))
 
     def load(sc: SparkContext, path: String): GaussianMixtureModel = {
       val dataPath = Loader.dataPath(path)

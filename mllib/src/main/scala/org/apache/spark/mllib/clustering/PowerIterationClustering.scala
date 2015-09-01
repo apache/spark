@@ -84,8 +84,8 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
     }
 
     private val schema = StructType(
-      StructField("id", LongType, nullable = false)::
-      StructField("cluster", IntegerType, nullable = true)::Nil)
+      Seq(StructField("id", LongType, nullable = false),
+      StructField("cluster", IntegerType, nullable = true)))
 
     @Since("1.4.0")
     def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {

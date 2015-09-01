@@ -207,11 +207,11 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
     }
 
     private val schema = StructType(
-      StructField("labels", ArrayType(DoubleType, containsNull = false), nullable = false)::
-      StructField("pi", ArrayType(DoubleType, containsNull = false), nullable = false)::
+      Seq(StructField("labels", ArrayType(DoubleType, containsNull = false), nullable = false),
+      StructField("pi", ArrayType(DoubleType, containsNull = false), nullable = false),
       StructField("theta", ArrayType(
-        ArrayType(DoubleType, containsNull = false), containsNull = false), nullable = false)::
-      StructField("modelType", StringType, nullable = false)::Nil)
+        ArrayType(DoubleType, containsNull = false), containsNull = false), nullable = false),
+      StructField("modelType", StringType, nullable = false)))
 
     @Since("1.3.0")
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
@@ -260,11 +260,10 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
     }
 
     private val schema = StructType(
-      StructField("labels", ArrayType(DoubleType, containsNull = false), nullable = false)::
-      StructField("pi", ArrayType(DoubleType, containsNull = false), nullable = false)::
+      Seq(StructField("labels", ArrayType(DoubleType, containsNull = false), nullable = false),
+      StructField("pi", ArrayType(DoubleType, containsNull = false), nullable = false),
       StructField("theta", ArrayType(
-          ArrayType(DoubleType, containsNull = false), containsNull = false), nullable = false)::
-        Nil)
+          ArrayType(DoubleType, containsNull = false), containsNull = false), nullable = false)))
 
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
       val sqlContext = new SQLContext(sc)

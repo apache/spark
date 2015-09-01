@@ -616,8 +616,8 @@ object Word2VecModel extends Loader[Word2VecModel] {
   }
 
   private val schema = StructType(
-    StructField("word", StringType, nullable = false)::
-    StructField("vector", ArrayType(FloatType, containsNull = false), nullable = false)::Nil)
+    Seq(StructField("word", StringType, nullable = false),
+    StructField("vector", ArrayType(FloatType, containsNull = false), nullable = false)))
 
   @Since("1.4.0")
   override def load(sc: SparkContext, path: String): Word2VecModel = {

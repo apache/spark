@@ -237,30 +237,30 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       sqlContext.createDataFrame(dataRDD, nodeDataSchema).write.parquet(Loader.dataPath(path))
     }
 
-    def convertNodeDataToRow(nodeData: NodeData): Row = {
+    private[mllib] def convertNodeDataToRow(nodeData: NodeData): Row = {
       Row(
         nodeData.treeId, nodeData.nodeId, nodeData.predict,
         nodeData.impurity, nodeData.isLeaf, nodeData.split,
         nodeData.leftNodeId, nodeData.rightNodeId, nodeData.infoGain)
     }
 
-    val nodeDataSchema = StructType(
-      StructField("treeId", IntegerType, nullable = false)::
-      StructField("nodeId", IntegerType, nullable = false)::
+    private[mllib] val nodeDataSchema = StructType(
+      Seq(StructField("treeId", IntegerType, nullable = false),
+      StructField("nodeId", IntegerType, nullable = false),
       StructField("predict", StructType(
-        StructField("predict", DoubleType, nullable = false)::
-        StructField("prob", DoubleType, nullable = false)::Nil), nullable = false)::
-      StructField("impurity", DoubleType, nullable = false)::
-      StructField("isLeaf", BooleanType, nullable = false)::
+        Seq(StructField("predict", DoubleType, nullable = false),
+        StructField("prob", DoubleType, nullable = false))), nullable = false),
+      StructField("impurity", DoubleType, nullable = false),
+      StructField("isLeaf", BooleanType, nullable = false),
       StructField("split", StructType(
-        StructField("feature", IntegerType, nullable = false)::
-        StructField("threshold", DoubleType, nullable = false)::
-        StructField("featureType", IntegerType, nullable = false)::
+        Seq(StructField("feature", IntegerType, nullable = false),
+        StructField("threshold", DoubleType, nullable = false),
+        StructField("featureType", IntegerType, nullable = false),
         StructField("categories", ArrayType(DoubleType, containsNull = false),
-        nullable = false)::Nil), nullable = true)::
-      StructField("leftNodeId", IntegerType, nullable = true)::
-      StructField("rightNodeId", IntegerType, nullable = true)::
-      StructField("infoGain", DoubleType, nullable = true)::Nil)
+        nullable = false))), nullable = true),
+      StructField("leftNodeId", IntegerType, nullable = true),
+      StructField("rightNodeId", IntegerType, nullable = true),
+      StructField("infoGain", DoubleType, nullable = true)))
 
     def load(sc: SparkContext, path: String, algo: String, numNodes: Int): DecisionTreeModel = {
       val datapath = Loader.dataPath(path)

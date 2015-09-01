@@ -414,9 +414,10 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
       val dataRDD = sc.parallelize(topics, 1)
       sqlContext.createDataFrame(dataRDD, schema).write.parquet(Loader.dataPath(path))
     }
+
     private val schema = StructType(
-      StructField("topic", new VectorUDT, nullable = false)::
-      StructField("index", IntegerType, nullable = false)::Nil)
+      Seq(StructField("topic", new VectorUDT, nullable = false),
+      StructField("index", IntegerType, nullable = false)))
 
     def load(
         sc: SparkContext,
@@ -829,17 +830,18 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       }
       sqlContext.createDataFrame(edgeDataRDD, edgeDataSchema).write.parquet(edgesPath)
     }
+
     private val dataSchema = StructType(
-      StructField("globalTopicTotals", new VectorUDT, nullable = false)::Nil)
+      Seq(StructField("globalTopicTotals", new VectorUDT, nullable = false)))
 
     private val vertexDataSchema = StructType(
-      StructField("id", LongType, nullable = false)::
-      StructField("topicWeights", new VectorUDT, nullable = false)::Nil)
+      Seq(StructField("id", LongType, nullable = false),
+      StructField("topicWeights", new VectorUDT, nullable = false)))
 
     private val edgeDataSchema = StructType(
-      StructField("srcId", LongType, nullable = false)::
-      StructField("dstId", LongType, nullable = false)::
-      StructField("tokenCounts", DoubleType, nullable = false)::Nil)
+      Seq(StructField("srcId", LongType, nullable = false),
+      StructField("dstId", LongType, nullable = false),
+      StructField("tokenCounts", DoubleType, nullable = false)))
 
     def load(
         sc: SparkContext,

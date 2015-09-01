@@ -58,12 +58,12 @@ private[regression] object GLMRegressionModel {
 
       // Create Parquet data.
       val dataRDD = sc.parallelize(Seq(Row(weights, intercept)), 1)
-      val schema = StructType(
-        StructField("weights", new VectorUDT, nullable = false)::
-        StructField("intercept", DoubleType, nullable = false)::Nil)
-
       sqlContext.createDataFrame(dataRDD, schema).write.parquet(Loader.dataPath(path))
     }
+
+    private val schema = StructType(
+      Seq(StructField("weights", new VectorUDT, nullable = false),
+      StructField("intercept", DoubleType, nullable = false)))
 
     /**
      * Helper method for loading GLM regression model data.
