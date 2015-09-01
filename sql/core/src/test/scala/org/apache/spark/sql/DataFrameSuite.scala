@@ -878,4 +878,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = Seq(("x", (1, 1)), ("y", (2, 2))).toDF("a", "b")
     checkAnswer(df.groupBy("b._1").agg(sum("b._2")), Row(1, 1) :: Row(2, 2) :: Nil)
   }
+
+  test("SPARK-10093: Avoid transformations on executors") {
+    val df = Seq((1, 1)).toDF("a", "b")
+    df.where($"a" === 1)
+      .select($"a", $"b", struct($"b"))
+      .orderBy("a")
+      .select(struct($"b"))
+      .collect()
+  }
 }

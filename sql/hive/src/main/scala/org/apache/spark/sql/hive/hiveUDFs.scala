@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.util.Try
 
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ConstantObjectInspector}
@@ -81,8 +81,7 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
 
   /* List all of the registered function names. */
   override def listFunction(): Seq[String] = {
-    val a = FunctionRegistry.getFunctionNames ++ underlying.listFunction()
-    a.toList.sorted
+    (FunctionRegistry.getFunctionNames.asScala ++ underlying.listFunction()).toList.sorted
   }
 
   /* Get the class of the registered function by specified name. */
@@ -116,7 +115,7 @@ private[hive] case class HiveSimpleUDF(funcWrapper: HiveFunctionWrapper, childre
 
   @transient
   private lazy val method =
-    function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo))
+    function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo).asJava)
 
   @transient
   private lazy val arguments = children.map(toInspector).toArray
@@ -541,7 +540,7 @@ private[hive] case class HiveGenericUDTF(
   @transient
   protected lazy val collector = new UDTFCollector
 
-  lazy val elementTypes = outputInspector.getAllStructFieldRefs.map {
+  lazy val elementTypes = outputInspector.getAllStructFieldRefs.asScala.map {
     field => (inspectorToDataType(field.getFieldObjectInspector), true)
   }
 

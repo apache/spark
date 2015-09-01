@@ -20,15 +20,14 @@ package org.apache.spark.sql.hive.test
 import java.io.File
 import java.util.{Set => JavaSet}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.implicitConversions
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
-import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
-import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.analysis._
@@ -38,9 +37,6 @@ import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.{SparkConf, SparkContext}
-
-/* Implicit conversions */
-import scala.collection.JavaConversions._
 
 // SPARK-3729: Test key required to check for initialization errors with config.
 object TestHive
@@ -276,10 +272,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       "INSERT OVERWRITE TABLE serdeins SELECT * FROM src".cmd),
     TestTable("episodes",
       s"""CREATE TABLE episodes (title STRING, air_date STRING, doctor INT)
-         |ROW FORMAT SERDE '${classOf[AvroSerDe].getCanonicalName}'
-         |STORED AS
-         |INPUTFORMAT '${classOf[AvroContainerInputFormat].getCanonicalName}'
-         |OUTPUTFORMAT '${classOf[AvroContainerOutputFormat].getCanonicalName}'
+         |STORED AS avro
          |TBLPROPERTIES (
          |  'avro.schema.literal'='{
          |    "type": "record",
@@ -312,10 +305,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     TestTable("episodes_part",
       s"""CREATE TABLE episodes_part (title STRING, air_date STRING, doctor INT)
          |PARTITIONED BY (doctor_pt INT)
-         |ROW FORMAT SERDE '${classOf[AvroSerDe].getCanonicalName}'
-         |STORED AS
-         |INPUTFORMAT '${classOf[AvroContainerInputFormat].getCanonicalName}'
-         |OUTPUTFORMAT '${classOf[AvroContainerOutputFormat].getCanonicalName}'
+         |STORED AS avro
          |TBLPROPERTIES (
          |  'avro.schema.literal'='{
          |    "type": "record",
@@ -413,7 +403,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   def reset() {
     try {
       // HACK: Hive is too noisy by default.
-      org.apache.log4j.LogManager.getCurrentLoggers.foreach { log =>
+      org.apache.log4j.LogManager.getCurrentLoggers.asScala.foreach { log =>
         log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
       }
 
@@ -423,9 +413,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       catalog.client.reset()
       catalog.unregisterAllTables()
 
-      FunctionRegistry.getFunctionNames.filterNot(originalUDFs.contains(_)).foreach { udfName =>
-        FunctionRegistry.unregisterTemporaryUDF(udfName)
-      }
+      FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
+        foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
 
       // Some tests corrupt this value on purpose, which breaks the RESET call below.
       hiveconf.set("fs.default.name", new File(".").toURI.toString)
@@ -445,7 +434,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         case (k, v) =>
           metadataHive.runSqlHive(s"SET $k=$v")
       }
-      defaultOverides()
+      defaultOverrides()
 
       runSqlHive("USE default")
 

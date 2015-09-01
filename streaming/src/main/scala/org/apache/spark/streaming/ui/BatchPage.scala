@@ -28,7 +28,7 @@ import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
 import org.apache.spark.streaming.ui.StreamingJobProgressListener.{SparkJobId, OutputOpId}
 import org.apache.spark.ui.jobs.UIData.JobUIData
 
-private case class SparkJobIdWithUIData(sparkJobId: SparkJobId, jobUIData: Option[JobUIData])
+private[ui] case class SparkJobIdWithUIData(sparkJobId: SparkJobId, jobUIData: Option[JobUIData])
 
 private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   private val streamingListener = parent.listener

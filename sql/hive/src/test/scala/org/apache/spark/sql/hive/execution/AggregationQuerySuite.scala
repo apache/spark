@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import _root_.test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
+import org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 
 abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
   override def _sqlContext: SQLContext = TestHive

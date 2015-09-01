@@ -34,7 +34,7 @@ protocol CompatibilityTest {
         string nested_string_column;
     }
 
-    record ParquetAvroCompat {
+    record AvroPrimitives {
         boolean bool_column;
         int int_column;
         long long_column;
@@ -42,7 +42,9 @@ protocol CompatibilityTest {
         double double_column;
         bytes binary_column;
         string string_column;
+    }
 
+    record AvroOptionalPrimitives {
         union { null, boolean } maybe_bool_column;
         union { null, int } maybe_int_column;
         union { null, long } maybe_long_column;
@@ -50,7 +52,22 @@ protocol CompatibilityTest {
         union { null, double } maybe_double_column;
         union { null, bytes } maybe_binary_column;
         union { null, string } maybe_string_column;
+    }
 
+    record AvroNonNullableArrays {
+        array<string> strings_column;
+        union { null, array<int> } maybe_ints_column;
+    }
+
+    record AvroArrayOfArray {
+        array<array<int>> int_arrays_column;
+    }
+
+    record AvroMapOfArray {
+        map<array<int>> string_to_ints_column;
+    }
+
+    record ParquetAvroCompat {
         array<string> strings_column;
         map<int> string_to_int_column;
         map<array<Nested>> complex_column;
