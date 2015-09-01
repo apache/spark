@@ -955,9 +955,8 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
 
     # a placeholder to make the labels show up in generated doc
     labels = Param(Params._dummy(), "labels",
-                   "Optional labels to be provided by the user, if not supplied column " +
-                   "metadata is read for labels. The default value is an empty array, " +
-                   "but the empty array is ignored and column metadata used instead.")
+                   "Optional array of labels to be provided by the user, if not supplied or " +
+                   "empty, column metadata is read for labels")
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, labels=None):
@@ -968,9 +967,8 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IndexToString",
                                             self.uid)
         self.labels = Param(self, "labels",
-                            "Optional labels to be provided by the user, if not supplied column " +
-                            "metadata is read for labels. The default value is an empty array, " +
-                            "but the empty array is ignored and column metadata used instead.")
+                            "Optional array of labels to be provided by the user, if not supplied or " +
+                            "empty, column metadata is read for labels")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
