@@ -63,6 +63,9 @@ import scala.language.postfixOps
  * was not in SparkHadoopWriter, the tests would still pass because only one of the
  * increments would be captured even though the commit in both tasks was executed
  * erroneously.
+ *
+ * See also: [[OutputCommitCoordinatorIntegrationSuite]] for integration tests that do
+ * not use mocks.
  */
 class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
 
