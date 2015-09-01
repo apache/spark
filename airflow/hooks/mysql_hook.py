@@ -17,7 +17,10 @@ class MySqlHook(DbApiHook):
         Returns a mysql connection object
         """
         conn = self.get_connection(self.mysql_conn_id)
-        port = conn.port or '3306'
+        if not conn.port:
+            port = 3306
+        else:
+            port = int(conn.port)
         conn = MySQLdb.connect(
             host=conn.host,
             port=port,
