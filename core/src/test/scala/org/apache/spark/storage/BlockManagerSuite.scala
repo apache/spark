@@ -44,7 +44,7 @@ import org.apache.spark.util._
 class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
   with PrivateMethodTester with ResetSystemProperties {
 
-  private val conf = new SparkConf(false)
+  private val conf = new SparkConf(false).set("spark.app.id", "test")
   var store: BlockManager = null
   var store2: BlockManager = null
   var store3: BlockManager = null

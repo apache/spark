@@ -38,7 +38,7 @@ import org.apache.spark.storage.StorageLevel._
 /** Testsuite that tests block replication in BlockManager */
 class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
-  private val conf = new SparkConf(false)
+  private val conf = new SparkConf(false).set("spark.app.id", "test")
   var rpcEnv: RpcEnv = null
   var master: BlockManagerMaster = null
   val securityMgr = new SecurityManager(conf)

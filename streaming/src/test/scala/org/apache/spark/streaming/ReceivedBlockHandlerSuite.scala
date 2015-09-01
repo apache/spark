@@ -47,7 +47,9 @@ class ReceivedBlockHandlerSuite
   with Matchers
   with Logging {
 
-  val conf = new SparkConf().set("spark.streaming.receiver.writeAheadLog.rollingIntervalSecs", "1")
+  val conf = new SparkConf()
+    .set("spark.streaming.receiver.writeAheadLog.rollingIntervalSecs", "1")
+    .set("spark.app.id", "streaming-test")
   val hadoopConf = new Configuration()
   val streamId = 1
   val securityMgr = new SecurityManager(conf)
