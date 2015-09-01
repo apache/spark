@@ -20,8 +20,8 @@ package org.apache.spark.deploy.yarn
 import java.io.File
 import java.net.URI
 
-import scala.collection.JavaConversions._
-import scala.collection.mutable.{ HashMap => MutableHashMap }
+import scala.collection.JavaConverters._
+import scala.collection.mutable.{HashMap => MutableHashMap}
 import scala.reflect.ClassTag
 import scala.util.Try
 
@@ -38,7 +38,7 @@ import org.mockito.Matchers._
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterAll, Matchers}
 
-import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.util.Utils
 
 class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
@@ -201,7 +201,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
     appContext.getClass.getMethods.filter(_.getName.equals("getApplicationTags")).foreach{ method =>
       val tags = method.invoke(appContext).asInstanceOf[java.util.Set[String]]
       tags should contain allOf ("tag1", "dup", "tag2", "multi word")
-      tags.filter(!_.isEmpty).size should be (4)
+      tags.asScala.filter(_.nonEmpty).size should be (4)
     }
     appContext.getMaxAppAttempts should be (42)
   }

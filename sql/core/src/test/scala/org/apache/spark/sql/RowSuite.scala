@@ -85,4 +85,13 @@ class RowSuite extends SparkFunSuite with SharedSQLContext {
     val r2 = Row(Double.NaN)
     assert(r1 === r2)
   }
+
+  test("equals and hashCode") {
+    val r1 = Row("Hello")
+    val r2 = Row("Hello")
+    assert(r1 === r2)
+    assert(r1.hashCode() === r2.hashCode())
+    val r3 = Row("World")
+    assert(r3.hashCode() != r1.hashCode())
+  }
 }

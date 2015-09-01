@@ -39,9 +39,9 @@ MLlib's FP-growth implementation takes the following (hyper-)parameters:
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`FPGrowth`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowth)
-implements the FP-growth algorithm.  It take an `RDD` of transactions,
-where each transaction is an `Iterable` of items of a generic type.
+[`FPGrowth`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowth) implements the
+FP-growth algorithm.
+It take a `RDD` of transactions, where each transaction is an `Array` of items of a generic type.
 Calling `FPGrowth.run` with transactions returns an
 [`FPGrowthModel`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowthModel)
 that stores the frequent itemsets with their frequencies.  The following
@@ -53,16 +53,11 @@ details) from `transactions`.
 
 {% highlight scala %}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.fpm.{FPGrowth, FPGrowthModel}
+import org.apache.spark.mllib.fpm.FPGrowth
 
-val transactions: RDD[Array[String]] = sc.parallelize(Seq(
-  "r z h k p",
-  "z y x w v u t s",
-  "s x o n r",
-  "x z y m t s q e",
-  "z",
-  "x z y r q t p")
-  .map(_.split(" ")))
+val data = sc.textFile("data/mllib/sample_fpgrowth.txt")
+
+val transactions: RDD[Array[String]] = data.map(s => s.trim.split(' '))
 
 val fpg = new FPGrowth()
   .setMinSupport(0.2)
@@ -86,10 +81,10 @@ model.generateAssociationRules(minConfidence).collect().foreach { rule =>
 
 <div data-lang="java" markdown="1">
 
-[`FPGrowth`](api/java/org/apache/spark/mllib/fpm/FPGrowth.html)
-implements the FP-growth algorithm.  It take a `JavaRDD` of
-transactions, where each transaction is an `Array` of items of a generic
-type.  Calling `FPGrowth.run` with transactions returns an
+[`FPGrowth`](api/java/org/apache/spark/mllib/fpm/FPGrowth.html) implements the
+FP-growth algorithm.
+It take an `JavaRDD` of transactions, where each transaction is an `Iterable` of items of a generic type.
+Calling `FPGrowth.run` with transactions returns an
 [`FPGrowthModel`](api/java/org/apache/spark/mllib/fpm/FPGrowthModel.html)
 that stores the frequent itemsets with their frequencies.  The following
 example illustrates how to mine frequent itemsets and association rules
@@ -107,13 +102,19 @@ import org.apache.spark.mllib.fpm.AssociationRules;
 import org.apache.spark.mllib.fpm.FPGrowth;
 import org.apache.spark.mllib.fpm.FPGrowthModel;
 
-JavaRDD<List<String>> transactions = sc.parallelize(Arrays.asList(
-  Arrays.asList("r z h k p".split(" ")),
-  Arrays.asList("z y x w v u t s".split(" ")),
-  Arrays.asList("s x o n r".split(" ")),
-  Arrays.asList("x z y m t s q e".split(" ")),
-  Arrays.asList("z".split(" ")),
-  Arrays.asList("x z y r q t p".split(" "))), 2);
+SparkConf conf = new SparkConf().setAppName("FP-growth Example");
+JavaSparkContext sc = new JavaSparkContext(conf);
+
+JavaRDD<String> data = sc.textFile("data/mllib/sample_fpgrowth.txt");
+
+JavaRDD<List<String>> transactions = data.map(
+  new Function<String, List<String>>() {
+    public List<String> call(String line) {
+      String[] parts = line.split(" ");
+      return Arrays.asList(parts);
+    }
+  }
+);
 
 FPGrowth fpg = new FPGrowth()
   .setMinSupport(0.2)
@@ -133,6 +134,32 @@ for (AssociationRules.Rule<String> rule
 {% endhighlight %}
 
 </div>
+
+<div data-lang="python" markdown="1">
+
+[`FPGrowth`](api/python/pyspark.mllib.html#pyspark.mllib.fpm.FPGrowth) implements the
+FP-growth algorithm.
+It take an `RDD` of transactions, where each transaction is an `List` of items of a generic type.
+Calling `FPGrowth.train` with transactions returns an
+[`FPGrowthModel`](api/python/pyspark.mllib.html#pyspark.mllib.fpm.FPGrowthModel)
+that stores the frequent itemsets with their frequencies.
+
+{% highlight python %}
+from pyspark.mllib.fpm import FPGrowth
+
+data = sc.textFile("data/mllib/sample_fpgrowth.txt")
+
+transactions = data.map(lambda line: line.strip().split(' '))
+
+model = FPGrowth.train(transactions, minSupport=0.2, numPartitions=10)
+
+result = model.freqItemsets().collect()
+for fi in result:
+    print(fi)
+{% endhighlight %}
+
+</div>
+
 </div>
 
 ## Association Rules

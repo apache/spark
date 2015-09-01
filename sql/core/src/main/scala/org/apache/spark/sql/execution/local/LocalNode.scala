@@ -48,10 +48,10 @@ abstract class LocalNode extends TreeNode[LocalNode] {
   /**
    * Returns the current tuple.
    */
-  def get(): InternalRow
+  def fetch(): InternalRow
 
   /**
-   * Closes the iterator and releases all resources.
+   * Closes the iterator and releases all resources. It should be idempotent.
    *
    * Implementations of this must also call the `close()` function of its children.
    */
@@ -64,10 +64,13 @@ abstract class LocalNode extends TreeNode[LocalNode] {
     val converter = CatalystTypeConverters.createToScalaConverter(StructType.fromAttributes(output))
     val result = new scala.collection.mutable.ArrayBuffer[Row]
     open()
-    while (next()) {
-      result += converter.apply(get()).asInstanceOf[Row]
+    try {
+      while (next()) {
+        result += converter.apply(fetch()).asInstanceOf[Row]
+      }
+    } finally {
+      close()
     }
-    close()
     result
   }
 }

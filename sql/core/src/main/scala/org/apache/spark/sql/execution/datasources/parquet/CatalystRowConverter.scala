@@ -20,16 +20,17 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
-import org.apache.parquet.schema.OriginalType.{LIST, INT_32, UTF8}
+import org.apache.parquet.schema.OriginalType.{INT_32, LIST, UTF8}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.DOUBLE
 import org.apache.parquet.schema.Type.Repetition
 import org.apache.parquet.schema.{GroupType, MessageType, PrimitiveType, Type}
 
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -145,7 +146,16 @@ private[parquet] class CatalystRowConverter(
     parquetType: GroupType,
     catalystType: StructType,
     updater: ParentContainerUpdater)
-  extends CatalystGroupConverter(updater) {
+  extends CatalystGroupConverter(updater) with Logging {
+
+  logDebug(
+    s"""Building row converter for the following schema:
+       |
+       |Parquet form:
+       |$parquetType
+       |Catalyst form:
+       |${catalystType.prettyJson}
+     """.stripMargin)
 
   /**
    * Updater used together with field converters within a [[CatalystRowConverter]].  It propagates
@@ -173,7 +183,7 @@ private[parquet] class CatalystRowConverter(
     // those missing fields and create converters for them, although values of these fields are
     // always null.
     val paddedParquetFields = {
-      val parquetFields = parquetType.getFields
+      val parquetFields = parquetType.getFields.asScala
       val parquetFieldNames = parquetFields.map(_.getName).toSet
       val missingFields = catalystType.filterNot(f => parquetFieldNames.contains(f.name))
 
@@ -184,6 +194,13 @@ private[parquet] class CatalystRowConverter(
       (parquetFields ++ missingFields.map(toParquet.convertField)).sortBy { f =>
         catalystType.indexWhere(_.name == f.getName)
       }
+    }
+
+    if (paddedParquetFields.length != catalystType.length) {
+      throw new UnsupportedOperationException(
+        "A Parquet file's schema has different number of fields with the table schema. " +
+          "Please enable schema merging by setting \"mergeSchema\" to true when load " +
+          "a Parquet dataset or set spark.sql.parquet.mergeSchema to true in SQLConf.")
     }
 
     paddedParquetFields.zip(catalystType).zipWithIndex.map {
@@ -405,8 +422,9 @@ private[parquet] class CatalystRowConverter(
     private val elementConverter: Converter = {
       val repeatedType = parquetSchema.getType(0)
       val elementType = catalystSchema.elementType
+      val parentName = parquetSchema.getName
 
-      if (isElementType(repeatedType, elementType)) {
+      if (isElementType(repeatedType, elementType, parentName)) {
         newConverter(repeatedType, elementType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentArray += value
         })
@@ -443,10 +461,13 @@ private[parquet] class CatalystRowConverter(
      * @see https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules
      */
     // scalastyle:on
-    private def isElementType(parquetRepeatedType: Type, catalystElementType: DataType): Boolean = {
+    private def isElementType(
+        parquetRepeatedType: Type, catalystElementType: DataType, parentName: String): Boolean = {
       (parquetRepeatedType, catalystElementType) match {
         case (t: PrimitiveType, _) => true
         case (t: GroupType, _) if t.getFieldCount > 1 => true
+        case (t: GroupType, _) if t.getFieldCount == 1 && t.getName == "array" => true
+        case (t: GroupType, _) if t.getFieldCount == 1 && t.getName == parentName + "_tuple" => true
         case (t: GroupType, StructType(Array(f))) if f.name == t.getFieldName(0) => true
         case _ => false
       }
