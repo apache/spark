@@ -191,4 +191,13 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       ctx.table("InMemoryCache_different_data_types").collect())
     ctx.dropTempTable("InMemoryCache_different_data_types")
   }
+
+  test("SPARK-10422: String column in InMemoryColumnarCache needs to override clone method") {
+    val df =
+      ctx.range(1, 30000).selectExpr("id % 500 as id").rdd.map(id => Tuple1(s"str_$id")).toDF("i")
+    val cached = df.cache()
+    // count triggers the caching action. It should not throw.
+    cached.count()
+    cached.unpersist()
+  }
 }
