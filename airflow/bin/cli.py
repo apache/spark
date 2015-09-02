@@ -230,7 +230,7 @@ def clear(args):
         end_date=args.end_date,
         only_failed=args.only_failed,
         only_running=args.only_running,
-        confirm_prompt=True)
+        confirm_prompt=not args.no_confirm)
 
 
 def webserver(args):
@@ -410,6 +410,8 @@ def get_parser():
     parser_clear.add_argument(
         "-sd", "--subdir", help=subdir_help,
         default=DAGS_FOLDER)
+    parser_clear.add_argument(
+        "-c", "--no_confirm", help=ht, action="store_true")
     parser_clear.set_defaults(func=clear)
 
     ht = "Run a single task instance"
