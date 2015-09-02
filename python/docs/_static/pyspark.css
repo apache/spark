@@ -3,9 +3,49 @@ body {
 }
 
 div.sphinxsidebar {
-    width: 260px;
+    width: 270px;
 }
 
 div.bodywrapper {
-    margin: 0 0 0 260px;
+    margin: 0 0 0 270px;
 }
+
+div.sphinxsidebar ul {
+    margin-right: 10px;
+}
+
+div.sphinxsidebar li a {
+    word-break: break-all;
+}
+
+span.pys-tag {
+    font-size: 11px;
+    font-weight: bold;
+    margin: 0 0 0 2px;
+    padding: 1px 3px 1px 3px;
+    -moz-border-radius: 3px;
+    -webkit-border-radius: 3px;
+    border-radius: 3px;
+    text-align: center;
+    text-decoration: none;
+}
+
+span.pys-tag-experimental {
+    background-color: rgb(37, 112, 128);
+    color: rgb(255, 255, 255);
+}
+
+span.pys-tag-deprecated {
+    background-color: rgb(238, 238, 238);
+    color: rgb(62, 67, 73);
+}
+
+div.pys-note-experimental {
+    background-color: rgb(88, 151, 165);
+    border-color: rgb(59, 115, 127);
+    color: rgb(255, 255, 255);
+}
+
+div.pys-note-deprecated {
+}
+

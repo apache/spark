@@ -1,37 +1,83 @@
-$(function (){
+    function startsWith(s, prefix) {
+        return s && s.indexOf(prefix) === 0;
+    }
 
-    var sidebarLinkMap = function() {
-
+    function buildSidebarLinkMap() {
         var linkMap = {};
         $('div.sphinxsidebar a.reference.internal').each(function (i,a)  {
-
             var href = $(a).attr('href');
-            if (href && href.indexOf('#module-') == 0) {
+            if (startsWith(href, '#module-')) {
                 var id = href.substr(8);
                 linkMap[id] = [$(a), null];
             }
         })
-
         return linkMap;
-    }();
+    };
 
 
-    $('dl.class > dt, dl.function > dt').each(function (i,dt)  {
-        var id = dt.id;
-        var desc = $(dt).find('> code.descname').text();
+    function getAdNoteDivs(dd) {
+        var noteDivs = {};
+        dd.find('> div.admonition.note > p.last').each(function (i, p) {
+            var text = $(p).text();
+            if (!noteDivs.experimental && startsWith(text, 'Experimental')) {
+                noteDivs.experimental = $(p).parent();
+            }
+            if (!noteDivs.deprecated && startsWith(text, 'Deprecated')) {
+                noteDivs.deprecated = $(p).parent();
+            }
+        });
+        return noteDivs;
+    }
+
+
+    function getParentId(name) {
+        var last_idx = name.lastIndexOf('.');
+        return last_idx == -1? '': name.substr(0, last_idx);
+    }
+
+
+
+$(function (){
+
+    var sidebarLinkMap = buildSidebarLinkMap();
+
+    $('dl.class, dl.function').each(function (i,dl)  {
+
+        dl = $(dl);
+        dt = dl.children('dt').eq(0);
+        dd = dl.children('dd').eq(0);
+        var id = dt.attr('id');
+        var desc = dt.find('> code.descname').text();
+        var adNoteDivs = getAdNoteDivs(dd);
+
+        //console.log("Match", dt, id);
 
         if (id) {
+            var parent_id = getParentId(id);
 
-            var last_idx = id.lastIndexOf('.');
-            var mod_id = last_idx == -1? '': id.substr(0, last_idx);
+            //console.log("Id -> Parent", id, parent_id);
 
-            var r = sidebarLinkMap[mod_id];
+            var r = sidebarLinkMap[parent_id];
             if (r) {
                 if (r[1] === null) {
                     r[1] = $('<ul/>');
-                    r[0].after(r[1]);
+                    r[0].parent().append(r[1]);
                 }
-                r[1].append('<li><a href="#' + id + '">' + desc + '</a></li>');
+                var tags = '';
+                if (adNoteDivs.experimental) {
+                    tags += ' <span class="pys-tag pys-tag-experimental">E</span>';
+                    adNoteDivs.experimental.addClass('pys-note pys-note-experimental');
+                }
+                if (adNoteDivs.deprecated) {
+                    tags += ' <span class="pys-tag pys-tag-deprecated">D</span>';
+                    adNoteDivs.deprecated.addClass('pys-note pys-note-deprecated');
+                }
+                var li = $('<li/>');
+                var a = $('<a href="#' + id + '">' + desc + '</a>');
+                li.append(a);
+                li.append(tags);
+                r[1].append(li);
+                sidebarLinkMap[id] = [a, null];
             }
         }
     });
