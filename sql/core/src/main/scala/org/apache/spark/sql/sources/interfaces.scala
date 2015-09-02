@@ -31,7 +31,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.execution.RDDConversions
+import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, PartitionSpec, Partition}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql._
@@ -406,7 +406,7 @@ abstract class OutputWriter {
  */
 @Experimental
 abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec])
-  extends BaseRelation with Logging {
+  extends BaseRelation with FileRelation with Logging {
 
   override def toString: String = getClass.getSimpleName + paths.mkString("[", ",", "]")
 
@@ -515,6 +515,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
    * @since 1.4.0
    */
   def paths: Array[String]
+
+  override def inputFiles: Array[String] = cachedLeafStatuses().map(_.getPath.toString).toArray
 
   /**
    * Partition columns.  Can be either defined by [[userDefinedPartitionColumns]] or automatically

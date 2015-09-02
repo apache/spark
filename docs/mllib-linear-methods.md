@@ -504,7 +504,6 @@ will in the future.
 {% highlight python %}
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS, LogisticRegressionModel
 from pyspark.mllib.regression import LabeledPoint
-from numpy import array
 
 # Load and parse the data
 def parsePoint(line):
@@ -676,7 +675,6 @@ Note that the Python API does not yet support model save/load but will in the fu
 
 {% highlight python %}
 from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD, LinearRegressionModel
-from numpy import array
 
 # Load and parse the data
 def parsePoint(line):

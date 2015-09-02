@@ -26,7 +26,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.api.java.JavaPairRDD
+import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
 import org.apache.spark.graphx.{Edge, EdgeContext, Graph, VertexId}
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
@@ -228,6 +228,11 @@ class LocalLDAModel private[clustering] (
     docConcentration, topicConcentration, topicsMatrix.toBreeze.toDenseMatrix, gammaShape, k,
     vocabSize)
 
+  /** Java-friendly version of [[logLikelihood]] */
+  def logLikelihood(documents: JavaPairRDD[java.lang.Long, Vector]): Double = {
+    logLikelihood(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
+  }
+
   /**
    * Calculate an upper bound bound on perplexity.  (Lower is better.)
    * See Equation (16) in original Online LDA paper.
@@ -240,6 +245,11 @@ class LocalLDAModel private[clustering] (
       .map { case (_, termCounts) => termCounts.toArray.sum }
       .sum()
     -logLikelihood(documents) / corpusTokenCount
+  }
+
+  /** Java-friendly version of [[logPerplexity]] */
+  def logPerplexity(documents: JavaPairRDD[java.lang.Long, Vector]): Double = {
+    logPerplexity(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
   }
 
   /**
@@ -341,8 +351,14 @@ class LocalLDAModel private[clustering] (
     }
   }
 
-}
+  /** Java-friendly version of [[topicDistributions]] */
+  def topicDistributions(
+      documents: JavaPairRDD[java.lang.Long, Vector]): JavaPairRDD[java.lang.Long, Vector] = {
+    val distributions = topicDistributions(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
+    JavaPairRDD.fromRDD(distributions.asInstanceOf[RDD[(java.lang.Long, Vector)]])
+  }
 
+}
 
 @Experimental
 object LocalLDAModel extends Loader[LocalLDAModel] {
@@ -655,6 +671,12 @@ class DistributedLDAModel private[clustering] (
       }
       (docID.toLong, topIndices.toArray, weights.toArray)
     }
+  }
+
+  /** Java-friendly version of [[topTopicsPerDocument]] */
+  def javaTopTopicsPerDocument(k: Int): JavaRDD[(java.lang.Long, Array[Int], Array[Double])] = {
+    val topics = topTopicsPerDocument(k)
+    topics.asInstanceOf[RDD[(java.lang.Long, Array[Int], Array[Double])]].toJavaRDD()
   }
 
   // TODO:

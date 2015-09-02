@@ -18,8 +18,7 @@
 package org.apache.spark.unsafe.types;
 
 import javax.annotation.Nonnull;
-import java.io.Serializable;
-import java.io.UnsupportedEncodingException;
+import java.io.*;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Map;
@@ -38,12 +37,13 @@ import static org.apache.spark.unsafe.Platform.*;
  * <p>
  * Note: This is not designed for general use cases, should not be used outside SQL.
  */
-public final class UTF8String implements Comparable<UTF8String>, Serializable {
+public final class UTF8String implements Comparable<UTF8String>, Externalizable {
 
+  // These are only updated by readExternal()
   @Nonnull
-  private final Object base;
-  private final long offset;
-  private final int numBytes;
+  private Object base;
+  private long offset;
+  private int numBytes;
 
   public Object getBaseObject() { return base; }
   public long getBaseOffset() { return offset; }
@@ -125,6 +125,11 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     this.base = base;
     this.offset = offset;
     this.numBytes = numBytes;
+  }
+
+  // for serialization
+  public UTF8String() {
+    this(null, 0, 0);
   }
 
   /**
@@ -978,4 +983,18 @@ public final class UTF8String implements Comparable<UTF8String>, Serializable {
     }
     return UTF8String.fromBytes(sx);
   }
+
+  public void writeExternal(ObjectOutput out) throws IOException {
+    byte[] bytes = getBytes();
+    out.writeInt(bytes.length);
+    out.write(bytes);
+  }
+
+  public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+    offset = BYTE_ARRAY_OFFSET;
+    numBytes = in.readInt();
+    base = new byte[numBytes];
+    in.readFully((byte[]) base);
+  }
+
 }

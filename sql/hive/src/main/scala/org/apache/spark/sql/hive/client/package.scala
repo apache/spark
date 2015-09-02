@@ -25,7 +25,7 @@ package object client {
       val exclusions: Seq[String] = Nil)
 
   // scalastyle:off
-  private[client] object hive {
+  private[hive] object hive {
     case object v12 extends HiveVersion("0.12.0")
     case object v13 extends HiveVersion("0.13.1")
 

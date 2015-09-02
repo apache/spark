@@ -33,7 +33,7 @@ import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.{Partition => SparkPartition, _}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager, Utils}
 
 
 private[spark] class SqlNewHadoopPartition(
@@ -212,7 +212,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
           }
         } catch {
           case e: Exception =>
-            if (!Utils.inShutdown()) {
+            if (!ShutdownHookManager.inShutdown()) {
               logWarning("Exception in RecordReader.close()", e)
             }
         }

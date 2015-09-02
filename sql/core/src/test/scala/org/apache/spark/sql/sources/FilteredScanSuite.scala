@@ -21,6 +21,7 @@ import scala.language.existentials
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 
@@ -96,11 +97,11 @@ object FiltersPushed {
   var list: Seq[Filter] = Nil
 }
 
-class FilteredScanSuite extends DataSourceTest {
+class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
+  protected override lazy val sql = caseInsensitiveContext.sql _
 
-  import caseInsensitiveContext.sql
-
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     sql(
       """
         |CREATE TEMPORARY TABLE oneToTenFiltered

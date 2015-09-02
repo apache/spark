@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, DriverManager, PreparedStatement}
+import java.sql.{Connection, PreparedStatement}
 import java.util.Properties
 
 import scala.util.Try
@@ -36,7 +36,7 @@ object JdbcUtils extends Logging {
    * Establishes a JDBC connection.
    */
   def createConnection(url: String, connectionProperties: Properties): Connection = {
-    DriverManager.getConnection(url, connectionProperties)
+    JDBCRDD.getConnector(connectionProperties.getProperty("driver"), url, connectionProperties)()
   }
 
   /**
@@ -170,7 +170,7 @@ object JdbcUtils extends Logging {
             case BinaryType => "BLOB"
             case TimestampType => "TIMESTAMP"
             case DateType => "DATE"
-            case t: DecimalType => s"DECIMAL(${t.precision}},${t.scale}})"
+            case t: DecimalType => s"DECIMAL(${t.precision},${t.scale})"
             case _ => throw new IllegalArgumentException(s"Don't know how to save $field to JDBC")
           })
       val nullable = if (field.nullable) "" else "NOT NULL"
