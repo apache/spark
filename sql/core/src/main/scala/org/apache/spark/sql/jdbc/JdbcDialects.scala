@@ -126,6 +126,8 @@ object JdbcDialects {
   registerDialect(MySQLDialect)
   registerDialect(PostgresDialect)
   registerDialect(DB2Dialect)
+  registerDialect(SqlServerDialect)
+
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
@@ -238,5 +240,23 @@ case object DB2Dialect extends JdbcDialect {
     case StringType => Some(JdbcType("CLOB", java.sql.Types.CLOB))
     case BooleanType => Some(JdbcType("CHAR(1)", java.sql.Types.CHAR))
     case _ => None
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Default SQL Server dialect, mapping the datetimeoffset types to a String on read.
+ */
+@DeveloperApi
+case object SqlServerDialect extends JdbcDialect {
+
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:sqlserver")
+
+  override def getCatalystType(
+    sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+        if (typeName.contains("datetimeoffset")) {
+          // String is used by SQL Server for datetimeoffset types in legacy clients
+          Some(StringType)
+        } else None
   }
 }
