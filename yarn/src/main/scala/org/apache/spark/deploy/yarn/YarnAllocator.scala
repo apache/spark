@@ -21,9 +21,7 @@ import java.util.Collections
 import java.util.concurrent._
 import java.util.regex.Pattern
 
-import org.apache.spark.util.Utils
-
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -39,8 +37,8 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
+import org.apache.spark.util.Utils
 
 /**
  * YarnAllocator is charged with requesting containers from the YARN ResourceManager and deciding
@@ -164,7 +162,7 @@ private[yarn] class YarnAllocator(
    * Number of container requests at the given location that have not yet been fulfilled.
    */
   private def getNumPendingAtLocation(location: String): Int =
-    amClient.getMatchingRequests(RM_REQUEST_PRIORITY, location, resource).map(_.size).sum
+    amClient.getMatchingRequests(RM_REQUEST_PRIORITY, location, resource).asScala.map(_.size).sum
 
   /**
    * Request as many executors from the ResourceManager as needed to reach the desired total. If
@@ -231,14 +229,14 @@ private[yarn] class YarnAllocator(
           numExecutorsRunning,
           allocateResponse.getAvailableResources))
 
-      handleAllocatedContainers(allocatedContainers)
+      handleAllocatedContainers(allocatedContainers.asScala)
     }
 
     val completedContainers = allocateResponse.getCompletedContainersStatuses()
     if (completedContainers.size > 0) {
       logDebug("Completed %d containers".format(completedContainers.size))
 
-      processCompletedContainers(completedContainers)
+      processCompletedContainers(completedContainers.asScala)
 
       logDebug("Finished processing %d completed containers. Current running executor count: %d."
         .format(completedContainers.size, numExecutorsRunning))
@@ -271,7 +269,7 @@ private[yarn] class YarnAllocator(
         val request = createContainerRequest(resource, locality.nodes, locality.racks)
         amClient.addContainerRequest(request)
         val nodes = request.getNodes
-        val hostStr = if (nodes == null || nodes.isEmpty) "Any" else nodes.last
+        val hostStr = if (nodes == null || nodes.isEmpty) "Any" else nodes.asScala.last
         logInfo(s"Container request (host: $hostStr, capability: $resource)")
       }
     } else if (missing < 0) {
@@ -280,7 +278,8 @@ private[yarn] class YarnAllocator(
 
       val matchingRequests = amClient.getMatchingRequests(RM_REQUEST_PRIORITY, ANY_HOST, resource)
       if (!matchingRequests.isEmpty) {
-        matchingRequests.head.take(numToCancel).foreach(amClient.removeContainerRequest)
+        matchingRequests.iterator().next().asScala
+          .take(numToCancel).foreach(amClient.removeContainerRequest)
       } else {
         logWarning("Expected to find pending requests, but found none.")
       }
@@ -459,7 +458,7 @@ private[yarn] class YarnAllocator(
         }
       }
 
-      if (allocatedContainerToHostMap.containsKey(containerId)) {
+      if (allocatedContainerToHostMap.contains(containerId)) {
         val host = allocatedContainerToHostMap.get(containerId).get
         val containerSet = allocatedHostToContainersMap.get(host).get
 

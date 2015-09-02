@@ -36,6 +36,7 @@ import org.apache.spark.streaming.dstream.DStream
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
  */
+@Since("0.8.0")
 object MLUtils {
 
   private[mllib] lazy val EPSILON = {
@@ -168,6 +169,7 @@ object MLUtils {
    *
    * @see [[org.apache.spark.mllib.util.MLUtils#loadLibSVMFile]]
    */
+  @Since("1.0.0")
   def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String) {
     // TODO: allow to specify label precision and feature precision.
     val dataStr = data.map { case LabeledPoint(label, features) =>

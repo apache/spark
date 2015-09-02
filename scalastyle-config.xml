@@ -161,6 +161,13 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
+  <!-- As of SPARK-9613 JavaConversions should be replaced with JavaConverters -->
+  <check customId="javaconversions" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters><parameter name="regex">JavaConversions</parameter></parameters>
+    <customMessage>Instead of importing implicits in scala.collection.JavaConversions._, import
+    scala.collection.JavaConverters._ and use .asScala / .asJava methods</customMessage>
+  </check>
+
   <!-- ================================================================================ -->
   <!--       rules we'd like to enforce, but haven't cleaned up the codebase yet        -->
   <!-- ================================================================================ -->

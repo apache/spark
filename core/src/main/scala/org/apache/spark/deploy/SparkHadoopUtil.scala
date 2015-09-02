@@ -22,7 +22,7 @@ import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 import java.util.{Arrays, Comparator}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
@@ -71,7 +71,7 @@ class SparkHadoopUtil extends Logging {
   }
 
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
-    for (token <- source.getTokens()) {
+    for (token <- source.getTokens.asScala) {
       dest.addToken(token)
     }
   }
@@ -175,8 +175,8 @@ class SparkHadoopUtil extends Logging {
   }
 
   private def getFileSystemThreadStatistics(): Seq[AnyRef] = {
-    val stats = FileSystem.getAllStatistics()
-    stats.map(Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
+    FileSystem.getAllStatistics.asScala.map(
+      Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
   }
 
   private def getFileSystemThreadStatisticsMethod(methodName: String): Method = {
@@ -306,12 +306,13 @@ class SparkHadoopUtil extends Logging {
     val renewalInterval =
       sparkConf.getLong("spark.yarn.token.renewal.interval", (24 hours).toMillis)
 
-    credentials.getAllTokens.filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
+    credentials.getAllTokens.asScala
+      .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
       .map { t =>
-      val identifier = new DelegationTokenIdentifier()
-      identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
-      (identifier.getIssueDate + fraction * renewalInterval).toLong - now
-    }.foldLeft(0L)(math.max)
+        val identifier = new DelegationTokenIdentifier()
+        identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
+        (identifier.getIssueDate + fraction * renewalInterval).toLong - now
+      }.foldLeft(0L)(math.max)
   }
 
 

@@ -42,7 +42,8 @@ import org.apache.spark.storage.StorageLevel
  */
 @Since("1.3.0")
 @Experimental
-class FPGrowthModel[Item: ClassTag](val freqItemsets: RDD[FreqItemset[Item]]) extends Serializable {
+class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
+    @Since("1.3.0") val freqItemsets: RDD[FreqItemset[Item]]) extends Serializable {
   /**
    * Generates association rules for the [[Item]]s in [[freqItemsets]].
    * @param confidence minimal confidence of the rules produced
@@ -126,6 +127,8 @@ class FPGrowth private (
     new FPGrowthModel(freqItemsets)
   }
 
+  /** Java-friendly version of [[run]]. */
+  @Since("1.3.0")
   def run[Item, Basket <: JavaIterable[Item]](data: JavaRDD[Basket]): FPGrowthModel[Item] = {
     implicit val tag = fakeClassTag[Item]
     run(data.rdd.map(_.asScala.toArray))
@@ -226,7 +229,9 @@ object FPGrowth {
    *
    */
   @Since("1.3.0")
-  class FreqItemset[Item](val items: Array[Item], val freq: Long) extends Serializable {
+  class FreqItemset[Item] @Since("1.3.0") (
+      @Since("1.3.0") val items: Array[Item],
+      @Since("1.3.0") val freq: Long) extends Serializable {
 
     /**
      * Returns items in a Java List.

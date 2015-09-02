@@ -32,7 +32,6 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] object ParquetFilters {
   val PARQUET_FILTER_DATA = "org.apache.spark.sql.parquet.row.filter"
@@ -65,7 +64,7 @@ private[sql] object ParquetFilters {
     case StringType =>
       (n: String, v: Any) => FilterApi.eq(
         binaryColumn(n),
-        Option(v).map(s => Binary.fromByteArray(s.asInstanceOf[UTF8String].getBytes)).orNull)
+        Option(v).map(s => Binary.fromByteArray(s.asInstanceOf[String].getBytes("utf-8"))).orNull)
     case BinaryType =>
       (n: String, v: Any) => FilterApi.eq(
         binaryColumn(n),
@@ -86,7 +85,7 @@ private[sql] object ParquetFilters {
     case StringType =>
       (n: String, v: Any) => FilterApi.notEq(
         binaryColumn(n),
-        Option(v).map(s => Binary.fromByteArray(s.asInstanceOf[UTF8String].getBytes)).orNull)
+        Option(v).map(s => Binary.fromByteArray(s.asInstanceOf[String].getBytes("utf-8"))).orNull)
     case BinaryType =>
       (n: String, v: Any) => FilterApi.notEq(
         binaryColumn(n),
@@ -104,7 +103,8 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.lt(doubleColumn(n), v.asInstanceOf[java.lang.Double])
     case StringType =>
       (n: String, v: Any) =>
-        FilterApi.lt(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[UTF8String].getBytes))
+        FilterApi.lt(binaryColumn(n),
+          Binary.fromByteArray(v.asInstanceOf[String].getBytes("utf-8")))
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.lt(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
@@ -121,7 +121,8 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.ltEq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
     case StringType =>
       (n: String, v: Any) =>
-        FilterApi.ltEq(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[UTF8String].getBytes))
+        FilterApi.ltEq(binaryColumn(n),
+          Binary.fromByteArray(v.asInstanceOf[String].getBytes("utf-8")))
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.ltEq(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
@@ -138,7 +139,8 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.gt(doubleColumn(n), v.asInstanceOf[java.lang.Double])
     case StringType =>
       (n: String, v: Any) =>
-        FilterApi.gt(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[UTF8String].getBytes))
+        FilterApi.gt(binaryColumn(n),
+          Binary.fromByteArray(v.asInstanceOf[String].getBytes("utf-8")))
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.gt(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
@@ -155,7 +157,8 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.gtEq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
     case StringType =>
       (n: String, v: Any) =>
-        FilterApi.gtEq(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[UTF8String].getBytes))
+        FilterApi.gtEq(binaryColumn(n),
+          Binary.fromByteArray(v.asInstanceOf[String].getBytes("utf-8")))
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.gtEq(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
@@ -177,7 +180,7 @@ private[sql] object ParquetFilters {
     case StringType =>
       (n: String, v: Set[Any]) =>
         FilterApi.userDefined(binaryColumn(n),
-          SetInFilter(v.map(e => Binary.fromByteArray(e.asInstanceOf[UTF8String].getBytes))))
+          SetInFilter(v.map(s => Binary.fromByteArray(s.asInstanceOf[String].getBytes("utf-8")))))
     case BinaryType =>
       (n: String, v: Set[Any]) =>
         FilterApi.userDefined(binaryColumn(n),

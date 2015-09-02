@@ -42,9 +42,10 @@ import org.apache.spark.{Logging, SparkContext, SparkException}
  */
 @Since("1.3.0")
 @Experimental
-class PowerIterationClusteringModel(
-    val k: Int,
-    val assignments: RDD[PowerIterationClustering.Assignment]) extends Saveable with Serializable {
+class PowerIterationClusteringModel @Since("1.3.0") (
+    @Since("1.3.0") val k: Int,
+    @Since("1.3.0") val assignments: RDD[PowerIterationClustering.Assignment])
+  extends Saveable with Serializable {
 
   @Since("1.4.0")
   override def save(sc: SparkContext, path: String): Unit = {
@@ -56,6 +57,8 @@ class PowerIterationClusteringModel(
 
 @Since("1.4.0")
 object PowerIterationClusteringModel extends Loader[PowerIterationClusteringModel] {
+
+  @Since("1.4.0")
   override def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {
     PowerIterationClusteringModel.SaveLoadV1_0.load(sc, path)
   }
@@ -68,8 +71,6 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
     private[clustering]
     val thisClassName = "org.apache.spark.mllib.clustering.PowerIterationClusteringModel"
 
-    /**
-     */
     @Since("1.4.0")
     def save(sc: SparkContext, model: PowerIterationClusteringModel, path: String): Unit = {
       val sqlContext = new SQLContext(sc)
@@ -120,6 +121,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
  * @see [[http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)]]
  */
 @Experimental
+@Since("1.3.0")
 class PowerIterationClustering private[clustering] (
     private var k: Int,
     private var maxIterations: Int,

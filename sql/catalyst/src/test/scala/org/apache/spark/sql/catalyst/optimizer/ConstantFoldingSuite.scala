@@ -250,29 +250,14 @@ class ConstantFoldingSuite extends PlanTest {
   }
 
   test("Constant folding test: Fold In(v, list) into true or false") {
-    var originalQuery =
+    val originalQuery =
       testRelation
         .select('a)
         .where(In(Literal(1), Seq(Literal(1), Literal(2))))
 
-    var optimized = Optimize.execute(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
 
-    var correctAnswer =
-      testRelation
-        .select('a)
-        .where(Literal(true))
-        .analyze
-
-    comparePlans(optimized, correctAnswer)
-
-    originalQuery =
-      testRelation
-        .select('a)
-        .where(In(Literal(1), Seq(Literal(1), 'a.attr)))
-
-    optimized = Optimize.execute(originalQuery.analyze)
-
-    correctAnswer =
+    val correctAnswer =
       testRelation
         .select('a)
         .where(Literal(true))
