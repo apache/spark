@@ -123,7 +123,7 @@ final class CategoricalSplit private[ml] (
   override def hashCode(): Int = {
     var hashCode = categories.hashCode
     hashCode = hashCode * 31 + featureIndex
-    hashCode = hashCode * 31 + isLeft.hashCode()
+    hashCode = hashCode * 31 + isLeft.hashCode
     hashCode
   }
 

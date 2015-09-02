@@ -27,6 +27,7 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
+
 /**
  * Trait for a local matrix.
  */
