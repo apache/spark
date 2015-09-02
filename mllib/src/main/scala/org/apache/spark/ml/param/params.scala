@@ -501,7 +501,13 @@ trait Params extends Identifiable with Serializable {
    */
   final def getDefault[T](param: Param[T]): Option[T] = {
     shouldOwn(param)
-    defaultParamMap.get(param)
+    try {
+      defaultParamMap.get(param)
+    } catch {
+      case e: NoSuchElementException =>
+        throw new NoSuchElementException("Failed to find a default value for param" +
+          param.name)
+    }
   }
 
   /**
