@@ -1541,22 +1541,23 @@ class RDD(object):
         """
         return self.map(lambda x: x[1])
 
-    def reduceByKey(self, func, numPartitions=None):
+    def reduceByKey(self, func, numPartitions=None, partitionFunc=portable_hash):
         """
         Merge the values for each key using an associative reduce function.
 
         This will also perform the merging locally on each mapper before
         sending results to a reducer, similarly to a "combiner" in MapReduce.
 
-        Output will be hash-partitioned with C{numPartitions} partitions, or
+        Output will be partitioned with C{numPartitions} partitions, or
         the default parallelism level if C{numPartitions} is not specified.
+        Default partitioner is hash-partition.
 
         >>> from operator import add
         >>> rdd = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
         >>> sorted(rdd.reduceByKey(add).collect())
         [('a', 2), ('b', 1)]
         """
-        return self.combineByKey(lambda x: x, func, func, numPartitions)
+        return self.combineByKey(lambda x: x, func, func, partitioner, numPartitions)
 
     def reduceByKeyLocally(self, func):
         """
@@ -1741,7 +1742,7 @@ class RDD(object):
 
     # TODO: add control over map-side aggregation
     def combineByKey(self, createCombiner, mergeValue, mergeCombiners,
-                     numPartitions=None):
+                     numPartitions=None, partitionFunc=portable_hash):
         """
         Generic function to combine the elements for each key using a custom
         set of aggregation functions.
@@ -1781,7 +1782,7 @@ class RDD(object):
             return merger.items()
 
         locally_combined = self.mapPartitions(combineLocally, preservesPartitioning=True)
-        shuffled = locally_combined.partitionBy(numPartitions)
+        shuffled = locally_combined.partitionBy(numPartitions, partitionFunc)
 
         def _mergeCombiners(iterator):
             merger = ExternalMerger(agg, memory, serializer) \
