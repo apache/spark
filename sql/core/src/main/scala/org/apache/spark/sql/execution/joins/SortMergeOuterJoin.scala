@@ -189,8 +189,6 @@ case class SortMergeOuterJoin(
 
           new FullOuterIterator(
             smjScanner,
-            leftNullRow,
-            rightNullRow,
             resultProj,
             numOutputRows).toScala
 
@@ -301,13 +299,6 @@ private class RightOuterIterator(
   override def getRow: InternalRow = resultProj(joinedRow)
 }
 
-private object SortMergeFullJoinScanner {
-  object Status extends Enumeration {
-    type Status = Value
-    val Init, LeftAdvanced, RightAdvanced, NoAdvanced, Buffering = Value
-  }
-}
-
 private class SortMergeFullJoinScanner(
     leftKeyGenerator: Projection,
     rightKeyGenerator: Projection,
@@ -335,10 +326,6 @@ private class SortMergeFullJoinScanner(
 
   private[this] var leftAdvanced: Boolean = false
   private[this] var rightAdvanced: Boolean = false
-
-  import SortMergeFullJoinScanner.Status._
-
-  private var latestStatus: Status = Init
 
   // --- Private methods --------------------------------------------------------------------------
 
@@ -461,12 +448,11 @@ private class SortMergeFullJoinScanner(
   def getRightRow(): InternalRow = rightRow
   def getJoinedRow(): JoinedRow = joinedRow
 
-  def advanceNextPair(): Status = {
+  def advanceNextPair(): Boolean = {
     // We already buffered some matching rows, use them directly
     if (leftMatches.size > 0 && rightMatches.size > 0) {
       if (scanNextInBuffered()) {
-        latestStatus = Buffering
-        return latestStatus
+        return true
       } else {
         // No more rows in buffers
         leftMatches.clear()
@@ -474,17 +460,16 @@ private class SortMergeFullJoinScanner(
       }
     }
 
-    // Only advance when last time we consume row from left iterator
-    if (latestStatus == Init || latestStatus == LeftAdvanced) {
+    if (leftRow == null) {
       leftAdvanced = advancedLeft()
     }
-    // Only advance when last time we consume row from right iterator
-    if (latestStatus == Init || latestStatus == RightAdvanced) {
+
+    if (rightRow == null) {
       rightAdvanced = advancedRight()
     }
 
-    // Both left and right iterators have rows
-    latestStatus = if (canCompare) {
+    // Both left and right iterators have rows and they can be compared
+    if (canCompare) {
       // No buffered matching rows
       val comp = keyOrdering.compare(leftRowKey, rightRowKey)
       if (comp == 0) {
@@ -492,50 +477,44 @@ private class SortMergeFullJoinScanner(
         findMatchingRows(leftRowKey.copy())
         scanNextInBuffered()
         // Since we buffered matching rows, we don't consume rows in next round
-        Buffering
       } else if (comp < 0) {
-        LeftAdvanced
+        joinedRow(getLeftRow(), rightNullRow)
+        leftRow = null
       } else {
-        RightAdvanced
+        joinedRow(leftNullRow, getRightRow())
+        rightRow = null
       }
+      true
     } else if (leftAdvanced) {
-    // Only left iterator has row(s)
-      LeftAdvanced
+      // Only consume row(s) from left iterator
+      joinedRow(getLeftRow(), rightNullRow)
+      leftRow = null
+      true
     } else if (rightAdvanced) {
-    // Only right iterator has row(s)
-      RightAdvanced
+      // Only consume row(s) from right iterator
+      joinedRow(leftNullRow, getRightRow())
+      rightRow = null
+      true
     } else {
-    // Both iterators have been consumed
-      NoAdvanced
+      // Both iterators have been consumed
+      false
     }
-    latestStatus
   }
 }
 
 private class FullOuterIterator(
     smjScanner: SortMergeFullJoinScanner,
-    leftNullRow: InternalRow,
-    rightNullRow: InternalRow,
     resultProj: InternalRow => InternalRow,
     numRows: LongSQLMetric
   ) extends RowIterator {
   private[this] val joinedRow: JoinedRow = smjScanner.getJoinedRow()
 
-  import SortMergeFullJoinScanner.Status._
-
   override def advanceNext(): Boolean = {
     val advancedStatus = smjScanner.advanceNextPair()
-    if (advancedStatus == NoAdvanced) {
-      false
-    } else {
-      if (advancedStatus == LeftAdvanced) {
-        joinedRow(smjScanner.getLeftRow(), rightNullRow)
-      } else if (advancedStatus == RightAdvanced) {
-        joinedRow(leftNullRow, smjScanner.getRightRow())
-      }
+    if (advancedStatus) {
       numRows += 1
-      true
     }
+    advancedStatus
   }
 
   override def getRow: InternalRow = resultProj(joinedRow)
