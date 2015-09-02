@@ -473,6 +473,7 @@ class DAGSchedulerSuite
     assertDataStructuresEmpty()
   }
 
+
   // Helper function to validate state when creating tests for task failures
   def checkStageId(stageId: Int, attempt: Int, stageAttempt: TaskSet) {
     assert(stageAttempt.stageId === stageId)
@@ -485,6 +486,7 @@ class DAGSchedulerSuite
     }.toSeq
   }
 
+  // Helper functions to extract commonly used code in Fetch Failure test cases
   def setupStageAbortTest(sc: SparkContext) {
     sc.listenerBus.addListener(new EndListener())
     ended = false
@@ -504,7 +506,6 @@ class DAGSchedulerSuite
     }
   }
 
-  // Helper functions to extract commonly used code in Fetch Failure test cases
   /**
    * Common code to get the next stage attempt, confirm it's the one we expect, and complete it
    * succesfullly.
@@ -557,100 +558,8 @@ class DAGSchedulerSuite
   }
 
   /**
-   * In this test we simulate a job failure where the first stage completes successfully and
-   * the second stage fails due to a fetch failure. Multiple successive fetch failures of a stage
-   * trigger an overall job abort to avoid endless retries.
-   */
-  test("Multiple consecutive stage failures should lead to job being aborted.") {
-    setupStageAbortTest(sc)
-
-    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
-    val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
-    submit(reduceRdd, Array(0, 1))
-
-    for (attempt <- 0 until Stage.MAX_STAGE_FAILURES) {
-      // Complete all the tasks for the current attempt of stage 0 successfully
-      completeNextShuffleMapSuccesfully(0, attempt, numShufflePartitions = 2)
-
-      // Now we should have a new taskSet, for a new attempt of stage 1.
-      // Fail all these tasks with FetchFailure
-      completeNextStageWithFetchFailure(1, attempt, shuffleDep)
-
-      // this will (potentially) trigger a resubmission of stage 0, since we've lost some of its
-      // map output, for the next iteration through the loop
-      scheduler.resubmitFailedStages()
-
-      if (attempt < Stage.MAX_STAGE_FAILURES-1) {
-        assert(scheduler.runningStages.nonEmpty)
-        assert(!ended)
-      } else {
-        // Stage has been aborted and removed from running stages
-        assertDataStructuresEmpty()
-        sc.listenerBus.waitUntilEmpty(1000)
-        assert(ended)
-        jobResult match {
-          case JobFailed(reason) =>
-            assert(reason.getMessage.contains("ResultStage 1 () has failed the maximum"))
-          case other => fail(s"expected JobFailed, not $other")
-        }
-      }
-    }
-  }
-
-  /**
-   * In this test we simulate a job failure where there are two failures in two different stages.
-   * Specifically, stage1 fails twice, and then stage2 twice. In total, the job has had four
-   * failures overall but not four failures for a particular stage, and as such should not be
-   * aborted.
-   */
-  test("Failures in different stages should not trigger an overall abort") {
-    setupStageAbortTest(sc)
-
-    val shuffleOneRdd = new MyRDD(sc, 2, Nil).cache()
-    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
-    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne)).cache()
-    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, null)
-    val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo))
-    submit(finalRdd, Array(0))
-
-    // In the first two iterations, Stage 0 succeeds and stage 1 fails. In the next two iterations,
-    // stage 2 fails.
-    for (attempt <- 0 until Stage.MAX_STAGE_FAILURES) {
-      // Complete all the tasks for the current attempt of stage 0 successfully
-      completeNextShuffleMapSuccesfully(0, attempt, numShufflePartitions = 2)
-
-      if (attempt < Stage.MAX_STAGE_FAILURES/2) {
-        // Now we should have a new taskSet, for a new attempt of stage 1.
-        // Fail all these tasks with FetchFailure
-        completeNextStageWithFetchFailure(1, attempt, shuffleDepOne)
-      } else {
-        completeNextShuffleMapSuccesfully(1, attempt, numShufflePartitions = 1)
-
-        // Fail stage 2
-        completeNextStageWithFetchFailure(2, attempt - Stage.MAX_STAGE_FAILURES / 2,
-          shuffleDepTwo)
-      }
-
-      // this will (potentially) trigger a resubmission of stage 0, since we've lost some of its
-      // map output, for the next iteration through the loop
-      scheduler.resubmitFailedStages()
-    }
-
-    completeNextShuffleMapSuccesfully(0, 4, numShufflePartitions = 2)
-    completeNextShuffleMapSuccesfully(1, 4, numShufflePartitions = 1)
-
-    // Succeed stage2 with a "42"
-    completeNextResultStageWithSuccess(2, Stage.MAX_STAGE_FAILURES/2)
-
-    assert(results === Map(0 -> 42))
-    assertDataStructuresEmpty()
-  }
-
-  /**
-   * In this test we simulate a job failure where a stage may have many tasks, many of which fail.
-   * We want to show that many fetch failures inside a single stage attempt do not trigger an abort
+   * In this test, we simulate a job where many tasks in the same stage fail. We want to show
+   * that many fetch failures inside a single stage attempt do not trigger an abort
    * on their own, but only when there are enough failing stage attempts.
    */
   test("Multiple tasks w/ fetch failures in same stage attempt should not abort the stage.") {
@@ -685,12 +594,54 @@ class DAGSchedulerSuite
   }
 
   /**
-   * In this test we demonstrate that only consecutive failures trigger a stage abort. A stage may
-   * fail multiples, succeed, then fail a few more times (because its run again by downstream
-   * dependencies). The total number of failed attempts for one stage will go over the limit,
-   * but that doesn't matter, since they have successes in the middle.
+   * In this test we simulate a job failure where the first stage completes successfully and
+   * the second stage fails due to a fetch failure. Multiple successive fetch failures of a stage
+   * trigger an overall job abort to avoid endless retries.
    */
-  test("Abort should only trigger after consecutive stage failures") {
+  test("Multiple consecutive stage failures should lead to job being aborted.") {
+    setupStageAbortTest(sc)
+
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    submit(reduceRdd, Array(0, 1))
+
+    for (attempt <- 0 until Stage.MAX_CONSECUTIVE_FAILURES) {
+      // Complete all the tasks for the current attempt of stage 0 successfully
+      completeNextShuffleMapSuccesfully(0, attempt, numShufflePartitions = 2)
+
+      // Now we should have a new taskSet, for a new attempt of stage 1.
+      // Fail all these tasks with FetchFailure
+      completeNextStageWithFetchFailure(1, attempt, shuffleDep)
+
+      // this will (potentially) trigger a resubmission of stage 0, since we've lost some of its
+      // map output, for the next iteration through the loop
+      scheduler.resubmitFailedStages()
+
+      if (attempt < Stage.MAX_CONSECUTIVE_FAILURES-1) {
+        assert(scheduler.runningStages.nonEmpty)
+        assert(!ended)
+      } else {
+        // Stage should have been aborted and removed from running stages
+        assertDataStructuresEmpty()
+        sc.listenerBus.waitUntilEmpty(1000)
+        assert(ended)
+        jobResult match {
+          case JobFailed(reason) =>
+            assert(reason.getMessage.contains("ResultStage 1 () has failed the maximum"))
+          case other => fail(s"expected JobFailed, not $other")
+        }
+      }
+    }
+  }
+
+  /**
+   * In this test, we create a job with two consecutive shuffles, and simulate 2 failures for each
+   * shuffle fetch. In total In total, the job has had four failures overall but not four failures
+   * for a particular stage, and as such should not be aborted.
+   */
+  test("Failures in different stages should not trigger an overall abort") {
     setupStageAbortTest(sc)
 
     val shuffleOneRdd = new MyRDD(sc, 2, Nil).cache()
@@ -700,7 +651,56 @@ class DAGSchedulerSuite
     val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo))
     submit(finalRdd, Array(0))
 
-    for (attempt <- 0 until Stage.MAX_STAGE_FAILURES-1) {
+    // In the first two iterations, Stage 0 succeeds and stage 1 fails. In the next two iterations,
+    // stage 2 fails.
+    for (attempt <- 0 until Stage.MAX_CONSECUTIVE_FAILURES) {
+      // Complete all the tasks for the current attempt of stage 0 successfully
+      completeNextShuffleMapSuccesfully(0, attempt, numShufflePartitions = 2)
+
+      if (attempt < Stage.MAX_CONSECUTIVE_FAILURES / 2) {
+        // Now we should have a new taskSet, for a new attempt of stage 1.
+        // Fail all these tasks with FetchFailure
+        completeNextStageWithFetchFailure(1, attempt, shuffleDepOne)
+      } else {
+        completeNextShuffleMapSuccesfully(1, attempt, numShufflePartitions = 1)
+
+        // Fail stage 2
+        completeNextStageWithFetchFailure(2, attempt - Stage.MAX_CONSECUTIVE_FAILURES / 2,
+          shuffleDepTwo)
+      }
+
+      // this will (potentially) trigger a resubmission of stage 0, since we've lost some of its
+      // map output, for the next iteration through the loop
+      scheduler.resubmitFailedStages()
+    }
+
+    completeNextShuffleMapSuccesfully(0, 4, numShufflePartitions = 2)
+    completeNextShuffleMapSuccesfully(1, 4, numShufflePartitions = 1)
+
+    // Succeed stage2 with a "42"
+    completeNextResultStageWithSuccess(2, Stage.MAX_CONSECUTIVE_FAILURES/2)
+
+    assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty()
+  }
+
+  /**
+   * In this test we demonstrate that only consecutive failures trigger a stage abort. A stage may
+   * fail multiple times, succeed, then fail a few more times (because its run again by downstream
+   * dependencies). The total number of failed attempts for one stage will go over the limit,
+   * but that doesn't matter, since they have successes in the middle.
+   */
+  test("Non-consecutive stage failures don't trigger abort") {
+    setupStageAbortTest(sc)
+
+    val shuffleOneRdd = new MyRDD(sc, 2, Nil).cache()
+    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
+    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne)).cache()
+    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, null)
+    val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo))
+    submit(finalRdd, Array(0))
+
+    for (attempt <- 0 until Stage.MAX_CONSECUTIVE_FAILURES-1) {
       // Make each task in stage 0 success
       completeNextShuffleMapSuccesfully(0, attempt, numShufflePartitions = 2)
 

@@ -93,16 +93,10 @@ private[scheduler] abstract class Stage(
   private var _latestInfo: StageInfo = StageInfo.fromStage(this, nextAttemptId)
 
   /**
-   * Spark is resilient to executors dying by retrying stages on FetchFailures. Here, we keep track
-   * of unique stage failures (per stage attempt) triggered by fetch failures to prevent endless
-   * stage retries. Specifically, per stage we wish to only record a failure when the following
-   * holds:
-   *
-   * A) A fetch failure was observed
-   * B) A failure has not yet been registered for this stage attempt. There may be multiple
-   * concurrent failures for a sinlge stage since we may have multiple tasks executing at the same
-   * time, one or many of which may fail. Also, even though there may only be one non-zombie stage
-   * attempt, zombie stage attempts may still have running tasks.
+   * Set of IDs of stage attempts that have failed with a FetchFailure. We keep track of these
+   * failures in order to avoid endless retries if a stage keeps failing with a FetchFailure.
+   * We keep track of each attempt ID that has failed to avoid recording duplicate failures if
+   * multiple tasks from the same stage attempt fail.
    */
   private val attemptsFailedFromFetch = new HashSet[Int]
 
@@ -118,7 +112,7 @@ private[scheduler] abstract class Stage(
    */
   private[scheduler] def failedOnFetchAndShouldAbort(stageAttemptId: Int): Boolean = {
     attemptsFailedFromFetch.add(stageAttemptId)
-    attemptsFailedFromFetch.size >= Stage.MAX_STAGE_FAILURES
+    attemptsFailedFromFetch.size >= Stage.MAX_CONSECUTIVE_FAILURES
   }
 
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
@@ -141,6 +135,6 @@ private[scheduler] abstract class Stage(
 }
 
 private[scheduler] object Stage {
-  // The maximum number of times to retry a stage before aborting
-  val MAX_STAGE_FAILURES = 4
+  // The number of consecutive failures allowed before a stage is aborted
+  val MAX_CONSECUTIVE_FAILURES = 4
 }
