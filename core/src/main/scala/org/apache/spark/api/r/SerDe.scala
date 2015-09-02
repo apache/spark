@@ -18,9 +18,9 @@
 package org.apache.spark.api.r
 
 import java.io.{DataInputStream, DataOutputStream}
-import java.sql.{Date, Time}
+import java.sql.{Timestamp, Date, Time}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 /**
  * Utility functions to serialize, deserialize objects to / from R
@@ -107,9 +107,12 @@ private[spark] object SerDe {
     Date.valueOf(readString(in))
   }
 
-  def readTime(in: DataInputStream): Time = {
-    val t = in.readDouble()
-    new Time((t * 1000L).toLong)
+  def readTime(in: DataInputStream): Timestamp = {
+    val seconds = in.readDouble()
+    val sec = Math.floor(seconds).toLong
+    val t = new Timestamp(sec * 1000L)
+    t.setNanos(((seconds - sec) * 1e9).toInt)
+    t
   }
 
   def readBytesArr(in: DataInputStream): Array[Array[Byte]] = {
@@ -146,6 +149,10 @@ private[spark] object SerDe {
       case 'b' => readBooleanArr(dis)
       case 'j' => readStringArr(dis).map(x => JVMObjectTracker.getObject(x))
       case 'r' => readBytesArr(dis)
+      case 'l' => {
+        val len = readInt(dis)
+        (0 until len).map(_ => readList(dis)).toArray
+      }
       case _ => throw new IllegalArgumentException(s"Invalid array type $arrType")
     }
   }
@@ -157,10 +164,12 @@ private[spark] object SerDe {
       val keysLen = readInt(in)
       val keys = (0 until keysLen).map(_ => readTypedObject(in, keysType))
 
-      val valuesType = readObjectType(in)
       val valuesLen = readInt(in)
-      val values = (0 until valuesLen).map(_ => readTypedObject(in, valuesType))
-      mapAsJavaMap(keys.zip(values).toMap)
+      val values = (0 until valuesLen).map(_ => {
+        val valueType = readObjectType(in)
+        readTypedObject(in, valueType)
+      })
+      keys.zip(values).toMap.asJava
     } else {
       new java.util.HashMap[Object, Object]()
     }
@@ -174,7 +183,9 @@ private[spark] object SerDe {
   // Int -> integer
   // String -> character
   // Boolean -> logical
+  // Float -> double
   // Double -> double
+  // Decimal -> double
   // Long -> double
   // Array[Byte] -> raw
   // Date -> Date
@@ -193,6 +204,9 @@ private[spark] object SerDe {
       case "date" => dos.writeByte('D')
       case "time" => dos.writeByte('t')
       case "raw" => dos.writeByte('r')
+      // Array of primitive types
+      case "array" => dos.writeByte('a')
+      // Array of objects
       case "list" => dos.writeByte('l')
       case "jobj" => dos.writeByte('j')
       case _ => throw new IllegalArgumentException(s"Invalid type $typeStr")
@@ -204,19 +218,35 @@ private[spark] object SerDe {
       writeType(dos, "void")
     } else {
       value.getClass.getName match {
+        case "java.lang.Character" =>
+          writeType(dos, "character")
+          writeString(dos, value.asInstanceOf[Character].toString)
         case "java.lang.String" =>
           writeType(dos, "character")
           writeString(dos, value.asInstanceOf[String])
-        case "long" | "java.lang.Long" =>
+        case "java.lang.Long" =>
           writeType(dos, "double")
           writeDouble(dos, value.asInstanceOf[Long].toDouble)
-        case "double" | "java.lang.Double" =>
+        case "java.lang.Float" =>
+          writeType(dos, "double")
+          writeDouble(dos, value.asInstanceOf[Float].toDouble)
+        case "java.math.BigDecimal" =>
+          writeType(dos, "double")
+          val javaDecimal = value.asInstanceOf[java.math.BigDecimal]
+          writeDouble(dos, scala.math.BigDecimal(javaDecimal).toDouble)
+        case "java.lang.Double" =>
           writeType(dos, "double")
           writeDouble(dos, value.asInstanceOf[Double])
-        case "int" | "java.lang.Integer" =>
+        case "java.lang.Byte" =>
+          writeType(dos, "integer")
+          writeInt(dos, value.asInstanceOf[Byte].toInt)
+        case "java.lang.Short" =>
+          writeType(dos, "integer")
+          writeInt(dos, value.asInstanceOf[Short].toInt)
+        case "java.lang.Integer" =>
           writeType(dos, "integer")
           writeInt(dos, value.asInstanceOf[Int])
-        case "boolean" | "java.lang.Boolean" =>
+        case "java.lang.Boolean" =>
           writeType(dos, "logical")
           writeBoolean(dos, value.asInstanceOf[Boolean])
         case "java.sql.Date" =>
@@ -225,43 +255,51 @@ private[spark] object SerDe {
         case "java.sql.Time" =>
           writeType(dos, "time")
           writeTime(dos, value.asInstanceOf[Time])
+        case "java.sql.Timestamp" =>
+          writeType(dos, "time")
+          writeTime(dos, value.asInstanceOf[Timestamp])
+
+        // Handle arrays
+
+        // Array of primitive types
+
+        // Special handling for byte array
         case "[B" =>
           writeType(dos, "raw")
           writeBytes(dos, value.asInstanceOf[Array[Byte]])
-        // TODO: Types not handled right now include
-        // byte, char, short, float
 
-        // Handle arrays
-        case "[Ljava.lang.String;" =>
-          writeType(dos, "list")
-          writeStringArr(dos, value.asInstanceOf[Array[String]])
+        case "[C" =>
+          writeType(dos, "array")
+          writeStringArr(dos, value.asInstanceOf[Array[Char]].map(_.toString))
+        case "[S" =>
+          writeType(dos, "array")
+          writeIntArr(dos, value.asInstanceOf[Array[Short]].map(_.toInt))
         case "[I" =>
-          writeType(dos, "list")
+          writeType(dos, "array")
           writeIntArr(dos, value.asInstanceOf[Array[Int]])
         case "[J" =>
-          writeType(dos, "list")
+          writeType(dos, "array")
           writeDoubleArr(dos, value.asInstanceOf[Array[Long]].map(_.toDouble))
+        case "[F" =>
+          writeType(dos, "array")
+          writeDoubleArr(dos, value.asInstanceOf[Array[Float]].map(_.toDouble))
         case "[D" =>
-          writeType(dos, "list")
+          writeType(dos, "array")
           writeDoubleArr(dos, value.asInstanceOf[Array[Double]])
         case "[Z" =>
-          writeType(dos, "list")
+          writeType(dos, "array")
           writeBooleanArr(dos, value.asInstanceOf[Array[Boolean]])
-        case "[[B" =>
+
+        // Array of objects, null objects use "void" type
+        case c if c.startsWith("[") =>
           writeType(dos, "list")
-          writeBytesArr(dos, value.asInstanceOf[Array[Array[Byte]]])
-        case otherName =>
-          // Handle array of objects
-          if (otherName.startsWith("[L")) {
-            val objArr = value.asInstanceOf[Array[Object]]
-            writeType(dos, "list")
-            writeType(dos, "jobj")
-            dos.writeInt(objArr.length)
-            objArr.foreach(o => writeJObj(dos, o))
-          } else {
-            writeType(dos, "jobj")
-            writeJObj(dos, value)
-          }
+          val array = value.asInstanceOf[Array[Object]]
+          writeInt(dos, array.length)
+          array.foreach(elem => writeObject(dos, elem))
+
+        case _ =>
+          writeType(dos, "jobj")
+          writeJObj(dos, value)
       }
     }
   }
@@ -287,6 +325,9 @@ private[spark] object SerDe {
     out.writeDouble(value.getTime.toDouble / 1000.0)
   }
 
+  def writeTime(out: DataOutputStream, value: Timestamp): Unit = {
+    out.writeDouble((value.getTime / 1000).toDouble + value.getNanos.toDouble / 1e9)
+  }
 
   // NOTE: Only works for ASCII right now
   def writeString(out: DataOutputStream, value: String): Unit = {
@@ -330,11 +371,6 @@ private[spark] object SerDe {
     value.foreach(v => writeString(out, v))
   }
 
-  def writeBytesArr(out: DataOutputStream, value: Array[Array[Byte]]): Unit = {
-    writeType(out, "raw")
-    out.writeInt(value.length)
-    value.foreach(v => writeBytes(out, v))
-  }
 }
 
 private[r] object SerializationFormats {

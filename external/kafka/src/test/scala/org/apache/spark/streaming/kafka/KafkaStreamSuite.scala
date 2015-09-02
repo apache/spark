@@ -23,14 +23,14 @@ import scala.language.postfixOps
 import scala.util.Random
 
 import kafka.serializer.StringDecoder
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 
-class KafkaStreamSuite extends FunSuite with Eventually with BeforeAndAfterAll {
+class KafkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfterAll {
   private var ssc: StreamingContext = _
   private var kafkaTestUtils: KafkaTestUtils = _
 
@@ -65,7 +65,7 @@ class KafkaStreamSuite extends FunSuite with Eventually with BeforeAndAfterAll {
 
     val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
       ssc, kafkaParams, Map(topic -> 1), StorageLevel.MEMORY_ONLY)
-    val result = new mutable.HashMap[String, Long]()
+    val result = new mutable.HashMap[String, Long]() with mutable.SynchronizedMap[String, Long]
     stream.map(_._2).countByValue().foreachRDD { r =>
       val ret = r.collect()
       ret.toMap.foreach { kv =>
@@ -77,10 +77,7 @@ class KafkaStreamSuite extends FunSuite with Eventually with BeforeAndAfterAll {
     ssc.start()
 
     eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
-      assert(sent.size === result.size)
-      sent.keys.foreach { k =>
-        assert(sent(k) === result(k).toInt)
-      }
+      assert(sent === result)
     }
   }
 }

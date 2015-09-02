@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.graphx
 
 /**
@@ -42,3 +43,4 @@ object LiveJournalPageRank {
     Analytics.main(args.patch(0, List("pagerank"), 0))
   }
 }
+// scalastyle:on println

@@ -17,10 +17,10 @@
 
 package org.apache.spark.api.python
 
-import java.io.{File}
+import java.io.File
 import java.util.{List => JList}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkContext
@@ -31,7 +31,7 @@ private[spark] object PythonUtils {
   def sparkPythonPath: String = {
     val pythonPath = new ArrayBuffer[String]
     for (sparkHome <- sys.env.get("SPARK_HOME")) {
-      pythonPath += Seq(sparkHome, "python").mkString(File.separator)
+      pythonPath += Seq(sparkHome, "python", "lib", "pyspark.zip").mkString(File.separator)
       pythonPath += Seq(sparkHome, "python", "lib", "py4j-0.8.2.1-src.zip").mkString(File.separator)
     }
     pythonPath ++= SparkContext.jarOfObject(this)
@@ -50,7 +50,28 @@ private[spark] object PythonUtils {
   /**
    * Convert list of T into seq of T (for calling API with varargs)
    */
-  def toSeq[T](cols: JList[T]): Seq[T] = {
-    cols.toList.toSeq
+  def toSeq[T](vs: JList[T]): Seq[T] = {
+    vs.asScala
+  }
+
+  /**
+   * Convert list of T into a (Scala) List of T
+   */
+  def toList[T](vs: JList[T]): List[T] = {
+    vs.asScala.toList
+  }
+
+  /**
+   * Convert list of T into array of T (for calling API with array)
+   */
+  def toArray[T](vs: JList[T]): Array[T] = {
+    vs.toArray().asInstanceOf[Array[T]]
+  }
+
+  /**
+   * Convert java map of K, V into Map of K, V (for calling API with varargs)
+   */
+  def toScalaMap[K, V](jm: java.util.Map[K, V]): Map[K, V] = {
+    jm.asScala.toMap
   }
 }

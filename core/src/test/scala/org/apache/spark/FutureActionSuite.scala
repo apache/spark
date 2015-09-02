@@ -20,10 +20,14 @@ package org.apache.spark
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, Matchers}
 
 
-class FutureActionSuite extends FunSuite with BeforeAndAfter with Matchers with LocalSparkContext {
+class FutureActionSuite
+  extends SparkFunSuite
+  with BeforeAndAfter
+  with Matchers
+  with LocalSparkContext {
 
   before {
     sc = new SparkContext("local", "FutureActionSuite")

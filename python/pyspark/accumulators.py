@@ -83,7 +83,7 @@ Py4JJavaError:...
 >>> sc.accumulator([1.0, 2.0, 3.0]) # doctest: +IGNORE_EXCEPTION_DETAIL
 Traceback (most recent call last):
     ...
-Exception:...
+TypeError:...
 """
 
 import sys
@@ -261,3 +261,9 @@ def _start_update_server():
     thread.daemon = True
     thread.start()
     return server
+
+if __name__ == "__main__":
+    import doctest
+    (failure_count, test_count) = doctest.testmod()
+    if failure_count:
+        exit(-1)

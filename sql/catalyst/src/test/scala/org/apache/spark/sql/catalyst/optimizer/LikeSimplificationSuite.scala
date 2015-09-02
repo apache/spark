@@ -41,7 +41,7 @@ class LikeSimplificationSuite extends PlanTest {
       testRelation
         .where(('a like "abc%") || ('a like "abc\\%"))
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .where(StartsWith('a, "abc") || ('a like "abc\\%"))
       .analyze
@@ -54,7 +54,7 @@ class LikeSimplificationSuite extends PlanTest {
       testRelation
         .where('a like "%xyz")
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .where(EndsWith('a, "xyz"))
       .analyze
@@ -67,7 +67,7 @@ class LikeSimplificationSuite extends PlanTest {
       testRelation
         .where(('a like "%mn%") || ('a like "%mn\\%"))
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .where(Contains('a, "mn") || ('a like "%mn\\%"))
       .analyze
@@ -80,7 +80,7 @@ class LikeSimplificationSuite extends PlanTest {
       testRelation
         .where(('a like "") || ('a like "abc"))
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .where(('a === "") || ('a === "abc"))
       .analyze

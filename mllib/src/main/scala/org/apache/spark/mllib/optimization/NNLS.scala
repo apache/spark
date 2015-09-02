@@ -91,7 +91,7 @@ private[spark] object NNLS {
     val dir = ws.dir
     val lastDir = ws.lastDir
     val res = ws.res
-    val iterMax = Math.max(400, 20 * n)
+    val iterMax = math.max(400, 20 * n)
     var lastNorm = 0.0
     var iterno = 0
     var lastWall = 0 // Last iteration when we hit a bound constraint.

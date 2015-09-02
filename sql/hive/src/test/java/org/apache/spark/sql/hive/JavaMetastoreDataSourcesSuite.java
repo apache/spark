@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.hive;
 
 import java.io.File;
@@ -81,22 +82,28 @@ public class JavaMetastoreDataSourcesSuite {
       jsonObjects.add("{\"a\":" + i + ", \"b\":\"str" + i + "\"}");
     }
     JavaRDD<String> rdd = sc.parallelize(jsonObjects);
-    df = sqlContext.jsonRDD(rdd);
+    df = sqlContext.read().json(rdd);
     df.registerTempTable("jsonTable");
   }
 
   @After
   public void tearDown() throws IOException {
     // Clean up tables.
-    sqlContext.sql("DROP TABLE IF EXISTS javaSavedTable");
-    sqlContext.sql("DROP TABLE IF EXISTS externalTable");
+    if (sqlContext != null) {
+      sqlContext.sql("DROP TABLE IF EXISTS javaSavedTable");
+      sqlContext.sql("DROP TABLE IF EXISTS externalTable");
+    }
   }
 
   @Test
   public void saveExternalTableAndQueryIt() {
     Map<String, String> options = new HashMap<String, String>();
     options.put("path", path.toString());
-    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", SaveMode.Append, options);
+    df.write()
+      .format("org.apache.spark.sql.json")
+      .mode(SaveMode.Append)
+      .options(options)
+      .saveAsTable("javaSavedTable");
 
     checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),
@@ -115,7 +122,11 @@ public class JavaMetastoreDataSourcesSuite {
   public void saveExternalTableWithSchemaAndQueryIt() {
     Map<String, String> options = new HashMap<String, String>();
     options.put("path", path.toString());
-    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", SaveMode.Append, options);
+    df.write()
+      .format("org.apache.spark.sql.json")
+      .mode(SaveMode.Append)
+      .options(options)
+      .saveAsTable("javaSavedTable");
 
     checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),
@@ -138,7 +149,11 @@ public class JavaMetastoreDataSourcesSuite {
   @Test
   public void saveTableAndQueryIt() {
     Map<String, String> options = new HashMap<String, String>();
-    df.saveAsTable("javaSavedTable", "org.apache.spark.sql.json", SaveMode.Append, options);
+    df.write()
+      .format("org.apache.spark.sql.json")
+      .mode(SaveMode.Append)
+      .options(options)
+      .saveAsTable("javaSavedTable");
 
     checkAnswer(
       sqlContext.sql("SELECT * FROM javaSavedTable"),

@@ -17,12 +17,11 @@
 
 package org.apache.spark.mllib.evaluation
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Matrices
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class MulticlassMetricsSuite extends FunSuite with MLlibTestSparkContext {
+class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("Multiclass evaluation metrics") {
     /*
      * Confusion matrix for 3-class classification with total 9 instances:

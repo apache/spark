@@ -21,10 +21,11 @@ import java.util.NoSuchElementException
 
 import scala.collection.mutable.Buffer
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
-class NextIteratorSuite extends FunSuite with Matchers {
+import org.apache.spark.SparkFunSuite
+
+class NextIteratorSuite extends SparkFunSuite with Matchers {
   test("one iteration") {
     val i = new StubIterator(Buffer(1))
     i.hasNext should be (true)

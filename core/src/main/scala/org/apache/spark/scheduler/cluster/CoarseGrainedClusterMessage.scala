@@ -75,7 +75,8 @@ private[spark] object CoarseGrainedClusterMessages {
   case class SetupDriver(driver: RpcEndpointRef) extends CoarseGrainedClusterMessage
 
   // Exchanged between the driver and the AM in Yarn client mode
-  case class AddWebUIFilter(filterName:String, filterParams: Map[String, String], proxyBase: String)
+  case class AddWebUIFilter(
+      filterName: String, filterParams: Map[String, String], proxyBase: String)
     extends CoarseGrainedClusterMessage
 
   // Messages exchanged between the driver and the cluster manager for executor allocation
@@ -85,7 +86,11 @@ private[spark] object CoarseGrainedClusterMessages {
 
   // Request executors by specifying the new total number of executors desired
   // This includes executors already pending or running
-  case class RequestExecutors(requestedTotal: Int) extends CoarseGrainedClusterMessage
+  case class RequestExecutors(
+      requestedTotal: Int,
+      localityAwareTasks: Int,
+      hostToLocalTaskCount: Map[String, Int])
+    extends CoarseGrainedClusterMessage
 
   case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage
 

@@ -51,9 +51,9 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
    * filled in automatically by the QueryPlanner using the other execution strategies that are
    * available.
    */
-  protected def planLater(plan: LogicalPlan) = apply(plan).next()
+  protected def planLater(plan: LogicalPlan) = this.plan(plan).next()
 
-  def apply(plan: LogicalPlan): Iterator[PhysicalPlan] = {
+  def plan(plan: LogicalPlan): Iterator[PhysicalPlan] = {
     // Obviously a lot to do here still...
     val iter = strategies.view.flatMap(_(plan)).toIterator
     assert(iter.hasNext, s"No plan for $plan")

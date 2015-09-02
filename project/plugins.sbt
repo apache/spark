@@ -25,9 +25,11 @@ addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.1.6")
 
 addSbtPlugin("com.alpinenow" % "junit_xml_listener" % "0.5.1")
 
-addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.3.1")
+addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.3.3")
 
 addSbtPlugin("com.cavorite" % "sbt-avro" % "0.3.2")
+
+addSbtPlugin("io.spray" % "sbt-revolver" % "0.7.2")
 
 libraryDependencies += "org.ow2.asm"  % "asm" % "5.0.3"
 

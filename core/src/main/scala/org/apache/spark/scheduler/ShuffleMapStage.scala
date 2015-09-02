@@ -30,14 +30,14 @@ private[spark] class ShuffleMapStage(
     rdd: RDD[_],
     numTasks: Int,
     parents: List[Stage],
-    jobId: Int,
+    firstJobId: Int,
     callSite: CallSite,
     val shuffleDep: ShuffleDependency[_, _, _])
-  extends Stage(id, rdd, numTasks, parents, jobId, callSite) {
+  extends Stage(id, rdd, numTasks, parents, firstJobId, callSite) {
 
   override def toString: String = "ShuffleMapStage " + id
 
-  var numAvailableOutputs: Long = 0
+  var numAvailableOutputs: Int = 0
 
   def isAvailable: Boolean = numAvailableOutputs == numPartitions
 

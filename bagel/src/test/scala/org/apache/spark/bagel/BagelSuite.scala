@@ -17,7 +17,7 @@
 
 package org.apache.spark.bagel
 
-import org.scalatest.{BeforeAndAfter, FunSuite, Assertions}
+import org.scalatest.{BeforeAndAfter, Assertions}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
@@ -27,7 +27,7 @@ import org.apache.spark.storage.StorageLevel
 class TestVertex(val active: Boolean, val age: Int) extends Vertex with Serializable
 class TestMessage(val targetId: String) extends Message[String] with Serializable
 
-class BagelSuite extends FunSuite with Assertions with BeforeAndAfter with Timeouts {
+class BagelSuite extends SparkFunSuite with Assertions with BeforeAndAfter with Timeouts {
 
   var sc: SparkContext = _
 

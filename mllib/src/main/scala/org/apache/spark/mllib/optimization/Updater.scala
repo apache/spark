@@ -116,7 +116,8 @@ class L1Updater extends Updater {
     // Apply proximal operator (soft thresholding)
     val shrinkageVal = regParam * thisIterStepSize
     var i = 0
-    while (i < brzWeights.length) {
+    val len = brzWeights.length
+    while (i < len) {
       val wi = brzWeights(i)
       brzWeights(i) = signum(wi) * max(0.0, abs(wi) - shrinkageVal)
       i += 1

@@ -31,7 +31,6 @@ import tempfile
 import time
 import zipfile
 import random
-import itertools
 import threading
 import hashlib
 
@@ -48,6 +47,11 @@ else:
     if sys.version_info[0] >= 3:
         xrange = range
         basestring = str
+
+if sys.version >= "3":
+    from io import StringIO
+else:
+    from StringIO import StringIO
 
 
 from pyspark.conf import SparkConf
@@ -175,9 +179,12 @@ class SorterTests(unittest.TestCase):
                          list(sorter.sorted(l, key=lambda x: -x, reverse=True)))
 
     def test_external_sort(self):
+        class CustomizedSorter(ExternalSorter):
+            def _next_limit(self):
+                return self.memory_limit
         l = list(range(1024))
         random.shuffle(l)
-        sorter = ExternalSorter(1)
+        sorter = CustomizedSorter(1)
         self.assertEqual(sorted(l), list(sorter.sorted(l)))
         self.assertGreater(shuffle.DiskBytesSpilled, 0)
         last = shuffle.DiskBytesSpilled
@@ -196,7 +203,7 @@ class SorterTests(unittest.TestCase):
         sc = SparkContext(conf=conf)
         l = list(range(10240))
         random.shuffle(l)
-        rdd = sc.parallelize(l, 2)
+        rdd = sc.parallelize(l, 4)
         self.assertEqual(sorted(l), rdd.sortBy(lambda x: x).collect())
         sc.stop()
 
@@ -300,6 +307,18 @@ class SerializationTestCase(unittest.TestCase):
         hash(FlattenedValuesSerializer(PickleSerializer()))
 
 
+class QuietTest(object):
+    def __init__(self, sc):
+        self.log4j = sc._jvm.org.apache.log4j
+
+    def __enter__(self):
+        self.old_level = self.log4j.LogManager.getRootLogger().getLevel()
+        self.log4j.LogManager.getRootLogger().setLevel(self.log4j.Level.FATAL)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.log4j.LogManager.getRootLogger().setLevel(self.old_level)
+
+
 class PySparkTestCase(unittest.TestCase):
 
     def setUp(self):
@@ -371,15 +390,11 @@ class AddFileTests(PySparkTestCase):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this job fails due to `userlibrary` not being on the Python path:
         # disable logging in log4j temporarily
-        log4j = self.sc._jvm.org.apache.log4j
-        old_level = log4j.LogManager.getRootLogger().getLevel()
-        log4j.LogManager.getRootLogger().setLevel(log4j.Level.FATAL)
-
         def func(x):
             from userlibrary import UserClass
             return UserClass().hello()
-        self.assertRaises(Exception, self.sc.parallelize(range(2)).map(func).first)
-        log4j.LogManager.getRootLogger().setLevel(old_level)
+        with QuietTest(self.sc):
+            self.assertRaises(Exception, self.sc.parallelize(range(2)).map(func).first)
 
         # Add the file, so the job should now succeed:
         path = os.path.join(SPARK_HOME, "python/test_support/userlibrary.py")
@@ -432,6 +447,11 @@ class AddFileTests(PySparkTestCase):
 
 class RDDTests(ReusedPySparkTestCase):
 
+    def test_range(self):
+        self.assertEqual(self.sc.range(1, 1).count(), 0)
+        self.assertEqual(self.sc.range(1, 0, -1).count(), 1)
+        self.assertEqual(self.sc.range(0, 1 << 40, 1 << 39).count(), 2)
+
     def test_id(self):
         rdd = self.sc.parallelize(range(10))
         id = rdd.id()
@@ -440,6 +460,14 @@ class RDDTests(ReusedPySparkTestCase):
         id2 = rdd2.id()
         self.assertEqual(id + 1, id2)
         self.assertEqual(id2, rdd2.id())
+
+    def test_empty_rdd(self):
+        rdd = self.sc.emptyRDD()
+        self.assertTrue(rdd.isEmpty())
+
+    def test_sum(self):
+        self.assertEqual(0, self.sc.emptyRDD().sum())
+        self.assertEqual(6, self.sc.parallelize([1, 2, 3]).sum())
 
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
@@ -496,13 +524,131 @@ class RDDTests(ReusedPySparkTestCase):
         filtered_data = data.filter(lambda x: True)
         self.assertEqual(1, filtered_data.count())
         os.unlink(tempFile.name)
-        self.assertRaises(Exception, lambda: filtered_data.count())
+        with QuietTest(self.sc):
+            self.assertRaises(Exception, lambda: filtered_data.count())
 
     def test_sampling_default_seed(self):
         # Test for SPARK-3995 (default seed setting)
-        data = self.sc.parallelize(range(1000), 1)
+        data = self.sc.parallelize(xrange(1000), 1)
         subset = data.takeSample(False, 10)
         self.assertEqual(len(subset), 10)
+
+    def test_aggregate_mutable_zero_value(self):
+        # Test for SPARK-9021; uses aggregate and treeAggregate to build dict
+        # representing a counter of ints
+        # NOTE: dict is used instead of collections.Counter for Python 2.6
+        # compatibility
+        from collections import defaultdict
+
+        # Show that single or multiple partitions work
+        data1 = self.sc.range(10, numSlices=1)
+        data2 = self.sc.range(10, numSlices=2)
+
+        def seqOp(x, y):
+            x[y] += 1
+            return x
+
+        def comboOp(x, y):
+            for key, val in y.items():
+                x[key] += val
+            return x
+
+        counts1 = data1.aggregate(defaultdict(int), seqOp, comboOp)
+        counts2 = data2.aggregate(defaultdict(int), seqOp, comboOp)
+        counts3 = data1.treeAggregate(defaultdict(int), seqOp, comboOp, 2)
+        counts4 = data2.treeAggregate(defaultdict(int), seqOp, comboOp, 2)
+
+        ground_truth = defaultdict(int, dict((i, 1) for i in range(10)))
+        self.assertEqual(counts1, ground_truth)
+        self.assertEqual(counts2, ground_truth)
+        self.assertEqual(counts3, ground_truth)
+        self.assertEqual(counts4, ground_truth)
+
+    def test_aggregate_by_key_mutable_zero_value(self):
+        # Test for SPARK-9021; uses aggregateByKey to make a pair RDD that
+        # contains lists of all values for each key in the original RDD
+
+        # list(range(...)) for Python 3.x compatibility (can't use * operator
+        # on a range object)
+        # list(zip(...)) for Python 3.x compatibility (want to parallelize a
+        # collection, not a zip object)
+        tuples = list(zip(list(range(10))*2, [1]*20))
+        # Show that single or multiple partitions work
+        data1 = self.sc.parallelize(tuples, 1)
+        data2 = self.sc.parallelize(tuples, 2)
+
+        def seqOp(x, y):
+            x.append(y)
+            return x
+
+        def comboOp(x, y):
+            x.extend(y)
+            return x
+
+        values1 = data1.aggregateByKey([], seqOp, comboOp).collect()
+        values2 = data2.aggregateByKey([], seqOp, comboOp).collect()
+        # Sort lists to ensure clean comparison with ground_truth
+        values1.sort()
+        values2.sort()
+
+        ground_truth = [(i, [1]*2) for i in range(10)]
+        self.assertEqual(values1, ground_truth)
+        self.assertEqual(values2, ground_truth)
+
+    def test_fold_mutable_zero_value(self):
+        # Test for SPARK-9021; uses fold to merge an RDD of dict counters into
+        # a single dict
+        # NOTE: dict is used instead of collections.Counter for Python 2.6
+        # compatibility
+        from collections import defaultdict
+
+        counts1 = defaultdict(int, dict((i, 1) for i in range(10)))
+        counts2 = defaultdict(int, dict((i, 1) for i in range(3, 8)))
+        counts3 = defaultdict(int, dict((i, 1) for i in range(4, 7)))
+        counts4 = defaultdict(int, dict((i, 1) for i in range(5, 6)))
+        all_counts = [counts1, counts2, counts3, counts4]
+        # Show that single or multiple partitions work
+        data1 = self.sc.parallelize(all_counts, 1)
+        data2 = self.sc.parallelize(all_counts, 2)
+
+        def comboOp(x, y):
+            for key, val in y.items():
+                x[key] += val
+            return x
+
+        fold1 = data1.fold(defaultdict(int), comboOp)
+        fold2 = data2.fold(defaultdict(int), comboOp)
+
+        ground_truth = defaultdict(int)
+        for counts in all_counts:
+            for key, val in counts.items():
+                ground_truth[key] += val
+        self.assertEqual(fold1, ground_truth)
+        self.assertEqual(fold2, ground_truth)
+
+    def test_fold_by_key_mutable_zero_value(self):
+        # Test for SPARK-9021; uses foldByKey to make a pair RDD that contains
+        # lists of all values for each key in the original RDD
+
+        tuples = [(i, range(i)) for i in range(10)]*2
+        # Show that single or multiple partitions work
+        data1 = self.sc.parallelize(tuples, 1)
+        data2 = self.sc.parallelize(tuples, 2)
+
+        def comboOp(x, y):
+            x.extend(y)
+            return x
+
+        values1 = data1.foldByKey([], comboOp).collect()
+        values2 = data2.foldByKey([], comboOp).collect()
+        # Sort lists to ensure clean comparison with ground_truth
+        values1.sort()
+        values2.sort()
+
+        # list(range(...)) for Python 3.x compatibility
+        ground_truth = [(i, list(range(i))*2) for i in range(10)]
+        self.assertEqual(values1, ground_truth)
+        self.assertEqual(values2, ground_truth)
 
     def test_aggregate_by_key(self):
         data = self.sc.parallelize([(1, 1), (1, 1), (3, 2), (5, 1), (5, 3)], 2)
@@ -536,9 +682,9 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual([jon, jane], theDoes.collect())
 
     def test_large_broadcast(self):
-        N = 100000
+        N = 10000
         data = [[float(i) for i in range(300)] for i in range(N)]
-        bdata = self.sc.broadcast(data)  # 270MB
+        bdata = self.sc.broadcast(data)  # 27MB
         m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
         self.assertEqual(N, m)
 
@@ -569,7 +715,7 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual(checksum, csum)
 
     def test_large_closure(self):
-        N = 1000000
+        N = 200000
         data = [float(i) for i in xrange(N)]
         rdd = self.sc.parallelize(range(1), 1).map(lambda x: len(data))
         self.assertEqual(N, rdd.first())
@@ -595,8 +741,8 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_zip_with_different_object_sizes(self):
         # regress test for SPARK-5973
-        a = self.sc.parallelize(range(10000)).map(lambda i: '*' * i)
-        b = self.sc.parallelize(range(10000, 20000)).map(lambda i: '*' * i)
+        a = self.sc.parallelize(xrange(10000)).map(lambda i: '*' * i)
+        b = self.sc.parallelize(xrange(10000, 20000)).map(lambda i: '*' * i)
         self.assertEqual(10000, a.zip(b).count())
 
     def test_zip_with_different_number_of_items(self):
@@ -604,20 +750,21 @@ class RDDTests(ReusedPySparkTestCase):
         # different number of partitions
         b = self.sc.parallelize(range(100, 106), 3)
         self.assertRaises(ValueError, lambda: a.zip(b))
-        # different number of batched items in JVM
-        b = self.sc.parallelize(range(100, 104), 2)
-        self.assertRaises(Exception, lambda: a.zip(b).count())
-        # different number of items in one pair
-        b = self.sc.parallelize(range(100, 106), 2)
-        self.assertRaises(Exception, lambda: a.zip(b).count())
-        # same total number of items, but different distributions
-        a = self.sc.parallelize([2, 3], 2).flatMap(range)
-        b = self.sc.parallelize([3, 2], 2).flatMap(range)
-        self.assertEqual(a.count(), b.count())
-        self.assertRaises(Exception, lambda: a.zip(b).count())
+        with QuietTest(self.sc):
+            # different number of batched items in JVM
+            b = self.sc.parallelize(range(100, 104), 2)
+            self.assertRaises(Exception, lambda: a.zip(b).count())
+            # different number of items in one pair
+            b = self.sc.parallelize(range(100, 106), 2)
+            self.assertRaises(Exception, lambda: a.zip(b).count())
+            # same total number of items, but different distributions
+            a = self.sc.parallelize([2, 3], 2).flatMap(range)
+            b = self.sc.parallelize([3, 2], 2).flatMap(range)
+            self.assertEqual(a.count(), b.count())
+            self.assertRaises(Exception, lambda: a.zip(b).count())
 
     def test_count_approx_distinct(self):
-        rdd = self.sc.parallelize(range(1000))
+        rdd = self.sc.parallelize(xrange(1000))
         self.assertTrue(950 < rdd.countApproxDistinct(0.03) < 1050)
         self.assertTrue(950 < rdd.map(float).countApproxDistinct(0.03) < 1050)
         self.assertTrue(950 < rdd.map(str).countApproxDistinct(0.03) < 1050)
@@ -630,7 +777,6 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertTrue(18 < rdd.map(lambda x: (x, -x)).countApproxDistinct() < 22)
 
         self.assertRaises(ValueError, lambda: rdd.countApproxDistinct(0.00000001))
-        self.assertRaises(ValueError, lambda: rdd.countApproxDistinct(0.5))
 
     def test_histogram(self):
         # empty
@@ -748,7 +894,7 @@ class RDDTests(ReusedPySparkTestCase):
     def test_external_group_by_key(self):
         self.sc._conf.set("spark.python.worker.memory", "1m")
         N = 200001
-        kv = self.sc.parallelize(range(N)).map(lambda x: (x % 3, x))
+        kv = self.sc.parallelize(xrange(N)).map(lambda x: (x % 3, x))
         gkv = kv.groupByKey().cache()
         self.assertEqual(3, gkv.count())
         filtered = gkv.filter(lambda kv: kv[0] == 1)
@@ -842,7 +988,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     # Regression test for SPARK-6294
     def test_take_on_jrdd(self):
-        rdd = self.sc.parallelize(range(1 << 20)).map(lambda x: str(x))
+        rdd = self.sc.parallelize(xrange(1 << 20)).map(lambda x: str(x))
         rdd._jrdd.first()
 
     def test_sortByKey_uses_all_partitions_not_only_first_and_last(self):
@@ -855,6 +1001,19 @@ class RDDTests(ReusedPySparkTestCase):
             sizes = sort.glom().map(len).collect()
             for size in sizes:
                 self.assertGreater(size, 0)
+
+    def test_pipe_functions(self):
+        data = ['1', '2', '3']
+        rdd = self.sc.parallelize(data)
+        with QuietTest(self.sc):
+            self.assertEqual([], rdd.pipe('cc').collect())
+            self.assertRaises(Py4JJavaError, rdd.pipe('cc', checkCode=True).collect)
+        result = rdd.pipe('cat').collect()
+        result.sort()
+        for x, y in zip(data, result):
+            self.assertEqual(x, y)
+        self.assertRaises(Py4JJavaError, rdd.pipe('grep 4', checkCode=True).collect)
+        self.assertEqual([], rdd.pipe('grep 4').collect())
 
 
 class ProfilerTests(PySparkTestCase):
@@ -877,7 +1036,12 @@ class ProfilerTests(PySparkTestCase):
         func_names = [func_name for fname, n, func_name in stat_list]
         self.assertTrue("heavy_foo" in func_names)
 
+        old_stdout = sys.stdout
+        sys.stdout = io = StringIO()
         self.sc.show_profiles()
+        self.assertTrue("heavy_foo" in io.getvalue())
+        sys.stdout = old_stdout
+
         d = tempfile.gettempdir()
         self.sc.dump_profiles(d)
         self.assertTrue("rdd_%d.pstats" % id in os.listdir(d))
@@ -901,7 +1065,7 @@ class ProfilerTests(PySparkTestCase):
 
     def do_computation(self):
         def heavy_foo(x):
-            for i in range(1 << 20):
+            for i in range(1 << 18):
                 x = 1
 
         rdd = self.sc.parallelize(range(100))
@@ -1387,7 +1551,8 @@ class DaemonTests(unittest.TestCase):
 
         # start daemon
         daemon_path = os.path.join(os.path.dirname(__file__), "daemon.py")
-        daemon = Popen([sys.executable, daemon_path], stdin=PIPE, stdout=PIPE)
+        python_exec = sys.executable or os.environ.get("PYSPARK_PYTHON")
+        daemon = Popen([python_exec, daemon_path], stdin=PIPE, stdout=PIPE)
 
         # read the port number
         port = read_int(daemon.stdout)
@@ -1417,7 +1582,7 @@ class DaemonTests(unittest.TestCase):
         self.do_termination_test(lambda daemon: os.kill(daemon.pid, SIGTERM))
 
 
-class WorkerTests(PySparkTestCase):
+class WorkerTests(ReusedPySparkTestCase):
     def test_cancel_task(self):
         temp = tempfile.NamedTemporaryFile(delete=True)
         temp.close()
@@ -1432,7 +1597,10 @@ class WorkerTests(PySparkTestCase):
 
         # start job in background thread
         def run():
-            self.sc.parallelize(range(1), 1).foreach(sleep)
+            try:
+                self.sc.parallelize(range(1), 1).foreach(sleep)
+            except Exception:
+                pass
         import threading
         t = threading.Thread(target=run)
         t.daemon = True
@@ -1466,14 +1634,15 @@ class WorkerTests(PySparkTestCase):
             self.fail("daemon had been killed")
 
         # run a normal job
-        rdd = self.sc.parallelize(range(100), 1)
+        rdd = self.sc.parallelize(xrange(100), 1)
         self.assertEqual(100, rdd.map(str).count())
 
     def test_after_exception(self):
         def raise_exception(_):
             raise Exception()
-        rdd = self.sc.parallelize(range(100), 1)
-        self.assertRaises(Exception, lambda: rdd.foreach(raise_exception))
+        rdd = self.sc.parallelize(xrange(100), 1)
+        with QuietTest(self.sc):
+            self.assertRaises(Exception, lambda: rdd.foreach(raise_exception))
         self.assertEqual(100, rdd.map(str).count())
 
     def test_after_jvm_exception(self):
@@ -1484,24 +1653,25 @@ class WorkerTests(PySparkTestCase):
         filtered_data = data.filter(lambda x: True)
         self.assertEqual(1, filtered_data.count())
         os.unlink(tempFile.name)
-        self.assertRaises(Exception, lambda: filtered_data.count())
+        with QuietTest(self.sc):
+            self.assertRaises(Exception, lambda: filtered_data.count())
 
-        rdd = self.sc.parallelize(range(100), 1)
+        rdd = self.sc.parallelize(xrange(100), 1)
         self.assertEqual(100, rdd.map(str).count())
 
     def test_accumulator_when_reuse_worker(self):
         from pyspark.accumulators import INT_ACCUMULATOR_PARAM
         acc1 = self.sc.accumulator(0, INT_ACCUMULATOR_PARAM)
-        self.sc.parallelize(range(100), 20).foreach(lambda x: acc1.add(x))
+        self.sc.parallelize(xrange(100), 20).foreach(lambda x: acc1.add(x))
         self.assertEqual(sum(range(100)), acc1.value)
 
         acc2 = self.sc.accumulator(0, INT_ACCUMULATOR_PARAM)
-        self.sc.parallelize(range(100), 20).foreach(lambda x: acc2.add(x))
+        self.sc.parallelize(xrange(100), 20).foreach(lambda x: acc2.add(x))
         self.assertEqual(sum(range(100)), acc2.value)
         self.assertEqual(sum(range(100)), acc1.value)
 
     def test_reuse_worker_after_take(self):
-        rdd = self.sc.parallelize(range(100000), 1)
+        rdd = self.sc.parallelize(xrange(100000), 1)
         self.assertEqual(0, rdd.first())
 
         def count():
@@ -1520,16 +1690,13 @@ class WorkerTests(PySparkTestCase):
     def test_with_different_versions_of_python(self):
         rdd = self.sc.parallelize(range(10))
         rdd.count()
-        version = sys.version_info
-        sys.version_info = (2, 0, 0)
-        log4j = self.sc._jvm.org.apache.log4j
-        old_level = log4j.LogManager.getRootLogger().getLevel()
-        log4j.LogManager.getRootLogger().setLevel(log4j.Level.FATAL)
+        version = self.sc.pythonVer
+        self.sc.pythonVer = "2.0"
         try:
-            self.assertRaises(Py4JJavaError, lambda: rdd.count())
+            with QuietTest(self.sc):
+                self.assertRaises(Py4JJavaError, lambda: rdd.count())
         finally:
-            sys.version_info = version
-            log4j.LogManager.getRootLogger().setLevel(old_level)
+            self.sc.pythonVer = version
 
 
 class SparkSubmitTests(unittest.TestCase):
@@ -1656,7 +1823,7 @@ class SparkSubmitTests(unittest.TestCase):
             |    return x + 1
             """)
         proc = subprocess.Popen([self.sparkSubmit, "--py-files", zip, "--master",
-                                "local-cluster[1,1,512]", script],
+                                "local-cluster[1,1,1024]", script],
                                 stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -1690,7 +1857,7 @@ class SparkSubmitTests(unittest.TestCase):
         self.create_spark_package("a:mylib:0.1")
         proc = subprocess.Popen([self.sparkSubmit, "--packages", "a:mylib:0.1", "--repositories",
                                  "file:" + self.programDir, "--master",
-                                 "local-cluster[1,1,512]", script], stdout=subprocess.PIPE)
+                                 "local-cluster[1,1,1024]", script], stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 3, 4]", out.decode('utf-8'))
@@ -1709,7 +1876,7 @@ class SparkSubmitTests(unittest.TestCase):
         # this will fail if you have different spark.executor.memory
         # in conf/spark-defaults.conf
         proc = subprocess.Popen(
-            [self.sparkSubmit, "--master", "local-cluster[1,1,512]", script],
+            [self.sparkSubmit, "--master", "local-cluster[1,1,1024]", script],
             stdout=subprocess.PIPE)
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode)
@@ -1751,9 +1918,14 @@ class ContextTests(unittest.TestCase):
     def test_progress_api(self):
         with SparkContext() as sc:
             sc.setJobGroup('test_progress_api', '', True)
-
             rdd = sc.parallelize(range(10)).map(lambda x: time.sleep(100))
-            t = threading.Thread(target=rdd.collect)
+
+            def run():
+                try:
+                    rdd.count()
+                except Exception:
+                    pass
+            t = threading.Thread(target=run)
             t.daemon = True
             t.start()
             # wait for scheduler to start
@@ -1778,6 +1950,10 @@ class ContextTests(unittest.TestCase):
             self.assertEqual([], tracker.getActiveStageIds())
 
             sc.stop()
+
+    def test_startTime(self):
+        with SparkContext() as sc:
+            self.assertGreater(sc.startTime, 0)
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
