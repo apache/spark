@@ -709,6 +709,11 @@ private[spark] class TaskSetManager(
         }
         ef.exception
 
+      case e: ExecutorExitFailure =>
+        taskMetrics = e.metrics.orNull
+        logWarning(failureReason)
+        None
+
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
         logWarning(failureReason)
         None
