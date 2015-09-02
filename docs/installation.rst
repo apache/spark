@@ -152,3 +152,15 @@ exposes a set of hooks in the ``airflow.default_login`` module. You can
 alter the content of this module by overriding it as a ``airflow_login``
 module. To do this, you would typically copy/paste ``airflow.default_login``
 in a ``airflow_login.py`` and put it directly in your ``PYTHONPATH``.
+You also need to set webserver.authenticate as true in your ``airflow.cfg``
+
+
+Multi-tenancy
+'''''''''''''
+
+You can filter the list of dags in webserver by owner name, when authentication
+is turned on, by setting webserver.filter_by_owner as true in your ``airflow.cfg``
+With this, when a user authenticates and logs into webserver, it will see only the dags 
+which it is owner of. A super_user, will be able to see all the dags although.
+This makes the web UI a multi-tenant UI, where a user will only be able to see dags
+created by itself.
