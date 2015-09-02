@@ -20,6 +20,7 @@ package org.apache.spark.deploy.history
 import java.io.{BufferedInputStream, FileNotFoundException, InputStream, IOException, OutputStream}
 import java.util.UUID
 import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
+import java.util.UUID
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
