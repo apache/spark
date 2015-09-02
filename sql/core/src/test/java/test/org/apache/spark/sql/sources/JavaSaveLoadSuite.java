@@ -21,13 +21,14 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.test.TestSQLContext$;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
@@ -52,8 +53,9 @@ public class JavaSaveLoadSuite {
 
   @Before
   public void setUp() throws IOException {
-    sqlContext = TestSQLContext$.MODULE$;
-    sc = new JavaSparkContext(sqlContext.sparkContext());
+    SparkContext _sc = new SparkContext("local[*]", "testing");
+    sqlContext = new SQLContext(_sc);
+    sc = new JavaSparkContext(_sc);
 
     originalDefaultSource = sqlContext.conf().defaultDataSourceName();
     path =
@@ -69,6 +71,13 @@ public class JavaSaveLoadSuite {
     JavaRDD<String> rdd = sc.parallelize(jsonObjects);
     df = sqlContext.read().json(rdd);
     df.registerTempTable("jsonTable");
+  }
+
+  @After
+  public void tearDown() {
+    sqlContext.sparkContext().stop();
+    sqlContext = null;
+    sc = null;
   }
 
   @Test

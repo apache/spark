@@ -21,7 +21,7 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol, HasPredictionCol}
+import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol, HasPredictionCol, HasWeightCol}
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.mllib.regression.{IsotonicRegression => MLlibIsotonicRegression, IsotonicRegressionModel => MLlibIsotonicRegressionModel}
@@ -35,19 +35,7 @@ import org.apache.spark.storage.StorageLevel
  * Params for isotonic regression.
  */
 private[regression] trait IsotonicRegressionBase extends Params with HasFeaturesCol
-  with HasLabelCol with HasPredictionCol with Logging {
-
-  /**
-   * Param for weight column name (default: none).
-   * @group param
-   */
-  // TODO: Move weightCol to sharedParams.
-  final val weightCol: Param[String] =
-    new Param[String](this, "weightCol",
-      "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
-
-  /** @group getParam */
-  final def getWeightCol: String = $(weightCol)
+  with HasLabelCol with HasPredictionCol with HasWeightCol with Logging {
 
   /**
    * Param for whether the output sequence should be isotonic/increasing (true) or

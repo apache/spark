@@ -66,7 +66,8 @@ class MyDialect extends DefaultParserDialect
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest with SQLTestUtils {
-  override def sqlContext: SQLContext = TestHive
+  override def _sqlContext: SQLContext = TestHive
+  private val sqlContext = _sqlContext
 
   test("UDTF") {
     sql(s"ADD JAR ${TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath()}")

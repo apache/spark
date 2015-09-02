@@ -18,18 +18,22 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.sql.Timestamp
+import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
-import scala.sys.process.{ProcessLogger, Process}
 
-import org.scalatest.exceptions.TestFailedDueToTimeoutException
-
-import org.apache.spark._
-import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
-import org.apache.spark.util.{ResetSystemProperties, Utils}
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Timeouts
+import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
+
+import org.apache.spark._
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
+import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
+import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 /**
  * This suite tests spark-submit with applications using HiveContext.
@@ -37,6 +41,8 @@ import org.scalatest.time.SpanSugar._
 class HiveSparkSubmitSuite
   extends SparkFunSuite
   with Matchers
+  // This test suite sometimes gets extremely slow out of unknown reason on Jenkins.  Here we
+  // add a timestamp to provide more diagnosis information.
   with ResetSystemProperties
   with Timeouts {
 
@@ -50,13 +56,15 @@ class HiveSparkSubmitSuite
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
-    val jar3 = TestHive.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()
-    val jar4 = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath()
+    val jar3 = TestHive.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath
+    val jar4 = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
     val jarsString = Seq(jar1, jar2, jar3, jar4).map(j => j.toString).mkString(",")
     val args = Seq(
       "--class", SparkSubmitClassLoaderTest.getClass.getName.stripSuffix("$"),
       "--name", "SparkSubmitClassLoaderTest",
       "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       "--jars", jarsString,
       unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
     runSparkSubmit(args)
@@ -68,6 +76,8 @@ class HiveSparkSubmitSuite
       "--class", SparkSQLConfTest.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
       "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -79,7 +89,21 @@ class HiveSparkSubmitSuite
     // the HiveContext code mistakenly overrides the class loader that contains user classes.
     // For more detail, see sql/hive/src/test/resources/regression-test-SPARK-8489/*scala.
     val testJar = "sql/hive/src/test/resources/regression-test-SPARK-8489/test.jar"
-    val args = Seq("--class", "Main", testJar)
+    val args = Seq(
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--class", "Main",
+      testJar)
+    runSparkSubmit(args)
+  }
+
+  test("SPARK-9757 Persist Parquet relation with decimal column") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SPARK_9757.getClass.getName.stripSuffix("$"),
+      "--name", "SparkSQLConfTest",
+      "--master", "local-cluster[2,1,1024]",
+      unusedJar.toString)
     runSparkSubmit(args)
   }
 
@@ -90,28 +114,44 @@ class HiveSparkSubmitSuite
     val history = ArrayBuffer.empty[String]
     val commands = Seq("./bin/spark-submit") ++ args
     val commandLine = commands.mkString("'", "' '", "'")
-    val process = Process(
-      commands,
-      new File(sparkHome),
-      "SPARK_TESTING" -> "1",
-      "SPARK_HOME" -> sparkHome
-    ).run(ProcessLogger(
+
+    val builder = new ProcessBuilder(commands: _*).directory(new File(sparkHome))
+    val env = builder.environment()
+    env.put("SPARK_TESTING", "1")
+    env.put("SPARK_HOME", sparkHome)
+
+    def captureOutput(source: String)(line: String): Unit = {
+      // This test suite has some weird behaviors when executed on Jenkins:
+      //
+      // 1. Sometimes it gets extremely slow out of unknown reason on Jenkins.  Here we add a
+      //    timestamp to provide more diagnosis information.
+      // 2. Log lines are not correctly redirected to unit-tests.log as expected, so here we print
+      //    them out for debugging purposes.
+      val logLine = s"${new Timestamp(new Date().getTime)} - $source> $line"
       // scalastyle:off println
-      (line: String) => { println(s"stdout> $line"); history += s"out> $line"},
-      (line: String) => { println(s"stderr> $line"); history += s"err> $line" }
+      println(logLine)
       // scalastyle:on println
-    ))
+      history += logLine
+    }
+
+    val process = builder.start()
+    new ProcessOutputCapturer(process.getInputStream, captureOutput("stdout")).start()
+    new ProcessOutputCapturer(process.getErrorStream, captureOutput("stderr")).start()
 
     try {
-      val exitCode = failAfter(180.seconds) { process.exitValue() }
+      val exitCode = failAfter(180.seconds) { process.waitFor() }
       if (exitCode != 0) {
         // include logs in output. Note that logging is async and may not have completed
         // at the time this exception is raised
         Thread.sleep(1000)
         val historyLog = history.mkString("\n")
-        fail(s"$commandLine returned with exit code $exitCode." +
-            s" See the log4j logs for more detail." +
-            s"\n$historyLog")
+        fail {
+          s"""spark-submit returned with exit code $exitCode.
+             |Command line: $commandLine
+             |
+             |$historyLog
+           """.stripMargin
+        }
       }
     } catch {
       case to: TestFailedDueToTimeoutException =>
@@ -205,7 +245,7 @@ object SparkSQLConfTest extends Logging {
     // before spark.sql.hive.metastore.jars get set, we will see the following exception:
     // Exception in thread "main" java.lang.IllegalArgumentException: Builtin jars can only
     // be used when hive execution version == hive metastore version.
-    // Execution: 0.13.1 != Metastore: 0.12. Specify a vaild path to the correct hive jars
+    // Execution: 0.13.1 != Metastore: 0.12. Specify a valid path to the correct hive jars
     // using $HIVE_METASTORE_JARS or change spark.sql.hive.metastore.version to 0.13.1.
     val conf = new SparkConf() {
       override def getAll: Array[(String, String)] = {
@@ -229,5 +269,48 @@ object SparkSQLConfTest extends Logging {
     // Run a simple command to make sure all lazy vals in hiveContext get instantiated.
     hiveContext.tables().collect()
     sc.stop()
+  }
+}
+
+object SPARK_9757 extends QueryTest with Logging {
+  def main(args: Array[String]): Unit = {
+    Utils.configTestLog4j("INFO")
+
+    val sparkContext = new SparkContext(
+      new SparkConf()
+        .set("spark.sql.hive.metastore.version", "0.13.1")
+        .set("spark.sql.hive.metastore.jars", "maven"))
+
+    val hiveContext = new TestHiveContext(sparkContext)
+    import hiveContext.implicits._
+
+    import org.apache.spark.sql.functions._
+
+    val dir = Utils.createTempDir()
+    dir.delete()
+
+    try {
+      {
+        val df =
+          hiveContext
+            .range(10)
+            .select(('id + 0.1) cast DecimalType(10, 3) as 'dec)
+        df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
+        checkAnswer(hiveContext.table("t"), df)
+      }
+
+      {
+        val df =
+          hiveContext
+            .range(10)
+            .select(callUDF("struct", ('id + 0.2) cast DecimalType(10, 3)) as 'dec_struct)
+        df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
+        checkAnswer(hiveContext.table("t"), df)
+      }
+    } finally {
+      dir.delete()
+      hiveContext.sql("DROP TABLE t")
+      sparkContext.stop()
+    }
   }
 }

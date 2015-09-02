@@ -23,7 +23,8 @@ from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredict
 from pyspark.ml.util import keyword_only
 from pyspark.mllib.common import inherit_doc
 
-__all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator']
+__all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator',
+           'MulticlassClassificationEvaluator']
 
 
 @inherit_doc
@@ -45,7 +46,7 @@ class Evaluator(Params):
         """
         raise NotImplementedError()
 
-    def evaluate(self, dataset, params={}):
+    def evaluate(self, dataset, params=None):
         """
         Evaluates the output with optional parameters.
 
@@ -55,6 +56,8 @@ class Evaluator(Params):
                        params
         :return: metric
         """
+        if params is None:
+            params = dict()
         if isinstance(params, dict):
             if params:
                 return self.copy(params)._evaluate(dataset)

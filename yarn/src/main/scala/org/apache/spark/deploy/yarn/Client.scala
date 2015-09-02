@@ -163,6 +163,23 @@ private[spark] class Client(
     appContext.setQueue(args.amQueue)
     appContext.setAMContainerSpec(containerContext)
     appContext.setApplicationType("SPARK")
+    sparkConf.getOption(CONF_SPARK_YARN_APPLICATION_TAGS)
+      .map(StringUtils.getTrimmedStringCollection(_))
+      .filter(!_.isEmpty())
+      .foreach { tagCollection =>
+        try {
+          // The setApplicationTags method was only introduced in Hadoop 2.4+, so we need to use
+          // reflection to set it, printing a warning if a tag was specified but the YARN version
+          // doesn't support it.
+          val method = appContext.getClass().getMethod(
+            "setApplicationTags", classOf[java.util.Set[String]])
+          method.invoke(appContext, new java.util.HashSet[String](tagCollection))
+        } catch {
+          case e: NoSuchMethodException =>
+            logWarning(s"Ignoring $CONF_SPARK_YARN_APPLICATION_TAGS because this version of " +
+              "YARN does not support it")
+        }
+      }
     sparkConf.getOption("spark.yarn.maxAppAttempts").map(_.toInt) match {
       case Some(v) => appContext.setMaxAppAttempts(v)
       case None => logDebug("spark.yarn.maxAppAttempts is not set. " +
@@ -751,7 +768,6 @@ private[spark] class Client(
         userArgs ++ Seq(
           "--executor-memory", args.executorMemory.toString + "m",
           "--executor-cores", args.executorCores.toString,
-          "--num-executors ", args.numExecutors.toString,
           "--properties-file", buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
             LOCALIZED_CONF_DIR, SPARK_CONF_FILE))
 
@@ -960,6 +976,10 @@ object Client extends Logging {
     val sparkConf = new SparkConf
 
     val args = new ClientArguments(argStrings, sparkConf)
+    // to maintain backwards-compatibility
+    if (!Utils.isDynamicAllocationEnabled(sparkConf)) {
+      sparkConf.setIfMissing("spark.executor.instances", args.numExecutors.toString)
+    }
     new Client(args, sparkConf).run()
   }
 
@@ -983,6 +1003,10 @@ object Client extends Logging {
   // Internal config to propagate the locations of any extra jars to add to the classpath
   // of the executors
   val CONF_SPARK_YARN_SECONDARY_JARS = "spark.yarn.secondary.jars"
+
+  // Comma-separated list of strings to pass through as YARN application tags appearing
+  // in YARN ApplicationReports, which can be used for filtering when querying YARN.
+  val CONF_SPARK_YARN_APPLICATION_TAGS = "spark.yarn.tags"
 
   // Staging directory is private! -> rwx--------
   val STAGING_DIR_PERMISSION: FsPermission =
@@ -1074,20 +1098,10 @@ object Client extends Logging {
     triedDefault.toOption
   }
 
-  /**
-   * In Hadoop 0.23, the MR application classpath comes with the YARN application
-   * classpath. In Hadoop 2.0, it's an array of Strings, and in 2.2+ it's a String.
-   * So we need to use reflection to retrieve it.
-   */
   private[yarn] def getDefaultMRApplicationClasspath: Option[Seq[String]] = {
     val triedDefault = Try[Seq[String]] {
       val field = classOf[MRJobConfig].getField("DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH")
-      val value = if (field.getType == classOf[String]) {
-        StringUtils.getStrings(field.get(null).asInstanceOf[String]).toArray
-      } else {
-        field.get(null).asInstanceOf[Array[String]]
-      }
-      value.toSeq
+      StringUtils.getStrings(field.get(null).asInstanceOf[String]).toSeq
     } recoverWith {
       case e: NoSuchFieldException => Success(Seq.empty[String])
     }
