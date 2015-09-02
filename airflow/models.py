@@ -333,15 +333,14 @@ class Connection(Base):
             if not ENCRYPTION_ON:
                 raise AirflowException(
                     "Can't decrypt, configuration is missing")
-            return FERNET.decrypt(bytes(self._password, 'utf-8'))
+            return FERNET.decrypt(bytes(self._password, 'utf-8')).decode()
         else:
             return self._password
 
     def set_password(self, value):
         if value:
             try:
-                val = bytes(value.encode('utf-8'))
-                self._password = FERNET.encrypt(val)
+                self._password = FERNET.encrypt(bytes(value, 'utf-8')).decode()
                 self.is_encrypted = True
             except NameError:
                 self._password = value
