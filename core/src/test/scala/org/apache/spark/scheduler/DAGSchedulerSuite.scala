@@ -172,6 +172,7 @@ class DAGSchedulerSuite
         blockManagerMaster,
         sc.env)
     dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
+    scheduler.eventProcessLoop = dagEventProcessLoopTester
   }
 
   after {
