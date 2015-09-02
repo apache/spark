@@ -93,15 +93,15 @@ private[scheduler] abstract class Stage(
   private var _latestInfo: StageInfo = StageInfo.fromStage(this, nextAttemptId)
 
   /**
-   * Set of IDs of stage attempts that have failed with a FetchFailure. We keep track of these
+   * Set of stage attempt IDs that have failed with a FetchFailure. We keep track of these
    * failures in order to avoid endless retries if a stage keeps failing with a FetchFailure.
    * We keep track of each attempt ID that has failed to avoid recording duplicate failures if
-   * multiple tasks from the same stage attempt fail.
+   * multiple tasks from the same stage attempt fail (SPARK-5945).
    */
-  private val attemptsFailedFromFetch = new HashSet[Int]
+  private val fetchFailedAttemptIds = new HashSet[Int]
 
   private[scheduler] def clearFailures() : Unit = {
-    attemptsFailedFromFetch.clear()
+    fetchFailedAttemptIds.clear()
   }
 
   /**
@@ -111,8 +111,8 @@ private[scheduler] abstract class Stage(
    * true if the number of failures exceeds the allowable number of failures.
    */
   private[scheduler] def failedOnFetchAndShouldAbort(stageAttemptId: Int): Boolean = {
-    attemptsFailedFromFetch.add(stageAttemptId)
-    attemptsFailedFromFetch.size >= Stage.MAX_CONSECUTIVE_FAILURES
+    fetchFailedAttemptIds.add(stageAttemptId)
+    fetchFailedAttemptIds.size >= Stage.MAX_CONSECUTIVE_FETCH_FAILURES
   }
 
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
@@ -136,5 +136,5 @@ private[scheduler] abstract class Stage(
 
 private[scheduler] object Stage {
   // The number of consecutive failures allowed before a stage is aborted
-  val MAX_CONSECUTIVE_FAILURES = 4
+  val MAX_CONSECUTIVE_FETCH_FAILURES = 4
 }

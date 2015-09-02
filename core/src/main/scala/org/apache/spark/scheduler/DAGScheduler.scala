@@ -1119,7 +1119,7 @@ class DAGScheduler(
           } else if (failedStage.failedOnFetchAndShouldAbort(task.stageAttemptId)) {
             abortStage(failedStage, s"$failedStage (${failedStage.name}) " +
               s"has failed the maximum allowable number of " +
-              s"times: ${Stage.MAX_CONSECUTIVE_FAILURES}. " +
+              s"times: ${Stage.MAX_CONSECUTIVE_FETCH_FAILURES}. " +
               s"Most recent failure reason: ${failureMessage}", None)
           } else if (failedStages.isEmpty) {
             // Don't schedule an event to resubmit failed stages if failed isn't empty, because
