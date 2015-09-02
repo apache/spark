@@ -1405,16 +1405,6 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
     </p>
   </td>
 </tr>
-<tr>
-  <td><code>spark.sql.parquet.mergeSchema</code></td>
-  <td><code>false</code></td>
-  <td>
-    <p>
-      When true, the Parquet data source merges schemas collected from all data files, otherwise the
-      schema is picked from the summary file or a random data file if no summary file is available.
-    </p>
-  </td>
-</tr>
 </table>
 
 ## JSON Datasets
@@ -2057,6 +2047,12 @@ options.
  - The canonical name of SQL/DataFrame functions are now lower case (e.g. sum vs SUM).
  - It has been determined that using the DirectOutputCommitter when speculation is enabled is unsafe
    and thus this output committer will not be used when speculation is on, independent of configuration.
+ - JSON data source will not automatically load new files that are created by other applications
+   (i.e. files that are not inserted to the dataset through Spark SQL).
+   For a JSON persistent table (i.e. the metadata of the table is stored in Hive Metastore),
+   users can use `REFRESH TABLE` SQL command or `HiveContext`'s `refreshTable` method
+   to include those new files to the table. For a DataFrame representing a JSON dataset, users need to recreate
+   the DataFrame and the new DataFrame will include new files.
 
 ## Upgrading from Spark SQL 1.3 to 1.4
 
