@@ -73,6 +73,30 @@ abstract class LocalNode extends TreeNode[LocalNode] {
     }
     result
   }
+
+  def toIterator: Iterator[InternalRow] = new Iterator[InternalRow] {
+
+    private var currentRow: InternalRow = null
+
+    override def hasNext: Boolean = {
+      if (currentRow == null) {
+        if (LocalNode.this.next()) {
+          currentRow = fetch()
+          true
+        } else {
+          false
+        }
+      } else {
+        true
+      }
+    }
+
+    override def next(): InternalRow = {
+      val r = currentRow
+      currentRow = null
+      r
+    }
+  }
 }
 
 
@@ -86,4 +110,13 @@ abstract class UnaryLocalNode extends LocalNode {
   def child: LocalNode
 
   override def children: Seq[LocalNode] = Seq(child)
+}
+
+abstract class BinaryLocalNode extends LocalNode {
+
+  def left: LocalNode
+
+  def right: LocalNode
+
+  override def children: Seq[LocalNode] = Seq(left, right)
 }
