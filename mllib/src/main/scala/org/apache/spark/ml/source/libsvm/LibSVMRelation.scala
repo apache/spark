@@ -19,7 +19,8 @@ package org.apache.spark.ml.source.libsvm
 
 import com.google.common.base.Objects
 import org.apache.spark.Logging
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.annotation.Since
+import org.apache.spark.mllib.linalg.{VectorUDT, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -27,18 +28,20 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.sources.{DataSourceRegister, PrunedScan, BaseRelation, RelationProvider}
 
-
-class LibSVMRelation(val path: String, val numFeatures: Int, val featuresType: String)
+/**
+ * LibSVMRelation provides the DataFrame constructed from LibSVM format data.
+ * @param path
+ * @param numFeatures
+ * @param vectorType
+ * @param sqlContext
+ */
+private[ml] class LibSVMRelation(val path: String, val numFeatures: Int, val vectorType: String)
     (@transient val sqlContext: SQLContext)
   extends BaseRelation with PrunedScan with Logging {
 
-  private final val vectorType: DataType
-    = classOf[Vector].getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
-
-
   override def schema: StructType = StructType(
     StructField("label", DoubleType, nullable = false) ::
-      StructField("features", vectorType, nullable = false) :: Nil
+      StructField("features", new VectorUDT(), nullable = false) :: Nil
   )
 
   override def buildScan(requiredColumns: Array[String]): RDD[Row] = {
@@ -47,8 +50,8 @@ class LibSVMRelation(val path: String, val numFeatures: Int, val featuresType: S
 
     val rowBuilders = requiredColumns.map {
       case "label" => (pt: LabeledPoint) => Seq(pt.label)
-      case "features" if featuresType == "sparse" => (pt: LabeledPoint) => Seq(pt.features.toSparse)
-      case "features" if featuresType == "dense" => (pt: LabeledPoint) => Seq(pt.features.toDense)
+      case "features" if vectorType == "sparse" => (pt: LabeledPoint) => Seq(pt.features.toSparse)
+      case "features" if vectorType == "dense" => (pt: LabeledPoint) => Seq(pt.features.toDense)
     }
 
     baseRdd.map(pt => {
@@ -69,16 +72,6 @@ class LibSVMRelation(val path: String, val numFeatures: Int, val featuresType: S
 
 class DefaultSource extends RelationProvider with DataSourceRegister {
 
-  /**
-   * The string that represents the format that this data source provider uses. This is
-   * overridden by children to provide a nice alias for the data source. For example:
-   *
-   * {{{
-   *   override def format(): String = "parquet"
-   * }}}
-   *
-   * @since 1.5.0
-   */
   override def shortName(): String = "libsvm"
 
   private def checkPath(parameters: Map[String, String]): String = {
@@ -90,8 +83,8 @@ class DefaultSource extends RelationProvider with DataSourceRegister {
    * Note: the parameters' keywords are case insensitive and this insensitivity is enforced
    * by the Map that is passed to the function.
    */
-  override def createRelation(sqlContext: SQLContext, parameters: Map[String, String]):
-       BaseRelation = {
+  override def createRelation(sqlContext: SQLContext, parameters: Map[String, String])
+    : BaseRelation = {
     val path = checkPath(parameters)
     val numFeatures = parameters.getOrElse("numFeatures", "-1").toInt
     /**
