@@ -297,13 +297,6 @@ private[spark] object SQLConf {
       "Spark SQL schema and vice versa.",
     isPublic = false)
 
-  @deprecated(s"use ${PARQUET_WRITE_LEGACY_FORMAT.key} instead", "1.6.0")
-  val PARQUET_FOLLOW_PARQUET_FORMAT_SPEC = booleanConf(
-    key = "spark.sql.parquet.followParquetFormatSpec",
-    defaultValue = Some(!PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get),
-    doc = s"Deprecated, use ${PARQUET_WRITE_LEGACY_FORMAT.key} instead.",
-    isPublic = false)
-
   val PARQUET_OUTPUT_COMMITTER_CLASS = stringConf(
     key = "spark.sql.parquet.output.committer.class",
     defaultValue = Some(classOf[ParquetOutputCommitter].getName),
@@ -504,9 +497,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
 
   private[spark] def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
-
-  @deprecated("use SQLConf.writeLegacyParquetFormat", "1.6.0")
-  private[spark] def followParquetFormatSpec: Boolean = !writeLegacyParquetFormat
 
   private[spark] def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 
