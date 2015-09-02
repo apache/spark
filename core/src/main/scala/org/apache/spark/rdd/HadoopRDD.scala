@@ -138,7 +138,7 @@ class HadoopRDD[K, V](
   private val createTime = new Date()
 
   private val shouldCloneJobConf = sc.conf.getBoolean("spark.hadoop.cloneConf", false)
-  private val shouldCacheInputFormat = sc.conf.getBoolean("spark.inputFormat.cache.enabled", false)
+  private val shouldCacheInputFormat = sc.conf.getBoolean("spark.inputFormat.cache.enabled", true)
 
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {

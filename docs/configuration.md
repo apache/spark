@@ -822,11 +822,11 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
     <td><code>spark.inputFormat.cache.enabled</code></td>
-    <td>false</td>
+    <td>true</td>
     <td>
-      Whether to cache the inputFormat. If set to false (default), all tasks will has its own 
-      InputFormat object. If set to true, all tasks of an Executor will use one InputFormat object,
-      so the InputFormat should be thread-safety.
+      Whether to cache the inputFormat. If set to false, all tasks will has its own InputFormat
+      object. If set to true, all tasks of an Executor will use one InputFormat object, so the 
+      InputFormat should be thread-safety.
     </td>
 </tr>
 <tr>
