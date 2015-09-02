@@ -300,7 +300,7 @@ class LinearRegressionModel private[ml] (
   private[regression] def evaluate(dataset: DataFrame): LinearRegressionSummary = {
     val t = udf { features: Vector => predict(features) }
     val predictionAndObservations = dataset
-      .withColumn(col($(labelCol)), t(col($(featuresCol))).as($(predictionCol)))
+      .withColumn($(predictionCol), t(col($(featuresCol))))
 
     new LinearRegressionSummary(predictionAndObservations, $(predictionCol), $(labelCol))
   }
