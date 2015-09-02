@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.regression
 
+import org.apache.spark.mllib.regression.StreamingDecay.{BATCHES, POINTS}
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkFunSuite
@@ -256,6 +258,140 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
     runStreams(ssc, numBatches, numBatches)
 
     // with no memory, the final parameter estimates should be close to model B
+    assertEqual(model.latestModel().intercept, 0.0, 1.0)
+    assertEqual(model.latestModel().weights(0), 5.0, 1.0)
+    assertEqual(model.latestModel().weights(1), 3.0, 1.0)
+  }
+
+  test("parameter accuracy with long half life and POINTS as TimeUnit") {
+    // create model
+    val model = new StreamingLinearRegressionWithSGD()
+      .setHalfLife(5000, POINTS)
+      .setInitialWeights(Vectors.dense(0.0, 0.0))
+      .setStepSize(0.5)
+      .setNumIterations(50)
+      .setConvergenceTol(0.0001)
+
+    // generate sequence of simulated data
+    val numBatches = 10
+    // the first few RDD's are generated under the model A
+    val inputA = (0 until (numBatches-1)).map { i =>
+      LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 200, 42 * (i + 1))
+    }
+    // the last RDD is generated under the model B
+    val inputB =
+      LinearDataGenerator.generateLinearInput(0.0, Array(5.0, 3.0), 200, 42 * (numBatches + 1))
+    val input = inputA :+ inputB
+
+    // apply model training to input stream
+    ssc = setupStreams(input, (inputDStream: DStream[LabeledPoint]) => {
+      model.trainOn(inputDStream)
+      inputDStream.count()
+    })
+    runStreams(ssc, numBatches, numBatches)
+
+    // with long half life, the final parameter estimates should be close to model A
+    assertEqual(model.latestModel().intercept, 0.0, 1.0)
+    assertEqual(model.latestModel().weights(0), 10.0, 1.0)
+    assertEqual(model.latestModel().weights(1), 10.0, 1.0)
+  }
+
+  test("parameter accuracy with long half life and BATCHES as TimeUnit") {
+    // create model
+    val model = new StreamingLinearRegressionWithSGD()
+      .setHalfLife(20, BATCHES)
+      .setInitialWeights(Vectors.dense(0.0, 0.0))
+      .setStepSize(0.5)
+      .setNumIterations(50)
+      .setConvergenceTol(0.0001)
+
+    // generate sequence of simulated data
+    val numBatches = 10
+    // the first few RDD's are generated under the model A
+    val inputA = (0 until (numBatches-1)).map { i =>
+      LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 200, 42 * (i + 1))
+    }
+    // the last RDD is generated under the model B
+    val inputB =
+      LinearDataGenerator.generateLinearInput(0.0, Array(5.0, 3.0), 200, 42 * (numBatches + 1))
+    val input = inputA :+ inputB
+
+    // apply model training to input stream
+    ssc = setupStreams(input, (inputDStream: DStream[LabeledPoint]) => {
+      model.trainOn(inputDStream)
+      inputDStream.count()
+    })
+    runStreams(ssc, numBatches, numBatches)
+
+    // with long half life, the final parameter estimates should be close to model A
+    assertEqual(model.latestModel().intercept, 0.0, 1.0)
+    assertEqual(model.latestModel().weights(0), 10.0, 1.0)
+    assertEqual(model.latestModel().weights(1), 10.0, 1.0)
+  }
+
+  test("parameter accuracy with short half life and POINTS as TimeUnit") {
+    // create model
+    val model = new StreamingLinearRegressionWithSGD()
+      .setHalfLife(50, POINTS)
+      .setInitialWeights(Vectors.dense(0.0, 0.0))
+      .setStepSize(0.5)
+      .setNumIterations(50)
+      .setConvergenceTol(0.0001)
+
+    // generate sequence of simulated data
+    val numBatches = 10
+    // the first half of the RDD's are generated under the model A
+    val inputA = (0 until (numBatches / 2 - 1)).map { i =>
+      LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 200, 42 * (i + 1))
+    }
+    // the second half of the RDD's are generated under the model B
+    val inputB = (0 until (numBatches / 2 - 1)).map { i =>
+      LinearDataGenerator.generateLinearInput(0.0, Array(5.0, 3.0), 200, 42 * (i + 1))
+    }
+    val input = inputA ++ inputB
+
+    // apply model training to input stream
+    ssc = setupStreams(input, (inputDStream: DStream[LabeledPoint]) => {
+      model.trainOn(inputDStream)
+      inputDStream.count()
+    })
+    runStreams(ssc, numBatches, numBatches)
+
+    // with short half life, the final parameter estimates should be close to model B
+    assertEqual(model.latestModel().intercept, 0.0, 1.0)
+    assertEqual(model.latestModel().weights(0), 5.0, 1.0)
+    assertEqual(model.latestModel().weights(1), 3.0, 1.0)
+  }
+
+  test("parameter accuracy with short half life and BATCHES as TimeUnit") {
+    // create model
+    val model = new StreamingLinearRegressionWithSGD()
+      .setHalfLife(1, BATCHES)
+      .setInitialWeights(Vectors.dense(0.0, 0.0))
+      .setStepSize(0.5)
+      .setNumIterations(50)
+      .setConvergenceTol(0.0001)
+
+    // generate sequence of simulated data
+    val numBatches = 10
+    // the first half of the RDD's are generated under the model A
+    val inputA = (0 until (numBatches / 2 - 1)).map { i =>
+      LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 200, 42 * (i + 1))
+    }
+    // the second half of the RDD's are generated under the model B
+    val inputB = (0 until (numBatches / 2 - 1)).map { i =>
+      LinearDataGenerator.generateLinearInput(0.0, Array(5.0, 3.0), 200, 42 * (i + 1))
+    }
+    val input = inputA ++ inputB
+
+    // apply model training to input stream
+    ssc = setupStreams(input, (inputDStream: DStream[LabeledPoint]) => {
+      model.trainOn(inputDStream)
+      inputDStream.count()
+    })
+    runStreams(ssc, numBatches, numBatches)
+
+    // with short half life, the final parameter estimates should be close to model B
     assertEqual(model.latestModel().intercept, 0.0, 1.0)
     assertEqual(model.latestModel().weights(0), 5.0, 1.0)
     assertEqual(model.latestModel().weights(1), 3.0, 1.0)

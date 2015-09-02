@@ -85,7 +85,7 @@ private[mllib] trait StreamingDecay extends Logging{
  */
 @Experimental
 object StreamingDecay {
-  sealed trait TimeUnit
+  private[mllib] sealed trait TimeUnit
   /**
    * Each RDD in the DStream will be treated as 1 time unit.
    *
