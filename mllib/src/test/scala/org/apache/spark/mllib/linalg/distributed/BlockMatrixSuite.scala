@@ -298,7 +298,7 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("Block LU Decomposition") {
-    //square matrix, but not fully populated in edge blocks.
+    // square matrix, but not fully populated in edge blocks.
     val blocksForLU: Seq[((Int, Int), Matrix)] = Seq(
       ((0, 0), new DenseMatrix(2, 2, Array(1.0, 2.0, 3.0, 2.0))),
       ((0, 1), new DenseMatrix(2, 2, Array(2.0, 1.0, 3.0, 5.0))),
@@ -316,27 +316,27 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     val U = PLU._3
     val residual = (L.multiply(U)).subtract(P.multiply(A))
     val error = residual.toLocalMatrix.toArray.reduce(_ + Math.abs(_))
-    assert(error < 6.8e-16) //sb ~ 2.22e-16
+    assert(error < 6.8e-16) // should be ~ 2.22e-16
 
-    //testing matrices that have nontrivial permutation matrices
-    val blocksForSecondLU: Seq[((Int, Int), Matrix)]  =  Seq(
-      ((0, 0), new DenseMatrix(2, 2, Array( 0, 1,  -1,  2))),
+    // testing matrices that have nontrivial permutation matrices
+    val blocksForSecondLU: Seq[((Int, Int), Matrix)] = Seq(
+      ((0, 0), new DenseMatrix(2, 2, Array( 0, 1, -1, 2))),
       ((0, 1), new DenseMatrix(2, 2, Array(-2, -1, -3, -2))),
       ((0, 2), new DenseMatrix(2, 2, Array(-4, -3, -5, -4))),
-      ((1, 0), new DenseMatrix(2, 2, Array( 2,  3,  1,  2))),
-      ((1, 1), new DenseMatrix(2, 2, Array( 3,  1, -1,  4))),
+      ((1, 0), new DenseMatrix(2, 2, Array( 2, 3, 1, 2))),
+      ((1, 1), new DenseMatrix(2, 2, Array( 3, 1, -1, 4))),
       ((1, 2), new DenseMatrix(2, 2, Array(-2, -1, -3, -2))),
-      ((2, 0), new DenseMatrix(2, 2, Array( 0,  5,  0,  4))),
-      ((2, 1), new DenseMatrix(2, 2, Array( 0,  3,  0,  2))),
-      ((2, 2), new DenseMatrix(2, 2, Array( 0,  0,  0,  0))))
+      ((2, 0), new DenseMatrix(2, 2, Array( 0, 5, 0, 4))),
+      ((2, 1), new DenseMatrix(2, 2, Array( 0, 3, 0, 2))),
+      ((2, 2), new DenseMatrix(2, 2, Array( 0, 0, 0, 0))))
 
-    val A2 =  new BlockMatrix(sc.parallelize(blocksForSecondLU), 2, 2)
+    val A2 = new BlockMatrix(sc.parallelize(blocksForSecondLU), 2, 2)
     val PLU2 = A2.blockLU;
     val P2 = PLU2._1;
     val L2 = PLU2._2;
     val U2 = PLU2._3
     val residual2 = (L2.multiply(U2)).subtract(P2.multiply(A2))
     val error2 = residual2.toLocalMatrix.toArray.reduce(_ + Math.abs(_))
-    assert(error2 < 2.6e-14) //sb ~ 2.49e-14
+    assert(error2 < 2.6e-14) // should be ~ 2.49e-14
   }
 }

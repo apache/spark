@@ -36,6 +36,43 @@ and $P$ is a row permutation matrix.  This algorithm is a highly stable method f
 
 Once the decomposition is computed, the inverse is straightforward to compute using a forward subsitution method on $L$ and $U$.  The inversion method is not yet available in [`BlockMatrix`](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix).
 
+
+**Example**
+
+{% highlight scala %}
+import org.apache.spark.mllib.linalg.distributed.{BlockMatrix}
+import org.apache.spark.mllib.linalg.{Matrix=>SparkMatrix,Matrices=>SparkMatrices}
+import org.apache.spark.mllib.linalg.{DenseMatrix}
+
+val blocks: Seq[((Int, Int), SparkMatrix)] = Seq(
+  ((0, 0), new DenseMatrix(2, 2, Array(1.0, 2.0, 3.0, 2.0))),
+  ((0, 1), new DenseMatrix(2, 2, Array(2.0, 1.0, 3.0, 5.0))),
+  ((1, 0), new DenseMatrix(2, 2, Array(3.0, 2.0, 1.0, 1.0))),
+  ((1, 1), new DenseMatrix(2, 2, Array(1.0, 2.0, 0.0, 1.0))), 
+  ((0, 2), new DenseMatrix(2, 1, Array(1.0, 1.0))),
+  ((1, 2), new DenseMatrix(2, 1, Array(1.0, 3.0))),
+  ((2, 0), new DenseMatrix(1, 2, Array(1.0, 0.0))),
+  ((2, 1), new DenseMatrix(1, 2, Array(1.0, 2.0))),
+  ((2, 2), new DenseMatrix(1, 1, Array(4.0))))
+
+val rowsPerBlock = 2; val colsPerBlock = 2; 
+ val A =  
+       new BlockMatrix(sc.parallelize(blocks), rowsPerBlock, colsPerBlock)
+    
+val PLU = A.blockLU
+val P  = PLU._1
+val L  = PLU._2
+val U  = PLU._3
+
+// computing a fast residual...top and bottom matrices only
+val residual = L.multiply(U).subtract(P.multiply(A))
+val error = residual.toLocalMatrix.toArray.reduce(_ + Math.abs(_) ) 
+
+println( "error (sb ~6.7e-16): " + error.toString )
+{% endhighlight %}
+
+**How it Works**
+
 The LU decomposition of $A$ can be written in 4 block form as:
 `\begin{align}
     PA & = LU\\
@@ -99,38 +136,6 @@ Instead of building the solution incrementally, and using more frequent but smal
 </p>
 
 
-The Matrix multiply operations shown in the figure are generalizations of equations $\eqref{eq:A11Solve}$, $\eqref{eq:U12Solve}$, and $\eqref{eq:L21Solve}$.  An example is given below.
+The Matrix multiply operations shown in the figure are generalizations of equations $\eqref{eq:A11Solve}$, $\eqref{eq:U12Solve}$, and $\eqref{eq:L21Solve}$.
 
 
-
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.distributed.{BlockMatrix}
-import org.apache.spark.mllib.linalg.{Matrix=>SparkMatrix,Matrices=>SparkMatrices}
-import org.apache.spark.mllib.linalg.{DenseMatrix}
-
-val blocks: Seq[((Int, Int), SparkMatrix)] = Seq(
-  ((0, 0), new DenseMatrix(2, 2, Array(1.0, 2.0, 3.0, 2.0))),
-  ((0, 1), new DenseMatrix(2, 2, Array(2.0, 1.0, 3.0, 5.0))),
-  ((1, 0), new DenseMatrix(2, 2, Array(3.0, 2.0, 1.0, 1.0))),
-  ((1, 1), new DenseMatrix(2, 2, Array(1.0, 2.0, 0.0, 1.0))), 
-  ((0, 2), new DenseMatrix(2, 1, Array(1.0, 1.0))),
-  ((1, 2), new DenseMatrix(2, 1, Array(1.0, 3.0))),
-  ((2, 0), new DenseMatrix(1, 2, Array(1.0, 0.0))),
-  ((2, 1), new DenseMatrix(1, 2, Array(1.0, 2.0))),
-  ((2, 2), new DenseMatrix(1, 1, Array(4.0))))
-
-val rowsPerBlock = 2; val colsPerBlock = 2; 
- val A =  
-       new BlockMatrix(sc.parallelize(blocks), rowsPerBlock, colsPerBlock)
-    
-val PLU = A.blockLU
-val P  = PLU._1
-val L  = PLU._2
-val U  = PLU._3
-
-// computing a fast residual...top and bottom matrices only
-val residual = L.multiply(U).subtract(P.multiply(A))
-val error = residual.toLocalMatrix.toArray.reduce(_ + Math.abs(_) ) 
-
-println( "error (sb ~6.7e-16): " + error.toString )
-{% endhighlight %}
