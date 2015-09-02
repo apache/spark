@@ -377,7 +377,7 @@ class LogisticRegression(override val uid: String)
       }
     }
 
-    if (handlePersistence) instances.fold(identity, identity).unpersist()
+    if (handlePersistence) instances.unpersist()
 
     val model = copyValues(new LogisticRegressionModel(uid, weights, intercept))
     val logRegSummary = new BinaryLogisticRegressionTrainingSummary(
