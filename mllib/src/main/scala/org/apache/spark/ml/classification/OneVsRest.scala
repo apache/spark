@@ -91,7 +91,6 @@ final class OneVsRestModel private[ml] (
     // add an accumulator column to store predictions of all the models
     val accColName = "mbc$acc" + UUID.randomUUID().toString
     val initUDF = udf { () => Map[Int, Double]() }
-    val mapType = MapType(IntegerType, DoubleType, valueContainsNull = false)
     val newDataset = dataset.withColumn(accColName, initUDF())
 
     // persist if underlying dataset is not persistent.
@@ -195,16 +194,11 @@ final class OneVsRest(override val uid: String)
 
     // create k columns, one for each binary classifier.
     val models = Range(0, numClasses).par.map { index =>
-      val labelUDF = udf { (label: Double) =>
-        if (label.toInt == index) 1.0 else 0.0
-      }
-
       // generate new label metadata for the binary problem.
-      // TODO: use when ... otherwise after SPARK-7321 is merged
       val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
       val labelColName = "mc2b$" + index
-      val trainingDataset =
-        multiclassLabeled.withColumn(labelColName, labelUDF(col($(labelCol))), newLabelMeta)
+      val trainingDataset = multiclassLabeled.withColumn(
+        labelColName, when(col($(labelCol)) === index.toDouble, 1.0).otherwise(0.0), newLabelMeta)
       val classifier = getClassifier
       val paramMap = new ParamMap()
       paramMap.put(classifier.labelCol -> labelColName)

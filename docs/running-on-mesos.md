@@ -45,7 +45,7 @@ frameworks.  You can install Mesos either from source or using prebuilt packages
 To install Apache Mesos from source, follow these steps:
 
 1. Download a Mesos release from a
-   [mirror](http://www.apache.org/dyn/closer.cgi/mesos/{{site.MESOS_VERSION}}/)
+   [mirror](http://www.apache.org/dyn/closer.lua/mesos/{{site.MESOS_VERSION}}/)
 2. Follow the Mesos [Getting Started](http://mesos.apache.org/gettingstarted) page for compiling and
    installing Mesos
 
