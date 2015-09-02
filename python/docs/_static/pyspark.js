@@ -1,3 +1,5 @@
+$(function (){
+
     function startsWith(s, prefix) {
         return s && s.indexOf(prefix) === 0;
     }
@@ -14,7 +16,6 @@
         return linkMap;
     };
 
-
     function getAdNoteDivs(dd) {
         var noteDivs = {};
         dd.find('> div.admonition.note > p.last').each(function (i, p) {
@@ -29,15 +30,10 @@
         return noteDivs;
     }
 
-
     function getParentId(name) {
         var last_idx = name.lastIndexOf('.');
         return last_idx == -1? '': name.substr(0, last_idx);
     }
-
-
-
-$(function (){
 
     var sidebarLinkMap = buildSidebarLinkMap();
 
@@ -50,12 +46,8 @@ $(function (){
         var desc = dt.find('> code.descname').text();
         var adNoteDivs = getAdNoteDivs(dd);
 
-        //console.log("Match", dt, id);
-
         if (id) {
             var parent_id = getParentId(id);
-
-            //console.log("Id -> Parent", id, parent_id);
 
             var r = sidebarLinkMap[parent_id];
             if (r) {
