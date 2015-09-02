@@ -60,7 +60,7 @@ private[spark] abstract class Stage(
   /** Set of jobs that this stage belongs to. */
   val jobIds = new HashSet[Int]
 
-  var pendingTasks = new HashSet[Task[_]]
+  var pendingPartitions = new HashSet[Int]
 
   /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
