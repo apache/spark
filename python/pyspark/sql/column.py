@@ -227,8 +227,7 @@ class Column(object):
         return self.getField(item)
 
     def __iter__(self):
-        raise TypeError('%s.%s object is not iterable' % (self.__module__,
-                                                          self.__class__.__name__))
+        raise TypeError("Column is not iterable")
 
     # string methods
     rlike = _bin_op("rlike")

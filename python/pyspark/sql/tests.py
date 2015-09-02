@@ -1068,13 +1068,12 @@ class SQLTests(ReusedPySparkTestCase):
 
     # regression test for SPARK-10417
     def test_column_iterator(self):
-        # Catch exception raised during improper construction
-        try:
+
+        def foo():
             for x in self.df.key:
                 break
-            self.assertEqual(0, 1)
-        except TypeError:
-            self.assertEqual(1, 1)
+
+        self.assertRaises(TypeError, foo)
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
