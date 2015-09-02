@@ -461,7 +461,8 @@ trait Params extends Identifiable with Serializable {
    */
   final def getOrDefault[T](param: Param[T]): T = {
     shouldOwn(param)
-    get(param).orElse(getDefault(param)).get
+    get(param).orElse(getDefault(param)).getOrElse(
+      throw new NoSuchElementException(s"Failed to find a default value for ${param.name}"))
   }
 
   /** An alias for [[getOrDefault()]]. */
@@ -501,8 +502,7 @@ trait Params extends Identifiable with Serializable {
    */
   final def getDefault[T](param: Param[T]): Option[T] = {
     shouldOwn(param)
-    defaultParamMap.getOrElse(param,
-      throw new NoSuchElementException(s"Failed to find a default value for ${param.name}"))
+    defaultParamMap.get(param)
   }
 
   /**
