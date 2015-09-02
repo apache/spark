@@ -505,8 +505,7 @@ trait Params extends Identifiable with Serializable {
       defaultParamMap.get(param)
     } catch {
       case e: NoSuchElementException =>
-        throw new NoSuchElementException("Failed to find a default value for param" +
-          param.name)
+        throw new NoSuchElementException(s"Failed to find a default value for ${param.name}")
     }
   }
 
