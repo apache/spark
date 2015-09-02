@@ -23,17 +23,15 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, RightOuter, FullOuter}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{BinaryNode, RowIterator, SparkPlan}
+import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.{BinaryNode, RowIterator, SparkPlan}
 import org.apache.spark.util.collection.BitSet
 
 /**
  * :: DeveloperApi ::
  * Performs an sort merge outer join of two child relations.
- *
- * Note: this does not support full outer join yet; see SPARK-9730 for progress on this.
  */
 @DeveloperApi
 case class SortMergeOuterJoin(
@@ -77,7 +75,8 @@ case class SortMergeOuterJoin(
     // For left and right outer joins, the output is ordered by the streamed input's join keys.
     case LeftOuter => requiredOrders(leftKeys)
     case RightOuter => requiredOrders(rightKeys)
-    case FullOuter => requiredOrders(leftKeys ++ rightKeys)
+    // there are null rows between each stream, so there is no order
+    case FullOuter => Nil
     case x => throw new IllegalArgumentException(
       s"SortMergeOuterJoin should not take $x as the JoinType")
   }
@@ -316,16 +315,15 @@ private class SortMergeFullJoinScanner(
   private[this] var rightRow: InternalRow = _
   private[this] var rightRowKey: InternalRow = _
 
-  private[this] var leftIndex: Int = _
-  private[this] var rightIndex: Int = _
+  private[this] var leftIndex: Int = 0
+  private[this] var rightIndex: Int = 0
   private[this] val leftMatches: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
   private[this] val rightMatches: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
+  private[this] var leftMatched: BitSet = new BitSet(1)
+  private[this] var rightMatched: BitSet = new BitSet(1)
 
-  private[this] var notMatchBitSet: BitSet = _
-  private[this] val foundRightIndex: ArrayBuffer[Int] = new ArrayBuffer[Int]
-
-  private[this] var leftAdvanced: Boolean = false
-  private[this] var rightAdvanced: Boolean = false
+  advancedLeft()
+  advancedRight()
 
   // --- Private methods --------------------------------------------------------------------------
 
@@ -364,136 +362,118 @@ private class SortMergeFullJoinScanner(
   }
 
   /**
-   * Consume rows from both iterators. Keep record matching rows in buffers until their
-   * row keys are different.
+   * Consume rows from both iterators until their key are different than matchingKey.
    */
   private def findMatchingRows(matchingKey: InternalRow): Unit = {
     leftMatches.clear()
     rightMatches.clear()
 
-    do {
+    while (leftRowKey != null && keyOrdering.compare(leftRowKey, matchingKey) == 0) {
       leftMatches += leftRow.copy()
-      leftAdvanced = advancedLeft()
-    } while (leftAdvanced && (keyOrdering.compare(leftRowKey, matchingKey) == 0))
-
-    do {
+      advancedLeft()
+    }
+    while (rightRowKey != null && keyOrdering.compare(rightRowKey, matchingKey) == 0) {
       rightMatches += rightRow.copy()
-      rightAdvanced = advancedRight()
-    } while (rightAdvanced && (keyOrdering.compare(matchingKey, rightRowKey) == 0))
+      advancedRight()
+    }
+
+    // Adding a null row at lat, in case that they can't matching any rows
+    leftMatches += leftNullRow
+    rightMatches += rightNullRow
 
     leftIndex = 0
     rightIndex = 0
-    notMatchBitSet = new BitSet(rightMatches.size)
+
+    if (leftMatches.size <= leftMatched.capacity) {
+      leftMatched.clear()
+    } else {
+      leftMatched = new BitSet(leftMatches.size)
+    }
+    if (rightMatches.size <= rightMatched.capacity) {
+      rightMatched.clear()
+    } else {
+      rightMatched = new BitSet(rightMatches.size)
+    }
+    // the last null row should not join another null row
+    leftMatched.set(leftMatches.size - 1)
+    rightMatched.set(rightMatches.size - 1)
+  }
+
+
+  /**
+   * Check whether the current two rows can match the condition or not.
+   *
+   * If a row has not match other rows, it can match the last null row from the other side.
+   */
+  private def validMatch(): Boolean = {
+    ((leftIndex < leftMatches.size - 1 && rightIndex < rightMatches.size - 1
+      && boundCondition(joinedRow))
+      || !leftMatched.get(leftIndex) && rightIndex == rightMatches.size - 1
+      || leftIndex == leftMatches.size - 1 && !rightMatched.get(rightIndex))
   }
 
   /**
    * Scan for next matching rows in buffers of both sides.
    * @return true if next row(s) are found and false otherwise.
+   *
+   * TODO(davies): a faster version for emtpy condition
    */
   private def scanNextInBuffered(): Boolean = {
-    if (leftIndex < leftMatches.size) {
-      var found = false
-      do {
-        found = boundCondition(joinedRow(leftMatches(leftIndex), rightMatches(rightIndex)))
-        if (!found) {
-          if (!foundRightIndex.contains(rightIndex)) {
-            notMatchBitSet.set(rightIndex)
-          }
-          rightIndex += 1
-        }
-      } while (!found && rightIndex < rightMatches.size)
-
-      // No match can be found
-      // Output only left row
-      if (!found) {
-        joinedRow(leftMatches(leftIndex), rightNullRow)
+    joinedRow(leftMatches(leftIndex), rightMatches(rightIndex))
+    while (!validMatch()) {
+      rightIndex += 1
+      if (rightIndex == rightMatches.size) {
         leftIndex += 1
-        rightIndex = 0
-      } else {
-        notMatchBitSet.unset(rightIndex)
-        foundRightIndex += rightIndex
-        rightIndex += 1
-        if (rightIndex == rightMatches.size) {
-          leftIndex += 1
-          rightIndex = 0
+        if (leftIndex == leftMatches.size) {
+          return false
         }
-      }
-      if (leftIndex == leftMatches.size) {
         rightIndex = 0
-        foundRightIndex.clear()
       }
-      true
-    } else if (rightIndex < rightMatches.size) {
-      // Output those right rows not matched by any left row
-      rightIndex = notMatchBitSet.nextSetBit(rightIndex)
-      if (rightIndex >= 0) {
-        joinedRow(leftNullRow, rightMatches(rightIndex))
-        rightIndex += 1
-        true
-      } else {
-        false
-      }
-    } else {
-      false
+      joinedRow(leftMatches(leftIndex), rightMatches(rightIndex))
     }
-  }
-
-  private def canCompare: Boolean = {
-    (leftAdvanced && rightAdvanced ) && (!leftRowKey.anyNull || !rightRowKey.anyNull)
+    // it's safe to mark last null row as matched
+    leftMatched.set(leftIndex)
+    rightMatched.set(rightIndex)
+    rightIndex += 1
+    if (rightIndex == rightMatches.size) {
+      leftIndex += 1
+      rightIndex = 0
+    }
+    true
   }
 
   // --- Public methods --------------------------------------------------------------------------
 
-  def getLeftRow(): InternalRow = leftRow
-  def getRightRow(): InternalRow = rightRow
   def getJoinedRow(): JoinedRow = joinedRow
 
-  def advanceNextPair(): Boolean = {
+  def advanceNext(): Boolean = {
     // We already buffered some matching rows, use them directly
-    if (leftMatches.size > 0 && rightMatches.size > 0) {
+    if (leftIndex < leftMatches.size) {
       if (scanNextInBuffered()) {
         return true
-      } else {
-        // No more rows in buffers
-        leftMatches.clear()
-        rightMatches.clear()
       }
-    }
-
-    if (leftRow == null) {
-      leftAdvanced = advancedLeft()
-    }
-
-    if (rightRow == null) {
-      rightAdvanced = advancedRight()
     }
 
     // Both left and right iterators have rows and they can be compared
-    if (canCompare) {
-      // No buffered matching rows
-      val comp = keyOrdering.compare(leftRowKey, rightRowKey)
-      if (comp == 0) {
-        // Find matching rows from both iterators and put in buffers
-        findMatchingRows(leftRowKey.copy())
-        scanNextInBuffered()
-        // Since we buffered matching rows, we don't consume rows in next round
-      } else if (comp < 0) {
-        joinedRow(getLeftRow(), rightNullRow)
-        leftRow = null
-      } else {
-        joinedRow(leftNullRow, getRightRow())
-        rightRow = null
-      }
-      true
-    } else if (leftAdvanced) {
+    if (leftRow != null && (leftRowKey.anyNull || rightRow == null)) {
       // Only consume row(s) from left iterator
-      joinedRow(getLeftRow(), rightNullRow)
-      leftRow = null
+      joinedRow(leftRow.copy(), rightNullRow)
+      advancedLeft()
       true
-    } else if (rightAdvanced) {
+    } else if (rightRow != null && (rightRowKey.anyNull || leftRow == null)) {
       // Only consume row(s) from right iterator
-      joinedRow(leftNullRow, getRightRow())
-      rightRow = null
+      joinedRow(leftNullRow, rightRow.copy())
+      advancedRight()
+      true
+    } else if (leftRow != null && rightRow != null) {
+      // find matching rows from both sides
+      val comp = keyOrdering.compare(leftRowKey, rightRowKey)
+      if (comp <= 0) {
+        findMatchingRows(leftRowKey.copy())
+      } else {
+        findMatchingRows(rightRowKey.copy())
+      }
+      scanNextInBuffered()
       true
     } else {
       // Both iterators have been consumed
@@ -510,11 +490,9 @@ private class FullOuterIterator(
   private[this] val joinedRow: JoinedRow = smjScanner.getJoinedRow()
 
   override def advanceNext(): Boolean = {
-    val advancedStatus = smjScanner.advanceNextPair()
-    if (advancedStatus) {
-      numRows += 1
-    }
-    advancedStatus
+    val r = smjScanner.advanceNext()
+    if (r) numRows += 1
+    r
   }
 
   override def getRow: InternalRow = resultProj(joinedRow)
