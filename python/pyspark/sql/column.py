@@ -226,6 +226,10 @@ class Column(object):
             raise AttributeError(item)
         return self.getField(item)
 
+    def __iter__(self):
+        raise TypeError('%s.%s object is not iterable' % (self.__module__,
+                                                          self.__class__.__name__))
+
     # string methods
     rlike = _bin_op("rlike")
     like = _bin_op("like")
