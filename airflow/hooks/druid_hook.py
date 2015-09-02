@@ -72,7 +72,7 @@ class DruidHook(BaseHook):
                         "queryGranularity": "NONE",
                         "intervals": intervals,
                         "type": "uniform",
-                        "segmentGranularity": "DAY"
+                        "segmentGranularity": "DAY",
                     },
                     "parser": {
                         "type": "string",
@@ -93,7 +93,12 @@ class DruidHook(BaseHook):
                     "dataSource": datasource
                 },
                 "tuningConfig": {
-                    "type": "hadoop"
+                    "type": "hadoop",
+                    "jobProperties": {
+                        "mapreduce.job.user.classpath.first": "false",
+                        "mapreduce.map.output.compress" : "false",
+                        "mapreduce.output.fileoutputformat.compress" : "false",
+                    },
                 },
                 "ioConfig": {
                     "inputSpec": {
