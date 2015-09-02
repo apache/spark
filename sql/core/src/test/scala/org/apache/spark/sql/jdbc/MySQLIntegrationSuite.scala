@@ -18,132 +18,44 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.{Date, Timestamp}
+import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
-import org.scalatest.BeforeAndAfterAll
-
-import com.spotify.docker.client.{ImageNotFoundException, DockerClient}
-import com.spotify.docker.client.messages.ContainerConfig
-
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SharedSQLContext
-
-class MySQLDatabase {
-  val docker: DockerClient = DockerClientFactory.get()
-  var containerId: String = null
-
-  start()
-
-  def start(): Unit = {
-    while (true) {
-      try {
-        val config = ContainerConfig.builder()
-          .image("mysql").env("MYSQL_ROOT_PASSWORD=rootpass")
-          .build()
-        containerId = docker.createContainer(config).id
-        docker.startContainer(containerId)
-        return
-      } catch {
-        case e: ImageNotFoundException => retry(3)(docker.pull("mysql:latest"))
-      }
-    }
+class MySQLIntegrationSuite extends DatabaseIntegrationSuite {
+  val db = new DatabaseOnDocker {
+    val imageName = "mysql:latest"
+    val env = Seq("MYSQL_ROOT_PASSWORD=rootpass")
+    lazy val jdbcUrl = s"jdbc:mysql://$ip:3306/mysql?user=root&password=rootpass"
   }
 
-  private def retry[T](n: Int)(fn: => T): T = {
-    try {
-      fn
-    } catch {
-      case e if n > 1 =>
-        retry(n - 1)(fn)
-    }
-  }
+  override def dataPreparation(conn: Connection) {
+    conn.prepareStatement("CREATE DATABASE foo").executeUpdate()
+    conn.prepareStatement("CREATE TABLE tbl (x INTEGER, y TEXT(8))").executeUpdate()
+    conn.prepareStatement("INSERT INTO tbl VALUES (42,'fred')").executeUpdate()
+    conn.prepareStatement("INSERT INTO tbl VALUES (17,'dave')").executeUpdate()
 
-  lazy val ip = docker.inspectContainer(containerId).networkSettings.ipAddress
+    conn.prepareStatement("CREATE TABLE numbers (onebit BIT(1), tenbits BIT(10), "
+      + "small SMALLINT, med MEDIUMINT, nor INT, big BIGINT, deci DECIMAL(40,20), flt FLOAT, "
+      + "dbl DOUBLE)").executeUpdate()
+    conn.prepareStatement("INSERT INTO numbers VALUES (b'0', b'1000100101', "
+      + "17, 77777, 123456789, 123456789012345, 123456789012345.123456789012345, "
+      + "42.75, 1.0000000000000002)").executeUpdate()
 
-  def close(): Unit = {
-    docker.killContainer(containerId)
-    docker.removeContainer(containerId)
-    DockerClientFactory.close(docker)
-  }
-}
+    conn.prepareStatement("CREATE TABLE dates (d DATE, t TIME, dt DATETIME, ts TIMESTAMP, "
+      + "yr YEAR)").executeUpdate()
+    conn.prepareStatement("INSERT INTO dates VALUES ('1991-11-09', '13:31:24', "
+      + "'1996-01-01 01:23:45', '2009-02-13 23:31:30', '2001')").executeUpdate()
 
-class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll with SharedSQLContext {
-  lazy val db: MySQLDatabase = new MySQLDatabase()
-  var ip: String = null
-
-  def url(ip: String): String = url(ip, "mysql")
-  def url(ip: String, db: String): String = s"jdbc:mysql://$ip:3306/$db?user=root&password=rootpass"
-
-  def waitForDatabase(ip: String, maxMillis: Long) {
-    val before = System.currentTimeMillis()
-    var lastException: java.sql.SQLException = null
-    while (true) {
-      if (System.currentTimeMillis() > before + maxMillis) {
-        throw new java.sql.SQLException(s"Database not up after $maxMillis ms.", lastException)
-      }
-      try {
-        val conn = java.sql.DriverManager.getConnection(url(ip))
-        conn.close()
-        return
-      } catch {
-        case e: java.sql.SQLException =>
-          lastException = e
-          java.lang.Thread.sleep(250)
-      }
-    }
-  }
-
-  def setupDatabase(ip: String) {
-    val conn = java.sql.DriverManager.getConnection(url(ip))
-    try {
-      conn.prepareStatement("CREATE DATABASE foo").executeUpdate()
-      conn.prepareStatement("CREATE TABLE foo.tbl (x INTEGER, y TEXT(8))").executeUpdate()
-      conn.prepareStatement("INSERT INTO foo.tbl VALUES (42,'fred')").executeUpdate()
-      conn.prepareStatement("INSERT INTO foo.tbl VALUES (17,'dave')").executeUpdate()
-
-      conn.prepareStatement("CREATE TABLE foo.numbers (onebit BIT(1), tenbits BIT(10), "
-        + "small SMALLINT, med MEDIUMINT, nor INT, big BIGINT, deci DECIMAL(40,20), flt FLOAT, "
-        + "dbl DOUBLE)").executeUpdate()
-      conn.prepareStatement("INSERT INTO foo.numbers VALUES (b'0', b'1000100101', "
-        + "17, 77777, 123456789, 123456789012345, 123456789012345.123456789012345, "
-        + "42.75, 1.0000000000000002)").executeUpdate()
-
-      conn.prepareStatement("CREATE TABLE foo.dates (d DATE, t TIME, dt DATETIME, ts TIMESTAMP, "
-        + "yr YEAR)").executeUpdate()
-      conn.prepareStatement("INSERT INTO foo.dates VALUES ('1991-11-09', '13:31:24', "
-        + "'1996-01-01 01:23:45', '2009-02-13 23:31:30', '2001')").executeUpdate()
-
-      // TODO: Test locale conversion for strings.
-      conn.prepareStatement("CREATE TABLE foo.strings (a CHAR(10), b VARCHAR(10), c TINYTEXT, "
-        + "d TEXT, e MEDIUMTEXT, f LONGTEXT, g BINARY(4), h VARBINARY(10), i BLOB)"
-      ).executeUpdate()
-      conn.prepareStatement("INSERT INTO foo.strings VALUES ('the', 'quick', 'brown', 'fox', " +
-        "'jumps', 'over', 'the', 'lazy', 'dog')").executeUpdate()
-    } finally {
-      conn.close()
-    }
-  }
-
-  override def beforeAll() {
-    // If you load the MySQL driver here, DriverManager will deadlock.  The
-    // MySQL driver gets loaded when its jar gets loaded, unlike the Postgres
-    // and H2 drivers.
-    // scalastyle:off classforname
-    // Class.forName("com.mysql.jdbc.Driver")
-    // scalastyle:on classforname
-    super.beforeAll()
-    waitForDatabase(db.ip, 60000)
-    setupDatabase(db.ip)
-    ip = db.ip
-  }
-
-  override def afterAll() {
-    db.close()
+    // TODO: Test locale conversion for strings.
+    conn.prepareStatement("CREATE TABLE strings (a CHAR(10), b VARCHAR(10), c TINYTEXT, "
+      + "d TEXT, e MEDIUMTEXT, f LONGTEXT, g BINARY(4), h VARBINARY(10), i BLOB)"
+    ).executeUpdate()
+    conn.prepareStatement("INSERT INTO strings VALUES ('the', 'quick', 'brown', 'fox', " +
+      "'jumps', 'over', 'the', 'lazy', 'dog')").executeUpdate()
   }
 
   test("Basic test") {
-    val df = sqlContext.read.jdbc(url(ip, "foo"), "tbl", new Properties)
+    val df = sqlContext.read.jdbc(db.jdbcUrl, "tbl", new Properties)
     val rows = df.collect()
     assert(rows.length == 2)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -153,7 +65,7 @@ class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll with Sh
   }
 
   test("Numeric types") {
-    val df = sqlContext.read.jdbc(url(ip, "foo"), "numbers", new Properties)
+    val df = sqlContext.read.jdbc(db.jdbcUrl, "numbers", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -180,7 +92,7 @@ class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll with Sh
   }
 
   test("Date types") {
-    val df = sqlContext.read.jdbc(url(ip, "foo"), "dates", new Properties)
+    val df = sqlContext.read.jdbc(db.jdbcUrl, "dates", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -198,7 +110,7 @@ class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll with Sh
   }
 
   test("String types") {
-    val df = sqlContext.read.jdbc(url(ip, "foo"), "strings", new Properties)
+    val df = sqlContext.read.jdbc(db.jdbcUrl, "strings", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -224,11 +136,11 @@ class MySQLIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll with Sh
   }
 
   test("Basic write test") {
-    val df1 = sqlContext.read.jdbc(url(ip, "foo"), "numbers", new Properties)
-    val df2 = sqlContext.read.jdbc(url(ip, "foo"), "dates", new Properties)
-    val df3 = sqlContext.read.jdbc(url(ip, "foo"), "strings", new Properties)
-    df1.write.jdbc(url(ip, "foo"), "numberscopy", new Properties)
-    df2.write.jdbc(url(ip, "foo"), "datescopy", new Properties)
-    df3.write.jdbc(url(ip, "foo"), "stringscopy", new Properties)
+    val df1 = sqlContext.read.jdbc(db.jdbcUrl, "numbers", new Properties)
+    val df2 = sqlContext.read.jdbc(db.jdbcUrl, "dates", new Properties)
+    val df3 = sqlContext.read.jdbc(db.jdbcUrl, "strings", new Properties)
+    df1.write.jdbc(db.jdbcUrl, "numberscopy", new Properties)
+    df2.write.jdbc(db.jdbcUrl, "datescopy", new Properties)
+    df3.write.jdbc(db.jdbcUrl, "stringscopy", new Properties)
   }
 }

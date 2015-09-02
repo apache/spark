@@ -17,108 +17,27 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.DriverManager
+import java.sql.Connection
 import java.util.Properties
 
-import org.scalatest.BeforeAndAfterAll
-
-import com.spotify.docker.client.{ImageNotFoundException, DockerClient}
-import com.spotify.docker.client.messages.ContainerConfig
-
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SharedSQLContext
-
-class PostgresDatabase {
-  val docker: DockerClient = DockerClientFactory.get()
-  var containerId: String = null
-
-  start()
-
-  def start(): Unit = {
-    while (true) {
-      try {
-        val config = ContainerConfig.builder()
-          .image("postgres").env("POSTGRES_PASSWORD=rootpass")
-          .build()
-        containerId = docker.createContainer(config).id
-        docker.startContainer(containerId)
-        return
-      } catch {
-        case e: ImageNotFoundException => retry(3)(docker.pull("postgres:latest"))
-      }
-    }
+class PostgresIntegrationSuite extends DatabaseIntegrationSuite {
+  val db = new DatabaseOnDocker {
+    val imageName = "postgres:latest"
+    val env = Seq("POSTGRES_PASSWORD=rootpass")
+    lazy val jdbcUrl = s"jdbc:postgresql://$ip:5432/postgres?user=postgres&password=rootpass"
   }
 
-  private def retry[T](n: Int)(fn: => T): T = {
-    try {
-      fn
-    } catch {
-      case e if n > 1 =>
-        retry(n - 1)(fn)
-    }
-  }
-
-  lazy val ip = docker.inspectContainer(containerId).networkSettings.ipAddress
-
-  def close(): Unit = {
-    docker.killContainer(containerId)
-    docker.removeContainer(containerId)
-    DockerClientFactory.close(docker)
-  }
-}
-
-class PostgresIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll with SharedSQLContext {
-  lazy val db = new PostgresDatabase()
-
-  def url(ip: String): String =
-    s"jdbc:postgresql://$ip:5432/postgres?user=postgres&password=rootpass"
-
-  def waitForDatabase(ip: String, maxMillis: Long) {
-    val before = System.currentTimeMillis()
-    var lastException: java.sql.SQLException = null
-    while (true) {
-      if (System.currentTimeMillis() > before + maxMillis) {
-        throw new java.sql.SQLException(s"Database not up after $maxMillis ms.",
-          lastException)
-      }
-      try {
-        val conn = java.sql.DriverManager.getConnection(url(ip))
-        conn.close()
-        return
-      } catch {
-        case e: java.sql.SQLException =>
-          lastException = e
-          java.lang.Thread.sleep(250)
-      }
-    }
-  }
-
-  def setupDatabase(ip: String) {
-    val conn = DriverManager.getConnection(url(ip))
-    try {
-      conn.prepareStatement("CREATE DATABASE foo").executeUpdate()
-      conn.setCatalog("foo")
-      conn.prepareStatement("CREATE TABLE bar (a text, b integer, c double precision, d bigint, "
-        + "e bit(1), f bit(10), g bytea, h boolean, i inet, j cidr)").executeUpdate()
-      conn.prepareStatement("INSERT INTO bar VALUES ('hello', 42, 1.25, 123456789012345, B'0', "
-        + "B'1000100101', E'\\\\xDEADBEEF', true, '172.16.0.42', '192.168.0.0/16')").executeUpdate()
-    } finally {
-      conn.close()
-    }
-  }
-
-  override def beforeAll() {
-    super.beforeAll()
-    waitForDatabase(db.ip, 60000)
-    setupDatabase(db.ip)
-  }
-
-  override def afterAll() {
-    db.close()
+  override def dataPreparation(conn: Connection) {
+    conn.prepareStatement("CREATE DATABASE foo").executeUpdate()
+    conn.setCatalog("foo")
+    conn.prepareStatement("CREATE TABLE bar (a text, b integer, c double precision, d bigint, "
+      + "e bit(1), f bit(10), g bytea, h boolean, i inet, j cidr)").executeUpdate()
+    conn.prepareStatement("INSERT INTO bar VALUES ('hello', 42, 1.25, 123456789012345, B'0', "
+      + "B'1000100101', E'\\\\xDEADBEEF', true, '172.16.0.42', '192.168.0.0/16')").executeUpdate()
   }
 
   test("Type mapping for various types") {
-    val df = sqlContext.read.jdbc(url(db.ip), "public.bar", new Properties)
+    val df = sqlContext.read.jdbc(db.jdbcUrl, "bar", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -149,8 +68,8 @@ class PostgresIntegrationSuite extends SparkFunSuite with BeforeAndAfterAll with
   }
 
   test("Basic write test") {
-    val df = sqlContext.read.jdbc(url(db.ip), "public.bar", new Properties)
-    df.write.jdbc(url(db.ip), "public.barcopy", new Properties)
+    val df = sqlContext.read.jdbc(db.jdbcUrl, "bar", new Properties)
+    df.write.jdbc(db.jdbcUrl, "public.barcopy", new Properties)
     // Test only that it doesn't bomb out.
   }
 }
