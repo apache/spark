@@ -165,6 +165,14 @@ private[execution] object HashedRelation {
     }
   }
 
+  /**
+   * Consume a `LocalNode` to create a `HashedRelation`. Because `LocalNode` is not an `Iterator`,
+   * we cannot use `apply` directly. Moreover, to avoid creating another layer of `Iterator`, we
+   * have to duplicate most codes of `apply` here.
+   *
+   * Note: the default parameter is in conflict with overloading. So it uses a different method than
+   * rather than `apply`.
+   */
   def createLocalHashedRelation(
       input: LocalNode,
       keyGenerator: Projection,
@@ -445,9 +453,9 @@ private[execution] object UnsafeHashedRelation {
   }
 
   def apply(
-    input: LocalNode,
-    keyGenerator: UnsafeProjection,
-    sizeEstimate: Int): HashedRelation = {
+      input: LocalNode,
+      keyGenerator: UnsafeProjection,
+      sizeEstimate: Int): HashedRelation = {
 
     // Use a Java hash table here because unsafe maps expect fixed size records
     val hashTable = new JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]](sizeEstimate)
