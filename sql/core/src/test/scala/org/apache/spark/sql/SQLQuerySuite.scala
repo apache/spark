@@ -1493,6 +1493,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql(
         """
+          |SELECT sum(b)
+          |FROM orderByData
+          |GROUP BY a
+          |ORDER BY sum(b), max(b)
+        """.stripMargin),
+      Row(3) :: Row(7) :: Row(11) :: Row(15) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
           |SELECT a, sum(b)
           |FROM orderByData
           |GROUP BY a
