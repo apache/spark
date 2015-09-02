@@ -38,6 +38,7 @@ defaults = {
         'web_server_host': '0.0.0.0',
         'web_server_port': '8080',
         'authenticate': False,
+        'filter_by_owner': False,
         'demo_mode': False,
         'secret_key': 'airflowified',
         'expose_config': False,
@@ -115,6 +116,11 @@ secret_key = temporary_key
 # Expose the configuration file in the web server
 expose_config = true
 
+# Set to true to turn on authentication : http://pythonhosted.org/airflow/installation.html#web-authentication
+authenticate = False
+
+# Filter the list of dags by owner name (requires authentication to be enabled)
+filter_by_owner = False
 
 [smtp]
 # If you want airflow to send emails on retries, failure, and you want to

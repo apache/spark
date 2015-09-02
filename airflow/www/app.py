@@ -67,6 +67,10 @@ AUTHENTICATE = conf.getboolean('webserver', 'AUTHENTICATE')
 if AUTHENTICATE is False:
     login_required = lambda x: x
 
+FILTER_BY_OWNER = False
+if conf.getboolean('webserver', 'FILTER_BY_OWNER'):
+    # filter_by_owner if authentication is enabled and filter_by_owner is true
+    FILTER_BY_OWNER = AUTHENTICATE
 
 class VisiblePasswordInput(widgets.PasswordInput):
     def __init__(self, hide_value=False):
@@ -278,7 +282,13 @@ class HomeView(AdminIndexView):
     def index(self):
         session = Session()
         DM = models.DagModel
-        qry = session.query(DM).filter(~DM.is_subdag, DM.is_active).all()
+        qry = None
+        # filter the dags if filter_by_owner and current user is not superuser
+        do_filter = FILTER_BY_OWNER and (not current_user.is_superuser())
+        if do_filter:
+            qry = session.query(DM).filter(~DM.is_subdag, DM.is_active, DM.owners == current_user.username).all()
+        else:
+            qry = session.query(DM).filter(~DM.is_subdag, DM.is_active).all()
         orm_dags = {dag.dag_id: dag for dag in qry}
         import_errors = session.query(models.ImportError).all()
         for ie in import_errors:
@@ -289,7 +299,10 @@ class HomeView(AdminIndexView):
         session.commit()
         session.close()
         dags = dagbag.dags.values()
-        dags = {dag.dag_id: dag for dag in dags if not dag.parent_dag}
+        if do_filter:
+            dags = {dag.dag_id: dag for dag in dags if (dag.owner == current_user.username and (not dag.parent_dag))}
+        else:
+            dags = {dag.dag_id: dag for dag in dags if not dag.parent_dag}
         all_dag_ids = sorted(set(orm_dags.keys()) | set(dags.keys()))
         return self.render(
             'airflow/dags.html',
