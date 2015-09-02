@@ -1996,11 +1996,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       dependency,
       callSite,
       localProperties.get)
-    new SimpleFutureAction(waiter, env.mapOutputTracker.getStatistics(
-      dependency.shuffleId, dependency.partitioner.numPartitions))
+    new SimpleFutureAction(waiter, env.mapOutputTracker.getStatistics(dependency))
   }
-
-
 
   /**
    * Cancel active jobs for the specified group. See [[org.apache.spark.SparkContext.setJobGroup]]

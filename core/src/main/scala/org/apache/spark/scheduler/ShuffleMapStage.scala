@@ -45,7 +45,7 @@ private[spark] class ShuffleMapStage(
 
   override def toString: String = "ShuffleMapStage " + id
 
-  /** Map-stage jobs that were submitted to execute this stage independently (if any) */
+  /** Running map-stage jobs that were submitted to execute this stage independently (if any) */
   var mapStageJobs: List[ActiveJob] = Nil
 
   var numAvailableOutputs: Int = 0

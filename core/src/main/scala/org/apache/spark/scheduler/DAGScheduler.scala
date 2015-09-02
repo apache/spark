@@ -829,24 +829,25 @@ class DAGScheduler(
         listener.jobFailed(e)
         return
     }
-    if (finalStage != null) {
-      val job = new ActiveJob(jobId, finalStage, callSite, listener, properties)
-      clearCacheLocs()
-      logInfo("Got job %s (%s) with %d output partitions".format(
-        job.jobId, callSite.shortForm, partitions.length))
-      logInfo("Final stage: " + finalStage + " (" + finalStage.name + ")")
-      logInfo("Parents of final stage: " + finalStage.parents)
-      logInfo("Missing parents: " + getMissingParentStages(finalStage))
-      val jobSubmissionTime = clock.getTimeMillis()
-      jobIdToActiveJob(jobId) = job
-      activeJobs += job
-      finalStage.resultOfJob = Some(job)
-      val stageIds = jobIdToStageIds(jobId).toArray
-      val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
-      listenerBus.post(
-        SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
-      submitStage(finalStage)
-    }
+
+    val job = new ActiveJob(jobId, finalStage, callSite, listener, properties)
+    clearCacheLocs()
+    logInfo("Got job %s (%s) with %d output partitions".format(
+      job.jobId, callSite.shortForm, partitions.length))
+    logInfo("Final stage: " + finalStage + " (" + finalStage.name + ")")
+    logInfo("Parents of final stage: " + finalStage.parents)
+    logInfo("Missing parents: " + getMissingParentStages(finalStage))
+
+    val jobSubmissionTime = clock.getTimeMillis()
+    jobIdToActiveJob(jobId) = job
+    activeJobs += job
+    finalStage.resultOfJob = Some(job)
+    val stageIds = jobIdToStageIds(jobId).toArray
+    val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
+    listenerBus.post(
+      SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
+    submitStage(finalStage)
+
     submitWaitingStages()
   }
 
@@ -868,42 +869,42 @@ class DAGScheduler(
         listener.jobFailed(e)
         return
     }
-    if (finalStage != null) {
-      val job = new ActiveJob(jobId, finalStage, callSite, listener, properties)
-      clearCacheLocs()
-      logInfo("Got map stage job %s (%s) with %d output partitions".format(
-        jobId, callSite.shortForm, dependency.rdd.partitions.size))
-      logInfo("Final stage: " + finalStage + " (" + finalStage.name + ")")
-      logInfo("Parents of final stage: " + finalStage.parents)
-      logInfo("Missing parents: " + getMissingParentStages(finalStage))
 
-      // Mark any finished tasks in the stage as such so the listener knows about them
-      for (i <- 0 until finalStage.numPartitions) {
-        if (finalStage.outputLocs(i).nonEmpty) {
-          job.finished(i) = true
-          job.numFinished += 1
-          listener.taskSucceeded(i, null)
-        }
-      }
+    val job = new ActiveJob(jobId, finalStage, callSite, listener, properties)
+    clearCacheLocs()
+    logInfo("Got map stage job %s (%s) with %d output partitions".format(
+      jobId, callSite.shortForm, dependency.rdd.partitions.size))
+    logInfo("Final stage: " + finalStage + " (" + finalStage.name + ")")
+    logInfo("Parents of final stage: " + finalStage.parents)
+    logInfo("Missing parents: " + getMissingParentStages(finalStage))
 
-      val jobSubmissionTime = clock.getTimeMillis()
-      jobIdToActiveJob(jobId) = job
-      activeJobs += job
-      finalStage.mapStageJobs = job :: finalStage.mapStageJobs
-      val stageIds = jobIdToStageIds(jobId).toArray
-      val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
-      listenerBus.post(
-        SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
-      submitStage(finalStage)
-
-      // If the whole job has finished, remove it
-      if (job.numFinished == job.numPartitions) {
-        markStageAsFinished(finalStage)
-        cleanupStateForJobAndIndependentStages(job)
-        listenerBus.post(
-          SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
+    // Mark any finished tasks in the stage as such so the listener knows about them
+    for (i <- 0 until finalStage.numPartitions) {
+      if (finalStage.outputLocs(i).nonEmpty) {
+        job.finished(i) = true
+        job.numFinished += 1
+        listener.taskSucceeded(i, null)
       }
     }
+
+    val jobSubmissionTime = clock.getTimeMillis()
+    jobIdToActiveJob(jobId) = job
+    activeJobs += job
+    finalStage.mapStageJobs = job :: finalStage.mapStageJobs
+    val stageIds = jobIdToStageIds(jobId).toArray
+    val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
+    listenerBus.post(
+      SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
+    submitStage(finalStage)
+
+    // If the whole job has finished, remove it
+    if (job.numFinished == job.numPartitions) {
+      markStageAsFinished(finalStage)
+      cleanupStateForJobAndIndependentStages(job)
+      listenerBus.post(
+        SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
+    }
+
     submitWaitingStages()
   }
 
