@@ -32,18 +32,23 @@ import org.apache.spark.sql.types._
  * Trait for a local matrix.
  */
 @SQLUserDefinedType(udt = classOf[MatrixUDT])
+@Since("1.0.0")
 sealed trait Matrix extends Serializable {
 
   /** Number of rows. */
+  @Since("1.0.0")
   def numRows: Int
 
   /** Number of columns. */
+  @Since("1.0.0")
   def numCols: Int
 
   /** Flag that keeps track whether the matrix is transposed or not. False by default. */
+  @Since("1.3.0")
   val isTransposed: Boolean = false
 
   /** Converts to a dense array in column major. */
+  @Since("1.0.0")
   def toArray: Array[Double] = {
     val newArray = new Array[Double](numRows * numCols)
     foreachActive { (i, j, v) =>
@@ -56,6 +61,7 @@ sealed trait Matrix extends Serializable {
   private[mllib] def toBreeze: BM[Double]
 
   /** Gets the (i, j)-th element. */
+  @Since("1.3.0")
   def apply(i: Int, j: Int): Double
 
   /** Return the index for the (i, j)-th element in the backing array. */
@@ -65,12 +71,15 @@ sealed trait Matrix extends Serializable {
   private[mllib] def update(i: Int, j: Int, v: Double): Unit
 
   /** Get a deep copy of the matrix. */
+  @Since("1.2.0")
   def copy: Matrix
 
   /** Transpose the Matrix. Returns a new `Matrix` instance sharing the same underlying data. */
+  @Since("1.3.0")
   def transpose: Matrix
 
   /** Convenience method for `Matrix`-`DenseMatrix` multiplication. */
+  @Since("1.2.0")
   def multiply(y: DenseMatrix): DenseMatrix = {
     val C: DenseMatrix = DenseMatrix.zeros(numRows, y.numCols)
     BLAS.gemm(1.0, this, y, 0.0, C)
@@ -78,11 +87,13 @@ sealed trait Matrix extends Serializable {
   }
 
   /** Convenience method for `Matrix`-`DenseVector` multiplication. For binary compatibility. */
+  @Since("1.2.0")
   def multiply(y: DenseVector): DenseVector = {
     multiply(y.asInstanceOf[Vector])
   }
 
   /** Convenience method for `Matrix`-`Vector` multiplication. */
+  @Since("1.4.0")
   def multiply(y: Vector): DenseVector = {
     val output = new DenseVector(new Array[Double](numRows))
     BLAS.gemv(1.0, this, y, 0.0, output)
@@ -93,6 +104,7 @@ sealed trait Matrix extends Serializable {
   override def toString: String = toBreeze.toString()
 
   /** A human readable representation of the matrix with maximum lines and width */
+  @Since("1.4.0")
   def toString(maxLines: Int, maxLineWidth: Int): String = toBreeze.toString(maxLines, maxLineWidth)
 
   /** Map the values of this matrix using a function. Generates a new matrix. Performs the
@@ -118,11 +130,13 @@ sealed trait Matrix extends Serializable {
   /**
    * Find the number of non-zero active values.
    */
+  @Since("1.5.0")
   def numNonzeros: Int
 
   /**
    * Find the number of values stored explicitly. These values can be zero as well.
    */
+  @Since("1.5.0")
   def numActives: Int
 }
 
@@ -230,11 +244,11 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
  */
 @Since("1.0.0")
 @SQLUserDefinedType(udt = classOf[MatrixUDT])
-class DenseMatrix(
-    val numRows: Int,
-    val numCols: Int,
-    val values: Array[Double],
-    override val isTransposed: Boolean) extends Matrix {
+class DenseMatrix @Since("1.3.0") (
+    @Since("1.0.0") val numRows: Int,
+    @Since("1.0.0") val numCols: Int,
+    @Since("1.0.0") val values: Array[Double],
+    @Since("1.3.0") override val isTransposed: Boolean) extends Matrix {
 
   require(values.length == numRows * numCols, "The number of values supplied doesn't match the " +
     s"size of the matrix! values.length: ${values.length}, numRows * numCols: ${numRows * numCols}")
@@ -254,7 +268,7 @@ class DenseMatrix(
    * @param numCols number of columns
    * @param values matrix entries in column major
    */
-  @Since("1.3.0")
+  @Since("1.0.0")
   def this(numRows: Int, numCols: Int, values: Array[Double]) =
     this(numRows, numCols, values, false)
 
@@ -491,13 +505,13 @@ object DenseMatrix {
  */
 @Since("1.2.0")
 @SQLUserDefinedType(udt = classOf[MatrixUDT])
-class SparseMatrix(
-    val numRows: Int,
-    val numCols: Int,
-    val colPtrs: Array[Int],
-    val rowIndices: Array[Int],
-    val values: Array[Double],
-    override val isTransposed: Boolean) extends Matrix {
+class SparseMatrix @Since("1.3.0") (
+    @Since("1.2.0") val numRows: Int,
+    @Since("1.2.0") val numCols: Int,
+    @Since("1.2.0") val colPtrs: Array[Int],
+    @Since("1.2.0") val rowIndices: Array[Int],
+    @Since("1.2.0") val values: Array[Double],
+    @Since("1.3.0") override val isTransposed: Boolean) extends Matrix {
 
   require(values.length == rowIndices.length, "The number of row indices and values don't match! " +
     s"values.length: ${values.length}, rowIndices.length: ${rowIndices.length}")
@@ -527,7 +541,7 @@ class SparseMatrix(
    *                   order for each column
    * @param values non-zero matrix entries in column major
    */
-  @Since("1.3.0")
+  @Since("1.2.0")
   def this(
       numRows: Int,
       numCols: Int,
@@ -549,8 +563,6 @@ class SparseMatrix(
      }
   }
 
-  /**
-   */
   @Since("1.3.0")
   override def apply(i: Int, j: Int): Double = {
     val ind = index(i, j)

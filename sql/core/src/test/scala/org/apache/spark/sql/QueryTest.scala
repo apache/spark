@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.{Locale, TimeZone}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
@@ -145,7 +145,7 @@ object QueryTest {
   }
 
   def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): String = {
-    checkAnswer(df, expectedAnswer.toSeq) match {
+    checkAnswer(df, expectedAnswer.asScala) match {
       case Some(errorMessage) => errorMessage
       case None => null
     }

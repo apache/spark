@@ -46,7 +46,8 @@ import org.apache.spark.util.random.XORShiftRandom
  */
 @Since("1.0.0")
 @Experimental
-class DecisionTree (private val strategy: Strategy) extends Serializable with Logging {
+class DecisionTree @Since("1.0.0") (private val strategy: Strategy)
+  extends Serializable with Logging {
 
   strategy.assertValid()
 

@@ -19,13 +19,13 @@ package org.apache.spark.deploy
 
 import java.util.concurrent.CountDownLatch
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.{Logging, SparkConf, SecurityManager}
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.sasl.SaslServerBootstrap
-import org.apache.spark.network.server.TransportServer
+import org.apache.spark.network.server.{TransportServerBootstrap, TransportServer}
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.util.Utils
@@ -67,13 +67,13 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   def start() {
     require(server == null, "Shuffle server already started")
     logInfo(s"Starting shuffle service on port $port with useSasl = $useSasl")
-    val bootstraps =
+    val bootstraps: Seq[TransportServerBootstrap] =
       if (useSasl) {
         Seq(new SaslServerBootstrap(transportConf, securityManager))
       } else {
         Nil
       }
-    server = transportContext.createServer(port, bootstraps)
+    server = transportContext.createServer(port, bootstraps.asJava)
   }
 
   /** Clean up all shuffle files associated with an application that has exited. */

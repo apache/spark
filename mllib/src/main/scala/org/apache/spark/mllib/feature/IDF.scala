@@ -39,8 +39,9 @@ import org.apache.spark.rdd.RDD
  */
 @Since("1.1.0")
 @Experimental
-class IDF(val minDocFreq: Int) {
+class IDF @Since("1.2.0") (@Since("1.2.0") val minDocFreq: Int) {
 
+  @Since("1.1.0")
   def this() = this(0)
 
   // TODO: Allow different IDF formulations.
@@ -162,7 +163,8 @@ private object IDF {
  * Represents an IDF model that can transform term frequency vectors.
  */
 @Experimental
-class IDFModel private[spark] (val idf: Vector) extends Serializable {
+@Since("1.1.0")
+class IDFModel private[spark] (@Since("1.1.0") val idf: Vector) extends Serializable {
 
   /**
    * Transforms term frequency (TF) vectors to TF-IDF vectors.

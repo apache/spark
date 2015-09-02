@@ -18,13 +18,13 @@
 import java.io._
 
 import scala.util.Properties
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
-import com.typesafe.sbt.pom.{loadEffectivePom, PomBuild, SbtPomKeys}
+import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
 
 import spray.revolver.RevolverPlugin._
@@ -120,7 +120,7 @@ object SparkBuild extends PomBuild {
     case _ =>
   }
 
-  override val userPropertiesMap = System.getProperties.toMap
+  override val userPropertiesMap = System.getProperties.asScala.toMap
 
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
@@ -547,6 +547,8 @@ object TestSettings {
     envVars in Test ++= Map(
       "SPARK_DIST_CLASSPATH" ->
         (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
+      "SPARK_PREPEND_CLASSES" -> "1",
+      "SPARK_TESTING" -> "1",
       "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home"))),
     javaOptions in Test += s"-Djava.io.tmpdir=$testTempDir",
     javaOptions in Test += "-Dspark.test.home=" + sparkHome,
@@ -559,7 +561,7 @@ object TestSettings {
     javaOptions in Test += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test += "-Dderby.system.durability=test",
-    javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark")
+    javaOptions in Test ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test += "-ea",
     javaOptions in Test ++= "-Xmx3g -Xss4096k -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"

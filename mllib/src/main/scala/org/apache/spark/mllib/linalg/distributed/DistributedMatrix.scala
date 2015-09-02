@@ -28,9 +28,11 @@ import org.apache.spark.annotation.Since
 trait DistributedMatrix extends Serializable {
 
   /** Gets or computes the number of rows. */
+  @Since("1.0.0")
   def numRows(): Long
 
   /** Gets or computes the number of columns. */
+  @Since("1.0.0")
   def numCols(): Long
 
   /** Collects data and assembles a local dense breeze matrix (for test only). */

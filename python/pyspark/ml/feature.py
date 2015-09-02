@@ -26,11 +26,11 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer
 from pyspark.mllib.common import inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 
-__all__ = ['Binarizer', 'Bucketizer', 'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel',
+__all__ = ['Binarizer', 'Bucketizer', 'DCT', 'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel',
            'NGram', 'Normalizer', 'OneHotEncoder', 'PolynomialExpansion', 'RegexTokenizer',
-           'StandardScaler', 'StandardScalerModel', 'StringIndexer', 'StringIndexerModel',
-           'Tokenizer', 'VectorAssembler', 'VectorIndexer', 'Word2Vec', 'Word2VecModel',
-           'PCA', 'PCAModel', 'RFormula', 'RFormulaModel']
+           'SQLTransformer', 'StandardScaler', 'StandardScalerModel', 'StringIndexer',
+           'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer', 'Word2Vec',
+           'Word2VecModel', 'PCA', 'PCAModel', 'RFormula', 'RFormulaModel']
 
 
 @inherit_doc
@@ -164,6 +164,69 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
         Gets the value of threshold or its default value.
         """
         return self.getOrDefault(self.splits)
+
+
+@inherit_doc
+class DCT(JavaTransformer, HasInputCol, HasOutputCol):
+    """
+    A feature transformer that takes the 1D discrete cosine transform
+    of a real vector. No zero padding is performed on the input vector.
+    It returns a real vector of the same length representing the DCT.
+    The return vector is scaled such that the transform matrix is
+    unitary (aka scaled DCT-II).
+
+    More information on
+    `https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia`.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df1 = sqlContext.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
+    >>> dct = DCT(inverse=False, inputCol="vec", outputCol="resultVec")
+    >>> df2 = dct.transform(df1)
+    >>> df2.head().resultVec
+    DenseVector([10.969..., -0.707..., -2.041...])
+    >>> df3 = DCT(inverse=True, inputCol="resultVec", outputCol="origVec").transform(df2)
+    >>> df3.head().origVec
+    DenseVector([5.0, 8.0, 6.0])
+    """
+
+    # a placeholder to make it appear in the generated doc
+    inverse = Param(Params._dummy(), "inverse", "Set transformer to perform inverse DCT, " +
+                    "default False.")
+
+    @keyword_only
+    def __init__(self, inverse=False, inputCol=None, outputCol=None):
+        """
+        __init__(self, inverse=False, inputCol=None, outputCol=None)
+        """
+        super(DCT, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.DCT", self.uid)
+        self.inverse = Param(self, "inverse", "Set transformer to perform inverse DCT, " +
+                             "default False.")
+        self._setDefault(inverse=False)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, inverse=False, inputCol=None, outputCol=None):
+        """
+        setParams(self, inverse=False, inputCol=None, outputCol=None)
+        Sets params for this DCT.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setInverse(self, value):
+        """
+        Sets the value of :py:attr:`inverse`.
+        """
+        self._paramMap[self.inverse] = value
+        return self
+
+    def getInverse(self):
+        """
+        Gets the value of inverse or its default value.
+        """
+        return self.getOrDefault(self.inverse)
 
 
 @inherit_doc
@@ -678,6 +741,57 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         Gets the value of pattern or its default value.
         """
         return self.getOrDefault(self.pattern)
+
+
+@inherit_doc
+class SQLTransformer(JavaTransformer):
+    """
+    Implements the transforms which are defined by SQL statement.
+    Currently we only support SQL syntax like 'SELECT ... FROM __THIS__'
+    where '__THIS__' represents the underlying table of the input dataset.
+
+    >>> df = sqlContext.createDataFrame([(0, 1.0, 3.0), (2, 2.0, 5.0)], ["id", "v1", "v2"])
+    >>> sqlTrans = SQLTransformer(
+    ...     statement="SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__")
+    >>> sqlTrans.transform(df).head()
+    Row(id=0, v1=1.0, v2=3.0, v3=4.0, v4=3.0)
+    """
+
+    # a placeholder to make it appear in the generated doc
+    statement = Param(Params._dummy(), "statement", "SQL statement")
+
+    @keyword_only
+    def __init__(self, statement=None):
+        """
+        __init__(self, statement=None)
+        """
+        super(SQLTransformer, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.SQLTransformer", self.uid)
+        self.statement = Param(self, "statement", "SQL statement")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, statement=None):
+        """
+        setParams(self, statement=None)
+        Sets params for this SQLTransformer.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setStatement(self, value):
+        """
+        Sets the value of :py:attr:`statement`.
+        """
+        self._paramMap[self.statement] = value
+        return self
+
+    def getStatement(self):
+        """
+        Gets the value of statement or its default value.
+        """
+        return self.getOrDefault(self.statement)
 
 
 @inherit_doc
