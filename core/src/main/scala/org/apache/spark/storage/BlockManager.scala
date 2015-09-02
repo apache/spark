@@ -23,6 +23,7 @@ import java.nio.{ByteBuffer, MappedByteBuffer}
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{ExecutionContext, Await, Future}
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 import scala.util.Random
 
 import sun.nio.ch.DirectBuffer
@@ -590,24 +591,25 @@ private[spark] class BlockManager(
   private def doGetRemote(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
     require(blockId != null, "BlockId is null")
     val locations = Random.shuffle(master.getLocations(blockId))
-    var attemptTimes = 0
+    var numFetchFailures = 0
     for (loc <- locations) {
       logDebug(s"Getting remote block $blockId from $loc")
       val data = try {
         blockTransferService.fetchBlockSync(
           loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
       } catch {
-        case t: Throwable if attemptTimes < locations.size - 1 =>
-          // Return null when Exception throw, so we can fetch block
-          // from another location if there still have locations
-          attemptTimes += 1
-          logWarning(s"Try $attemptTimes times getting remote block $blockId from $loc failed.", t)
-          null
-        case t: Throwable =>
-          // Throw BlockFetchException wraps the last Exception when
-          // there is no block we can fetch
-          throw new BlockFetchException(s"Failed to fetch block from" +
-            s" ${locations.size} locations. Most recent failure cause:", t)
+        case NonFatal(e) =>
+          numFetchFailures += 1
+          if (numFetchFailures == locations.size) {
+            // An exception is thrown while fetching this block from all locations
+            throw new BlockFetchException(s"Failed to fetch block from" +
+              s" ${locations.size} locations. Most recent failure cause:", e)
+          } else {
+            // This location failed, so we retry fetch from a different one by returning null here
+            logWarning(s"Failed to fetch remote block $blockId " +
+              s"from $loc (failed attempt $numFetchFailures)", e)
+            null
+          }
       }
 
       if (data != null) {
