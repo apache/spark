@@ -41,10 +41,7 @@ infer_type <- function(x) {
   if (type == "map") {
     stopifnot(length(x) > 0)
     key <- ls(x)[[1]]
-    list(type = "map",
-         keyType = "string",
-         valueType = infer_type(get(key, x)),
-         valueContainsNull = TRUE)
+    paste0("map<string,", infer_type(get(key, x)), ">")
   } else if (type == "array") {
     stopifnot(length(x) > 0)
     names <- names(x)

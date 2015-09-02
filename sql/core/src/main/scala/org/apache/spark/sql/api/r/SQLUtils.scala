@@ -64,6 +64,9 @@ private[r] object SQLUtils {
       case r"\Aarray<(.*)${elemType}>\Z" => {
         org.apache.spark.sql.types.ArrayType(getSQLDataType(elemType))
       }
+      case r"\Amap<(.*)${keyType},(.*)${valueType}>\Z" => {
+        org.apache.spark.sql.types.MapType(getSQLDataType(keyType), getSQLDataType(valueType))
+      }
       case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
     }
   }

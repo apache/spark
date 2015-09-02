@@ -131,13 +131,31 @@ checkType <- function(type) {
   if (type %in% primtiveTypes) {
     return()
   } else {
-    m <- regexec("^array<(.*)>$", type)
-    matchedStrings <- regmatches(type, m)
-    if (length(matchedStrings[[1]]) >= 2) {
-      elemType <- matchedStrings[[1]][2]
-      checkType(elemType)
-      return()
-    }
+    # Array type
+    firstChar <- substr(type, 1, 1)
+    switch (firstChar,
+            a = {
+              # Array type
+              m <- regexec("^array<(.*)>$", type)
+              matchedStrings <- regmatches(type, m)
+              if (length(matchedStrings[[1]]) >= 2) {
+                elemType <- matchedStrings[[1]][2]
+                checkType(elemType)
+                return()
+              }
+            },
+            m = {
+              # Map type
+              m <- regexec("^map<(.*),(.*)>$", type)
+              matchedStrings <- regmatches(type, m)
+              if (length(matchedStrings[[1]]) >= 3) {
+                keyType <- matchedStrings[[1]][2]
+                valueType <- matchedStrings[[1]][3]
+                checkType(keyType)
+                checkType(valueType)
+                return()
+              }
+            })
   }
 
   stop(paste("Unsupported type for Dataframe:", type))
