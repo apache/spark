@@ -697,6 +697,7 @@ class DAGSchedulerSuite
     val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo))
     submit(finalRdd, Array(0))
 
+    // First, execute stages 0 and 1, failing stage 1 up to MAX-1 times.
     for (attempt <- 0 until Stage.MAX_CONSECUTIVE_FETCH_FAILURES - 1) {
       // Make each task in stage 0 success
       completeShuffleMapStageSuccessfully(0, attempt, numShufflePartitions = 2)
@@ -712,19 +713,20 @@ class DAGSchedulerSuite
       assert(!ended)
     }
 
-    // Rerun stage 0 and 1
+    // Rerun stage 0 and 1 to step through the task set
     completeShuffleMapStageSuccessfully(0, 3, numShufflePartitions = 2)
     completeShuffleMapStageSuccessfully(1, 3, numShufflePartitions = 1)
 
-    // Fail stage 2
+    // Fail stage 2 so that stage 1 is resubmitted when we call scheduler.resubmitFailedStages()
     completeNextStageWithFetchFailure(2, 0, shuffleDepTwo)
 
     scheduler.resubmitFailedStages()
-    // Rerun stage 0
+
+    // Rerun stage 0 to step through the task set
     completeShuffleMapStageSuccessfully(0, 4, numShufflePartitions = 2)
 
     // Now again, fail stage 1 (up to MAX_FAILURES) but confirm that this doesn't trigger an abort
-    // since we succeeded in between
+    // since we succeeded in between.
     completeNextStageWithFetchFailure(1, 4, shuffleDepOne)
 
     scheduler.resubmitFailedStages()
