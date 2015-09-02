@@ -278,7 +278,7 @@ class DenseMatrix @Since("1.3.0") (
   }
 
   override def hashCode: Int = {
-    val state = Seq(numRows, numCols, java.util.Arrays.hashCode(values), isTransposed.hashCode)
+    val state = Seq(numRows, numCols, Arrays.hashCode(values), isTransposed.hashCode)
     state.reduce((a, b) => 31 * a + b)
   }
 
@@ -559,9 +559,9 @@ class SparseMatrix @Since("1.3.0") (
     val state = Seq(
       numRows,
       numCols,
-      java.util.Arrays.hashCode(colPtrs),
-      java.util.Arrays.hashCode(rowIndices),
-      java.util.Arrays.hashCode(values))
+      Arrays.hashCode(colPtrs),
+      Arrays.hashCode(rowIndices),
+      Arrays.hashCode(values))
     state.reduce((a, b) => 31 * a + b)
   }
 
