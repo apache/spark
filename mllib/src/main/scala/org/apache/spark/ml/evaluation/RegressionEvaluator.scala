@@ -29,8 +29,8 @@ import org.apache.spark.sql.types.DoubleType
  * :: Experimental ::
  * Evaluator for regression, which expects two input columns: prediction and label.
  */
-@Experimental
 @Since("1.5.0")
+@Experimental
 final class RegressionEvaluator(override val uid: String)
   extends Evaluator with HasPredictionCol with HasLabelCol {
 

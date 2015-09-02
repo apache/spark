@@ -30,9 +30,9 @@ import org.apache.spark.sql.types.DoubleType
  * :: Experimental ::
  * Evaluator for binary classification, which expects two input columns: rawPrediction and label.
  */
-@Experimental
 @Since("1.2.0")
-class BinaryClassificationEvaluator(override val uid: String)
+@Experimental
+class BinaryClassificationEvaluator(@Since("1.2.0") override val uid: String)
   extends Evaluator with HasRawPredictionCol with HasLabelCol {
 
   @Since("1.4.0")
