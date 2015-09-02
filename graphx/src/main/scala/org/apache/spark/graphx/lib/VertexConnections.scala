@@ -21,7 +21,7 @@ import org.apache.spark.graphx._
 import scala.reflect.ClassTag
 
 /**
- * Computes all the direct and indirect connections of each vertex on a graph up to a 
+ * Computes all the direct and indirect connections of each vertex on a graph up to a
  * maximum degree.
  */
 object VertexConnections {
@@ -32,39 +32,39 @@ object VertexConnections {
    * @param graph the graph for which to compute the connections
    * @param removeDegree0 if true, the returned graph will not contain vertices with degree 0
    *
-   * @return a graph where each vertex attribute is a map containing all the connections and 
-   *         the degree of each connection 
+   * @return a graph where each vertex attribute is a map containing all the connections and
+   *         the degree of each connection
    */
   def apply[VD: ClassTag, ED: ClassTag](
       graph: Graph[VD, ED],
       maxDegree: Int = Int.MaxValue,
       removeDegree0: Boolean = true)
-      : Graph[Map[Int, Set[VD]], ED] = 
-  {      
+      : Graph[Map[Int, Set[VD]], ED] =
+  {
     type RelationsMap = Map[Int, Set[VD]]
-  
+
     def makeMap(x: (Int, Set[VD])*): RelationsMap = (Map(x: _*))
-    
+
     /**
      * Add two maps from different vertices
      */
-    def addMaps(rel1: collection.mutable.Map[Int, Set[VD]], 
+    def addMaps(rel1: collection.mutable.Map[Int, Set[VD]],
         rel2: collection.mutable.Map[Int, Set[VD]]): RelationsMap = {
       val firstValues: Set[VD] = rel1.values.toSet.flatten
-      
+
       val notIncludedMap: collection.mutable.Map[Int, Set[VD]] = rel2.map{case (key, value) =>
         val notIncluded: Set[VD] = value -- firstValues
         key -> notIncluded
       }
-  
-      notIncludedMap.foreach{case (key, value) => 
+
+      notIncludedMap.foreach{case (key, value) =>
          if (key > 0) {
           val finalSet: Set[VD] = rel1.getOrElse(key + 1, Set.empty) ++ value
-          if (finalSet.size > 0) rel1.put(key + 1, finalSet)      
+          if (finalSet.size > 0) rel1.put(key + 1, finalSet)
         }
       }
-  
-      Map(rel1.toSeq: _*) 
+
+      Map(rel1.toSeq: _*)
     }
 
     /**
@@ -72,59 +72,59 @@ object VertexConnections {
      */
     def mergeMaps(rel1: RelationsMap, rel2: RelationsMap): RelationsMap = {
       val firstValues: Set[VD] = rel1.values.toSet.flatten
-  
+
       val notIncludedMap: RelationsMap = rel2.map{case (key, value) =>
         val notIncluded: Set[VD] = value -- firstValues
         key -> notIncluded
       }
-      
-      val finalSet = (rel1.keys ++ notIncludedMap.keys).map { k => 
-        (k,rel1.getOrElse(k, Set.empty) ++ notIncludedMap.getOrElse(k, Set.empty)) 
+
+      val finalSet = (rel1.keys ++ notIncludedMap.keys).map { k =>
+        (k, rel1.getOrElse(k, Set.empty) ++ notIncludedMap.getOrElse(k, Set.empty))
       }
 
       finalSet.toMap
     }
-    
+
     /**
      * Called on every vertex to merge all the inbound messages after each Pregel iteration
      */
     def vertexProgram(id: VertexId, attr: RelationsMap, msg: RelationsMap): RelationsMap = {
       mergeMaps(attr, msg)
     }
-    
+
     /**
      * Function applied to all of the edges that received messages in the current iteration
      */
     def sendMessage(edge: EdgeTriplet[RelationsMap, _]): Iterator[(VertexId, RelationsMap)] = {
       val copySrc = collection.mutable.Map(edge.srcAttr.toSeq: _*)
       val copyDst = collection.mutable.Map(edge.dstAttr.toSeq: _*)
-  
-      copySrc.put(1,copySrc.getOrElse(1, Set.empty) ++ copyDst(0))
-      copyDst.put(1,copyDst.getOrElse(1, Set.empty) ++ copySrc(0))
+
+      copySrc.put(1, copySrc.getOrElse(1, Set.empty) ++ copyDst(0))
+      copyDst.put(1, copyDst.getOrElse(1, Set.empty) ++ copySrc(0))
 
       val newSrcAttr = addMaps(copySrc, copyDst)
       val newDstAttr = addMaps(copyDst, copySrc)
 
       if (edge.srcAttr != newSrcAttr || edge.dstAttr != newDstAttr) {
-        Iterator((edge.srcId, newSrcAttr), (edge.dstId, newDstAttr)) 
+        Iterator((edge.srcId, newSrcAttr), (edge.dstId, newDstAttr))
       }
       else Iterator.empty
     }
-    
+
     val initialMessage = makeMap()
-    
-    val relGraph: Graph[RelationsMap, ED] = 
+
+    val relGraph: Graph[RelationsMap, ED] =
       if (!removeDegree0) {
-        graph.mapVertices{ (vid, attr) => makeMap((0, Set(attr))) } 
+        graph.mapVertices{ (vid, attr) => makeMap((0, Set(attr))) }
       } else {
         graph.filter(graph => {
           val degrees: VertexRDD[Int] = graph.degrees
           graph.outerJoinVertices(degrees) {(vid, data, deg) => deg.getOrElse(0)}
         },
-        vpred = (vid: VertexId, deg:Int) => deg > 0
+        vpred = (vid: VertexId, deg: Int) => deg > 0
         ).mapVertices{ (vid, attr) => makeMap((0, Set(attr))) }
       }
-    
+
     Pregel(relGraph, initialMessage, maxDegree)(vertexProgram, sendMessage, mergeMaps)
   }
 }
