@@ -232,44 +232,36 @@ class LogisticRegression(override val uid: String)
 
   override protected def train(dataset: DataFrame): LogisticRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
-    val instances: Either[RDD[(Double, Vector)], RDD[(Double, Double, Vector)]] =
-      if ($(weightCol).isEmpty) {
-        Left(dataset.select($(labelCol), $(featuresCol)).map {
-          case Row(label: Double, features: Vector) => (label, features)
-        })
-      } else {
-        Right(dataset.select($(labelCol), $(weightCol), $(featuresCol)).map {
-          case Row(label: Double, weight: Double, features: Vector) =>
-            (label, weight, features)
-        })
+    val instances: RDD[(Double, Double, Vector)] = if ($(weightCol).isEmpty) {
+      dataset.select($(labelCol), $(featuresCol)).map {
+        case Row(label: Double, features: Vector) =>
+          (label, 1.0, features)
       }
+    } else {
+      dataset.select($(labelCol), $(weightCol), $(featuresCol)).map {
+        case Row(label: Double, weight: Double, features: Vector) =>
+          (label, weight, features)
+      }
+    }
 
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
-    if (handlePersistence) instances.fold(identity, identity).persist(StorageLevel.MEMORY_AND_DISK)
+    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (summarizer, labelSummarizer) = {
       val combOp = (c1: (MultivariateOnlineSummarizer, MultiClassSummarizer),
         c2: (MultivariateOnlineSummarizer, MultiClassSummarizer)) =>
           (c1._1.merge(c2._1), c1._2.merge(c2._2))
 
-      instances match {
-        case Left(instances: RDD[(Double, Vector)]) =>
-          val seqOP = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-            v: (Double, Vector)) => (c._1.add(v._2), c._2.add(v._1))
+      val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
+        v: (Double, Double, Vector)) => {
+          val weight = v._2
+          (c._1.add(v._3, weight), c._2.add(v._1, weight))
+        }
 
-          instances.treeAggregate(
-            new MultivariateOnlineSummarizer, new MultiClassSummarizer)(seqOP, combOp)
-        case Right(instances: RDD[(Double, Double, Vector)]) =>
-          val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-            v: (Double, Double, Vector)) => {
-              val weight = v._2
-              (c._1.add(v._3, weight), c._2.add(v._1, weight))
-            }
-
-          instances.treeAggregate(
-            new MultivariateOnlineSummarizer, new MultiClassSummarizer)(seqOp, combOp)
-      }
+      instances.treeAggregate(new MultivariateOnlineSummarizer,
+        new MultiClassSummarizer)(seqOp, combOp)
     }
+
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -859,7 +851,7 @@ private class LogisticAggregator(
  * It's used in Breeze's convex optimization routines.
  */
 private class LogisticCostFun(
-    data: Either[RDD[(Double, Vector)], RDD[(Double, Double, Vector)]],
+    data: RDD[(Double, Double, Vector)],
     numClasses: Int,
     fitIntercept: Boolean,
     standardization: Boolean,
@@ -873,17 +865,10 @@ private class LogisticCostFun(
 
     val logisticAggregator = {
       val combOp = (c1: LogisticAggregator, c2: LogisticAggregator) => c1.merge(c2)
-      data match {
-        case Left(data: RDD[(Double, Vector)]) =>
-          val seqOP = (c: LogisticAggregator, v: (Double, Vector)) => c.add(v._1, v._2)
-          data.treeAggregate(new LogisticAggregator(w, numClasses, fitIntercept,
-            featuresStd, featuresMean))(seqOP, combOp)
-        case Right(data: RDD[(Double, Double, Vector)]) =>
-          val seqOp = (c: LogisticAggregator, v: (Double, Double, Vector)) =>
-            c.add(v._1, v._3, v._2)
-          data.treeAggregate(new LogisticAggregator(w, numClasses, fitIntercept,
-            featuresStd, featuresMean))(seqOp, combOp)
-      }
+      val seqOp = (c: LogisticAggregator, v: (Double, Double, Vector)) => c.add(v._1, v._3, v._2)
+
+      data.treeAggregate(new LogisticAggregator(w, numClasses, fitIntercept, featuresStd,
+        featuresMean))(seqOp, combOp)
     }
 
     val totalGradientArray = logisticAggregator.gradient.toArray
