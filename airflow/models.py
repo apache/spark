@@ -16,6 +16,7 @@ import re
 import signal
 import socket
 import sys
+from urlparse import urlparse
 
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType,
@@ -311,22 +312,37 @@ class Connection(Base):
     schema = Column(String(500))
     login = Column(String(500))
     _password = Column('password', String(500))
-    is_encrypted = Column(Boolean, unique=False, default=False)
     port = Column(Integer())
+    is_encrypted = Column(Boolean, unique=False, default=False)
     extra = Column(String(5000))
 
     def __init__(
             self, conn_id=None, conn_type=None,
             host=None, login=None, password=None,
-            schema=None, port=None, extra=None):
+            schema=None, port=None, extra=None,
+            uri=None):
         self.conn_id = conn_id
         self.conn_type = conn_type
-        self.host = host
-        self.login = login
-        self.password = password
-        self.schema = schema
-        self.port = port
-        self.extra = extra
+        if uri:
+            self.parse_from_uri(uri)
+        else:
+            self.host = host
+            self.login = login
+            self.password = password
+            self.schema = schema
+            self.port = port
+            self.extra = extra
+
+    def parse_from_uri(self, uri):
+        temp_uri = urlparse(uri)
+        hostname = temp_uri.hostname or ''
+        if '%2f' in hostname:
+            hostname = hostname.replace('%2f', '/').replace('%2F', '/')
+        self.host = hostname
+        self.schema = temp_uri.path[1:]
+        self.login = temp_uri.username
+        self.password = temp_uri.password
+        self.port = temp_uri.port
 
     def get_password(self):
         if self._password and self.is_encrypted:

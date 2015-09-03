@@ -82,7 +82,7 @@ Connections
 '''''''''''
 
 The connection information to external systems is stored in the Airflow
-metadata database and managed in the UI (``Menu -> Admin -> Connections``).
+metadata database and managed in the UI (``Menu -> Admin -> Connections``)
 A ``conn_id`` is defined there and hostname / login / password / schema
 information attached to it. Airflow pipelines can simply refer to the
 centrally managed ``conn_id`` without having to hard code any of this
@@ -93,6 +93,16 @@ is the case, and when the **hooks** uses the ``get_connection`` method
 from ``BaseHook``, Airflow will choose one connection randomly, allowing
 for some basic load balancing and fault tolerance when used in conjunction
 with retries.
+
+Airflow also has the ability to reference connections via environment
+variables from the operating system. The environment variable needs to be
+prefixed with ``AIRFLOW_CONN_`` to be considered a connection. When
+referencing the connection in the Airflow pipeline, the ``conn_id`` should
+be the name of the variable without the prefix. For example, if the ``conn_id``
+is named ``POSTGRES_MASTER`` the environment variable should be named
+``AIRFLOW_CONN_POSTGRES_MASTER``. Airflow assumes the value returned
+from the environment variable to be in a URI format
+(e.g. ``postgres://user:password@localhost:5432/master``).
 
 Queues
 ''''''

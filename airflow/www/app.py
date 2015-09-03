@@ -1669,7 +1669,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
     verbose_name = "Connection"
     verbose_name_plural = "Connections"
     column_default_sort = ('conn_id', False)
-    column_list = ('conn_id', 'conn_type', 'host', 'port', 'is_encrypted')
+    column_list = ('conn_id', 'conn_type', 'host', 'port', 'is_encrypted',)
     form_overrides = dict(_password=VisiblePasswordField)
     form_widget_args = {
         'is_encrypted': {'disabled': True},
