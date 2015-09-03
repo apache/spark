@@ -25,7 +25,7 @@ pyhive
 pydruid
 PySmbClient
 python-dateutil
-pyhs2
+#pyhs2
 redis
 requests
 setproctitle
