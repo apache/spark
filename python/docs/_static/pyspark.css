@@ -21,7 +21,7 @@ div.sphinxsidebar li a {
 span.pys-tag {
     font-size: 11px;
     font-weight: bold;
-    margin: 0 0 0 2px;
+    margin: 0 0 0 4px;
     padding: 1px 3px 1px 3px;
     -moz-border-radius: 3px;
     -webkit-border-radius: 3px;
@@ -49,3 +49,25 @@ div.pys-note-experimental {
 div.pys-note-deprecated {
 }
 
+.hasTooltip {
+    position:relative;
+}
+.hasTooltip span {
+    display:none;
+}
+
+.hasTooltip:hover span.tooltip {
+    display: inline-block;
+    -moz-border-radius: 2px;
+    -webkit-border-radius: 2px;
+    border-radius: 2px;
+    background-color: rgb(250, 250, 250);
+    color: rgb(68, 68, 68);
+    font-weight: normal;
+    box-shadow: 1px 1px 3px rgb(127, 127, 127);
+    position: absolute;
+    padding: 0 3px 0 3px;
+    top: 1.3em;
+    left: 10px;
+    z-index: 9999
+}

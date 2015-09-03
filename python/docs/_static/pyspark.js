@@ -35,6 +35,11 @@ $(function (){
         return last_idx == -1? '': name.substr(0, last_idx);
     }
 
+    function buildTag(text, cls, tooltip) {
+        return '<span class="pys-tag ' + cls + ' hasTooltip">' + text + '<span class="tooltip">'
+            + tooltip + '</span></span>'
+    }
+
     var sidebarLinkMap = buildSidebarLinkMap();
 
     $('dl.class, dl.function').each(function (i,dl)  {
@@ -57,11 +62,11 @@ $(function (){
                 }
                 var tags = '';
                 if (adNoteDivs.experimental) {
-                    tags += ' <span class="pys-tag pys-tag-experimental">E</span>';
+                    tags += buildTag('E', 'pys-tag-experimental', 'Experimental');
                     adNoteDivs.experimental.addClass('pys-note pys-note-experimental');
                 }
                 if (adNoteDivs.deprecated) {
-                    tags += ' <span class="pys-tag pys-tag-deprecated">D</span>';
+                    tags += buildTag('D', 'pys-tag-deprecated', 'Deprecated');
                     adNoteDivs.deprecated.addClass('pys-note pys-note-deprecated');
                 }
                 var li = $('<li/>');
