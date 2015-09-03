@@ -70,10 +70,10 @@ public class JavaLogisticRegressionSuite implements Serializable {
     DataFrame predictions = jsql.sql("SELECT label, probability, prediction FROM prediction");
     predictions.collectAsList();
     // Check defaults
-    Assert.assertEquals(model.getThreshold(), 0.5);
-    Assert.assertEquals(model.getFeaturesCol(), "features");
-    Assert.assertEquals(model.getPredictionCol(), "prediction");
-    Assert.assertEquals(model.getProbabilityCol(), "probability");
+    Assert.assertEquals(0.5, model.getThreshold());
+    Assert.assertEquals("features", model.getFeaturesCol());
+    Assert.assertEquals("prediction", model.getPredictionCol());
+    Assert.assertEquals("probability", model.getProbabilityCol());
   }
 
   @Test
@@ -86,19 +86,19 @@ public class JavaLogisticRegressionSuite implements Serializable {
       .setProbabilityCol("myProbability");
     LogisticRegressionModel model = lr.fit(dataset);
     LogisticRegression parent = (LogisticRegression) model.parent();
-    Assert.assertEquals(parent.getMaxIter(), 10);
-    Assert.assertEquals(parent.getRegParam(), 1.0);
-    Assert.assertEquals(parent.getThresholds()[0], 0.4);
-    Assert.assertEquals(parent.getThresholds()[1], 0.6);
-    Assert.assertEquals(parent.getThreshold(), 0.6);
-    Assert.assertEquals(model.getThreshold(), 0.6);
+    Assert.assertEquals(10, parent.getMaxIter());
+    Assert.assertEquals(1.0, parent.getRegParam());
+    Assert.assertEquals(0.4, parent.getThresholds()[0]);
+    Assert.assertEquals(0.6, parent.getThresholds()[1]);
+    Assert.assertEquals(0.6, parent.getThreshold());
+    Assert.assertEquals(0.6, model.getThreshold());
 
     // Modify model params, and check that the params worked.
     model.setThreshold(1.0);
     model.transform(dataset).registerTempTable("predAllZero");
     DataFrame predAllZero = jsql.sql("SELECT prediction, myProbability FROM predAllZero");
     for (Row r: predAllZero.collectAsList()) {
-      Assert.assertEquals(r.getDouble(0), 0.0);
+      Assert.assertEquals(0.0, r.getDouble(0));
     }
     // Call transform with params, and check that the params worked.
     model.transform(dataset, model.threshold().w(0.0), model.probabilityCol().w("myProb"))
@@ -114,11 +114,11 @@ public class JavaLogisticRegressionSuite implements Serializable {
     LogisticRegressionModel model2 = lr.fit(dataset, lr.maxIter().w(5), lr.regParam().w(0.1),
         lr.threshold().w(0.4), lr.probabilityCol().w("theProb"));
     LogisticRegression parent2 = (LogisticRegression) model2.parent();
-    Assert.assertEquals(parent2.getMaxIter(), 5);
-    Assert.assertEquals(parent2.getRegParam(), 0.1);
-    Assert.assertEquals(parent2.getThreshold(), 0.4);
-    Assert.assertEquals(model2.getThreshold(), 0.4);
-    Assert.assertEquals(model2.getProbabilityCol(), "theProb");
+    Assert.assertEquals(5, parent2.getMaxIter());
+    Assert.assertEquals(0.1, parent2.getRegParam());
+    Assert.assertEquals(0.4, parent2.getThreshold());
+    Assert.assertEquals(0.4, model2.getThreshold());
+    Assert.assertEquals("theProb", model2.getProbabilityCol());
   }
 
   @SuppressWarnings("unchecked")
@@ -126,7 +126,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
   public void logisticRegressionPredictorClassifierMethods() {
     LogisticRegression lr = new LogisticRegression();
     LogisticRegressionModel model = lr.fit(dataset);
-    Assert.assertEquals(model.numClasses(), 2);
+    Assert.assertEquals(2, model.numClasses());
 
     model.transform(dataset).registerTempTable("transformed");
     DataFrame trans1 = jsql.sql("SELECT rawPrediction, probability FROM transformed");
@@ -136,8 +136,8 @@ public class JavaLogisticRegressionSuite implements Serializable {
       Assert.assertEquals(raw.size(), 2);
       Assert.assertEquals(prob.size(), 2);
       double probFromRaw1 = 1.0 / (1.0 + Math.exp(-raw.apply(1)));
-      Assert.assertEquals(Math.abs(prob.apply(1) - probFromRaw1), 0, eps);
-      Assert.assertEquals(Math.abs(prob.apply(0) - (1.0 - probFromRaw1)), 0, eps);
+      Assert.assertEquals(0, Math.abs(prob.apply(1) - probFromRaw1), eps);
+      Assert.assertEquals(0, Math.abs(prob.apply(0) - (1.0 - probFromRaw1)), eps);
     }
 
     DataFrame trans2 = jsql.sql("SELECT prediction, probability FROM transformed");
