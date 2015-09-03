@@ -41,7 +41,7 @@ class RDDOperationScopeSuite extends SparkFunSuite with BeforeAndAfter {
   test("equals and hashCode") {
     val opScope1 = new RDDOperationScope("scope1", id = "1")
     val opScope2 = new RDDOperationScope("scope1", id = "1")
-    assert(opScope1 == opScope2)
+    assert(opScope1 === opScope2)
     assert(opScope1.hashCode() === opScope2.hashCode())
   }
 
