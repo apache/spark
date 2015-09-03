@@ -31,18 +31,14 @@ import org.apache.spark.util.Utils
  * old stages to be resubmitted, such as shuffle map fetch failures.
  */
 @DeveloperApi
-sealed trait TaskEndReason {
-  def shouldTaskEndEventuallyFailJob: Boolean
-}
+sealed trait TaskEndReason
 
 /**
  * :: DeveloperApi ::
  * Task succeeded.
  */
 @DeveloperApi
-case object Success extends TaskEndReason {
-  def shouldTaskEndEventuallyFailJob: Boolean = false
-}
+case object Success extends TaskEndReason
 
 /**
  * :: DeveloperApi ::
@@ -53,7 +49,7 @@ sealed trait TaskFailedReason extends TaskEndReason {
   /** Error message displayed in the web UI. */
   def toErrorString: String
 
-  def shouldTaskEndEventuallyFailJob: Boolean = true
+  def shouldEventuallyFailJob: Boolean = true
 }
 
 /**
@@ -205,7 +201,7 @@ case class TaskCommitDenied(jobID: Int, partitionID: Int, attemptID: Int) extend
     towards failing the stage. This is intended to prevent spurious stage failures in cases
     where many speculative tasks are launched and denied to commit.
   */
-  override def shouldTaskEndEventuallyFailJob: Boolean = false
+  override def shouldEventuallyFailJob: Boolean = false
 }
 
 /**
@@ -221,7 +217,7 @@ case class ExecutorLostFailure(execId: String, isNormalExit: Boolean = false)
     s"ExecutorLostFailure (executor ${execId} exited ${exitBehavior})"
   }
 
-  override def shouldTaskEndEventuallyFailJob: Boolean = !isNormalExit
+  override def shouldEventuallyFailJob: Boolean = !isNormalExit
 }
 
 /**

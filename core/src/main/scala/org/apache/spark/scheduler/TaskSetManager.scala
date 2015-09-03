@@ -728,7 +728,9 @@ private[spark] class TaskSetManager(
       put(info.executorId, clock.getTimeMillis())
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
     addPendingTask(index)
-    if (!isZombie && state != TaskState.KILLED && reason.shouldTaskEndEventuallyFailJob) {
+    if (!isZombie && state != TaskState.KILLED
+        && reason.isInstanceOf[TaskFailedReason]
+        && reason.asInstanceOf[TaskFailedReason].shouldEventuallyFailJob) {
       assert (null != failureReason)
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
