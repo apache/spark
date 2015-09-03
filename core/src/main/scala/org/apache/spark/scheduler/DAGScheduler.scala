@@ -1046,9 +1046,9 @@ class DAGScheduler(
 
               clearCacheLocs()
 
-              // Some tasks had failed; let's resubmit this shuffleStage
-              // TODO: Lower-level scheduler should also deal with this
               if (shuffleStage.outputLocs.contains(Nil)) {
+                // Some tasks had failed; let's resubmit this shuffleStage
+                // TODO: Lower-level scheduler should also deal with this
                 logInfo("Resubmitting " + shuffleStage + " (" + shuffleStage.name +
                   ") because some of its tasks had failed: " +
                   shuffleStage.outputLocs.zipWithIndex.filter(_._1.isEmpty)
