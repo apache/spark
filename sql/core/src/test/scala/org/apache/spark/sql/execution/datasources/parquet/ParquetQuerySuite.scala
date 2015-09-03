@@ -356,10 +356,14 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       df2.write.parquet(s"$path/p=2")
 
       checkAnswer(
-        sqlContext.read.option("mergeSchema", "true").parquet(path),
+        sqlContext
+          .read
+          .option("mergeSchema", "true")
+          .parquet(path)
+          .selectExpr("s.a", "s.b", "s.c", "p"),
         Seq(
-          Row(Row(0, null, 2), 1),
-          Row(Row(0, 1, 2), 2)))
+          Row(0, null, 2, 1),
+          Row(0, 1, 2, 2)))
     }
   }
 }
