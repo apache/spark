@@ -13,7 +13,7 @@ flask-login
 flower
 future
 hive-thrift-py
-ipython[all]
+ipython
 jinja2
 librabbitmq
 markdown
