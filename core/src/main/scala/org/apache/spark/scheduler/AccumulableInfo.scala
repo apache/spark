@@ -41,7 +41,7 @@ class AccumulableInfo private[spark] (
 
   override def hashCode(): Int = {
     val state = Seq(id, name, update, value, internal)
-    state.map(_.hashCode).reduce(31 * _ + _)
+    state.map(_.hashCode).reduceLeft(31 * _ + _)
   }
 }
 
