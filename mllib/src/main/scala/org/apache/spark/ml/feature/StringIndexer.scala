@@ -214,6 +214,7 @@ class IndexToString private[ml] (
    * Param for array of labels.
    * Optional labels to be provided by the user, if not supplied column
    * metadata is read for labels.
+   * Default: Empty array, resulting in metadata used for labels.
    * @group param
    */
   final val labels: StringArrayParam = new StringArrayParam(this, "labels",
