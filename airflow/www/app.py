@@ -12,6 +12,7 @@ import logging
 import os
 import socket
 import sys
+import time
 
 from flask._compat import PY2
 from flask import (
@@ -1062,8 +1063,19 @@ class Airflow(BaseView):
 
         expanded = []
 
-        def recurse_nodes(task):
-            children = [recurse_nodes(t) for t in task.upstream_list]
+        # The default recursion traces every path so that tree view has full
+        # expand/collapse functionality. After 5,000 nodes we stop and fall
+        # back on a quick DFS search for performance. See PR #320.
+        node_count = [0]
+        node_limit = 5000 / len(dag.roots)
+
+        def recurse_nodes(task, visited):
+            visited.add(task)
+            node_count[0] += 1
+
+            children = [
+                recurse_nodes(t, visited) for t in task.upstream_list
+                if node_count[0] < node_limit or t not in visited]
 
             # D3 tree uses children vs _children to define what is
             # expanded or not. The following block makes it such that
@@ -1099,10 +1111,10 @@ class Airflow(BaseView):
             data = {
                 'name': 'root',
                 'instances': [],
-                'children': [recurse_nodes(t) for t in dag.roots]
+                'children': [recurse_nodes(t, set()) for t in dag.roots]
             }
         elif len(dag.roots) == 1:
-            data = recurse_nodes(dag.roots[0])
+            data = recurse_nodes(dag.roots[0], set())
         else:
             flash("No tasks found.", "error")
             data = []
