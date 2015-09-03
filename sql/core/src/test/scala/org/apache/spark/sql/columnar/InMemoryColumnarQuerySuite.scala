@@ -198,6 +198,12 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val cached = df.cache()
     // count triggers the caching action. It should not throw.
     cached.count()
+
+    checkAnswer(
+      cached,
+      ctx.range(1, 30000).selectExpr("id % 500 as id").rdd.map(id => Tuple1(s"str_$id")).toDF("i")
+    )
+
     cached.unpersist()
   }
 }
