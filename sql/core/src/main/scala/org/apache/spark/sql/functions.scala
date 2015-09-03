@@ -173,6 +173,24 @@ object functions {
   def avg(columnName: String): Column = avg(Column(columnName))
 
   /**
+   * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def corr(column1: Column, column2: Column): Column =
+    Corr(column1.expr, column2.expr)
+
+  /**
+   * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def corr(columnName1: String, columnName2: String): Column =
+    corr(Column(columnName1), Column(columnName2))
+
+  /**
    * Aggregate function: returns the number of items in a group.
    *
    * @group agg_funcs

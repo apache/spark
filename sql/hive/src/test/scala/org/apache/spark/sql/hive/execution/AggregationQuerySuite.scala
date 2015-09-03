@@ -21,6 +21,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -478,6 +479,29 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
         Row(1, 100, 1, 1, null, 1) ::
         Row(1, null, 2, 2, 3, 1) ::
         Row(0, null, 1, 1, null, 0) :: Nil)
+  }
+
+  test("pearson correlation") {
+    val df = Seq.tabulate(10)(i => (1.0 * i, 2.0 * i, i * -1.0)).toDF("a", "b", "c")
+    val corr1 = df.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(corr1 - 1.0) < 1e-12)
+    val corr2 = df.groupBy().agg(corr("a", "c")).collect()(0).getDouble(0)
+    assert(math.abs(corr2 + 1.0) < 1e-12)
+    // non-trivial example. To reproduce in python, use:
+    // >>> from scipy.stats import pearsonr
+    // >>> import numpy as np
+    // >>> a = np.array(range(20))
+    // >>> b = np.array([x * x - 2 * x + 3.5 for x in range(20)])
+    // >>> pearsonr(a, b)
+    // (0.95723391394758572, 3.8902121417802199e-11)
+    // In R, use:
+    // > a <- 0:19
+    // > b <- mapply(function(x) x * x - 2 * x + 3.5, a)
+    // > cor(a, b)
+    // [1] 0.957233913947585835
+    val df2 = Seq.tabulate(20)(x => (1.0 * x, x * x - 2 * x + 3.5)).toDF("a", "b")
+    val corr3 = df2.groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(corr3 - 0.95723391394758572) < 1e-12)
   }
 
   test("test Last implemented based on AggregateExpression1") {

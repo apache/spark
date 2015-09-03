@@ -691,3 +691,16 @@ case class LastFunction(expr: Expression, base: AggregateExpression1) extends Ag
     result
   }
 }
+
+/**
+ * Calculate Pearson Correlation Coefficient for the given columns.
+ * Only support AggregateExpression2.
+ *
+ */
+case class Corr(
+    left: Expression,
+    right: Expression) extends BinaryExpression with AggregateExpression {
+  override def nullable: Boolean = false
+  override def dataType: DoubleType.type = DoubleType
+  override def toString: String = s"CORRELATION($left, $right)"
+}

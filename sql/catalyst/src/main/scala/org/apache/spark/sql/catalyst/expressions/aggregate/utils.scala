@@ -96,6 +96,12 @@ object Utils {
             aggregateFunction = aggregate.Sum(child),
             mode = aggregate.Complete,
             isDistinct = true)
+
+        case expressions.Corr(left, right) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.Corr(left, right),
+            mode = aggregate.Complete,
+            isDistinct = false)
       }
       // Check if there is any expressions.AggregateExpression1 left.
       // If so, we cannot convert this plan.

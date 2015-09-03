@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
@@ -301,4 +302,103 @@ case class Sum(child: Expression) extends AlgebraicAggregate {
   }
 
   override val evaluateExpression = Cast(currentSum, resultType)
+}
+
+case class Corr(left: Expression, right: Expression) extends AggregateFunction2 {
+
+  def children: Seq[Expression] = Seq(left, right)
+
+  def nullable: Boolean = false
+
+  def dataType: DataType = DoubleType
+
+  def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
+
+  def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
+
+  def cloneBufferAttributes: Seq[Attribute] = bufferAttributes.map(_.newInstance())
+
+  val bufferAttributes: Seq[AttributeReference] = Seq(
+    AttributeReference("xAvg", DoubleType)(),
+    AttributeReference("yAvg", DoubleType)(),
+    AttributeReference("Ck", DoubleType)(),
+    AttributeReference("MkX", DoubleType)(),
+    AttributeReference("MkY", DoubleType)(),
+    AttributeReference("count", LongType)())
+
+  override def initialize(buffer: MutableRow): Unit = {
+    (0 until 5).map(idx => buffer.setDouble(mutableBufferOffset + idx, 0.0))
+    buffer.setLong(mutableBufferOffset + 5, 0L)
+  }
+
+  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+    val x = left.eval(input).asInstanceOf[Double]
+    val y = right.eval(input).asInstanceOf[Double]
+
+    var xAvg = buffer.getDouble(mutableBufferOffset)
+    var yAvg = buffer.getDouble(mutableBufferOffset + 1)
+    var Ck = buffer.getDouble(mutableBufferOffset + 2)
+    var MkX = buffer.getDouble(mutableBufferOffset + 3)
+    var MkY = buffer.getDouble(mutableBufferOffset + 4)
+    var count = buffer.getLong(mutableBufferOffset + 5)
+
+    val deltaX = x - xAvg
+    val deltaY = y - yAvg
+    count += 1
+    xAvg += deltaX / count
+    yAvg += deltaY / count
+    Ck += deltaX * (y - yAvg)
+    MkX += deltaX * (x - xAvg)
+    MkY += deltaY * (y - yAvg)
+
+    buffer.setDouble(mutableBufferOffset, xAvg)
+    buffer.setDouble(mutableBufferOffset + 1, yAvg)
+    buffer.setDouble(mutableBufferOffset + 2, Ck)
+    buffer.setDouble(mutableBufferOffset + 3, MkX)
+    buffer.setDouble(mutableBufferOffset + 4, MkY)
+    buffer.setLong(mutableBufferOffset + 5, count)
+  }
+
+  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+    val count2 = buffer2.getLong(inputBufferOffset + 5)
+
+    if (count2 > 0) {
+      var xAvg = buffer1.getDouble(mutableBufferOffset)
+      var yAvg = buffer1.getDouble(mutableBufferOffset + 1)
+      var Ck = buffer1.getDouble(mutableBufferOffset + 2)
+      var MkX = buffer1.getDouble(mutableBufferOffset + 3)
+      var MkY = buffer1.getDouble(mutableBufferOffset + 4)
+      var count = buffer1.getLong(mutableBufferOffset + 5)
+
+      val xAvg2 = buffer2.getDouble(inputBufferOffset)
+      val yAvg2 = buffer2.getDouble(inputBufferOffset + 1)
+      val Ck2 = buffer2.getDouble(inputBufferOffset + 2)
+      val MkX2 = buffer2.getDouble(inputBufferOffset + 3)
+      val MkY2 = buffer2.getDouble(inputBufferOffset + 4)
+
+      val totalCount = count + count2
+      val deltaX = xAvg - xAvg2
+      val deltaY = yAvg - yAvg2
+      Ck += Ck2 + deltaX * deltaY * count / totalCount * count2
+      xAvg = (xAvg * count + xAvg2 * count2) / totalCount
+      yAvg = (yAvg * count + yAvg2 * count2) / totalCount
+      MkX += MkX2 + deltaX * deltaX * count / totalCount * count2
+      MkY += MkY2 + deltaY * deltaY * count / totalCount * count2
+      count = totalCount
+
+      buffer1.setDouble(mutableBufferOffset, xAvg)
+      buffer1.setDouble(mutableBufferOffset + 1, yAvg)
+      buffer1.setDouble(mutableBufferOffset + 2, Ck)
+      buffer1.setDouble(mutableBufferOffset + 3, MkX)
+      buffer1.setDouble(mutableBufferOffset + 4, MkY)
+      buffer1.setLong(mutableBufferOffset + 5, count)
+    }
+  }
+
+  override def eval(buffer: InternalRow): Any = {
+    val Ck = buffer.getDouble(mutableBufferOffset + 2)
+    val MkX = buffer.getDouble(mutableBufferOffset + 3)
+    val MkY = buffer.getDouble(mutableBufferOffset + 4)
+    Ck / math.sqrt(MkX * MkY)
+  }
 }
