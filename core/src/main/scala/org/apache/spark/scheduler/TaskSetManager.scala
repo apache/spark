@@ -711,7 +711,7 @@ private[spark] class TaskSetManager(
 
       case e: ExecutorLostFailure =>
         if (e.isNormalExit) {
-          logWarning (s"Task $tid failed because while it was being computed, its executor" +
+          logInfo(s"Task $tid failed because while it was being computed, its executor" +
           s" exited normally. Not marking the task as failed.")
         }
         None
@@ -741,7 +741,6 @@ private[spark] class TaskSetManager(
     }
     maybeFinishTaskSet()
   }
-
 
   def abort(message: String, exception: Option[Throwable] = None): Unit = sched.synchronized {
     // TODO: Kill running tasks if we were not terminated due to a Mesos error

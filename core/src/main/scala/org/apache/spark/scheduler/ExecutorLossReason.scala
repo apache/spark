@@ -28,9 +28,8 @@ class ExecutorLossReason(val message: String) extends Serializable {
 }
 
 private[spark]
-case class ExecutorExited(val exitCode: Int, isNormalExit: Boolean, reason: String)
-  extends ExecutorLossReason(reason) {
-}
+case class ExecutorExited(exitCode: Int, isNormalExit: Boolean, reason: String)
+  extends ExecutorLossReason(reason)
 
 private[spark] object ExecutorExited {
   def apply(exitCode: Int, isNormalExit: Boolean): ExecutorExited = {
@@ -40,5 +39,4 @@ private[spark] object ExecutorExited {
 
 private[spark]
 case class SlaveLost(_message: String = "Slave lost")
-  extends ExecutorLossReason(_message) {
-}
+  extends ExecutorLossReason(_message)

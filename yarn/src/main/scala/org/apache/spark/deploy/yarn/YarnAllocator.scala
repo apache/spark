@@ -21,8 +21,7 @@ import java.util.Collections
 import java.util.concurrent._
 import java.util.regex.Pattern
 
-import org.apache.spark.util.Utils
-
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.collection.JavaConverters._
 
@@ -36,11 +35,12 @@ import org.apache.hadoop.yarn.util.RackResolver
 
 import org.apache.log4j.{Level, Logger}
 
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
-import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.util.Utils
 
 /**
  * YarnAllocator is charged with requesting containers from the YARN ResourceManager and deciding
@@ -94,6 +94,11 @@ private[yarn] class YarnAllocator(
     } else {
       sparkConf.getInt("spark.executor.instances", YarnSparkHadoopUtil.DEFAULT_NUMBER_EXECUTORS)
     }
+
+  // Executor loss reason requests that are pending - maps from executor ID for inquiry to a
+  // list of requesters that should be responded to once we find out why the given executor
+  // was lost.
+  private val pendingLossReasonRequests = new HashMap[String, mutable.Buffer[RpcCallContext]]
 
   // Keep track of which container is running which executor to remove the executors later
   // Visible for testing.
@@ -434,9 +439,7 @@ private[yarn] class YarnAllocator(
   }
 
   // Visible for testing.
-  private[yarn] def processCompletedContainers(completedContainers: Seq[ContainerStatus])
-      : Map[String, ExecutorLossReason] = {
-    val discoveredLossReasons = new HashMap[String, ExecutorLossReason]
+  private[yarn] def processCompletedContainers(completedContainers: Seq[ContainerStatus]): Unit = {
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
       val alreadyReleased = releasedContainers.remove(containerId)
@@ -480,12 +483,13 @@ private[yarn] class YarnAllocator(
         }
 
         if (exitStatus == 0) {
-          ExecutorExited(0, true, s"Executor for container $containerId exited normally.")
+          ExecutorExited(0, isNormalExit = true,
+            s"Executor for container $containerId exited normally.")
         } else {
           ExecutorExited(completedContainer.getExitStatus, isNormalExit, containerExitReason)
         }
       } else {
-        ExecutorExited(completedContainer.getExitStatus, true,
+        ExecutorExited(completedContainer.getExitStatus, isNormalExit = true,
           s"Container $containerId exited from explicit termination request.")
       }
 
@@ -505,8 +509,9 @@ private[yarn] class YarnAllocator(
 
       containerIdToExecutorId.remove(containerId).foreach { eid =>
         executorIdToContainer.remove(eid)
-        discoveredLossReasons.put(eid, exitReason)
-
+        pendingLossReasonRequests.remove(eid).foreach { pendingRequests =>
+          pendingRequests.foreach(_.reply(exitReason))
+        }
         if (!alreadyReleased) {
           // The executor could have gone away (like no route to host, node failure, etc)
           // Notify backend about the failure of the executor
@@ -515,7 +520,13 @@ private[yarn] class YarnAllocator(
         }
       }
     }
-    discoveredLossReasons.toMap
+  }
+
+  def enqueueGetLossReasonRequest(eid: String, context: RpcCallContext): Unit = synchronized {
+    if (executorIdToContainer.contains(eid)) {
+      pendingLossReasonRequests
+        .getOrElseUpdate(eid, new ArrayBuffer[RpcCallContext]) += context
+    }
   }
 
   private def internalReleaseContainer(container: Container): Unit = {

@@ -354,16 +354,7 @@ private[spark] class ApplicationMaster(
                 "Max number of executor failures reached")
             } else {
               logDebug("Sending progress")
-              val discoveredLossReasons = allocator.allocateResources()
-              if (!discoveredLossReasons.isEmpty) {
-                pendingLossReasonRequests.synchronized {
-                  discoveredLossReasons.foreach { case (execId, lossReason) =>
-                    pendingLossReasonRequests.remove(execId).foreach { pendingRequests =>
-                      pendingRequests.foreach(_.reply(lossReason))
-                    }
-                  }
-                }
-              }
+              allocator.allocateResources()
             }
             failureCount = 0
           } catch {
@@ -608,14 +599,9 @@ private[spark] class ApplicationMaster(
 
       case GetExecutorLossReason(eid) =>
         Option(allocator) match {
-          case Some(a) =>
-            pendingLossReasonRequests.synchronized {
-              pendingLossReasonRequests
-                  .getOrElseUpdate(eid, new ArrayBuffer[RpcCallContext]) += context
-            }
-          case None =>
-            logWarning("Container allocator was not ready to report on executor status.")
-            context.reply(None)
+          case Some(a) => a.enqueueGetLossReasonRequest(eid, context)
+          case None => logWarning(s"Container allocator is not ready to find" +
+            s" executor loss reasons yet.")
         }
     }
 
