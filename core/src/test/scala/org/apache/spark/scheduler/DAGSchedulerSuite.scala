@@ -1342,6 +1342,9 @@ class DAGSchedulerSuite
     job2Properties.setProperty("testProperty", "job2")
 
     // run both job 1 & 2, referencing the same stage, then cancel job1
+    // Note that we have to submit job2 before we cancel job1, to have them actually share
+    // *Stages*, and not just shuffle dependencies, due to skipped stages.  (at least until
+    // we address SPARK-10193)
     val jobId1 = submit(finalRdd1, Array(0), properties = job1Properties)
     val jobId2 = submit(finalRdd2, Array(0), properties = job2Properties)
     assert(scheduler.activeJobs.nonEmpty)
