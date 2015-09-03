@@ -44,6 +44,7 @@ private[ml] class LibSVMRelation(val path: String, val numFeatures: Int, val vec
       StructField("features", new VectorUDT(), nullable = false) :: Nil
   )
 
+<<<<<<< HEAD
   override def buildScan(): RDD[Row] = {
     val sc = sqlContext.sparkContext
     val baseRdd = MLUtils.loadLibSVMFile(sc, path, numFeatures)
