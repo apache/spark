@@ -51,9 +51,9 @@ private[ml] class LibSVMRelation(val path: String, val numFeatures: Int, val vec
     val rowBuilders = Array(
       (pt: LabeledPoint) => Seq(pt.label),
       if (vectorType == "dense") {
-        (pt: LabeledPoint) => Seq(pt.features.toSparse)
-      } else {
         (pt: LabeledPoint) => Seq(pt.features.toDense)
+      } else {
+        (pt: LabeledPoint) => Seq(pt.features.toSparse)
       }
     )
 
@@ -79,7 +79,7 @@ class DefaultSource extends RelationProvider with DataSourceRegister {
 
   private def checkPath(parameters: Map[String, String]): String = {
     require(parameters.contains("path"), "'path' must be specified")
-    parameters.get("path")
+    parameters.get("path").get
   }
 
   /**
