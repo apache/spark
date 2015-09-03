@@ -77,7 +77,7 @@ case class SortMergeOuterJoin(
     // For left and right outer joins, the output is ordered by the streamed input's join keys.
     case LeftOuter => requiredOrders(leftKeys)
     case RightOuter => requiredOrders(rightKeys)
-    case FullOuter => requiredOrders(leftKeys ++ rightKeys)
+    case FullOuter => Nil
     case x => throw new IllegalArgumentException(
       s"SortMergeOuterJoin should not take $x as the JoinType")
   }
