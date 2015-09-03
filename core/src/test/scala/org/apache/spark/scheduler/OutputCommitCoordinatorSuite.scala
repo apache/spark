@@ -24,7 +24,7 @@ import org.mockito.Matchers
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.hadoop.mapred.{TaskAttemptID, JobConf, TaskAttemptContext, OutputCommitter}
 
@@ -64,7 +64,7 @@ import scala.language.postfixOps
  * increments would be captured even though the commit in both tasks was executed
  * erroneously.
  */
-class OutputCommitCoordinatorSuite extends FunSuite with BeforeAndAfter {
+class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   var outputCommitCoordinator: OutputCommitCoordinator = null
   var tempDir: File = null
@@ -81,7 +81,7 @@ class OutputCommitCoordinatorSuite extends FunSuite with BeforeAndAfter {
           conf: SparkConf,
           isLocal: Boolean,
           listenerBus: LiveListenerBus): SparkEnv = {
-        outputCommitCoordinator = spy(new OutputCommitCoordinator(conf))
+        outputCommitCoordinator = spy(new OutputCommitCoordinator(conf, isDriver = true))
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
         SparkEnv.createDriverEnv(conf, isLocal, listenerBus, Some(outputCommitCoordinator))
@@ -134,14 +134,14 @@ class OutputCommitCoordinatorSuite extends FunSuite with BeforeAndAfter {
   test("Only one of two duplicate commit tasks should commit") {
     val rdd = sc.parallelize(Seq(1), 1)
     sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).commitSuccessfully _,
-      0 until rdd.partitions.size, allowLocal = false)
+      0 until rdd.partitions.size)
     assert(tempDir.list().size === 1)
   }
 
   test("If commit fails, if task is retried it should not be locked, and will succeed.") {
     val rdd = sc.parallelize(Seq(1), 1)
     sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).failFirstCommitAttempt _,
-      0 until rdd.partitions.size, allowLocal = false)
+      0 until rdd.partitions.size)
     assert(tempDir.list().size === 1)
   }
 

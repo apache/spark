@@ -17,9 +17,7 @@
 
 package org.apache.spark.rdd
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SharedSparkContext
+import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, RandomSampler}
 
 /** a sampler that outputs its seed */
@@ -38,7 +36,7 @@ class MockSampler extends RandomSampler[Long, Long] {
   override def clone: MockSampler = new MockSampler
 }
 
-class PartitionwiseSampledRDDSuite extends FunSuite with SharedSparkContext {
+class PartitionwiseSampledRDDSuite extends SparkFunSuite with SharedSparkContext {
 
   test("seed distribution") {
     val rdd = sc.makeRDD(Array(1L, 2L, 3L, 4L), 2)

@@ -21,13 +21,13 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.scheduler.{Schedulable, StageInfo}
+import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 
 /** Page showing specific pool details */
 private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
   private val sc = parent.sc
-  private val listener = parent.listener
+  private val listener = parent.progressListener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
@@ -40,7 +40,7 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
         case None => Seq[StageInfo]()
       }
       val activeStagesTable = new StageTableBase(activeStages.sortBy(_.submissionTime).reverse,
-        parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
+        parent.basePath, parent.progressListener, isFairScheduler = parent.isFairScheduler,
         killEnabled = parent.killEnabled)
 
       // For now, pool information is only accessible in live UIs

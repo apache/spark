@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.hive.execution;
 
-import org.apache.hadoop.hive.ql.exec.UDF;
-
 import java.util.List;
-import org.apache.commons.lang.StringUtils;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.hive.ql.exec.UDF;
 
 public class UDFListString extends UDF {
 

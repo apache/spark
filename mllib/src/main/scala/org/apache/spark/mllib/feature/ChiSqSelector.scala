@@ -19,7 +19,7 @@ package org.apache.spark.mllib.feature
 
 import scala.collection.mutable.ArrayBuilder
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.Statistics
@@ -31,14 +31,17 @@ import org.apache.spark.rdd.RDD
  *
  * @param selectedFeatures list of indices to select (filter). Must be ordered asc
  */
+@Since("1.3.0")
 @Experimental
-class ChiSqSelectorModel (val selectedFeatures: Array[Int]) extends VectorTransformer {
+class ChiSqSelectorModel @Since("1.3.0") (
+  @Since("1.3.0") val selectedFeatures: Array[Int]) extends VectorTransformer {
 
   require(isSorted(selectedFeatures), "Array has to be sorted asc")
 
   protected def isSorted(array: Array[Int]): Boolean = {
     var i = 1
-    while (i < array.length) {
+    val len = array.length
+    while (i < len) {
       if (array(i) < array(i-1)) return false
       i += 1
     }
@@ -51,6 +54,7 @@ class ChiSqSelectorModel (val selectedFeatures: Array[Int]) extends VectorTransf
    * @param vector vector to be transformed.
    * @return transformed vector.
    */
+  @Since("1.3.0")
   override def transform(vector: Vector): Vector = {
     compress(vector, selectedFeatures)
   }
@@ -106,8 +110,10 @@ class ChiSqSelectorModel (val selectedFeatures: Array[Int]) extends VectorTransf
  * @param numTopFeatures number of features that selector will select
  *                       (ordered by statistic value descending)
  */
+@Since("1.3.0")
 @Experimental
-class ChiSqSelector (val numTopFeatures: Int) {
+class ChiSqSelector @Since("1.3.0") (
+  @Since("1.3.0") val numTopFeatures: Int) extends Serializable {
 
   /**
    * Returns a ChiSquared feature selector.
@@ -116,6 +122,7 @@ class ChiSqSelector (val numTopFeatures: Int) {
    *             Real-valued features will be treated as categorical for each distinct value.
    *             Apply feature discretizer before using this function.
    */
+  @Since("1.3.0")
   def fit(data: RDD[LabeledPoint]): ChiSqSelectorModel = {
     val indices = Statistics.chiSqTest(data)
       .zipWithIndex.sortBy { case (res, _) => -res.statistic }

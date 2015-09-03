@@ -18,12 +18,12 @@
 package org.apache.spark.deploy.worker
 
 import java.io.{File, FileOutputStream, InputStream, IOException}
-import java.lang.System._
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.Map
 
 import org.apache.spark.Logging
+import org.apache.spark.SecurityManager
 import org.apache.spark.deploy.Command
 import org.apache.spark.launcher.WorkerCommandBuilder
 import org.apache.spark.util.Utils
@@ -40,12 +40,14 @@ object CommandUtils extends Logging {
    */
   def buildProcessBuilder(
       command: Command,
+      securityMgr: SecurityManager,
       memory: Int,
       sparkHome: String,
       substituteArguments: String => String,
       classPaths: Seq[String] = Seq[String](),
       env: Map[String, String] = sys.env): ProcessBuilder = {
-    val localCommand = buildLocalCommand(command, substituteArguments, classPaths, env)
+    val localCommand = buildLocalCommand(
+      command, securityMgr, substituteArguments, classPaths, env)
     val commandSeq = buildCommandSeq(localCommand, memory, sparkHome)
     val builder = new ProcessBuilder(commandSeq: _*)
     val environment = builder.environment()
@@ -59,7 +61,7 @@ object CommandUtils extends Logging {
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
     val cmd = new WorkerCommandBuilder(sparkHome, memory, command).buildCommand()
-    cmd.toSeq ++ Seq(command.mainClass) ++ command.arguments
+    cmd.asScala ++ Seq(command.mainClass) ++ command.arguments
   }
 
   /**
@@ -69,6 +71,7 @@ object CommandUtils extends Logging {
    */
   private def buildLocalCommand(
       command: Command,
+      securityMgr: SecurityManager,
       substituteArguments: String => String,
       classPath: Seq[String] = Seq[String](),
       env: Map[String, String]): Command = {
@@ -76,11 +79,16 @@ object CommandUtils extends Logging {
     val libraryPathEntries = command.libraryPathEntries
     val cmdLibraryPath = command.environment.get(libraryPathName)
 
-    val newEnvironment = if (libraryPathEntries.nonEmpty && libraryPathName.nonEmpty) {
+    var newEnvironment = if (libraryPathEntries.nonEmpty && libraryPathName.nonEmpty) {
       val libraryPaths = libraryPathEntries ++ cmdLibraryPath ++ env.get(libraryPathName)
       command.environment + ((libraryPathName, libraryPaths.mkString(File.pathSeparator)))
     } else {
       command.environment
+    }
+
+    // set auth secret to env variable if needed
+    if (securityMgr.isAuthenticationEnabled) {
+      newEnvironment += (SecurityManager.ENV_AUTH_SECRET -> securityMgr.getSecretKey)
     }
 
     Command(
@@ -89,7 +97,8 @@ object CommandUtils extends Logging {
       newEnvironment,
       command.classPathEntries ++ classPath,
       Seq[String](), // library path already captured in environment variable
-      command.javaOpts)
+      // filter out auth secret from java options
+      command.javaOpts.filterNot(_.startsWith("-D" + SecurityManager.SPARK_AUTH_SECRET_CONF)))
   }
 
   /** Spawn a thread that will redirect a given stream to a file */

@@ -28,12 +28,10 @@ import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputCommitter => NewOutputCommitter,
 OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
 TaskAttemptContext => NewTaskAttempContext}
-import org.apache.spark.{Partitioner, SharedSparkContext}
+import org.apache.spark.{Partitioner, SharedSparkContext, SparkFunSuite}
 import org.apache.spark.util.Utils
 
-import org.scalatest.FunSuite
-
-class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
+class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   test("aggregateByKey") {
     val pairs = sc.parallelize(Array((1, 1), (1, 1), (3, 2), (5, 1), (5, 3)), 2)
 
@@ -284,6 +282,29 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     ))
   }
 
+  // See SPARK-9326
+  test("cogroup with empty RDD") {
+    import scala.reflect.classTag
+    val intPairCT = classTag[(Int, Int)]
+
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+    val rdd2 = sc.emptyRDD[(Int, Int)](intPairCT)
+
+    val joined = rdd1.cogroup(rdd2).collect()
+    assert(joined.size > 0)
+  }
+
+  // See SPARK-9326
+  test("cogroup with groupByed RDD having 0 partitions") {
+    import scala.reflect.classTag
+    val intCT = classTag[Int]
+
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+    val rdd2 = sc.emptyRDD[Int](intCT).groupBy((x) => 5)
+    val joined = rdd1.cogroup(rdd2).collect()
+    assert(joined.size > 0)
+  }
+
   test("rightOuterJoin") {
     val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
     val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
@@ -512,17 +533,17 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   }
 
   test("lookup") {
-    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+    val pairs = sc.parallelize(Array((1, 2), (3, 4), (5, 6), (5, 7)))
 
     assert(pairs.partitioner === None)
     assert(pairs.lookup(1) === Seq(2))
-    assert(pairs.lookup(5) === Seq(6,7))
+    assert(pairs.lookup(5) === Seq(6, 7))
     assert(pairs.lookup(-1) === Seq())
 
   }
 
   test("lookup with partitioner") {
-    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+    val pairs = sc.parallelize(Array((1, 2), (3, 4), (5, 6), (5, 7)))
 
     val p = new Partitioner {
       def numPartitions: Int = 2
@@ -533,12 +554,12 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
 
     assert(shuffled.partitioner === Some(p))
     assert(shuffled.lookup(1) === Seq(2))
-    assert(shuffled.lookup(5) === Seq(6,7))
+    assert(shuffled.lookup(5) === Seq(6, 7))
     assert(shuffled.lookup(-1) === Seq())
   }
 
   test("lookup with bad partitioner") {
-    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+    val pairs = sc.parallelize(Array((1, 2), (3, 4), (5, 6), (5, 7)))
 
     val p = new Partitioner {
       def numPartitions: Int = 2

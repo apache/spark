@@ -59,7 +59,7 @@ for applications that involve the REPL (e.g. Spark shell).
 Alternatively, if your application is submitted from a machine far from the worker machines (e.g.
 locally on your laptop), it is common to use `cluster` mode to minimize network latency between
 the drivers and the executors. Note that `cluster` mode is currently not supported for
-Mesos clusters or Python applications.
+Mesos clusters. Currently only YARN supports cluster mode for Python applications.
 
 For Python applications, simply pass a `.py` file in the place of `<application-jar>` instead of a JAR,
 and add Python `.zip`, `.egg` or `.py` files to the search path with `--py-files`.

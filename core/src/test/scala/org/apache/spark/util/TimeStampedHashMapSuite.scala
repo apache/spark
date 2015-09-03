@@ -23,9 +23,9 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class TimeStampedHashMapSuite extends FunSuite {
+class TimeStampedHashMapSuite extends SparkFunSuite {
 
   // Test the testMap function - a Scala HashMap should obviously pass
   testMap(new mutable.HashMap[String, String]())

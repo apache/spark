@@ -32,7 +32,7 @@ Resource allocation can be configured as follows, based on the cluster type:
 * **Standalone mode:** By default, applications submitted to the standalone mode cluster will run in
   FIFO (first-in-first-out) order, and each application will try to use all available nodes. You can limit
   the number of nodes an application uses by setting the `spark.cores.max` configuration property in it,
-  or change the default for applications that don't set this setting through `spark.deploy.defaultCores`. 
+  or change the default for applications that don't set this setting through `spark.deploy.defaultCores`.
   Finally, in addition to controlling cores, each application's `spark.executor.memory` setting controls
   its memory use.
 * **Mesos:** To use static partitioning on Mesos, set the `spark.mesos.coarse` configuration property to `true`,

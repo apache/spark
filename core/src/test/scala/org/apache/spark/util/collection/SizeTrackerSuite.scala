@@ -20,11 +20,10 @@ package org.apache.spark.util.collection
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.SizeEstimator
 
-class SizeTrackerSuite extends FunSuite {
+class SizeTrackerSuite extends SparkFunSuite {
   val NORMAL_ERROR = 0.20
   val HIGH_ERROR = 0.30
 
@@ -104,7 +103,9 @@ private object SizeTrackerSuite {
    */
   def main(args: Array[String]): Unit = {
     if (args.size < 1) {
+      // scalastyle:off println
       println("Usage: SizeTrackerSuite [num elements]")
+      // scalastyle:on println
       System.exit(1)
     }
     val numElements = args(0).toInt
@@ -181,11 +182,13 @@ private object SizeTrackerSuite {
       baseTimes: Seq[Long],
       sampledTimes: Seq[Long],
       unsampledTimes: Seq[Long]): Unit = {
+    // scalastyle:off println
     println(s"Average times for $testName (ms):")
     println("  Base - " + averageTime(baseTimes))
     println("  SizeTracker (sampled) - " + averageTime(sampledTimes))
     println("  SizeEstimator (unsampled) - " + averageTime(unsampledTimes))
     println()
+    // scalastyle:on println
   }
 
   def time(f: => Unit): Long = {

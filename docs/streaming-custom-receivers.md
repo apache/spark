@@ -4,7 +4,7 @@ title: Spark Streaming Custom Receivers
 ---
 
 Spark Streaming can receive streaming data from any arbitrary data source beyond
-the one's for which it has in-built support (that is, beyond Flume, Kafka, Kinesis, files, sockets, etc.).
+the ones for which it has built-in support (that is, beyond Flume, Kafka, Kinesis, files, sockets, etc.).
 This requires the developer to implement a *receiver* that is customized for receiving data from
 the concerned data source. This guide walks through the process of implementing a custom receiver
 and using it in a Spark Streaming application. Note that custom receivers can be implemented
@@ -21,15 +21,15 @@ A custom receiver must extend this abstract class by implementing two methods
 - `onStop()`: Things to do to stop receiving data.
 
 Both `onStart()` and `onStop()` must not block indefinitely. Typically, `onStart()` would start the threads
-that responsible for receiving the data and `onStop()` would ensure that the receiving by those threads
+that are responsible for receiving the data, and `onStop()` would ensure that these threads receiving the data
 are stopped. The receiving threads can also use `isStopped()`, a `Receiver` method, to check whether they
 should stop receiving data.
 
 Once the data is received, that data can be stored inside Spark
 by calling `store(data)`, which is a method provided by the Receiver class.
-There are number of flavours of `store()` which allow you store the received data
-record-at-a-time or as whole collection of objects / serialized bytes. Note that the flavour of
-`store()` used to implemented a receiver affects its reliability and fault-tolerance semantics.
+There are a number of flavors of `store()` which allow one to store the received data
+record-at-a-time or as whole collection of objects / serialized bytes. Note that the flavor of
+`store()` used to implement a receiver affects its reliability and fault-tolerance semantics.
 This is discussed [later](#receiver-reliability) in more detail.
 
 Any exception in the receiving threads should be caught and handled properly to avoid silent
@@ -60,7 +60,7 @@ class CustomReceiver(host: String, port: Int)
 
   def onStop() {
    // There is nothing much to do as the thread calling receive()
-   // is designed to stop by itself isStopped() returns false
+   // is designed to stop by itself if isStopped() returns false
   }
 
   /** Create a socket connection and receive data until receiver is stopped */
@@ -123,7 +123,7 @@ public class JavaCustomReceiver extends Receiver<String> {
 
   public void onStop() {
     // There is nothing much to do as the thread calling receive()
-    // is designed to stop by itself isStopped() returns false
+    // is designed to stop by itself if isStopped() returns false
   }
 
   /** Create a socket connection and receive data until receiver is stopped */
@@ -167,7 +167,7 @@ public class JavaCustomReceiver extends Receiver<String> {
 
 The custom receiver can be used in a Spark Streaming application by using
 `streamingContext.receiverStream(<instance of custom receiver>)`. This will create
-input DStream using data received by the instance of custom receiver, as shown below
+an input DStream using data received by the instance of custom receiver, as shown below:
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1" >
@@ -206,22 +206,20 @@ there are two kinds of receivers based on their reliability and fault-tolerance 
   and stored in Spark reliably (that is, replicated successfully). Usually,
   implementing this receiver involves careful consideration of the semantics of source
   acknowledgements.
-1. *Unreliable Receiver* - These are receivers for unreliable sources that do not support
-  acknowledging. Even for reliable sources, one may implement an unreliable receiver that
-  do not go into the complexity of acknowledging correctly.
+1. *Unreliable Receiver* - An *unreliable receiver* does *not* send acknowledgement to a source. This can be used for sources that do not support acknowledgement, or even for reliable sources when one does not want or need to go into the complexity of acknowledgement.
 
 To implement a *reliable receiver*, you have to use `store(multiple-records)` to store data.
-This flavour of `store` is a blocking call which returns only after all the given records have
+This flavor of `store` is a blocking call which returns only after all the given records have
 been stored inside Spark. If the receiver's configured storage level uses replication
 (enabled by default), then this call returns after replication has completed.
 Thus it ensures that the data is reliably stored, and the receiver can now acknowledge the
-source appropriately. This ensures that no data is caused when the receiver fails in the middle
+source appropriately. This ensures that no data is lost when the receiver fails in the middle
 of replicating data -- the buffered data will not be acknowledged and hence will be later resent
 by the source.
 
 An *unreliable receiver* does not have to implement any of this logic. It can simply receive
 records from the source and insert them one-at-a-time using `store(single-record)`. While it does
-not get the reliability guarantees of `store(multiple-records)`, it has the following advantages.
+not get the reliability guarantees of `store(multiple-records)`, it has the following advantages:
 
 - The system takes care of chunking that data into appropriate sized blocks (look for block
 interval in the [Spark Streaming Programming Guide](streaming-programming-guide.html)).

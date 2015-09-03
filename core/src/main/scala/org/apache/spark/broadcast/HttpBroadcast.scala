@@ -125,7 +125,7 @@ private[broadcast] object HttpBroadcast extends Logging {
         securityManager = securityMgr
         if (isDriver) {
           createServer(conf)
-          conf.set("spark.httpBroadcast.uri",  serverUri)
+          conf.set("spark.httpBroadcast.uri", serverUri)
         }
         serverUri = conf.get("spark.httpBroadcast.uri")
         cleaner = new MetadataCleaner(MetadataCleanerType.HTTP_BROADCAST, cleanup, conf)
@@ -187,7 +187,7 @@ private[broadcast] object HttpBroadcast extends Logging {
   }
 
   private def read[T: ClassTag](id: Long): T = {
-    logDebug("broadcast read server: " +  serverUri + " id: broadcast-" + id)
+    logDebug("broadcast read server: " + serverUri + " id: broadcast-" + id)
     val url = serverUri + "/" + BroadcastBlockId(id).name
 
     var uc: URLConnection = null

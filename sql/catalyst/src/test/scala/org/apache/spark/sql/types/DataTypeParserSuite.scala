@@ -17,19 +17,19 @@
 
 package org.apache.spark.sql.types
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class DataTypeParserSuite extends FunSuite {
+class DataTypeParserSuite extends SparkFunSuite {
 
   def checkDataType(dataTypeString: String, expectedDataType: DataType): Unit = {
     test(s"parse ${dataTypeString.replace("\n", "")}") {
-      assert(DataTypeParser(dataTypeString) === expectedDataType)
+      assert(DataTypeParser.parse(dataTypeString) === expectedDataType)
     }
   }
 
   def unsupported(dataTypeString: String): Unit = {
     test(s"$dataTypeString is not supported") {
-      intercept[DataTypeException](DataTypeParser(dataTypeString))
+      intercept[DataTypeException](DataTypeParser.parse(dataTypeString))
     }
   }
 
@@ -44,7 +44,7 @@ class DataTypeParserSuite extends FunSuite {
   checkDataType("float", FloatType)
   checkDataType("dOUBle", DoubleType)
   checkDataType("decimal(10, 5)", DecimalType(10, 5))
-  checkDataType("decimal", DecimalType.Unlimited)
+  checkDataType("decimal", DecimalType.USER_DEFAULT)
   checkDataType("DATE", DateType)
   checkDataType("timestamp", TimestampType)
   checkDataType("string", StringType)
@@ -87,7 +87,7 @@ class DataTypeParserSuite extends FunSuite {
     StructType(
       StructField("struct",
         StructType(
-          StructField("deciMal", DecimalType.Unlimited, true) ::
+          StructField("deciMal", DecimalType.USER_DEFAULT, true) ::
           StructField("anotherDecimal", DecimalType(5, 2), true) :: Nil), true) ::
       StructField("MAP", MapType(TimestampType, StringType), true) ::
       StructField("arrAy", ArrayType(DoubleType, true), true) :: Nil)

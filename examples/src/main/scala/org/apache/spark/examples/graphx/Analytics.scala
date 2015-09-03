@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.graphx
 
 import scala.collection.mutable
@@ -151,3 +152,4 @@ object Analytics extends Logging {
     }
   }
 }
+// scalastyle:on println
