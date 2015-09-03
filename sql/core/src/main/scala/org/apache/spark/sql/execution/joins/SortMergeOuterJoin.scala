@@ -406,9 +406,13 @@ private class SortMergeFullJoinScanner(
       // No match can be found
       // Output only left row
       if (!found) {
-        joinedRow(leftMatches(leftIndex), rightNullRow)
-        leftIndex += 1
-        rightIndex = 0
+        // We only output left row with null right row when we can't find any matches in right
+        // iterator, including current try and previous tries
+        if (foundRightIndex.isEmpty) {
+          joinedRow(leftMatches(leftIndex), rightNullRow)
+          leftIndex += 1
+          rightIndex = 0
+        }
       } else {
         notMatchBitSet.unset(rightIndex)
         foundRightIndex += rightIndex
