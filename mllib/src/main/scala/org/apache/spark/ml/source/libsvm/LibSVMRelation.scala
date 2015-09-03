@@ -18,41 +18,44 @@
 package org.apache.spark.ml.source.libsvm
 
 import com.google.common.base.Objects
+
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Since
-import org.apache.spark.mllib.linalg.{VectorUDT, Vector}
+import org.apache.spark.mllib.linalg.VectorUDT
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{StructType, StructField, DoubleType}
 import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.sources.{DataSourceRegister, PrunedScan, BaseRelation, RelationProvider}
+import org.apache.spark.sql.sources._
 
 /**
  * LibSVMRelation provides the DataFrame constructed from LibSVM format data.
- * @param path
- * @param numFeatures
- * @param vectorType
- * @param sqlContext
+ * @param path File path of LibSVM format
+ * @param numFeatures The number of features
+ * @param vectorType The type of vector. It can be 'sparse' or 'dense'
+ * @param sqlContext The Spark SQLContext
  */
 private[ml] class LibSVMRelation(val path: String, val numFeatures: Int, val vectorType: String)
     (@transient val sqlContext: SQLContext)
-  extends BaseRelation with PrunedScan with Logging {
+  extends BaseRelation with TableScan with Logging {
 
   override def schema: StructType = StructType(
     StructField("label", DoubleType, nullable = false) ::
       StructField("features", new VectorUDT(), nullable = false) :: Nil
   )
 
-  override def buildScan(requiredColumns: Array[String]): RDD[Row] = {
+  override def buildScan(): RDD[Row] = {
     val sc = sqlContext.sparkContext
     val baseRdd = MLUtils.loadLibSVMFile(sc, path, numFeatures)
 
-    val rowBuilders = requiredColumns.map {
-      case "label" => (pt: LabeledPoint) => Seq(pt.label)
-      case "features" if vectorType == "sparse" => (pt: LabeledPoint) => Seq(pt.features.toSparse)
-      case "features" if vectorType == "dense" => (pt: LabeledPoint) => Seq(pt.features.toDense)
-    }
+    val rowBuilders = Array(
+      (pt: LabeledPoint) => Seq(pt.label),
+      if (vectorType == "dense") {
+        (pt: LabeledPoint) => Seq(pt.features.toSparse)
+      } else {
+        (pt: LabeledPoint) => Seq(pt.features.toDense)
+      }
+    )
 
     baseRdd.map(pt => {
       Row.fromSeq(rowBuilders.map(_(pt)).reduceOption(_ ++ _).getOrElse(Seq.empty))
@@ -75,7 +78,8 @@ class DefaultSource extends RelationProvider with DataSourceRegister {
   override def shortName(): String = "libsvm"
 
   private def checkPath(parameters: Map[String, String]): String = {
-    parameters.getOrElse("path", sys.error("'path' must be specified"))
+    require(parameters.contains("path"), "'path' must be specified")
+    parameters.get("path")
   }
 
   /**

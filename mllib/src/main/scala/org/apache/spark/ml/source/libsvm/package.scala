@@ -24,7 +24,7 @@ package object libsvm {
   /**
    * Implicit declaration in order to be used from SQLContext.
    * It is necessary to import org.apache.spark.ml.source.libsvm._
-   * @param read
+   * @param read Given original DataFrameReader
    */
   implicit class LibSVMReader(read: DataFrameReader) {
     def libsvm(filePath: String): DataFrame
