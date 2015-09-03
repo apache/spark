@@ -49,17 +49,18 @@ b <- c(17, 19, 23, 29)
 w <- c(1, 2, 3, 4)
 
 for (intercept in c(FALSE, TRUE)) {
-  model <- glmnet(A, b, weights=w, intercept=intercept, lambda=0.0, standardize=FALSE, alpha=0)
+  model <- glmnet(A, b, weights=w, intercept=intercept, lambda=0.0, standardize=FALSE,
+                  alpha=0, thresh=1E-14)
   print(as.vector(coef(model)))
 }
 
-[1]  0.000000 -3.713230  3.007162
-[1] 17.9935922  6.0267241 -0.5814462
+[1]  0.000000 -3.727117  3.009982
+[1] 18.0799727  6.0799832 -0.5999941
      */
 
     val expected = Seq(
-      Vectors.dense(0.0, -3.713230, 3.007162),
-      Vectors.dense(17.9935922, 6.0267241, -0.5814462))
+      Vectors.dense(0.0, -3.727117, 3.009982),
+      Vectors.dense(18.0799727, 6.0799832, -0.5999941))
 
     var idx = 0
     for (fitIntercept <- Seq(false, true);
@@ -68,7 +69,7 @@ for (intercept in c(FALSE, TRUE)) {
       val wls = new WeightedLeastSquares(fitIntercept, regParam, standardization)
         .fit(instances)
       val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
-      assert(actual ~== expected(idx) absTol 1e-1)
+      assert(actual ~== expected(idx) absTol 1e-2)
       idx += 1
     }
   }
