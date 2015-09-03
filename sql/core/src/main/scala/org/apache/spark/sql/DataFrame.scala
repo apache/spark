@@ -634,6 +634,7 @@ class DataFrame private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
+   * Note that the column name can also reference to a nested column like `a.b`.
    * @group dfops
    * @since 1.3.0
    */
@@ -641,6 +642,7 @@ class DataFrame private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
+   * Note that the column name can also reference to a nested column like `a.b`.
    * @group dfops
    * @since 1.3.0
    */
@@ -682,7 +684,7 @@ class DataFrame private[sql](
       // make it a NamedExpression.
       case Column(u: UnresolvedAttribute) => UnresolvedAlias(u)
       case Column(expr: NamedExpression) => expr
-      // Leave an unaliased explode with an empty list of names since the analzyer will generate the
+      // Leave an unaliased explode with an empty list of names since the analyzer will generate the
       // correct defaults after the nested expression's type has been resolved.
       case Column(explode: Explode) => MultiAlias(explode, Nil)
       case Column(expr: Expression) => Alias(expr, expr.prettyString)()
@@ -1131,7 +1133,8 @@ class DataFrame private[sql](
   /////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns a new [[DataFrame]] by adding a column.
+   * Returns a new [[DataFrame]] by adding a column or replacing the existing column that has
+   * the same name.
    * @group dfops
    * @since 1.3.0
    */

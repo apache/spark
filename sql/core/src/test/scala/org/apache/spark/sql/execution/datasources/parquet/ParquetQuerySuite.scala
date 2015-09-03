@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.{QueryTest, Row, SQLConf}
+import org.apache.spark.sql._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -199,6 +199,111 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
       val decimal = sqlContext.read.parquet(basePath).first().getDecimal(0)
       assert(Decimal("67123.45") === Decimal(decimal))
+    }
+  }
+
+  test("SPARK-10005 Schema merging for nested struct") {
+    val sqlContext = _sqlContext
+    import sqlContext.implicits._
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      def append(df: DataFrame): Unit = {
+        df.write.mode(SaveMode.Append).parquet(path)
+      }
+
+      // Note that both the following two DataFrames contain a single struct column with multiple
+      // nested fields.
+      append((1 to 2).map(i => Tuple1((i, i))).toDF())
+      append((1 to 2).map(i => Tuple1((i, i, i))).toDF())
+
+      withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "true") {
+        checkAnswer(
+          sqlContext.read.option("mergeSchema", "true").parquet(path),
+          Seq(
+            Row(Row(1, 1, null)),
+            Row(Row(2, 2, null)),
+            Row(Row(1, 1, 1)),
+            Row(Row(2, 2, 2))))
+      }
+    }
+  }
+
+  test("SPARK-10301 Clipping nested structs in requested schema") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = sqlContext
+        .range(1)
+        .selectExpr("NAMED_STRUCT('a', id, 'b', id) AS s")
+        .coalesce(1)
+
+      df.write.mode("append").parquet(path)
+
+      val userDefinedSchema = new StructType()
+        .add("s", new StructType().add("a", LongType, nullable = true), nullable = true)
+
+      checkAnswer(
+        sqlContext.read.schema(userDefinedSchema).parquet(path),
+        Row(Row(0)))
+    }
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      val df1 = sqlContext
+        .range(1)
+        .selectExpr("NAMED_STRUCT('a', id, 'b', id) AS s")
+        .coalesce(1)
+
+      val df2 = sqlContext
+        .range(1, 2)
+        .selectExpr("NAMED_STRUCT('b', id, 'c', id) AS s")
+        .coalesce(1)
+
+      df1.write.parquet(path)
+      df2.write.mode(SaveMode.Append).parquet(path)
+
+      val userDefinedSchema = new StructType()
+        .add("s",
+          new StructType()
+            .add("a", LongType, nullable = true)
+            .add("c", LongType, nullable = true),
+          nullable = true)
+
+      checkAnswer(
+        sqlContext.read.schema(userDefinedSchema).parquet(path),
+        Seq(
+          Row(Row(0, null)),
+          Row(Row(null, 1))))
+    }
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      val df = sqlContext
+        .range(1)
+        .selectExpr("NAMED_STRUCT('a', ARRAY(NAMED_STRUCT('b', id, 'c', id))) AS s")
+        .coalesce(1)
+
+      df.write.parquet(path)
+
+      val userDefinedSchema = new StructType()
+        .add("s",
+          new StructType()
+            .add(
+              "a",
+              ArrayType(
+                new StructType()
+                  .add("b", LongType, nullable = true)
+                  .add("d", StringType, nullable = true),
+                containsNull = true),
+              nullable = true),
+          nullable = true)
+
+      checkAnswer(
+        sqlContext.read.schema(userDefinedSchema).parquet(path),
+        Row(Row(Seq(Row(0, null)))))
     }
   }
 }

@@ -408,6 +408,14 @@ test_that("collect() returns a data.frame", {
   expect_equal(names(rdf)[1], "age")
   expect_equal(nrow(rdf), 3)
   expect_equal(ncol(rdf), 2)
+
+  # collect() returns data correctly from a DataFrame with 0 row
+  df0 <- limit(df, 0)
+  rdf <- collect(df0)
+  expect_true(is.data.frame(rdf))
+  expect_equal(names(rdf)[1], "age")
+  expect_equal(nrow(rdf), 0)
+  expect_equal(ncol(rdf), 2)
 })
 
 test_that("limit() returns DataFrame with the correct number of rows", {
@@ -492,6 +500,18 @@ test_that("head() and first() return the correct data", {
 
   testFirst <- first(df)
   expect_equal(nrow(testFirst), 1)
+
+  # head() and first() return the correct data on
+  # a DataFrame with 0 row
+  df0 <- limit(df, 0)
+
+  testHead <- head(df0)
+  expect_equal(nrow(testHead), 0)
+  expect_equal(ncol(testHead), 2)
+
+  testFirst <- first(df0)
+  expect_equal(nrow(testFirst), 0)
+  expect_equal(ncol(testFirst), 2)
 })
 
 test_that("distinct() and unique on DataFrames", {
@@ -560,6 +580,42 @@ test_that("select with column", {
   df2 <- select(df, df$age)
   expect_equal(columns(df2), c("age"))
   expect_equal(count(df2), 3)
+
+  df3 <- select(df, lit("x"))
+  expect_equal(columns(df3), c("x"))
+  expect_equal(count(df3), 3)
+  expect_equal(collect(select(df3, "x"))[[1, 1]], "x")
+})
+
+test_that("subsetting", {
+  # jsonFile returns columns in random order
+  df <- select(jsonFile(sqlContext, jsonPath), "name", "age")
+  filtered <- df[df$age > 20,]
+  expect_equal(count(filtered), 1)
+  expect_equal(columns(filtered), c("name", "age"))
+  expect_equal(collect(filtered)$name, "Andy")
+
+  df2 <- df[df$age == 19, 1]
+  expect_is(df2, "DataFrame")
+  expect_equal(count(df2), 1)
+  expect_equal(columns(df2), c("name"))
+  expect_equal(collect(df2)$name, "Justin")
+
+  df3 <- df[df$age > 20, 2]
+  expect_equal(count(df3), 1)
+  expect_equal(columns(df3), c("age"))
+
+  df4 <- df[df$age %in% c(19, 30), 1:2]
+  expect_equal(count(df4), 2)
+  expect_equal(columns(df4), c("name", "age"))
+
+  df5 <- df[df$age %in% c(19), c(1,2)]
+  expect_equal(count(df5), 1)
+  expect_equal(columns(df5), c("name", "age"))
+
+  df6 <- subset(df, df$age %in% c(30), c(1,2))
+  expect_equal(count(df6), 1)
+  expect_equal(columns(df6), c("name", "age"))
 })
 
 test_that("selectExpr() on a DataFrame", {
@@ -571,6 +627,11 @@ test_that("selectExpr() on a DataFrame", {
   selected2 <- selectExpr(df, "name as newName", "abs(age) as age")
   expect_equal(names(selected2), c("newName", "age"))
   expect_equal(count(selected2), 3)
+})
+
+test_that("expr() on a DataFrame", {
+  df <- jsonFile(sqlContext, jsonPath)
+  expect_equal(collect(select(df, expr("abs(-123)")))[1, 1], 123)
 })
 
 test_that("column calculation", {
@@ -642,16 +703,15 @@ test_that("column functions", {
   c <- SparkR:::col("a")
   c1 <- abs(c) + acos(c) + approxCountDistinct(c) + ascii(c) + asin(c) + atan(c)
   c2 <- avg(c) + base64(c) + bin(c) + bitwiseNOT(c) + cbrt(c) + ceil(c) + cos(c)
-  c3 <- cosh(c) + count(c) + crc32(c) + dayofmonth(c) + dayofyear(c) + exp(c)
+  c3 <- cosh(c) + count(c) + crc32(c) + exp(c)
   c4 <- explode(c) + expm1(c) + factorial(c) + first(c) + floor(c) + hex(c)
   c5 <- hour(c) + initcap(c) + isNaN(c) + last(c) + last_day(c) + length(c)
   c6 <- log(c) + (c) + log1p(c) + log2(c) + lower(c) + ltrim(c) + max(c) + md5(c)
-  c7 <- mean(c) + min(c) + minute(c) + month(c) + negate(c) + quarter(c)
-  c8 <- reverse(c) + rint(c) + round(c) + rtrim(c) + second(c) + sha1(c)
+  c7 <- mean(c) + min(c) + month(c) + negate(c) + quarter(c)
+  c8 <- reverse(c) + rint(c) + round(c) + rtrim(c) + sha1(c)
   c9 <- signum(c) + sin(c) + sinh(c) + size(c) + soundex(c) + sqrt(c) + sum(c)
   c10 <- sumDistinct(c) + tan(c) + tanh(c) + toDegrees(c) + toRadians(c)
-  c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c) + weekofyear(c)
-  c12 <- year(c)
+  c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
 
   df <- jsonFile(sqlContext, jsonPath)
   df2 <- select(df, between(df$age, c(20, 30)), between(df$age, c(10, 20)))
@@ -664,8 +724,11 @@ test_that("column functions", {
   expect_equal(collect(df3)[[1, 1]], TRUE)
   expect_equal(collect(df3)[[2, 1]], FALSE)
   expect_equal(collect(df3)[[3, 1]], TRUE)
-})
 
+  df4 <- createDataFrame(sqlContext, list(list(a = "010101")))
+  expect_equal(collect(select(df4, conv(df4$a, 2, 16)))[1, 1], "15")
+})
+#
 test_that("column binary mathfunctions", {
   lines <- c("{\"a\":1, \"b\":5}",
              "{\"a\":2, \"b\":6}",
@@ -684,6 +747,13 @@ test_that("column binary mathfunctions", {
   expect_equal(collect(select(df, hypot(df$a, df$b)))[3, "HYPOT(a, b)"], sqrt(3^2 + 7^2))
   expect_equal(collect(select(df, hypot(df$a, df$b)))[4, "HYPOT(a, b)"], sqrt(4^2 + 8^2))
   ## nolint end
+  expect_equal(collect(select(df, shiftLeft(df$b, 1)))[4, 1], 16)
+  expect_equal(collect(select(df, shiftRight(df$b, 1)))[4, 1], 4)
+  expect_equal(collect(select(df, shiftRightUnsigned(df$b, 1)))[4, 1], 4)
+  expect_equal(class(collect(select(df, rand()))[2, 1]), "numeric")
+  expect_equal(collect(select(df, rand(1)))[1, 1], 0.45, tolerance = 0.01)
+  expect_equal(class(collect(select(df, randn()))[2, 1]), "numeric")
+  expect_equal(collect(select(df, randn(1)))[1, 1], -0.0111, tolerance = 0.01)
 })
 
 test_that("string operators", {
@@ -692,6 +762,94 @@ test_that("string operators", {
   expect_equal(count(where(df, startsWith(df$name, "A"))), 1)
   expect_equal(first(select(df, substr(df$name, 1, 2)))[[1]], "Mi")
   expect_equal(collect(select(df, cast(df$age, "string")))[[2, 1]], "30")
+  expect_equal(collect(select(df, concat(df$name, lit(":"), df$age)))[[2, 1]], "Andy:30")
+  expect_equal(collect(select(df, concat_ws(":", df$name)))[[2, 1]], "Andy")
+  expect_equal(collect(select(df, concat_ws(":", df$name, df$age)))[[2, 1]], "Andy:30")
+  expect_equal(collect(select(df, instr(df$name, "i")))[, 1], c(2, 0, 5))
+  expect_equal(collect(select(df, format_number(df$age, 2)))[2, 1], "30.00")
+  expect_equal(collect(select(df, sha1(df$name)))[2, 1],
+               "ab5a000e88b5d9d0fa2575f5c6263eb93452405d")
+  expect_equal(collect(select(df, sha2(df$name, 256)))[2, 1],
+               "80f2aed3c618c423ddf05a2891229fba44942d907173152442cf6591441ed6dc")
+  expect_equal(collect(select(df, format_string("Name:%s", df$name)))[2, 1], "Name:Andy")
+  expect_equal(collect(select(df, format_string("%s, %d", df$name, df$age)))[2, 1], "Andy, 30")
+  expect_equal(collect(select(df, regexp_extract(df$name, "(n.y)", 1)))[2, 1], "ndy")
+  expect_equal(collect(select(df, regexp_replace(df$name, "(n.y)", "ydn")))[2, 1], "Aydn")
+
+  l2 <- list(list(a = "aaads"))
+  df2 <- createDataFrame(sqlContext, l2)
+  expect_equal(collect(select(df2, locate("aa", df2$a)))[1, 1], 1)
+  expect_equal(collect(select(df2, locate("aa", df2$a, 1)))[1, 1], 2)
+  expect_equal(collect(select(df2, lpad(df2$a, 8, "#")))[1, 1], "###aaads")
+  expect_equal(collect(select(df2, rpad(df2$a, 8, "#")))[1, 1], "aaads###")
+
+  l3 <- list(list(a = "a.b.c.d"))
+  df3 <- createDataFrame(sqlContext, l3)
+  expect_equal(collect(select(df3, substring_index(df3$a, ".", 2)))[1, 1], "a.b")
+  expect_equal(collect(select(df3, substring_index(df3$a, ".", -3)))[1, 1], "b.c.d")
+  expect_equal(collect(select(df3, translate(df3$a, "bc", "12")))[1, 1], "a.1.2.d")
+})
+
+test_that("date functions on a DataFrame", {
+  .originalTimeZone <- Sys.getenv("TZ")
+  Sys.setenv(TZ = "UTC")
+  l <- list(list(a = 1L, b = as.Date("2012-12-13")),
+            list(a = 2L, b = as.Date("2013-12-14")),
+            list(a = 3L, b = as.Date("2014-12-15")))
+  df <- createDataFrame(sqlContext, l)
+  expect_equal(collect(select(df, dayofmonth(df$b)))[, 1], c(13, 14, 15))
+  expect_equal(collect(select(df, dayofyear(df$b)))[, 1], c(348, 348, 349))
+  expect_equal(collect(select(df, weekofyear(df$b)))[, 1], c(50, 50, 51))
+  expect_equal(collect(select(df, year(df$b)))[, 1], c(2012, 2013, 2014))
+  expect_equal(collect(select(df, month(df$b)))[, 1], c(12, 12, 12))
+  expect_equal(collect(select(df, last_day(df$b)))[, 1],
+               c(as.Date("2012-12-31"), as.Date("2013-12-31"), as.Date("2014-12-31")))
+  expect_equal(collect(select(df, next_day(df$b, "MONDAY")))[, 1],
+               c(as.Date("2012-12-17"), as.Date("2013-12-16"), as.Date("2014-12-22")))
+  expect_equal(collect(select(df, date_format(df$b, "y")))[, 1], c("2012", "2013", "2014"))
+  expect_equal(collect(select(df, add_months(df$b, 3)))[, 1],
+               c(as.Date("2013-03-13"), as.Date("2014-03-14"), as.Date("2015-03-15")))
+  expect_equal(collect(select(df, date_add(df$b, 1)))[, 1],
+               c(as.Date("2012-12-14"), as.Date("2013-12-15"), as.Date("2014-12-16")))
+  expect_equal(collect(select(df, date_sub(df$b, 1)))[, 1],
+               c(as.Date("2012-12-12"), as.Date("2013-12-13"), as.Date("2014-12-14")))
+
+  l2 <- list(list(a = 1L, b = as.POSIXlt("2012-12-13 12:34:00", tz = "UTC")),
+            list(a = 2L, b = as.POSIXlt("2014-12-15 01:24:34", tz = "UTC")))
+  df2 <- createDataFrame(sqlContext, l2)
+  expect_equal(collect(select(df2, minute(df2$b)))[, 1], c(34, 24))
+  expect_equal(collect(select(df2, second(df2$b)))[, 1], c(0, 34))
+  expect_equal(collect(select(df2, from_utc_timestamp(df2$b, "JST")))[, 1],
+               c(as.POSIXlt("2012-12-13 21:34:00 UTC"), as.POSIXlt("2014-12-15 10:24:34 UTC")))
+  expect_equal(collect(select(df2, to_utc_timestamp(df2$b, "JST")))[, 1],
+               c(as.POSIXlt("2012-12-13 03:34:00 UTC"), as.POSIXlt("2014-12-14 16:24:34 UTC")))
+  expect_more_than(collect(select(df2, unix_timestamp()))[1, 1], 0)
+  expect_more_than(collect(select(df2, unix_timestamp(df2$b)))[1, 1], 0)
+  expect_more_than(collect(select(df2, unix_timestamp(lit("2015-01-01"), "yyyy-MM-dd")))[1, 1], 0)
+
+  l3 <- list(list(a = 1000), list(a = -1000))
+  df3 <- createDataFrame(sqlContext, l3)
+  result31 <- collect(select(df3, from_unixtime(df3$a)))
+  expect_equal(grep("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}", result31[, 1], perl = TRUE),
+               c(1, 2))
+  result32 <- collect(select(df3, from_unixtime(df3$a, "yyyy")))
+  expect_equal(grep("\\d{4}", result32[, 1]), c(1, 2))
+  Sys.setenv(TZ = .originalTimeZone)
+})
+
+test_that("greatest() and least() on a DataFrame", {
+  l <- list(list(a = 1, b = 2), list(a = 3, b = 4))
+  df <- createDataFrame(sqlContext, l)
+  expect_equal(collect(select(df, greatest(df$a, df$b)))[, 1], c(2, 4))
+  expect_equal(collect(select(df, least(df$a, df$b)))[, 1], c(1, 3))
+})
+
+test_that("when(), otherwise() and ifelse() on a DataFrame", {
+  l <- list(list(a = 1, b = 2), list(a = 3, b = 4))
+  df <- createDataFrame(sqlContext, l)
+  expect_equal(collect(select(df, when(df$a > 1 & df$b > 2, 1)))[, 1], c(NA, 1))
+  expect_equal(collect(select(df, otherwise(when(df$a > 1, 1), 0)))[, 1], c(0, 1))
+  expect_equal(collect(select(df, ifelse(df$a > 1 & df$b > 2, 0, 1)))[, 1], c(1, 0))
 })
 
 test_that("group by", {
@@ -874,7 +1032,7 @@ test_that("withColumn() and withColumnRenamed()", {
   expect_equal(columns(newDF2)[1], "newerAge")
 })
 
-test_that("mutate(), rename() and names()", {
+test_that("mutate(), transform(), rename() and names()", {
   df <- jsonFile(sqlContext, jsonPath)
   newDF <- mutate(df, newAge = df$age + 2)
   expect_equal(length(columns(newDF)), 3)
@@ -888,6 +1046,20 @@ test_that("mutate(), rename() and names()", {
   names(newDF2) <- c("newerName", "evenNewerAge")
   expect_equal(length(names(newDF2)), 2)
   expect_equal(names(newDF2)[1], "newerName")
+
+  transformedDF <- transform(df, newAge = -df$age, newAge2 = df$age / 2)
+  expect_equal(length(columns(transformedDF)), 4)
+  expect_equal(columns(transformedDF)[3], "newAge")
+  expect_equal(columns(transformedDF)[4], "newAge2")
+  expect_equal(first(filter(transformedDF, transformedDF$name == "Andy"))$newAge, -30)
+
+  # test if transform on local data frames works
+  # ensure the proper signature is used - otherwise this will fail to run
+  attach(airquality)
+  result <- transform(Ozone, logOzone = log(Ozone))
+  expect_equal(nrow(result), 153)
+  expect_equal(ncol(result), 2)
+  detach(airquality)
 })
 
 test_that("write.df() on DataFrame and works with parquetFile", {
@@ -906,6 +1078,12 @@ test_that("parquetFile works with multiple input paths", {
   parquetDF <- parquetFile(sqlContext, parquetPath, parquetPath2)
   expect_is(parquetDF, "DataFrame")
   expect_equal(count(parquetDF), count(df) * 2)
+
+  # Test if varargs works with variables
+  saveMode <- "overwrite"
+  mergeSchema <- "true"
+  parquetPath3 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
+  write.df(df, parquetPath2, "parquet", mode = saveMode, mergeSchema = mergeSchema)
 })
 
 test_that("describe() and summarize() on a DataFrame", {
@@ -923,7 +1101,7 @@ test_that("describe() and summarize() on a DataFrame", {
   expect_equal(collect(stats2)[5, "age"], "30")
 })
 
-test_that("dropna() on a DataFrame", {
+test_that("dropna() and na.omit() on a DataFrame", {
   df <- jsonFile(sqlContext, jsonPathNa)
   rows <- collect(df)
 
@@ -931,6 +1109,8 @@ test_that("dropna() on a DataFrame", {
 
   expected <- rows[!is.na(rows$name),]
   actual <- collect(dropna(df, cols = "name"))
+  expect_identical(expected, actual)
+  actual <- collect(na.omit(df, cols = "name"))
   expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age),]
@@ -941,13 +1121,18 @@ test_that("dropna() on a DataFrame", {
   expect_identical(expected$age, actual$age)
   expect_identical(expected$height, actual$height)
   expect_identical(expected$name, actual$name)
+  actual <- collect(na.omit(df, cols = "age"))
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height),]
   actual <- collect(dropna(df, cols = c("age", "height")))
   expect_identical(expected, actual)
+  actual <- collect(na.omit(df, cols = c("age", "height")))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
   actual <- collect(dropna(df))
+  expect_identical(expected, actual)
+  actual <- collect(na.omit(df))
   expect_identical(expected, actual)
 
   # drop with how
@@ -955,21 +1140,31 @@ test_that("dropna() on a DataFrame", {
   expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
   actual <- collect(dropna(df))
   expect_identical(expected, actual)
+  actual <- collect(na.omit(df))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) | !is.na(rows$height) | !is.na(rows$name),]
   actual <- collect(dropna(df, "all"))
+  expect_identical(expected, actual)
+  actual <- collect(na.omit(df, "all"))
   expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
   actual <- collect(dropna(df, "any"))
   expect_identical(expected, actual)
+  actual <- collect(na.omit(df, "any"))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height),]
   actual <- collect(dropna(df, "any", cols = c("age", "height")))
   expect_identical(expected, actual)
+  actual <- collect(na.omit(df, "any", cols = c("age", "height")))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) | !is.na(rows$height),]
   actual <- collect(dropna(df, "all", cols = c("age", "height")))
+  expect_identical(expected, actual)
+  actual <- collect(na.omit(df, "all", cols = c("age", "height")))
   expect_identical(expected, actual)
 
   # drop with threshold
@@ -977,11 +1172,15 @@ test_that("dropna() on a DataFrame", {
   expected <- rows[as.integer(!is.na(rows$age)) + as.integer(!is.na(rows$height)) >= 2,]
   actual <- collect(dropna(df, minNonNulls = 2, cols = c("age", "height")))
   expect_identical(expected, actual)
+  actual <- collect(na.omit(df, minNonNulls = 2, cols = c("age", "height")))
+  expect_identical(expected, actual)
 
   expected <- rows[as.integer(!is.na(rows$age)) +
                    as.integer(!is.na(rows$height)) +
                    as.integer(!is.na(rows$name)) >= 3,]
   actual <- collect(dropna(df, minNonNulls = 3, cols = c("name", "age", "height")))
+  expect_identical(expected, actual)
+  actual <- collect(na.omit(df, minNonNulls = 3, cols = c("name", "age", "height")))
   expect_identical(expected, actual)
 })
 

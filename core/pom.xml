@@ -266,7 +266,7 @@
     <dependency>
       <groupId>org.tachyonproject</groupId>
       <artifactId>tachyon-client</artifactId>
-      <version>0.7.0</version>
+      <version>0.7.1</version>
       <exclusions>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>

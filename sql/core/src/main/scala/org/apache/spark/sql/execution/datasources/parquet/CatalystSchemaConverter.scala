@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.schema.OriginalType._
@@ -55,16 +55,10 @@ import org.apache.spark.sql.{AnalysisException, SQLConf}
  *        to old style non-standard behaviors.
  */
 private[parquet] class CatalystSchemaConverter(
-    private val assumeBinaryIsString: Boolean,
-    private val assumeInt96IsTimestamp: Boolean,
-    private val followParquetFormatSpec: Boolean) {
-
-  // Only used when constructing converter for converting Spark SQL schema to Parquet schema, in
-  // which case `assumeInt96IsTimestamp` and `assumeBinaryIsString` are irrelevant.
-  def this() = this(
-    assumeBinaryIsString = SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get,
-    assumeInt96IsTimestamp = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get,
-    followParquetFormatSpec = SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.defaultValue.get)
+    assumeBinaryIsString: Boolean = SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get,
+    assumeInt96IsTimestamp: Boolean = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get,
+    followParquetFormatSpec: Boolean = SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.defaultValue.get
+) {
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
@@ -72,18 +66,9 @@ private[parquet] class CatalystSchemaConverter(
     followParquetFormatSpec = conf.followParquetFormatSpec)
 
   def this(conf: Configuration) = this(
-    assumeBinaryIsString =
-      conf.getBoolean(
-        SQLConf.PARQUET_BINARY_AS_STRING.key,
-        SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get),
-    assumeInt96IsTimestamp =
-      conf.getBoolean(
-        SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
-        SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get),
-    followParquetFormatSpec =
-      conf.getBoolean(
-        SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key,
-        SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.defaultValue.get))
+    assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
+    assumeInt96IsTimestamp = conf.get(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key).toBoolean,
+    followParquetFormatSpec = conf.get(SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key).toBoolean)
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
@@ -91,7 +76,7 @@ private[parquet] class CatalystSchemaConverter(
   def convert(parquetSchema: MessageType): StructType = convert(parquetSchema.asGroupType())
 
   private def convert(parquetSchema: GroupType): StructType = {
-    val fields = parquetSchema.getFields.map { field =>
+    val fields = parquetSchema.getFields.asScala.map { field =>
       field.getRepetition match {
         case OPTIONAL =>
           StructField(field.getName, convertField(field), nullable = true)

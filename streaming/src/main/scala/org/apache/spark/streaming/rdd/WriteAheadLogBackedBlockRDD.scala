@@ -75,7 +75,7 @@ private[streaming]
 class WriteAheadLogBackedBlockRDD[T: ClassTag](
     @transient sc: SparkContext,
     @transient blockIds: Array[BlockId],
-    @transient walRecordHandles: Array[WriteAheadLogRecordHandle],
+    @transient val walRecordHandles: Array[WriteAheadLogRecordHandle],
     @transient isBlockIdValid: Array[Boolean] = Array.empty,
     storeInBlockManager: Boolean = false,
     storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER)
@@ -84,7 +84,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
   require(
     blockIds.length == walRecordHandles.length,
     s"Number of block Ids (${blockIds.length}) must be " +
-      s" same as number of WAL record handles (${walRecordHandles.length}})")
+      s" same as number of WAL record handles (${walRecordHandles.length})")
 
   require(
     isBlockIdValid.isEmpty || isBlockIdValid.length == blockIds.length,

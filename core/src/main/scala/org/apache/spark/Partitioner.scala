@@ -291,7 +291,7 @@ private[spark] object RangePartitioner {
     while ((i < numCandidates) && (j < partitions - 1)) {
       val (key, weight) = ordered(i)
       cumWeight += weight
-      if (cumWeight > target) {
+      if (cumWeight >= target) {
         // Skip duplicate values.
         if (previousBound.isEmpty || ordering.gt(key, previousBound.get)) {
           bounds += key

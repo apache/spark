@@ -867,4 +867,32 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val actual = df.sort(rand(seed)).collect().map(_.getInt(0))
     assert(expected === actual)
   }
+
+  test("SPARK-9323: DataFrame.orderBy should support nested column name") {
+    val df = sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+      """{"a": {"b": 1}}""" :: Nil))
+    checkAnswer(df.orderBy("a.b"), Row(Row(1)))
+  }
+
+  test("SPARK-9950: correctly analyze grouping/aggregating on struct fields") {
+    val df = Seq(("x", (1, 1)), ("y", (2, 2))).toDF("a", "b")
+    checkAnswer(df.groupBy("b._1").agg(sum("b._2")), Row(1, 1) :: Row(2, 2) :: Nil)
+  }
+
+  test("SPARK-10093: Avoid transformations on executors") {
+    val df = Seq((1, 1)).toDF("a", "b")
+    df.where($"a" === 1)
+      .select($"a", $"b", struct($"b"))
+      .orderBy("a")
+      .select(struct($"b"))
+      .collect()
+  }
+
+  test("SPARK-10034: Sort on Aggregate with aggregation expression named 'aggOrdering'") {
+    val df = Seq(1 -> 2).toDF("i", "j")
+    val query = df.groupBy('i)
+      .agg(max('j).as("aggOrdering"))
+      .orderBy(sum('j))
+    checkAnswer(query, Row(1, 2))
+  }
 }

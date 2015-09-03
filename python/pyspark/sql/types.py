@@ -168,10 +168,12 @@ class DateType(AtomicType):
         return True
 
     def toInternal(self, d):
-        return d and d.toordinal() - self.EPOCH_ORDINAL
+        if d is not None:
+            return d.toordinal() - self.EPOCH_ORDINAL
 
     def fromInternal(self, v):
-        return v and datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
+        if v is not None:
+            return datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
 
 
 class TimestampType(AtomicType):
@@ -467,9 +469,11 @@ class StructType(DataType):
         """
         Construct a StructType by adding new elements to it to define the schema. The method accepts
         either:
+
             a) A single parameter which is a StructField object.
             b) Between 2 and 4 parameters as (name, data_type, nullable (optional),
-             metadata(optional). The data_type parameter may be either a String or a DataType object
+               metadata(optional). The data_type parameter may be either a String or a
+               DataType object.
 
         >>> struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         >>> struct2 = StructType([StructField("f1", StringType(), True),\
@@ -535,6 +539,9 @@ class StructType(DataType):
                 return tuple(f.toInternal(obj.get(n)) for n, f in zip(self.names, self.fields))
             elif isinstance(obj, (tuple, list)):
                 return tuple(f.toInternal(v) for f, v in zip(self.fields, obj))
+            elif hasattr(obj, "__dict__"):
+                d = obj.__dict__
+                return tuple(f.toInternal(d.get(n)) for n, f in zip(self.names, self.fields))
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
         else:
@@ -542,6 +549,9 @@ class StructType(DataType):
                 return tuple(obj.get(n) for n in self.names)
             elif isinstance(obj, (list, tuple)):
                 return tuple(obj)
+            elif hasattr(obj, "__dict__"):
+                d = obj.__dict__
+                return tuple(d.get(n) for n in self.names)
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
 
@@ -1282,8 +1292,11 @@ class DatetimeConverter(object):
 
     def convert(self, obj, gateway_client):
         Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
-        return Timestamp(int(time.mktime(obj.timetuple())) * 1000 + obj.microsecond // 1000)
-
+        seconds = (calendar.timegm(obj.utctimetuple()) if obj.tzinfo
+                   else time.mktime(obj.timetuple()))
+        t = Timestamp(int(seconds) * 1000)
+        t.setNanos(obj.microsecond * 1000)
+        return t
 
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeConverter())

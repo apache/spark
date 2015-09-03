@@ -389,7 +389,8 @@ Apart from these, the following properties are also available, and may be useful
     Implementation to use for transferring shuffle and cached blocks between executors. There
     are two implementations available: <code>netty</code> and <code>nio</code>. Netty-based
     block transfer is intended to be simpler but equally efficient and is the default option
-    starting in 1.2.
+    starting in 1.2, and <code>nio</code> block transfer is deprecated in Spark 1.5.0 and will
+    be removed in Spark 1.6.0.
   </td>
 </tr>
 <tr>
@@ -906,16 +907,6 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.akka.failure-detector.threshold</code></td>
-  <td>300.0</td>
-  <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
-     enabled again, if you plan to use this feature (Not recommended). This maps to akka's
-     `akka.remote.transport-failure-detector.threshold`. Tune this in combination of
-     `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
-  </td>
-</tr>
-<tr>
   <td><code>spark.akka.frameSize</code></td>
   <td>128</td>
   <td>
@@ -1295,7 +1286,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma separated list of users/administrators that have view and modify access to all Spark jobs.
     This can be used if you run on a shared cluster and have a set of administrators or devs who
-    help debug when things work.
+    help debug when things work. Putting a "*" in the list means any user can have the priviledge
+    of admin.
   </td>
 </tr>
 <tr>
@@ -1336,7 +1328,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>Empty</td>
   <td>
     Comma separated list of users that have modify access to the Spark job. By default only the
-    user that started the Spark job has access to modify it (kill it for example).
+    user that started the Spark job has access to modify it (kill it for example). Putting a "*" in
+    the list means any user can have access to modify it.
   </td>
 </tr>
 <tr>
@@ -1358,7 +1351,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>Empty</td>
   <td>
     Comma separated list of users that have view access to the Spark web ui. By default only the
-    user that started the Spark job has view access.
+    user that started the Spark job has view access. Putting a "*" in the list means any user can
+    have view access to this Spark job.
   </td>
 </tr>
 </table>
@@ -1560,7 +1554,11 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>PYSPARK_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark.</td>
+    <td>Python binary executable to use for PySpark in both driver and workers (default is `python`).</td>
+  </tr>
+  <tr>
+    <td><code>PYSPARK_DRIVER_PYTHON</code></td>
+    <td>Python binary executable to use for PySpark in driver only (default is PYSPARK_PYTHON).</td>
   </tr>
   <tr>
     <td><code>SPARK_LOCAL_IP</code></td>
