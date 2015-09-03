@@ -38,7 +38,7 @@ class BaseHook(object):
 
     @classmethod
     def get_connection(cls, conn_id):
-        environment_uri = os.environ.get(CONN_ENV_PREFIX + conn_id)
+        environment_uri = os.environ.get(CONN_ENV_PREFIX + conn_id.upper())
         conn = None
         if environment_uri:
             conn = Connection(uri=environment_uri)

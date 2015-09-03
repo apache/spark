@@ -4,12 +4,11 @@ from time import sleep
 import unittest
 from airflow import configuration
 configuration.test_mode()
-from airflow import jobs, models, DAG, executors, utils, operators
+from airflow import jobs, models, DAG, executors, utils, operators, hooks
 from airflow.www.app import app
 
 NUM_EXAMPLE_DAGS = 6
 DEV_NULL = '/dev/null'
-LOCAL_EXECUTOR = executors.LocalExecutor()
 DEFAULT_DATE = datetime(2015, 1, 1)
 TEST_DAG_ID = 'unit_tests'
 configuration.test_mode()
@@ -155,13 +154,17 @@ class HivePrestoTest(unittest.TestCase):
         t = operators.HiveToMySqlTransfer(
             mysql_conn_id='airflow_db',
             task_id='hive_to_mysql_check',
+            create=True,
             sql="""
-            SELECT name, count(*) as ccount
+            SELECT name
             FROM airflow.static_babynames
-            GROUP BY name
+            LIMIT 100
             """,
             mysql_table='test_static_babynames',
-            mysql_preoperator='TRUNCATE TABLE test_static_babynames;',
+            mysql_preoperator=[
+                'DROP TABLE IF EXISTS test_static_babynames;',
+                'CREATE TABLE test_static_babynames (name VARCHAR(500))',
+            ],
             dag=self.dag)
         t.clear(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
@@ -457,7 +460,11 @@ if 'MySqlOperator' in dir(operators):
 
         def setUp(self):
             configuration.test_mode()
-            args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
+            args = {
+                'owner': 'airflow',
+                'mysql_conn_id': 'airflow_db',
+                'start_date': datetime(2015, 1, 1)
+            }
             dag = DAG(TEST_DAG_ID, default_args=args)
             self.dag = dag
 
@@ -575,12 +582,11 @@ class ConnectionTest(unittest.TestCase):
     def setUp(self):
         configuration.test_mode()
         utils.initdb()
+        os.environ['AIRFLOW_CONN_TEST_URI'] = \
+            'postgres://username:password@ec2.compute.com:5432/the_database'
 
     def test_using_env_var(self):
-        os.environ['AIRFLOW_TEST_CONN_URL'] = \
-            'postgres://username:password@ec2.compute.com:5432/the_database'
-        c = models.Connection(env_variable='AIRFLOW_TEST_CONN_URL',
-                              conn_id='test_env_config')
+        c = hooks.PostgresHook.get_connection(conn_id='test_uri')
         assert c.host == 'ec2.compute.com'
         assert c.schema == 'the_database'
         assert c.login == 'username'
@@ -588,11 +594,7 @@ class ConnectionTest(unittest.TestCase):
         assert c.port == 5432
 
     def test_using_unix_socket_env_var(self):
-        os.environ['AIRFLOW_TEST_CONN_URL'] = \
-            'postgres://%2Fvar%2Fpostgresql/the_database'
-        c = models.Connection(env_variable='AIRFLOW_TEST_CONN_URL',
-                              conn_id='test_env_config')
-        print c.host
+        c = hooks.PostgresHook.get_connection(conn_id='test_uri')
         assert c.host == '/var/postgresql'
         assert c.schema == 'the_database'
         assert c.login is None
@@ -610,27 +612,18 @@ class ConnectionTest(unittest.TestCase):
         assert c.port is None
 
     def test_env_var_priority(self):
-        os.environ['AIRFLOW_TEST_CONN_URL'] = \
+        c = hooks.PostgresHook.get_connection(conn_id='airflow_db')
+        assert c.host != 'ec2.compute.com'
+
+        os.environ['AIRFLOW_CONN_AIRFLOW_DB'] = \
             'postgres://username:password@ec2.compute.com:5432/the_database'
-        c = models.Connection(env_variable='AIRFLOW_TEST_CONN_URL',
-                              conn_id='test_env_config')
-        c.host = 'localhost'
-        c.schema = 'airflow'
-        c.login = 'airflow'
-        c.password = 'airflow'
-        c.port is None
+        c = hooks.PostgresHook.get_connection(conn_id='airflow_db')
         assert c.host == 'ec2.compute.com'
         assert c.schema == 'the_database'
         assert c.login == 'username'
         assert c.password == 'password'
         assert c.port == 5432
-
-        c.env_variable = None
-        assert c.host == 'localhost'
-        assert c.schema == 'airflow'
-        assert c.login == 'airflow'
-        assert c.password == 'airflow'
-        assert c.port is None
+        del os.environ['AIRFLOW_CONN_AIRFLOW_DB']
 
 
 if __name__ == '__main__':
