@@ -678,7 +678,7 @@ object RowMatrix {
    *
    * @param U the upper triangular part of the matrix packed in an array (column major)
    */
-  private def dspr(alpha: Double, v: Vector, U: Array[Double]): Unit = {
+  private[spark] def dspr(alpha: Double, v: Vector, U: Array[Double]): Unit = {
     // TODO: Find a better home (breeze?) for this method.
     val n = v.size
     v match {
