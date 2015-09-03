@@ -55,6 +55,22 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(queryCoalesce, Row("1") :: Nil)
   }
 
+  test("collect set") {
+    val df = Seq((1, "a"), (1, "b"), (2, "c")).toDF("key", "value")
+    df.registerTempTable("src")
+    val query = sql("select key, collect_set(value) from src group by key")
+
+    checkAnswer(query, Row(1, "a" :: "b" :: Nil) :: Row(2, "c" :: Nil) :: Nil)
+  }
+
+  test("collect set with nulls") {
+    val df = Seq((1, "a"), (1, null), (2, null)).toDF("key", "value")
+    df.registerTempTable("src")
+    val query = sql("select key, collect_set(value) from src group by key")
+
+    checkAnswer(query, Row(1, "a" :: Nil) :: Row(2, Nil) :: Nil)
+  }
+
   test("show functions") {
     checkAnswer(sql("SHOW functions"),
       FunctionRegistry.builtin.listFunction().sorted.map(Row(_)))

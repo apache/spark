@@ -68,6 +68,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val BY = Keyword("BY")
   protected val CASE = Keyword("CASE")
   protected val CAST = Keyword("CAST")
+  protected val COLLECT_SET = Keyword("COLLECT_SET")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
   protected val ELSE = Keyword("ELSE")
@@ -298,6 +299,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
           throw new AnalysisException(s"invalid function approximate($s) $udfName")
         }
       }
+    | COLLECT_SET ~> "(" ~> expression <~ ")" ^^ { case exp => CollectSet(exp) }
     | CASE ~> whenThenElse ^^ CaseWhen
     | CASE ~> expression ~ whenThenElse ^^
       { case keyPart ~ branches => CaseKeyWhen(keyPart, branches) }
