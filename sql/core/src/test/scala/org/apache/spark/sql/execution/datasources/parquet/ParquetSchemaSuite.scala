@@ -959,9 +959,9 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         fail(
           s"""Expected clipped schema:
              |$expected
-              |Actual clipped schema:
-              |$actual
-           """.stripMargin,
+             |Actual clipped schema:
+             |$actual
+          """.stripMargin,
           cause)
       }
     }
@@ -1011,11 +1011,11 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       """.stripMargin,
 
     catalystSchema = {
-      val f11Type = new StructType().add("f011", DoubleType, nullable = true)
-      val f01Type = ArrayType(StringType, containsNull = false)
+      val f00Type = ArrayType(StringType, containsNull = false)
+      val f01Type = new StructType().add("f011", DoubleType, nullable = true)
       val f0Type = new StructType()
-        .add("f00", f01Type, nullable = false)
-        .add("f01", f11Type, nullable = false)
+        .add("f00", f00Type, nullable = false)
+        .add("f01", f01Type, nullable = false)
       val f1Type = ArrayType(IntegerType, containsNull = true)
       new StructType()
         .add("f0", f0Type, nullable = false)
@@ -1045,7 +1045,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     parquetSchema =
       """message root {
         |  required group f0 {
-        |    optional group f00 {
+        |    optional group f00 (LIST) {
         |      repeated binary f00_tuple (UTF8);
         |    }
         |
@@ -1060,13 +1060,13 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       """.stripMargin,
 
     catalystSchema = {
-      val f11ElementType = new StructType()
+      val f01ElementType = new StructType()
         .add("f011", DoubleType, nullable = true)
         .add("f012", LongType, nullable = true)
 
       val f0Type = new StructType()
-        .add("f00", ArrayType(StringType, containsNull = false), nullable = false)
-        .add("f01", ArrayType(f11ElementType, containsNull = false), nullable = false)
+        .add("f00", ArrayType(StringType, containsNull = false), nullable = true)
+        .add("f01", ArrayType(f01ElementType, containsNull = false), nullable = true)
 
       new StructType().add("f0", f0Type, nullable = false)
     },
@@ -1074,7 +1074,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     expectedSchema =
       """message root {
         |  required group f0 {
-        |    optional group f00 {
+        |    optional group f00 (LIST) {
         |      repeated binary f00_tuple (UTF8);
         |    }
         |
@@ -1094,7 +1094,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     parquetSchema =
       """message root {
         |  required group f0 {
-        |    optional group f00 {
+        |    optional group f00 (LIST) {
         |      repeated binary array (UTF8);
         |    }
         |
@@ -1109,13 +1109,13 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       """.stripMargin,
 
     catalystSchema = {
-      val f11ElementType = new StructType()
+      val f01ElementType = new StructType()
         .add("f011", DoubleType, nullable = true)
         .add("f012", LongType, nullable = true)
 
       val f0Type = new StructType()
-        .add("f00", ArrayType(StringType, containsNull = false), nullable = false)
-        .add("f01", ArrayType(f11ElementType, containsNull = false), nullable = false)
+        .add("f00", ArrayType(StringType, containsNull = false), nullable = true)
+        .add("f01", ArrayType(f01ElementType, containsNull = false), nullable = true)
 
       new StructType().add("f0", f0Type, nullable = false)
     },
@@ -1123,7 +1123,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     expectedSchema =
       """message root {
         |  required group f0 {
-        |    optional group f00 {
+        |    optional group f00 (LIST) {
         |      repeated binary array (UTF8);
         |    }
         |
@@ -1236,6 +1236,63 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
        """.stripMargin)
 
   testSchemaClipping(
+    "standard array",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated group list {
+        |        required binary element (UTF8);
+        |      }
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group list {
+        |        required group element {
+        |          optional int32 f010;
+        |          optional double f011;
+        |        }
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val f01ElementType = new StructType()
+        .add("f011", DoubleType, nullable = true)
+        .add("f012", LongType, nullable = true)
+
+      val f0Type = new StructType()
+        .add("f00", ArrayType(StringType, containsNull = false), nullable = true)
+        .add("f01", ArrayType(f01ElementType, containsNull = false), nullable = true)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated group list {
+        |        required binary element (UTF8);
+        |      }
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group list {
+        |        required group element {
+        |          optional double f011;
+        |          optional int64 f012;
+        |        }
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
     "empty requested schema",
 
     parquetSchema =
@@ -1250,4 +1307,88 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     catalystSchema = new StructType(),
 
     expectedSchema = "message root {}")
+
+  testSchemaClipping(
+    "parquet-avro style map",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group map (MAP_KEY_VALUE) {
+        |      required int32 key;
+        |      required group value {
+        |        required int32 value_f0;
+        |        required int64 value_f1;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val valueType =
+        new StructType()
+          .add("value_f1", LongType, nullable = false)
+          .add("value_f2", DoubleType, nullable = false)
+
+      val f0Type = MapType(IntegerType, valueType, valueContainsNull = false)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group map (MAP_KEY_VALUE) {
+        |      required int32 key;
+        |      required group value {
+        |        required int64 value_f1;
+        |        required double value_f2;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "standard map",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group key_value {
+        |      required int32 key;
+        |      required group value {
+        |        required int32 value_f0;
+        |        required int64 value_f1;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val valueType =
+        new StructType()
+          .add("value_f1", LongType, nullable = false)
+          .add("value_f2", DoubleType, nullable = false)
+
+      val f0Type = MapType(IntegerType, valueType, valueContainsNull = false)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group key_value {
+        |      required int32 key;
+        |      required group value {
+        |        required int64 value_f1;
+        |        required double value_f2;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
 }
