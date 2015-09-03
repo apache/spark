@@ -1430,13 +1430,13 @@ class DAGSchedulerSuite
     // updated its properties.  It might be desirable to have this actually change to "job2"
     checkJobProperties(taskSets(1), "job1")
 
-    // but lets say there is a fetch failure in this task set, which makes us go back and
+    // lets say there is a fetch failure in this task set, which makes us go back and
     // run stage 0, attempt 1
     complete(taskSets(1), Seq(
       (FetchFailed(makeBlockManagerId("hostA"), shuffleDep1.shuffleId, 0, 0, "ignored"), null)))
     scheduler.resubmitFailedStages()
 
-    // but stage 0, attempt 1 should have the properties of job2
+    // stage 0, attempt 1 should have the properties of job2
     assert(taskSets(2).stageId === 0)
     assert(taskSets(2).stageAttemptId === 1)
     checkJobProperties(taskSets(2), "job2")
