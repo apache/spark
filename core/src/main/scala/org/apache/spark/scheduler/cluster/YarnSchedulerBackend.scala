@@ -93,10 +93,19 @@ private[spark] abstract class YarnSchedulerBackend(
     }
   }
 
+  override def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {
+    new YarnDriverEndpoint(rpcEnv, properties)
+  }
+
   /**
    * Override the DriverEndpoint to add extra logic for the case when an executor is disconnected.
    * We should check the cluster manager and find if the loss of the executor was caused by YARN
    * force killing it due to preemption.
+   *
+   * Specifically, this endpoint is the endpoint used by CoarseGrainedSchedulerBackend. Unlike
+   * YarnSchedulerEndpoint, it handles messages from executors the driver is connected to. It
+   * does query the application master when the onDisconnected event is received, however.
+   *
    */
   private class YarnDriverEndpoint(rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
       extends DriverEndpoint(rpcEnv, sparkProperties) {
@@ -119,10 +128,6 @@ private[spark] abstract class YarnSchedulerBackend(
     }
   }
 
-  override def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {
-    new YarnDriverEndpoint(rpcEnv, properties)
-  }
-
   /**
    * An [[RpcEndpoint]] that communicates with the ApplicationMaster.
    */
@@ -134,7 +139,7 @@ private[spark] abstract class YarnSchedulerBackend(
       ThreadUtils.newDaemonCachedThreadPool("yarn-scheduler-ask-am-thread-pool")
     implicit val askAmExecutor = ExecutionContext.fromExecutor(askAmThreadPool)
 
-    def handleExecutorDisconnectedFromDriver(
+    private[YarnSchedulerBackend] def handleExecutorDisconnectedFromDriver(
         executorId: String,
         executorRpcAddress: RpcAddress): Unit = {
       amEndpoint match {
@@ -143,7 +148,7 @@ private[spark] abstract class YarnSchedulerBackend(
           val future = am.ask[ExecutorLossReason](lossReasonRequest, askTimeout)
           future onSuccess {
             case reason: ExecutorLossReason => {
-              driverEndpoint.askWithRetry(RemoveExecutor(executorId, reason))
+              driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
             }
           }
           future onFailure {

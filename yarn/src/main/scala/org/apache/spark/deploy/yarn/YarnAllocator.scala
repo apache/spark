@@ -66,7 +66,7 @@ private[yarn] class YarnAllocator(
     securityMgr: SecurityManager)
   extends Logging {
 
-  import org.apache.spark.deploy.yarn.YarnAllocator._
+  import YarnAllocator._
 
   // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
   if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
@@ -222,7 +222,7 @@ private[yarn] class YarnAllocator(
    * Returns a list of executor loss reasons discovered by the allocator, which can then be
    * forwarded to the driver by the calling ApplicationMaster.
    */
-  def allocateResources(): Map[String, ExecutorLossReason] = synchronized {
+  def allocateResources(): Unit = synchronized {
     updateResourceRequests()
 
     val progressIndicator = 0.1f
@@ -245,15 +245,9 @@ private[yarn] class YarnAllocator(
     val completedContainers = allocateResponse.getCompletedContainersStatuses()
     if (completedContainers.size > 0) {
       logDebug("Completed %d containers".format(completedContainers.size))
-
-      val discoveredLossReasons = processCompletedContainers(completedContainers.asScala)
-
+      processCompletedContainers(completedContainers.asScala)
       logDebug("Finished processing %d completed containers. Current running executor count: %d."
         .format(completedContainers.size, numExecutorsRunning))
-      discoveredLossReasons
-    } else {
-      // No completed containers, so no reasons to report
-      Map.empty[String, ExecutorLossReason]
     }
   }
 
@@ -454,41 +448,40 @@ private[yarn] class YarnAllocator(
         // Hadoop 2.2.X added a ContainerExitStatus we should switch to use
         // there are some exit status' we shouldn't necessarily count against us, but for
         // now I think its ok as none of the containers are expected to exit
-        var isNormalExit = false
-        var containerExitReason = "Container exited for an unknown reason."
         val exitStatus = completedContainer.getExitStatus
-        if (exitStatus == ContainerExitStatus.PREEMPTED) {
-          isNormalExit = true
-          containerExitReason = s"Container $containerId was preempted."
-          logInfo(containerExitReason)
-        } else if (exitStatus == -103) { // vmem limit exceeded
-          // Should probably still count these towards task failures
-          containerExitReason = memLimitExceededLogMessage(
-            completedContainer.getDiagnostics,
-            VMEM_EXCEEDED_PATTERN)
-          logWarning(containerExitReason)
-        } else if (exitStatus == -104) { // pmem limit exceeded
-          // Should probably still count these towards task failures
-          containerExitReason = memLimitExceededLogMessage(
-            completedContainer.getDiagnostics,
-            PMEM_EXCEEDED_PATTERN)
-          logWarning(containerExitReason)
-        } else if (exitStatus != 0) {
-          logInfo("Container marked as failed: " + containerId +
-            ". Exit status: " + completedContainer.getExitStatus +
-            ". Diagnostics: " + completedContainer.getDiagnostics)
-          numExecutorsFailed += 1
-          containerExitReason = s"Container $containerId exited abnormally with exit" +
-            s" status $exitStatus, and was marked as failed."
-        }
+        val (isNormalExit, containerExitReason) = exitStatus match {
+          case ContainerExitStatus.SUCCESS =>
+            (true, s"Executor for container $containerId exited normally.")
+          case ContainerExitStatus.PREEMPTED =>
+            // Preemption should count as a normal exit, since YARN preempts containers merely
+            // to do resource sharing, and tasks that fail due to preempted executors could
+            // just as easily finish on any other executor. See SPARK-8167.
+            (true, s"Container $containerId was preempted.")
+          // Should probably still count memory exceeded exit codes towards task failures
+          case VMEM_EXCEEDED_EXIT_CODE =>
+            (false, memLimitExceededLogMessage(
+              completedContainer.getDiagnostics,
+              VMEM_EXCEEDED_PATTERN))
+          case PMEM_EXCEEDED_EXIT_CODE =>
+            (false, memLimitExceededLogMessage(
+              completedContainer.getDiagnostics,
+              PMEM_EXCEEDED_PATTERN))
+          case unknown =>
+            numExecutorsFailed += 1
+            (false, "Container marked as failed: " + containerId +
+              ". Exit status: " + completedContainer.getExitStatus +
+              ". Diagnostics: " + completedContainer.getDiagnostics)
 
-        if (exitStatus == 0) {
-          ExecutorExited(0, isNormalExit = true,
-            s"Executor for container $containerId exited normally.")
-        } else {
-          ExecutorExited(completedContainer.getExitStatus, isNormalExit, containerExitReason)
         }
+        if (isNormalExit) {
+          logInfo(containerExitReason)
+        } else {
+          logWarning(containerExitReason)
+        }
+        ExecutorExited(0, isNormalExit, containerExitReason)
       } else {
+        // If we have already released this container, then it must mean
+        // that the driver has explicitly requested it to be killed
         ExecutorExited(completedContainer.getExitStatus, isNormalExit = true,
           s"Container $containerId exited from explicit termination request.")
       }
@@ -522,7 +515,12 @@ private[yarn] class YarnAllocator(
     }
   }
 
-  def enqueueGetLossReasonRequest(eid: String, context: RpcCallContext): Unit = synchronized {
+  /**
+   * Register that some RpcCallContext has asked the AM why the executor was lost. Note that
+   * we can only find the loss reason to send back in the next call to allocateResources().
+   */
+  private[yarn] def enqueueGetLossReasonRequest(eid: String, context: RpcCallContext): Unit
+      = synchronized {
     if (executorIdToContainer.contains(eid)) {
       pendingLossReasonRequests
         .getOrElseUpdate(eid, new ArrayBuffer[RpcCallContext]) += context
@@ -544,6 +542,8 @@ private object YarnAllocator {
     Pattern.compile(s"$MEM_REGEX of $MEM_REGEX physical memory used")
   val VMEM_EXCEEDED_PATTERN =
     Pattern.compile(s"$MEM_REGEX of $MEM_REGEX virtual memory used")
+  val VMEM_EXCEEDED_EXIT_CODE = -103
+  val PMEM_EXCEEDED_EXIT_CODE = -104
 
   def memLimitExceededLogMessage(diagnostics: String, pattern: Pattern): String = {
     val matcher = pattern.matcher(diagnostics)

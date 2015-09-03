@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap}
 import scala.util.control.NonFatal
 
 import java.io.{File, IOException}
@@ -67,11 +66,6 @@ private[spark] class ApplicationMaster(
   private val maxNumExecutorFailures = sparkConf.getInt("spark.yarn.max.executor.failures",
     sparkConf.getInt("spark.yarn.max.worker.failures",
       math.max(sparkConf.getInt("spark.executor.instances", 0) *  2, 3)))
-
-  // Executor loss reason requests that are pending - maps from executor ID for inquiry to a
-  // list of requesters that should be responded to once we find out why the given executor
-  // was lost.
-  private val pendingLossReasonRequests = new HashMap[String, Buffer[RpcCallContext]]
 
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
