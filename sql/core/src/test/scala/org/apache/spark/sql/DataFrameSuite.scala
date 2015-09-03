@@ -887,4 +887,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .select(struct($"b"))
       .collect()
   }
+
+  test("SPARK-10034: Sort on Aggregate with aggregation expression named 'aggOrdering'") {
+    val df = Seq(1 -> 2).toDF("i", "j")
+    val query = df.groupBy('i)
+      .agg(max('j).as("aggOrdering"))
+      .orderBy(sum('j))
+    checkAnswer(query, Row(1, 2))
+  }
 }
