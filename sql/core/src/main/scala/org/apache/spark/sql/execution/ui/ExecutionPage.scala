@@ -125,11 +125,20 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
     <div>
-      <a onclick="$('#physical-plan-details').toggle();">+details</a>
-    </div> ++
+      <span style="cursor: pointer;" onclick="clickPhysicalPlanDetails();">
+        <span id="physical-plan-details-arrow" class="arrow-closed"></span>
+        <a>Details</a>
+      </span>
+    </div>
     <div id="physical-plan-details" style="display: none;">
       <pre>{physicalPlanDescription}</pre>
     </div>
+    <script>
+      function clickPhysicalPlanDetails() {{
+        $('#physical-plan-details').toggle();
+        $('#physical-plan-details-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
+      }}
+    </script>
     <br/>
   }
 }
