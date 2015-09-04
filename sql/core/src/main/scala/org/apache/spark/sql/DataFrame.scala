@@ -480,10 +480,11 @@ class DataFrame private[sql](
    *
    * @param right Right side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
+   * @param joinType One of: (default)`inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
    * @group dfops
    * @since 1.4.0
    */
-  def join(right: DataFrame, usingColumns: Seq[String]): DataFrame = {
+  def join(right: DataFrame, usingColumns: Seq[String], joinType: String = "inner"): DataFrame = {
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
     val joined = sqlContext.executePlan(
@@ -502,7 +503,7 @@ class DataFrame private[sql](
       Join(
         joined.left,
         joined.right,
-        joinType = Inner,
+        joinType = JoinType(joinType),
         condition)
     )
   }
