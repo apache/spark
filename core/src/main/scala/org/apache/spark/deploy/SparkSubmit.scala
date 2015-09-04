@@ -552,6 +552,7 @@ object SparkSubmit {
       assert(args.useRest, "Mesos cluster mode is only supported through the REST submission API")
       childMainClass = "org.apache.spark.deploy.rest.RestSubmissionClient"
       if (args.isPython) {
+        // Second argument is main class
         childArgs += (args.primaryResource, "")
         if (args.pyFiles != null) {
           sysProps("spark.submit.pyFiles") = args.pyFiles
