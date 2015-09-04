@@ -181,9 +181,6 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
     /** Hard-code class name string in case it changes in the future */
     def thisClassName: String = "org.apache.spark.mllib.regression.IsotonicRegressionModel"
 
-    /** Model data for model import/export */
-    case class Data(boundary: Double, prediction: Double)
-
     def save(
         sc: SparkContext,
         path: String,

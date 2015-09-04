@@ -583,8 +583,6 @@ object Word2VecModel extends Loader[Word2VecModel] {
 
     val classNameV1_0 = "org.apache.spark.mllib.feature.Word2VecModel"
 
-    case class Data(word: String, vector: Array[Float])
-
     def load(sc: SparkContext, path: String): Word2VecModel = {
       val dataPath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)

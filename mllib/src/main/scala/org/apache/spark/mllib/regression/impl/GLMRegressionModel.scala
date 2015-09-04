@@ -35,9 +35,6 @@ private[regression] object GLMRegressionModel {
 
     def thisFormatVersion: String = "1.0"
 
-    /** Model data for model import/export */
-    case class Data(weights: Vector, intercept: Double)
-
     /**
      * Helper method for saving GLM regression model metadata and data.
      * @param modelClass  String name for model class, to be saved with metadata
@@ -71,7 +68,11 @@ private[regression] object GLMRegressionModel {
      * @param numFeatures  Number of features, to be checked against loaded data.
      *                     The length of the weights vector should equal numFeatures.
      */
-    def loadData(sc: SparkContext, path: String, modelClass: String, numFeatures: Int): Data = {
+    def loadData(
+        sc: SparkContext,
+        path: String,
+        modelClass: String,
+        numFeatures: Int): Tuple2[Vector, Double] = {
       val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
       val dataRDD = sqlContext.read.parquet(datapath)
@@ -83,7 +84,7 @@ private[regression] object GLMRegressionModel {
         case Row(weights: Vector, intercept: Double) =>
           assert(weights.size == numFeatures, s"Expected $numFeatures features, but" +
             s" found ${weights.size} features when loading $modelClass weights from $datapath")
-          Data(weights, intercept)
+          (weights, intercept)
       }
     }
   }

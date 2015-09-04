@@ -184,11 +184,12 @@ object LogisticRegressionModel extends Loader[LogisticRegressionModel] {
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
         val (numFeatures, numClasses) = ClassificationModel.getNumFeaturesClasses(metadata)
-        val data = GLMClassificationModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0)
+        val (weights, intercept, threshold) = GLMClassificationModel.SaveLoadV1_0
+          .loadData(sc, path, classNameV1_0)
         // numFeatures, numClasses, weights are checked in model initialization
         val model =
-          new LogisticRegressionModel(data.weights, data.intercept, numFeatures, numClasses)
-        data.threshold match {
+          new LogisticRegressionModel(weights, intercept, numFeatures, numClasses)
+        threshold match {
           case Some(t) => model.setThreshold(t)
           case None => model.clearThreshold()
         }

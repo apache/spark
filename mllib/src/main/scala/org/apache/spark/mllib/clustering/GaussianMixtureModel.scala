@@ -138,8 +138,6 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
 
   private object SaveLoadV1_0 {
 
-    case class Data(weight: Double, mu: Vector, sigma: Matrix)
-
     val formatVersionV1_0 = "1.0"
 
     val classNameV1_0 = "org.apache.spark.mllib.clustering.GaussianMixtureModel"

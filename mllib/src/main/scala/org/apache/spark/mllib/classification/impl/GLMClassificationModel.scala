@@ -35,9 +35,6 @@ private[classification] object GLMClassificationModel {
 
     def thisFormatVersion: String = "1.0"
 
-    /** Model data for import/export */
-    case class Data(weights: Vector, intercept: Double, threshold: Option[Double])
-
     /**
      * Helper method for saving GLM classification model metadata and data.
      * @param modelClass  String name for model class, to be saved with metadata
@@ -70,7 +67,6 @@ private[classification] object GLMClassificationModel {
       StructField("intercept", DoubleType, nullable = false),
       StructField("threshold", DoubleType, nullable = true)))
 
-
     /**
      * Helper method for loading GLM classification model data.
      *
@@ -78,7 +74,10 @@ private[classification] object GLMClassificationModel {
      *
      * @param modelClass  String name for model class (used for error messages)
      */
-    def loadData(sc: SparkContext, path: String, modelClass: String): Data = {
+    def loadData(
+        sc: SparkContext,
+        path: String,
+        modelClass: String): Tuple3[Vector, Double, Option[Double]] = {
       val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
       val dataRDD = sqlContext.read.parquet(datapath)
@@ -95,7 +94,7 @@ private[classification] object GLMClassificationModel {
       } else {
         Some(data.getDouble(2))
       }
-      Data(weights, intercept, threshold)
+      (weights, intercept, threshold)
     }
   }
 

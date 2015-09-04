@@ -385,10 +385,6 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
 
     val thisClassName = "org.apache.spark.mllib.clustering.LocalLDAModel"
 
-    // Store the distribution of terms of each topic and the column index in topicsMatrix
-    // as a Row in data.
-    case class Data(topic: Vector, index: Int)
-
     def save(
         sc: SparkContext,
         path: String,
@@ -773,7 +769,6 @@ class DistributedLDAModel private[clustering] (
   }
 }
 
-
 @Experimental
 object DistributedLDAModel extends Loader[DistributedLDAModel] {
 
@@ -782,15 +777,6 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
     val thisFormatVersion = "1.0"
 
     val thisClassName = "org.apache.spark.mllib.clustering.DistributedLDAModel"
-
-    // Store globalTopicTotals as a Vector.
-    case class Data(globalTopicTotals: Vector)
-
-    // Store each term and document vertex with an id and the topicWeights.
-    case class VertexData(id: Long, topicWeights: Vector)
-
-    // Store each edge with the source id, destination id and tokenCounts.
-    case class EdgeData(srcId: Long, dstId: Long, tokenCounts: Double)
 
     def save(
         sc: SparkContext,

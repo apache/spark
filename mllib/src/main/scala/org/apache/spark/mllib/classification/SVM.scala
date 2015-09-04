@@ -109,13 +109,14 @@ object SVMModel extends Loader[SVMModel] {
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
         val (numFeatures, numClasses) = ClassificationModel.getNumFeaturesClasses(metadata)
-        val data = GLMClassificationModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0)
-        val model = new SVMModel(data.weights, data.intercept)
+        val (weights, intercept, threshold) = GLMClassificationModel.SaveLoadV1_0
+          .loadData(sc, path, classNameV1_0)
+        val model = new SVMModel(weights, intercept)
         assert(model.weights.size == numFeatures, s"SVMModel.load with numFeatures=$numFeatures" +
           s" was given non-matching weights vector of size ${model.weights.size}")
         assert(numClasses == 2,
           s"SVMModel.load was given numClasses=$numClasses but only supports 2 classes")
-        data.threshold match {
+        threshold match {
           case Some(t) => model.setThreshold(t)
           case None => model.clearThreshold()
         }

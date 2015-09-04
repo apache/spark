@@ -108,14 +108,6 @@ object KMeansModel extends Loader[KMeansModel] {
     KMeansModel.SaveLoadV1_0.load(sc, path)
   }
 
-  private case class Cluster(id: Int, point: Vector)
-
-  private object Cluster {
-    def apply(r: Row): Cluster = {
-      Cluster(r.getInt(0), r.getAs[Vector](1))
-    }
-  }
-
   private[clustering]
   object SaveLoadV1_0 {
 
@@ -148,9 +140,9 @@ object KMeansModel extends Loader[KMeansModel] {
       val k = (metadata \ "k").extract[Int]
       val centroids = sqlContext.read.parquet(Loader.dataPath(path))
       Loader.checkSchema(schema, centroids.schema)
-      val localCentroids = centroids.map(Cluster.apply).collect()
+      val localCentroids = centroids.map(r => (r.getInt(0), r.getAs[Vector](1))).collect()
       assert(k == localCentroids.size)
-      new KMeansModel(localCentroids.sortBy(_.id).map(_.point))
+      new KMeansModel(localCentroids.sortBy(_._1).map(_._2))
     }
   }
 }

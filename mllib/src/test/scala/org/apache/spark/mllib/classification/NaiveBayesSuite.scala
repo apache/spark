@@ -323,8 +323,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Save model as version 1.0, load it back, and compare.
     try {
-      val data = NaiveBayesModel.SaveLoadV1_0.Data(model.labels, model.pi, model.theta)
-      NaiveBayesModel.SaveLoadV1_0.save(sc, path, data)
+      NaiveBayesModel.SaveLoadV1_0.save(sc, path, model.labels, model.pi, model.theta)
       val sameModel = NaiveBayesModel.load(sc, path)
       assert(model.labels === sameModel.labels)
       assert(model.pi === sameModel.pi)
