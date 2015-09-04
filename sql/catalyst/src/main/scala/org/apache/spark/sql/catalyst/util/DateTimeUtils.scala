@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.lang.{Long => JLong}
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 import java.util.{TimeZone, Calendar}
@@ -56,6 +57,12 @@ object DateTimeUtils {
 
   @transient lazy val defaultTimeZone = TimeZone.getDefault
 
+  // Constants defining the allowed ranges for timestampts that fit in parquet files. Mostly
+  // used by tests to avoid duplication.
+  private[spark] final val MIN_TIMESTAMP: Long =
+    -(DateTimeUtils.JULIAN_DAY_OF_EPOCH * DateTimeUtils.SECONDS_PER_DAY * 1000)
+  private[spark] final val MAX_TIMESTAMP: Long = java.lang.Long.MAX_VALUE / 1000
+
   // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
   private val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {
     override protected def initialValue: TimeZone = {
@@ -82,7 +89,9 @@ object DateTimeUtils {
     // SPARK-6785: use Math.floor so negative number of days (dates before 1970)
     // will correctly work as input for function toJavaDate(Int)
     val millisLocal = millisUtc + threadLocalLocalTimeZone.get().getOffset(millisUtc)
-    Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
+    val days = Math.floor(millisLocal.toDouble / MILLIS_PER_DAY)
+    require(days <= Integer.MAX_VALUE && days >= Integer.MIN_VALUE, "Date exceeeds allowed range.")
+    days.toInt
   }
 
   // reverse of millisToDays
@@ -172,6 +181,8 @@ object DateTimeUtils {
    */
   def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
     if (t != null) {
+      require(t.getTime() <= JLong.MAX_VALUE / 1000 && t.getTime() >= JLong.MIN_VALUE / 1000,
+        s"Timestamp exceeds allowed range (${t.getTime()}).")
       t.getTime() * 1000L + (t.getNanos().toLong / 1000) % 1000L
     } else {
       0L
@@ -193,9 +204,15 @@ object DateTimeUtils {
    */
   def toJulianDay(us: SQLTimestamp): (Int, Long) = {
     val seconds = us / MICROS_PER_SECOND
-    val day = seconds / SECONDS_PER_DAY + JULIAN_DAY_OF_EPOCH
-    val secondsInDay = seconds % SECONDS_PER_DAY
-    val nanos = (us % MICROS_PER_SECOND) * 1000L
+    var day = seconds / SECONDS_PER_DAY + JULIAN_DAY_OF_EPOCH
+    var secondsInDay = seconds % SECONDS_PER_DAY
+    var nanos = (us % MICROS_PER_SECOND) * 1000L
+    if (us < 0) {
+      day -= 1
+      secondsInDay += SECONDS_PER_DAY
+      nanos += (SECONDS_PER_DAY * MICROS_PER_SECOND * 1000L)
+      require(day >= 0, "Timestamp exceeds allowed range.")
+    }
     (day.toInt, secondsInDay * NANOS_PER_SECOND + nanos)
   }
 

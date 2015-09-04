@@ -24,6 +24,7 @@ import org.scalatest.Matchers
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
@@ -94,7 +95,9 @@ object LiteralGenerator {
     for { d <- Arbitrary.arbInt.arbitrary } yield Literal.create(new Date(d), DateType)
 
   lazy val timestampLiteralGen: Gen[Literal] =
-    for { t <- Arbitrary.arbLong.arbitrary } yield Literal.create(new Timestamp(t), TimestampType)
+    for { t <- Gen.chooseNum(DateTimeUtils.MIN_TIMESTAMP, DateTimeUtils.MAX_TIMESTAMP) } yield {
+      Literal.create(new Timestamp(t), TimestampType)
+    }
 
   lazy val calendarIntervalLiterGen: Gen[Literal] =
     for { m <- Arbitrary.arbInt.arbitrary; s <- Arbitrary.arbLong.arbitrary}

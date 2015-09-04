@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.lang.{Long => JLong}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
@@ -425,4 +426,34 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     test("2011-12-25 01:00:00.123456", "PST", "2011-12-25 09:00:00.123456")
     test("2011-12-25 17:00:00.123456", "Asia/Shanghai", "2011-12-25 09:00:00.123456")
   }
+
+  test("SPARK-10439: bound checks") {
+    // Avoid truncation when converting from ms to us.
+    Seq(JLong.MIN_VALUE, JLong.MAX_VALUE).foreach { ts =>
+      intercept[IllegalArgumentException] {
+        fromJavaTimestamp(new Timestamp(ts))
+      }
+    }
+
+    // Avoid negative Julian day counts since the Hive/Impala timestamp spec does not
+    // expect them.
+    val julianDay = -(JULIAN_DAY_OF_EPOCH * SECONDS_PER_DAY * MICROS_PER_SECOND)
+    intercept[IllegalArgumentException] {
+      toJulianDay(julianDay - 1)
+    }
+
+    // Make sure calculated nanos are positive, since that's what the Hive/Impala timestamp
+    // spec expects.
+    val (_, nanos) = toJulianDay(julianDay + 1)
+    assert(nanos >= 0)
+
+    // Make sure timestamp in ms does not overflow number of days returned as int. millisToDays()
+    // considers the current time zone, so add 2 full days when checking to be sure.
+    val msPerDay = SECONDS_PER_DAY * 1000L
+    val tooManyDays = Integer.MAX_VALUE * msPerDay
+    intercept[IllegalArgumentException] {
+      millisToDays(tooManyDays + 2 * msPerDay)
+    }
+  }
+
 }

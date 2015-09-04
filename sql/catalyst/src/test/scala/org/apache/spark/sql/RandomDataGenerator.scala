@@ -24,6 +24,7 @@ import java.math.MathContext
 import scala.util.Random
 
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
@@ -106,7 +107,10 @@ object RandomDataGenerator {
       })
       case BooleanType => Some(() => rand.nextBoolean())
       case DateType => Some(() => new java.sql.Date(rand.nextInt()))
-      case TimestampType => Some(() => new java.sql.Timestamp(rand.nextLong()))
+      case TimestampType => Some { () =>
+        val range = DateTimeUtils.MAX_TIMESTAMP - DateTimeUtils.MIN_TIMESTAMP
+        new java.sql.Timestamp((range * rand.nextDouble()).toLong + DateTimeUtils.MIN_TIMESTAMP)
+      }
       case CalendarIntervalType => Some(() => {
         val months = rand.nextInt(1000)
         val ns = rand.nextLong()
