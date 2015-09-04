@@ -2279,7 +2279,7 @@ class XCom(Base):
     key = Column(String(512))
     value = Column(PickleType(pickler=dill))
     timestamp = Column(
-        DateTime, server_default=func.current_timestamp(), nullable=False)
+        DateTime, default=func.now(), nullable=False)
     execution_date = Column(DateTime, nullable=False)
 
     # source information
