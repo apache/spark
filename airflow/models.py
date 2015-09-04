@@ -1,4 +1,6 @@
 from __future__ import print_function
+from future.standard_library import install_aliases
+install_aliases()
 from builtins import str
 from past.builtins import basestring
 from builtins import object, bytes
@@ -16,7 +18,7 @@ import re
 import signal
 import socket
 import sys
-from urlparse import urlparse
+from urllib.parse import urlparse
 
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType,
