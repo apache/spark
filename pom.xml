@@ -119,7 +119,7 @@
     <akka.group>com.typesafe.akka</akka.group>
     <akka.version>2.3.11</akka.version>
     <java.version>1.7</java.version>
-    <maven.version>3.3.3</maven.version>
+    <maven.version>[3.2,)</maven.version>
     <sbt.project.name>spark</sbt.project.name>
     <mesos.version>0.21.1</mesos.version>
     <mesos.classifier>shaded-protobuf</mesos.classifier>
