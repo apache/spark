@@ -46,7 +46,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
 
     // Tests SQLConf as accessed from a SQLContext is mutable after
     // the latter is initialized, unlike SparkConf inside a SparkContext.
-    assert(ctx.getConf(testKey) == testVal)
+    assert(ctx.getConf(testKey) === testVal)
     assert(ctx.getConf(testKey, testVal + "_") === testVal)
     assert(ctx.getAllConfs.contains(testKey))
 
@@ -78,9 +78,12 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   test("deprecated property") {
     ctx.conf.clear()
     val original = ctx.conf.numShufflePartitions
-    sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
-    assert(ctx.conf.numShufflePartitions === 10)
-    sql(s"set ${SQLConf.SHUFFLE_PARTITIONS}=$original")
+    try{
+      sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
+      assert(ctx.conf.numShufflePartitions === 10)
+    } finally {
+      sql(s"set ${SQLConf.SHUFFLE_PARTITIONS}=$original")
+    }
   }
 
   test("invalid conf value") {
