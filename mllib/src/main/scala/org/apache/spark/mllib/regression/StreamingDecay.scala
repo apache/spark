@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.regression
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.mllib.regression.StreamingDecay.{TimeUnit, BATCHES, POINTS}
 
 /**
@@ -31,38 +31,53 @@ import org.apache.spark.mllib.regression.StreamingDecay.{TimeUnit, BATCHES, POIN
  */
 @Experimental
 private[mllib] trait StreamingDecay extends Logging{
-
   private[this] var decayFactor: Double = 0
   private[this] var timeUnit: TimeUnit = BATCHES
 
   /**
    * Set the decay factor for the forgetful algorithms.
-   * The decay factor should be between 0 and 1, inclusive.
-   * decayFactor = 0: only the data from the most recent RDD will be used.
-   * decayFactor = 1: all data since the beginning of the DStream will be used.
-   * decayFactor is default to zero.
+   * The decay factor specifies the decay of
+   * the contribution of data from time t-1 to time t.
+   * Valid decayFactor ranges from 0 to 1, inclusive.
+   * decayFactor = 0: previous data have no contribution to the model at the next time unit.
+   * decayFactor = 1: previous data have equal contribution to the model as the data arriving
+   * at the next time unit.
+   * decayFactor is default to 0.
    *
    * @param decayFactor the decay factor
    */
+  @Since("1.6.0")
   def setDecayFactor(decayFactor: Double): this.type = {
     this.decayFactor = decayFactor
     this
   }
 
-
   /**
-   * Set the half life and time unit ("batches" or "points") for the forgetful algorithm.
-   * The half life along with the time unit provides an alternative way to specify decay factor.
+   * Set the half life for the forgetful algorithm.
+   * The half life provides an alternative way to specify decay factor.
    * The decay factor is calculated such that, for data acquired at time t,
    * its contribution by time t + halfLife will have dropped by 0.5.
-   * The unit of time can be specified either as batches or points.
+   * Half life > 0 is considered as valid.
    *
    * @param halfLife the half life
-   * @param timeUnit the time unit
    */
-  def setHalfLife(halfLife: Double, timeUnit: TimeUnit): this.type = {
+  @Since("1.6.0")
+  def setHalfLife(halfLife: Double): this.type = {
     this.decayFactor = math.exp(math.log(0.5) / halfLife)
     logInfo("Setting decay factor to: %g ".format (this.decayFactor))
+    this
+  }
+
+  /**
+   * Set the time unit for the forgetful algorithm.
+   * BATCHES: Each RDD in the DStream will be treated as 1 time unit.
+   * POINTS: Each data point will be treated as 1 time unit.
+   * timeUnit is default to BATCHES.
+   *
+   * @param timeUnit the time unit
+   */
+  @Since("1.6.0")
+  def setTimeUnit(timeUnit: TimeUnit): this.type = {
     this.timeUnit = timeUnit
     this
   }
@@ -84,16 +99,19 @@ private[mllib] trait StreamingDecay extends Logging{
  * Provides the String constants for allowed time unit in the forgetful algorithm.
  */
 @Experimental
+@Since("1.6.0")
 object StreamingDecay {
   private[mllib] sealed trait TimeUnit
   /**
    * Each RDD in the DStream will be treated as 1 time unit.
    *
    */
+  @Since("1.6.0")
   case object BATCHES extends TimeUnit
   /**
    * Each data point will be treated as 1 time unit.
    *
    */
+  @Since("1.6.0")
   case object POINTS extends TimeUnit
 }

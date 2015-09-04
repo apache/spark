@@ -114,13 +114,14 @@ class StreamingLinearRegressionWithSGD private[mllib] (
 
   override def setDecayFactor(decayFactor: Double): this.type = {
     super.setDecayFactor(decayFactor)
-    this
   }
 
-  override def setHalfLife(halfLife: Double, timeUnit: TimeUnit): this.type = {
-    super.setHalfLife(halfLife, timeUnit)
-    this
+  override def setHalfLife(halfLife: Double): this.type = {
+    super.setHalfLife(halfLife)
   }
 
+  override def setTimeUnit(timeUnit: TimeUnit): this.type = {
+    super.setTimeUnit(timeUnit)
+  }
 
 }

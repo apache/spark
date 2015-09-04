@@ -17,15 +17,15 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.mllib.regression.StreamingDecay.{BATCHES, POINTS}
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression.StreamingDecay.{BATCHES, POINTS}
 import org.apache.spark.mllib.util.LinearDataGenerator
-import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
 
 class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
 
@@ -225,9 +225,9 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
     runStreams(ssc, numBatches, numBatches)
 
     // with full memory, the final parameter estimates should be close to model A
-    assertEqual(model.latestModel().intercept, 0.0, 1.0)
-    assertEqual(model.latestModel().weights(0), 10.0, 1.0)
-    assertEqual(model.latestModel().weights(1), 10.0, 1.0)
+    assert(model.latestModel().intercept ~== 0.0 absTol 1.0)
+    assert(model.latestModel().weights(0) ~== 10.0 absTol 1.0)
+    assert(model.latestModel().weights(1) ~== 10.0 absTol 1.0)
   }
 
   test("parameter accuracy with no memory (decayFactor = 0)") {
@@ -258,15 +258,16 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
     runStreams(ssc, numBatches, numBatches)
 
     // with no memory, the final parameter estimates should be close to model B
-    assertEqual(model.latestModel().intercept, 0.0, 1.0)
-    assertEqual(model.latestModel().weights(0), 5.0, 1.0)
-    assertEqual(model.latestModel().weights(1), 3.0, 1.0)
+    assert(model.latestModel().intercept ~== 0.0 absTol 1.0)
+    assert(model.latestModel().weights(0) ~== 5.0 absTol 1.0)
+    assert(model.latestModel().weights(1) ~== 3.0 absTol 1.0)
   }
 
   test("parameter accuracy with long half life and POINTS as TimeUnit") {
     // create model
     val model = new StreamingLinearRegressionWithSGD()
-      .setHalfLife(5000, POINTS)
+      .setHalfLife(5000)
+      .setTimeUnit(POINTS)
       .setInitialWeights(Vectors.dense(0.0, 0.0))
       .setStepSize(0.5)
       .setNumIterations(50)
@@ -291,15 +292,16 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
     runStreams(ssc, numBatches, numBatches)
 
     // with long half life, the final parameter estimates should be close to model A
-    assertEqual(model.latestModel().intercept, 0.0, 1.0)
-    assertEqual(model.latestModel().weights(0), 10.0, 1.0)
-    assertEqual(model.latestModel().weights(1), 10.0, 1.0)
+    assert(model.latestModel().intercept ~== 0.0 absTol 1.0)
+    assert(model.latestModel().weights(0) ~== 10.0 absTol 1.0)
+    assert(model.latestModel().weights(1) ~== 10.0 absTol 1.0)
   }
 
   test("parameter accuracy with long half life and BATCHES as TimeUnit") {
     // create model
     val model = new StreamingLinearRegressionWithSGD()
-      .setHalfLife(20, BATCHES)
+      .setHalfLife(20)
+      .setTimeUnit(BATCHES)
       .setInitialWeights(Vectors.dense(0.0, 0.0))
       .setStepSize(0.5)
       .setNumIterations(50)
@@ -324,15 +326,16 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
     runStreams(ssc, numBatches, numBatches)
 
     // with long half life, the final parameter estimates should be close to model A
-    assertEqual(model.latestModel().intercept, 0.0, 1.0)
-    assertEqual(model.latestModel().weights(0), 10.0, 1.0)
-    assertEqual(model.latestModel().weights(1), 10.0, 1.0)
+    assert(model.latestModel().intercept ~== 0.0 absTol 1.0)
+    assert(model.latestModel().weights(0) ~== 10.0 absTol 1.0)
+    assert(model.latestModel().weights(1) ~== 10.0 absTol 1.0)
   }
 
   test("parameter accuracy with short half life and POINTS as TimeUnit") {
     // create model
     val model = new StreamingLinearRegressionWithSGD()
-      .setHalfLife(50, POINTS)
+      .setHalfLife(50)
+      .setTimeUnit(POINTS)
       .setInitialWeights(Vectors.dense(0.0, 0.0))
       .setStepSize(0.5)
       .setNumIterations(50)
@@ -358,15 +361,16 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
     runStreams(ssc, numBatches, numBatches)
 
     // with short half life, the final parameter estimates should be close to model B
-    assertEqual(model.latestModel().intercept, 0.0, 1.0)
-    assertEqual(model.latestModel().weights(0), 5.0, 1.0)
-    assertEqual(model.latestModel().weights(1), 3.0, 1.0)
+    assert(model.latestModel().intercept ~== 0.0 absTol 1.0)
+    assert(model.latestModel().weights(0) ~== 5.0 absTol 1.0)
+    assert(model.latestModel().weights(1) ~== 3.0 absTol 1.0)
   }
 
   test("parameter accuracy with short half life and BATCHES as TimeUnit") {
     // create model
     val model = new StreamingLinearRegressionWithSGD()
-      .setHalfLife(1, BATCHES)
+      .setHalfLife(1)
+      .setTimeUnit(BATCHES)
       .setInitialWeights(Vectors.dense(0.0, 0.0))
       .setStepSize(0.5)
       .setNumIterations(50)
@@ -392,8 +396,8 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
     runStreams(ssc, numBatches, numBatches)
 
     // with short half life, the final parameter estimates should be close to model B
-    assertEqual(model.latestModel().intercept, 0.0, 1.0)
-    assertEqual(model.latestModel().weights(0), 5.0, 1.0)
-    assertEqual(model.latestModel().weights(1), 3.0, 1.0)
+    assert(model.latestModel().intercept ~== 0.0 absTol 1.0)
+    assert(model.latestModel().weights(0) ~== 5.0 absTol 1.0)
+    assert(model.latestModel().weights(1) ~== 3.0 absTol 1.0)
   }
 }
