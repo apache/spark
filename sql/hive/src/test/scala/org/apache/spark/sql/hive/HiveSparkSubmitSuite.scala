@@ -29,7 +29,7 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{SQLContext, QueryTest}
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.sql.types.DecimalType
@@ -274,7 +274,11 @@ object SparkSQLConfTest extends Logging {
   }
 }
 
-object SPARK_9757 extends QueryTest with Logging {
+object SPARK_9757 extends QueryTest {
+  import org.apache.spark.sql.functions._
+
+  protected var sqlContext: SQLContext = _
+
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
 
@@ -285,9 +289,8 @@ object SPARK_9757 extends QueryTest with Logging {
         .set("spark.ui.enabled", "false"))
 
     val hiveContext = new TestHiveContext(sparkContext)
+    sqlContext = hiveContext
     import hiveContext.implicits._
-
-    import org.apache.spark.sql.functions._
 
     val dir = Utils.createTempDir()
     dir.delete()

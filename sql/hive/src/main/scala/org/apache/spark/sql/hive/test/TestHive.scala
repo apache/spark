@@ -29,7 +29,7 @@ import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
-import org.apache.spark.sql.SQLConf
+import org.apache.spark.sql.{SQLContext, SQLConf}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.CacheTableCommand
@@ -50,6 +50,11 @@ object TestHive
           "org.apache.spark.sql.hive.execution.PairSerDe")
         // SPARK-8910
         .set("spark.ui.enabled", "false")))
+
+trait TestHiveSingleton {
+  protected val sqlContext: SQLContext = TestHive
+  protected val hiveContext: TestHiveContext = TestHive
+}
 
 /**
  * A locally running test instance of Spark's Hive execution engine.

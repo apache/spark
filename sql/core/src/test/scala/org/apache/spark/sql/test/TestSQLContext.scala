@@ -58,7 +58,7 @@ private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { sel
   }
 
   private object testData extends SQLTestData {
-    protected override def _sqlContext: SQLContext = self
+    protected override def sqlContext: SQLContext = self
   }
 }
 
