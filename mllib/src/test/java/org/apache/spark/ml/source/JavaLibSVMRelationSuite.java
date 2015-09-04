@@ -69,7 +69,7 @@ public class JavaLibSVMRelationSuite {
 
   @Test
   public void verifyLibSVMDF() {
-    dataset = jsql.read().format("libsvm").load();
+    dataset = jsql.read().format("org.apache.spark.ml.source.libsvm").load(path.getPath());
     Assert.assertEquals("label", dataset.columns()[0]);
     Assert.assertEquals("features", dataset.columns()[1]);
     Row r = dataset.first();
