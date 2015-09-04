@@ -49,28 +49,43 @@ b <- c(17, 19, 23, 29)
 w <- c(1, 2, 3, 4)
 
 for (intercept in c(FALSE, TRUE)) {
-  model <- glmnet(A, b, weights=w, intercept=intercept, lambda=0.0, standardize=FALSE,
-                  alpha=0, thresh=1E-14)
-  print(as.vector(coef(model)))
+  for (lambda in c(0.0, 0.1, 1.0)) {
+    for (standardize in c(FALSE)) {
+      model <- glmnet(A, b, weights=w, intercept=intercept, lambda=lambda, standardize=standardize,
+                      alpha=0, thresh=1E-14)
+      print(as.vector(coef(model)))
+    }
+  }
 }
 
 [1]  0.000000 -3.727117  3.009982
+[1]  0.000000 -3.307532  2.924206
+[1]  0.000000 -1.526575  2.558158
 [1] 18.0799727  6.0799832 -0.5999941
+[1] 13.5356178  3.2714044  0.3770744
+[1] 10.1238013  0.9708569  1.1475466
      */
 
     val expected = Seq(
-      Vectors.dense(0.0, -3.727117, 3.009982),
-      Vectors.dense(18.0799727, 6.0799832, -0.5999941))
+      Vectors.dense(0.000000, -3.727117, 3.009982),
+      Vectors.dense(0.000000, -3.307532, 2.924206),
+      Vectors.dense(0.000000, -1.526575, 2.558158),
+      Vectors.dense(18.0799727, 6.0799832, -0.5999941),
+      Vectors.dense(13.5356178, 3.2714044, 0.3770744),
+      Vectors.dense(10.1238013, 0.9708569, 1.1475466))
 
     var idx = 0
     for (fitIntercept <- Seq(false, true);
-         regParam <- Seq(0.0);
+         regParam <- Seq(0.0, 0.1, 1.0);
          standardization <- Seq(false)) {
       val wls = new WeightedLeastSquares(fitIntercept, regParam, standardization)
         .fit(instances)
       val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
-      assert(actual ~== expected(idx) absTol 1e-2)
+      println(actual, expected(idx))
+      // assert(actual ~== expected(idx) absTol 1e-2)
       idx += 1
     }
+
+    assert(false)
   }
 }

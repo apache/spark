@@ -46,48 +46,41 @@ private[ml] class WeightedLeastSquares(
   def fit(instances: RDD[Instance]): WeightedLeastSquaresModel = {
     val summary = instances.treeAggregate(new Aggregator)(_.add(_), _.merge(_))
     assert(summary.initialized, "Training dataset is empty.")
-    assert(summary.wSum > 0.0, "Sum of weights cannot be zero.")
-    assert(summary.count > 1.0, "Must have more than one instances.")
+    // assert(summary.wSum > 0.0, "Sum of weights cannot be zero.")
+    // assert(summary.count > 1.0, "Must have more than one instances.")
     val triK = summary.triK
-    val wSum = summary.wSum
-    val wwSum = summary.wwSum
-    val bSum = summary.bSum
-    val aSum = summary.aSum
-    val abSum = summary.abSum
-    val aaSum = summary.aaSum
-    val aaValues = aaSum.values
+    val bBar = summary.bBar
+    val bVar = summary.bVar
+    val aBar = summary.aBar
+    val aVar = summary.aVar
+    val abBar = summary.abBar
+    val aaBar = summary.aaBar
+    val aaValues = aaBar.values
+
+    if (fitIntercept) {
+      RowMatrix.dspr(-1.0, aBar, aaValues)
+      BLAS.axpy(-bBar, aBar, abBar)
+    }
 
     // add regularization to diagonals
     var i = 0
     var j = 2
     while (i < triK) {
       val scale = if (standardization) {
-        val l = j - 2
-        aaValues(i) - aSum(l) * aSum(l) / wSum
+        aVar(j - 2) / math.sqrt(bVar)
       } else {
-        wSum
+        1.0 / math.sqrt(bVar)
       }
       aaValues(i) += scale * regParam
       i += j
       j += 1
     }
 
-    if (fitIntercept) {
-      // shift centers
-      BLAS.axpy(-bSum / wSum, aSum, abSum)
-      RowMatrix.dspr(-1.0 / wSum, aSum, aaValues)
-    }
-
-    if (standardization) {
-      // correct bias
-      BLAS.scal(1.0 - wwSum / (wSum * wSum), abSum)
-    }
-
-    val x = choleskySolve(aaValues, abSum)
+    val x = choleskySolve(aaBar.values, abBar)
 
     // compute intercept
     val intercept = if (fitIntercept) {
-      (bSum - BLAS.dot(aSum, x)) / wSum
+      bBar - BLAS.dot(aBar, x)
     } else {
       0.0
     }
@@ -119,6 +112,7 @@ private[ml] object WeightedLeastSquares {
     var wSum: Double = _
     var wwSum: Double = _
     var bSum: Double = _
+    var bbSum: Double = _
     var aSum: DenseVector = _
     var abSum: DenseVector = _
     var aaSum: DenseVector = _
@@ -132,6 +126,7 @@ private[ml] object WeightedLeastSquares {
       wSum = 0.0
       wwSum = 0.0
       bSum = 0.0
+      bbSum = 0.0
       aSum = DenseVector.zeros(k)
       abSum = DenseVector.zeros(k)
       aaSum = DenseVector.zeros(triK)
@@ -150,6 +145,7 @@ private[ml] object WeightedLeastSquares {
       wSum += w
       wwSum += w * w
       bSum += w * b
+      bbSum += w * b * b
       BLAS.axpy(w, a, aSum)
       BLAS.axpy(w * b, a, abSum)
       RowMatrix.dspr(w, a, aaSum.values)
@@ -168,11 +164,51 @@ private[ml] object WeightedLeastSquares {
         wSum += other.wSum
         wwSum += other.wwSum
         bSum += other.bSum
+        bbSum += other.bbSum
         BLAS.axpy(1.0, other.aSum, aSum)
         BLAS.axpy(1.0, other.abSum, abSum)
         BLAS.axpy(1.0, other.aaSum, aaSum)
         this
       }
+    }
+
+    def aBar: DenseVector = {
+      val output = aSum.copy
+      BLAS.scal(1.0 / wSum, output)
+      output
+    }
+
+    def bBar: Double = bSum / wSum
+
+    def bVar: Double = bbSum / wSum - bBar * bBar
+
+    def abBar: DenseVector = {
+      val output = abSum.copy
+      BLAS.scal(1.0 / wSum, output)
+      output
+    }
+
+    def aaBar: DenseVector = {
+      val output = aaSum.copy
+      BLAS.scal(1.0 / wSum, output)
+      output
+    }
+
+    def aVar: DenseVector = {
+      val variance = Array.ofDim[Double](k)
+      var i = 0
+      var j = 2
+      val aaValues = aaSum.values
+      while (i < triK) {
+        val l = j - 2
+        variance(l) = wSum * aaValues(i) - aSum(l) * aSum(l)
+        i += j
+        j += 1
+      }
+      val output = new DenseVector(variance)
+      // correct bias
+      BLAS.scal(1.0 / (wSum * wSum), output)
+      output
     }
   }
 }
