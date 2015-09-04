@@ -119,10 +119,12 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   protected[hive] class SQLSession extends super.SQLSession {
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
+      // TODO as in unit test, conf.clear() probably be called, all of the value will be cleared.
+      // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
+      override def dialect: String = super.getConf(SQLConf.DIALECT, "hiveql")
+      override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
 
-      TestHiveContext.overrideConfs.map {
-        case (key, value) => setConfString(key, value)
-      }
+      clear()
 
       override def clear(): Unit = {
         super.clear()
@@ -467,10 +469,6 @@ private[hive] object TestHiveContext {
   val overrideConfs: Map[String, String] =
     Map(
       // Fewer shuffle partitions to speed up testing.
-      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-      // In unit test, conf.clear() is called in SQLConfSuite, which clear all the conf values.
-      // The super.getConf(SQLConf.DIALECT) is "sql" by default, we need to set it as "hiveql"
-      SQLConf.DIALECT.key -> "hiveql",
-      // HiveQl uses case-insensitive resolution.
-      SQLConf.CASE_SENSITIVE.key -> "false")
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5"
+    )
 }
