@@ -70,7 +70,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
     DataFrame predictions = jsql.sql("SELECT label, probability, prediction FROM prediction");
     predictions.collectAsList();
     // Check defaults
-    Assert.assertEquals(0.5, model.getThreshold());
+    Assert.assertEquals(0.5, model.getThreshold(), eps);
     Assert.assertEquals("features", model.getFeaturesCol());
     Assert.assertEquals("prediction", model.getPredictionCol());
     Assert.assertEquals("probability", model.getProbabilityCol());
@@ -87,18 +87,18 @@ public class JavaLogisticRegressionSuite implements Serializable {
     LogisticRegressionModel model = lr.fit(dataset);
     LogisticRegression parent = (LogisticRegression) model.parent();
     Assert.assertEquals(10, parent.getMaxIter());
-    Assert.assertEquals(1.0, parent.getRegParam());
-    Assert.assertEquals(0.4, parent.getThresholds()[0]);
-    Assert.assertEquals(0.6, parent.getThresholds()[1]);
-    Assert.assertEquals(0.6, parent.getThreshold());
-    Assert.assertEquals(0.6, model.getThreshold());
+    Assert.assertEquals(1.0, parent.getRegParam(), eps);
+    Assert.assertEquals(0.4, parent.getThresholds()[0], eps);
+    Assert.assertEquals(0.6, parent.getThresholds()[1], eps);
+    Assert.assertEquals(0.6, parent.getThreshold(), eps);
+    Assert.assertEquals(0.6, model.getThreshold(), eps);
 
     // Modify model params, and check that the params worked.
     model.setThreshold(1.0);
     model.transform(dataset).registerTempTable("predAllZero");
     DataFrame predAllZero = jsql.sql("SELECT prediction, myProbability FROM predAllZero");
     for (Row r: predAllZero.collectAsList()) {
-      Assert.assertEquals(0.0, r.getDouble(0));
+      Assert.assertEquals(0.0, r.getDouble(0), eps);
     }
     // Call transform with params, and check that the params worked.
     model.transform(dataset, model.threshold().w(0.0), model.probabilityCol().w("myProb"))
@@ -115,9 +115,9 @@ public class JavaLogisticRegressionSuite implements Serializable {
         lr.threshold().w(0.4), lr.probabilityCol().w("theProb"));
     LogisticRegression parent2 = (LogisticRegression) model2.parent();
     Assert.assertEquals(5, parent2.getMaxIter());
-    Assert.assertEquals(0.1, parent2.getRegParam());
-    Assert.assertEquals(0.4, parent2.getThreshold());
-    Assert.assertEquals(0.4, model2.getThreshold());
+    Assert.assertEquals(0.1, parent2.getRegParam(), eps);
+    Assert.assertEquals(0.4, parent2.getThreshold(), eps);
+    Assert.assertEquals(0.4, model2.getThreshold(), eps);
     Assert.assertEquals("theProb", model2.getProbabilityCol());
   }
 

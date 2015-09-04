@@ -59,7 +59,7 @@ public class JavaNaiveBayesSuite implements Serializable {
     for (Row r : predictionAndLabels.collect()) {
       double prediction = r.getAs(0);
       double label = r.getAs(1);
-      assertEquals(label, prediction);
+      assertEquals(label, prediction, 1E-5);
     }
   }
 
@@ -69,7 +69,7 @@ public class JavaNaiveBayesSuite implements Serializable {
     assertEquals("label", nb.getLabelCol());
     assertEquals("features", nb.getFeaturesCol());
     assertEquals("prediction", nb.getPredictionCol());
-    assertEquals(1.0, nb.getSmoothing());
+    assertEquals(1.0, nb.getSmoothing(), 1E-5);
     assertEquals("multinomial", nb.getModelType());
   }
 
