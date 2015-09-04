@@ -649,6 +649,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
+    if (catalog.tableExists(tableName :: Nil)) {
+      throw new AnalysisException(s"Table $tableName already exists.")
+    }
     catalog.registerTable(Seq(tableName), df.logicalPlan)
   }
 
