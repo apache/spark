@@ -24,11 +24,11 @@ import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
- * :: Experimental ::
+ * :: DeveloperApi ::
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
  * access to the intermediate phases of query execution for developers.
  */
-@Experimental
+@DeveloperApi
 class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
   val analyzer = sqlContext.analyzer
   val optimizer = sqlContext.optimizer
@@ -65,24 +65,21 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
        |${stringOrError(executedPlan)}
       """.stripMargin.trim
 
+
   override def toString: String = {
     def output =
       analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}").mkString(", ")
 
-    // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})
-    // however, the `toRdd` will cause the real execution, which is not what we want.
-    // We need to think about how to avoid the side effect.
     s"""== Parsed Logical Plan ==
        |${stringOrError(logical)}
-        |== Analyzed Logical Plan ==
-        |${stringOrError(output)}
-        |${stringOrError(analyzed)}
-        |== Optimized Logical Plan ==
-        |${stringOrError(optimizedPlan)}
-        |== Physical Plan ==
-        |${stringOrError(executedPlan)}
-        |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
-        |== RDD ==
-      """.stripMargin.trim
+       |== Analyzed Logical Plan ==
+       |${stringOrError(output)}
+       |${stringOrError(analyzed)}
+       |== Optimized Logical Plan ==
+       |${stringOrError(optimizedPlan)}
+       |== Physical Plan ==
+       |${stringOrError(executedPlan)}
+       |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
+    """.stripMargin.trim
   }
 }

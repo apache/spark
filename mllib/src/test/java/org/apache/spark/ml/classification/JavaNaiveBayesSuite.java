@@ -18,8 +18,8 @@
 package org.apache.spark.ml.classification;
 
 import java.io.Serializable;
+import java.util.Arrays;
 
-import com.google.common.collect.Lists;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -68,13 +68,13 @@ public class JavaNaiveBayesSuite implements Serializable {
     assert(nb.getLabelCol() == "label");
     assert(nb.getFeaturesCol() == "features");
     assert(nb.getPredictionCol() == "prediction");
-    assert(nb.getLambda() == 1.0);
+    assert(nb.getSmoothing() == 1.0);
     assert(nb.getModelType() == "multinomial");
   }
 
   @Test
   public void testNaiveBayes() {
-    JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
       RowFactory.create(0.0, Vectors.dense(1.0, 0.0, 0.0)),
       RowFactory.create(0.0, Vectors.dense(2.0, 0.0, 0.0)),
       RowFactory.create(1.0, Vectors.dense(0.0, 1.0, 0.0)),
@@ -89,7 +89,7 @@ public class JavaNaiveBayesSuite implements Serializable {
     });
 
     DataFrame dataset = jsql.createDataFrame(jrdd, schema);
-    NaiveBayes nb = new NaiveBayes().setLambda(0.5).setModelType("multinomial");
+    NaiveBayes nb = new NaiveBayes().setSmoothing(0.5).setModelType("multinomial");
     NaiveBayesModel model = nb.fit(dataset);
 
     DataFrame predictionAndLabels = model.transform(dataset).select("prediction", "label");

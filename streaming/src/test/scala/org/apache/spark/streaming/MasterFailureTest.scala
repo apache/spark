@@ -244,7 +244,13 @@ object MasterFailureTest extends Logging {
       } catch {
         case e: Exception => logError("Error running streaming context", e)
       }
-      if (killingThread.isAlive) killingThread.interrupt()
+      if (killingThread.isAlive) {
+        killingThread.interrupt()
+        // SparkContext.stop will set SparkEnv.env to null. We need to make sure SparkContext is
+        // stopped before running the next test. Otherwise, it's possible that we set SparkEnv.env
+        // to null after the next test creates the new SparkContext and fail the test.
+        killingThread.join()
+      }
       ssc.stop()
 
       logInfo("Has been killed = " + killed)

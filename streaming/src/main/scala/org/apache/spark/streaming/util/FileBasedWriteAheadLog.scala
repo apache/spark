@@ -19,6 +19,7 @@ package org.apache.spark.streaming.util
 import java.nio.ByteBuffer
 import java.util.{Iterator => JIterator}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
@@ -118,7 +119,6 @@ private[streaming] class FileBasedWriteAheadLog(
    * hence the implementation is kept simple.
    */
   def readAll(): JIterator[ByteBuffer] = synchronized {
-    import scala.collection.JavaConversions._
     val logFilesToRead = pastLogs.map{ _.path} ++ currentLogPath
     logInfo("Reading from the logs: " + logFilesToRead.mkString("\n"))
 
@@ -126,7 +126,7 @@ private[streaming] class FileBasedWriteAheadLog(
       logDebug(s"Creating log reader with $file")
       val reader = new FileBasedWriteAheadLogReader(file, hadoopConf)
       CompletionIterator[ByteBuffer, Iterator[ByteBuffer]](reader, reader.close _)
-    } flatMap { x => x }
+    }.flatten.asJava
   }
 
   /**

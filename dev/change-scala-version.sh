@@ -19,18 +19,22 @@
 
 set -e
 
+VALID_VERSIONS=( 2.10 2.11 )
+
 usage() {
-  echo "Usage: $(basename $0) <version>" 1>&2
+  echo "Usage: $(basename $0) [-h|--help] <version>
+where :
+  -h| --help Display this help text
+  valid version values : ${VALID_VERSIONS[*]}
+" 1>&2
   exit 1
 }
 
-if [ $# -ne 1 ]; then
+if [[ ($# -ne 1) || ( $1 == "--help") ||  $1 == "-h" ]]; then
   usage
 fi
 
 TO_VERSION=$1
-
-VALID_VERSIONS=( 2.10 2.11 )
 
 check_scala_version() {
   for i in ${VALID_VERSIONS[*]}; do [ $i = "$1" ] && return 0; done

@@ -17,34 +17,39 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.{DataOutputStream, ByteArrayInputStream, ByteArrayOutputStream}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeRowConverter}
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.PlatformDependent
+
+
+/**
+ * used to test close InputStream in UnsafeRowSerializer
+ */
+class ClosableByteArrayInputStream(buf: Array[Byte]) extends ByteArrayInputStream(buf) {
+  var closed: Boolean = false
+  override def close(): Unit = {
+    closed = true
+    super.close()
+  }
+}
 
 class UnsafeRowSerializerSuite extends SparkFunSuite {
 
   private def toUnsafeRow(row: Row, schema: Array[DataType]): UnsafeRow = {
     val internalRow = CatalystTypeConverters.convertToCatalyst(row).asInstanceOf[InternalRow]
-    val rowConverter = new UnsafeRowConverter(schema)
-    val rowSizeInBytes = rowConverter.getSizeRequirement(internalRow)
-    val byteArray = new Array[Byte](rowSizeInBytes)
-    rowConverter.writeRow(
-      internalRow, byteArray, PlatformDependent.BYTE_ARRAY_OFFSET, rowSizeInBytes)
-    val unsafeRow = new UnsafeRow()
-    unsafeRow.pointTo(byteArray, PlatformDependent.BYTE_ARRAY_OFFSET, row.length, rowSizeInBytes)
-    unsafeRow
+    val converter = UnsafeProjection.create(schema)
+    converter.apply(internalRow)
   }
 
-  ignore("toUnsafeRow() test helper method") {
+  test("toUnsafeRow() test helper method") {
     // This currently doesnt work because the generic getter throws an exception.
     val row = Row("Hello", 123)
     val unsafeRow = toUnsafeRow(row, Array(StringType, IntegerType))
-    assert(row.getString(0) === unsafeRow.get(0).toString)
+    assert(row.getString(0) === unsafeRow.getUTF8String(0).toString)
     assert(row.getInt(1) === unsafeRow.getInt(1))
   }
 
@@ -59,8 +64,8 @@ class UnsafeRowSerializerSuite extends SparkFunSuite {
       serializerStream.writeValue(unsafeRow)
     }
     serializerStream.close()
-    val deserializerIter = serializer.deserializeStream(
-      new ByteArrayInputStream(baos.toByteArray)).asKeyValueIterator
+    val input = new ClosableByteArrayInputStream(baos.toByteArray)
+    val deserializerIter = serializer.deserializeStream(input).asKeyValueIterator
     for (expectedRow <- unsafeRows) {
       val actualRow = deserializerIter.next().asInstanceOf[(Integer, UnsafeRow)]._2
       assert(expectedRow.getSizeInBytes === actualRow.getSizeInBytes)
@@ -68,5 +73,18 @@ class UnsafeRowSerializerSuite extends SparkFunSuite {
       assert(expectedRow.getInt(1) === actualRow.getInt(1))
     }
     assert(!deserializerIter.hasNext)
+    assert(input.closed)
+  }
+
+  test("close empty input stream") {
+    val baos = new ByteArrayOutputStream()
+    val dout = new DataOutputStream(baos)
+    dout.writeInt(-1)  // EOF
+    dout.flush()
+    val input = new ClosableByteArrayInputStream(baos.toByteArray)
+    val serializer = new UnsafeRowSerializer(numFields = 2).newInstance()
+    val deserializerIter = serializer.deserializeStream(input).asKeyValueIterator
+    assert(!deserializerIter.hasNext)
+    assert(input.closed)
   }
 }

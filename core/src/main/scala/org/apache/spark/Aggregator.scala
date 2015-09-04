@@ -58,12 +58,7 @@ case class Aggregator[K, V, C] (
     } else {
       val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
       combiners.insertAll(iter)
-      // Update task metrics if context is not null
-      // TODO: Make context non optional in a future release
-      Option(context).foreach { c =>
-        c.taskMetrics.incMemoryBytesSpilled(combiners.memoryBytesSpilled)
-        c.taskMetrics.incDiskBytesSpilled(combiners.diskBytesSpilled)
-      }
+      updateMetrics(context, combiners)
       combiners.iterator
     }
   }
@@ -89,13 +84,18 @@ case class Aggregator[K, V, C] (
     } else {
       val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
       combiners.insertAll(iter)
-      // Update task metrics if context is not null
-      // TODO: Make context non-optional in a future release
-      Option(context).foreach { c =>
-        c.taskMetrics.incMemoryBytesSpilled(combiners.memoryBytesSpilled)
-        c.taskMetrics.incDiskBytesSpilled(combiners.diskBytesSpilled)
-      }
+      updateMetrics(context, combiners)
       combiners.iterator
+    }
+  }
+
+  /** Update task metrics after populating the external map. */
+  private def updateMetrics(context: TaskContext, map: ExternalAppendOnlyMap[_, _, _]): Unit = {
+    Option(context).foreach { c =>
+      c.taskMetrics().incMemoryBytesSpilled(map.memoryBytesSpilled)
+      c.taskMetrics().incDiskBytesSpilled(map.diskBytesSpilled)
+      c.internalMetricsToAccumulators(
+        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(map.peakMemoryUsedBytes)
     }
   }
 }

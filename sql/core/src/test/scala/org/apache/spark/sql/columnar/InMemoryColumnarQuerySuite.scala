@@ -19,18 +19,16 @@ package org.apache.spark.sql.columnar
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{QueryTest, Row, TestData}
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 
-class InMemoryColumnarQuerySuite extends QueryTest {
-  // Make sure the tables are loaded.
-  TestData
+class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
-  import ctx.{logicalPlanToSparkQuery, sql}
+  setupTestData()
 
   test("simple columnar query") {
     val plan = ctx.executePlan(testData.logicalPlan).executedPlan
@@ -148,7 +146,7 @@ class InMemoryColumnarQuerySuite extends QueryTest {
     val dataTypes =
       Seq(StringType, BinaryType, NullType, BooleanType,
         ByteType, ShortType, IntegerType, LongType,
-        FloatType, DoubleType, DecimalType.SYSTEM_DEFAULT, DecimalType(6, 5),
+        FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
         DateType, TimestampType,
         ArrayType(IntegerType), MapType(StringType, LongType), struct)
     val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
@@ -192,5 +190,25 @@ class InMemoryColumnarQuerySuite extends QueryTest {
       sql(s"SELECT DISTINCT ${allColumns} FROM InMemoryCache_different_data_types"),
       ctx.table("InMemoryCache_different_data_types").collect())
     ctx.dropTempTable("InMemoryCache_different_data_types")
+  }
+
+  test("SPARK-10422: String column in InMemoryColumnarCache needs to override clone method") {
+    val df =
+      ctx.range(1, 100).selectExpr("id % 10 as id").rdd.map(id => Tuple1(s"str_$id")).toDF("i")
+    val cached = df.cache()
+    // count triggers the caching action. It should not throw.
+    cached.count()
+
+    // Make sure, the DataFrame is indeed cached.
+    assert(sqlContext.cacheManager.lookupCachedData(cached).nonEmpty)
+
+    // Check result.
+    checkAnswer(
+      cached,
+      ctx.range(1, 100).selectExpr("id % 10 as id").rdd.map(id => Tuple1(s"str_$id")).toDF("i")
+    )
+
+    // Drop the cache.
+    cached.unpersist()
   }
 }

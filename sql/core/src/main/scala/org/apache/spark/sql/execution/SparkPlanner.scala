@@ -36,17 +36,16 @@ class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
   def strategies: Seq[Strategy] =
     sqlContext.experimental.extraStrategies ++ (
       DataSourceStrategy ::
-        DDLStrategy ::
-        TakeOrderedAndProject ::
-        HashAggregation ::
-        Aggregation ::
-        LeftSemiJoin ::
-        HashJoin ::
-        InMemoryScans ::
-        ParquetOperations ::
-        BasicOperators ::
-        CartesianProduct ::
-        BroadcastNestedLoopJoin :: Nil)
+      DDLStrategy ::
+      TakeOrderedAndProject ::
+      HashAggregation ::
+      Aggregation ::
+      LeftSemiJoin ::
+      EquiJoinSelection ::
+      InMemoryScans ::
+      BasicOperators ::
+      CartesianProduct ::
+      BroadcastNestedLoopJoin :: Nil)
 
   /**
    * Used to build table scan operators where complex projection and filtering are done using
@@ -62,10 +61,10 @@ class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
    * provided `scanBuilder` function so that it can avoid unnecessary column materialization.
    */
   def pruneFilterProject(
-                          projectList: Seq[NamedExpression],
-                          filterPredicates: Seq[Expression],
-                          prunePushedDownFilters: Seq[Expression] => Seq[Expression],
-                          scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
+      projectList: Seq[NamedExpression],
+      filterPredicates: Seq[Expression],
+      prunePushedDownFilters: Seq[Expression] => Seq[Expression],
+      scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
 
     val projectSet = AttributeSet(projectList.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
@@ -79,7 +78,7 @@ class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
     // avoided safely.
 
     if (AttributeSet(projectList.map(_.toAttribute)) == projectSet &&
-      filterSet.subsetOf(projectSet)) {
+        filterSet.subsetOf(projectSet)) {
       // When it is possible to just use column pruning to get the right projection and
       // when the columns of this projection are enough to evaluate all filter conditions,
       // just do a scan followed by a filter, with no extra project.

@@ -17,29 +17,25 @@
 
 package org.apache.spark.streaming.kafka
 
-import java.lang.{Integer => JInt}
-import java.lang.{Long => JLong}
-import java.util.{Map => JMap}
-import java.util.{Set => JSet}
-import java.util.{List => JList}
+import java.lang.{Integer => JInt, Long => JLong}
+import java.util.{List => JList, Map => JMap, Set => JSet}
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
-import scala.collection.JavaConversions._
 
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
-import kafka.serializer.{DefaultDecoder, Decoder, StringDecoder}
+import kafka.serializer.{Decoder, DefaultDecoder, StringDecoder}
 
 import org.apache.spark.api.java.function.{Function => JFunction}
-import org.apache.spark.streaming.util.WriteAheadLogUtils
-import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.api.java.{JavaPairInputDStream, JavaInputDStream, JavaPairReceiverInputDStream, JavaStreamingContext}
+import org.apache.spark.streaming.api.java.{JavaInputDStream, JavaPairInputDStream, JavaPairReceiverInputDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream.{InputDStream, ReceiverInputDStream}
-import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
+import org.apache.spark.streaming.util.WriteAheadLogUtils
+import org.apache.spark.{SparkContext, SparkException}
 
 object KafkaUtils {
   /**
@@ -100,7 +96,7 @@ object KafkaUtils {
       groupId: String,
       topics: JMap[String, JInt]
     ): JavaPairReceiverInputDStream[String, String] = {
-    createStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*))
+    createStream(jssc.ssc, zkQuorum, groupId, Map(topics.asScala.mapValues(_.intValue()).toSeq: _*))
   }
 
   /**
@@ -119,7 +115,7 @@ object KafkaUtils {
       topics: JMap[String, JInt],
       storageLevel: StorageLevel
     ): JavaPairReceiverInputDStream[String, String] = {
-    createStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
+    createStream(jssc.ssc, zkQuorum, groupId, Map(topics.asScala.mapValues(_.intValue()).toSeq: _*),
       storageLevel)
   }
 
@@ -153,7 +149,10 @@ object KafkaUtils {
     implicit val valueCmd: ClassTag[T] = ClassTag(valueDecoderClass)
 
     createStream[K, V, U, T](
-      jssc.ssc, kafkaParams.toMap, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)
+      jssc.ssc,
+      kafkaParams.asScala.toMap,
+      Map(topics.asScala.mapValues(_.intValue()).toSeq: _*),
+      storageLevel)
   }
 
   /** get leaders for the given offset ranges, or throw an exception */
@@ -196,7 +195,6 @@ object KafkaUtils {
    * @param offsetRanges Each OffsetRange in the batch corresponds to a
    *   range of offsets for a given Kafka topic/partition
    */
-  @Experimental
   def createRDD[
     K: ClassTag,
     V: ClassTag,
@@ -214,7 +212,6 @@ object KafkaUtils {
   }
 
   /**
-   * :: Experimental ::
    * Create a RDD from Kafka using offset ranges for each topic and partition. This allows you
    * specify the Kafka leader to connect to (to optimize fetching) and access the message as well
    * as the metadata.
@@ -230,7 +227,6 @@ object KafkaUtils {
    *   in which case leaders will be looked up on the driver.
    * @param messageHandler Function for translating each message and metadata into the desired type
    */
-  @Experimental
   def createRDD[
     K: ClassTag,
     V: ClassTag,
@@ -268,7 +264,6 @@ object KafkaUtils {
    * @param offsetRanges Each OffsetRange in the batch corresponds to a
    *   range of offsets for a given Kafka topic/partition
    */
-  @Experimental
   def createRDD[K, V, KD <: Decoder[K], VD <: Decoder[V]](
       jsc: JavaSparkContext,
       keyClass: Class[K],
@@ -283,11 +278,10 @@ object KafkaUtils {
     implicit val keyDecoderCmt: ClassTag[KD] = ClassTag(keyDecoderClass)
     implicit val valueDecoderCmt: ClassTag[VD] = ClassTag(valueDecoderClass)
     new JavaPairRDD(createRDD[K, V, KD, VD](
-      jsc.sc, Map(kafkaParams.toSeq: _*), offsetRanges))
+      jsc.sc, Map(kafkaParams.asScala.toSeq: _*), offsetRanges))
   }
 
   /**
-   * :: Experimental ::
    * Create a RDD from Kafka using offset ranges for each topic and partition. This allows you
    * specify the Kafka leader to connect to (to optimize fetching) and access the message as well
    * as the metadata.
@@ -303,7 +297,6 @@ object KafkaUtils {
    *   in which case leaders will be looked up on the driver.
    * @param messageHandler Function for translating each message and metadata into the desired type
    */
-  @Experimental
   def createRDD[K, V, KD <: Decoder[K], VD <: Decoder[V], R](
       jsc: JavaSparkContext,
       keyClass: Class[K],
@@ -321,13 +314,12 @@ object KafkaUtils {
     implicit val keyDecoderCmt: ClassTag[KD] = ClassTag(keyDecoderClass)
     implicit val valueDecoderCmt: ClassTag[VD] = ClassTag(valueDecoderClass)
     implicit val recordCmt: ClassTag[R] = ClassTag(recordClass)
-    val leaderMap = Map(leaders.toSeq: _*)
+    val leaderMap = Map(leaders.asScala.toSeq: _*)
     createRDD[K, V, KD, VD, R](
-      jsc.sc, Map(kafkaParams.toSeq: _*), offsetRanges, leaderMap, messageHandler.call _)
+      jsc.sc, Map(kafkaParams.asScala.toSeq: _*), offsetRanges, leaderMap, messageHandler.call(_))
   }
 
   /**
-   * :: Experimental ::
    * Create an input stream that directly pulls messages from Kafka Brokers
    * without using any receiver. This stream can guarantee that each message
    * from Kafka is included in transformations exactly once (see points below).
@@ -357,7 +349,6 @@ object KafkaUtils {
    *    starting point of the stream
    * @param messageHandler Function for translating each message and metadata into the desired type
    */
-  @Experimental
   def createDirectStream[
     K: ClassTag,
     V: ClassTag,
@@ -375,7 +366,6 @@ object KafkaUtils {
   }
 
   /**
-   * :: Experimental ::
    * Create an input stream that directly pulls messages from Kafka Brokers
    * without using any receiver. This stream can guarantee that each message
    * from Kafka is included in transformations exactly once (see points below).
@@ -405,7 +395,6 @@ object KafkaUtils {
    *   to determine where the stream starts (defaults to "largest")
    * @param topics Names of the topics to consume
    */
-  @Experimental
   def createDirectStream[
     K: ClassTag,
     V: ClassTag,
@@ -437,7 +426,6 @@ object KafkaUtils {
   }
 
   /**
-   * :: Experimental ::
    * Create an input stream that directly pulls messages from Kafka Brokers
    * without using any receiver. This stream can guarantee that each message
    * from Kafka is included in transformations exactly once (see points below).
@@ -472,7 +460,6 @@ object KafkaUtils {
    *    starting point of the stream
    * @param messageHandler Function for translating each message and metadata into the desired type
    */
-  @Experimental
   def createDirectStream[K, V, KD <: Decoder[K], VD <: Decoder[V], R](
       jssc: JavaStreamingContext,
       keyClass: Class[K],
@@ -492,14 +479,13 @@ object KafkaUtils {
     val cleanedHandler = jssc.sparkContext.clean(messageHandler.call _)
     createDirectStream[K, V, KD, VD, R](
       jssc.ssc,
-      Map(kafkaParams.toSeq: _*),
-      Map(fromOffsets.mapValues { _.longValue() }.toSeq: _*),
+      Map(kafkaParams.asScala.toSeq: _*),
+      Map(fromOffsets.asScala.mapValues(_.longValue()).toSeq: _*),
       cleanedHandler
     )
   }
 
   /**
-   * :: Experimental ::
    * Create an input stream that directly pulls messages from Kafka Brokers
    * without using any receiver. This stream can guarantee that each message
    * from Kafka is included in transformations exactly once (see points below).
@@ -533,7 +519,6 @@ object KafkaUtils {
    *   to determine where the stream starts (defaults to "largest")
    * @param topics Names of the topics to consume
    */
-  @Experimental
   def createDirectStream[K, V, KD <: Decoder[K], VD <: Decoder[V]](
       jssc: JavaStreamingContext,
       keyClass: Class[K],
@@ -549,8 +534,8 @@ object KafkaUtils {
     implicit val valueDecoderCmt: ClassTag[VD] = ClassTag(valueDecoderClass)
     createDirectStream[K, V, KD, VD](
       jssc.ssc,
-      Map(kafkaParams.toSeq: _*),
-      Set(topics.toSeq: _*)
+      Map(kafkaParams.asScala.toSeq: _*),
+      Set(topics.asScala.toSeq: _*)
     )
   }
 }
@@ -564,7 +549,7 @@ object KafkaUtils {
  * classOf[KafkaUtilsPythonHelper].newInstance(), and the createStream()
  * takes care of known parameters instead of passing them from Python
  */
-private class KafkaUtilsPythonHelper {
+private[kafka] class KafkaUtilsPythonHelper {
   def createStream(
       jssc: JavaStreamingContext,
       kafkaParams: JMap[String, String],
@@ -620,10 +605,10 @@ private class KafkaUtilsPythonHelper {
     ): JavaPairInputDStream[Array[Byte], Array[Byte]] = {
 
     if (!fromOffsets.isEmpty) {
-      import scala.collection.JavaConversions._
-      val topicsFromOffsets = fromOffsets.keySet().map(_.topic)
-      if (topicsFromOffsets != topics.toSet) {
-        throw new IllegalStateException(s"The specified topics: ${topics.toSet.mkString(" ")} " +
+      val topicsFromOffsets = fromOffsets.keySet().asScala.map(_.topic)
+      if (topicsFromOffsets != topics.asScala.toSet) {
+        throw new IllegalStateException(
+          s"The specified topics: ${topics.asScala.toSet.mkString(" ")} " +
           s"do not equal to the topic from offsets: ${topicsFromOffsets.mkString(" ")}")
       }
     }
@@ -681,6 +666,6 @@ private class KafkaUtilsPythonHelper {
         "with this RDD, please call this method only on a Kafka RDD.")
 
     val kafkaRDD = kafkaRDDs.head.asInstanceOf[KafkaRDD[_, _, _, _, _]]
-    kafkaRDD.offsetRanges.toSeq
+    kafkaRDD.offsetRanges.toSeq.asJava
   }
 }

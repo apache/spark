@@ -136,10 +136,10 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
     checkType(Multiply(i, u), DecimalType(38, 18))
     checkType(Multiply(u, u), DecimalType(38, 36))
 
-    checkType(Divide(u, d1), DecimalType(38, 21))
-    checkType(Divide(u, d2), DecimalType(38, 24))
-    checkType(Divide(u, i), DecimalType(38, 29))
-    checkType(Divide(u, u), DecimalType(38, 38))
+    checkType(Divide(u, d1), DecimalType(38, 18))
+    checkType(Divide(u, d2), DecimalType(38, 19))
+    checkType(Divide(u, i), DecimalType(38, 23))
+    checkType(Divide(u, u), DecimalType(38, 18))
 
     checkType(Remainder(d1, u), DecimalType(19, 18))
     checkType(Remainder(d2, u), DecimalType(21, 18))
@@ -153,5 +153,31 @@ class DecimalPrecisionSuite extends SparkFunSuite with BeforeAndAfter {
       checkType(Divide(expr, u), DoubleType)
       checkType(Remainder(expr, u), DoubleType)
     }
+  }
+
+  test("DecimalType.isWiderThan") {
+    val d0 = DecimalType(2, 0)
+    val d1 = DecimalType(2, 1)
+    val d2 = DecimalType(5, 2)
+    val d3 = DecimalType(15, 3)
+    val d4 = DecimalType(25, 4)
+
+    assert(d0.isWiderThan(d1) === false)
+    assert(d1.isWiderThan(d0) === false)
+    assert(d1.isWiderThan(d2) === false)
+    assert(d2.isWiderThan(d1) === true)
+    assert(d2.isWiderThan(d3) === false)
+    assert(d3.isWiderThan(d2) === true)
+    assert(d4.isWiderThan(d3) === true)
+
+    assert(d1.isWiderThan(ByteType) === false)
+    assert(d2.isWiderThan(ByteType) === true)
+    assert(d2.isWiderThan(ShortType) === false)
+    assert(d3.isWiderThan(ShortType) === true)
+    assert(d3.isWiderThan(IntegerType) === true)
+    assert(d3.isWiderThan(LongType) === false)
+    assert(d4.isWiderThan(LongType) === true)
+    assert(d4.isWiderThan(FloatType) === false)
+    assert(d4.isWiderThan(DoubleType) === false)
   }
 }

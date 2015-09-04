@@ -125,6 +125,7 @@ object JdbcDialects {
 
   registerDialect(MySQLDialect)
   registerDialect(PostgresDialect)
+  registerDialect(DB2Dialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
@@ -220,5 +221,22 @@ case object MySQLDialect extends JdbcDialect {
 
   override def quoteIdentifier(colName: String): String = {
     s"`$colName`"
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Default DB2 dialect, mapping string/boolean on write to valid DB2 types.
+ * By default string, and boolean gets mapped to db2 invalid types TEXT, and BIT(1).
+ */
+@DeveloperApi
+case object DB2Dialect extends JdbcDialect {
+
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:db2")
+
+  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    case StringType => Some(JdbcType("CLOB", java.sql.Types.CLOB))
+    case BooleanType => Some(JdbcType("CHAR(1)", java.sql.Types.CHAR))
+    case _ => None
   }
 }

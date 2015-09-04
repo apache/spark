@@ -5,37 +5,44 @@ displayTitle: Machine Learning Library (MLlib) Guide
 description: MLlib machine learning library overview for Spark SPARK_VERSION_SHORT
 ---
 
-MLlib is Spark's scalable machine learning library consisting of common learning algorithms and utilities,
-including classification, regression, clustering, collaborative
-filtering, dimensionality reduction, as well as underlying optimization primitives.
-Guides for individual algorithms are listed below.
+MLlib is Spark's machine learning (ML) library.
+Its goal is to make practical machine learning scalable and easy.
+It consists of common learning algorithms and utilities, including classification, regression,
+clustering, collaborative filtering, dimensionality reduction, as well as lower-level optimization
+primitives and higher-level pipeline APIs.
 
-The API is divided into 2 parts:
+It divides into two packages:
 
-* [The original `spark.mllib` API](mllib-guide.html#mllib-types-algorithms-and-utilities) is the primary API.
-* [The "Pipelines" `spark.ml` API](mllib-guide.html#sparkml-high-level-apis-for-ml-pipelines) is a higher-level API for constructing ML workflows.
+* [`spark.mllib`](mllib-guide.html#mllib-types-algorithms-and-utilities) contains the original API
+  built on top of [RDDs](programming-guide.html#resilient-distributed-datasets-rdds).
+* [`spark.ml`](mllib-guide.html#sparkml-high-level-apis-for-ml-pipelines) provides higher-level API
+  built on top of [DataFrames](sql-programming-guide.html#dataframes) for constructing ML pipelines.
+
+Using `spark.ml` is recommended because with DataFrames the API is more versatile and flexible.
+But we will keep supporting `spark.mllib` along with the development of `spark.ml`.
+Users should be comfortable using `spark.mllib` features and expect more features coming.
+Developers should contribute new algorithms to `spark.ml` if they fit the ML pipeline concept well,
+e.g., feature extractors and transformers.
 
 We list major functionality from both below, with links to detailed guides.
 
-# MLlib types, algorithms and utilities
-
-This lists functionality included in `spark.mllib`, the main MLlib API.
+# spark.mllib: data types, algorithms, and utilities
 
 * [Data types](mllib-data-types.html)
 * [Basic statistics](mllib-statistics.html)
-  * summary statistics
-  * correlations
-  * stratified sampling
-  * hypothesis testing
-  * random data generation  
+  * [summary statistics](mllib-statistics.html#summary-statistics)
+  * [correlations](mllib-statistics.html#correlations)
+  * [stratified sampling](mllib-statistics.html#stratified-sampling)
+  * [hypothesis testing](mllib-statistics.html#hypothesis-testing)
+  * [random data generation](mllib-statistics.html#random-data-generation)
 * [Classification and regression](mllib-classification-regression.html)
   * [linear models (SVMs, logistic regression, linear regression)](mllib-linear-methods.html)
   * [naive Bayes](mllib-naive-bayes.html)
   * [decision trees](mllib-decision-tree.html)
-  * [ensembles of trees](mllib-ensembles.html) (Random Forests and Gradient-Boosted Trees)
+  * [ensembles of trees (Random Forests and Gradient-Boosted Trees)](mllib-ensembles.html)
   * [isotonic regression](mllib-isotonic-regression.html)
 * [Collaborative filtering](mllib-collaborative-filtering.html)
-  * alternating least squares (ALS)
+  * [alternating least squares (ALS)](mllib-collaborative-filtering.html#collaborative-filtering)
 * [Clustering](mllib-clustering.html)
   * [k-means](mllib-clustering.html#k-means)
   * [Gaussian mixture](mllib-clustering.html#gaussian-mixture)
@@ -43,78 +50,76 @@ This lists functionality included in `spark.mllib`, the main MLlib API.
   * [latent Dirichlet allocation (LDA)](mllib-clustering.html#latent-dirichlet-allocation-lda)
   * [streaming k-means](mllib-clustering.html#streaming-k-means)
 * [Dimensionality reduction](mllib-dimensionality-reduction.html)
-  * singular value decomposition (SVD)
-  * principal component analysis (PCA)
+  * [singular value decomposition (SVD)](mllib-dimensionality-reduction.html#singular-value-decomposition-svd)
+  * [principal component analysis (PCA)](mllib-dimensionality-reduction.html#principal-component-analysis-pca)
 * [Feature extraction and transformation](mllib-feature-extraction.html)
 * [Frequent pattern mining](mllib-frequent-pattern-mining.html)
-  * FP-growth
-* [Optimization (developer)](mllib-optimization.html)
-  * stochastic gradient descent
-  * limited-memory BFGS (L-BFGS)
+  * [FP-growth](mllib-frequent-pattern-mining.html#fp-growth)
+  * [association rules](mllib-frequent-pattern-mining.html#association-rules)
+  * [PrefixSpan](mllib-frequent-pattern-mining.html#prefix-span)
+* [Evaluation metrics](mllib-evaluation-metrics.html)
 * [PMML model export](mllib-pmml-model-export.html)
-
-MLlib is under active development.
-The APIs marked `Experimental`/`DeveloperApi` may change in future releases, 
-and the migration guide below will explain all changes between releases.
+* [Optimization (developer)](mllib-optimization.html)
+  * [stochastic gradient descent](mllib-optimization.html#stochastic-gradient-descent-sgd)
+  * [limited-memory BFGS (L-BFGS)](mllib-optimization.html#limited-memory-bfgs-l-bfgs)
 
 # spark.ml: high-level APIs for ML pipelines
 
-Spark 1.2 introduced a new package called `spark.ml`, which aims to provide a uniform set of
-high-level APIs that help users create and tune practical machine learning pipelines.
+**[spark.ml programming guide](ml-guide.html)** provides an overview of the Pipelines API and major
+concepts. It also contains sections on using algorithms within the Pipelines API, for example:
 
-*Graduated from Alpha!*  The Pipelines API is no longer an alpha component, although many elements of it are still `Experimental` or `DeveloperApi`.
-
-Note that we will keep supporting and adding features to `spark.mllib` along with the
-development of `spark.ml`.
-Users should be comfortable using `spark.mllib` features and expect more features coming.
-Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
-to `spark.ml`.
-
-More detailed guides for `spark.ml` include:
-
-* **[spark.ml programming guide](ml-guide.html)**: overview of the Pipelines API and major concepts
-* [Feature transformers](ml-features.html): Details on transformers supported in the Pipelines API, including a few not in the lower-level `spark.mllib` API
-* [Ensembles](ml-ensembles.html): Details on ensemble learning methods in the Pipelines API
+* [Feature extraction, transformation, and selection](ml-features.html)
+* [Decision trees for classification and regression](ml-decision-tree.html)
+* [Ensembles](ml-ensembles.html)
+* [Linear methods with elastic net regularization](ml-linear-methods.html)
+* [Multilayer perceptron classifier](ml-ann.html)
 
 # Dependencies
 
-MLlib uses the linear algebra package
-[Breeze](http://www.scalanlp.org/), which depends on
-[netlib-java](https://github.com/fommil/netlib-java) for optimised
-numerical processing. If natives are not available at runtime, you
-will see a warning message and a pure JVM implementation will be used
-instead.
+MLlib uses the linear algebra package [Breeze](http://www.scalanlp.org/), which depends on
+[netlib-java](https://github.com/fommil/netlib-java) for optimised numerical processing.
+If natives libraries[^1] are not available at runtime, you will see a warning message and a pure JVM
+implementation will be used instead.
 
-To learn more about the benefits and background of system optimised
-natives, you may wish to watch Sam Halliday's ScalaX talk on
-[High Performance Linear Algebra in Scala](http://fommil.github.io/scalax14/#/)).
+Due to licensing issues with runtime proprietary binaries, we do not include `netlib-java`'s native
+proxies by default.
+To configure `netlib-java` / Breeze to use system optimised binaries, include
+`com.github.fommil.netlib:all:1.1.2` (or build Spark with `-Pnetlib-lgpl`) as a dependency of your
+project and read the [netlib-java](https://github.com/fommil/netlib-java) documentation for your
+platform's additional installation instructions.
 
-Due to licensing issues with runtime proprietary binaries, we do not
-include `netlib-java`'s native proxies by default. To configure
-`netlib-java` / Breeze to use system optimised binaries, include
-`com.github.fommil.netlib:all:1.1.2` (or build Spark with
-`-Pnetlib-lgpl`) as a dependency of your project and read the
-[netlib-java](https://github.com/fommil/netlib-java) documentation for
-your platform's additional installation instructions.
+To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
 
-To use MLlib in Python, you will need [NumPy](http://www.numpy.org)
-version 1.4 or newer.
+[^1]: To learn more about the benefits and background of system optimised natives, you may wish to
+    watch Sam Halliday's ScalaX talk on [High Performance Linear Algebra in Scala](http://fommil.github.io/scalax14/#/).
 
----
+# Migration guide
 
-# Migration Guide
+MLlib is under active development.
+The APIs marked `Experimental`/`DeveloperApi` may change in future releases,
+and the migration guide below will explain all changes between releases.
 
-For the `spark.ml` package, please see the [spark.ml Migration Guide](ml-guide.html#migration-guide).
+## From 1.4 to 1.5
 
-## From 1.3 to 1.4
+In the `spark.mllib` package, there are no break API changes but several behavior changes:
 
-In the `spark.mllib` package, there were several breaking changes, but all in `DeveloperApi` or `Experimental` APIs:
+* [SPARK-9005](https://issues.apache.org/jira/browse/SPARK-9005):
+  `RegressionMetrics.explainedVariance` returns the average regression sum of squares.
+* [SPARK-8600](https://issues.apache.org/jira/browse/SPARK-8600): `NaiveBayesModel.labels` become
+  sorted.
+* [SPARK-3382](https://issues.apache.org/jira/browse/SPARK-3382): `GradientDescent` has a default
+  convergence tolerance `1e-3`, and hence iterations might end earlier than 1.4.
 
-* Gradient-Boosted Trees
-    * *(Breaking change)* The signature of the [`Loss.gradient`](api/scala/index.html#org.apache.spark.mllib.tree.loss.Loss) method was changed.  This is only an issues for users who wrote their own losses for GBTs.
-    * *(Breaking change)* The `apply` and `copy` methods for the case class [`BoostingStrategy`](api/scala/index.html#org.apache.spark.mllib.tree.configuration.BoostingStrategy) have been changed because of a modification to the case class fields.  This could be an issue for users who use `BoostingStrategy` to set GBT parameters.
-* *(Breaking change)* The return value of [`LDA.run`](api/scala/index.html#org.apache.spark.mllib.clustering.LDA) has changed.  It now returns an abstract class `LDAModel` instead of the concrete class `DistributedLDAModel`.  The object of type `LDAModel` can still be cast to the appropriate concrete type, which depends on the optimization algorithm.
+In the `spark.ml` package, there exists one break API change and one behavior change:
 
-## Previous Spark Versions
+* [SPARK-9268](https://issues.apache.org/jira/browse/SPARK-9268): Java's varargs support is removed
+  from `Params.setDefault` due to a
+  [Scala compiler bug](https://issues.scala-lang.org/browse/SI-9013).
+* [SPARK-10097](https://issues.apache.org/jira/browse/SPARK-10097): `Evaluator.isLargerBetter` is
+  added to indicate metric ordering. Metrics like RMSE no longer flip signs as in 1.4.
+
+## Previous Spark versions
 
 Earlier migration guides are archived [on this page](mllib-migration-guides.html).
+
+---

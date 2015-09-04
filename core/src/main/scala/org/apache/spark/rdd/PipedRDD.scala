@@ -23,7 +23,7 @@ import java.io.IOException
 import java.io.PrintWriter
 import java.util.StringTokenizer
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
@@ -72,7 +72,7 @@ private[spark] class PipedRDD[T: ClassTag](
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[String] = {
-    val pb = new ProcessBuilder(command)
+    val pb = new ProcessBuilder(command.asJava)
     // Add the environmental variables to the process.
     val currentEnvVars = pb.environment()
     envVars.foreach { case (variable, value) => currentEnvVars.put(variable, value) }
@@ -81,7 +81,7 @@ private[spark] class PipedRDD[T: ClassTag](
     // so the user code can access the input filename
     if (split.isInstanceOf[HadoopPartition]) {
       val hadoopSplit = split.asInstanceOf[HadoopPartition]
-      currentEnvVars.putAll(hadoopSplit.getPipeEnvVars())
+      currentEnvVars.putAll(hadoopSplit.getPipeEnvVars().asJava)
     }
 
     // When spark.worker.separated.working.directory option is turned on, each
@@ -133,6 +133,7 @@ private[spark] class PipedRDD[T: ClassTag](
     // Start a thread to feed the process input from our parent's iterator
     new Thread("stdin writer for " + command) {
       override def run() {
+        TaskContext.setTaskContext(context)
         val out = new PrintWriter(proc.getOutputStream)
 
         // scalastyle:off println
