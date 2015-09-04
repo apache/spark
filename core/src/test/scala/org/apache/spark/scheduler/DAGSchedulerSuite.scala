@@ -156,8 +156,8 @@ class DAGSchedulerSuite
   class SimpleListener extends JobListener {
     val results = new HashMap[Int, Any]
     var failure: Exception = null
-    override def taskSucceeded(index: Int, result: Any) = results.put(index, result)
-    override def jobFailed(exception: Exception) = { failure = exception }
+    override def taskSucceeded(index: Int, result: Any): Unit = results.put(index, result)
+    override def jobFailed(exception: Exception): Unit = { failure = exception }
   }
 
   before {
@@ -1333,23 +1333,19 @@ class DAGSchedulerSuite
   test("simple map stage submission") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
-    val shuffleId = shuffleDep.shuffleId
     val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
 
     // Submit a map stage by itself
     submitMapStage(shuffleDep)
-    complete(taskSets(0), Seq(
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostB", 1))))
-    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
-      HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+    assert(results.size === 0)  // No results yet
+    completeShuffleMapStageSuccessfully(0, 0, 1)
     assert(results.size === 1)
     results.clear()
     assertDataStructuresEmpty()
 
     // Submit a reduce job that depends on this map stage; it should directly do the reduce
     submit(reduceRdd, Array(0))
-    complete(taskSets(1), Seq((Success, 42)))
+    completeNextResultStageWithSuccess(2, 0)
     assert(results === Map(0 -> 42))
     results.clear()
     assertDataStructuresEmpty()
@@ -1373,16 +1369,12 @@ class DAGSchedulerSuite
     submit(reduceRdd, Array(0))
 
     // Complete tasks for the map stage
-    complete(taskSets(0), Seq(
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostB", 1))))
-    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
-      HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+    completeShuffleMapStageSuccessfully(0, 0, 1)
     assert(results.size === 1)
     results.clear()
 
     // Complete tasks for the reduce stage
-    complete(taskSets(1), Seq((Success, 42)))
+    completeNextResultStageWithSuccess(1, 0)
     assert(results === Map(0 -> 42))
     results.clear()
     assertDataStructuresEmpty()
@@ -1404,8 +1396,6 @@ class DAGSchedulerSuite
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostA", reduceRdd.partitions.size)),
       (Success, makeMapStatus("hostB", reduceRdd.partitions.size))))
-    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
-      HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
     assert(results.size === 1)
     results.clear()
     assertDataStructuresEmpty()
@@ -1445,7 +1435,7 @@ class DAGSchedulerSuite
    * that are waiting on each one, as well as a reduce job on the last one. We test that all of
    * these jobs complete even if there are some fetch failures in both shuffles.
    */
-  test("map stage submission with multiple shared stages and failure") {
+  test("map stage submission with multiple shared stages and failures") {
     val rdd1 = new MyRDD(sc, 2, Nil)
     val dep1 = new ShuffleDependency(rdd1, new HashPartitioner(2))
     val rdd2 = new MyRDD(sc, 2, List(dep1))
@@ -1520,7 +1510,6 @@ class DAGSchedulerSuite
   test("map stage submission with executor failure late map task completions") {
     val shuffleMapRdd = new MyRDD(sc, 3, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
-    val shuffleId = shuffleDep.shuffleId
 
     submitMapStage(shuffleDep)
 
