@@ -628,5 +628,10 @@ private[hive] case class HiveUDAFFunction(
     val inputs = inputProjection(input)
     function.iterate(buffer, wrap(inputs, inspectors, cached, inputDataTypes))
   }
+
+  override def reset(): AggregateFunction1 = {
+    function.reset(buffer)
+    this
+  }
 }
 

@@ -104,6 +104,13 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
   /** Return true if this set contains the specified element. */
   def contains(k: T): Boolean = getPos(k) != INVALID_POS
 
+  def clear(): Unit = {
+    _size = 0
+    _bitset.clear()
+    _capacity = nextPowerOf2(initialCapacity)
+    _data = new Array[T](_capacity)
+  }
+
   /**
    * Add an element to the set. If the set is over capacity after the insertion, grow the set
    * and rehash all elements.

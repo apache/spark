@@ -150,5 +150,9 @@ case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean 
     value = expression.eval(input)
   }
 
+  def update(value: Any): Unit = {
+    this.value = value
+  }
+
   override def eval(input: InternalRow): Any = value
 }

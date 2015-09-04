@@ -41,6 +41,8 @@ trait AggregateExpression1 extends AggregateExpression {
    * of input rows/
    */
   def newInstance(): AggregateFunction1
+
+  def reset(): AggregateFunction1 = newInstance()
 }
 
 /**
@@ -81,6 +83,8 @@ abstract class AggregateFunction1 extends LeafExpression with Serializable {
 
   def update(input: InternalRow): Unit
 
+  def reset(): AggregateFunction1
+
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     throw new UnsupportedOperationException(
       "AggregateFunction1 should not be used for generated aggregates")
@@ -117,6 +121,11 @@ case class MinFunction(expr: Expression, base: AggregateExpression1) extends Agg
     }
   }
 
+  override def reset(): AggregateFunction1 = {
+    currentMin.update(null)
+    this
+  }
+
   override def eval(input: InternalRow): Any = currentMin.value
 }
 
@@ -150,6 +159,11 @@ case class MaxFunction(expr: Expression, base: AggregateExpression1) extends Agg
     }
   }
 
+  override def reset(): AggregateFunction1 = {
+    currentMax.update(null)
+    this
+  }
+
   override def eval(input: InternalRow): Any = currentMax.value
 }
 
@@ -176,6 +190,11 @@ case class CountFunction(expr: Expression, base: AggregateExpression1) extends A
     if (evaluatedExpr != null) {
       count += 1L
     }
+  }
+
+  override def reset(): AggregateFunction1 = {
+    count = 0
+    this
   }
 
   override def eval(input: InternalRow): Any = count
@@ -218,6 +237,11 @@ case class CountDistinctFunction(
     }
   }
 
+  override def reset(): AggregateFunction1 = {
+    seen.clear()
+    this
+  }
+
   override def eval(input: InternalRow): Any = seen.size.toLong
 }
 
@@ -249,6 +273,11 @@ case class CollectHashSetFunction(
     if (!evaluatedExpr.anyNull) {
       seen.add(evaluatedExpr)
     }
+  }
+
+  override def reset(): AggregateFunction1 = {
+    seen.clear()
+    this
   }
 
   override def eval(input: InternalRow): Any = {
@@ -283,6 +312,11 @@ case class CombineSetsAndCountFunction(
     while (inputIterator.hasNext) {
       seen.add(inputIterator.next)
     }
+  }
+
+  override def reset(): AggregateFunction1 = {
+    seen.clear()
+    this
   }
 
   override def eval(input: InternalRow): Any = seen.size.toLong
@@ -333,6 +367,9 @@ case class ApproxCountDistinctPartitionFunction(
   }
 
   override def eval(input: InternalRow): Any = hyperLogLog
+
+  override def reset(): AggregateFunction1 =
+    new ApproxCountDistinctPartitionFunction(expr, base, relativeSD)
 }
 
 case class ApproxCountDistinctMerge(child: Expression, relativeSD: Double)
@@ -361,6 +398,9 @@ case class ApproxCountDistinctMergeFunction(
   }
 
   override def eval(input: InternalRow): Any = hyperLogLog.cardinality()
+
+  override def reset(): AggregateFunction1 =
+    new ApproxCountDistinctMergeFunction(expr, base, relativeSD)
 }
 
 case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
@@ -471,6 +511,12 @@ case class AverageFunction(expr: Expression, base: AggregateExpression1)
       sum.update(addFunction(evaluatedExpr), input)
     }
   }
+
+  override def reset(): AggregateFunction1 = {
+    count = 0
+    sum.update(zero.eval(null))
+    this
+  }
 }
 
 case class Sum(child: Expression) extends UnaryExpression with PartialAggregate1 {
@@ -528,6 +574,11 @@ case class SumFunction(expr: Expression, base: AggregateExpression1) extends Agg
     sum.update(addFunction, input)
   }
 
+  override def reset(): AggregateFunction1 = {
+    sum.update(null)
+    this
+  }
+
   override def eval(input: InternalRow): Any = {
     expr.dataType match {
       case DecimalType.Fixed(_, _) =>
@@ -576,6 +627,11 @@ case class SumDistinctFunction(expr: Expression, base: AggregateExpression1)
     }
   }
 
+  override def reset(): AggregateFunction1 = {
+    seen.clear()
+    this
+  }
+
   override def eval(input: InternalRow): Any = {
     if (seen.size == 0) {
       null
@@ -617,6 +673,11 @@ case class CombineSetsAndSumFunction(
     }
   }
 
+  override def reset(): AggregateFunction1 = {
+    seen.clear()
+    this
+  }
+
   override def eval(input: InternalRow): Any = {
     val casted = seen.asInstanceOf[OpenHashSet[InternalRow]]
     if (casted.size == 0) {
@@ -656,6 +717,11 @@ case class FirstFunction(expr: Expression, base: AggregateExpression1) extends A
     }
   }
 
+  override def reset(): AggregateFunction1 = {
+    result = null
+    this
+  }
+
   override def eval(input: InternalRow): Any = result
 }
 
@@ -685,6 +751,11 @@ case class LastFunction(expr: Expression, base: AggregateExpression1) extends Ag
     if (value != null) {
       result = value
     }
+  }
+
+  override def reset(): AggregateFunction1 = {
+    result = null
+    this
   }
 
   override def eval(input: InternalRow): Any = {
