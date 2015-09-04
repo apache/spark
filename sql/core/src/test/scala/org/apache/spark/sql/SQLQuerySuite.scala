@@ -997,7 +997,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       val value = row.getString(1)
       assert(
         TestSQLContext.overrideConfs.contains(key),
-        s"$key should not exist in SQLConf.")
+        s"$key should exist in SQLConf.")
       assert(
         TestSQLContext.overrideConfs(key) === value,
         s"The value of $key should be ${TestSQLContext.overrideConfs(key)} instead of $value.")

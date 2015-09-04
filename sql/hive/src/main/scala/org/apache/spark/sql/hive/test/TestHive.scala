@@ -111,7 +111,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
 
-  // At here, we make sure we set those test specific confs correctly when we create
+  // Make sure we set those test specific confs correctly when we create
   // the SQLConf as well as when we call clear.
   override protected[sql] def createSession(): SQLSession = {
     new this.SQLSession()

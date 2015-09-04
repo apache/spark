@@ -31,20 +31,20 @@ private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { sel
       new SparkConf().set("spark.sql.testkey", "true")))
   }
 
-  // At here, we make sure we set those test specific confs correctly when we create
+  // Make sure we set those test specific confs correctly when we create
   // the SQLConf as well as when we call clear.
   protected[sql] override def createSession(): SQLSession = new this.SQLSession()
 
+  /** A special [[SQLSession]] that uses fewer shuffle partitions than normal. */
   protected[sql] class SQLSession extends super.SQLSession {
     protected[sql] override lazy val conf: SQLConf = new SQLConf {
 
-      TestSQLContext.overrideConfs.map {
-        case (key, value) => setConfString(key, value)
-      }
+      clear()
 
       override def clear(): Unit = {
         super.clear()
 
+        // Make sure we start with the default test configs even after clear
         TestSQLContext.overrideConfs.map {
           case (key, value) => setConfString(key, value)
         }
