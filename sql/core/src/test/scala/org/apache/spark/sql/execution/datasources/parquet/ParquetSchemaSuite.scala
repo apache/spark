@@ -1012,11 +1012,16 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
     catalystSchema = {
       val f00Type = ArrayType(StringType, containsNull = false)
-      val f01Type = new StructType().add("f011", DoubleType, nullable = true)
+      val f01Type = ArrayType(
+        new StructType()
+          .add("f011", DoubleType, nullable = true),
+        containsNull = false)
+
       val f0Type = new StructType()
         .add("f00", f00Type, nullable = false)
         .add("f01", f01Type, nullable = false)
       val f1Type = ArrayType(IntegerType, containsNull = true)
+
       new StructType()
         .add("f0", f0Type, nullable = false)
         .add("f1", f1Type, nullable = true)
