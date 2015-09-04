@@ -1992,11 +1992,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       : SimpleFutureAction[MapOutputStatistics] = {
     assertNotStopped()
     val callSite = getCallSite()
+    var result: MapOutputStatistics = null
     val waiter = dagScheduler.submitMapStage(
       dependency,
+      (r: MapOutputStatistics) => { result = r },
       callSite,
       localProperties.get)
-    new SimpleFutureAction(waiter, env.mapOutputTracker.getStatistics(dependency))
+    new SimpleFutureAction[MapOutputStatistics](waiter, result)
   }
 
   /**

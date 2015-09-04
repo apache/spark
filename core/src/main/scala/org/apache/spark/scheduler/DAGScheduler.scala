@@ -45,7 +45,9 @@ import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
  * stages for each job, keeps track of which RDDs and stage outputs are materialized, and finds a
  * minimal schedule to run the job. It then submits stages as TaskSets to an underlying
- * TaskScheduler implementation that runs them on the cluster.
+ * TaskScheduler implementation that runs them on the cluster. A TaskSet contains fully independent
+ * tasks that can run right away based on the data that's already on the cluster (e.g. map output
+ * files from previous stages), though it may fail if this data becomes unavailable.
  *
  * Spark stages are created by breaking the RDD graph at shuffle boundaries. RDD operations with
  * "narrow" dependencies, like map() and filter(), are pipelined together into one set of tasks
@@ -83,6 +85,19 @@ import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
  *
  *  - Preferred locations: the DAGScheduler also computes where to run each task in a stage based
  *    on the preferred locations of its underlying RDDs, or the location of cached or shuffle data.
+ *
+ *  - Cleanup: all data structures are cleared when the running jobs that depend on them finish,
+ *    to prevent memory leaks in a long-running application.
+ *
+ * To recover from failures, the same stage might need to run multiple times, which are called
+ * "attempts". If the TaskScheduler reports that a task failed because a map output file from a
+ * previous stage was lost, the DAGScheduler resubmits that lost stage. This is detected through a
+ * through a CompletionEvent with FetchFailed, or an ExecutorLost event. The DAGScheduler will wait
+ * a small amount of time to see whether other nodes or tasks fail, then resubmit TaskSets for any
+ * lost stage(s) that compute the missing tasks. As part of this process, we might also have to
+ * create Stage objects for old (finished) stages where we previously cleaned up the Stage object.
+ * Since tasks from the old attempt of a stage could still be running, care must be taken to map
+ * any events received in the correct Stage object.
  *
  * Here's a checklist to use when making or reviewing changes to this class:
  *
@@ -652,23 +667,24 @@ class DAGScheduler(
    * about their outputs before submitting downstream stages.
    *
    * @param dependency the ShuffleDependency to run a map stage for
+   * @param callback function called with the result of the job, which in this case will be a
+   *   single MapOutputStatistics object showing how much data was produced for each partition
    * @param callSite where in the user program this job was submitted
    * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
    */
   def submitMapStage[K, V, C](
       dependency: ShuffleDependency[K, V, C],
+      callback: MapOutputStatistics => Unit,
       callSite: CallSite,
-      properties: Properties): JobWaiter[Any] = {
+      properties: Properties): JobWaiter[MapOutputStatistics] = {
 
     val rdd = dependency.rdd
     val jobId = nextJobId.getAndIncrement()
-    if (rdd.partitions.size == 0) {
-      // Return immediately if the job is running 0 tasks
-      return new JobWaiter[Any](this, jobId, 0, (i: Int, r: Any) => {})
+    if (rdd.partitions.length == 0) {
+      throw new SparkException("Can't run submitMapStage on RDD with 0 partitions")
     }
 
-    assert(rdd.partitions.size > 0)
-    val waiter = new JobWaiter(this, jobId, rdd.partitions.size, (i: Int, r: Any) => {})
+    val waiter = new JobWaiter(this, jobId, 1, (i: Int, r: MapOutputStatistics) => callback(r))
     eventProcessLoop.post(MapStageSubmitted(
       jobId, dependency, callSite, waiter, SerializationUtils.clone(properties)))
     waiter
@@ -878,15 +894,6 @@ class DAGScheduler(
     logInfo("Parents of final stage: " + finalStage.parents)
     logInfo("Missing parents: " + getMissingParentStages(finalStage))
 
-    // Mark any finished tasks in the stage as such so the listener knows about them
-    for (i <- 0 until finalStage.numPartitions) {
-      if (finalStage.outputLocs(i).nonEmpty) {
-        job.finished(i) = true
-        job.numFinished += 1
-        listener.taskSucceeded(i, null)
-      }
-    }
-
     val jobSubmissionTime = clock.getTimeMillis()
     jobIdToActiveJob(jobId) = job
     activeJobs += job
@@ -897,9 +904,11 @@ class DAGScheduler(
       SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
     submitStage(finalStage)
 
-    // If the whole job has finished, remove it
-    if (job.numFinished == job.numPartitions) {
-      markStageAsFinished(finalStage)
+    // If the whole stage has already finished, tell the listener and remove it
+    if (!finalStage.outputLocs.contains(Nil)) {
+      job.finished(0) = true
+      job.numFinished += 1
+      listener.taskSucceeded(0, mapOutputTracker.getStatistics(dependency))
       cleanupStateForJobAndIndependentStages(job)
       listenerBus.post(
         SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
@@ -1212,28 +1221,26 @@ class DAGScheduler(
                 logInfo("Resubmitting " + shuffleStage + " (" + shuffleStage.name +
                   ") because some of its tasks had failed: " +
                   shuffleStage.outputLocs.zipWithIndex.filter(_._1.isEmpty)
-                      .map(_._2).mkString(", "))
+                    .map(_._2).mkString(", "))
                 submitStage(shuffleStage)
+              } else {
+                // Mark any map-stage jobs waiting on this stage as finished
+                if (shuffleStage.mapStageJobs.nonEmpty) {
+                  val stats = mapOutputTracker.getStatistics(shuffleStage.shuffleDep)
+                  for (job <- shuffleStage.mapStageJobs) {
+                    job.finished(0) = true
+                    job.numFinished += 1
+                    job.listener.taskSucceeded(0, stats)
+                    cleanupStateForJobAndIndependentStages(job)
+                    listenerBus.post(
+                      SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
+                  }
+                }
               }
 
               // Note: newly runnable stages will be submitted below when we submit waiting stages
             }
-
-            // Mark the task as finished in any map-stage jobs waiting on this stage
-            for (job <- shuffleStage.mapStageJobs) {
-              if (!job.finished(smt.partitionId)) {
-                job.finished(smt.partitionId) = true
-                job.numFinished += 1
-                job.listener.taskSucceeded(smt.partitionId, null)
-                // If the whole job has finished, remove it
-                if (job.numFinished == job.numPartitions) {
-                  cleanupStateForJobAndIndependentStages(job)
-                  listenerBus.post(
-                    SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
-                }
-              }
-            }
-          }
+        }
 
       case Resubmitted =>
         logInfo("Resubmitted " + task + ", so marking it as still running")
