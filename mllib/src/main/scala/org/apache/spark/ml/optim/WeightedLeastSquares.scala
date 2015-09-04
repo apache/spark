@@ -25,14 +25,43 @@ import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.rdd.RDD
 
+/**
+ * Model fitted by [[WeightedLeastSquares]].
+ * @param coefficients model coefficients
+ * @param intercept model intercept
+ */
 private[ml] class WeightedLeastSquaresModel(
     val coefficients: DenseVector,
     val intercept: Double) extends Serializable
 
+/**
+ * Weighted least squares solver via normal equation.
+ * Given weighted observations (w,,i,,, a,,i,,, b,,i,,), we use the following weighted least squares
+ * formulation:
+ *
+ * min,,x,z,, 1/2 sum,,i,, w,,i,, (a,,i,,^T^ x + z - b,,i,,)^2^ / sum,,i,, w_i
+ *   + 1/2 lambda delta sum,,j,, (sigma,,j,, x,,j,,)^2^,
+ *
+ * where lambda is the regularization parameter, and delta and sigma,,j,, are controlled by
+ * [[standardizeLabel]] and [[standardizeFeatures]], respectively.
+ *
+ * Set [[regParam]] to 0.0 and turn off both [[standardizeFeatures]] and [[standardizeLabel]] to
+ * match R's `lm`.
+ * Turn on [[standardizeLabel]] to match R's `glmnet`.
+ *
+ * @param fitIntercept whether to fit intercept. If false, z is 0.0.
+ * @param regParam L2 regularization parameter (lambda)
+ * @param standardizeFeatures whether to standardize features. If true, sigma_,,j,, is the
+ *                            population standard deviation of the j-th column of A. Otherwise,
+ *                            sigma,,j,, is 1.0.
+ * @param standardizeLabel whether to standardize label. If true, delta is the population standard
+ *                         deviation of the label column b. Otherwise, delta is 1.0.
+ */
 private[ml] class WeightedLeastSquares(
     val fitIntercept: Boolean,
     val regParam: Double,
-    val standardization: Boolean) extends Logging with Serializable {
+    val standardizeFeatures: Boolean,
+    val standardizeLabel: Boolean) extends Logging with Serializable {
   import WeightedLeastSquares._
 
   require(regParam >= 0.0, s"regParam cannot be negative: $regParam")
@@ -45,12 +74,11 @@ private[ml] class WeightedLeastSquares(
    */
   def fit(instances: RDD[Instance]): WeightedLeastSquaresModel = {
     val summary = instances.treeAggregate(new Aggregator)(_.add(_), _.merge(_))
-    assert(summary.initialized, "Training dataset is empty.")
-    // assert(summary.wSum > 0.0, "Sum of weights cannot be zero.")
-    // assert(summary.count > 1.0, "Must have more than one instances.")
+    summary.validate()
+    logInfo(s"Number of instances: ${summary.count}.")
     val triK = summary.triK
     val bBar = summary.bBar
-    val bVar = summary.bVar
+    val bStd = summary.bStd
     val aBar = summary.aBar
     val aVar = summary.aVar
     val abBar = summary.abBar
@@ -66,10 +94,12 @@ private[ml] class WeightedLeastSquares(
     var i = 0
     var j = 2
     while (i < triK) {
-      val scale = if (standardization) {
-        aVar(j - 2) / math.sqrt(bVar)
-      } else {
-        1.0 / math.sqrt(bVar)
+      var scale = 1.0
+      if (standardizeFeatures) {
+        scale *= aVar(j - 2)
+      }
+      if (standardizeLabel) {
+        scale /= bStd
       }
       aaValues(i) += scale * regParam
       i += j
@@ -88,6 +118,13 @@ private[ml] class WeightedLeastSquares(
     new WeightedLeastSquaresModel(x, intercept)
   }
 
+  /**
+   * Solves a symmetric positive definite linear system via Cholesky factorization.
+   * The input arguments are modified in-place to store the factorization and the solution.
+   * @param A the upper triangular part of A
+   * @param bx right-hand side
+   * @return the solution vector
+   */
   private def choleskySolve(A: Array[Double], bx: DenseVector): DenseVector = {
     val k = bx.size
     val info = new intW(0)
@@ -100,22 +137,31 @@ private[ml] class WeightedLeastSquares(
 
 private[ml] object WeightedLeastSquares {
 
+  /**
+   * Case class for weighted observations.
+   * @param w weight, must be positive
+   * @param a features
+   * @param b label
+   */
   case class Instance(w: Double, a: Vector, b: Double) {
     require(w >= 0.0, s"Weight cannot be negative: $w.")
   }
 
+  /**
+   * Aggregator to provide necessary summary statistics for solving [[WeightedLeastSquares]].
+   */
   private class Aggregator extends Serializable {
     var initialized: Boolean = false
     var k: Int = _
     var count: Long = _
     var triK: Int = _
-    var wSum: Double = _
-    var wwSum: Double = _
-    var bSum: Double = _
-    var bbSum: Double = _
-    var aSum: DenseVector = _
-    var abSum: DenseVector = _
-    var aaSum: DenseVector = _
+    private var wSum: Double = _
+    private var wwSum: Double = _
+    private var bSum: Double = _
+    private var bbSum: Double = _
+    private var aSum: DenseVector = _
+    private var abSum: DenseVector = _
+    private var aaSum: DenseVector = _
 
     private def init(k: Int): Unit = {
       require(k <= 4096, "In order to take the normal equation approach efficiently, " +
@@ -133,6 +179,9 @@ private[ml] object WeightedLeastSquares {
       initialized = true
     }
 
+    /**
+     * Adds an instance.
+     */
     def add(instance: Instance): this.type = {
       val Instance(w, a, b) = instance
       val ak = a.size
@@ -152,6 +201,9 @@ private[ml] object WeightedLeastSquares {
       this
     }
 
+    /**
+     * Merges another [[Aggregator]].
+     */
     def merge(other: Aggregator): this.type = {
       if (!other.initialized) {
         this
@@ -172,28 +224,54 @@ private[ml] object WeightedLeastSquares {
       }
     }
 
+    /**
+     * Validates that we have seen observations.
+     */
+    def validate(): Unit = {
+      assert(initialized, "Training dataset is empty.")
+      assert(wSum > 0.0, "Sum of weights cannot be zero.")
+    }
+
+    /**
+     * Weighted mean of features.
+     */
     def aBar: DenseVector = {
       val output = aSum.copy
       BLAS.scal(1.0 / wSum, output)
       output
     }
 
+    /**
+     * Weighted mean of labels.
+     */
     def bBar: Double = bSum / wSum
 
-    def bVar: Double = bbSum / wSum - bBar * bBar
+    /**
+     * Weighted population standard deviation of labels.
+     */
+    def bStd: Double = math.sqrt(bbSum / wSum - bBar * bBar)
 
+    /**
+     * Weighted mean of (label * features).
+     */
     def abBar: DenseVector = {
       val output = abSum.copy
       BLAS.scal(1.0 / wSum, output)
       output
     }
 
+    /**
+     * Weighted mean of (features * features^T^).
+     */
     def aaBar: DenseVector = {
       val output = aaSum.copy
       BLAS.scal(1.0 / wSum, output)
       output
     }
 
+    /**
+     * Weighted population variance of features.
+     */
     def aVar: DenseVector = {
       val variance = Array.ofDim[Double](k)
       var i = 0
@@ -201,14 +279,12 @@ private[ml] object WeightedLeastSquares {
       val aaValues = aaSum.values
       while (i < triK) {
         val l = j - 2
-        variance(l) = wSum * aaValues(i) - aSum(l) * aSum(l)
+        val aw = aSum(l) / wSum
+        variance(l) = aaValues(i) / wSum - aw * aw
         i += j
         j += 1
       }
-      val output = new DenseVector(variance)
-      // correct bias
-      BLAS.scal(1.0 / (wSum * wSum), output)
-      output
+      new DenseVector(variance)
     }
   }
 }

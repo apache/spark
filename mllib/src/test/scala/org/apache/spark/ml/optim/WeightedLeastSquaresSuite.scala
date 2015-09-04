@@ -30,6 +30,13 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
 
   override def beforeAll(): Unit = {
     super.beforeAll()
+    /*
+       R code:
+
+A <- matrix(c(0, 1, 2, 3, 5, 7, 11, 13), 4, 2)
+b <- c(17, 19, 23, 29)
+w <- c(1, 2, 3, 4)
+     */
     instances = sc.parallelize(Seq(
       Instance(1.0, Vectors.dense(0.0, 5.0).toSparse, 17.0),
       Instance(2.0, Vectors.dense(1.0, 7.0), 19.0),
@@ -38,15 +45,40 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
     ), 2)
   }
 
+  test("WLS against lm") {
+    /*
+       R code:
+
+df <- as.data.frame(cbind(A, b))
+for (formula in c(b ~ . -1, b ~ .)) {
+  model <- lm(formula, data=df, weights=w)
+  print(as.vector(coef(model)))
+}
+
+[1] -3.727121  3.009983
+[1] 18.08  6.08 -0.60
+     */
+
+    val expected = Seq(
+      Vectors.dense(0.0, -3.727121, 3.009983),
+      Vectors.dense(18.08, 6.08, -0.60))
+
+    var idx = 0
+    for (fitIntercept <- Seq(false, true)) {
+      val wls = new WeightedLeastSquares(
+        fitIntercept, regParam = 0.0, standardizeFeatures = false, standardizeLabel = false)
+        .fit(instances)
+      val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
+      assert(actual ~== expected(idx) absTol 1e-4)
+      idx += 1
+    }
+  }
+
   test("WLS against glmnet") {
     /*
        R code:
 
 library(glmnet)
-
-A <- matrix(c(0, 1, 2, 3, 5, 7, 11, 13), 4, 2)
-b <- c(17, 19, 23, 29)
-w <- c(1, 2, 3, 4)
 
 for (intercept in c(FALSE, TRUE)) {
   for (lambda in c(0.0, 0.1, 1.0)) {
@@ -89,11 +121,11 @@ for (intercept in c(FALSE, TRUE)) {
     var idx = 0
     for (fitIntercept <- Seq(false, true);
          regParam <- Seq(0.0, 0.1, 1.0);
-         standardization <- Seq(false, true)) {
-      val wls = new WeightedLeastSquares(fitIntercept, regParam, standardization)
+         standardizeFeatures <- Seq(false, true)) {
+      val wls = new WeightedLeastSquares(
+        fitIntercept, regParam, standardizeFeatures, standardizeLabel = true)
         .fit(instances)
       val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
-      // println(actual, expected(idx))
       assert(actual ~== expected(idx) absTol 1e-4)
       idx += 1
     }
