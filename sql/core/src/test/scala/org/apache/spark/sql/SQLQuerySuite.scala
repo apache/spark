@@ -1001,20 +1001,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         TestSQLContext.overrideConfs(key) === value,
         s"The value of $key should be ${TestSQLContext.overrideConfs(key)} instead of $value.")
     }
+    val overrideConfs = sql("SET").collect()
 
     // "set key=val"
     sql(s"SET $testKey=$testVal")
     checkAnswer(
       sql("SET"),
-      Row(testKey, testVal)
+      overrideConfs ++ Seq(Row(testKey, testVal))
     )
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     checkAnswer(
       sql("set"),
-      Seq(
-        Row(testKey, testVal),
-        Row(testKey + testKey, testVal + testVal))
+      overrideConfs ++ Seq(Row(testKey, testVal), Row(testKey + testKey, testVal + testVal))
     )
 
     // "set key"
