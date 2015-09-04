@@ -92,6 +92,7 @@ private[spark] object BLAS extends Serializable with Logging {
     }
   }
 
+  /** Y += a * x */
   private[spark] def axpy(a: Double, X: DenseMatrix, Y: DenseMatrix): Unit = {
     require(X.numRows == Y.numRows && X.numCols == Y.numCols, "Dimension mismatch: " +
       s"size(X) = ${(X.numRows, X.numCols)} but size(Y) = ${(Y.numRows, Y.numCols)}.")

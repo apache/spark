@@ -40,7 +40,7 @@ private[ml] class WeightedLeastSquaresModel(
  * formulation:
  *
  * min,,x,z,, 1/2 sum,,i,, w,,i,, (a,,i,,^T^ x + z - b,,i,,)^2^ / sum,,i,, w_i
- *   + 1/2 lambda delta sum,,j,, (sigma,,j,, x,,j,,)^2^,
+ *   + 1/2 lambda / delta sum,,j,, (sigma,,j,, x,,j,,)^2^,
  *
  * where lambda is the regularization parameter, and delta and sigma,,j,, are controlled by
  * [[standardizeLabel]] and [[standardizeFeatures]], respectively.
@@ -86,7 +86,10 @@ private[ml] class WeightedLeastSquares(
     val aaValues = aaBar.values
 
     if (fitIntercept) {
+      // shift centers
+      // A^T A - aBar aBar^T
       RowMatrix.dspr(-1.0, aBar, aaValues)
+      // A^T b - bBar aBar
       BLAS.axpy(-bBar, aBar, abBar)
     }
 
@@ -94,14 +97,15 @@ private[ml] class WeightedLeastSquares(
     var i = 0
     var j = 2
     while (i < triK) {
-      var scale = 1.0
+      var lambda = regParam
       if (standardizeFeatures) {
-        scale *= aVar(j - 2)
+        lambda *= aVar(j - 2)
       }
       if (standardizeLabel) {
-        scale /= bStd
+        // TODO: handle the case when bStd = 0
+        lambda /= bStd
       }
-      aaValues(i) += scale * regParam
+      aaValues(i) += lambda
       i += j
       j += 1
     }
@@ -150,6 +154,7 @@ private[ml] object WeightedLeastSquares {
   /**
    * Aggregator to provide necessary summary statistics for solving [[WeightedLeastSquares]].
    */
+  // TODO: consolidate aggregates for summary statistics
   private class Aggregator extends Serializable {
     var initialized: Boolean = false
     var k: Int = _
@@ -173,9 +178,9 @@ private[ml] object WeightedLeastSquares {
       wwSum = 0.0
       bSum = 0.0
       bbSum = 0.0
-      aSum = DenseVector.zeros(k)
-      abSum = DenseVector.zeros(k)
-      aaSum = DenseVector.zeros(triK)
+      aSum = new DenseVector(Array.ofDim(k))
+      abSum = new DenseVector(Array.ofDim(k))
+      aaSum = new DenseVector(Array.ofDim(triK))
       initialized = true
     }
 

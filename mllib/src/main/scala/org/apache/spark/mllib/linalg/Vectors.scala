@@ -655,8 +655,6 @@ object DenseVector {
   /** Extracts the value array from a dense vector. */
   @Since("1.3.0")
   def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
-
-  def zeros(size: Int): DenseVector = new DenseVector(Array.ofDim(size))
 }
 
 /**
