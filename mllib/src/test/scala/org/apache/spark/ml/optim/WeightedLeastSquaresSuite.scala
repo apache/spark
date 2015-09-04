@@ -50,7 +50,7 @@ w <- c(1, 2, 3, 4)
 
 for (intercept in c(FALSE, TRUE)) {
   for (lambda in c(0.0, 0.1, 1.0)) {
-    for (standardize in c(FALSE)) {
+    for (standardize in c(FALSE, TRUE)) {
       model <- glmnet(A, b, weights=w, intercept=intercept, lambda=lambda, standardize=standardize,
                       alpha=0, thresh=1E-14)
       print(as.vector(coef(model)))
@@ -59,33 +59,43 @@ for (intercept in c(FALSE, TRUE)) {
 }
 
 [1]  0.000000 -3.727117  3.009982
+[1]  0.000000 -3.727117  3.009982
 [1]  0.000000 -3.307532  2.924206
+[1]  0.000000 -2.914790  2.840627
 [1]  0.000000 -1.526575  2.558158
+[1] 0.00000000 0.06984238 2.20488344
+[1] 18.0799727  6.0799832 -0.5999941
 [1] 18.0799727  6.0799832 -0.5999941
 [1] 13.5356178  3.2714044  0.3770744
+[1] 14.064629  3.565802  0.269593
 [1] 10.1238013  0.9708569  1.1475466
+[1] 13.1860638  2.1761382  0.6213134
      */
 
     val expected = Seq(
-      Vectors.dense(0.000000, -3.727117, 3.009982),
-      Vectors.dense(0.000000, -3.307532, 2.924206),
-      Vectors.dense(0.000000, -1.526575, 2.558158),
+      Vectors.dense(0.0, -3.727117, 3.009982),
+      Vectors.dense(0.0, -3.727117, 3.009982),
+      Vectors.dense(0.0, -3.307532, 2.924206),
+      Vectors.dense(0.0, -2.914790, 2.840627),
+      Vectors.dense(0.0, -1.526575, 2.558158),
+      Vectors.dense(0.0, 0.06984238, 2.20488344),
+      Vectors.dense(18.0799727, 6.0799832, -0.5999941),
       Vectors.dense(18.0799727, 6.0799832, -0.5999941),
       Vectors.dense(13.5356178, 3.2714044, 0.3770744),
-      Vectors.dense(10.1238013, 0.9708569, 1.1475466))
+      Vectors.dense(14.064629, 3.565802, 0.269593),
+      Vectors.dense(10.1238013, 0.9708569, 1.1475466),
+      Vectors.dense(13.1860638, 2.1761382, 0.6213134))
 
     var idx = 0
     for (fitIntercept <- Seq(false, true);
          regParam <- Seq(0.0, 0.1, 1.0);
-         standardization <- Seq(false)) {
+         standardization <- Seq(false, true)) {
       val wls = new WeightedLeastSquares(fitIntercept, regParam, standardization)
         .fit(instances)
       val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
-      println(actual, expected(idx))
-      // assert(actual ~== expected(idx) absTol 1e-2)
+      // println(actual, expected(idx))
+      assert(actual ~== expected(idx) absTol 1e-4)
       idx += 1
     }
-
-    assert(false)
   }
 }
