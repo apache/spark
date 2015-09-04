@@ -38,7 +38,7 @@ Currently **officialy** using Airflow:
 * Wooga
 * Xoom [[@gepser](https://github.com/gepser) & [@omarvides](https://github.com/omarvides)]
 * Yahoo!
-* [Jampp](https://github.com/jampphq)
+* [Jampp](https://github.com/jampp)
 
 ## Links 
 
