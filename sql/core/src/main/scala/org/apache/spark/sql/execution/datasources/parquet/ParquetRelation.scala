@@ -18,35 +18,37 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.net.URI
-import java.util.logging.{Level, Logger => JLogger}
+import java.util.logging.{Logger => JLogger}
 import java.util.{List => JList}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.{Failure, Try}
 
 import com.google.common.base.Objects
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.parquet.filter2.predicate.FilterApi
+import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.hadoop.util.ContextUtil
-import org.apache.parquet.hadoop.{ParquetOutputCommitter, ParquetRecordReader, _}
 import org.apache.parquet.schema.MessageType
-import org.apache.parquet.{Log => ParquetLog}
+import org.apache.parquet.{Log => ApacheParquetLog}
+import org.slf4j.bridge.SLF4JBridgeHandler
 
-import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.{SqlNewHadoopPartition, SqlNewHadoopRDD, RDD}
-import org.apache.spark.rdd.RDD._
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.rdd.{RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
 
 
 private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
@@ -80,8 +82,10 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
         //     `FileOutputCommitter.getWorkPath()`, which points to the base directory of all
         //     partitions in the case of dynamic partitioning.
         override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-          val uniqueWriteJobId = context.getConfiguration.get("spark.sql.sources.writeJobUUID")
-          val split = context.getTaskAttemptID.getTaskID.getId
+          val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+          val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+          val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
+          val split = taskAttemptId.getTaskID.getId
           new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
         }
       }
@@ -281,12 +285,18 @@ private[sql] class ParquetRelation(
     val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
     val followParquetFormatSpec = sqlContext.conf.followParquetFormatSpec
 
+    // Parquet row group size. We will use this value as the value for
+    // mapreduce.input.fileinputformat.split.minsize and mapred.min.split.size if the value
+    // of these flags are smaller than the parquet row group size.
+    val parquetBlockSize = ParquetOutputFormat.getLongBlockSize(broadcastedConf.value.value)
+
     // Create the function to set variable Parquet confs at both driver and executor side.
     val initLocalJobFuncOpt =
       ParquetRelation.initializeLocalJobFunc(
         requiredColumns,
         filters,
         dataSchema,
+        parquetBlockSize,
         useMetadataCache,
         parquetFilterPushDown,
         assumeBinaryIsString,
@@ -294,7 +304,8 @@ private[sql] class ParquetRelation(
         followParquetFormatSpec) _
 
     // Create the function to set input paths at the driver side.
-    val setInputPaths = ParquetRelation.initializeDriverSideJobFunc(inputFiles) _
+    val setInputPaths =
+      ParquetRelation.initializeDriverSideJobFunc(inputFiles, parquetBlockSize) _
 
     Utils.withDummyCallSite(sqlContext.sparkContext) {
       new SqlNewHadoopRDD(
@@ -328,7 +339,7 @@ private[sql] class ParquetRelation(
         override def getPartitions: Array[SparkPartition] = {
           val inputFormat = new ParquetInputFormat[InternalRow] {
             override def listStatus(jobContext: JobContext): JList[FileStatus] = {
-              if (cacheMetadata) cachedStatuses else super.listStatus(jobContext)
+              if (cacheMetadata) cachedStatuses.asJava else super.listStatus(jobContext)
             }
           }
 
@@ -336,7 +347,8 @@ private[sql] class ParquetRelation(
           val rawSplits = inputFormat.getSplits(jobContext)
 
           Array.tabulate[SparkPartition](rawSplits.size) { i =>
-            new SqlNewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
+            new SqlNewHadoopPartition(
+              id, i, rawSplits.get(i).asInstanceOf[InputSplit with Writable])
           }
         }
       }.asInstanceOf[RDD[Row]]  // type erasure hack to pass RDD[InternalRow] as RDD[Row]
@@ -482,11 +494,35 @@ private[sql] object ParquetRelation extends Logging {
   // internally.
   private[sql] val METASTORE_SCHEMA = "metastoreSchema"
 
+  /**
+   * If parquet's block size (row group size) setting is larger than the min split size,
+   * we use parquet's block size setting as the min split size. Otherwise, we will create
+   * tasks processing nothing (because a split does not cover the starting point of a
+   * parquet block). See https://issues.apache.org/jira/browse/SPARK-10143 for more information.
+   */
+  private def overrideMinSplitSize(parquetBlockSize: Long, conf: Configuration): Unit = {
+    val minSplitSize =
+      math.max(
+        conf.getLong("mapred.min.split.size", 0L),
+        conf.getLong("mapreduce.input.fileinputformat.split.minsize", 0L))
+    if (parquetBlockSize > minSplitSize) {
+      val message =
+        s"Parquet's block size (row group size) is larger than " +
+          s"mapred.min.split.size/mapreduce.input.fileinputformat.split.minsize. Setting " +
+          s"mapred.min.split.size and mapreduce.input.fileinputformat.split.minsize to " +
+          s"$parquetBlockSize."
+      logDebug(message)
+      conf.set("mapred.min.split.size", parquetBlockSize.toString)
+      conf.set("mapreduce.input.fileinputformat.split.minsize", parquetBlockSize.toString)
+    }
+  }
+
   /** This closure sets various Parquet configurations at both driver side and executor side. */
   private[parquet] def initializeLocalJobFunc(
       requiredColumns: Array[String],
       filters: Array[Filter],
       dataSchema: StructType,
+      parquetBlockSize: Long,
       useMetadataCache: Boolean,
       parquetFilterPushDown: Boolean,
       assumeBinaryIsString: Boolean,
@@ -522,16 +558,21 @@ private[sql] object ParquetRelation extends Logging {
     conf.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING.key, assumeBinaryIsString)
     conf.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key, assumeInt96IsTimestamp)
     conf.setBoolean(SQLConf.PARQUET_FOLLOW_PARQUET_FORMAT_SPEC.key, followParquetFormatSpec)
+
+    overrideMinSplitSize(parquetBlockSize, conf)
   }
 
   /** This closure sets input paths at the driver side. */
   private[parquet] def initializeDriverSideJobFunc(
-      inputFiles: Array[FileStatus])(job: Job): Unit = {
+      inputFiles: Array[FileStatus],
+      parquetBlockSize: Long)(job: Job): Unit = {
     // We side the input paths at the driver side.
     logInfo(s"Reading Parquet file(s) from ${inputFiles.map(_.getPath).mkString(", ")}")
     if (inputFiles.nonEmpty) {
       FileInputFormat.setInputPaths(job, inputFiles.map(_.getPath): _*)
     }
+
+    overrideMinSplitSize(parquetBlockSize, job.getConfiguration)
   }
 
   private[parquet] def readSchema(
@@ -551,7 +592,7 @@ private[sql] object ParquetRelation extends Logging {
       val metadata = footer.getParquetMetadata.getFileMetaData
       val serializedSchema = metadata
         .getKeyValueMetaData
-        .toMap
+        .asScala.toMap
         .get(CatalystReadSupport.SPARK_METADATA_KEY)
       if (serializedSchema.isEmpty) {
         // Falls back to Parquet schema if no Spark SQL schema found.
@@ -708,7 +749,7 @@ private[sql] object ParquetRelation extends Logging {
           // Reads footers in multi-threaded manner within each task
           val footers =
             ParquetFileReader.readAllFootersInParallel(
-              serializedConf.value, fakeFileStatuses, skipRowGroups)
+              serializedConf.value, fakeFileStatuses.asJava, skipRowGroups).asScala
 
           // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
           val converter =
@@ -735,7 +776,7 @@ private[sql] object ParquetRelation extends Logging {
     val fileMetaData = footer.getParquetMetadata.getFileMetaData
     fileMetaData
       .getKeyValueMetaData
-      .toMap
+      .asScala.toMap
       .get(CatalystReadSupport.SPARK_METADATA_KEY)
       .flatMap(deserializeSchemaString)
       .getOrElse(converter.convert(fileMetaData.getSchema))
@@ -759,38 +800,39 @@ private[sql] object ParquetRelation extends Logging {
     }.toOption
   }
 
-  def enableLogForwarding() {
-    // Note: the org.apache.parquet.Log class has a static initializer that
-    // sets the java.util.logging Logger for "org.apache.parquet". This
-    // checks first to see if there's any handlers already set
-    // and if not it creates them. If this method executes prior
-    // to that class being loaded then:
-    //  1) there's no handlers installed so there's none to
-    // remove. But when it IS finally loaded the desired affect
-    // of removing them is circumvented.
-    //  2) The parquet.Log static initializer calls setUseParentHandlers(false)
-    // undoing the attempt to override the logging here.
-    //
-    // Therefore we need to force the class to be loaded.
-    // This should really be resolved by Parquet.
-    Utils.classForName(classOf[ParquetLog].getName)
+  // JUL loggers must be held by a strong reference, otherwise they may get destroyed by GC.
+  // However, the root JUL logger used by Parquet isn't properly referenced.  Here we keep
+  // references to loggers in both parquet-mr <= 1.6 and >= 1.7
+  val apacheParquetLogger: JLogger = JLogger.getLogger(classOf[ApacheParquetLog].getPackage.getName)
+  val parquetLogger: JLogger = JLogger.getLogger("parquet")
 
-    // Note: Logger.getLogger("parquet") has a default logger
-    // that appends to Console which needs to be cleared.
-    val parquetLogger = JLogger.getLogger(classOf[ParquetLog].getPackage.getName)
-    parquetLogger.getHandlers.foreach(parquetLogger.removeHandler)
-    parquetLogger.setUseParentHandlers(true)
+  // Parquet initializes its own JUL logger in a static block which always prints to stdout.  Here
+  // we redirect the JUL logger via SLF4J JUL bridge handler.
+  val redirectParquetLogsViaSLF4J: Unit = {
+    def redirect(logger: JLogger): Unit = {
+      logger.getHandlers.foreach(logger.removeHandler)
+      logger.setUseParentHandlers(false)
+      logger.addHandler(new SLF4JBridgeHandler)
+    }
 
-    // Disables a WARN log message in ParquetOutputCommitter.  We first ensure that
-    // ParquetOutputCommitter is loaded and the static LOG field gets initialized.
-    // See https://issues.apache.org/jira/browse/SPARK-5968 for details
-    Utils.classForName(classOf[ParquetOutputCommitter].getName)
-    JLogger.getLogger(classOf[ParquetOutputCommitter].getName).setLevel(Level.OFF)
+    // For parquet-mr 1.7.0 and above versions, which are under `org.apache.parquet` namespace.
+    // scalastyle:off classforname
+    Class.forName(classOf[ApacheParquetLog].getName)
+    // scalastyle:on classforname
+    redirect(JLogger.getLogger(classOf[ApacheParquetLog].getPackage.getName))
 
-    // Similar as above, disables a unnecessary WARN log message in ParquetRecordReader.
-    // See https://issues.apache.org/jira/browse/PARQUET-220 for details
-    Utils.classForName(classOf[ParquetRecordReader[_]].getName)
-    JLogger.getLogger(classOf[ParquetRecordReader[_]].getName).setLevel(Level.OFF)
+    // For parquet-mr 1.6.0 and lower versions bundled with Hive, which are under `parquet`
+    // namespace.
+    try {
+      // scalastyle:off classforname
+      Class.forName("parquet.Log")
+      // scalastyle:on classforname
+      redirect(JLogger.getLogger("parquet"))
+    } catch { case _: Throwable =>
+      // SPARK-9974: com.twitter:parquet-hadoop-bundle:1.6.0 is not packaged into the assembly jar
+      // when Spark is built with SBT. So `parquet.Log` may not be found.  This try/catch block
+      // should be removed after this issue is fixed.
+    }
   }
 
   // The parquet compression short names

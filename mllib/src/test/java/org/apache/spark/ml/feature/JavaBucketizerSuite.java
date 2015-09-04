@@ -17,7 +17,8 @@
 
 package org.apache.spark.ml.feature;
 
-import com.google.common.collect.Lists;
+import java.util.Arrays;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -54,7 +55,7 @@ public class JavaBucketizerSuite {
   public void bucketizerTest() {
     double[] splits = {-0.5, 0.0, 0.5};
 
-    JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
+    JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
       RowFactory.create(-0.5),
       RowFactory.create(-0.3),
       RowFactory.create(0.0),

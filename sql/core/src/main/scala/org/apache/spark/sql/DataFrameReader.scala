@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Experimental
@@ -90,7 +92,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def options(options: java.util.Map[String, String]): DataFrameReader = {
-    this.options(scala.collection.JavaConversions.mapAsScalaMap(options))
+    this.options(options.asScala)
     this
   }
 
@@ -197,7 +199,13 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       table: String,
       parts: Array[Partition],
       connectionProperties: Properties): DataFrame = {
-    val relation = JDBCRelation(url, table, parts, connectionProperties)(sqlContext)
+    val props = new Properties()
+    extraOptions.foreach { case (key, value) =>
+      props.put(key, value)
+    }
+    // connectionProperties should override settings in extraOptions
+    props.putAll(connectionProperties)
+    val relation = JDBCRelation(url, table, parts, props)(sqlContext)
     sqlContext.baseRelationToDataFrame(relation)
   }
 

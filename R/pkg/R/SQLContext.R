@@ -201,7 +201,7 @@ setMethod("toDF", signature(x = "RDD"),
 
 jsonFile <- function(sqlContext, path) {
   # Allow the user to have a more flexible definiton of the text file path
-  path <- normalizePath(path)
+  path <- suppressWarnings(normalizePath(path))
   # Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse = ",")
   sdf <- callJMethod(sqlContext, "jsonFile", path)
@@ -251,7 +251,7 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
 # TODO: Implement saveasParquetFile and write examples for both
 parquetFile <- function(sqlContext, ...) {
   # Allow the user to have a more flexible definiton of the text file path
-  paths <- lapply(list(...), normalizePath)
+  paths <- lapply(list(...), function(x) suppressWarnings(normalizePath(x)))
   sdf <- callJMethod(sqlContext, "parquetFile", paths)
   dataFrame(sdf)
 }

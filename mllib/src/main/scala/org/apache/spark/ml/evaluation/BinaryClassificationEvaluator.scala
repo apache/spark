@@ -40,8 +40,11 @@ class BinaryClassificationEvaluator(override val uid: String)
    * param for metric name in evaluation
    * @group param
    */
-  val metricName: Param[String] = new Param(this, "metricName",
-    "metric name in evaluation (areaUnderROC|areaUnderPR)")
+  val metricName: Param[String] = {
+    val allowedParams = ParamValidators.inArray(Array("areaUnderROC", "areaUnderPR"))
+    new Param(
+      this, "metricName", "metric name in evaluation (areaUnderROC|areaUnderPR)", allowedParams)
+  }
 
   /** @group getParam */
   def getMetricName: String = $(metricName)
@@ -76,15 +79,16 @@ class BinaryClassificationEvaluator(override val uid: String)
       }
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
     val metric = $(metricName) match {
-      case "areaUnderROC" =>
-        metrics.areaUnderROC()
-      case "areaUnderPR" =>
-        metrics.areaUnderPR()
-      case other =>
-        throw new IllegalArgumentException(s"Does not support metric $other.")
+      case "areaUnderROC" => metrics.areaUnderROC()
+      case "areaUnderPR" => metrics.areaUnderPR()
     }
     metrics.unpersist()
     metric
+  }
+
+  override def isLargerBetter: Boolean = $(metricName) match {
+    case "areaUnderROC" => true
+    case "areaUnderPR" => true
   }
 
   override def copy(extra: ParamMap): BinaryClassificationEvaluator = defaultCopy(extra)

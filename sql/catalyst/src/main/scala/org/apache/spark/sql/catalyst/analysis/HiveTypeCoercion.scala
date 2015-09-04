@@ -203,6 +203,7 @@ object HiveTypeCoercion {
         planName: String,
         left: LogicalPlan,
         right: LogicalPlan): (LogicalPlan, LogicalPlan) = {
+      require(left.output.length == right.output.length)
 
       val castedTypes = left.output.zip(right.output).map {
         case (lhs, rhs) if lhs.dataType != rhs.dataType =>
@@ -229,15 +230,10 @@ object HiveTypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case p if p.analyzed => p
 
-      case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
-        val (newLeft, newRight) = widenOutputTypes(u.nodeName, left, right)
-        Union(newLeft, newRight)
-      case e @ Except(left, right) if e.childrenResolved && !e.resolved =>
-        val (newLeft, newRight) = widenOutputTypes(e.nodeName, left, right)
-        Except(newLeft, newRight)
-      case i @ Intersect(left, right) if i.childrenResolved && !i.resolved =>
-        val (newLeft, newRight) = widenOutputTypes(i.nodeName, left, right)
-        Intersect(newLeft, newRight)
+      case s @ SetOperation(left, right) if s.childrenResolved
+          && left.output.length == right.output.length && !s.resolved =>
+        val (newLeft, newRight) = widenOutputTypes(s.nodeName, left, right)
+        s.makeCopy(Array(newLeft, newRight))
     }
   }
 
@@ -371,8 +367,8 @@ object HiveTypeCoercion {
       DecimalType.bounded(range + scale, scale)
     }
 
-    private def changePrecision(e: Expression, dataType: DataType): Expression = {
-      ChangeDecimalPrecision(Cast(e, dataType))
+    private def promotePrecision(e: Expression, dataType: DataType): Expression = {
+      PromotePrecision(Cast(e, dataType))
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -383,36 +379,48 @@ object HiveTypeCoercion {
         case e if !e.childrenResolved => e
 
         // Skip nodes who is already promoted
-        case e: BinaryArithmetic if e.left.isInstanceOf[ChangeDecimalPrecision] => e
+        case e: BinaryArithmetic if e.left.isInstanceOf[PromotePrecision] => e
 
         case Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
           val dt = DecimalType.bounded(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
-          Add(changePrecision(e1, dt), changePrecision(e2, dt))
+          CheckOverflow(Add(promotePrecision(e1, dt), promotePrecision(e2, dt)), dt)
 
         case Subtract(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
           val dt = DecimalType.bounded(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
-          Subtract(changePrecision(e1, dt), changePrecision(e2, dt))
+          CheckOverflow(Subtract(promotePrecision(e1, dt), promotePrecision(e2, dt)), dt)
 
         case Multiply(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val dt = DecimalType.bounded(p1 + p2 + 1, s1 + s2)
-          Multiply(changePrecision(e1, dt), changePrecision(e2, dt))
+          val resultType = DecimalType.bounded(p1 + p2 + 1, s1 + s2)
+          val widerType = widerDecimalType(p1, s1, p2, s2)
+          CheckOverflow(Multiply(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
+            resultType)
 
         case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val dt = DecimalType.bounded(p1 - s1 + s2 + max(6, s1 + p2 + 1), max(6, s1 + p2 + 1))
-          Divide(changePrecision(e1, dt), changePrecision(e2, dt))
+          var intDig = min(DecimalType.MAX_SCALE, p1 - s1 + s2)
+          var decDig = min(DecimalType.MAX_SCALE, max(6, s1 + p2 + 1))
+          val diff = (intDig + decDig) - DecimalType.MAX_SCALE
+          if (diff > 0) {
+            decDig -= diff / 2 + 1
+            intDig = DecimalType.MAX_SCALE - decDig
+          }
+          val resultType = DecimalType.bounded(intDig + decDig, decDig)
+          val widerType = widerDecimalType(p1, s1, p2, s2)
+          CheckOverflow(Divide(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
+            resultType)
 
         case Remainder(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
           val resultType = DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
           // resultType may have lower precision, so we cast them into wider type first.
           val widerType = widerDecimalType(p1, s1, p2, s2)
-          Cast(Remainder(changePrecision(e1, widerType), changePrecision(e2, widerType)),
+          CheckOverflow(Remainder(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
             resultType)
 
         case Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
           val resultType = DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
           // resultType may have lower precision, so we cast them into wider type first.
           val widerType = widerDecimalType(p1, s1, p2, s2)
-          Cast(Pmod(changePrecision(e1, widerType), changePrecision(e2, widerType)), resultType)
+          CheckOverflow(Pmod(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
+            resultType)
 
         case b @ BinaryComparison(e1 @ DecimalType.Expression(p1, s1),
                                   e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
@@ -599,7 +607,7 @@ object HiveTypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case c: CaseWhenLike if c.childrenResolved && !c.valueTypesEqual =>
         logDebug(s"Input values for null casting ${c.valueTypes.mkString(",")}")
-        val maybeCommonType = findTightestCommonTypeAndPromoteToString(c.valueTypes)
+        val maybeCommonType = findWiderCommonType(c.valueTypes)
         maybeCommonType.map { commonType =>
           val castedBranches = c.branches.grouped(2).map {
             case Seq(when, value) if value.dataType != commonType =>
@@ -616,7 +624,7 @@ object HiveTypeCoercion {
 
       case c: CaseKeyWhen if c.childrenResolved && !c.resolved =>
         val maybeCommonType =
-          findTightestCommonTypeAndPromoteToString((c.key +: c.whenList).map(_.dataType))
+          findWiderCommonType((c.key +: c.whenList).map(_.dataType))
         maybeCommonType.map { commonType =>
           val castedBranches = c.branches.grouped(2).map {
             case Seq(whenExpr, thenExpr) if whenExpr.dataType != commonType =>
@@ -633,6 +641,7 @@ object HiveTypeCoercion {
    */
   object IfCoercion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      case e if !e.childrenResolved => e
       // Find tightest common type for If, if the true value and false value have different types.
       case i @ If(pred, left, right) if left.dataType != right.dataType =>
         findTightestCommonTypeToString(left.dataType, right.dataType).map { widestType =>

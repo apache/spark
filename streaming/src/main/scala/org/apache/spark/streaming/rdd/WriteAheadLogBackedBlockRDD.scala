@@ -75,7 +75,7 @@ private[streaming]
 class WriteAheadLogBackedBlockRDD[T: ClassTag](
     @transient sc: SparkContext,
     @transient blockIds: Array[BlockId],
-    @transient walRecordHandles: Array[WriteAheadLogRecordHandle],
+    @transient val walRecordHandles: Array[WriteAheadLogRecordHandle],
     @transient isBlockIdValid: Array[Boolean] = Array.empty,
     storeInBlockManager: Boolean = false,
     storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER)
