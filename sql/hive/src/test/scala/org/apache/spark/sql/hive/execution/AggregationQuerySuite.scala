@@ -65,7 +65,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     data2.write.saveAsTable("agg2")
 
     val emptyDF = sqlContext.createDataFrame(
-      sqlContext.sparkContext.emptyRDD[Row],
+      sparkContext.emptyRDD[Row],
       StructType(StructField("key", StringType) :: StructField("value", IntegerType) :: Nil))
     emptyDF.registerTempTable("emptyTable")
 

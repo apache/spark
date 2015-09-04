@@ -36,7 +36,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
 
   test("LongSQLMetric should not box Long") {
-    val l = SQLMetrics.createLongMetric(sqlContext.sparkContext, "long")
+    val l = SQLMetrics.createLongMetric(sparkContext, "long")
     val f = () => {
       l += 1L
       l.add(1L)
@@ -50,7 +50,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
 
   test("Normal accumulator should do boxing") {
     // We need this test to make sure BoxingFinder works.
-    val l = sqlContext.sparkContext.accumulator(0L)
+    val l = sparkContext.accumulator(0L)
     val f = () => { l += 1L }
     BoxingFinder.getClassReader(f.getClass).foreach { cl =>
       val boxingFinder = new BoxingFinder()
@@ -73,7 +73,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
     val previousExecutionIds = sqlContext.listener.executionIdToData.keySet
     df.collect()
-    sqlContext.sparkContext.listenerBus.waitUntilEmpty(10000)
+    sparkContext.listenerBus.waitUntilEmpty(10000)
     val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
     assert(executionIds.size === 1)
     val executionId = executionIds.head
@@ -478,7 +478,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       // Assume the execution plan is
       // PhysicalRDD(nodeId = 0)
       person.select('name).write.format("json").save(file.getAbsolutePath)
-      sqlContext.sparkContext.listenerBus.waitUntilEmpty(10000)
+      sparkContext.listenerBus.waitUntilEmpty(10000)
       val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
       assert(executionIds.size === 1)
       val executionId = executionIds.head

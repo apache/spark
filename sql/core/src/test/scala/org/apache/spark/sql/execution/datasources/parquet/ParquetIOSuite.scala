@@ -101,7 +101,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
   test("fixed-length decimals") {
     def makeDecimalRDD(decimal: DecimalType): DataFrame =
-      sqlContext.sparkContext
+      sparkContext
         .parallelize(0 to 1000)
         .map(i => Tuple1(i / 100.0))
         .toDF()
@@ -119,7 +119,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
   test("date type") {
     def makeDateRDD(): DataFrame =
-      sqlContext.sparkContext
+      sparkContext
         .parallelize(0 to 1000)
         .map(i => Tuple1(DateTimeUtils.toJavaDate(i)))
         .toDF()
@@ -355,7 +355,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       val path = new Path(location.getCanonicalPath)
 
       ParquetFileWriter.writeMetadataFile(
-        sqlContext.sparkContext.hadoopConfiguration,
+        sparkContext.hadoopConfiguration,
         path,
         Collections.singletonList(
           new Footer(path, new ParquetMetadata(fileMetadata, Collections.emptyList()))))

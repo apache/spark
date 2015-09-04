@@ -60,7 +60,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-8005 input_file_name") {
     withTempPath { dir =>
-      val data = sqlContext.sparkContext.parallelize(0 to 10, 2).toDF("id")
+      val data = sparkContext.parallelize(0 to 10, 2).toDF("id")
       data.write.parquet(dir.getCanonicalPath)
       sqlContext.read.parquet(dir.getCanonicalPath).registerTempTable("test_table")
       val answer = sql("select input_file_name() from test_table").head().getString(0)
@@ -104,7 +104,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
   test("UDF in a WHERE") {
     sqlContext.udf.register("oneArgFilter", (n: Int) => { n > 80 })
 
-    val df = sqlContext.sparkContext.parallelize(
+    val df = sparkContext.parallelize(
       (1 to 100).map(i => TestData(i, i.toString))).toDF()
     df.registerTempTable("integerData")
 

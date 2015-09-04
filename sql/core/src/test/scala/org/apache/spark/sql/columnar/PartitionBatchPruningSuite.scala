@@ -33,7 +33,7 @@ class PartitionBatchPruningSuite extends SparkFunSuite with SharedSQLContext {
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
     sqlContext.setConf(SQLConf.COLUMN_BATCH_SIZE, 10)
 
-    val pruningData = sqlContext.sparkContext.makeRDD((1 to 100).map { key =>
+    val pruningData = sparkContext.makeRDD((1 to 100).map { key =>
       val string = if (((key - 1) / 10) % 2 == 0) null else key.toString
       TestData(key, string)
     }, 5).toDF()

@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
 
   private lazy val left = sqlContext.createDataFrame(
-    sqlContext.sparkContext.parallelize(Seq(
+    sparkContext.parallelize(Seq(
       Row(1, 2.0),
       Row(1, 2.0),
       Row(2, 1.0),
@@ -41,7 +41,7 @@ class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
     )), new StructType().add("a", IntegerType).add("b", DoubleType))
 
   private lazy val right = sqlContext.createDataFrame(
-    sqlContext.sparkContext.parallelize(Seq(
+    sparkContext.parallelize(Seq(
       Row(2, 3.0),
       Row(2, 3.0),
       Row(3, 2.0),

@@ -119,7 +119,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     val schema = StructType(List(StructField("d", DecimalType(18, 0), false),
       StructField("time", TimestampType, false)).toArray)
     withTempPath { file =>
-      val df = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(data), schema)
+      val df = sqlContext.createDataFrame(sparkContext.parallelize(data), schema)
       df.write.parquet(file.getCanonicalPath)
       val df2 = sqlContext.read.parquet(file.getCanonicalPath)
       checkAnswer(df2, df.collect().toSeq)
@@ -194,7 +194,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     withTempPath { dir =>
       val basePath = dir.getCanonicalPath
       val schema = StructType(Array(StructField("name", DecimalType(10, 5), false)))
-      val rowRDD = sqlContext.sparkContext.parallelize(Array(Row(Decimal("67123.45"))))
+      val rowRDD = sparkContext.parallelize(Array(Row(Decimal("67123.45"))))
       val df = sqlContext.createDataFrame(rowRDD, schema)
       df.write.parquet(basePath)
 

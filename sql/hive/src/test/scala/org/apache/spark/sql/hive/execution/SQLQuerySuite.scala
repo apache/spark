@@ -1140,8 +1140,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("specifying database name for a temporary table is not allowed") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val df =
-        sqlContext.sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
       df
         .write
         .format("parquet")

@@ -44,7 +44,7 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
   }
 
   def isMaterialized(rddId: Int): Boolean = {
-    sqlContext.sparkContext.env.blockManager.get(RDDBlockId(rddId, 0)).nonEmpty
+    sparkContext.env.blockManager.get(RDDBlockId(rddId, 0)).nonEmpty
   }
 
   test("withColumn doesn't invalidate cached dataframe") {
@@ -111,7 +111,7 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
 
   test("too big for memory") {
     val data = "*" * 1000
-    sqlContext.sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
+    sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
       .registerTempTable("bigData")
     sqlContext.table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
     assert(sqlContext.table("bigData").count() === 200000L)

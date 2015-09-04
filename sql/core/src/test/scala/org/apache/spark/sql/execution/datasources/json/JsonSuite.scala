@@ -573,7 +573,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val dir = Utils.createTempDir()
     dir.delete()
     val path = dir.getCanonicalFile.toURI.toString
-    sqlContext.sparkContext.parallelize(1 to 100)
+    sparkContext.parallelize(1 to 100)
       .map(i => s"""{"a": 1, "b": "str$i"}""").saveAsTextFile(path)
     val jsonDF = sqlContext.read.option("samplingRatio", "0.49").json(path)
 
@@ -1077,7 +1077,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     withTempPath(dir => {
       val path = dir.getCanonicalFile.toURI.toString
-      sqlContext.sparkContext.parallelize(1 to 100)
+      sparkContext.parallelize(1 to 100)
         .map(i => s"""{"a": 1, "b": "str$i"}""").saveAsTextFile(path)
 
       val d1 = ResolvedDataSource(
@@ -1138,14 +1138,14 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val d1 = new File(root, "d1=1")
       // root/dt=1/col1=abc
       val p1_col1 = makePartition(
-        sqlContext.sparkContext.parallelize(2 to 5).map(i => s"""{"a": 1, "b": "str$i"}"""),
+        sparkContext.parallelize(2 to 5).map(i => s"""{"a": 1, "b": "str$i"}"""),
         d1,
         "col1",
         "abc")
 
       // root/dt=1/col1=abd
       val p2 = makePartition(
-        sqlContext.sparkContext.parallelize(6 to 10).map(i => s"""{"a": 1, "b": "str$i"}"""),
+        sparkContext.parallelize(6 to 10).map(i => s"""{"a": 1, "b": "str$i"}"""),
         d1,
         "col1",
         "abd")

@@ -30,7 +30,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
   import testImplicits.localSeqToDataFrameHolder
 
   private lazy val myUpperCaseData = sqlContext.createDataFrame(
-    sqlContext.sparkContext.parallelize(Seq(
+    sparkContext.parallelize(Seq(
       Row(1, "A"),
       Row(2, "B"),
       Row(3, "C"),
@@ -41,7 +41,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     )), new StructType().add("N", IntegerType).add("L", StringType))
 
   private lazy val myLowerCaseData = sqlContext.createDataFrame(
-    sqlContext.sparkContext.parallelize(Seq(
+    sparkContext.parallelize(Seq(
       Row(1, "a"),
       Row(2, "b"),
       Row(3, "c"),

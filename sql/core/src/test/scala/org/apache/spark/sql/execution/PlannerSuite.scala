@@ -87,7 +87,7 @@ class PlannerSuite extends SharedSQLContext {
         } :+ StructField("key", IntegerType, true)
         val schema = StructType(fields)
         val row = Row.fromSeq(Seq.fill(fields.size)(null))
-        val rowRDD = sqlContext.sparkContext.parallelize(row :: Nil)
+        val rowRDD = sparkContext.parallelize(row :: Nil)
         sqlContext.createDataFrame(rowRDD, schema).registerTempTable("testLimit")
 
         val planned = sql(

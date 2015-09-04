@@ -39,7 +39,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("default size avoids broadcast") {
     // TODO: Improve this test when we have better statistics
-    sqlContext.sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
+    sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
       .toDF().registerTempTable("sizeTst")
     sqlContext.cacheTable("sizeTst")
     assert(
@@ -157,7 +157,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
     // Create a RDD for the schema
     val rdd =
-      sqlContext.sparkContext.parallelize((1 to 100), 10).map { i =>
+      sparkContext.parallelize((1 to 100), 10).map { i =>
         Row(
           s"str${i}: test cache.",
           s"binary${i}: test cache.".getBytes("UTF-8"),

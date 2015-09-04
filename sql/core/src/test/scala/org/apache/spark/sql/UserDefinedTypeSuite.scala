@@ -148,7 +148,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext {
       StructField("vec", new MyDenseVectorUDT, false)
     ))
 
-    val stringRDD = sqlContext.sparkContext.parallelize(data)
+    val stringRDD = sparkContext.parallelize(data)
     val jsonRDD = sqlContext.read.schema(schema).json(stringRDD)
     checkAnswer(
       jsonRDD,

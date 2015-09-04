@@ -65,8 +65,7 @@ class TungstenSortSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("sorting updates peak execution memory") {
-    val sc = sqlContext.sparkContext
-    AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "unsafe external sort") {
+    AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "unsafe external sort") {
       checkThatPlansAgree(
         (1 to 100).map(v => Tuple1(v)).toDF("a"),
         (child: SparkPlan) => TungstenSort('a.asc :: Nil, true, child),
@@ -85,7 +84,7 @@ class TungstenSortSuite extends SparkPlanTest with SharedSQLContext {
     test(s"sorting on $dataType with nullable=$nullable, sortOrder=$sortOrder") {
       val inputData = Seq.fill(1000)(randomDataGenerator())
       val inputDf = sqlContext.createDataFrame(
-        sqlContext.sparkContext.parallelize(Random.shuffle(inputData).map(v => Row(v))),
+        sparkContext.parallelize(Random.shuffle(inputData).map(v => Row(v))),
         StructType(StructField("a", dataType, nullable = true) :: Nil)
       )
       assert(TungstenSort.supportsSchema(inputDf.schema))
