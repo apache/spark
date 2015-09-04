@@ -253,18 +253,21 @@ case class Min(child: Expression) extends AlgebraicAggregate {
 case class Stddev(child: Expression) extends StddevAgg(child) {
 
   override def isSample: Boolean = true
+  override def prettyName: String = "stddev"
 }
 
 // Compute the population standard deviation of a column
 case class StddevPop(child: Expression) extends StddevAgg(child) {
 
   override def isSample: Boolean = false
+  override def prettyName: String = "stddev_pop"
 }
 
 // Compute the sample standard deviation of a column
 case class StddevSamp(child: Expression) extends StddevAgg(child) {
 
   override def isSample: Boolean = true
+  override def prettyName: String = "stddev_samp"
 }
 
 // Compute standard deviation based on online algorithm specified here:
@@ -362,11 +365,15 @@ abstract class StddevAgg(child: Expression) extends AlgebraicAggregate {
     }
 
     Seq(
-      /* preCount = */ currentCount.left,
-      /* currentCount = */ countMerge,
-      /* preAvg = */ currentAvg.left,
-      /* currentAvg = */ avgMerge,
-      /* currentMk = */ mkMerge
+      /* preCount = */ If(IsNull(currentCount.left),
+                         Cast(Literal(0), resultType), currentCount.left),
+      /* currentCount = */ If(IsNull(currentCount.left), currentCount.right,
+                             If(IsNull(currentCount.right), currentCount.left, countMerge)),
+      /* preAvg = */ If(IsNull(currentAvg.left), Cast(Literal(0), resultType), currentAvg.left),
+      /* currentAvg = */ If(IsNull(currentAvg.left), currentAvg.right,
+                           If(IsNull(currentAvg.right), currentAvg.left, avgMerge)),
+      /* currentMk = */ If(IsNull(currentMk.left), currentMk.right,
+                          If(IsNull(currentMk.right), currentMk.left, mkMerge))
     )
   }
 
