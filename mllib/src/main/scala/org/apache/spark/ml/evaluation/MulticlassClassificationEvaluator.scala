@@ -38,7 +38,6 @@ class MulticlassClassificationEvaluator (override val uid: String)
   /**
    * param for metric name in evaluation (supports `"f1"` (default), `"precision"`, `"recall"`,
    * `"weightedPrecision"`, `"weightedRecall"`)
-   * Default: f1
    * @group param
    */
   val metricName: Param[String] = {

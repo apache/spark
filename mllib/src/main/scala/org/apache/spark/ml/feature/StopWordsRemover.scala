@@ -98,7 +98,7 @@ class StopWordsRemover(override val uid: String)
 
   /**
    * the stop words set to be filtered out
-   * Default: StopWords.English
+   * Default: [[StopWords.English]]
    * @group param
    */
   val stopWords: StringArrayParam = new StringArrayParam(this, "stopWords", "stop words")
