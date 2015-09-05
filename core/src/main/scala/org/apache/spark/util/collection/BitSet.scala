@@ -33,7 +33,7 @@ class BitSet(numBits: Int) extends Serializable {
   def capacity: Int = numWords * 64
 
   /**
-   * Clear all setted bits.
+   * Clear all set bits.
    */
   def clear(): Unit = {
     var i = 0

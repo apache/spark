@@ -75,7 +75,7 @@ case class SortMergeOuterJoin(
     // For left and right outer joins, the output is ordered by the streamed input's join keys.
     case LeftOuter => requiredOrders(leftKeys)
     case RightOuter => requiredOrders(rightKeys)
-    // there are null rows between each stream, so there is no order
+    // there are null rows in both streams, so there is no order
     case FullOuter => Nil
     case x => throw new IllegalArgumentException(
       s"SortMergeOuterJoin should not take $x as the JoinType")
@@ -174,7 +174,7 @@ case class SortMergeOuterJoin(
         case FullOuter =>
           val leftNullRow = new GenericInternalRow(left.output.length)
           val rightNullRow = new GenericInternalRow(right.output.length)
-          val smjScanner = new SortMergeFullJoinScanner(
+          val smjScanner = new SortMergeFullOuterJoinScanner(
             leftKeyGenerator = createLeftKeyGenerator(),
             rightKeyGenerator = createRightKeyGenerator(),
             keyOrdering,
@@ -298,7 +298,7 @@ private class RightOuterIterator(
   override def getRow: InternalRow = resultProj(joinedRow)
 }
 
-private class SortMergeFullJoinScanner(
+private class SortMergeFullOuterJoinScanner(
     leftKeyGenerator: Projection,
     rightKeyGenerator: Projection,
     keyOrdering: Ordering[InternalRow],
@@ -362,11 +362,13 @@ private class SortMergeFullJoinScanner(
   }
 
   /**
-   * Consume rows from both iterators until their key are different than matchingKey.
+   * Consume rows from both iterators until their keys are different from the provided matchingKey.
    */
   private def findMatchingRows(matchingKey: InternalRow): Unit = {
     leftMatches.clear()
     rightMatches.clear()
+    leftIndex = 0
+    rightIndex = 0
 
     while (leftRowKey != null && keyOrdering.compare(leftRowKey, matchingKey) == 0) {
       leftMatches += leftRow.copy()
@@ -376,13 +378,6 @@ private class SortMergeFullJoinScanner(
       rightMatches += rightRow.copy()
       advancedRight()
     }
-
-    // Adding a null row at lat, in case that they can't matching any rows
-    leftMatches += leftNullRow
-    rightMatches += rightNullRow
-
-    leftIndex = 0
-    rightIndex = 0
 
     if (leftMatches.size <= leftMatched.capacity) {
       leftMatched.clear()
@@ -394,52 +389,43 @@ private class SortMergeFullJoinScanner(
     } else {
       rightMatched = new BitSet(rightMatches.size)
     }
-    // the last null row should not join another null row
-    leftMatched.set(leftMatches.size - 1)
-    rightMatched.set(rightMatches.size - 1)
-  }
-
-
-  /**
-   * Check whether the current two rows can match the condition or not.
-   *
-   * If a row has not match other rows, it can match the last null row from the other side.
-   */
-  private def validMatch(): Boolean = {
-    ((leftIndex < leftMatches.size - 1 && rightIndex < rightMatches.size - 1
-      && boundCondition(joinedRow))
-      || !leftMatched.get(leftIndex) && rightIndex == rightMatches.size - 1
-      || leftIndex == leftMatches.size - 1 && !rightMatched.get(rightIndex))
   }
 
   /**
    * Scan for next matching rows in buffers of both sides.
    * @return true if next row(s) are found and false otherwise.
-   *
-   * TODO(davies): a faster version for emtpy condition
    */
   private def scanNextInBuffered(): Boolean = {
-    joinedRow(leftMatches(leftIndex), rightMatches(rightIndex))
-    while (!validMatch()) {
-      rightIndex += 1
-      if (rightIndex == rightMatches.size) {
-        leftIndex += 1
-        if (leftIndex == leftMatches.size) {
-          return false
-        }
-        rightIndex = 0
+    while (leftIndex < leftMatches.size) {
+      while (rightIndex < rightMatches.size
+        && !boundCondition(joinedRow(leftMatches(leftIndex), rightMatches(rightIndex)))) {
+        rightIndex += 1
       }
-      joinedRow(leftMatches(leftIndex), rightMatches(rightIndex))
-    }
-    // it's safe to mark last null row as matched
-    leftMatched.set(leftIndex)
-    rightMatched.set(rightIndex)
-    rightIndex += 1
-    if (rightIndex == rightMatches.size) {
+      if (rightIndex < rightMatches.size) {
+        // matched with condition
+        leftMatched.set(leftIndex)
+        rightMatched.set(rightIndex)
+        rightIndex += 1
+        return true
+      }
       leftIndex += 1
       rightIndex = 0
+      if (!leftMatched.get(leftIndex - 1)) {
+        joinedRow(leftMatches(leftIndex - 1), rightNullRow)
+        return true
+      }
     }
-    true
+
+    while (rightIndex < rightMatches.size && rightMatched.get(rightIndex)) {
+      rightIndex += 1
+    }
+    if (rightIndex < rightMatches.size) {
+      joinedRow(leftNullRow, rightMatches(rightIndex))
+      rightIndex += 1
+      true
+    } else {
+      false
+    }
   }
 
   // --- Public methods --------------------------------------------------------------------------
@@ -448,7 +434,7 @@ private class SortMergeFullJoinScanner(
 
   def advanceNext(): Boolean = {
     // We already buffered some matching rows, use them directly
-    if (leftIndex < leftMatches.size) {
+    if (leftIndex <= leftMatches.size || rightIndex <= rightMatches.size) {
       if (scanNextInBuffered()) {
         return true
       }
@@ -483,7 +469,7 @@ private class SortMergeFullJoinScanner(
 }
 
 private class FullOuterIterator(
-    smjScanner: SortMergeFullJoinScanner,
+    smjScanner: SortMergeFullOuterJoinScanner,
     resultProj: InternalRow => InternalRow,
     numRows: LongSQLMetric
   ) extends RowIterator {
