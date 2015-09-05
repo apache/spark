@@ -33,9 +33,9 @@ import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkCon
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
-    with LocalSparkContext
-    with MockitoSugar
-    with BeforeAndAfter {
+  with LocalSparkContext
+  with MockitoSugar
+  with BeforeAndAfter {
 
   private def createOffer(offerId: String, slaveId: String, mem: Int, cpu: Int): Offer = {
     val builder = Offer.newBuilder()
@@ -57,8 +57,8 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
   }
 
   private def createSchedulerBackend(
-      taskScheduler: TaskSchedulerImpl,
-      driver: SchedulerDriver): CoarseMesosSchedulerBackend = {
+                                      taskScheduler: TaskSchedulerImpl,
+                                      driver: SchedulerDriver): CoarseMesosSchedulerBackend = {
     val securityManager = mock[SecurityManager]
     val backend = new CoarseMesosSchedulerBackend(taskScheduler, sc, "master", securityManager) {
       override protected def createSchedulerDriver(

@@ -54,8 +54,8 @@ private[spark] class CoarseMesosSchedulerBackend(
     master: String,
     securityManager: SecurityManager)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
-  with MScheduler
-  with MesosSchedulerUtils {
+    with MScheduler
+    with MesosSchedulerUtils {
 
   val MAX_SLAVE_FAILURES = 2     // Blacklist a slave after this many failures
 
@@ -192,11 +192,11 @@ private[spark] class CoarseMesosSchedulerBackend(
       command.setValue(
         "%s \"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend"
           .format(prefixEnv, runScript) +
-        s" --driver-url $driverURL" +
-        s" --executor-id ${offer.getSlaveId.getValue}" +
-        s" --hostname ${offer.getHostname}" +
-        s" --cores $numCores" +
-        s" --app-id $appId")
+          s" --driver-url $driverURL" +
+          s" --executor-id ${offer.getSlaveId.getValue}" +
+          s" --hostname ${offer.getHostname}" +
+          s" --cores $numCores" +
+          s" --app-id $appId")
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
@@ -204,12 +204,12 @@ private[spark] class CoarseMesosSchedulerBackend(
       val executorId = sparkExecutorId(offer.getSlaveId.getValue, taskId.toString)
       command.setValue(
         s"cd $basename*; $prefixEnv " +
-         "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend" +
-        s" --driver-url $driverURL" +
-        s" --executor-id $executorId" +
-        s" --hostname ${offer.getHostname}" +
-        s" --cores $numCores" +
-        s" --app-id $appId")
+          "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend" +
+          s" --driver-url $driverURL" +
+          s" --executor-id $executorId" +
+          s" --hostname ${offer.getHostname}" +
+          s" --cores $numCores" +
+          s" --app-id $appId")
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get))
     }
 
@@ -271,11 +271,11 @@ private[spark] class CoarseMesosSchedulerBackend(
         val id = offer.getId.getValue
         if (meetsConstraints) {
           if (taskIdToSlaveId.size < executorLimit &&
-              totalCoresAcquired < maxCores &&
-              mem >= calculateTotalMemory(sc) &&
-              cpus >= 1 &&
-              failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
-              !slaveIdsWithExecutors.contains(slaveId)) {
+            totalCoresAcquired < maxCores &&
+            mem >= calculateTotalMemory(sc) &&
+            cpus >= 1 &&
+            failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
+            !slaveIdsWithExecutors.contains(slaveId)) {
             // Launch an executor on the slave
             val cpusToUse = math.min(cpus, maxCores - totalCoresAcquired)
             totalCoresAcquired += cpusToUse
@@ -316,7 +316,7 @@ private[spark] class CoarseMesosSchedulerBackend(
           // This offer does not meet constraints. We don't need to see it again.
           // Decline the offer for a long period of time.
           logDebug(s"Declining offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus"
-              + s" for $rejectOfferDurationForUnmetConstraints seconds")
+            + s" for $rejectOfferDurationForUnmetConstraints seconds")
           d.declineOffer(offer.getId, Filters.newBuilder()
             .setRefuseSeconds(rejectOfferDurationForUnmetConstraints).build())
         }
@@ -336,8 +336,8 @@ private[spark] class CoarseMesosSchedulerBackend(
       // this application when the driver exits. There is currently not a great way to detect
       // this through Mesos, since the shuffle services are set up independently.
       if (TaskState.fromMesos(state).equals(TaskState.RUNNING) &&
-          slaveIdToHost.contains(slaveId) &&
-          shuffleServiceEnabled) {
+        slaveIdToHost.contains(slaveId) &&
+        shuffleServiceEnabled) {
         assume(mesosExternalShuffleClient.isDefined,
           "External shuffle client was not instantiated even though shuffle service is enabled.")
         // TODO: Remove this and allow the MesosExternalShuffleService to detect
@@ -345,7 +345,7 @@ private[spark] class CoarseMesosSchedulerBackend(
         val externalShufflePort = conf.getInt("spark.shuffle.service.port", 7337)
         val hostname = slaveIdToHost.remove(slaveId).get
         logDebug(s"Connecting to shuffle service on slave $slaveId, " +
-            s"host $hostname, port $externalShufflePort for app ${conf.getAppId}")
+          s"host $hostname, port $externalShufflePort for app ${conf.getAppId}")
         mesosExternalShuffleClient.get
           .registerDriverWithShuffleService(hostname, externalShufflePort)
       }
@@ -364,7 +364,7 @@ private[spark] class CoarseMesosSchedulerBackend(
           failuresBySlaveId(slaveId) = failuresBySlaveId.getOrElse(slaveId, 0) + 1
           if (failuresBySlaveId(slaveId) >= MAX_SLAVE_FAILURES) {
             logInfo(s"Blacklisting Mesos slave $slaveId due to too many failures; " +
-                "is Spark installed on it?")
+              "is Spark installed on it?")
           }
         }
         executorTerminated(d, slaveId, s"Executor finished with state $state")
