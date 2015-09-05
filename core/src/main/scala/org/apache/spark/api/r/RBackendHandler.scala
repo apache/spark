@@ -184,7 +184,12 @@ private[r] class RBackendHandler(server: RBackend)
   }
 
   // Find a matching method in all methods of the same name of a class
-  // according to the passed arguments.
+  // according to the passed arguments. Arguments may be converted in
+  // order to match a method.
+  //
+  // Returns a two-element tuple. The first element is the index of
+  // the matched method in the list of the methods of the same name.
+  // The second element is the list of converted arguments.
   def matchMethod(
       parameterTypesOfMethods: Array[Array[Class[_]]],
       args: Array[Object]): (Option[Int], Array[Object]) = {
