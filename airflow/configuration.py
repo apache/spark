@@ -251,11 +251,11 @@ class ConfigParserWithDefaults(ConfigParser):
 
         # ...then the config file
         elif self.has_option(section, key):
-            return ConfigParser.get(self, section, key)
+            return expand_env_var(ConfigParser.get(self, section, key))
 
         # ...then the defaults
         elif section in d and key in d[section]:
-            return d[section][key]
+            return expand_env_var(d[section][key])
 
         else:
             raise AirflowConfigException(
