@@ -23,7 +23,7 @@ ID_LEN = models.ID_LEN
 
 # Setting up a statsd client if needed
 statsd = None
-if conf.get('scheduler', 'statsd_on'):
+if conf.getboolean('scheduler', 'statsd_on'):
     from statsd import StatsClient
     statsd = StatsClient(
         host=conf.get('scheduler', 'statsd_host'),
