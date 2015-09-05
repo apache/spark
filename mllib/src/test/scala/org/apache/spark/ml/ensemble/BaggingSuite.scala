@@ -36,7 +36,7 @@ class BaggingSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setNumModels(3)
 
     val baggedModel = bagging.fit(dataset)
-    baggedModel.transform(dataset).where("instanceId = 1").show()
+    baggedModel.transform(dataset)
   }
 
   test("bagging with linear regression") {
@@ -51,6 +51,6 @@ class BaggingSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setNumModels(3)
 
     val baggedModel = bagging.fit(dataset)
-    baggedModel.transform(dataset).where("instanceId = 1").show()
+    baggedModel.transform(dataset)
   }
 }

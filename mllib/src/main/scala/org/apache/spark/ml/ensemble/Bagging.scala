@@ -147,14 +147,11 @@ class BaggingModel[M <: Model[M] with HasPredictionCol] private[ml] (
       val toModelId = udf { (x: Any) => modelId }
       // cast is required because of erasure
       model.asInstanceOf[M].transform(numberedDataset)
-        .select(instanceIdCol, predictionCol)
         .withColumn(modelIdCol, toModelId(col(instanceIdCol)))
     }.reduce[DataFrame] { case (a: DataFrame, b: DataFrame) =>
       a.unionAll(b)
     }
-    models.head.transform(dataset).show()
-    predictions.where(s"$instanceIdCol = 1").show()
-    if (this.getIsClassifier) {
+    val aggregatedPrediction = if (this.getIsClassifier) {
       // counts number of models voting for each (instance, prediction) pair
       val predictionCounts = predictions
         .groupBy(instanceIdCol, predictionCol)
@@ -171,13 +168,13 @@ class BaggingModel[M <: Model[M] with HasPredictionCol] private[ml] (
       maxPredictionCounts
         .join(predictionCounts, Seq(instanceIdCol, predictionCountsCol))
         .drop(predictionCountsCol)
-        .drop(instanceIdCol)
     } else {
       predictions.groupBy(instanceIdCol)
         .agg(predictionCol -> "avg")
         .withColumnRenamed("avg(" + predictionCol + ")", predictionCol)
-        .drop(instanceIdCol)
     }
+
+    numberedDataset.join(aggregatedPrediction, instanceIdCol).drop(instanceIdCol)
   }
 
   override def transformSchema(schema: StructType): StructType = {
