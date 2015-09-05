@@ -30,7 +30,7 @@ def expand_env_var(env_var):
     any effect.
     """
     while True:
-        interpolated = os.path.expanduser(os.path.expandvars(env_var))
+        interpolated = os.path.expanduser(os.path.expandvars(str(env_var)))
         if interpolated == env_var:
             return interpolated
         else:
