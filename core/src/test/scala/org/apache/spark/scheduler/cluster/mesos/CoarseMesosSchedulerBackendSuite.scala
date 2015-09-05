@@ -93,6 +93,7 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
     val taskScheduler = mock[TaskSchedulerImpl]
     when(taskScheduler.sc).thenReturn(sc)
+    when(taskScheduler.CPUS_PER_TASK).thenReturn(sparkConf.getInt("spark.task.cpus", 1))
 
     sparkConf.set("spark.driver.host", "driverHost")
     sparkConf.set("spark.driver.port", "1234")
@@ -144,6 +145,7 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
     val taskScheduler = mock[TaskSchedulerImpl]
     when(taskScheduler.sc).thenReturn(sc)
+    when(taskScheduler.CPUS_PER_TASK).thenReturn(sparkConf.getInt("spark.task.cpus", 1))
 
     val backend = createSchedulerBackend(taskScheduler, driver)
     val minMem = backend.calculateTotalMemory(sc) + 1024
