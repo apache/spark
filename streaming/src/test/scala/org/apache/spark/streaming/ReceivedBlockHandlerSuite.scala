@@ -186,7 +186,7 @@ class ReceivedBlockHandlerSuite
   }
 
   test("Test Block - isFullyConsumed") {
-    val sparkConf = new SparkConf()
+    val sparkConf = new SparkConf().set("spark.app.id", "streaming-test")
     sparkConf.set("spark.storage.unrollMemoryThreshold", "512")
     // spark.storage.unrollFraction set to 0.4 for BlockManager
     sparkConf.set("spark.storage.unrollFraction", "0.4")
