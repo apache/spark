@@ -23,6 +23,20 @@ def generate_fernet_key():
     return FERNET_KEY
 
 
+def expand_env_var(env_var):
+    """
+    Expands (potentially nested) env vars by repeatedly applying
+    `expandvars` and `expanduser` until interpolation stops having
+    any effect.
+    """
+    while True:
+        interpolated = os.path.expanduser(os.path.expandvars(str(env_var)))
+        if interpolated == env_var:
+            return interpolated
+        else:
+            env_var = interpolated
+
+
 class AirflowConfigException(Exception):
     pass
 
@@ -239,15 +253,15 @@ class ConfigParserWithDefaults(ConfigParser):
         # must have format AIRFLOW__{SESTION}__{KEY} (note double underscore)
         env_var = 'AIRFLOW__{S}__{K}'.format(S=section.upper(), K=key.upper())
         if env_var in os.environ:
-            return os.environ[env_var]
+            return expand_env_var(os.environ[env_var])
 
         # ...then the config file
         elif self.has_option(section, key):
-            return ConfigParser.get(self, section, key)
+            return expand_env_var(ConfigParser.get(self, section, key))
 
         # ...then the defaults
         elif section in d and key in d[section]:
-            return d[section][key]
+            return expand_env_var(d[section][key])
 
         else:
             raise AirflowConfigException(
@@ -284,19 +298,19 @@ Setting AIRFLOW_HOME and AIRFLOW_CONFIG from environment variables, using
 """
 
 if 'AIRFLOW_HOME' not in os.environ:
-    AIRFLOW_HOME = os.path.expanduser('~/airflow')
+    AIRFLOW_HOME = expand_env_var('~/airflow')
 else:
-    AIRFLOW_HOME = os.path.expanduser(os.environ['AIRFLOW_HOME'])
+    AIRFLOW_HOME = expand_env_var(os.environ['AIRFLOW_HOME'])
 
 mkdir_p(AIRFLOW_HOME)
 
 if 'AIRFLOW_CONFIG' not in os.environ:
-    if os.path.isfile(os.path.expanduser('~/airflow.cfg')):
-        AIRFLOW_CONFIG = os.path.expanduser('~/airflow.cfg')
+    if os.path.isfile(expand_env_var('~/airflow.cfg')):
+        AIRFLOW_CONFIG = expand_env_var('~/airflow.cfg')
     else:
         AIRFLOW_CONFIG = AIRFLOW_HOME + '/airflow.cfg'
 else:
-    AIRFLOW_CONFIG = os.environ['AIRFLOW_CONFIG']
+    AIRFLOW_CONFIG = expand_env_var(os.environ['AIRFLOW_CONFIG'])
 
 if not os.path.isfile(AIRFLOW_CONFIG):
     """
