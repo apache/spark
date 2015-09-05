@@ -345,7 +345,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("replace column using withColumn") {
-    val df2 = sqlContext.sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
+    val df2 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
     val df3 = df2.withColumn("x", df2("x") + 1)
     checkAnswer(
       df3.select("x"),
@@ -506,7 +506,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("showString: truncate = [true, false]") {
     val longString = Array.fill(21)("1").mkString
-    val df = sqlContext.sparkContext.parallelize(Seq("1", longString)).toDF()
+    val df = sparkContext.parallelize(Seq("1", longString)).toDF()
     val expectedAnswerForFalse = """+---------------------+
                                    ||_1                   |
                                    |+---------------------+
@@ -596,7 +596,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("createDataFrame(RDD[Row], StructType) should convert UDTs (SPARK-6672)") {
-    val rowRDD = sqlContext.sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
+    val rowRDD = sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
     val schema = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
     val df = sqlContext.createDataFrame(rowRDD, schema)
     df.rdd.collect()
@@ -619,14 +619,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-7551: support backticks for DataFrame attribute resolution") {
-    val df = sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+    val df = sqlContext.read.json(sparkContext.makeRDD(
       """{"a.b": {"c": {"d..e": {"f": 1}}}}""" :: Nil))
     checkAnswer(
       df.select(df("`a.b`.c.`d..e`.`f`")),
       Row(1)
     )
 
-    val df2 = sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+    val df2 = sqlContext.read.json(sparkContext.makeRDD(
       """{"a  b": {"c": {"d  e": {"f": 1}}}}""" :: Nil))
     checkAnswer(
       df2.select(df2("`a  b`.c.d  e.f")),
@@ -646,7 +646,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-7324 dropDuplicates") {
-    val testData = sqlContext.sparkContext.parallelize(
+    val testData = sparkContext.parallelize(
       (2, 1, 2) :: (1, 1, 1) ::
       (1, 2, 1) :: (2, 1, 2) ::
       (2, 2, 2) :: (2, 2, 1) ::
@@ -869,7 +869,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-9323: DataFrame.orderBy should support nested column name") {
-    val df = sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+    val df = sqlContext.read.json(sparkContext.makeRDD(
       """{"a": {"b": 1}}""" :: Nil))
     checkAnswer(df.orderBy("a.b"), Row(Row(1)))
   }

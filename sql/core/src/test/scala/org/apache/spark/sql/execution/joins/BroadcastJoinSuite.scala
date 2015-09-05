@@ -33,8 +33,7 @@ import org.apache.spark.sql.{SQLConf, SQLContext, QueryTest}
  * without serializing the hashed relation, which does not happen in local mode.
  */
 class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
-  private var sc: SparkContext = null
-  private var sqlContext: SQLContext = null
+  protected var sqlContext: SQLContext = null
 
   /**
    * Create a new [[SQLContext]] running in local-cluster mode with unsafe and codegen enabled.
@@ -44,15 +43,14 @@ class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
     val conf = new SparkConf()
       .setMaster("local-cluster[2,1,1024]")
       .setAppName("testing")
-    sc = new SparkContext(conf)
+    val sc = new SparkContext(conf)
     sqlContext = new SQLContext(sc)
     sqlContext.setConf(SQLConf.UNSAFE_ENABLED, true)
     sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
   }
 
   override def afterAll(): Unit = {
-    sc.stop()
-    sc = null
+    sqlContext.sparkContext.stop()
     sqlContext = null
   }
 
@@ -60,7 +58,7 @@ class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
    * Test whether the specified broadcast join updates the peak execution memory accumulator.
    */
   private def testBroadcastJoin[T: ClassTag](name: String, joinType: String): Unit = {
-    AccumulatorSuite.verifyPeakExecutionMemorySet(sc, name) {
+    AccumulatorSuite.verifyPeakExecutionMemorySet(sqlContext.sparkContext, name) {
       val df1 = sqlContext.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value")
       val df2 = sqlContext.createDataFrame(Seq((1, "1"), (2, "2"))).toDF("key", "value")
       // Comparison at the end is for broadcast left semi join
