@@ -279,6 +279,38 @@ private[tree] class LearningNode(
     }
   }
 
+  /**
+   * Get the node corresponding to this data point.
+   * This function mimics prediction, passing an example from the root node down to a leaf
+   * or unsplit node; that node is returned.
+   *
+   * @param binnedFeatures  Binned feature vector for data point.
+   * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
+   */
+  def predictImpl(binnedFeatures: Array[Int], splits: Array[Array[Split]]): LearningNode = {
+    if (this.isLeaf || this.split.isEmpty) {
+      this
+    } else {
+      val split = this.split.get
+      val featureIndex = split.featureIndex
+      val splitLeft = split.shouldGoLeft(binnedFeatures(featureIndex), splits(featureIndex))
+      if (this.leftChild.isEmpty) {
+        // Not yet split. Return next layer of nodes to train
+        if (splitLeft) {
+          leftChild.get
+        } else {
+          rightChild.get
+        }
+      } else {
+        if (splitLeft) {
+          this.leftChild.get.predictImpl(binnedFeatures, splits)
+        } else {
+          this.rightChild.get.predictImpl(binnedFeatures, splits)
+        }
+      }
+    }
+  }
+
 }
 
 private[tree] object LearningNode {
