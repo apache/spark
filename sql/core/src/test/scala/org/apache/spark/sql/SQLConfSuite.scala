@@ -80,7 +80,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     val original = sqlContext.conf.numShufflePartitions
     try{
       sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
-      assert(ctx.conf.numShufflePartitions === 10)
+      assert(sqlContext.conf.numShufflePartitions === 10)
     } finally {
       sql(s"set ${SQLConf.SHUFFLE_PARTITIONS}=$original")
     }
