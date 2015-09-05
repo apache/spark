@@ -157,6 +157,8 @@ From the client, you can submit a job to Mesos cluster by running `spark-submit`
 to the url of the MesosClusterDispatcher (e.g: mesos://dispatcher:7077). You can view driver statuses on the
 Spark cluster Web UI.
 
+Note that jars or python files that are passed to spark-submit should be URIs reachable by Mesos slaves.
+
 # Mesos Run Modes
 
 Spark can run over Mesos in two modes: "fine-grained" (default) and "coarse-grained".
