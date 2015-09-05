@@ -1520,18 +1520,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           """.stripMargin),
       Row("4", 3) :: Row("1", 7) :: Row("3", 11) :: Row("2", 15) :: Nil)
 
-    Seq("1" -> 3, "2" -> 7, "2" -> 8, "3" -> 5, "3" -> 6, "3" -> 2, "4" -> 1, "4" -> 2,
-      "4" -> 3, "4" -> 4).toDF("a", "b").registerTempTable("orderByData2")
-
     checkAnswer(
       sql(
         """
-            |SELECT a, count(*)
-            |FROM orderByData2
+            |SELECT count(*)
+            |FROM orderByData
             |GROUP BY a
             |ORDER BY count(*)
           """.stripMargin),
-      Row("1", 1) :: Row("2", 2) :: Row("3", 3) :: Row("4", 4) :: Nil)
+      Row(2) :: Row(2) :: Row(2) :: Row(2) :: Nil)
   }
 
   test("SPARK-7952: fix the equality check between boolean and numeric types") {
