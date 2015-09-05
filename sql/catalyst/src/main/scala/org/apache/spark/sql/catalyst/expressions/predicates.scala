@@ -67,7 +67,7 @@ trait PredicateHelper {
 
   /**
    * Returns true if `expr` can be evaluated using only the output of `plan`.  This method
-   * can be used to determine when is is acceptable to move expression evaluation within a query
+   * can be used to determine when it is acceptable to move expression evaluation within a query
    * plan.
    *
    * For example consider a join between two relations R(a, b) and S(c, d).
