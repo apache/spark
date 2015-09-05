@@ -235,7 +235,7 @@ private[sql] case class InMemoryColumnarTableScan(
     case IsNotNull(a: Attribute) => statsFor(a).count - statsFor(a).nullCount > 0
   }
 
-  @transient val partitionFilters: Seq[Expression] = {
+  val partitionFilters: Seq[Expression] = {
     predicates.flatMap { p =>
       val filter = buildFilter.lift(p)
       val boundFilter =
@@ -268,15 +268,16 @@ private[sql] case class InMemoryColumnarTableScan(
       readBatches.setValue(0)
     }
 
-    val schemaIndex = relation.partitionStatistics.schema.zipWithIndex
+    val schema = relation.partitionStatistics.schema
+    val schemaIndex = schema.zipWithIndex
     val relOutput = relation.output
     val buffers = relation.cachedColumnBuffers
 
+    buffers.mapPartitions { cachedBatchIterator =>
     val partitionFilter = newPredicate(
       partitionFilters.reduceOption(And).getOrElse(Literal(true)),
-      relation.partitionStatistics.schema)
+      schema)
 
-    buffers.mapPartitions { cachedBatchIterator =>
       // Find the ordinals and data types of the requested columns.  If none are requested, use the
       // narrowest (the field with minimum default element size).
       val (requestedColumnIndices, requestedColumnDataTypes) = if (attributes.isEmpty) {
@@ -300,7 +301,7 @@ private[sql] case class InMemoryColumnarTableScan(
           // Build column accessors
           val columnAccessors = requestedColumnIndices.map { batchColumnIndex =>
             ColumnAccessor(
-              relation.output(batchColumnIndex).dataType,
+              relOutput(batchColumnIndex).dataType,
               ByteBuffer.wrap(cachedBatch.buffers(batchColumnIndex)))
           }
 
