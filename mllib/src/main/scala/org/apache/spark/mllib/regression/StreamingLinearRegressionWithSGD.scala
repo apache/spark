@@ -111,17 +111,4 @@ class StreamingLinearRegressionWithSGD private[mllib] (
     this.algorithm.optimizer.setConvergenceTol(tolerance)
     this
   }
-
-  override def setDecayFactor(decayFactor: Double): this.type = {
-    super.setDecayFactor(decayFactor)
-  }
-
-  override def setHalfLife(halfLife: Double): this.type = {
-    super.setHalfLife(halfLife)
-  }
-
-  override def setTimeUnit(timeUnit: TimeUnit): this.type = {
-    super.setTimeUnit(timeUnit)
-  }
-
 }

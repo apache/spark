@@ -27,12 +27,11 @@ import org.apache.spark.mllib.regression.StreamingDecay.{TimeUnit, BATCHES, POIN
  * forgetful update rule in [[StreamingLinearAlgorithm]];
  * The degree of forgetfulness can be specified by the decay factor
  * or the half life.
- *
  */
 @Experimental
 private[mllib] trait StreamingDecay extends Logging{
-  private[this] var decayFactor: Double = 0
-  private[this] var timeUnit: TimeUnit = BATCHES
+  private var decayFactor: Double = 0
+  private var timeUnit: TimeUnit = BATCHES
 
   /**
    * Set the decay factor for the forgetful algorithms.
@@ -43,7 +42,6 @@ private[mllib] trait StreamingDecay extends Logging{
    * decayFactor = 1: previous data have equal contribution to the model as the data arriving
    * at the next time unit.
    * decayFactor is default to 0.
-   *
    * @param decayFactor the decay factor
    */
   @Since("1.6.0")
@@ -58,7 +56,6 @@ private[mllib] trait StreamingDecay extends Logging{
    * The decay factor is calculated such that, for data acquired at time t,
    * its contribution by time t + halfLife will have dropped by 0.5.
    * Half life > 0 is considered as valid.
-   *
    * @param halfLife the half life
    */
   @Since("1.6.0")
@@ -73,7 +70,6 @@ private[mllib] trait StreamingDecay extends Logging{
    * BATCHES: Each RDD in the DStream will be treated as 1 time unit.
    * POINTS: Each data point will be treated as 1 time unit.
    * timeUnit is default to BATCHES.
-   *
    * @param timeUnit the time unit
    */
   @Since("1.6.0")
@@ -84,7 +80,6 @@ private[mllib] trait StreamingDecay extends Logging{
 
   /**
    * Derive the discount factor.
-   *
    * @param numNewDataPoints number of data points for the RDD arriving at time t.
    * @return Discount factor
    */
@@ -104,13 +99,11 @@ object StreamingDecay {
   private[mllib] sealed trait TimeUnit
   /**
    * Each RDD in the DStream will be treated as 1 time unit.
-   *
    */
   @Since("1.6.0")
   case object BATCHES extends TimeUnit
   /**
    * Each data point will be treated as 1 time unit.
-   *
    */
   @Since("1.6.0")
   case object POINTS extends TimeUnit

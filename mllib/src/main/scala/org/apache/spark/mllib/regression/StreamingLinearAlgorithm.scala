@@ -82,6 +82,7 @@ abstract class StreamingLinearAlgorithm[
   /** The model to be updated and used for prediction. */
   protected var model: Option[M]
 
+  /** The weight estimated with data arriving before the current time unit. */
   protected var previousDataWeight: Double = 0
 
   /** The algorithm to use for updating. */
