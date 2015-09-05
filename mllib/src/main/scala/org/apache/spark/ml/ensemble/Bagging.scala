@@ -17,19 +17,15 @@
 
 package org.apache.spark.ml.tuning
 
-import com.github.fommil.netlib.F2jBLAS
-
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
-import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasPredictionCol, HasSeed}
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.{Row, DataFrame}
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions.{col, rowNumber, udf}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.functions.{col, udf, rowNumber}
 
 /**
  * Params for [[Bagging]] and [[BaggingModel]].
@@ -88,6 +84,9 @@ class Bagging[M <: Model[_] with HasPredictionCol](override val uid: String)
 
   /** @group setParam */
   def setNumModels(value: Int): this.type = set(numModels, value)
+
+  /** @group setParam */
+  def setIsClassifier(value: Boolean): this.type = set(isClassifier, value)
 
   override def fit(dataset: DataFrame): BaggingModel = {
     val models = (0 until $(numModels)).map { _ =>
