@@ -26,7 +26,8 @@ import org.apache.hadoop.hive.ql.plan.{PlanUtils, TableDesc}
 import org.apache.hadoop.hive.serde2.Deserializer
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
-import org.apache.hadoop.io.Writable
+import org.apache.hadoop.io.{ArrayWritable, Text, LongWritable, Writable}
+import org.apache.hadoop.mapred.lib.CombineTextInputFormat
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
 
 import org.apache.spark.Logging
@@ -35,6 +36,7 @@ import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.hive.parquet.CombineParquetInputFormat
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -273,14 +275,39 @@ class HadoopTableReader(
 
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
 
-    val rdd = new HadoopRDD(
-      sc.sparkContext,
-      _broadcastedHiveConf.asInstanceOf[Broadcast[SerializableConfiguration]],
-      Some(initializeJobConfFunc),
-      inputFormatClass,
-      classOf[Writable],
-      classOf[Writable],
-      _minSplitsPerRDD)
+    val combineSmallFile = _broadcastedHiveConf.value.value.
+      getBoolean("spark.sql.combine.small.file", false)
+
+    val inputFormatClassName = inputFormatClass.getName
+    // Only support combine text/parquet format file in current version.
+    val rdd = if (combineSmallFile && inputFormatClassName.contains("TextInputFormat")) {
+      new HadoopRDD(
+        sc.sparkContext,
+        _broadcastedHiveConf.asInstanceOf[Broadcast[SerializableConfiguration]],
+        Some(initializeJobConfFunc),
+        classOf[CombineTextInputFormat],
+        classOf[LongWritable],
+        classOf[Text],
+        _minSplitsPerRDD)
+    } else if (combineSmallFile && inputFormatClassName.contains("MapredParquetInputFormat")) {
+      new HadoopRDD(
+        sc.sparkContext,
+        _broadcastedHiveConf.asInstanceOf[Broadcast[SerializableConfiguration]],
+        Some(initializeJobConfFunc),
+        classOf[CombineParquetInputFormat],
+        classOf[Void],
+        classOf[ArrayWritable],
+        _minSplitsPerRDD)
+    } else {
+      new HadoopRDD(
+        sc.sparkContext,
+        _broadcastedHiveConf.asInstanceOf[Broadcast[SerializableConfiguration]],
+        Some(initializeJobConfFunc),
+        inputFormatClass,
+        classOf[Writable],
+        classOf[Writable],
+        _minSplitsPerRDD)
+    }
 
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)
