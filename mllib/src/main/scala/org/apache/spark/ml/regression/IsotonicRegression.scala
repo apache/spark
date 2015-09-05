@@ -40,6 +40,7 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
   /**
    * Param for whether the output sequence should be isotonic/increasing (true) or
    * antitonic/decreasing (false).
+   * Default: true
    * @group param
    */
   final val isotonic: BooleanParam =
