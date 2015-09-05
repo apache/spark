@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.tuning
+package org.apache.spark.ml.ensemble
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LogisticRegression
@@ -25,7 +25,7 @@ import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 
 class BaggingSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  test("cross validation with logistic regression") {
+  test("bagging with logistic regression") {
     val dataset = sqlContext.createDataFrame(
         sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2))
 
@@ -36,10 +36,10 @@ class BaggingSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setNumModels(3)
 
     val baggedModel = bagging.fit(dataset)
-    baggedModel.transform(dataset)
+    baggedModel.transform(dataset).where("instanceId = 1").show()
   }
 
-  test("cross validation with linear regression") {
+  test("bagging with linear regression") {
     val dataset = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2))
@@ -51,6 +51,6 @@ class BaggingSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setNumModels(3)
 
     val baggedModel = bagging.fit(dataset)
-    baggedModel.transform(dataset)
+    baggedModel.transform(dataset).where("instanceId = 1").show()
   }
 }
