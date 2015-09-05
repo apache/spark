@@ -3,11 +3,11 @@ body {
 }
 
 div.sphinxsidebar {
-    width: 270px;
+    width: 274px;
 }
 
 div.bodywrapper {
-    margin: 0 0 0 270px;
+    margin: 0 0 0 274px;
 }
 
 div.sphinxsidebar ul {
@@ -21,7 +21,7 @@ div.sphinxsidebar li a {
 span.pys-tag {
     font-size: 11px;
     font-weight: bold;
-    margin: 0 0 0 4px;
+    margin: 0 0 0 2px;
     padding: 1px 3px 1px 3px;
     -moz-border-radius: 3px;
     -webkit-border-radius: 3px;
@@ -68,6 +68,6 @@ div.pys-note-deprecated {
     position: absolute;
     padding: 0 3px 0 3px;
     top: 1.3em;
-    left: 10px;
+    left: 14px;
     z-index: 9999
 }
