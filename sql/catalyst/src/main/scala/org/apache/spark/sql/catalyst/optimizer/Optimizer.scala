@@ -57,7 +57,7 @@ object DefaultOptimizer extends Optimizer {
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
-      RemovePositive,
+      RemoveDispensable,
       SimplifyFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions) ::
@@ -732,11 +732,12 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes [[UnaryPositive]] identify function
+ * Removes [[UnaryPositive]] identify function and [[PromotePrecision]] wrapper.
  */
-object RemovePositive extends Rule[LogicalPlan] {
+object RemoveDispensable extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case UnaryPositive(child) => child
+    case PromotePrecision(child) => child
   }
 }
 
