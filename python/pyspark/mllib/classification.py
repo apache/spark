@@ -20,7 +20,7 @@ from math import exp
 import numpy
 from numpy import array
 
-from pyspark import RDD
+from pyspark import RDD, since
 from pyspark.streaming import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
 from pyspark.mllib.linalg import DenseVector, SparseVector, _convert_to_vector
@@ -44,6 +44,7 @@ class LinearClassificationModel(LinearModel):
         super(LinearClassificationModel, self).__init__(weights, intercept)
         self._threshold = None
 
+    @since('1.4.0')
     def setThreshold(self, value):
         """
         .. note:: Experimental
@@ -57,6 +58,7 @@ class LinearClassificationModel(LinearModel):
         self._threshold = value
 
     @property
+    @since('1.4.0')
     def threshold(self):
         """
         .. note:: Experimental
@@ -67,6 +69,7 @@ class LinearClassificationModel(LinearModel):
         """
         return self._threshold
 
+    @since('1.4.0')
     def clearThreshold(self):
         """
         .. note:: Experimental
@@ -76,6 +79,7 @@ class LinearClassificationModel(LinearModel):
         """
         self._threshold = None
 
+    @since('1.4.0')
     def predict(self, test):
         """
         Predict values for a single data point or an RDD of points
@@ -157,6 +161,8 @@ class LogisticRegressionModel(LinearClassificationModel):
     1
     >>> mcm.predict([0.0, 0.0, 0.3])
     2
+
+    .. versionadded:: 0.9.1
     """
     def __init__(self, weights, intercept, numFeatures, numClasses):
         super(LogisticRegressionModel, self).__init__(weights, intercept)
@@ -172,13 +178,16 @@ class LogisticRegressionModel(LinearClassificationModel):
                                                                 self._dataWithBiasSize)
 
     @property
+    @since('1.4.0')
     def numFeatures(self):
         return self._numFeatures
 
     @property
+    @since('1.4.0')
     def numClasses(self):
         return self._numClasses
 
+    @since('0.9.1')
     def predict(self, x):
         """
         Predict values for a single data point or an RDD of points
@@ -217,12 +226,14 @@ class LogisticRegressionModel(LinearClassificationModel):
                         best_class = i + 1
             return best_class
 
+    @since('1.4.0')
     def save(self, sc, path):
         java_model = sc._jvm.org.apache.spark.mllib.classification.LogisticRegressionModel(
             _py2java(sc, self._coeff), self.intercept, self.numFeatures, self.numClasses)
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
+    @since('1.4.0')
     def load(cls, sc, path):
         java_model = sc._jvm.org.apache.spark.mllib.classification.LogisticRegressionModel.load(
             sc._jsc.sc(), path)
@@ -237,8 +248,11 @@ class LogisticRegressionModel(LinearClassificationModel):
 
 
 class LogisticRegressionWithSGD(object):
-
+    """
+    .. versionadded:: 0.9.1
+    """
     @classmethod
+    @since('0.9.1')
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
               initialWeights=None, regParam=0.01, regType="l2", intercept=False,
               validateData=True, convergenceTol=0.001):
@@ -286,8 +300,11 @@ class LogisticRegressionWithSGD(object):
 
 
 class LogisticRegressionWithLBFGS(object):
-
+    """
+    .. versionadded:: 1.2.0
+    """
     @classmethod
+    @since('1.2.0')
     def train(cls, data, iterations=100, initialWeights=None, regParam=0.01, regType="l2",
               intercept=False, corrections=10, tolerance=1e-4, validateData=True, numClasses=2):
         """
@@ -399,11 +416,14 @@ class SVMModel(LinearClassificationModel):
     ...    rmtree(path)
     ... except:
     ...    pass
+
+    .. versionadded:: 0.9.1
     """
     def __init__(self, weights, intercept):
         super(SVMModel, self).__init__(weights, intercept)
         self._threshold = 0.0
 
+    @since('0.9.1')
     def predict(self, x):
         """
         Predict values for a single data point or an RDD of points
@@ -419,12 +439,14 @@ class SVMModel(LinearClassificationModel):
         else:
             return 1 if margin > self._threshold else 0
 
+    @since('1.4.0')
     def save(self, sc, path):
         java_model = sc._jvm.org.apache.spark.mllib.classification.SVMModel(
             _py2java(sc, self._coeff), self.intercept)
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
+    @since('1.4.0')
     def load(cls, sc, path):
         java_model = sc._jvm.org.apache.spark.mllib.classification.SVMModel.load(
             sc._jsc.sc(), path)
@@ -437,8 +459,12 @@ class SVMModel(LinearClassificationModel):
 
 
 class SVMWithSGD(object):
+    """
+    .. versionadded:: 0.9.1
+    """
 
     @classmethod
+    @since('0.9.1')
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, regType="l2",
               intercept=False, validateData=True, convergenceTol=0.001):
@@ -530,13 +556,15 @@ class NaiveBayesModel(Saveable, Loader):
     ...     rmtree(path)
     ... except OSError:
     ...     pass
-    """
 
+    .. versionadded:: 0.9.1
+    """
     def __init__(self, labels, pi, theta):
         self.labels = labels
         self.pi = pi
         self.theta = theta
 
+    @since('0.9.1')
     def predict(self, x):
         """
         Return the most likely class for a data vector
@@ -556,6 +584,7 @@ class NaiveBayesModel(Saveable, Loader):
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
+    @since('1.4.0')
     def load(cls, sc, path):
         java_model = sc._jvm.org.apache.spark.mllib.classification.NaiveBayesModel.load(
             sc._jsc.sc(), path)
@@ -567,8 +596,12 @@ class NaiveBayesModel(Saveable, Loader):
 
 
 class NaiveBayes(object):
+    """
+    .. versionadded:: 0.9.1
+    """
 
     @classmethod
+    @since('0.9.1')
     def train(cls, data, lambda_=1.0):
         """
         Train a Naive Bayes model given an RDD of (label, features)
@@ -605,6 +638,8 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
                               iteration.
     :param regParam: L2 Regularization parameter.
     :param convergenceTol: A condition which decides iteration termination.
+
+    .. versionadded:: 1.5.0
     """
     def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0, regParam=0.01,
                  convergenceTol=0.001):
@@ -617,6 +652,7 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
         super(StreamingLogisticRegressionWithSGD, self).__init__(
             model=self._model)
 
+    @since('1.5.0')
     def setInitialWeights(self, initialWeights):
         """
         Set the initial value of weights.
@@ -630,6 +666,7 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
             initialWeights, 0, initialWeights.size, 2)
         return self
 
+    @since('1.5.0')
     def trainOn(self, dstream):
         """Train the model on the incoming dstream."""
         self._validate(dstream)
