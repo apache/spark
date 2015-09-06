@@ -21,13 +21,34 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.OneHotEncoder
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+// import org.apache.spark.mllib.random.{ExponentialGenerator, WeibullGenerator}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
+
+import scala.util.Random
 
 case class AFTExamplePoint(stage: Double, time: Double, age: Int, year: Int, censored: Double)
 
+case class AFTPoint(features: Vector, censored: Double, label: Double)
+
 class AFTRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  @transient var datasetUnivariate: DataFrame = _
+  @transient var datasetMultivariate: DataFrame = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    /*
+    datasetUnivariate = sqlContext.createDataFrame(
+      sc.parallelize(generateAFTInput(
+        1, Array(5.5), Array(0.8), 1000, 42, 1.0, 2.0)))
+    datasetMultivariate = sqlContext.createDataFrame(
+      sc.parallelize(generateAFTInput(
+        2, Array(0.9, -1.3), Array(0.7, 1.2), 1000, 42, 1.5, 2.5)))
+    */
+  }
 
   test("params") {
     ParamsSuite.checkParams(new AFTRegression)
@@ -44,9 +65,131 @@ class AFTRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   /*
-     Currently this test case is only used to verify the AFTRegression for some classical dataset.
-     Because it depends on the external dataset which need to download to your disk.
-     I will figure out some methods to generate test dataset later.
+     Currently disabled because the following test cases were blocked by SPARK-10464
+     which will add WeibullGenerator for RandomDataGenerator.
+   */
+  /*
+  def generateAFTInput(
+      numFeatures: Int,
+      xMean: Array[Double],
+      xVariance: Array[Double],
+      nPoints: Int,
+      seed: Int,
+      alpha: Double,
+      beta: Double): Seq[AFTPoint] = {
+
+    def censored(x: Double, y: Double): Double = {
+      if (x <= y) 1.0 else 0.0
+    }
+
+    val weibull = new WeibullGenerator(alpha, beta)
+    weibull.setSeed(seed)
+
+    val exponential = new ExponentialGenerator(2.0)
+    exponential.setSeed(seed)
+
+    val rnd = new Random(seed)
+    val x = Array.fill[Array[Double]](nPoints)(
+      Array.fill[Double](numFeatures)(rnd.nextDouble()))
+
+    x.foreach { v =>
+      var i = 0
+      val len = v.length
+      while (i < len) {
+        v(i) = (v(i) - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
+        i += 1
+      }
+    }
+    val y = (1 to nPoints).map { i =>
+      (weibull.nextValue(), exponential.nextValue())
+    }
+
+    y.zip(x).map { p =>
+      AFTPoint(Vectors.dense(p._2), censored(p._1._1, p._1._2), p._1._1)
+    }
+  }
+
+  test("aft regression with univariate") {
+    val trainer = new AFTRegression
+    val model = trainer.fit(datasetUnivariate)
+
+    /*
+       Using the following R code to load the data and train the model using survival package.
+
+       > library("survival")
+       > data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
+       > features <- as.matrix(data.frame(as.numeric(data$V1)))
+       > censored <- as.numeric(data$V2)
+       > label <- as.numeric(data$V3)
+       > sr.fit <- survreg(Surv(label, censored)~features, dist='weibull')
+       > summary(sr.fit)
+
+       survreg(formula = Surv(label, censored) ~ features, dist = "weibull")
+                    Value Std. Error      z        p
+       (Intercept)  1.759     0.4141  4.247 2.16e-05
+       features    -0.039     0.0735 -0.531 5.96e-01
+       Log(scale)   0.344     0.0379  9.073 1.16e-19
+
+       Scale= 1.41
+
+       Weibull distribution
+       Loglik(model)= -1152.2   Loglik(intercept only)= -1152.3
+           Chisq= 0.28 on 1 degrees of freedom, p= 0.6
+       Number of Newton-Raphson Iterations: 5
+       n= 1000
+     */
+    val weightsR = Vectors.dense(-0.039)
+    val interceptR = 1.759
+    val scaleR = 1.41
+
+    assert(model.intercept ~== interceptR relTol 1E-2)
+    assert(model.weights ~= weightsR relTol 1E-2)
+    assert(model.scale ~= scaleR relTol 1E-2)
+  }
+
+  test("aft regression with multivariate") {
+    val trainer = new AFTRegression
+    val model = trainer.fit(datasetMultivariate)
+
+    /*
+       Using the following R code to load the data and train the model using survival package.
+
+       > library("survival")
+       > data <- read.csv("path", header=FALSE, stringsAsFactors=FALSE)
+       > features <- as.matrix(data.frame(as.numeric(data$V1), as.numeric(data$V2)))
+       > censored <- as.numeric(data$V3)
+       > label <- as.numeric(data$V4)
+       > sr.fit <- survreg(Surv(label, censored)~features, dist='weibull')
+       > summary(sr.fit)
+
+                                     Value Std. Error      z        p
+       (Intercept)                  1.9206     0.1057 18.171 8.78e-74
+       featuresas.numeric.data.V1. -0.0844     0.0611 -1.381 1.67e-01
+       featuresas.numeric.data.V2.  0.0677     0.0468  1.447 1.48e-01
+       Log(scale)                  -0.0236     0.0436 -0.542 5.88e-01
+
+       Scale= 0.977
+
+       Weibull distribution
+       Loglik(model)= -1070.7   Loglik(intercept only)= -1072.7
+           Chisq= 3.91 on 2 degrees of freedom, p= 0.14
+       Number of Newton-Raphson Iterations: 5
+       n= 1000
+     */
+    val weightsR = Vectors.dense(-0.0844, 0.0677)
+    val interceptR = 1.9206
+    val scaleR = 0.977
+
+    assert(model.intercept ~== interceptR relTol 1E-2)
+    assert(model.weights ~= weightsR relTol 1E-2)
+    assert(model.scale ~= scaleR relTol 1E-2)
+  }
+  */
+
+  /*
+     This test case is only used to verify the AFTRegression on classical dataset.
+     It is not a regular unit test because it depends on external data which need to be downloaded
+     to your local disk firstly. I will move this test case to examples when this PR merged.
    */
   /*
   test("aft regression") {
