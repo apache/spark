@@ -195,8 +195,9 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       // as join keys.
       val (joinPredicates, otherPredicates) =
         condition.map(splitConjunctivePredicates).getOrElse(Nil).partition {
-          case EqualTo(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
-            (canEvaluate(l, right) && canEvaluate(r, left)) => true
+          case EqualTo(l, r) =>
+            (canEvaluate(l, left) && canEvaluate(r, right)) ||
+            (canEvaluate(l, right) && canEvaluate(r, left))
           case _ => false
         }
 
@@ -204,10 +205,9 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
         case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
       }
-      val leftKeys = joinKeys.map(_._1)
-      val rightKeys = joinKeys.map(_._2)
 
       if (joinKeys.nonEmpty) {
+        val (leftKeys, rightKeys) = joinKeys.unzip
         logDebug(s"leftKeys:$leftKeys | rightKeys:$rightKeys")
         Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
       } else {

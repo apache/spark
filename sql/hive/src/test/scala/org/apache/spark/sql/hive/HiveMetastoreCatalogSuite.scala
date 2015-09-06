@@ -19,18 +19,15 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.apache.spark.sql.hive.client.{ExternalTable, HiveColumn, ManagedTable}
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.sql.sources.DataSourceTest
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.{QueryTest, Row, SaveMode}
+import org.apache.spark.sql.hive.client.{ExternalTable, ManagedTable}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{Row, SaveMode}
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 
-
-class HiveMetastoreCatalogSuite extends SparkFunSuite with Logging {
+class HiveMetastoreCatalogSuite extends SparkFunSuite with TestHiveSingleton {
+  import hiveContext.implicits._
 
   test("struct field should accept underscore in sub-column name") {
     val hiveTypeStr = "struct<a: int, b_1: string, c: string>"
@@ -46,16 +43,21 @@ class HiveMetastoreCatalogSuite extends SparkFunSuite with Logging {
   }
 
   test("duplicated metastore relations") {
-    val df = sql("SELECT * FROM src")
+    val df = hiveContext.sql("SELECT * FROM src")
     logInfo(df.queryExecution.toString)
     df.as('a).join(df.as('b), $"a.key" === $"b.key")
   }
 }
 
-class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with SQLTestUtils {
-  override val sqlContext = TestHive
+class DataSourceWithHiveMetastoreCatalogSuite
+  extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import hiveContext._
+  import testImplicits._
 
-  private val testDF = (1 to 2).map(i => (i, s"val_$i")).toDF("d1", "d2").coalesce(1)
+  private val testDF = range(1, 3).select(
+    ('id + 0.1) cast DecimalType(10, 3) as 'd1,
+    'id cast StringType as 'd2
+  ).coalesce(1)
 
   Seq(
     "parquet" -> (
@@ -88,10 +90,10 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with SQLTes
 
         val columns = hiveTable.schema
         assert(columns.map(_.name) === Seq("d1", "d2"))
-        assert(columns.map(_.hiveType) === Seq("int", "string"))
+        assert(columns.map(_.hiveType) === Seq("decimal(10,3)", "string"))
 
         checkAnswer(table("t"), testDF)
-        assert(runSqlHive("SELECT * FROM t") === Seq("1\tval_1", "2\tval_2"))
+        assert(runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
       }
     }
 
@@ -117,10 +119,10 @@ class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with SQLTes
 
           val columns = hiveTable.schema
           assert(columns.map(_.name) === Seq("d1", "d2"))
-          assert(columns.map(_.hiveType) === Seq("int", "string"))
+          assert(columns.map(_.hiveType) === Seq("decimal(10,3)", "string"))
 
           checkAnswer(table("t"), testDF)
-          assert(runSqlHive("SELECT * FROM t") === Seq("1\tval_1", "2\tval_2"))
+          assert(runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
         }
       }
     }

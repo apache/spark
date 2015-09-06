@@ -26,6 +26,7 @@ import scala.util.Try
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types._
@@ -269,6 +270,18 @@ private[sql] object PartitioningUtils {
 
   private val upCastingOrder: Seq[DataType] =
     Seq(NullType, IntegerType, LongType, FloatType, DoubleType, StringType)
+
+  def validatePartitionColumnDataTypes(
+      schema: StructType,
+      partitionColumns: Array[String]): Unit = {
+
+    ResolvedDataSource.partitionColumnsSchema(schema, partitionColumns).foreach { field =>
+      field.dataType match {
+        case _: AtomicType => // OK
+        case _ => throw new AnalysisException(s"Cannot use ${field.dataType} for partition column")
+      }
+    }
+  }
 
   /**
    * Given a collection of [[Literal]]s, resolves possible type conflicts by up-casting "lower"

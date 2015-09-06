@@ -24,7 +24,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, AttributeReference, Attribute, InterpretedOrdering$}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 
 
 /**
@@ -292,13 +292,17 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private[sql] def merge(that: StructType): StructType =
     StructType.merge(this, that).asInstanceOf[StructType]
 
-  private[spark] override def asNullable: StructType = {
+  override private[spark] def asNullable: StructType = {
     val newFields = fields.map {
       case StructField(name, dataType, nullable, metadata) =>
         StructField(name, dataType.asNullable, nullable = true, metadata)
     }
 
     StructType(newFields)
+  }
+
+  override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
+    f(this) || fields.exists(field => field.dataType.existsRecursively(f))
   }
 
   private[sql] val interpretedOrdering = InterpretedOrdering.forSchema(this.fields.map(_.dataType))

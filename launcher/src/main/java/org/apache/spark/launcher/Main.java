@@ -32,7 +32,7 @@ class Main {
 
   /**
    * Usage: Main [class] [class args]
-   * <p/>
+   * <p>
    * This CLI works in two different modes:
    * <ul>
    *   <li>"spark-submit": if <i>class</i> is "org.apache.spark.deploy.SparkSubmit", the
@@ -42,7 +42,7 @@ class Main {
    *
    * This class works in tandem with the "bin/spark-class" script on Unix-like systems, and
    * "bin/spark-class2.cmd" batch script on Windows to execute the final command.
-   * <p/>
+   * <p>
    * On Unix-like systems, the output is a list of command arguments, separated by the NULL
    * character. On Windows, the output is a command line suitable for direct execution from the
    * script.

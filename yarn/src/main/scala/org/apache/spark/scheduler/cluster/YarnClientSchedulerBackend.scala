@@ -81,8 +81,6 @@ private[spark] class YarnClientSchedulerBackend(
     // List of (target Client argument, environment variable, Spark property)
     val optionTuples =
       List(
-        ("--num-executors", "SPARK_WORKER_INSTANCES", "spark.executor.instances"),
-        ("--num-executors", "SPARK_EXECUTOR_INSTANCES", "spark.executor.instances"),
         ("--executor-memory", "SPARK_WORKER_MEMORY", "spark.executor.memory"),
         ("--executor-memory", "SPARK_EXECUTOR_MEMORY", "spark.executor.memory"),
         ("--executor-cores", "SPARK_WORKER_CORES", "spark.executor.cores"),
@@ -92,7 +90,6 @@ private[spark] class YarnClientSchedulerBackend(
       )
     // Warn against the following deprecated environment variables: env var -> suggestion
     val deprecatedEnvVars = Map(
-      "SPARK_WORKER_INSTANCES" -> "SPARK_WORKER_INSTANCES or --num-executors through spark-submit",
       "SPARK_WORKER_MEMORY" -> "SPARK_EXECUTOR_MEMORY or --executor-memory through spark-submit",
       "SPARK_WORKER_CORES" -> "SPARK_EXECUTOR_CORES or --executor-cores through spark-submit")
     optionTuples.foreach { case (optionName, envVar, sparkProp) =>

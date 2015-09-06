@@ -181,7 +181,7 @@ private[spark] object ClosureCleaner extends Logging {
       return
     }
 
-    logDebug(s"+++ Cleaning closure $func (${func.getClass.getName}}) +++")
+    logDebug(s"+++ Cleaning closure $func (${func.getClass.getName}) +++")
 
     // A list of classes that represents closures enclosed in the given one
     val innerClasses = getInnerClosureClasses(func)

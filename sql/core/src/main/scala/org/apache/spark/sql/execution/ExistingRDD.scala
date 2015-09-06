@@ -99,8 +99,6 @@ private[sql] case class PhysicalRDD(
     rdd: RDD[InternalRow],
     extraInformation: String) extends LeafNode {
 
-  override protected[sql] val trackNumOfRowsEnabled = true
-
   protected override def doExecute(): RDD[InternalRow] = rdd
 
   override def simpleString: String = "Scan " + extraInformation + output.mkString("[", ",", "]")

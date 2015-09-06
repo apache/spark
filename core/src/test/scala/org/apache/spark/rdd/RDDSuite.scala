@@ -42,6 +42,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(dups.distinct().collect === dups.distinct().collect)
     assert(dups.distinct(2).collect === dups.distinct().collect)
     assert(nums.reduce(_ + _) === 10)
+    assert(nums.reduceOption(_ + _) === Some(10))
     assert(nums.fold(0)(_ + _) === 10)
     assert(nums.map(_.toString).collect().toList === List("1", "2", "3", "4"))
     assert(nums.filter(_ > 2).collect().toList === List(3, 4))
@@ -228,6 +229,8 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
       empty.reduce(_ + _)
     }
     assert(thrown.getMessage.contains("empty"))
+
+    empty.reduceOption(_ + _) === None
 
     val emptyKv = new EmptyRDD[(Int, Int)](sc)
     val rdd = sc.parallelize(1 to 2, 2).map(x => (x, x))

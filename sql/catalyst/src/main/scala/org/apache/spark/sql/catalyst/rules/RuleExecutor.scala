@@ -17,22 +17,25 @@
 
 package org.apache.spark.sql.catalyst.rules
 
+import scala.collection.JavaConverters._
+
+import com.google.common.util.concurrent.AtomicLongMap
+
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.sideBySide
 
-import scala.collection.mutable
-
 object RuleExecutor {
-  protected val timeMap = new mutable.HashMap[String, Long].withDefault(_ => 0)
+  protected val timeMap = AtomicLongMap.create[String]()
 
   /** Resets statistics about time spent running specific rules */
   def resetTime(): Unit = timeMap.clear()
 
   /** Dump statistics about time spent running specific rules. */
   def dumpTimeSpent(): String = {
-    val maxSize = timeMap.keys.map(_.toString.length).max
-    timeMap.toSeq.sortBy(_._2).reverseMap { case (k, v) =>
+    val map = timeMap.asMap().asScala
+    val maxSize = map.keys.map(_.toString.length).max
+    map.toSeq.sortBy(_._2).reverseMap { case (k, v) =>
       s"${k.padTo(maxSize, " ").mkString} $v"
     }.mkString("\n")
   }
@@ -79,7 +82,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             val startTime = System.nanoTime()
             val result = rule(plan)
             val runTime = System.nanoTime() - startTime
-            RuleExecutor.timeMap(rule.ruleName) = RuleExecutor.timeMap(rule.ruleName) + runTime
+            RuleExecutor.timeMap.addAndGet(rule.ruleName, runTime)
 
             if (!result.fastEquals(plan)) {
               logTrace(

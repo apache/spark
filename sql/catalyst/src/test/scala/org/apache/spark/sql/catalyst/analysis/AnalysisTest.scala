@@ -71,6 +71,8 @@ trait AnalysisTest extends PlanTest {
     val e = intercept[Exception] {
       analyzer.checkAnalysis(analyzer.execute(inputPlan))
     }
-    expectedErrors.forall(e.getMessage.contains)
+    assert(expectedErrors.map(_.toLowerCase).forall(e.getMessage.toLowerCase.contains),
+      s"Expected to throw Exception contains: ${expectedErrors.mkString(", ")}, " +
+        s"actually we get ${e.getMessage}")
   }
 }

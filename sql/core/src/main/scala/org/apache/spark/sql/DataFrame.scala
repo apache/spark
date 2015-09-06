@@ -34,12 +34,12 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, _}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, LogicalRDD, SQLExecution}
+import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
-import org.apache.spark.sql.json.JacksonGenerator
+import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -634,6 +634,7 @@ class DataFrame private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
+   * Note that the column name can also reference to a nested column like `a.b`.
    * @group dfops
    * @since 1.3.0
    */
@@ -641,6 +642,7 @@ class DataFrame private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
+   * Note that the column name can also reference to a nested column like `a.b`.
    * @group dfops
    * @since 1.3.0
    */
@@ -682,7 +684,7 @@ class DataFrame private[sql](
       // make it a NamedExpression.
       case Column(u: UnresolvedAttribute) => UnresolvedAlias(u)
       case Column(expr: NamedExpression) => expr
-      // Leave an unaliased explode with an empty list of names since the analzyer will generate the
+      // Leave an unaliased explode with an empty list of names since the analyzer will generate the
       // correct defaults after the nested expression's type has been resolved.
       case Column(explode: Explode) => MultiAlias(explode, Nil)
       case Column(expr: Expression) => Alias(expr, expr.prettyString)()
@@ -1131,7 +1133,8 @@ class DataFrame private[sql](
   /////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns a new [[DataFrame]] by adding a column.
+   * Returns a new [[DataFrame]] by adding a column or replacing the existing column that has
+   * the same name.
    * @group dfops
    * @since 1.3.0
    */
@@ -1146,6 +1149,23 @@ class DataFrame private[sql](
       select(colNames : _*)
     } else {
       select(Column("*"), col.as(colName))
+    }
+  }
+
+  /**
+   * Returns a new [[DataFrame]] by adding a column with metadata.
+   */
+  private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
+    val replaced = schema.exists(f => resolver(f.name, colName))
+    if (replaced) {
+      val colNames = schema.map { field =>
+        val name = field.name
+        if (resolver(name, colName)) col.as(colName, metadata) else Column(name)
+      }
+      select(colNames : _*)
+    } else {
+      select(Column("*"), col.as(colName, metadata))
     }
   }
 
@@ -1560,8 +1580,10 @@ class DataFrame private[sql](
    */
   def inputFiles: Array[String] = {
     val files: Seq[String] = logicalPlan.collect {
-      case LogicalRelation(fsBasedRelation: HadoopFsRelation) =>
-        fsBasedRelation.paths.toSeq
+      case LogicalRelation(fsBasedRelation: FileRelation) =>
+        fsBasedRelation.inputFiles
+      case fr: FileRelation =>
+        fr.inputFiles
     }.flatten
     files.toSet.toArray
   }

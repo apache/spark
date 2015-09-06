@@ -139,9 +139,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toBigDecimal: BigDecimal = {
     if (decimalVal.ne(null)) {
-      decimalVal(MATH_CONTEXT)
+      decimalVal
     } else {
-      BigDecimal(longVal, _scale)(MATH_CONTEXT)
+      BigDecimal(longVal, _scale)
     }
   }
 
@@ -267,7 +267,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
       Decimal(longVal + that.longVal, Math.max(precision, that.precision), scale)
     } else {
-      Decimal(toBigDecimal + that.toBigDecimal, precision, scale)
+      Decimal(toBigDecimal + that.toBigDecimal)
     }
   }
 
@@ -275,18 +275,20 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
       Decimal(longVal - that.longVal, Math.max(precision, that.precision), scale)
     } else {
-      Decimal(toBigDecimal - that.toBigDecimal, precision, scale)
+      Decimal(toBigDecimal - that.toBigDecimal)
     }
   }
 
   // HiveTypeCoercion will take care of the precision, scale of result
-  def * (that: Decimal): Decimal = Decimal(toBigDecimal * that.toBigDecimal)
+  def * (that: Decimal): Decimal =
+    Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
 
   def / (that: Decimal): Decimal =
-    if (that.isZero) null else Decimal(toBigDecimal / that.toBigDecimal)
+    if (that.isZero) null else Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal, MATH_CONTEXT))
 
   def % (that: Decimal): Decimal =
-    if (that.isZero) null else Decimal(toBigDecimal % that.toBigDecimal)
+    if (that.isZero) null
+    else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT))
 
   def remainder(that: Decimal): Decimal = this % that
 

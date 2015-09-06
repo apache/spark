@@ -189,6 +189,7 @@ final class RandomForestClassificationModel private[ml] (
 
   override def copy(extra: ParamMap): RandomForestClassificationModel = {
     copyValues(new RandomForestClassificationModel(uid, _trees, numFeatures, numClasses), extra)
+      .setParent(parent)
   }
 
   override def toString: String = {

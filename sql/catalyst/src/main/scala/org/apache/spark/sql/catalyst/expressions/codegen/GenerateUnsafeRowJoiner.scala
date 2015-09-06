@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, Attribute}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.unsafe.PlatformDependent
+import org.apache.spark.unsafe.Platform
 
 
 abstract class UnsafeRowJoiner {
@@ -52,9 +52,9 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
   }
 
   def create(schema1: StructType, schema2: StructType): UnsafeRowJoiner = {
-    val offset = PlatformDependent.BYTE_ARRAY_OFFSET
-    val getLong = "PlatformDependent.UNSAFE.getLong"
-    val putLong = "PlatformDependent.UNSAFE.putLong"
+    val offset = Platform.BYTE_ARRAY_OFFSET
+    val getLong = "Platform.getLong"
+    val putLong = "Platform.putLong"
 
     val bitset1Words = (schema1.size + 63) / 64
     val bitset2Words = (schema2.size + 63) / 64
@@ -96,7 +96,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     var cursor = offset + outputBitsetWords * 8
     val copyFixedLengthRow1 = s"""
        |// Copy fixed length data for row1
-       |PlatformDependent.copyMemory(
+       |Platform.copyMemory(
        |  obj1, offset1 + ${bitset1Words * 8},
        |  buf, $cursor,
        |  ${schema1.size * 8});
@@ -106,7 +106,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     // --------------------- copy fixed length portion from row 2 ----------------------- //
     val copyFixedLengthRow2 = s"""
        |// Copy fixed length data for row2
-       |PlatformDependent.copyMemory(
+       |Platform.copyMemory(
        |  obj2, offset2 + ${bitset2Words * 8},
        |  buf, $cursor,
        |  ${schema2.size * 8});
@@ -118,7 +118,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     val copyVariableLengthRow1 = s"""
        |// Copy variable length data for row1
        |long numBytesVariableRow1 = row1.getSizeInBytes() - $numBytesBitsetAndFixedRow1;
-       |PlatformDependent.copyMemory(
+       |Platform.copyMemory(
        |  obj1, offset1 + ${(bitset1Words + schema1.size) * 8},
        |  buf, $cursor,
        |  numBytesVariableRow1);
@@ -129,7 +129,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     val copyVariableLengthRow2 = s"""
        |// Copy variable length data for row2
        |long numBytesVariableRow2 = row2.getSizeInBytes() - $numBytesBitsetAndFixedRow2;
-       |PlatformDependent.copyMemory(
+       |Platform.copyMemory(
        |  obj2, offset2 + ${(bitset2Words + schema2.size) * 8},
        |  buf, $cursor + numBytesVariableRow1,
        |  numBytesVariableRow2);
@@ -155,7 +155,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
            |$putLong(buf, $cursor, $getLong(buf, $cursor) + ($shift << 32));
          """.stripMargin
       }
-    }.mkString
+    }.mkString("\n")
 
     // ------------------------ Finally, put everything together  --------------------------- //
     val code = s"""

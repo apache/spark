@@ -24,10 +24,10 @@ import java.net.URI;
 import java.util.*;
 import java.util.concurrent.*;
 
-import scala.collection.JavaConversions;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
+import scala.collection.JavaConverters;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -817,6 +817,22 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void reduceOptionExist() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1,2,3));
+    Optional<Integer> sum = rdd.reduceOption(new AddInts());
+    Optional<Integer> expected = Optional.of(6);
+    Assert.assertEquals(expected, sum);
+  }
+
+  @Test
+  public void reduceOptionAbsent() {
+    JavaRDD<Integer> rdd = sc.emptyRDD();
+    Optional<Integer> sum = rdd.reduceOption(new AddInts());
+    Optional<Integer> expected = Optional.absent();
+    Assert.assertEquals(expected, sum);
+  }
+
+  @Test
   public void fold() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4));
     int sum = rdd.fold(0, new AddInts());
@@ -1473,7 +1489,9 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(expected, results);
 
     Partitioner defaultPartitioner = Partitioner.defaultPartitioner(
-        combinedRDD.rdd(), JavaConversions.asScalaBuffer(Lists.<RDD<?>>newArrayList()));
+        combinedRDD.rdd(),
+        JavaConverters.collectionAsScalaIterableConverter(
+            Collections.<RDD<?>>emptyList()).asScala().toSeq());
     combinedRDD = originalRDD.keyBy(keyFunction)
         .combineByKey(
              createCombinerFunction,

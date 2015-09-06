@@ -700,7 +700,7 @@ class RDD(object):
         return self.map(lambda x: (f(x), x)).groupByKey(numPartitions)
 
     @ignore_unicode_prefix
-    def pipe(self, command, env={}, checkCode=False):
+    def pipe(self, command, env=None, checkCode=False):
         """
         Return an RDD created by piping elements to a forked external process.
 
@@ -709,6 +709,9 @@ class RDD(object):
 
         :param checkCode: whether or not to check the return value of the shell command.
         """
+        if env is None:
+            env = dict()
+
         def func(iterator):
             pipe = Popen(
                 shlex.split(command), env=env, stdin=PIPE, stdout=PIPE)
@@ -774,6 +777,7 @@ class RDD(object):
         """
         Reduces the elements of this RDD using the specified commutative and
         associative binary operator. Currently reduces partitions locally.
+        This function raises Exception if RDD is empty.
 
         >>> from operator import add
         >>> sc.parallelize([1, 2, 3, 4, 5]).reduce(add)
@@ -784,6 +788,25 @@ class RDD(object):
         Traceback (most recent call last):
             ...
         ValueError: Can not reduce() empty RDD
+        """
+        ret = self.reduceOption(f)
+        if ret:
+            return ret
+        else:
+            raise ValueError("Can not reduce() empty RDD")
+
+    def reduceOption(self, f):
+        """
+        Reduces the elements of this RDD using the specified commutative and
+        associative binary operator. Currently reduces partitions locally.
+
+        >>> from operator import add
+        >>> sc.parallelize([1, 2, 3, 4, 5]).reduceOption(add)
+        15
+        >>> sc.parallelize((2 for _ in range(10))).map(lambda x: 1).cache().reduceOption(add)
+        10
+        >>> sc.parallelize([]).reduceOption(add) is None
+        True
         """
         def func(iterator):
             iterator = iter(iterator)
@@ -796,7 +819,8 @@ class RDD(object):
         vals = self.mapPartitions(func).collect()
         if vals:
             return reduce(f, vals)
-        raise ValueError("Can not reduce() empty RDD")
+        else:
+            return None
 
     def treeReduce(self, f, depth=2):
         """

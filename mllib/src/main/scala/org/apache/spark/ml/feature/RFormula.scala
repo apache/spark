@@ -33,11 +33,6 @@ import org.apache.spark.sql.types._
  * Base trait for [[RFormula]] and [[RFormulaModel]].
  */
 private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
-  /** @group getParam */
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
-
-  /** @group getParam */
-  def setLabelCol(value: String): this.type = set(labelCol, value)
 
   protected def hasLabelCol(schema: StructType): Boolean = {
     schema.map(_.name).contains($(labelCol))
@@ -47,8 +42,8 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
 /**
  * :: Experimental ::
  * Implements the transforms required for fitting a dataset against an R model formula. Currently
- * we support a limited subset of the R operators, including '~' and '+'. Also see the R formula
- * docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
+ * we support a limited subset of the R operators, including '.', '~', '+', and '-'. Also see the
+ * R formula docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
  */
 @Experimental
 class RFormula(override val uid: String) extends Estimator[RFormulaModel] with RFormulaBase {
@@ -70,6 +65,12 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
 
   /** @group getParam */
   def getFormula: String = $(formula)
+
+  /** @group setParam */
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** Whether the formula specifies fitting an intercept. */
   private[ml] def hasIntercept: Boolean = {

@@ -19,18 +19,16 @@ package org.apache.spark.sql.hive.execution
 
 import java.sql.{Date, Timestamp}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
-import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -65,11 +63,12 @@ class MyDialect extends DefaultParserDialect
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
-class SQLQuerySuite extends QueryTest with SQLTestUtils {
-  override def sqlContext: SQLContext = TestHive
+class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import hiveContext._
+  import hiveContext.implicits._
 
   test("UDTF") {
-    sql(s"ADD JAR ${TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
+    sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
     // The function source code can be found at:
     // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
     sql(
@@ -163,7 +162,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   test("show functions") {
     val allFunctions =
       (FunctionRegistry.builtin.listFunction().toSet[String] ++
-        org.apache.hadoop.hive.ql.exec.FunctionRegistry.getFunctionNames).toList.sorted
+        org.apache.hadoop.hive.ql.exec.FunctionRegistry.getFunctionNames.asScala).toList.sorted
     checkAnswer(sql("SHOW functions"), allFunctions.map(Row(_)))
     checkAnswer(sql("SHOW functions abs"), Row("abs"))
     checkAnswer(sql("SHOW functions 'abs'"), Row("abs"))
@@ -508,19 +507,19 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     checkAnswer(
       sql("SELECT f1.f2.f3 FROM nested"),
       Row(1))
-    checkAnswer(sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested"),
-      Seq.empty[Row])
+
+    sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested")
     checkAnswer(
       sql("SELECT * FROM test_ctas_1234"),
       sql("SELECT * FROM nested").collect().toSeq)
 
     intercept[AnalysisException] {
-      sql("CREATE TABLE test_ctas_12345 AS SELECT * from notexists").collect()
+      sql("CREATE TABLE test_ctas_1234 AS SELECT * from notexists").collect()
     }
   }
 
   test("test CTAS") {
-    checkAnswer(sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src"), Seq.empty[Row])
+    sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src")
     checkAnswer(
       sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
       sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
@@ -613,7 +612,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
     val rowRdd = sparkContext.parallelize(row :: Nil)
 
-    TestHive.createDataFrame(rowRdd, schema).registerTempTable("testTable")
+    hiveContext.createDataFrame(rowRdd, schema).registerTempTable("testTable")
 
     sql(
       """CREATE TABLE nullValuesInInnerComplexTypes
@@ -1043,10 +1042,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     val thread = new Thread {
       override def run() {
         // To make sure this test works, this jar should not be loaded in another place.
-        TestHive.sql(
-          s"ADD JAR ${TestHive.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
+        sql(
+          s"ADD JAR ${hiveContext.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
         try {
-          TestHive.sql(
+          sql(
             """
               |CREATE TEMPORARY FUNCTION example_max
               |AS 'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax'
@@ -1096,21 +1095,21 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-8588 HiveTypeCoercion.inConversion fires too early") {
     val df =
-      TestHive.createDataFrame(Seq((1, "2014-01-01"), (2, "2015-01-01"), (3, "2016-01-01")))
+      createDataFrame(Seq((1, "2014-01-01"), (2, "2015-01-01"), (3, "2016-01-01")))
     df.toDF("id", "datef").registerTempTable("test_SPARK8588")
     checkAnswer(
-      TestHive.sql(
+      sql(
         """
           |select id, concat(year(datef))
           |from test_SPARK8588 where concat(year(datef), ' year') in ('2015 year', '2014 year')
         """.stripMargin),
       Row(1, "2014") :: Row(2, "2015") :: Nil
     )
-    TestHive.dropTempTable("test_SPARK8588")
+    dropTempTable("test_SPARK8588")
   }
 
   test("SPARK-9371: fix the support for special chars in column names for hive context") {
-    TestHive.read.json(TestHive.sparkContext.makeRDD(
+    read.json(sparkContext.makeRDD(
       """{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""" :: Nil))
       .registerTempTable("t")
 
@@ -1136,5 +1135,39 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     checkAnswer(sql("select interval '299.889987299' second"),
       Row(CalendarInterval.fromString(
         "interval 4 minutes 59 seconds 889 milliseconds 987 microseconds")))
+  }
+
+  test("specifying database name for a temporary table is not allowed") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+      df
+        .write
+        .format("parquet")
+        .save(path)
+
+      val message = intercept[AnalysisException] {
+        sqlContext.sql(
+          s"""
+          |CREATE TEMPORARY TABLE db.t
+          |USING parquet
+          |OPTIONS (
+          |  path '$path'
+          |)
+        """.stripMargin)
+      }.getMessage
+      assert(message.contains("Specifying database name or other qualifiers are not allowed"))
+
+      // If you use backticks to quote the name of a temporary table having dot in it.
+      sqlContext.sql(
+        s"""
+          |CREATE TEMPORARY TABLE `db.t`
+          |USING parquet
+          |OPTIONS (
+          |  path '$path'
+          |)
+        """.stripMargin)
+      checkAnswer(sqlContext.table("`db.t`"), df)
+    }
   }
 }
