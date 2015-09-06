@@ -180,8 +180,8 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
 @Experimental
 @Since("1.3.0")
 class ALSModel private[ml] (
-    override val uid: String,
-    val rank: Int,
+   @Since("1.4.0") override val uid: String,
+   @Since("1.4.0") val rank: Int,
     @transient val userFactors: DataFrame,
     @transient val itemFactors: DataFrame)
   extends Model[ALSModel] with ALSModelParams {
