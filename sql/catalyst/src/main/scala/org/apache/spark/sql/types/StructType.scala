@@ -380,7 +380,7 @@ object StructType extends AbstractDataType {
         } else if ((leftPrecision != rightPrecision) && (leftScale != rightScale)) {
           throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
             s"precision $leftPrecision and $rightPrecision & scale $leftScale and $rightScale")
-        } else if(leftPrecision != rightPrecision) {
+        } else if (leftPrecision != rightPrecision) {
           throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
             s"precision $leftPrecision and $rightPrecision")
         } else {
