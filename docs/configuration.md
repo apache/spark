@@ -1015,7 +1015,11 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.port.maxRetries</code></td>
   <td>16</td>
   <td>
-    Default maximum number of retries when binding to a port before giving up.
+    Maximum number of retries when binding to a port before giving up.
+    When a port is given a specific value (non 0), each subsequent retry will
+    increment the port used in the previous attempt by 1 before retrying. This 
+    essentially allows it to try a range of ports from the start port specified 
+    to port + maxRetries.
   </td>
 </tr>
 <tr>
@@ -1286,7 +1290,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma separated list of users/administrators that have view and modify access to all Spark jobs.
     This can be used if you run on a shared cluster and have a set of administrators or devs who
-    help debug when things work.
+    help debug when things work. Putting a "*" in the list means any user can have the priviledge
+    of admin.
   </td>
 </tr>
 <tr>
@@ -1327,7 +1332,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>Empty</td>
   <td>
     Comma separated list of users that have modify access to the Spark job. By default only the
-    user that started the Spark job has access to modify it (kill it for example).
+    user that started the Spark job has access to modify it (kill it for example). Putting a "*" in
+    the list means any user can have access to modify it.
   </td>
 </tr>
 <tr>
@@ -1349,7 +1355,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>Empty</td>
   <td>
     Comma separated list of users that have view access to the Spark web ui. By default only the
-    user that started the Spark job has view access.
+    user that started the Spark job has view access. Putting a "*" in the list means any user can
+    have view access to this Spark job.
   </td>
 </tr>
 </table>

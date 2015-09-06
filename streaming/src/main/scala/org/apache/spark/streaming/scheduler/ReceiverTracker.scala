@@ -291,7 +291,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         ReceiverTrackingInfo(
           streamId, ReceiverState.INACTIVE, None, None, None, None, Some(errorInfo))
     }
-    receiverTrackingInfos -= streamId
+    receiverTrackingInfos(streamId) = newReceiverTrackingInfo
     listenerBus.post(StreamingListenerReceiverStopped(newReceiverTrackingInfo.toReceiverInfo))
     val messageWithError = if (error != null && !error.isEmpty) {
       s"$message - $error"
@@ -483,7 +483,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         context.reply(true)
       // Local messages
       case AllReceiverIds =>
-        context.reply(receiverTrackingInfos.keys.toSeq)
+        context.reply(receiverTrackingInfos.filter(_._2.state != ReceiverState.INACTIVE).keys.toSeq)
       case StopAllReceivers =>
         assert(isTrackerStopping || isTrackerStopped)
         stopReceivers()

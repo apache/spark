@@ -15,21 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.storage
 
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.SparkException
 
-case class FunctionResult(f1: String, f2: String)
-
-class UDFSuite extends QueryTest with TestHiveSingleton {
-
-  test("UDF case insensitive") {
-    hiveContext.udf.register("random0", () => { Math.random() })
-    hiveContext.udf.register("RANDOM1", () => { Math.random() })
-    hiveContext.udf.register("strlenScala", (_: String).length + (_: Int))
-    assert(hiveContext.sql("SELECT RANDOM0() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
-    assert(hiveContext.sql("SELECT RANDOm1() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
-    assert(hiveContext.sql("SELECT strlenscala('test', 1) FROM src LIMIT 1").head().getInt(0) === 5)
-  }
-}
+private[spark]
+case class BlockFetchException(messages: String, throwable: Throwable)
+  extends SparkException(messages, throwable)

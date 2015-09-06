@@ -87,7 +87,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         left: LogicalPlan,
         right: LogicalPlan,
         condition: Option[Expression],
-        side: joins.BuildSide) = {
+        side: joins.BuildSide): Seq[SparkPlan] = {
       val broadcastHashJoin = execution.joins.BroadcastHashJoin(
         leftKeys, rightKeys, side, planLater(left), planLater(right))
       condition.map(Filter(_, broadcastHashJoin)).getOrElse(broadcastHashJoin) :: Nil
@@ -123,12 +123,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // --- Outer joins --------------------------------------------------------------------------
 
       case ExtractEquiJoinKeys(
-             LeftOuter, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
+          LeftOuter, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
         joins.BroadcastHashOuterJoin(
           leftKeys, rightKeys, LeftOuter, condition, planLater(left), planLater(right)) :: Nil
 
       case ExtractEquiJoinKeys(
-             RightOuter, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
+          RightOuter, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
         joins.BroadcastHashOuterJoin(
           leftKeys, rightKeys, RightOuter, condition, planLater(left), planLater(right)) :: Nil
 
@@ -156,11 +156,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // Aggregations that can be performed in two phases, before and after the shuffle.
       case PartialAggregation(
-             namedGroupingAttributes,
-             rewrittenAggregateExpressions,
-             groupingExpressions,
-             partialComputation,
-             child) if !canBeConvertedToNewAggregation(plan) =>
+          namedGroupingAttributes,
+          rewrittenAggregateExpressions,
+          groupingExpressions,
+          partialComputation,
+          child) if !canBeConvertedToNewAggregation(plan) =>
         execution.Aggregate(
           partial = false,
           namedGroupingAttributes,
