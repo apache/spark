@@ -44,7 +44,7 @@ XCOM_RETURN_KEY = 'return_value'
 ENCRYPTION_ON = False
 try:
     from cryptography.fernet import Fernet
-    FERNET = Fernet(conf.get('core', 'FERNET_KEY'))
+    FERNET = Fernet(conf.get('core', 'FERNET_KEY').encode('utf-8'))
     ENCRYPTION_ON = True
 except:
     pass

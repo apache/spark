@@ -17,7 +17,7 @@ except:
 
 def generate_fernet_key():
     try:
-        FERNET_KEY = Fernet.generate_key()
+        FERNET_KEY = Fernet.generate_key().decode()
     except NameError:
         FERNET_KEY = "cryptography_not_found_storing_passwords_in_plain_text"
     return FERNET_KEY
