@@ -418,21 +418,21 @@ trait Params extends Identifiable with Serializable {
   /**
    * Sets a parameter in the embedded param map.
    */
-  protected final def set[T](param: Param[T], value: T): this.type = {
+  final def set[T](param: Param[T], value: T): this.type = {
     set(param -> value)
   }
 
   /**
    * Sets a parameter (by name) in the embedded param map.
    */
-  protected final def set(param: String, value: Any): this.type = {
+  final def set(param: String, value: Any): this.type = {
     set(getParam(param), value)
   }
 
   /**
    * Sets a parameter in the embedded param map.
    */
-  protected final def set(paramPair: ParamPair[_]): this.type = {
+  final def set(paramPair: ParamPair[_]): this.type = {
     shouldOwn(paramPair.param)
     paramMap.put(paramPair)
     this
@@ -449,7 +449,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Clears the user-supplied value for the input param.
    */
-  protected final def clear(param: Param[_]): this.type = {
+  final def clear(param: Param[_]): this.type = {
     shouldOwn(param)
     paramMap.remove(param)
     this
