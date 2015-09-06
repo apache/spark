@@ -21,7 +21,6 @@ import com.google.common.base.Objects
 
 import org.apache.spark.Logging
 import org.apache.spark.mllib.linalg.VectorUDT
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.{StructType, StructField, DoubleType}
@@ -37,7 +36,7 @@ import org.apache.spark.sql.sources._
  */
 private[ml] class LibSVMRelation(val path: String, val numFeatures: Int, val vectorType: String)
     (@transient val sqlContext: SQLContext)
-  extends BaseRelation with TableScan with Logging {
+  extends BaseRelation with TableScan with Logging with Serializable {
 
   override def schema: StructType = StructType(
     StructField("label", DoubleType, nullable = false) ::
@@ -48,18 +47,10 @@ private[ml] class LibSVMRelation(val path: String, val numFeatures: Int, val vec
     val sc = sqlContext.sparkContext
     val baseRdd = MLUtils.loadLibSVMFile(sc, path, numFeatures)
 
-    val rowBuilders = Array(
-      (pt: LabeledPoint) => Seq(pt.label),
-      if (vectorType == "dense") {
-        (pt: LabeledPoint) => Seq(pt.features.toDense)
-      } else {
-        (pt: LabeledPoint) => Seq(pt.features.toSparse)
-      }
-    )
-
-    baseRdd.map(pt => {
-      Row.fromSeq(rowBuilders.map(_(pt)).reduceOption(_ ++ _).getOrElse(Seq.empty))
-    })
+    baseRdd.map { pt =>
+      val features = if (vectorType == "dense") pt.features.toDense else pt.features.toSparse
+      Row(pt.label, features)
+    }
   }
 
   override def hashCode(): Int = {
@@ -95,7 +86,7 @@ class DefaultSource extends RelationProvider with DataSourceRegister {
      * featuresType can be selected "dense" or "sparse".
      * This parameter decides the type of returned feature vector.
      */
-    val featuresType = parameters.getOrElse("featuresType", "sparse")
-    new LibSVMRelation(path, numFeatures, featuresType)(sqlContext)
+    val vectorType = parameters.getOrElse("vectorType", "sparse")
+    new LibSVMRelation(path, numFeatures, vectorType)(sqlContext)
   }
 }
