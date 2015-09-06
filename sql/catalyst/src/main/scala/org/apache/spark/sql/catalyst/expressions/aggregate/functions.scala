@@ -304,7 +304,7 @@ case class Sum(child: Expression) extends AlgebraicAggregate {
   override val evaluateExpression = Cast(currentSum, resultType)
 }
 
-case class Corr(left: Expression, right: Expression) extends AggregateFunction2 {
+case class Corr(left: Expression, right: Expression) extends AlgebraicAggregate {
 
   def children: Seq[Expression] = Seq(left, right)
 
@@ -314,91 +314,80 @@ case class Corr(left: Expression, right: Expression) extends AggregateFunction2 
 
   def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
 
-  def bufferSchema: StructType = StructType.fromAttributes(bufferAttributes)
+  private val xAvg = AttributeReference("xAvg", DoubleType)()
+  private val yAvg = AttributeReference("yAvg", DoubleType)()
+  private val ck = AttributeReference("Ck", DoubleType)()
+  private val mkX = AttributeReference("MkX", DoubleType)()
+  private val mkY = AttributeReference("MkY", DoubleType)()
+  private val count = AttributeReference("Count", DoubleType)()
 
-  def cloneBufferAttributes: Seq[Attribute] = bufferAttributes.map(_.newInstance())
+  override val bufferAttributes = ck :: mkX :: mkY :: xAvg :: yAvg :: count :: Nil
 
-  val bufferAttributes: Seq[AttributeReference] = Seq(
-    AttributeReference("xAvg", DoubleType)(),
-    AttributeReference("yAvg", DoubleType)(),
-    AttributeReference("Ck", DoubleType)(),
-    AttributeReference("MkX", DoubleType)(),
-    AttributeReference("MkY", DoubleType)(),
-    AttributeReference("count", LongType)())
-
-  override def initialize(buffer: MutableRow): Unit = {
-    (0 until 5).map(idx => buffer.setDouble(mutableBufferOffset + idx, 0.0))
-    buffer.setLong(mutableBufferOffset + 5, 0L)
+  override val initialValues = {
+    Seq(
+    /* ck    = */ Literal(0.0),
+    /* MkX   = */ Literal(0.0),
+    /* MkY   = */ Literal(0.0),
+    /* xAvg  = */ Literal(0.0),
+    /* yAvg  = */ Literal(0.0),
+    /* Count = */ Literal(0.0)
+    )
   }
 
-  override def update(buffer: MutableRow, input: InternalRow): Unit = {
-    val x = left.eval(input).asInstanceOf[Double]
-    val y = right.eval(input).asInstanceOf[Double]
+  override val updateExpressions = {
+    val x = Cast(left, DoubleType)
+    val y = Cast(right, DoubleType)
+    val deltaX = Subtract(x, xAvg)
+    val deltaY = Subtract(y, yAvg)
+    val newCount = Add(count, Literal(1.0))
 
-    var xAvg = buffer.getDouble(mutableBufferOffset)
-    var yAvg = buffer.getDouble(mutableBufferOffset + 1)
-    var Ck = buffer.getDouble(mutableBufferOffset + 2)
-    var MkX = buffer.getDouble(mutableBufferOffset + 3)
-    var MkY = buffer.getDouble(mutableBufferOffset + 4)
-    var count = buffer.getLong(mutableBufferOffset + 5)
+    val newXAvg = Add(xAvg, Divide(deltaX, newCount))
+    val newYAvg = Add(yAvg, Divide(deltaY, newCount))
 
-    val deltaX = x - xAvg
-    val deltaY = y - yAvg
-    count += 1
-    xAvg += deltaX / count
-    yAvg += deltaY / count
-    Ck += deltaX * (y - yAvg)
-    MkX += deltaX * (x - xAvg)
-    MkY += deltaY * (y - yAvg)
-
-    buffer.setDouble(mutableBufferOffset, xAvg)
-    buffer.setDouble(mutableBufferOffset + 1, yAvg)
-    buffer.setDouble(mutableBufferOffset + 2, Ck)
-    buffer.setDouble(mutableBufferOffset + 3, MkX)
-    buffer.setDouble(mutableBufferOffset + 4, MkY)
-    buffer.setLong(mutableBufferOffset + 5, count)
+    Seq(
+      /* Ck = */
+      Add(ck, Multiply(deltaX, Subtract(y, newYAvg))),
+      /* MkX = */
+      Add(mkX, Multiply(deltaX, Subtract(x, newXAvg))),
+      /* MkY = */
+      Add(mkY, Multiply(deltaY, Subtract(y, newYAvg))),
+      /* xAvg = */
+      Add(xAvg, Divide(deltaX, newCount)),
+      /* yAvg = */
+      Add(yAvg, Divide(deltaY, newCount)),
+      /* Count = */
+      newCount
+    )
   }
 
-  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
-    val count2 = buffer2.getLong(inputBufferOffset + 5)
+  override val mergeExpressions = {
+    val totalCount = Add(count.left, count.right)
+    val deltaX = Subtract(xAvg.left, xAvg.right)
+    val deltaY = Subtract(yAvg.left, yAvg.right)
 
-    if (count2 > 0) {
-      var xAvg = buffer1.getDouble(mutableBufferOffset)
-      var yAvg = buffer1.getDouble(mutableBufferOffset + 1)
-      var Ck = buffer1.getDouble(mutableBufferOffset + 2)
-      var MkX = buffer1.getDouble(mutableBufferOffset + 3)
-      var MkY = buffer1.getDouble(mutableBufferOffset + 4)
-      var count = buffer1.getLong(mutableBufferOffset + 5)
-
-      val xAvg2 = buffer2.getDouble(inputBufferOffset)
-      val yAvg2 = buffer2.getDouble(inputBufferOffset + 1)
-      val Ck2 = buffer2.getDouble(inputBufferOffset + 2)
-      val MkX2 = buffer2.getDouble(inputBufferOffset + 3)
-      val MkY2 = buffer2.getDouble(inputBufferOffset + 4)
-
-      val totalCount = count + count2
-      val deltaX = xAvg - xAvg2
-      val deltaY = yAvg - yAvg2
-      Ck += Ck2 + deltaX * deltaY * count / totalCount * count2
-      xAvg = (xAvg * count + xAvg2 * count2) / totalCount
-      yAvg = (yAvg * count + yAvg2 * count2) / totalCount
-      MkX += MkX2 + deltaX * deltaX * count / totalCount * count2
-      MkY += MkY2 + deltaY * deltaY * count / totalCount * count2
-      count = totalCount
-
-      buffer1.setDouble(mutableBufferOffset, xAvg)
-      buffer1.setDouble(mutableBufferOffset + 1, yAvg)
-      buffer1.setDouble(mutableBufferOffset + 2, Ck)
-      buffer1.setDouble(mutableBufferOffset + 3, MkX)
-      buffer1.setDouble(mutableBufferOffset + 4, MkY)
-      buffer1.setLong(mutableBufferOffset + 5, count)
-    }
+    Seq(
+      /* Ck = */
+      If(GreaterThan(count.right, Literal(0.0)), Add(ck.left, Add(ck.right,
+        Divide(Multiply(Multiply(count.left, count.right), Multiply(deltaX, deltaY)), totalCount))),
+          ck.left),
+      /* MkX = */
+      If(GreaterThan(count.right, Literal(0.0)), Add(mkX.left, Add(mkX.right,
+        Divide(Multiply(Multiply(count.left, count.right), Multiply(deltaX, deltaX)), totalCount))),
+          mkX.left),
+      /* MkY = */
+      If(GreaterThan(count.right, Literal(0.0)), Add(mkY.left, Add(mkY.right,
+        Divide(Multiply(Multiply(count.left, count.right), Multiply(deltaY, deltaY)), totalCount))),
+          mkY.left),
+      /* xAvg = */
+      If(GreaterThan(count.right, Literal(0.0)), Divide(Add(Multiply(xAvg.left, count.left),
+        Multiply(xAvg.right, count.right)), totalCount), xAvg.left),
+      /* yAvg = */
+      If(GreaterThan(count.right, Literal(0.0)), Divide(Add(Multiply(yAvg.left, count.left),
+        Multiply(yAvg.right, count.right)), totalCount), yAvg.left),
+      /* Count = */
+      If(GreaterThan(count.right, Literal(0.0)), totalCount, count.left)
+    )
   }
 
-  override def eval(buffer: InternalRow): Any = {
-    val Ck = buffer.getDouble(mutableBufferOffset + 2)
-    val MkX = buffer.getDouble(mutableBufferOffset + 3)
-    val MkY = buffer.getDouble(mutableBufferOffset + 4)
-    Ck / math.sqrt(MkX * MkY)
-  }
+  override val evaluateExpression = Divide(ck, Sqrt(Multiply(mkX , mkY)))
 }

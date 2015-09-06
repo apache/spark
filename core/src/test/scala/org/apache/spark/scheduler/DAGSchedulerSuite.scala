@@ -285,6 +285,15 @@ class DAGSchedulerSuite
     assertDataStructuresEmpty()
   }
 
+  test("equals and hashCode AccumulableInfo") {
+    val accInfo1 = new AccumulableInfo(1, " Accumulable " + 1, Some("delta" + 1), "val" + 1, true)
+    val accInfo2 = new AccumulableInfo(1, " Accumulable " + 1, Some("delta" + 1), "val" + 1, false)
+    val accInfo3 = new AccumulableInfo(1, " Accumulable " + 1, Some("delta" + 1), "val" + 1, false)
+    assert(accInfo1 !== accInfo2)
+    assert(accInfo2 === accInfo3)
+    assert(accInfo2.hashCode() === accInfo3.hashCode())
+  }
+
   test("cache location preferences w/ dependency") {
     val baseRdd = new MyRDD(sc, 1, Nil).cache()
     val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd)))
@@ -803,6 +812,7 @@ class DAGSchedulerSuite
     }
 
     // The map stage should have been submitted.
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(countSubmittedMapStageAttempts() === 1)
 
     complete(taskSets(0), Seq(

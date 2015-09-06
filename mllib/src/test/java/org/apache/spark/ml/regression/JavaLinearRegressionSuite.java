@@ -60,7 +60,7 @@ public class JavaLinearRegressionSuite implements Serializable {
   @Test
   public void linearRegressionDefaultParams() {
     LinearRegression lr = new LinearRegression();
-    assert(lr.getLabelCol().equals("label"));
+    assertEquals("label", lr.getLabelCol());
     LinearRegressionModel model = lr.fit(dataset);
     model.transform(dataset).registerTempTable("prediction");
     DataFrame predictions = jsql.sql("SELECT label, prediction FROM prediction");

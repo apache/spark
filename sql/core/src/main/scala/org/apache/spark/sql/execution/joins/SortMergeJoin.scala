@@ -238,7 +238,7 @@ private[joins] class SortMergeJoinScanner(
    * Advances the streamed input iterator and buffers all rows from the buffered input that
    * have matching keys.
    * @return true if the streamed iterator returned a row, false otherwise. If this returns true,
-   *         then [getStreamedRow and [[getBufferedMatches]] can be called to produce the outer
+   *         then [[getStreamedRow]] and [[getBufferedMatches]] can be called to produce the outer
    *         join results.
    */
   final def findNextOuterJoinRows(): Boolean = {
