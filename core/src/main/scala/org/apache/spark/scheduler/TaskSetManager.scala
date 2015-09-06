@@ -198,7 +198,7 @@ private[spark] class TaskSetManager(
 
     for (loc <- tasks(index).preferredLocations) {
 
-      val locHost: String = if( sparkLocalHostname != None ) loc.host
+      val locHost: String = if ( sparkLocalHostname != None ) loc.host
         else InetAddress.getByName(loc.host).getHostAddress
 
       loc match {
@@ -333,11 +333,12 @@ private[spark] class TaskSetManager(
       // Check for node-local tasks
       if (TaskLocality.isAllowed(locality, TaskLocality.NODE_LOCAL)) {
         for (index <- speculatableTasks if canRunOnHost(index)) {
-          val locations = if( sparkLocalHostname != None ) tasks(index).preferredLocations.map(_.host)
-            else tasks(index).preferredLocations.map(_.host).map(
+          val locations = if ( sparkLocalHostname != None ) {
+            tasks(index).preferredLocations.map(_.host)
+          } else { tasks(index).preferredLocations.map(_.host).map(
             h =>
               InetAddress.getByName(h).getHostAddress
-          )
+          ) }
           if (locations.contains(host)) {
             speculatableTasks -= index
             return Some((index, TaskLocality.NODE_LOCAL))
