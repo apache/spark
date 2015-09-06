@@ -25,8 +25,10 @@ class ConcurrentHiveSuite extends SparkFunSuite with BeforeAndAfterAll {
   ignore("multiple instances not supported") {
     test("Multiple Hive Instances") {
       (1 to 10).map { i =>
+        val conf = new SparkConf()
+        conf.set("spark.ui.enabled", "false")
         val ts =
-          new TestHiveContext(new SparkContext("local", s"TestSQLContext$i", new SparkConf()))
+          new TestHiveContext(new SparkContext("local", s"TestSQLContext$i", conf))
         ts.executeSql("SHOW TABLES").toRdd.collect()
         ts.executeSql("SELECT * FROM src").toRdd.collect()
         ts.executeSql("SHOW TABLES").toRdd.collect()
