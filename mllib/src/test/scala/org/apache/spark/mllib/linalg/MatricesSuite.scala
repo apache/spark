@@ -74,8 +74,11 @@ class MatricesSuite extends SparkFunSuite {
     }
   }
 
-  test("equals") {
+  test("equals and hashCode") {
+    val dm = Matrices.dense(2, 2, Array(0.0, 1.0, 2.0, 3.0))
     val dm1 = Matrices.dense(2, 2, Array(0.0, 1.0, 2.0, 3.0))
+    assert(dm1 === dm)
+    assert(dm1.hashCode === dm.hashCode)
     assert(dm1 === dm1)
     assert(dm1 !== dm1.transpose)
 
@@ -85,6 +88,7 @@ class MatricesSuite extends SparkFunSuite {
     val sm1 = dm1.asInstanceOf[DenseMatrix].toSparse
     assert(sm1 === sm1)
     assert(sm1 === dm1)
+    assert(sm1.hashCode === dm.asInstanceOf[DenseMatrix].toSparse.hashCode)
     assert(sm1 !== sm1.transpose)
 
     val sm2 = dm2.asInstanceOf[DenseMatrix].toSparse

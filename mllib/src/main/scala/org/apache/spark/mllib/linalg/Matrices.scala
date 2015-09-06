@@ -278,7 +278,8 @@ class DenseMatrix @Since("1.3.0") (
   }
 
   override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(numRows : Integer, numCols: Integer, toArray)
+    val state = Seq(numRows, numCols, Arrays.hashCode(values), isTransposed.hashCode)
+    state.reduce((a, b) => 31 * a + b)
   }
 
   private[mllib] def toBreeze: BM[Double] = {
@@ -552,6 +553,16 @@ class SparseMatrix @Since("1.3.0") (
   override def equals(o: Any): Boolean = o match {
     case m: Matrix => toBreeze == m.toBreeze
     case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(
+      numRows,
+      numCols,
+      Arrays.hashCode(colPtrs),
+      Arrays.hashCode(rowIndices),
+      Arrays.hashCode(values))
+    state.reduce((a, b) => 31 * a + b)
   }
 
   private[mllib] def toBreeze: BM[Double] = {

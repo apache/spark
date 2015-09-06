@@ -120,6 +120,13 @@ final class CategoricalSplit private[ml] (
     }
   }
 
+  override def hashCode(): Int = {
+    var hashCode = categories.hashCode
+    hashCode = hashCode * 31 + featureIndex
+    hashCode = hashCode * 31 + isLeft.hashCode
+    hashCode
+  }
+
   override private[tree] def toOld: OldSplit = {
     val oldCats = if (isLeft) {
       categories
@@ -180,6 +187,8 @@ final class ContinuousSplit private[ml] (override val featureIndex: Int, val thr
         false
     }
   }
+
+  override def hashCode(): Int = 31 * (31 + featureIndex) + threshold.hashCode
 
   override private[tree] def toOld: OldSplit = {
     OldSplit(featureIndex, threshold, OldFeatureType.Continuous, List.empty[Double])

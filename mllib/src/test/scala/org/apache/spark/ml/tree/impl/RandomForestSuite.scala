@@ -20,7 +20,7 @@ package org.apache.spark.ml.tree.impl
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.impl.TreeTests
-import org.apache.spark.ml.tree.{ContinuousSplit, DecisionTreeModel, LeafNode, Node}
+import org.apache.spark.ml.tree._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.tree.impurity.GiniCalculator
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -95,6 +95,19 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(mapToVec(map.toMap) ~== mapToVec(expected) relTol 0.01)
   }
 
+  test("equals and hashCode ContinuousSplit") {
+    val split1 = new ContinuousSplit(1, 1.0)
+    val split2 = new ContinuousSplit(1, 1.0)
+    assert(split1 == split2)
+    assert(split1.hashCode === split2.hashCode)
+  }
+
+  test("equals and hashCode CategoricalSplit") {
+    val split1 = new CategoricalSplit(100, Array(0, 2.0), 5)
+    val split2 = new CategoricalSplit(100, Array(0, 2.0), 5)
+    assert(split1 == split2)
+    assert(split1.hashCode === split2.hashCode)
+  }
 }
 
 private object RandomForestSuite {
