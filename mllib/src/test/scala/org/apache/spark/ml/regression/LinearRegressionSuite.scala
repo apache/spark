@@ -21,9 +21,12 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.{DenseVector, Vectors}
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
+
+import scala.util.Random
 
 class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -509,5 +512,91 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     model.summary.residuals.select("residuals").collect()
       .zip(testSummary.residuals.select("residuals").collect())
       .forall { case (Row(r1: Double), Row(r2: Double)) => r1 ~== r2 relTol 1E-5 }
+  }
+
+  test("linear regression with weighted samples"){
+    val (data, weightedData) = {
+      val activeData = LinearDataGenerator.generateLinearInput(
+        6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1)
+
+      val rnd = new Random(8392)
+      val signedData = activeData map { case p: LabeledPoint =>
+        (rnd.nextGaussian() > 0.0, p)
+      }
+
+      val data1 = signedData flatMap {
+        case (true, p) => Iterator(p, p)
+        case (false, p) => Iterator(p)
+      }
+
+      val weightedSignedData = signedData flatMap {
+        case (true, LabeledPoint(label, features)) =>
+          Iterator(
+            WeightedLabeledPoint(label, features, 1.2),
+            WeightedLabeledPoint(label, features, 0.8)
+          )
+        case (false, LabeledPoint(label, features)) =>
+          Iterator(
+            WeightedLabeledPoint(label, features, 0.3),
+            WeightedLabeledPoint(label, features, 0.1),
+            WeightedLabeledPoint(label, features, 0.6)
+          )
+      }
+
+      val noiseData = LinearDataGenerator.generateLinearInput(
+        2, Array(1, 3), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1)
+      val weightedNoiseData = noiseData map {
+        case LabeledPoint(label, features) => WeightedLabeledPoint(label, features, 0)
+      }
+      val data2 = weightedSignedData ++ weightedNoiseData
+
+      (sqlContext.createDataFrame(sc.parallelize(data1, 4)),
+        sqlContext.createDataFrame(sc.parallelize(data2, 4)))
+    }
+
+    val trainer1a = (new LinearRegression).setFitIntercept(true)
+      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true)
+    val trainer1b = (new LinearRegression).setFitIntercept(true).setWeightCol("weight")
+      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true)
+    val model1a0 = trainer1a.fit(data)
+    val model1a1 = trainer1a.fit(weightedData)
+    val model1b = trainer1b.fit(weightedData)
+    assert(model1a0.weights !~= model1a1.weights absTol 1E-3)
+    assert(model1a0.intercept !~= model1a1.intercept absTol 1E-3)
+    assert(model1a0.weights ~== model1b.weights absTol 1E-10)
+    assert(model1a0.intercept ~== model1b.intercept absTol 1E-10)
+
+    val trainer2a = (new LinearRegression).setFitIntercept(true)
+      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false)
+    val trainer2b = (new LinearRegression).setFitIntercept(true).setWeightCol("weight")
+      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false)
+    val model2a0 = trainer2a.fit(data)
+    val model2a1 = trainer2a.fit(weightedData)
+    val model2b = trainer2b.fit(weightedData)
+    assert(model2a0.weights !~= model2a1.weights absTol 1E-3)
+    assert(model2a0.intercept !~= model2a1.intercept absTol 1E-3)
+    assert(model2a0.weights ~== model2b.weights absTol 1E-10)
+    assert(model2a0.intercept ~== model2b.intercept absTol 1E-10)
+
+    val trainer3a = (new LinearRegression).setFitIntercept(false)
+      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true)
+    val trainer3b = (new LinearRegression).setFitIntercept(false).setWeightCol("weight")
+      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true)
+    val model3a0 = trainer3a.fit(data)
+    val model3a1 = trainer3a.fit(weightedData)
+    val model3b = trainer3b.fit(weightedData)
+    assert(model3a0.weights !~= model3a1.weights absTol 1E-3)
+    assert(model3a0.weights ~== model3b.weights absTol 1E-10)
+
+    val trainer4a = (new LinearRegression).setFitIntercept(false)
+      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false)
+    val trainer4b = (new LinearRegression).setFitIntercept(false).setWeightCol("weight")
+      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false)
+    val model4a0 = trainer4a.fit(data)
+    val model4a1 = trainer4a.fit(weightedData)
+    val model4b = trainer4b.fit(weightedData)
+    assert(model4a0.weights !~= model4a1.weights absTol 1E-3)
+    assert(model4a0.weights ~== model4b.weights absTol 1E-10)
+
   }
 }
