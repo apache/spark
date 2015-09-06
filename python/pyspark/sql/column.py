@@ -226,6 +226,9 @@ class Column(object):
             raise AttributeError(item)
         return self.getField(item)
 
+    def __iter__(self):
+        raise TypeError("Column is not iterable")
+
     # string methods
     rlike = _bin_op("rlike")
     like = _bin_op("like")

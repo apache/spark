@@ -28,7 +28,9 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
 
 import org.apache.spark._
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart, SparkListenerExecutorAdded}
+import org.apache.spark.launcher.TestClasspathBuilder
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
+  SparkListenerExecutorAdded}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.Utils
 
@@ -39,7 +41,7 @@ import org.apache.spark.util.Utils
  */
 class YarnClusterSuite extends BaseYarnClusterSuite {
 
-  override def yarnConfig: YarnConfiguration = new YarnConfiguration()
+  override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
 
   private val TEST_PYFILE = """
     |import mod1, mod2
@@ -111,6 +113,17 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val primaryPyFile = new File(tempDir, "test.py")
     Files.write(TEST_PYFILE, primaryPyFile, UTF_8)
 
+    // When running tests, let's not assume the user has built the assembly module, which also
+    // creates the pyspark archive. Instead, let's use PYSPARK_ARCHIVES_PATH to point at the
+    // needed locations.
+    val sparkHome = sys.props("spark.test.home");
+    val pythonPath = Seq(
+        s"$sparkHome/python/lib/py4j-0.8.2.1-src.zip",
+        s"$sparkHome/python")
+    val extraEnv = Map(
+      "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
+      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator))
+
     val moduleDir =
       if (clientMode) {
         // In client-mode, .py files added with --py-files are not visible in the driver.
@@ -130,7 +143,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
     runSpark(clientMode, primaryPyFile.getAbsolutePath(),
       sparkArgs = Seq("--py-files", pyFiles),
-      appArgs = Seq(result.getAbsolutePath()))
+      appArgs = Seq(result.getAbsolutePath()),
+      extraEnv = extraEnv)
     checkResult(result)
   }
 

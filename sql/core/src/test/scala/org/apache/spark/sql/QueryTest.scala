@@ -25,7 +25,9 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.columnar.InMemoryRelation
 
-class QueryTest extends PlanTest {
+abstract class QueryTest extends PlanTest {
+
+  protected def sqlContext: SQLContext
 
   // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
   TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
@@ -56,18 +58,33 @@ class QueryTest extends PlanTest {
    * @param df the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    */
-  protected def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Unit = {
-    QueryTest.checkAnswer(df, expectedAnswer) match {
+  protected def checkAnswer(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    val analyzedDF = try df catch {
+      case ae: AnalysisException =>
+        val currentValue = sqlContext.conf.dataFrameEagerAnalysis
+        sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, false)
+        val partiallyAnalzyedPlan = df.queryExecution.analyzed
+        sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, currentValue)
+        fail(
+          s"""
+             |Failed to analyze query: $ae
+             |$partiallyAnalzyedPlan
+             |
+             |${stackTraceToString(ae)}
+             |""".stripMargin)
+    }
+
+    QueryTest.checkAnswer(analyzedDF, expectedAnswer) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
   }
 
-  protected def checkAnswer(df: DataFrame, expectedAnswer: Row): Unit = {
+  protected def checkAnswer(df: => DataFrame, expectedAnswer: Row): Unit = {
     checkAnswer(df, Seq(expectedAnswer))
   }
 
-  protected def checkAnswer(df: DataFrame, expectedAnswer: DataFrame): Unit = {
+  protected def checkAnswer(df: => DataFrame, expectedAnswer: DataFrame): Unit = {
     checkAnswer(df, expectedAnswer.collect())
   }
 

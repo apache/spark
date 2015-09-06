@@ -431,6 +431,32 @@ test_that("collect() and take() on a DataFrame return the same number of rows an
   expect_equal(ncol(collect(df)), ncol(take(df, 10)))
 })
 
+test_that("collect() support Unicode characters", {
+  markUtf8 <- function(s) {
+    Encoding(s) <- "UTF-8"
+    s
+  }
+
+  lines <- c("{\"name\":\"안녕하세요\"}",
+             "{\"name\":\"您好\", \"age\":30}",
+             "{\"name\":\"こんにちは\", \"age\":19}",
+             "{\"name\":\"Xin chào\"}")
+
+  jsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  writeLines(lines, jsonPath)
+
+  df <- read.df(sqlContext, jsonPath, "json")
+  rdf <- collect(df)
+  expect_true(is.data.frame(rdf))
+  expect_equal(rdf$name[1], markUtf8("안녕하세요"))
+  expect_equal(rdf$name[2], markUtf8("您好"))
+  expect_equal(rdf$name[3], markUtf8("こんにちは"))
+  expect_equal(rdf$name[4], markUtf8("Xin chào"))
+
+  df1 <- createDataFrame(sqlContext, rdf)
+  expect_equal(collect(where(df1, df1$name == markUtf8("您好")))$name, markUtf8("您好"))
+})
+
 test_that("multiple pipeline transformations result in an RDD with the correct values", {
   df <- jsonFile(sqlContext, jsonPath)
   first <- lapply(df, function(row) {
@@ -612,6 +638,10 @@ test_that("subsetting", {
   df5 <- df[df$age %in% c(19), c(1,2)]
   expect_equal(count(df5), 1)
   expect_equal(columns(df5), c("name", "age"))
+
+  df6 <- subset(df, df$age %in% c(30), c(1,2))
+  expect_equal(count(df6), 1)
+  expect_equal(columns(df6), c("name", "age"))
 })
 
 test_that("selectExpr() on a DataFrame", {
@@ -1028,7 +1058,7 @@ test_that("withColumn() and withColumnRenamed()", {
   expect_equal(columns(newDF2)[1], "newerAge")
 })
 
-test_that("mutate(), rename() and names()", {
+test_that("mutate(), transform(), rename() and names()", {
   df <- jsonFile(sqlContext, jsonPath)
   newDF <- mutate(df, newAge = df$age + 2)
   expect_equal(length(columns(newDF)), 3)
@@ -1042,6 +1072,20 @@ test_that("mutate(), rename() and names()", {
   names(newDF2) <- c("newerName", "evenNewerAge")
   expect_equal(length(names(newDF2)), 2)
   expect_equal(names(newDF2)[1], "newerName")
+
+  transformedDF <- transform(df, newAge = -df$age, newAge2 = df$age / 2)
+  expect_equal(length(columns(transformedDF)), 4)
+  expect_equal(columns(transformedDF)[3], "newAge")
+  expect_equal(columns(transformedDF)[4], "newAge2")
+  expect_equal(first(filter(transformedDF, transformedDF$name == "Andy"))$newAge, -30)
+
+  # test if transform on local data frames works
+  # ensure the proper signature is used - otherwise this will fail to run
+  attach(airquality)
+  result <- transform(Ozone, logOzone = log(Ozone))
+  expect_equal(nrow(result), 153)
+  expect_equal(ncol(result), 2)
+  detach(airquality)
 })
 
 test_that("write.df() on DataFrame and works with parquetFile", {
@@ -1083,7 +1127,7 @@ test_that("describe() and summarize() on a DataFrame", {
   expect_equal(collect(stats2)[5, "age"], "30")
 })
 
-test_that("dropna() on a DataFrame", {
+test_that("dropna() and na.omit() on a DataFrame", {
   df <- jsonFile(sqlContext, jsonPathNa)
   rows <- collect(df)
 
@@ -1091,6 +1135,8 @@ test_that("dropna() on a DataFrame", {
 
   expected <- rows[!is.na(rows$name),]
   actual <- collect(dropna(df, cols = "name"))
+  expect_identical(expected, actual)
+  actual <- collect(na.omit(df, cols = "name"))
   expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age),]
@@ -1101,13 +1147,18 @@ test_that("dropna() on a DataFrame", {
   expect_identical(expected$age, actual$age)
   expect_identical(expected$height, actual$height)
   expect_identical(expected$name, actual$name)
+  actual <- collect(na.omit(df, cols = "age"))
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height),]
   actual <- collect(dropna(df, cols = c("age", "height")))
   expect_identical(expected, actual)
+  actual <- collect(na.omit(df, cols = c("age", "height")))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
   actual <- collect(dropna(df))
+  expect_identical(expected, actual)
+  actual <- collect(na.omit(df))
   expect_identical(expected, actual)
 
   # drop with how
@@ -1115,21 +1166,31 @@ test_that("dropna() on a DataFrame", {
   expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
   actual <- collect(dropna(df))
   expect_identical(expected, actual)
+  actual <- collect(na.omit(df))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) | !is.na(rows$height) | !is.na(rows$name),]
   actual <- collect(dropna(df, "all"))
+  expect_identical(expected, actual)
+  actual <- collect(na.omit(df, "all"))
   expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height) & !is.na(rows$name),]
   actual <- collect(dropna(df, "any"))
   expect_identical(expected, actual)
+  actual <- collect(na.omit(df, "any"))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) & !is.na(rows$height),]
   actual <- collect(dropna(df, "any", cols = c("age", "height")))
   expect_identical(expected, actual)
+  actual <- collect(na.omit(df, "any", cols = c("age", "height")))
+  expect_identical(expected, actual)
 
   expected <- rows[!is.na(rows$age) | !is.na(rows$height),]
   actual <- collect(dropna(df, "all", cols = c("age", "height")))
+  expect_identical(expected, actual)
+  actual <- collect(na.omit(df, "all", cols = c("age", "height")))
   expect_identical(expected, actual)
 
   # drop with threshold
@@ -1137,11 +1198,15 @@ test_that("dropna() on a DataFrame", {
   expected <- rows[as.integer(!is.na(rows$age)) + as.integer(!is.na(rows$height)) >= 2,]
   actual <- collect(dropna(df, minNonNulls = 2, cols = c("age", "height")))
   expect_identical(expected, actual)
+  actual <- collect(na.omit(df, minNonNulls = 2, cols = c("age", "height")))
+  expect_identical(expected, actual)
 
   expected <- rows[as.integer(!is.na(rows$age)) +
                    as.integer(!is.na(rows$height)) +
                    as.integer(!is.na(rows$name)) >= 3,]
   actual <- collect(dropna(df, minNonNulls = 3, cols = c("name", "age", "height")))
+  expect_identical(expected, actual)
+  actual <- collect(na.omit(df, minNonNulls = 3, cols = c("name", "age", "height")))
   expect_identical(expected, actual)
 })
 

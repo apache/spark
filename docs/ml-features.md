@@ -211,6 +211,115 @@ for feature in result.select("result").take(3):
 </div>
 </div>
 
+## CountVectorizer
+
+`CountVectorizer` and `CountVectorizerModel` aim to help convert a collection of text documents
+ to vectors of token counts. When an a-priori dictionary is not available, `CountVectorizer` can
+ be used as an `Estimator` to extract the vocabulary and generates a `CountVectorizerModel`. The
+ model produces sparse representations for the documents over the vocabulary, which can then be
+ passed to other algorithms like LDA.
+
+ During the fitting process, `CountVectorizer` will select the top `vocabSize` words ordered by
+ term frequency across the corpus. An optional parameter "minDF" also affect the fitting process
+ by specifying the minimum number (or fraction if < 1.0) of documents a term must appear in to be
+ included in the vocabulary.
+
+**Examples**
+
+Assume that we have the following DataFrame with columns `id` and `texts`:
+
+~~~~
+ id | texts
+----|----------
+ 0  | Array("a", "b", "c")
+ 1  | Array("a", "b", "b", "c", "a")
+~~~~
+
+each row in`texts` is a document of type Array[String].
+Invoking fit of `CountVectorizer` produces a `CountVectorizerModel` with vocabulary (a, b, c),
+then the output column "vector" after transformation contains:
+
+~~~~
+ id | texts                           | vector
+----|---------------------------------|---------------
+ 0  | Array("a", "b", "c")            | (3,[0,1,2],[1.0,1.0,1.0])
+ 1  | Array("a", "b", "b", "c", "a")  | (3,[0,1,2],[2.0,2.0,1.0])
+~~~~
+
+each vector represents the token counts of the document over the vocabulary.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+More details can be found in the API docs for
+[CountVectorizer](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizer) and
+[CountVectorizerModel](api/scala/index.html#org.apache.spark.ml.feature.CountVectorizerModel).
+{% highlight scala %}
+import org.apache.spark.ml.feature.CountVectorizer
+import org.apache.spark.mllib.util.CountVectorizerModel
+
+val df = sqlContext.createDataFrame(Seq(
+  (0, Array("a", "b", "c")),
+  (1, Array("a", "b", "b", "c", "a"))
+)).toDF("id", "words")
+
+// fit a CountVectorizerModel from the corpus
+val cvModel: CountVectorizerModel = new CountVectorizer()
+  .setInputCol("words")
+  .setOutputCol("features")
+  .setVocabSize(3)
+  .setMinDF(2) // a term must appear in more or equal to 2 documents to be included in the vocabulary
+  .fit(df)
+
+// alternatively, define CountVectorizerModel with a-priori vocabulary
+val cvm = new CountVectorizerModel(Array("a", "b", "c"))
+  .setInputCol("words")
+  .setOutputCol("features")
+
+cvModel.transform(df).select("features").show()
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+More details can be found in the API docs for
+[CountVectorizer](api/java/org/apache/spark/ml/feature/CountVectorizer.html) and
+[CountVectorizerModel](api/java/org/apache/spark/ml/feature/CountVectorizerModel.html).
+{% highlight java %}
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.CountVectorizer;
+import org.apache.spark.ml.feature.CountVectorizerModel;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.types.*;
+
+// Input data: Each row is a bag of words from a sentence or document.
+JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
+  RowFactory.create(Arrays.asList("a", "b", "c")),
+  RowFactory.create(Arrays.asList("a", "b", "b", "c", "a"))
+));
+StructType schema = new StructType(new StructField [] {
+  new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
+});
+DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+
+// fit a CountVectorizerModel from the corpus
+CountVectorizerModel cvModel = new CountVectorizer()
+  .setInputCol("text")
+  .setOutputCol("feature")
+  .setVocabSize(3)
+  .setMinDF(2) // a term must appear in more or equal to 2 documents to be included in the vocabulary
+  .fit(df);
+
+// alternatively, define CountVectorizerModel with a-priori vocabulary
+CountVectorizerModel cvm = new CountVectorizerModel(new String[]{"a", "b", "c"})
+  .setInputCol("text")
+  .setOutputCol("feature");
+
+cvModel.transform(df).show();
+{% endhighlight %}
+</div>
+</div>
+
 # Feature Transformers
 
 ## Tokenizer

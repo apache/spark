@@ -66,12 +66,12 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Seq(Row(1, 3), Row(2, 3), Row(3, 3))
     )
 
-    ctx.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
+    sqlContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
     checkAnswer(
       testData2.groupBy("a").agg(sum($"b")),
       Seq(Row(3), Row(3), Row(3))
     )
-    ctx.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, true)
+    sqlContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, true)
   }
 
   test("agg without groups") {

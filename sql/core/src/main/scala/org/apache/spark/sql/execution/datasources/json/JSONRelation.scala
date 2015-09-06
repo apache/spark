@@ -30,6 +30,7 @@ import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 
 import org.apache.spark.Logging
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -169,8 +170,10 @@ private[json] class JsonOutputWriter(
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val uniqueWriteJobId = context.getConfiguration.get("spark.sql.sources.writeJobUUID")
-        val split = context.getTaskAttemptID.getTaskID.getId
+        val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+        val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+        val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
+        val split = taskAttemptId.getTaskID.getId
         new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
       }
     }.getRecordWriter(context)
