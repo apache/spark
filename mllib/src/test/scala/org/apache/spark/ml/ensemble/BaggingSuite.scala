@@ -33,11 +33,11 @@ class BaggingSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val lr = new LinearRegression
     val bagging = new Bagging()
-      .setEstimator(lr)
+      .setPredictor(lr)
       .setIsClassifier(false)
       .setNumModels(3)
       .setSeed(42L)
-    assert(bagging.getEstimator.uid === lr.uid)
+    assert(bagging.getPredictor.uid === lr.uid)
     assert(bagging.getIsClassifier === false)
     assert(bagging.getNumModels === 3)
     assert(bagging.getSeed === 42)
@@ -52,7 +52,7 @@ class BaggingSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val lr = new LinearRegression
     val bagging = new Bagging()
-      .setEstimator(lr)
+      .setPredictor(lr)
       .setIsClassifier(false)
       .setNumModels(3)
       .setSeed(42L)
@@ -70,7 +70,7 @@ class BaggingSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val lr = new LogisticRegression
     val bagging = new Bagging()
-      .setEstimator(lr)
+      .setPredictor(lr)
       .setIsClassifier(true)
       .setNumModels(3)
       .setSeed(42L)
