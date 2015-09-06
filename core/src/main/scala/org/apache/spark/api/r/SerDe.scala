@@ -216,6 +216,17 @@ private[spark] object SerDe {
     }
   }
 
+  private def writeKeyValue(dos: DataOutputStream, key: Object, value: Object): Unit = {
+    if (key == null) {
+      throw new IllegalArgumentException("Key in map can't be null.")
+    } else if (!key.isInstanceOf[String]) {
+      throw new IllegalArgumentException(s"Invalid map key type: ${key.getClass.getName}")
+    }
+
+    writeString(dos, key.asInstanceOf[String])
+    writeObject(dos, value)
+  }
+
   def writeObject(dos: DataOutputStream, obj: Object): Unit = {
     if (obj == null) {
       writeType(dos, "void")
@@ -316,29 +327,15 @@ private[spark] object SerDe {
           while(iter.hasNext) {
             val entry = iter.next
             val key = entry.getKey
-
-            if (key == null) {
-              throw new IllegalArgumentException("Key in map can't be null.")
-            } else if (!key.isInstanceOf[String]) {
-              throw new IllegalArgumentException(s"Invalid map key type: ${key.getClass.getName}")
-            }
-            writeString(dos, key.asInstanceOf[String])
-
             val value = entry.getValue
-            writeObject(dos, value.asInstanceOf[Object])
+
+            writeKeyValue(dos, key.asInstanceOf[Object], value.asInstanceOf[Object])
           }
         case v: scala.collection.Map[_, _] =>
           writeType(dos, "map")
           writeInt(dos, v.size)
           v.foreach { case (key, value) =>
-            if (key == null) {
-              throw new IllegalArgumentException("Key in map can't be null.")
-            } else if (!key.isInstanceOf[String]) {
-              throw new IllegalArgumentException(s"Invalid map key type: ${key.getClass.getName}")
-            }
-
-            writeString(dos, key.asInstanceOf[String])
-            writeObject(dos, value.asInstanceOf[Object])
+            writeKeyValue(dos, key.asInstanceOf[Object], value.asInstanceOf[Object])
           }
  
         case _ =>
