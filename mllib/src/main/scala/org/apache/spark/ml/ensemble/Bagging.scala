@@ -17,17 +17,17 @@
 
 package org.apache.spark.ml.ensemble
 
+import scala.util.Random
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasPredictionCol, HasSeed}
+import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.sql.{Row, DataFrame}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
-
-import scala.util.Random
 
 /**
  * Params for [[Bagging]] and [[BaggingModel]].

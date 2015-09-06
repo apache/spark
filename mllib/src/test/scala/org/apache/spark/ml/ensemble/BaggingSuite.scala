@@ -34,6 +34,7 @@ class BaggingSuite extends SparkFunSuite with MLlibTestSparkContext {
     val lr = new LinearRegression
     val bagging = new Bagging()
       .setPredictor(lr)
+      .setPredictionCol("test")
       .setIsClassifier(false)
       .setNumModels(3)
       .setSeed(42L)
@@ -43,6 +44,7 @@ class BaggingSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(bagging.getSeed === 42)
 
     val baggedModel = bagging.fit(dataset)
+    assert(baggedModel.transform(dataset).columns.contains("test"))
   }
 
   test("bagging with linear regression") {
