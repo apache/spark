@@ -144,7 +144,7 @@ class Bagging[
  * TODO: type-safe way to ensure models has at least one
  */
 @Experimental
-class BaggingModel[FeatureType, M <: PredictionModel[FeatureType,M]] private[ml] (
+class BaggingModel[FeatureType, M <: PredictionModel[FeatureType, M]] private[ml] (
     override val uid: String,
     val models: Seq[M])
   extends Model[BaggingModel[FeatureType, M]]
@@ -233,9 +233,9 @@ private object Bagging {
         )
       ),
       StructType(
-        (if (inFront) Array(StructField(colName,LongType,false)) else Array[StructField]())
-          ++ df.schema.fields ++
-          (if (inFront) Array[StructField]() else Array(StructField(colName,LongType,false)))
+        (if (inFront) Array(StructField(colName, LongType, false)) else Array[StructField]()) ++
+          df.schema.fields ++
+          (if (inFront) Array[StructField]() else Array(StructField(colName, LongType, false)))
       )
     )
   }
