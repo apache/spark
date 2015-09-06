@@ -155,7 +155,7 @@ structField.character <- function(x, type, nullable = TRUE) {
   }
 
   checkType(type)
-  
+
   sfObj <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                        "createStructField",
                        x,

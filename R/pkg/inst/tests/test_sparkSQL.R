@@ -50,7 +50,7 @@ jsonPathNa <- tempfile(pattern="sparkr-test", fileext=".tmp")
 writeLines(mockLinesNa, jsonPathNa)
 
 # For test complex types in DataFrame
-mockLinesComplexType <- 
+mockLinesComplexType <-
   c("{\"c1\":[1, 2, 3], \"c2\":[\"a\", \"b\", \"c\"], \"c3\":[1.0, 2.0, 3.0]}",
     "{\"c1\":[4, 5, 6], \"c2\":[\"d\", \"e\", \"f\"], \"c3\":[4.0, 5.0, 6.0]}",
     "{\"c1\":[7, 8, 9], \"c2\":[\"g\", \"h\", \"i\"], \"c3\":[7.0, 8.0, 9.0]}")
@@ -253,7 +253,7 @@ test_that("create DataFrame with nested array and struct", {
 #  ldf <- collect(df)
 #  expect_equal(ldf[1,], l[[1]])
 
-  
+
   #  ArrayType only for now
   l <- list(as.list(1:10), list("a", "b"))
   df <- createDataFrame(sqlContext, list(l), c("a", "b"))
@@ -269,7 +269,7 @@ test_that("Collect DataFrame with complex types", {
   # only ArrayType now
   # TODO: tests for StructType and MapType after they are supported
   df <- jsonFile(sqlContext, complexTypeJsonPath)
-  
+
   ldf <- collect(df)
   expect_equal(nrow(ldf), 3)
   expect_equal(ncol(ldf), 3)
@@ -638,7 +638,7 @@ test_that("subsetting", {
   df4 <- df[df$age %in% c(19, 30), 1:2]
   expect_equal(count(df4), 2)
   expect_equal(columns(df4), c("name", "age"))
-  
+
   df5 <- df[df$age %in% c(19), c(1,2)]
   expect_equal(count(df5), 1)
   expect_equal(columns(df5), c("name", "age"))
