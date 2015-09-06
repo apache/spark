@@ -32,7 +32,8 @@ import scala.util.Random
 /**
  * Params for [[Bagging]] and [[BaggingModel]].
  */
-private[ml] trait BaggingParams[M <: Model[M] with HasPredictionCol] extends Params with HasSeed {
+private[ml] trait BaggingParams[M <: Model[M] with PredictorParams]
+  extends Params with HasSeed {
   /**
    * Param for the [[estimator]] to be validated.
    * @group param
@@ -78,7 +79,7 @@ private[ml] trait BaggingParams[M <: Model[M] with HasPredictionCol] extends Par
  * the ensemble prediction.
  */
 @Experimental
-class Bagging[M <: Model[M] with HasPredictionCol](override val uid: String)
+class Bagging[M <: PredictionModel[_,M]](override val uid: String)
   extends Estimator[BaggingModel[M]] with BaggingParams[M] with Logging {
 
   def this() = this(Identifiable.randomUID("bagging"))
@@ -99,7 +100,6 @@ class Bagging[M <: Model[M] with HasPredictionCol](override val uid: String)
     Random.setSeed($(seed))
     val models = (0 until $(numModels)).map { _ =>
       val bootstrapSample = dataset.sample(true, 1.0, Random.nextLong())
-      println(s"sampleSize: ${dataset.count()}, bootstrapSize: ${bootstrapSample.count()}")
       $(estimator).fit(bootstrapSample)
     }
     copyValues(new BaggingModel[M](uid, models).setParent(this))
@@ -125,7 +125,7 @@ class Bagging[M <: Model[M] with HasPredictionCol](override val uid: String)
  * TODO: type-safe way to ensure models has at least one
  */
 @Experimental
-class BaggingModel[M <: Model[M] with HasPredictionCol] private[ml] (
+class BaggingModel[M <: PredictionModel[_,M]] private[ml] (
     override val uid: String,
     val models: Seq[M])
     extends Model[BaggingModel[M]] with BaggingParams[M] {
@@ -136,7 +136,7 @@ class BaggingModel[M <: Model[M] with HasPredictionCol] private[ml] (
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
-    // these params are constant across models since estimator unchanged
+    // these are constant across models since the estimator unchanged
     val predictionCol = models.head.getPredictionCol // head is safe because models.size > 0
     val instanceIdCol = "instanceId"
     val modelIdCol = "modelId"
@@ -151,7 +151,7 @@ class BaggingModel[M <: Model[M] with HasPredictionCol] private[ml] (
     }.reduce[DataFrame] { case (a: DataFrame, b: DataFrame) =>
       a.unionAll(b)
     }
-    val aggregatedPrediction = if (this.getIsClassifier) {
+    val aggregatedPrediction = if (this.getIsClassifier) { // aggregate by voting
       // counts number of models voting for each (instance, prediction) pair
       val predictionCounts = predictions
         .groupBy(instanceIdCol, predictionCol)
@@ -168,7 +168,7 @@ class BaggingModel[M <: Model[M] with HasPredictionCol] private[ml] (
       maxPredictionCounts
         .join(predictionCounts, Seq(instanceIdCol, predictionCountsCol))
         .drop(predictionCountsCol)
-    } else {
+    } else { // aggregate by averaging
       predictions.groupBy(instanceIdCol)
         .agg(predictionCol -> "avg")
         .withColumnRenamed("avg(" + predictionCol + ")", predictionCol)
