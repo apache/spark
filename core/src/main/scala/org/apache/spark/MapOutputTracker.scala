@@ -21,8 +21,8 @@ import java.io._
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
-import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcCallContext, RpcEndpoint}
@@ -398,7 +398,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
  */
 private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTracker(conf) {
   protected val mapStatuses: Map[Int, Array[MapStatus]] =
-    new ConcurrentHashMap[Int, Array[MapStatus]]
+    new ConcurrentHashMap[Int, Array[MapStatus]]().asScala
 }
 
 private[spark] object MapOutputTracker extends Logging {

@@ -26,7 +26,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.serializer.{SerializationStream, DeserializationStream, SerializerInstance, Serializer}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.unsafe.PlatformDependent
+import org.apache.spark.unsafe.Platform
 
 /**
  * Serializer for serializing [[UnsafeRow]]s during shuffle. Since UnsafeRows are already stored as
@@ -58,27 +58,14 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
    */
   override def serializeStream(out: OutputStream): SerializationStream = new SerializationStream {
     private[this] var writeBuffer: Array[Byte] = new Array[Byte](4096)
-    // When `out` is backed by ChainedBufferOutputStream, we will get an
-    // UnsupportedOperationException when we call dOut.writeInt because it internally calls
-    // ChainedBufferOutputStream's write(b: Int), which is not supported.
-    // To workaround this issue, we create an array for sorting the int value.
-    // To reproduce the problem, use dOut.writeInt(row.getSizeInBytes) and
-    // run SparkSqlSerializer2SortMergeShuffleSuite.
-    private[this] var intBuffer: Array[Byte] = new Array[Byte](4)
-    private[this] val dOut: DataOutputStream = new DataOutputStream(out)
+    private[this] val dOut: DataOutputStream =
+      new DataOutputStream(new BufferedOutputStream(out))
 
     override def writeValue[T: ClassTag](value: T): SerializationStream = {
       val row = value.asInstanceOf[UnsafeRow]
-      val size = row.getSizeInBytes
-      // This part is based on DataOutputStream's writeInt.
-      // It is for dOut.writeInt(row.getSizeInBytes).
-      intBuffer(0) = ((size >>> 24) & 0xFF).toByte
-      intBuffer(1) = ((size >>> 16) & 0xFF).toByte
-      intBuffer(2) = ((size >>> 8) & 0xFF).toByte
-      intBuffer(3) = ((size >>> 0) & 0xFF).toByte
-      dOut.write(intBuffer, 0, 4)
 
-      row.writeToStream(out, writeBuffer)
+      dOut.writeInt(row.getSizeInBytes)
+      row.writeToStream(dOut, writeBuffer)
       this
     }
 
@@ -105,7 +92,6 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
 
     override def close(): Unit = {
       writeBuffer = null
-      intBuffer = null
       dOut.writeInt(EOF)
       dOut.close()
     }
@@ -113,7 +99,7 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
 
   override def deserializeStream(in: InputStream): DeserializationStream = {
     new DeserializationStream {
-      private[this] val dIn: DataInputStream = new DataInputStream(in)
+      private[this] val dIn: DataInputStream = new DataInputStream(new BufferedInputStream(in))
       // 1024 is a default buffer size; this buffer will grow to accommodate larger rows
       private[this] var rowBuffer: Array[Byte] = new Array[Byte](1024)
       private[this] var row: UnsafeRow = new UnsafeRow()
@@ -122,6 +108,7 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
       override def asKeyValueIterator: Iterator[(Int, UnsafeRow)] = {
         new Iterator[(Int, UnsafeRow)] {
           private[this] var rowSize: Int = dIn.readInt()
+          if (rowSize == EOF) dIn.close()
 
           override def hasNext: Boolean = rowSize != EOF
 
@@ -129,10 +116,11 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
             if (rowBuffer.length < rowSize) {
               rowBuffer = new Array[Byte](rowSize)
             }
-            ByteStreams.readFully(in, rowBuffer, 0, rowSize)
-            row.pointTo(rowBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, rowSize)
+            ByteStreams.readFully(dIn, rowBuffer, 0, rowSize)
+            row.pointTo(rowBuffer, Platform.BYTE_ARRAY_OFFSET, numFields, rowSize)
             rowSize = dIn.readInt() // read the next row's size
             if (rowSize == EOF) { // We are returning the last row in this stream
+              dIn.close()
               val _rowTuple = rowTuple
               // Null these out so that the byte array can be garbage collected once the entire
               // iterator has been consumed
@@ -163,8 +151,8 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
         if (rowBuffer.length < rowSize) {
           rowBuffer = new Array[Byte](rowSize)
         }
-        ByteStreams.readFully(in, rowBuffer, 0, rowSize)
-        row.pointTo(rowBuffer, PlatformDependent.BYTE_ARRAY_OFFSET, numFields, rowSize)
+        ByteStreams.readFully(dIn, rowBuffer, 0, rowSize)
+        row.pointTo(rowBuffer, Platform.BYTE_ARRAY_OFFSET, numFields, rowSize)
         row.asInstanceOf[T]
       }
 

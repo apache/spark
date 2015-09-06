@@ -25,8 +25,6 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
   override val dataSourceName: String = classOf[SimpleTextSource].getCanonicalName
 
-  import sqlContext._
-
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
       val basePath = new Path(file.getCanonicalPath)
@@ -44,37 +42,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        read.format(dataSourceName)
-          .option("dataSchema", dataSchemaWithPartition.json)
-          .load(file.getCanonicalPath))
-    }
-  }
-}
-
-class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
-  override val dataSourceName: String =
-    classOf[org.apache.spark.sql.json.DefaultSource].getCanonicalName
-
-  import sqlContext._
-
-  test("save()/load() - partitioned table - simple queries - partition columns in data") {
-    withTempDir { file =>
-      val basePath = new Path(file.getCanonicalPath)
-      val fs = basePath.getFileSystem(SparkHadoopUtil.get.conf)
-      val qualifiedBasePath = fs.makeQualified(basePath)
-
-      for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
-        val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
-        sparkContext
-          .parallelize(for (i <- 1 to 3) yield s"""{"a":$i,"b":"val_$i"}""")
-          .saveAsTextFile(partitionDir.toString)
-      }
-
-      val dataSchemaWithPartition =
-        StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
-
-      checkQueries(
-        read.format(dataSourceName)
+        hiveContext.read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
     }

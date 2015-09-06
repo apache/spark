@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -28,15 +28,12 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 
-abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
-  override lazy val sqlContext: SQLContext = TestHive
-
-  import sqlContext.sql
+abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import sqlContext.implicits._
 
   val dataSourceName: String
@@ -505,17 +502,17 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-8578 specified custom output committer will not be used to append data") {
-    val clonedConf = new Configuration(configuration)
+    val clonedConf = new Configuration(hadoopConfiguration)
     try {
       val df = sqlContext.range(1, 10).toDF("i")
       withTempPath { dir =>
         df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
-        configuration.set(
+        hadoopConfiguration.set(
           SQLConf.OUTPUT_COMMITTER_CLASS.key,
           classOf[AlwaysFailOutputCommitter].getName)
         // Since Parquet has its own output committer setting, also set it
         // to AlwaysFailParquetOutputCommitter at here.
-        configuration.set("spark.sql.parquet.output.committer.class",
+        hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
           classOf[AlwaysFailParquetOutputCommitter].getName)
         // Because there data already exists,
         // this append should succeed because we will use the output committer associated
@@ -534,12 +531,12 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         }
       }
       withTempPath { dir =>
-        configuration.set(
+        hadoopConfiguration.set(
           SQLConf.OUTPUT_COMMITTER_CLASS.key,
           classOf[AlwaysFailOutputCommitter].getName)
         // Since Parquet has its own output committer setting, also set it
         // to AlwaysFailParquetOutputCommitter at here.
-        configuration.set("spark.sql.parquet.output.committer.class",
+        hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
           classOf[AlwaysFailParquetOutputCommitter].getName)
         // Because there is no existing data,
         // this append will fail because AlwaysFailOutputCommitter is used when we do append
@@ -550,8 +547,57 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       }
     } finally {
       // Hadoop 1 doesn't have `Configuration.unset`
-      configuration.clear()
-      clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+      hadoopConfiguration.clear()
+      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
+    }
+  }
+
+  test("SPARK-8887: Explicitly define which data types can be used as dynamic partition columns") {
+    val df = Seq(
+      (1, "v1", Array(1, 2, 3), Map("k1" -> "v1"), Tuple2(1, "4")),
+      (2, "v2", Array(4, 5, 6), Map("k2" -> "v2"), Tuple2(2, "5")),
+      (3, "v3", Array(7, 8, 9), Map("k3" -> "v3"), Tuple2(3, "6"))).toDF("a", "b", "c", "d", "e")
+    withTempDir { file =>
+      intercept[AnalysisException] {
+        df.write.format(dataSourceName).partitionBy("c", "d", "e").save(file.getCanonicalPath)
+      }
+    }
+    intercept[AnalysisException] {
+      df.write.format(dataSourceName).partitionBy("c", "d", "e").saveAsTable("t")
+    }
+  }
+
+  test("SPARK-9899 Disable customized output committer when speculation is on") {
+    val clonedConf = new Configuration(hadoopConfiguration)
+    val speculationEnabled =
+      sqlContext.sparkContext.conf.getBoolean("spark.speculation", defaultValue = false)
+
+    try {
+      withTempPath { dir =>
+        // Enables task speculation
+        sqlContext.sparkContext.conf.set("spark.speculation", "true")
+
+        // Uses a customized output committer which always fails
+        hadoopConfiguration.set(
+          SQLConf.OUTPUT_COMMITTER_CLASS.key,
+          classOf[AlwaysFailOutputCommitter].getName)
+
+        // Code below shouldn't throw since customized output committer should be disabled.
+        val df = sqlContext.range(10).coalesce(1)
+        df.write.format(dataSourceName).save(dir.getCanonicalPath)
+        checkAnswer(
+          sqlContext
+            .read
+            .format(dataSourceName)
+            .option("dataSchema", df.schema.json)
+            .load(dir.getCanonicalPath),
+          df)
+      }
+    } finally {
+      // Hadoop 1 doesn't have `Configuration.unset`
+      hadoopConfiguration.clear()
+      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
+      sqlContext.sparkContext.conf.set("spark.speculation", speculationEnabled.toString)
     }
   }
 }

@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution;
 
 import java.io.IOException;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.ShuffleMemoryManager;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -27,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.KVIterator;
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryLocation;
 import org.apache.spark.unsafe.memory.TaskMemoryManager;
@@ -121,6 +123,10 @@ public final class UnsafeFixedWidthAggregationMap {
   public UnsafeRow getAggregationBuffer(InternalRow groupingKey) {
     final UnsafeRow unsafeGroupingKeyRow = this.groupingKeyProjection.apply(groupingKey);
 
+    return getAggregationBufferFromUnsafeRow(unsafeGroupingKeyRow);
+  }
+
+  public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow unsafeGroupingKeyRow) {
     // Probe our map using the serialized key
     final BytesToBytesMap.Location loc = map.lookup(
       unsafeGroupingKeyRow.getBaseObject(),
@@ -134,7 +140,7 @@ public final class UnsafeFixedWidthAggregationMap {
         unsafeGroupingKeyRow.getBaseOffset(),
         unsafeGroupingKeyRow.getSizeInBytes(),
         emptyAggregationBuffer,
-        PlatformDependent.BYTE_ARRAY_OFFSET,
+        Platform.BYTE_ARRAY_OFFSET,
         emptyAggregationBuffer.length
       );
       if (!putSucceeded) {
@@ -210,11 +216,15 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
-   * The memory used by this map's managed structures, in bytes.
-   * Note that this is also the peak memory used by this map, since the map is append-only.
+   * Return the peak memory used so far, in bytes.
    */
-  public long getMemoryUsage() {
-    return map.getTotalMemoryConsumption();
+  public long getPeakMemoryUsedBytes() {
+    return map.getPeakMemoryUsedBytes();
+  }
+
+  @VisibleForTesting
+  public int getNumDataPages() {
+    return map.getNumDataPages();
   }
 
   /**

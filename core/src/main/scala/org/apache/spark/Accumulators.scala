@@ -382,14 +382,18 @@ private[spark] object InternalAccumulator {
    * add to the same set of accumulators. We do this to report the distribution of accumulator
    * values across all tasks within each stage.
    */
-  def create(): Seq[Accumulator[Long]] = {
-    Seq(
-      // Execution memory refers to the memory used by internal data structures created
-      // during shuffles, aggregations and joins. The value of this accumulator should be
-      // approximately the sum of the peak sizes across all such data structures created
-      // in this task. For SQL jobs, this only tracks all unsafe operators and ExternalSort.
-      new Accumulator(
-        0L, AccumulatorParam.LongAccumulatorParam, Some(PEAK_EXECUTION_MEMORY), internal = true)
-    ) ++ maybeTestAccumulator.toSeq
+  def create(sc: SparkContext): Seq[Accumulator[Long]] = {
+    val internalAccumulators = Seq(
+        // Execution memory refers to the memory used by internal data structures created
+        // during shuffles, aggregations and joins. The value of this accumulator should be
+        // approximately the sum of the peak sizes across all such data structures created
+        // in this task. For SQL jobs, this only tracks all unsafe operators and ExternalSort.
+        new Accumulator(
+          0L, AccumulatorParam.LongAccumulatorParam, Some(PEAK_EXECUTION_MEMORY), internal = true)
+      ) ++ maybeTestAccumulator.toSeq
+    internalAccumulators.foreach { accumulator =>
+      sc.cleaner.foreach(_.registerAccumulatorForCleanup(accumulator))
+    }
+    internalAccumulators
   }
 }

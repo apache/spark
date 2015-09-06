@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.stat
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
@@ -33,8 +33,8 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
  * Reference: [[http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance variance-wiki]]
  * Zero elements (including explicit zero values) are skipped when calling add(),
  * to have time complexity O(nnz) instead of O(n) for each column.
- * @since 1.1.0
  */
+@Since("1.1.0")
 @DeveloperApi
 class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with Serializable {
 
@@ -53,8 +53,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    *
    * @param sample The sample in dense/sparse vector format to be added into this summarizer.
    * @return This MultivariateOnlineSummarizer object.
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def add(sample: Vector): this.type = {
     if (n == 0) {
       require(sample.size > 0, s"Vector should have dimension larger than zero.")
@@ -109,8 +109,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    *
    * @param other The other MultivariateOnlineSummarizer to be merged.
    * @return This MultivariateOnlineSummarizer object.
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def merge(other: MultivariateOnlineSummarizer): this.type = {
     if (this.totalCnt != 0 && other.totalCnt != 0) {
       require(n == other.n, s"Dimensions mismatch when merging with another summarizer. " +
@@ -153,8 +153,10 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   }
 
   /**
-   * @since 1.1.0
+   * Sample mean of each dimension.
+   *
    */
+  @Since("1.1.0")
   override def mean: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
@@ -168,8 +170,10 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   }
 
   /**
-   * @since 1.1.0
+   * Sample variance of each dimension.
+   *
    */
+  @Since("1.1.0")
   override def variance: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
@@ -193,13 +197,17 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   }
 
   /**
-   * @since 1.1.0
+   * Sample size.
+   *
    */
+  @Since("1.1.0")
   override def count: Long = totalCnt
 
   /**
-   * @since 1.1.0
+   * Number of nonzero elements in each dimension.
+   *
    */
+  @Since("1.1.0")
   override def numNonzeros: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
@@ -207,8 +215,10 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   }
 
   /**
-   * @since 1.1.0
+   * Maximum value of each dimension.
+   *
    */
+  @Since("1.1.0")
   override def max: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
@@ -221,8 +231,10 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   }
 
   /**
-   * @since 1.1.0
+   * Minimum value of each dimension.
+   *
    */
+  @Since("1.1.0")
   override def min: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
@@ -235,8 +247,10 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   }
 
   /**
-   * @since 1.2.0
+   * L2 (Euclidian) norm of each dimension.
+   *
    */
+  @Since("1.2.0")
   override def normL2: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
@@ -252,8 +266,10 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   }
 
   /**
-   * @since 1.2.0
+   * L1 norm of each dimension.
+   *
    */
+  @Since("1.2.0")
   override def normL1: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 

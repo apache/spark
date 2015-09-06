@@ -87,16 +87,17 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   def createAllocator(maxExecutors: Int = 5): YarnAllocator = {
     val args = Array(
-      "--num-executors", s"$maxExecutors",
       "--executor-cores", "5",
       "--executor-memory", "2048",
       "--jar", "somejar.jar",
       "--class", "SomeClass")
+    val sparkConfClone = sparkConf.clone()
+    sparkConfClone.set("spark.executor.instances", maxExecutors.toString)
     new YarnAllocator(
       "not used",
       mock(classOf[RpcEndpointRef]),
       conf,
-      sparkConf,
+      sparkConfClone,
       rmClient,
       appAttemptId,
       new ApplicationMasterArguments(args),

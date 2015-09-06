@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 import java.io._
 import java.util.concurrent.{Semaphore, TimeUnit}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
@@ -68,7 +68,7 @@ object RRunner {
     if (initialized.tryAcquire(backendTimeout, TimeUnit.SECONDS)) {
       // Launch R
       val returnCode = try {
-        val builder = new ProcessBuilder(Seq(rCommand, rFileNormalized) ++ otherArgs)
+        val builder = new ProcessBuilder((Seq(rCommand, rFileNormalized) ++ otherArgs).asJava)
         val env = builder.environment()
         env.put("EXISTING_SPARKR_BACKEND_PORT", sparkRBackendPort.toString)
         val rPackageDir = RUtils.sparkRPackagePath(isDriver = true)

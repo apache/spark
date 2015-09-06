@@ -32,6 +32,7 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
   with HasSeed with HasMaxIter with HasTol {
   /**
    * Layer sizes including input size and output size.
+   * Default: Array(1, 1)
    * @group param
    */
   final val layers: IntArrayParam = new IntArrayParam(this, "layers",
@@ -42,9 +43,6 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
     ParamValidators.arrayLengthGt(1)
   )
 
-  /** @group setParam */
-  def setLayers(value: Array[Int]): this.type = set(layers, value)
-
   /** @group getParam */
   final def getLayers: Array[Int] = $(layers)
 
@@ -53,6 +51,7 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
    * Data is stacked within partitions. If block size is more than remaining data in
    * a partition then it is adjusted to the size of this data.
    * Recommended size is between 10 and 1000.
+   * Default: 128
    * @group expertParam
    */
   final val blockSize: IntParam = new IntParam(this, "blockSize",
@@ -61,32 +60,8 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
       "it is adjusted to the size of this data. Recommended size is between 10 and 1000",
     ParamValidators.gt(0))
 
-  /** @group setParam */
-  def setBlockSize(value: Int): this.type = set(blockSize, value)
-
   /** @group getParam */
   final def getBlockSize: Int = $(blockSize)
-
-  /**
-   * Set the maximum number of iterations.
-   * Default is 100.
-   * @group setParam
-   */
-  def setMaxIter(value: Int): this.type = set(maxIter, value)
-
-  /**
-   * Set the convergence tolerance of iterations.
-   * Smaller value will lead to higher accuracy with the cost of more iterations.
-   * Default is 1E-4.
-   * @group setParam
-   */
-  def setTol(value: Double): this.type = set(tol, value)
-
-  /**
-   * Set the seed for weights initialization.
-   * @group setParam
-   */
-  def setSeed(value: Long): this.type = set(seed, value)
 
   setDefault(maxIter -> 100, tol -> 1e-4, layers -> Array(1, 1), blockSize -> 128)
 }
@@ -131,10 +106,37 @@ private object LabelConverter {
  */
 @Experimental
 class MultilayerPerceptronClassifier(override val uid: String)
-  extends Predictor[Vector, MultilayerPerceptronClassifier, MultilayerPerceptronClassifierModel]
+  extends Predictor[Vector, MultilayerPerceptronClassifier, MultilayerPerceptronClassificationModel]
   with MultilayerPerceptronParams {
 
   def this() = this(Identifiable.randomUID("mlpc"))
+
+  /** @group setParam */
+  def setLayers(value: Array[Int]): this.type = set(layers, value)
+
+  /** @group setParam */
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
+
+  /**
+   * Set the maximum number of iterations.
+   * Default is 100.
+   * @group setParam
+   */
+  def setMaxIter(value: Int): this.type = set(maxIter, value)
+
+  /**
+   * Set the convergence tolerance of iterations.
+   * Smaller value will lead to higher accuracy with the cost of more iterations.
+   * Default is 1E-4.
+   * @group setParam
+   */
+  def setTol(value: Double): this.type = set(tol, value)
+
+  /**
+   * Set the seed for weights initialization.
+   * @group setParam
+   */
+  def setSeed(value: Long): this.type = set(seed, value)
 
   override def copy(extra: ParamMap): MultilayerPerceptronClassifier = defaultCopy(extra)
 
@@ -146,7 +148,7 @@ class MultilayerPerceptronClassifier(override val uid: String)
    * @param dataset Training dataset
    * @return Fitted model
    */
-  override protected def train(dataset: DataFrame): MultilayerPerceptronClassifierModel = {
+  override protected def train(dataset: DataFrame): MultilayerPerceptronClassificationModel = {
     val myLayers = $(layers)
     val labels = myLayers.last
     val lpData = extractLabeledPoints(dataset)
@@ -156,13 +158,13 @@ class MultilayerPerceptronClassifier(override val uid: String)
     FeedForwardTrainer.LBFGSOptimizer.setConvergenceTol($(tol)).setNumIterations($(maxIter))
     FeedForwardTrainer.setStackSize($(blockSize))
     val mlpModel = FeedForwardTrainer.train(data)
-    new MultilayerPerceptronClassifierModel(uid, myLayers, mlpModel.weights())
+    new MultilayerPerceptronClassificationModel(uid, myLayers, mlpModel.weights())
   }
 }
 
 /**
  * :: Experimental ::
- * Classifier model based on the Multilayer Perceptron.
+ * Classification model based on the Multilayer Perceptron.
  * Each layer has sigmoid activation function, output layer has softmax.
  * @param uid uid
  * @param layers array of layer sizes including input and output layers
@@ -170,11 +172,11 @@ class MultilayerPerceptronClassifier(override val uid: String)
  * @return prediction model
  */
 @Experimental
-class MultilayerPerceptronClassifierModel private[ml] (
+class MultilayerPerceptronClassificationModel private[ml] (
     override val uid: String,
-    layers: Array[Int],
-    weights: Vector)
-  extends PredictionModel[Vector, MultilayerPerceptronClassifierModel]
+    val layers: Array[Int],
+    val weights: Vector)
+  extends PredictionModel[Vector, MultilayerPerceptronClassificationModel]
   with Serializable {
 
   private val mlpModel = FeedForwardTopology.multiLayerPerceptron(layers, true).getInstance(weights)
@@ -187,7 +189,7 @@ class MultilayerPerceptronClassifierModel private[ml] (
     LabelConverter.decodeLabel(mlpModel.predict(features))
   }
 
-  override def copy(extra: ParamMap): MultilayerPerceptronClassifierModel = {
-    copyValues(new MultilayerPerceptronClassifierModel(uid, layers, weights), extra)
+  override def copy(extra: ParamMap): MultilayerPerceptronClassificationModel = {
+    copyValues(new MultilayerPerceptronClassificationModel(uid, layers, weights), extra)
   }
 }

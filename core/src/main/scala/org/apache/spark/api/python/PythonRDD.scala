@@ -21,7 +21,7 @@ import java.io._
 import java.net._
 import java.util.{Collections, ArrayList => JArrayList, List => JList, Map => JMap}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.existentials
 
@@ -66,11 +66,11 @@ private[spark] class PythonRDD(
     val env = SparkEnv.get
     val localdir = env.blockManager.diskBlockManager.localDirs.map(
       f => f.getPath()).mkString(",")
-    envVars += ("SPARK_LOCAL_DIRS" -> localdir) // it's also used in monitor thread
+    envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuse_worker) {
-      envVars += ("SPARK_REUSE_WORKER" -> "1")
+      envVars.put("SPARK_REUSE_WORKER", "1")
     }
-    val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
+    val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
     // Whether is the worker released into idle pool
     @volatile var released = false
 
@@ -150,7 +150,7 @@ private[spark] class PythonRDD(
               // Check whether the worker is ready to be re-used.
               if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
                 if (reuse_worker) {
-                  env.releasePythonWorker(pythonExec, envVars.toMap, worker)
+                  env.releasePythonWorker(pythonExec, envVars.asScala.toMap, worker)
                   released = true
                 }
               }
@@ -217,13 +217,13 @@ private[spark] class PythonRDD(
         // sparkFilesDir
         PythonRDD.writeUTF(SparkFiles.getRootDirectory, dataOut)
         // Python includes (*.zip and *.egg files)
-        dataOut.writeInt(pythonIncludes.length)
-        for (include <- pythonIncludes) {
+        dataOut.writeInt(pythonIncludes.size())
+        for (include <- pythonIncludes.asScala) {
           PythonRDD.writeUTF(include, dataOut)
         }
         // Broadcast variables
         val oldBids = PythonRDD.getWorkerBroadcasts(worker)
-        val newBids = broadcastVars.map(_.id).toSet
+        val newBids = broadcastVars.asScala.map(_.id).toSet
         // number of different broadcasts
         val toRemove = oldBids.diff(newBids)
         val cnt = toRemove.size + newBids.diff(oldBids).size
@@ -233,7 +233,7 @@ private[spark] class PythonRDD(
           dataOut.writeLong(- bid - 1)  // bid >= 0
           oldBids.remove(bid)
         }
-        for (broadcast <- broadcastVars) {
+        for (broadcast <- broadcastVars.asScala) {
           if (!oldBids.contains(broadcast.id)) {
             // send new broadcast
             dataOut.writeLong(broadcast.id)
@@ -287,7 +287,7 @@ private[spark] class PythonRDD(
       if (!context.isCompleted) {
         try {
           logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
-          env.destroyPythonWorker(pythonExec, envVars.toMap, worker)
+          env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, worker)
         } catch {
           case e: Exception =>
             logError("Exception when trying to kill worker", e)
@@ -358,10 +358,10 @@ private[spark] object PythonRDD extends Logging {
     type ByteArray = Array[Byte]
     type UnrolledPartition = Array[ByteArray]
     val allPartitions: Array[UnrolledPartition] =
-      sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions)
+      sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions.asScala)
     val flattenedPartition: UnrolledPartition = Array.concat(allPartitions: _*)
     serveIterator(flattenedPartition.iterator,
-      s"serve RDD ${rdd.id} with partitions ${partitions.mkString(",")}")
+      s"serve RDD ${rdd.id} with partitions ${partitions.asScala.mkString(",")}")
   }
 
   /**
@@ -819,7 +819,7 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
       val in = socket.getInputStream
       val out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream, bufferSize))
       out.writeInt(val2.size)
-      for (array <- val2) {
+      for (array <- val2.asScala) {
         out.writeInt(array.length)
         out.write(array)
       }

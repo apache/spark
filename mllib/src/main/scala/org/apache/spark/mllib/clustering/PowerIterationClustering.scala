@@ -21,7 +21,7 @@ import org.json4s.JsonDSL._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
@@ -40,11 +40,14 @@ import org.apache.spark.{Logging, SparkContext, SparkException}
  * @param k number of clusters
  * @param assignments an RDD of clustering [[PowerIterationClustering#Assignment]]s
  */
+@Since("1.3.0")
 @Experimental
-class PowerIterationClusteringModel(
-    val k: Int,
-    val assignments: RDD[PowerIterationClustering.Assignment]) extends Saveable with Serializable {
+class PowerIterationClusteringModel @Since("1.3.0") (
+    @Since("1.3.0") val k: Int,
+    @Since("1.3.0") val assignments: RDD[PowerIterationClustering.Assignment])
+  extends Saveable with Serializable {
 
+  @Since("1.4.0")
   override def save(sc: SparkContext, path: String): Unit = {
     PowerIterationClusteringModel.SaveLoadV1_0.save(sc, this, path)
   }
@@ -52,7 +55,10 @@ class PowerIterationClusteringModel(
   override protected def formatVersion: String = "1.0"
 }
 
+@Since("1.4.0")
 object PowerIterationClusteringModel extends Loader[PowerIterationClusteringModel] {
+
+  @Since("1.4.0")
   override def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {
     PowerIterationClusteringModel.SaveLoadV1_0.load(sc, path)
   }
@@ -65,6 +71,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
     private[clustering]
     val thisClassName = "org.apache.spark.mllib.clustering.PowerIterationClusteringModel"
 
+    @Since("1.4.0")
     def save(sc: SparkContext, model: PowerIterationClusteringModel, path: String): Unit = {
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
@@ -77,6 +84,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
       dataRDD.write.parquet(Loader.dataPath(path))
     }
 
+    @Since("1.4.0")
     def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {
       implicit val formats = DefaultFormats
       val sqlContext = new SQLContext(sc)
@@ -113,6 +121,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
  * @see [[http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)]]
  */
 @Experimental
+@Since("1.3.0")
 class PowerIterationClustering private[clustering] (
     private var k: Int,
     private var maxIterations: Int,
@@ -120,14 +129,17 @@ class PowerIterationClustering private[clustering] (
 
   import org.apache.spark.mllib.clustering.PowerIterationClustering._
 
-  /** Constructs a PIC instance with default parameters: {k: 2, maxIterations: 100,
-   *  initMode: "random"}.
+  /**
+   * Constructs a PIC instance with default parameters: {k: 2, maxIterations: 100,
+   * initMode: "random"}.
    */
+  @Since("1.3.0")
   def this() = this(k = 2, maxIterations = 100, initMode = "random")
 
   /**
    * Set the number of clusters.
    */
+  @Since("1.3.0")
   def setK(k: Int): this.type = {
     this.k = k
     this
@@ -136,6 +148,7 @@ class PowerIterationClustering private[clustering] (
   /**
    * Set maximum number of iterations of the power iteration loop
    */
+  @Since("1.3.0")
   def setMaxIterations(maxIterations: Int): this.type = {
     this.maxIterations = maxIterations
     this
@@ -145,6 +158,7 @@ class PowerIterationClustering private[clustering] (
    * Set the initialization mode. This can be either "random" to use a random vector
    * as vertex properties, or "degree" to use normalized sum similarities. Default: random.
    */
+  @Since("1.3.0")
   def setInitializationMode(mode: String): this.type = {
     this.initMode = mode match {
       case "random" | "degree" => mode
@@ -165,6 +179,7 @@ class PowerIterationClustering private[clustering] (
    *
    * @return a [[PowerIterationClusteringModel]] that contains the clustering result
    */
+  @Since("1.5.0")
   def run(graph: Graph[Double, Double]): PowerIterationClusteringModel = {
     val w = normalize(graph)
     val w0 = initMode match {
@@ -186,6 +201,7 @@ class PowerIterationClustering private[clustering] (
    *
    * @return a [[PowerIterationClusteringModel]] that contains the clustering result
    */
+  @Since("1.3.0")
   def run(similarities: RDD[(Long, Long, Double)]): PowerIterationClusteringModel = {
     val w = normalize(similarities)
     val w0 = initMode match {
@@ -198,6 +214,7 @@ class PowerIterationClustering private[clustering] (
   /**
    * A Java-friendly version of [[PowerIterationClustering.run]].
    */
+  @Since("1.3.0")
   def run(similarities: JavaRDD[(java.lang.Long, java.lang.Long, java.lang.Double)])
     : PowerIterationClusteringModel = {
     run(similarities.rdd.asInstanceOf[RDD[(Long, Long, Double)]])
@@ -221,6 +238,7 @@ class PowerIterationClustering private[clustering] (
   }
 }
 
+@Since("1.3.0")
 @Experimental
 object PowerIterationClustering extends Logging {
 
@@ -230,6 +248,7 @@ object PowerIterationClustering extends Logging {
    * @param id node id
    * @param cluster assigned cluster id
    */
+  @Since("1.3.0")
   @Experimental
   case class Assignment(id: Long, cluster: Int)
 
