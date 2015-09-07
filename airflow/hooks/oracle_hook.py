@@ -1,4 +1,5 @@
 import cx_Oracle
+import logging
 
 from airflow.hooks.dbapi_hook import DbApiHook
 
@@ -22,7 +23,6 @@ class OracleHook(DbApiHook):
             service_name = conn.extra_dejson.get('service_name', None)
             dsn = cx_Oracle.makedsn(dsn, conn.port, service_name=service_name)
             conn = cx_Oracle.connect(conn.login, conn.password, dsn=dsn)
-
         return conn
 
     def run(self, sql, autocommit = False, parameters = None):
@@ -81,14 +81,12 @@ class OracleHook(DbApiHook):
                     l.append("'" + cell.isoformat() + "'")
                 else:
                     l.append(str(cell))
-
             values = tuple(l)
             sql = 'INSERT /*+ APPEND */ INTO {0} {1} VALUES ({2})'.format(table, target_fields, ','.join(values))
             cur.execute(sql)
             if i % commit_every == 0:
                 conn.commit()
                 logging.info('Loaded {i} into {table} rows so far'.format(**locals()))
-
         conn.commit()
         cur.close()
         conn.close()
