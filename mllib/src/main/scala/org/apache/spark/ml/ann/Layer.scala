@@ -17,8 +17,8 @@
 
 package org.apache.spark.ml.ann
 
-import breeze.linalg.{*, DenseMatrix => BDM, DenseVector => BDV, Vector => BV, axpy => Baxpy,
-  sum => Bsum}
+import breeze.generic.{MappingUFunc, UFunc}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Vector => BV, axpy => Baxpy, sum => Bsum, max => Bmax, *}
 import breeze.numerics.{log => Blog, sigmoid => Bsigmoid}
 
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -203,6 +203,7 @@ private[ann] object AffineLayerModel {
    * @return vector of weights, a copy of the data in `a` and `b`
    */
   def roll(a: BDM[Double], b: BDV[Double]): Vector = {
+    // TODO: the array is copied to Vector, make sure this is necessary!
     Vectors.dense(a.toArray ++ b.toArray)
   }
 
@@ -266,32 +267,18 @@ private[ann] trait ActivationFunction extends Serializable {
  */
 private[ann] object ActivationFunction {
 
-  def apply(x: BDM[Double], y: BDM[Double], func: Double => Double): Unit = {
-    var i = 0
-    while (i < x.rows) {
-      var j = 0
-      while (j < x.cols) {
-        y(i, j) = func(x(i, j))
-        j += 1
-      }
-      i += 1
-    }
+  def apply(x: BDM[Double], y: BDM[Double], func: UFunc with MappingUFunc)(
+      implicit impl: func.Impl[BDM[Double], BDM[Double]]): Unit = {
+    y := func(x)
   }
 
   def apply(
       x1: BDM[Double],
       x2: BDM[Double],
       y: BDM[Double],
-      func: (Double, Double) => Double): Unit = {
-    var i = 0
-    while (i < x1.rows) {
-      var j = 0
-      while (j < x1.cols) {
-        y(i, j) = func(x1(i, j), x2(i, j))
-        j += 1
-      }
-      i += 1
-    }
+      func: UFunc with MappingUFunc)(
+      implicit impl: func.Impl2[BDM[Double], BDM[Double], BDM[Double]]): Unit = {
+    y := func(x1, x2)
   }
 }
 
@@ -300,31 +287,11 @@ private[ann] object ActivationFunction {
  */
 private[ann] class SoftmaxFunction extends ActivationFunction {
   override def eval(x: BDM[Double], y: BDM[Double]): Unit = {
-    var j = 0
-    // find max value to make sure later that exponent is computable
-    while (j < x.cols) {
-      var i = 0
-      var max = Double.MinValue
-      while (i < x.rows) {
-        if (x(i, j) > max) {
-          max = x(i, j)
-        }
-        i += 1
-      }
-      var sum = 0.0
-      i = 0
-      while (i < x.rows) {
-        val res = Math.exp(x(i, j) - max)
-        y(i, j) = res
-        sum += res
-        i += 1
-      }
-      i = 0
-      while (i < x.rows) {
-        y(i, j) /= sum
-        i += 1
-      }
-      j += 1
+    (0 until x.cols).foreach { j =>
+      // find max value to scale and prevent overflow during exp
+      val maxVal = Bmax(x(::,j))
+      y(::,j) := x(::,j).map { xVal => Math.exp(xVal) - maxVal }
+      y(::,j) :/= Bsum(y(::,j))
     }
   }
 
@@ -332,14 +299,25 @@ private[ann] class SoftmaxFunction extends ActivationFunction {
       output: BDM[Double],
       target: BDM[Double],
       result: BDM[Double]): Double = {
-    def m(o: Double, t: Double): Double = o - t
     ActivationFunction(output, target, result, m)
     -Bsum( target :* Blog(output)) / output.cols
   }
 
+  private object m extends UFunc with MappingUFunc {
+    implicit val implDoubleDouble: Impl2[Double, Double, Double] =
+      new Impl2[Double, Double, Double] {
+        def apply(o: Double, t: Double): Double = o - t
+      }
+  }
+
   override def derivative(x: BDM[Double], y: BDM[Double]): Unit = {
-    def sd(z: Double): Double = (1 - z) * z
     ActivationFunction(x, y, sd)
+  }
+
+  private object sd extends UFunc with MappingUFunc {
+    implicit val implDouble: Impl[Double, Double] = new Impl[Double, Double] {
+      def apply(z: Double) = (1 - z) * z
+    }
   }
 
   override def squared(output: BDM[Double], target: BDM[Double], result: BDM[Double]): Double = {
@@ -352,32 +330,53 @@ private[ann] class SoftmaxFunction extends ActivationFunction {
  */
 private[ann] class SigmoidFunction extends ActivationFunction {
   override def eval(x: BDM[Double], y: BDM[Double]): Unit = {
-    def s(z: Double): Double = Bsigmoid(z)
     ActivationFunction(x, y, s)
+  }
+
+  private object s extends UFunc with MappingUFunc {
+    implicit val implDouble: Impl[Double, Double] = new Impl[Double, Double] {
+      def apply(z: Double): Double = Bsigmoid(z)
+    }
   }
 
   override def crossEntropy(
       output: BDM[Double],
       target: BDM[Double],
       result: BDM[Double]): Double = {
-    def m(o: Double, t: Double): Double = o - t
     ActivationFunction(output, target, result, m)
     -Bsum(target :* Blog(output)) / output.cols
   }
 
+  private object m extends UFunc with MappingUFunc {
+    implicit val implDoubleDouble: Impl2[Double, Double, Double] =
+      new Impl2[Double, Double, Double] {
+        def apply(o: Double, t: Double): Double = o - t
+      }
+  }
+
   override def derivative(x: BDM[Double], y: BDM[Double]): Unit = {
-    def sd(z: Double): Double = (1 - z) * z
     ActivationFunction(x, y, sd)
   }
 
+  private object sd extends UFunc with MappingUFunc {
+    implicit val implDouble: Impl[Double, Double] =
+      new Impl[Double, Double] {
+        def apply(z: Double) = (1 - z) * z
+      }
+  }
+
   override def squared(output: BDM[Double], target: BDM[Double], result: BDM[Double]): Double = {
-    // TODO: make it readable
-    def m(o: Double, t: Double): Double = (o - t)
     ActivationFunction(output, target, result, m)
-    val e = Bsum(result :* result) / 2 / output.cols
-    def m2(x: Double, o: Double) = x * (o - o * o)
+    val e = (Bsum(result :* result) / 2) / output.cols
     ActivationFunction(result, output, result, m2)
     e
+  }
+
+  private object m2 extends UFunc with MappingUFunc {
+    implicit val implDoubleDouble: Impl2[Double, Double, Double] =
+      new Impl2[Double, Double, Double] {
+        def apply(x: Double, o: Double): Double = x * (o - o * o)
+      }
   }
 }
 
@@ -582,13 +581,13 @@ private[ml] class FeedForwardModel private(
       case _ =>
         throw new UnsupportedOperationException("Non-functional layer not supported at the top")
     }
+    // backward pass (back-propagate deltas given errors)
     deltas(L) = new BDM[Double](0, 0)
     deltas(L - 1) = newE
-    // backwards pass (back-propagate deltas given errors)
     for (i <- (L - 2) to (0, -1)) {
       deltas(i) = layerModels(i + 1).prevDelta(deltas(i + 1), outputs(i + 1))
     }
-    // forwards pass (forward-propagate gradients given inputs)
+    // forward pass (forward-propagate gradients given inputs)
     val grads = layerModels.zipWithIndex.map { case (layer, i) =>
       val input = if (i == 0) data else outputs(i - 1)
       layer.grad(deltas(i), input)
