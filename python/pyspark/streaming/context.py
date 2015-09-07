@@ -31,6 +31,7 @@ from pyspark.streaming.util import TransformFunction, TransformFunctionSerialize
 
 __all__ = ["StreamingContext"]
 
+
 class StreamingContext(object):
     """
     Main entry point for Spark Streaming functionality. A StreamingContext
