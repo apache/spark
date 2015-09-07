@@ -85,7 +85,7 @@ class StreamingContext(object):
             gw.callback_server_parameters.eager_load = True
             gw.callback_server_parameters.daemonize = True
             gw.callback_server_parameters.port = 0
-            gw.start_callback_server()
+            gw.start_callback_server(gw.callback_server_parameters)
             gw._callback_server.port = gw._callback_server.server_socket.getsockname()[1]
             # gateway with real port
             gw._python_proxy_port = gw._callback_server.port
