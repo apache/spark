@@ -373,10 +373,7 @@ object StructType extends AbstractDataType {
       case (DecimalType.Fixed(leftPrecision, leftScale),
         DecimalType.Fixed(rightPrecision, rightScale)) =>
         if ((leftPrecision == rightPrecision) && (leftScale == rightScale)) {
-          DecimalType(
-            max(leftScale, rightScale) +
-              max(leftPrecision - leftScale, rightPrecision - rightScale),
-            max(leftScale, rightScale))
+          DecimalType(leftPrecision, leftScale)
         } else if ((leftPrecision != rightPrecision) && (leftScale != rightScale)) {
           throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
             s"precision $leftPrecision and $rightPrecision & scale $leftScale and $rightScale")
