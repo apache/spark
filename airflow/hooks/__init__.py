@@ -23,6 +23,7 @@ _hooks = {
     'jdbc_hook': ['JdbcHook'],
     'dbapi_hook': ['DbApiHook'],
     'mssql_hook': ['MsSqlHook'],
+    'oracle_hook': ['OracleHook'],
 }
 
 _import_module_attrs(globals(), _hooks)
