@@ -117,22 +117,21 @@ private[orc] class OrcOutputWriter(
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   private def wrapOrcStruct(
-      o: OrcStruct,
+      struct: OrcStruct,
       oi: SettableStructObjectInspector,
-      a: InternalRow): OrcStruct = {
+      row: InternalRow): Unit = {
     val fieldRefs = oi.getAllStructFieldRefs
-    val row = a.asInstanceOf[InternalRow]
     var i = 0
     while (i < fieldRefs.size) {
       oi.setStructFieldData(
-        o,
+        struct,
         fieldRefs.get(i),
-        wrap(row.get(i, dataSchema(i).dataType),
+        wrap(
+          row.get(i, dataSchema(i).dataType),
           fieldRefs.get(i).getFieldObjectInspector,
           dataSchema(i).dataType))
       i += 1
     }
-    o
   }
 
   val cachedOrcStruct = structOI.create().asInstanceOf[OrcStruct]
