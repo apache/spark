@@ -211,7 +211,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val numElements = ctx.freshName("numElements")
     val fixedSize = ctx.freshName("fixedSize")
     val numBytes = ctx.freshName("numBytes")
-    val elements = ctx.freshName("elements")
     val cursor = ctx.freshName("cursor")
     val index = ctx.freshName("index")
 
@@ -223,48 +222,24 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val convertedElement: GeneratedExpressionCode = createConvertCode(ctx, element, elementType)
 
     // go through the input array to calculate how many bytes we need.
-    val calculateNumBytes = elementType match {
+    val (calculateNumBytesSimple, calculateNumBytesComplex) = elementType match {
       case _ if ctx.isPrimitiveType(elementType) =>
         // Should we do word align?
         val elementSize = elementType.defaultSize
-        s"""
+        (s"""
           $numBytes += $elementSize * $numElements;
-        """
+          """, "")
       case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS =>
-        s"""
+        (s"""
           $numBytes += 8 * $numElements;
-        """
+          """, "")
       case _ =>
         val writer = getWriter(elementType)
-        val elementSize = s"$writer.getSize($elements[$index])"
-        // TODO(davies): avoid the copy
-        val unsafeType = elementType match {
-          case _: StructType => "UnsafeRow"
-          case _: ArrayType => "UnsafeArrayData"
-          case _: MapType => "UnsafeMapData"
-          case _ => ctx.javaType(elementType)
-        }
-        val copy = elementType match {
-          // We reuse the buffer during conversion, need copy it before process next element.
-          case _: StructType | _: ArrayType | _: MapType => ".copy()"
-          case _ => ""
-        }
-
-        val newElements = if (elementType == BinaryType) {
-          s"new byte[$numElements][]"
-        } else {
-          s"new $unsafeType[$numElements]"
-        }
-        s"""
-          final $unsafeType[] $elements = $newElements;
-          for (int $index = 0; $index < $numElements; $index++) {
-            ${convertedElement.code}
-            if (!${convertedElement.isNull}) {
-              $elements[$index] = ${convertedElement.primitive}$copy;
-              $numBytes += $elementSize;
-            }
+        ("", s"""
+          if (!${convertedElement.isNull}) {
+            $numBytes += $writer.getSize(${convertedElement.primitive});
           }
-        """
+          """)
     }
 
     val writeElement = elementType match {
@@ -286,21 +261,29 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             ${convertedElement.primitive}.toUnscaledLong());
           $cursor += 8;
         """
+      case _: StructType | _: ArrayType | _: MapType =>
+        val writer = getWriter(elementType)
+        s"""
+          $cursor += $writer.write(
+            $buffer,
+            Platform.BYTE_ARRAY_OFFSET + $cursor,
+            ${convertedElement.primitive});
+        """
       case _ =>
         val writer = getWriter(elementType)
         s"""
           $cursor += $writer.write(
             $buffer,
             Platform.BYTE_ARRAY_OFFSET + $cursor,
-            $elements[$index]);
+            ${convertedElement.primitive});
         """
     }
 
     val checkNull = elementType match {
       case _ if ctx.isPrimitiveType(elementType) => s"${convertedElement.isNull}"
-      case t: DecimalType => s"$elements[$index] == null" +
-        s" || !$elements[$index].changePrecision(${t.precision}, ${t.scale})"
-      case _ => s"$elements[$index] == null"
+      case t: DecimalType => s"${convertedElement.isNull}" +
+        s" || !${convertedElement.primitive}.changePrecision(${t.precision}, ${t.scale})"
+      case _ => s"${convertedElement.isNull}"
     }
 
     val code = s"""
@@ -315,7 +298,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           final int $fixedSize = 4 * $numElements;
           int $numBytes = $fixedSize;
 
-          $calculateNumBytes
+          $calculateNumBytesSimple
 
           if ($numBytes > $buffer.length) {
             $buffer = new byte[$numBytes];
@@ -323,6 +306,14 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
           int $cursor = $fixedSize;
           for (int $index = 0; $index < $numElements; $index++) {
+            ${convertedElement.code}
+            $calculateNumBytesComplex
+            if ($buffer.length < $numBytes) {
+              byte[] newBuffer = new byte[$numBytes * 2];
+              Platform.copyMemory($buffer, Platform.BYTE_ARRAY_OFFSET,
+                newBuffer, Platform.BYTE_ARRAY_OFFSET, $buffer.length);
+              $buffer = newBuffer;
+            }
             if ($checkNull) {
               // If element is null, write the negative value address into offset region.
               Platform.putInt($buffer, Platform.BYTE_ARRAY_OFFSET + 4 * $index, -$cursor);
