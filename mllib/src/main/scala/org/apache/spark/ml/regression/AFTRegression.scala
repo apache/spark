@@ -52,13 +52,14 @@ private[regression] trait AFTRegressionParams extends Params
   final def getCensorCol: String = $(censorCol)
 
   /**
-   * Param for time column name.
+   * Param for quantile column name.
    * @group param
    */
-  final val timeCol: Param[String] = new Param[String](this, "timeCol", "time column name")
+  final val quantileCol: Param[String] = new Param[String](this,
+    "quantileCol", "quantile column name")
 
   /** @group getParam */
-  final def getTimeCol: String = $(timeCol)
+  final def getQuantileCol: String = $(quantileCol)
 
   /**
    * Validates and transforms the input schema with the provided param map.
@@ -74,7 +75,7 @@ private[regression] trait AFTRegressionParams extends Params
     if (fitting) {
       SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
     } else {
-      SchemaUtils.checkColumnType(schema, $(timeCol), DoubleType)
+      SchemaUtils.checkColumnType(schema, $(quantileCol), DoubleType)
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
@@ -199,20 +200,25 @@ class AFTRegressionModel private[ml] (
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
-  def setTimeCol(value: String): this.type = set(timeCol, value)
+  def setQuantileCol(value: String): this.type = set(quantileCol, value)
+  setDefault(quantileCol -> "quantile")
 
   /** @group setParam */
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  protected def survival(features: Vector, time: Double): Double = {
-    val epsilon = math.log(time) - weights.toBreeze.dot(features.toBreeze) - intercept
-    math.exp(-math.exp(epsilon))
+  def predict(features: Vector, quantile: Vector): Vector = {
+    // scale parameter of the Weibull distribution
+    val lambda = math.exp(weights.toBreeze.dot(features.toBreeze) + intercept)
+    // shape parameter of the Weibull distribution
+    val k = 1 / scale
+    val array = quantile.toArray.map { q => lambda * math.exp(math.log(-math.log(1-q)) / k) }
+    Vectors.dense(array)
   }
 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema)
-    val predictUDF = udf { (features: Vector, time: Double) => survival(features, time) }
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol)), col($(timeCol))))
+    val predictUDF = udf { (features: Vector, quantile: Vector) => predict(features, quantile) }
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol)), col($(quantileCol))))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -220,7 +226,7 @@ class AFTRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): AFTRegressionModel = {
-    copyValues(new AFTRegressionModel(uid, weights, intercept, scale), extra)
+    copyValues(new AFTRegressionModel(uid, weights, intercept, scale), extra).setParent(parent)
   }
 }
 

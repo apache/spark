@@ -20,6 +20,7 @@ package org.apache.spark.ml.regression
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.OneHotEncoder
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 // import org.apache.spark.mllib.random.{ExponentialGenerator, WeibullGenerator}
 import org.apache.spark.mllib.util.TestingUtils._
@@ -62,6 +63,16 @@ class AFTRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(aftr.getFeaturesCol === "features")
     assert(aftr.getPredictionCol === "prediction")
     assert(aftr.getFitIntercept)
+//    val model = aftr.fit(datasetUnivariate)
+//
+//    // copied model must have the same parent.
+//    MLTestingUtils.checkCopy(model)
+//
+//    assert(model.getFeaturesCol === "features")
+//    assert(model.getPredictionCol === "prediction")
+//    assert(model.getQuantileCol == "quantile")
+//    assert(model.intercept !== 0.0)
+//    assert(model.hasParent)
   }
 
   /*
@@ -142,9 +153,13 @@ class AFTRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val interceptR = 1.759
     val scaleR = 1.41
 
-    assert(model.intercept ~== interceptR relTol 1E-2)
-    assert(model.weights ~= weightsR relTol 1E-2)
-    assert(model.scale ~= scaleR relTol 1E-2)
+    assert(model.intercept ~== interceptR relTol 1E-3)
+    assert(model.weights ~= weightsR relTol 1E-3)
+    assert(model.scale ~= scaleR relTol 1E-3)
+
+    val features = Vectors.dense(4.675290165370009)
+    val quantile = Vectors.dense(Array(0.1, 0.5, 0.9))
+    val expected = model.predict(features, quantile)
   }
 
   test("aft regression with multivariate") {
@@ -180,9 +195,13 @@ class AFTRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val interceptR = 1.9206
     val scaleR = 0.977
 
-    assert(model.intercept ~== interceptR relTol 1E-2)
-    assert(model.weights ~= weightsR relTol 1E-2)
-    assert(model.scale ~= scaleR relTol 1E-2)
+    assert(model.intercept ~== interceptR relTol 1E-3)
+    assert(model.weights ~= weightsR relTol 1E-3)
+    assert(model.scale ~= scaleR relTol 1E-3)
+
+    val features = Vectors.dense(1.109175828579902,-0.5315711415960551)
+    val quantile = Vectors.dense(Array(0.1, 0.5, 0.9))
+    val expected = model.predict(features, quantile)
   }
   */
 
