@@ -943,7 +943,9 @@ class DataFrame(object):
         +---+------+-----+
         |  5|    80|Alice|
         +---+------+-----+
-        """
+        
+	(Note: drop_duplicates is an alias for dropDuplicates)
+	"""
         if subset is None:
             jdf = self._jdf.dropDuplicates()
         else:
