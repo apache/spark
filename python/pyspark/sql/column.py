@@ -329,6 +329,8 @@ class Column(object):
         [Row(ages=u'2'), Row(ages=u'5')]
         >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
+        
+	(Note : astype is alias for cast)
         """
         if isinstance(dataType, basestring):
             jc = self._jc.cast(dataType)
