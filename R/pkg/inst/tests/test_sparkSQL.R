@@ -273,7 +273,7 @@ test_that("create DataFrame with nested array and map", {
   expect_equal(e$n, 3L)
 })
 
-# For test map type in DataFrame
+# For test map type and struct type in DataFrame
 mockLinesMapType <- c("{\"name\":\"Bob\",\"info\":{\"age\":16,\"height\":176.5}}",
                       "{\"name\":\"Alice\",\"info\":{\"age\":20,\"height\":164.3}}",
                       "{\"name\":\"David\",\"info\":{\"age\":60,\"height\":180}}")
@@ -308,7 +308,19 @@ test_that("Collect DataFrame with complex types", {
   expect_equal(bob$age, 16)
   expect_equal(bob$height, 176.5)
 
-  # TODO: tests for StructType after it is supported
+  # StructType
+  df <- jsonFile(sqlContext, mapTypeJsonPath)
+  expect_equal(dtypes(df), list(c("info", "struct<age:bigint,height:double>"),
+                                c("name", "string")))
+  ldf <- collect(df)
+  expect_equal(nrow(ldf), 3)
+  expect_equal(ncol(ldf), 2)
+  expect_equal(names(ldf), c("info", "name"))
+  expect_equal(ldf$name, c("Bob", "Alice", "David"))
+  bob <- ldf$info[[1]]
+  expect_equal(class(bob), "list")
+  expect_equal(bob$age, 16)
+  expect_equal(bob$height, 176.5)
 })
 
 test_that("jsonFile() on a local file returns a DataFrame", {

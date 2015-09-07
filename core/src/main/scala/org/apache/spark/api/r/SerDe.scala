@@ -27,6 +27,11 @@ import scala.collection.mutable.WrappedArray
  * Utility functions to serialize, deserialize objects to / from R
  */
 private[spark] object SerDe {
+  var sqlSerDe: (DataOutputStream, Object) => Boolean = _
+
+  def registerSqlSerDe(sqlSerDe: (DataOutputStream, Object) => Boolean): Unit = {
+    this.sqlSerDe = sqlSerDe
+  }
 
   // Type mapping from R to Java
   //
@@ -338,8 +343,10 @@ private[spark] object SerDe {
           }
 
         case _ =>
-          writeType(dos, "jobj")
-          writeJObj(dos, value)
+          if (sqlSerDe == null || !sqlSerDe(dos, value)) {
+            writeType(dos, "jobj")
+            writeJObj(dos, value)
+          }
       }
     }
   }

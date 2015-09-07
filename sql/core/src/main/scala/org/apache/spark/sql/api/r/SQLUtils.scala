@@ -22,13 +22,15 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression, GenericRowWithSchema}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame, GroupedData, Row, SQLContext, SaveMode}
 
 import scala.util.matching.Regex
 
 private[r] object SQLUtils {
+  SerDe.registerSqlSerDe(writeSqlObject)
+
   def createSQLContext(jsc: JavaSparkContext): SQLContext = {
     new SQLContext(jsc)
   }
@@ -150,5 +152,18 @@ private[r] object SQLUtils {
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
     sqlContext.read.format(source).schema(schema).options(options).load()
+  }
+
+  def writeSqlObject(dos: DataOutputStream, obj: Object): Boolean = {
+    obj match {
+      // Handle struct type in DataFrame
+      case v: GenericRowWithSchema =>
+        dos.writeByte('s')
+        SerDe.writeObject(dos, v.schema.fieldNames)
+        SerDe.writeObject(dos, v.values)
+        true
+      case _ =>
+        false
+    }
   }
 }
