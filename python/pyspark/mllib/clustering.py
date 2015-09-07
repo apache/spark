@@ -141,7 +141,6 @@ class KMeansModel(Saveable, Loader):
                              [_convert_to_vector(c) for c in self.centers])
         return cost
 
-    @since('1.4.0')
     def save(self, sc, path):
         java_centers = _py2java(sc, [_convert_to_vector(c) for c in self.centers])
         java_model = sc._jvm.org.apache.spark.mllib.clustering.KMeansModel(java_centers)
@@ -577,7 +576,6 @@ class StreamingKMeans(object):
         """Return the latest model"""
         return self._model
 
-    @since('1.5.0')
     def _validate(self, dstream):
         if self._model is None:
             raise ValueError(
