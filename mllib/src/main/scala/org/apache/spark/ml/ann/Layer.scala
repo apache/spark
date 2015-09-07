@@ -182,17 +182,17 @@ private[ann] object AffineLayerModel {
    * @param position position of weights for this layer
    * @param numIn number of layer inputs
    * @param numOut number of layer outputs
-   * @return matrix A and vector b
+   * @return matrix A and vector b, both views of the data in `weights`
    */
   def unroll(
       weights: Vector,
       position: Int,
       numIn: Int,
       numOut: Int): (BDM[Double], BDV[Double]) = {
-    val weightsCopy = weights.toArray
+    val weightsArray = weights.toArray
     // TODO: the array is not copied to BDMs, make sure this is OK!
-    val a = new BDM[Double](numOut, numIn, weightsCopy, position)
-    val b = new BDV[Double](weightsCopy, position + (numOut * numIn), 1, numOut)
+    val a = new BDM[Double](numOut, numIn, weightsArray, position)
+    val b = new BDV[Double](weightsArray, position + (numOut * numIn), 1, numOut)
     (a, b)
   }
 
@@ -200,14 +200,10 @@ private[ann] object AffineLayerModel {
    * Roll the layer weights into a vector.
    * @param a matrix A
    * @param b vector b
-   * @return vector of weights
+   * @return vector of weights, a copy of the data in `a` and `b`
    */
   def roll(a: BDM[Double], b: BDV[Double]): Vector = {
-    val result = new Array[Double](a.size + b.length)
-    // TODO: make sure that we need to copy!
-    System.arraycopy(a.toArray, 0, result, 0, a.size)
-    System.arraycopy(b.toArray, 0, result, a.size, b.length)
-    Vectors.dense(result)
+    Vectors.dense(a.toArray ++ b.toArray)
   }
 
   /**
@@ -542,7 +538,7 @@ private[ml] object FeedForwardTopology {
    */
   def multiLayerPerceptron(layerSizes: Array[Int], softmax: Boolean = true): FeedForwardTopology = {
     val layers = new Array[Layer]((layerSizes.length - 1) * 2)
-    for(i <- 0 until layerSizes.length - 1){
+    for (i <- 0 until layerSizes.length - 1) {
       layers(i * 2) = new AffineLayer(layerSizes(i), layerSizes(i + 1))
       layers(i * 2 + 1) =
         if (softmax && i == layerSizes.length - 2) {
@@ -588,45 +584,25 @@ private[ml] class FeedForwardModel private(
     }
     deltas(L) = new BDM[Double](0, 0)
     deltas(L - 1) = newE
+    // backwards pass (back-propagate deltas given errors)
     for (i <- (L - 2) to (0, -1)) {
       deltas(i) = layerModels(i + 1).prevDelta(deltas(i + 1), outputs(i + 1))
     }
-    val grads = new Array[Array[Double]](layerModels.length)
-    for (i <- 0 until layerModels.length) {
-      val input = if (i==0) data else outputs(i - 1)
-      grads(i) = layerModels(i).grad(deltas(i), input)
+    // forwards pass (forward-propagate gradients given inputs)
+    val grads = layerModels.zipWithIndex.map { case (layer, i) =>
+      val input = if (i == 0) data else outputs(i - 1)
+      layer.grad(deltas(i), input)
     }
-    // update cumGradient
+    // update cumulative gradients
     val cumGradientArray = cumGradient.toArray
-    var offset = 0
-    // TODO: extract roll
-    for (i <- 0 until grads.length) {
-      val gradArray = grads(i)
-      var k = 0
-      while (k < gradArray.length) {
-        cumGradientArray(offset + k) += gradArray(k)
-        k += 1
-      }
-      offset += gradArray.length
+    grads.flatten.zipWithIndex.foreach { case (newGrad, i) =>
+      cumGradientArray(i) += newGrad
     }
     newError
   }
 
-  // TODO: do we really need to copy the weights? they should be read-only
   override def weights(): Vector = {
-    // TODO: extract roll
-    var size = 0
-    for (i <- 0 until layerModels.length) {
-      size += layerModels(i).size
-    }
-    val array = new Array[Double](size)
-    var offset = 0
-    for (i <- 0 until layerModels.length) {
-      val layerWeights = layerModels(i).weights().toArray
-      System.arraycopy(layerWeights, 0, array, offset, layerWeights.length)
-      offset += layerWeights.length
-    }
-    Vectors.dense(array)
+    Vectors.dense(layerModels.flatMap(_.weights().toArray))
   }
 
   override def predict(data: Vector): Vector = {
