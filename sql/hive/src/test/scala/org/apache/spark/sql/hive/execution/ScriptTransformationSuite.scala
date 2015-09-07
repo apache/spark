@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
@@ -42,9 +41,8 @@ class ScriptTransformationSuite extends SparkPlanTest {
     outputSerdeClass = None,
     inputSerdeProps = Seq.empty,
     outputSerdeProps = Seq.empty,
-    schemaLess = false,
-    recordWriter = new HiveConf().getVar(HiveConf.ConfVars.HIVESCRIPTRECORDWRITER),
-    recordReader = new HiveConf().getVar(HiveConf.ConfVars.HIVESCRIPTRECORDREADER))
+    schemaLess = false
+  )
 
   private val serdeIOSchema = noSerdeIOSchema.copy(
     inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),

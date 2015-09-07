@@ -61,8 +61,7 @@ case class ScriptTransformation(
 
   override def otherCopyArgs: Seq[HiveContext] = sc :: Nil
 
-  private val _broadcastedHiveConf = this.
-    sc.sparkContext.broadcast(new SerializableConfiguration(sc.hiveconf))
+  private val _broadcastedHiveConf = new SerializableConfiguration(sc.hiveconf)
 
   protected override def doExecute(): RDD[InternalRow] = {
     def processIterator(inputIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
@@ -73,7 +72,7 @@ case class ScriptTransformation(
       val inputStream = proc.getInputStream
       val outputStream = proc.getOutputStream
       val errorStream = proc.getErrorStream
-      val localHconf = _broadcastedHiveConf.value.value
+      val localHconf = _broadcastedHiveConf.value
 
       // In order to avoid deadlocks, we need to consume the error output of the child process.
       // To avoid issues caused by large error output, we use a circular buffer to limit the amount
@@ -119,7 +118,7 @@ case class ScriptTransformation(
         val scriptOutputReader: RecordReader = ioschema.getRecordReader(localHconf)
 
         scriptOutputReader.initialize(
-          new DataInputStream(inputStream), _broadcastedHiveConf.value.value, tableProperties)
+          new DataInputStream(inputStream), _broadcastedHiveConf.value, tableProperties)
         var scriptOutputWritable: Writable = null
         val reusedWritableObject: Writable = if (null != outputSerde) {
           outputSerde.getSerializedClass().newInstance
@@ -300,9 +299,7 @@ case class HiveScriptIOSchema (
     outputSerdeClass: Option[String],
     inputSerdeProps: Seq[(String, String)],
     outputSerdeProps: Seq[(String, String)],
-    schemaLess: Boolean,
-    recordWriter: String,
-    recordReader: String) extends ScriptInputOutputSchema with HiveInspectors {
+    schemaLess: Boolean) extends ScriptInputOutputSchema with HiveInspectors {
 
   private val defaultFormat = Map(
     ("TOK_TABLEROWFORMATFIELD", "\t"),
@@ -313,22 +310,16 @@ case class HiveScriptIOSchema (
   val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
 
   def getRecordReader(conf: Configuration): RecordReader = {
+    // TODO: add support to get reader from sql clause
     val readerName =
-      if (recordReader == "") {
         HiveConf.getVar(conf, HiveConf.ConfVars.HIVESCRIPTRECORDREADER)
-      } else {
-        recordReader
-      }
     Utils.classForName(readerName).newInstance.asInstanceOf[RecordReader]
   }
 
   def getRecordWriter(conf: Configuration): RecordWriter = {
+    // TODO: add support to get writer from sql clause
     val writerName =
-      if (recordWriter == "") {
         HiveConf.getVar(conf, HiveConf.ConfVars.HIVESCRIPTRECORDWRITER)
-      } else {
-        recordWriter
-      }
     Utils.classForName(writerName).newInstance.asInstanceOf[RecordWriter]
   }
 
