@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.execution.local
 
+import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{DataFrame, Row, SQLConf}
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.{DataFrame, DataFrameHolder, Row, SQLConf}
+import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 
-class LocalNodeTest extends SparkFunSuite {
+class LocalNodeTest extends SparkFunSuite with SharedSQLContext {
 
   protected val conf = new SQLConf
 
@@ -41,6 +42,13 @@ class LocalNodeTest extends SparkFunSuite {
         case (key, None) => conf.unsetConf(key)
       }
     }
+  }
+
+  /**
+   * Creates a DataFrame from a local Seq of Product.
+   */
+  implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder = {
+    sqlContext.implicits.localSeqToDataFrameHolder(data)
   }
 
   /**
@@ -115,6 +123,19 @@ class LocalNodeTest extends SparkFunSuite {
       df.queryExecution.toRdd.map(_.copy()).collect())
   }
 
+  protected def wrapForUnsafe(
+      f: (LocalNode, LocalNode) => LocalNode): (LocalNode, LocalNode) => LocalNode = {
+    if (conf.unsafeEnabled) {
+      (left: LocalNode, right: LocalNode) => {
+        val _left = ConvertToUnsafeNode(conf, left)
+        val _right = ConvertToUnsafeNode(conf, right)
+        val r = f(_left, _right)
+        ConvertToSafeNode(conf, r)
+      }
+    } else {
+      f
+    }
+  }
 }
 
 /**

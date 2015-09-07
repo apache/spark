@@ -19,26 +19,44 @@ package org.apache.spark.sql.execution.local
 
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, Attribute, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Projection}
 
+case class ExpandNode(
+    conf: SQLConf,
+    projections: Seq[Seq[Expression]],
+    output: Seq[Attribute],
+    child: LocalNode) extends UnaryLocalNode(conf) {
 
-case class ProjectNode(conf: SQLConf, projectList: Seq[NamedExpression], child: LocalNode)
-  extends UnaryLocalNode(conf) {
+  assert(projections.size > 0)
 
-  private[this] var project: UnsafeProjection = _
+  private[this] var result: InternalRow = _
+  private[this] var idx: Int = _
+  private[this] var input: InternalRow = _
 
-  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+  private[this] var groups: Array[Projection] = _
 
   override def open(): Unit = {
-    project = UnsafeProjection.create(projectList, child.output)
     child.open()
+    idx = -1
+    groups = projections.map(ee => newProjection(ee, child.output)).toArray
   }
 
-  override def next(): Boolean = child.next()
-
-  override def fetch(): InternalRow = {
-    project.apply(child.fetch())
+  override def next(): Boolean = {
+    idx += 1
+    if (idx < groups.length) {
+      result = groups(idx)(input)
+      true
+    } else if (child.next()) {
+      input = child.fetch()
+      idx = 0
+      result = groups(idx)(input)
+      true
+    } else {
+      false
+    }
   }
+
+  override def fetch(): InternalRow = result
 
   override def close(): Unit = child.close()
 }
