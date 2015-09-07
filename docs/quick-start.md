@@ -218,7 +218,7 @@ a cluster, as described in the [programming guide](programming-guide.html#initia
 
 # Self-Contained Applications
 Suppose we wish to write a self-contained application using the Spark API. We will walk through a
-simple application in Scala (with SBT), Java (with Maven), and Python.
+simple application in Scala (with sbt), Java (with Maven), and Python.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -258,7 +258,7 @@ We pass the SparkContext constructor a
 object which contains information about our
 application. 
 
-Our application depends on the Spark API, so we'll also include an SBT configuration file, 
+Our application depends on the Spark API, so we'll also include an sbt configuration file, 
 `simple.sbt`, which explains that Spark is a dependency. This file also adds a repository that 
 Spark depends on:
 
@@ -272,7 +272,7 @@ scalaVersion := "{{site.SCALA_VERSION}}"
 libraryDependencies += "org.apache.spark" %% "spark-core" % "{{site.SPARK_VERSION}}"
 {% endhighlight %}
 
-For SBT to work correctly, we'll need to layout `SimpleApp.scala` and `simple.sbt`
+For sbt to work correctly, we'll need to layout `SimpleApp.scala` and `simple.sbt`
 according to the typical directory structure. Once that is in place, we can create a JAR package
 containing the application's code, then use the `spark-submit` script to run our program.
 
