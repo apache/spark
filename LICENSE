@@ -272,10 +272,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 ========================================================================
-For Py4J (python/lib/py4j-0.8.2.1-src.zip)
+For Py4J (python/lib/py4j-0.9-src.zip)
 ========================================================================
 
-Copyright (c) 2009-2011, Barthelemy Dagenais All rights reserved.
+Copyright (c) 2009-2015, Barthelemy Dagenais and individual contributors. All
+rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
