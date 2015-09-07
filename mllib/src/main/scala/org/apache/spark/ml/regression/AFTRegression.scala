@@ -71,11 +71,11 @@ private[regression] trait AFTRegressionParams extends Params
       schema: StructType,
       fitting: Boolean): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
-    SchemaUtils.checkColumnType(schema, $(censorCol), DoubleType)
     if (fitting) {
+      SchemaUtils.checkColumnType(schema, $(censorCol), DoubleType)
       SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
     } else {
-      SchemaUtils.checkColumnType(schema, $(quantileCol), DoubleType)
+      SchemaUtils.checkColumnType(schema, $(quantileCol), new VectorUDT)
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
