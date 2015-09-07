@@ -45,7 +45,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("select as sparse vector") {
-    val df = sqlContext.read.libsvm(path)
+    val df = sqlContext.read.format("libsvm").load(path)
     assert(df.columns(0) == "label")
     assert(df.columns(1) == "features")
     val row1 = df.first()
@@ -55,8 +55,8 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("select as dense vector") {
-    val df = sqlContext.read.options(Map("vectorType" -> "dense"))
-      .libsvm(path)
+    val df = sqlContext.read.format("libsvm").options(Map("vectorType" -> "dense"))
+      .load(path)
     assert(df.columns(0) == "label")
     assert(df.columns(1) == "features")
     assert(df.count() == 3)
@@ -75,7 +75,8 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00001")
     Files.write(lines, file, Charsets.US_ASCII)
-    val df = sqlContext.read.option("numFeatures", "100").libsvm(tempDir.toURI.toString)
+    val df = sqlContext.read.option("numFeatures", "100").format("libsvm")
+      .load(tempDir.toURI.toString)
     val row1 = df.first()
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(100, Seq((0, 1.0), (9, 2.0), (19, 3.0), (29, 4.0), (39, 5.0),
