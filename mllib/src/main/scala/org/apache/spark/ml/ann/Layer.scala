@@ -27,8 +27,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
- * Trait that holds Layer properties, that are needed to instantiate it.
- * Implements Layer instantiation.
+ * Trait holding Layer properties required for instantiating a [[LayerModel]].
  *
  */
 private[ann] trait Layer extends Serializable {
@@ -49,9 +48,9 @@ private[ann] trait Layer extends Serializable {
 }
 
 /**
- * Trait that holds Layer weights (or parameters).
- * Implements functions needed for forward propagation, computing delta and gradient.
- * Can return weights in Vector format.
+ * Trait holding weights (or parameters) for a layer.
+ * Implements functions needed for forward and back propagation.
+ * Can return weights in [[Vector]] format.
  */
 private[ann] trait LayerModel extends Serializable {
   /**
@@ -60,24 +59,23 @@ private[ann] trait LayerModel extends Serializable {
   val size: Int
 
   /**
-   * Evaluates the data (process the data through the layer).
+   * Evaluates the data (process the data forwards through the layer).
    * @param data data
    * @return processed data
    */
   def eval(data: BDM[Double]): BDM[Double]
 
   /**
-   * Computes the delta (gradient of the objective function with respect to weighted inputs) for back
-   * propagation.
-   * @param nextDelta delta of the next layer
+   * Computes the delta (gradient of the objective function with respect to weighted inputs) for
+   * back propagation.
+   * @param nextDelta delta for the next layer
    * @param input input data
    * @return delta for this layer
    */
   def prevDelta(nextDelta: BDM[Double], input: BDM[Double]): BDM[Double]
 
   /**
-   * Computes the gradient of the objective function with respect to this layer's weights and
-   * biases.
+   * Computes the gradient of the objective function with respect to this layer's weights.
    * @param delta delta for this layer
    * @param input input data
    * @return gradient
@@ -92,7 +90,7 @@ private[ann] trait LayerModel extends Serializable {
 }
 
 /**
- * Layer properties of affine transformations, that is y=A*x+b.
+ * Layer properties for affine transformations, that is y=A*x+b.
  * @param numIn number of inputs
  * @param numOut number of outputs
  */
@@ -416,13 +414,17 @@ private[ann] class FunctionalLayerModel private (val activationFunction: Activat
   private lazy val dg = new Array[Double](0)
 
   override def eval(data: BDM[Double]): BDM[Double] = {
-    if (f == null || f.cols != data.cols) f = new BDM[Double](data.rows, data.cols)
+    if (f == null || f.cols != data.cols) {
+      f = new BDM[Double](data.rows, data.cols)
+    }
     activationFunction.eval(data, f)
     f
   }
 
   override def prevDelta(nextDelta: BDM[Double], input: BDM[Double]): BDM[Double] = {
-    if (d == null || d.cols != nextDelta.cols) d = new BDM[Double](nextDelta.rows, nextDelta.cols)
+    if (d == null || d.cols != nextDelta.cols) {
+      d = new BDM[Double](nextDelta.rows, nextDelta.cols)
+    }
     activationFunction.derivative(input, d)
     d :*= nextDelta
     d
@@ -433,13 +435,17 @@ private[ann] class FunctionalLayerModel private (val activationFunction: Activat
   override def weights(): Vector = Vectors.dense(new Array[Double](0))
 
   def crossEntropy(output: BDM[Double], target: BDM[Double]): (BDM[Double], Double) = {
-    if (e == null || e.cols != output.cols) e = new BDM[Double](output.rows, output.cols)
+    if (e == null || e.cols != output.cols) {
+      e = new BDM[Double](output.rows, output.cols)
+    }
     val error = activationFunction.crossEntropy(output, target, e)
     (e, error)
   }
 
   def squared(output: BDM[Double], target: BDM[Double]): (BDM[Double], Double) = {
-    if (e == null || e.cols != output.cols) e = new BDM[Double](output.rows, output.cols)
+    if (e == null || e.cols != output.cols) {
+      e = new BDM[Double](output.rows, output.cols)
+    }
     val error = activationFunction.squared(output, target, e)
     (e, error)
   }
@@ -717,8 +723,8 @@ private[ann] class DataStacker(stackSize: Int, inputSize: Int, outputSize: Int)
         (0.0,
           Vectors.fromBreeze(BDV.vertcat(
             v._1.toBreeze.toDenseVector,
-            v._2.toBreeze.toDenseVector))
-          ) }
+            v._2.toBreeze.toDenseVector)))
+      }
     } else {
       data.mapPartitions { it =>
         it.grouped(stackSize).map { seq =>
@@ -838,7 +844,7 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Sets the updater.
-   * @param value updater
+   * @param updater updater
    * @return trainer
    */
   def setUpdater(updater: Updater): FeedForwardTrainer = {
@@ -854,7 +860,7 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Sets the gradient.
-   * @param value gradient
+   * @param gradient gradient
    * @return trainer
    */
   def setGradient(gradient: Gradient): FeedForwardTrainer = {
