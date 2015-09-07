@@ -16,6 +16,8 @@
  */
 package org.apache.spark.mllib.api.python
 
+import scala.collection.JavaConverters
+
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.clustering.LDAModel
 import org.apache.spark.mllib.linalg.Matrix
@@ -32,14 +34,11 @@ private[python] class LDAModelWrapper(model: LDAModel) {
   def describeTopics(): java.util.List[Array[Any]] = describeTopics(this.model.vocabSize)
 
   def describeTopics(maxTermsPerTopic: Int): java.util.List[Array[Any]] = {
-    import scala.collection.JavaConversions._
 
-    val javaList: java.util.List[Array[Any]] =
-      model.describeTopics(maxTermsPerTopic).map { case (terms, termWeights) =>
-        var array = Array.empty[Any]
+    val seq = model.describeTopics(maxTermsPerTopic).map { case (terms, termWeights) =>
         Array.empty[Any] ++ terms ++ termWeights
-      }.toList
-    javaList
+      }.toSeq
+    JavaConverters.seqAsJavaListConverter(seq).asJava
   }
 
   def save(sc: SparkContext, path: String): Unit = model.save(sc, path)
