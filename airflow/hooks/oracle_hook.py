@@ -19,26 +19,12 @@ class OracleHook(DbApiHook):
         try:
             conn = cx_Oracle.connect(conn.login, conn.password, conn.host)
         except:
+            # add support for custom DSN connections
             dsn = conn.extra_dejson.get('dsn', None)
             service_name = conn.extra_dejson.get('service_name', None)
             dsn = cx_Oracle.makedsn(dsn, conn.port, service_name=service_name)
             conn = cx_Oracle.connect(conn.login, conn.password, dsn=dsn)
         return conn
-
-    def run(self, sql, autocommit = False, parameters = None):
-        """
-        Runs a command
-        """
-        conn = self.get_conn()
-        if self.supports_autocommit:
-            self.set_autocommit(conn, autocommit)
-        cur = conn.cursor()
-        cur.callproc('dbms_output.enable')
-        logging.info('Executing query {sql}'.format(**locals()))
-        cur.execute(sql)
-        conn.commit()
-        cur.close()
-        conn.close()
 
     def get_pandas_df(self, sql, parameters = None):
         """
@@ -47,7 +33,7 @@ class OracleHook(DbApiHook):
         import pandas.io.sql as psql
         conn = self.get_conn()
         df = psql.read_sql(sql, con=conn)
-        df.columns = df.columns.map(lambda x: x.lower())
+        df.columns = df.columns.map(lambda x: x.lower()) # lower column names to have same output as other hooks
         conn.close()
         return df
 
