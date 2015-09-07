@@ -24,10 +24,9 @@ import org.apache.spark.sql.sources.HadoopFsRelationTest
 import org.apache.spark.sql.types._
 
 class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
-  override val dataSourceName: String = classOf[DefaultSource].getCanonicalName
+  import testImplicits._
 
-  import sqlContext._
-  import sqlContext.implicits._
+  override val dataSourceName: String = classOf[DefaultSource].getCanonicalName
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
@@ -48,7 +47,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        read.options(Map(
+        hiveContext.read.options(Map(
           "path" -> file.getCanonicalPath,
           "dataSchema" -> dataSchemaWithPartition.json)).format(dataSourceName).load())
     }

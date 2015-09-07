@@ -329,12 +329,11 @@ private[spark] object SerDe {
     out.writeDouble((value.getTime / 1000).toDouble + value.getNanos.toDouble / 1e9)
   }
 
-  // NOTE: Only works for ASCII right now
   def writeString(out: DataOutputStream, value: String): Unit = {
-    val len = value.length
-    out.writeInt(len + 1) // For the \0
-    out.writeBytes(value)
-    out.writeByte(0)
+    val utf8 = value.getBytes("UTF-8")
+    val len = utf8.length
+    out.writeInt(len)
+    out.write(utf8, 0, len)
   }
 
   def writeBytes(out: DataOutputStream, value: Array[Byte]): Unit = {
