@@ -841,9 +841,14 @@ private[ml] class FeedForwardTrainer(
    * @param value updater
    * @return trainer
    */
-  def setUpdater(value: Updater): FeedForwardTrainer = {
-    _updater = value
-    updateUpdater(value)
+  def setUpdater(updater: Updater): FeedForwardTrainer = {
+    _updater = updater
+    optimizer match {
+      case lbfgs: LBFGS => lbfgs.setUpdater(updater)
+      case sgd: GradientDescent => sgd.setUpdater(updater)
+      case other => throw new UnsupportedOperationException(
+        s"Only LBFGS and GradientDescent are supported but got ${other.getClass}.")
+    }
     this
   }
 
@@ -852,28 +857,15 @@ private[ml] class FeedForwardTrainer(
    * @param value gradient
    * @return trainer
    */
-  def setGradient(value: Gradient): FeedForwardTrainer = {
-    _gradient = value
-    updateGradient(value)
-    this
-  }
-
-  private[this] def updateGradient(gradient: Gradient): Unit = {
+  def setGradient(gradient: Gradient): FeedForwardTrainer = {
+    _gradient = gradient
     optimizer match {
       case lbfgs: LBFGS => lbfgs.setGradient(gradient)
       case sgd: GradientDescent => sgd.setGradient(gradient)
       case other => throw new UnsupportedOperationException(
         s"Only LBFGS and GradientDescent are supported but got ${other.getClass}.")
     }
-  }
-
-  private[this] def updateUpdater(updater: Updater): Unit = {
-    optimizer match {
-      case lbfgs: LBFGS => lbfgs.setUpdater(updater)
-      case sgd: GradientDescent => sgd.setUpdater(updater)
-      case other => throw new UnsupportedOperationException(
-        s"Only LBFGS and GradientDescent are supported but got ${other.getClass}.")
-    }
+    this
   }
 
   /**
