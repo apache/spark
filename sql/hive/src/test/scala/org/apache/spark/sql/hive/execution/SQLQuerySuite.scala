@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
 import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConverters._
@@ -764,12 +765,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   }
 
   test("test script transform script input and output format") {
+    println("Current dir: " + new File(".").getCanonicalPath)
     val data = (1 to 5).map { i => (i, i) }
     data.toDF("a", "b").registerTempTable("test")
     checkAnswer(
       sql("""FROM
             |(FROM test SELECT TRANSFORM(a, b)
-            |USING 'python sql/hive/src/test/resources/data/scripts/test_transript.py'
+            |USING 'python src/test/resources/data/scripts/test_transript.py'
             |AS (thing1 string, thing2 string)) t
             |SELECT thing1
           """.stripMargin), (1 to 5).map(i => Row(i + "#")))
