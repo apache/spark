@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+import scala.util.hashing.MurmurHash3
+
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
@@ -151,7 +155,7 @@ trait Row extends Serializable {
    *   StructType -> org.apache.spark.sql.Row
    * }}}
    */
-  def apply(i: Int): Any
+  def apply(i: Int): Any = get(i)
 
   /**
    * Returns the value at position i. If the value is null, null is returned. The following
@@ -176,10 +180,10 @@ trait Row extends Serializable {
    *   StructType -> org.apache.spark.sql.Row
    * }}}
    */
-  def get(i: Int): Any = apply(i)
+  def get(i: Int): Any
 
   /** Checks whether the value at position i is null. */
-  def isNullAt(i: Int): Boolean = apply(i) == null
+  def isNullAt(i: Int): Boolean = get(i) == null
 
   /**
    * Returns the value at position i as a primitive boolean.
@@ -279,9 +283,8 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getList[T](i: Int): java.util.List[T] = {
-    scala.collection.JavaConversions.seqAsJavaList(getSeq[T](i))
-  }
+  def getList[T](i: Int): java.util.List[T] =
+    getSeq[T](i).asJava
 
   /**
    * Returns the value at position i of map type as a Scala Map.
@@ -295,9 +298,8 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getJavaMap[K, V](i: Int): java.util.Map[K, V] = {
-    scala.collection.JavaConversions.mapAsJavaMap(getMap[K, V](i))
-  }
+  def getJavaMap[K, V](i: Int): java.util.Map[K, V] =
+    getMap[K, V](i).asJava
 
   /**
    * Returns the value at position i of struct type as an [[Row]] object.
@@ -311,7 +313,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getAs[T](i: Int): T = apply(i).asInstanceOf[T]
+  def getAs[T](i: Int): T = get(i).asInstanceOf[T]
 
   /**
    * Returns the value of a given fieldName.
@@ -361,6 +363,64 @@ trait Row extends Serializable {
       i += 1
     }
     false
+  }
+
+  override def equals(o: Any): Boolean = {
+    if (!o.isInstanceOf[Row]) return false
+    val other = o.asInstanceOf[Row]
+
+    if (other eq null) return false
+
+    if (length != other.length) {
+      return false
+    }
+
+    var i = 0
+    while (i < length) {
+      if (isNullAt(i) != other.isNullAt(i)) {
+        return false
+      }
+      if (!isNullAt(i)) {
+        val o1 = get(i)
+        val o2 = other.get(i)
+        o1 match {
+          case b1: Array[Byte] =>
+            if (!o2.isInstanceOf[Array[Byte]] ||
+                !java.util.Arrays.equals(b1, o2.asInstanceOf[Array[Byte]])) {
+              return false
+            }
+          case f1: Float if java.lang.Float.isNaN(f1) =>
+            if (!o2.isInstanceOf[Float] || ! java.lang.Float.isNaN(o2.asInstanceOf[Float])) {
+              return false
+            }
+          case d1: Double if java.lang.Double.isNaN(d1) =>
+            if (!o2.isInstanceOf[Double] || ! java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
+              return false
+            }
+          case d1: java.math.BigDecimal if o2.isInstanceOf[java.math.BigDecimal] =>
+            if (d1.compareTo(o2.asInstanceOf[java.math.BigDecimal]) != 0) {
+              return false
+            }
+          case _ => if (o1 != o2) {
+            return false
+          }
+        }
+      }
+      i += 1
+    }
+    true
+  }
+
+  override def hashCode: Int = {
+    // Using Scala's Seq hash code implementation.
+    var n = 0
+    var h = MurmurHash3.seqSeed
+    val len = length
+    while (n < len) {
+      h = MurmurHash3.mix(h, apply(n).##)
+      n += 1
+    }
+    MurmurHash3.finalizeHash(h, n)
   }
 
   /* ---------------------- utility methods for Scala ---------------------- */

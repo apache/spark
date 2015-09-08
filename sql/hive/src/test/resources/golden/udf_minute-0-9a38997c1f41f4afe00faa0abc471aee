@@ -1,1 +1,1 @@
-minute(date) - Returns the minute of date
+minute(param) - Returns the minute component of the string/timestamp/interval

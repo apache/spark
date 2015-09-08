@@ -98,8 +98,7 @@ class KafkaRDD[
     val res = context.runJob(
       this,
       (tc: TaskContext, it: Iterator[R]) => it.take(parts(tc.partitionId)).toArray,
-      parts.keys.toArray,
-      allowLocal = true)
+      parts.keys.toArray)
     res.foreach(buf ++= _)
     buf.toArray
   }
@@ -198,7 +197,11 @@ class KafkaRDD[
         .dropWhile(_.offset < requestOffset)
     }
 
-    override def close(): Unit = consumer.close()
+    override def close(): Unit = {
+      if (consumer != null) {
+        consumer.close()
+      }
+    }
 
     override def getNext(): R = {
       if (iter == null || !iter.hasNext) {

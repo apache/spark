@@ -60,12 +60,16 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
 
     testIf(_.toFloat, FloatType)
     testIf(_.toDouble, DoubleType)
-    testIf(Decimal(_), DecimalType.Unlimited)
+    testIf(Decimal(_), DecimalType.USER_DEFAULT)
 
     testIf(identity, DateType)
     testIf(_.toLong, TimestampType)
 
     testIf(_.toString, StringType)
+
+    DataTypeTestUtils.propertyCheckSupported.foreach { dt =>
+      checkConsistencyBetweenInterpretedAndCodegen(If, BooleanType, dt, dt)
+    }
   }
 
   test("case when") {
@@ -149,6 +153,8 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Least(Seq(c1, c2, Literal(-1))), -1, row)
     checkEvaluation(Least(Seq(c4, c5, c3, c3, Literal("a"))), "a", row)
 
+    val nullLiteral = Literal.create(null, IntegerType)
+    checkEvaluation(Least(Seq(nullLiteral, nullLiteral)), null)
     checkEvaluation(Least(Seq(Literal(null), Literal(null))), null, InternalRow.empty)
     checkEvaluation(Least(Seq(Literal(-1.0), Literal(2.5))), -1.0, InternalRow.empty)
     checkEvaluation(Least(Seq(Literal(-1), Literal(2))), -1, InternalRow.empty)
@@ -174,6 +180,10 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
         Literal(Timestamp.valueOf("2015-07-01 08:00:00")),
         Literal(Timestamp.valueOf("2015-07-01 10:00:00")))),
       Timestamp.valueOf("2015-07-01 08:00:00"), InternalRow.empty)
+
+    DataTypeTestUtils.ordered.foreach { dt =>
+      checkConsistencyBetweenInterpretedAndCodegen(Least, dt, 2)
+    }
   }
 
   test("function greatest") {
@@ -188,6 +198,8 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Greatest(Seq(c1, c2, Literal(2))), 2, row)
     checkEvaluation(Greatest(Seq(c4, c5, c3, Literal("ccc"))), "ccc", row)
 
+    val nullLiteral = Literal.create(null, IntegerType)
+    checkEvaluation(Greatest(Seq(nullLiteral, nullLiteral)), null)
     checkEvaluation(Greatest(Seq(Literal(null), Literal(null))), null, InternalRow.empty)
     checkEvaluation(Greatest(Seq(Literal(-1.0), Literal(2.5))), 2.5, InternalRow.empty)
     checkEvaluation(Greatest(Seq(Literal(-1), Literal(2))), 2, InternalRow.empty)
@@ -214,6 +226,9 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
         Literal(Timestamp.valueOf("2015-07-01 08:00:00")),
         Literal(Timestamp.valueOf("2015-07-01 10:00:00")))),
       Timestamp.valueOf("2015-07-01 10:00:00"), InternalRow.empty)
-  }
 
+    DataTypeTestUtils.ordered.foreach { dt =>
+      checkConsistencyBetweenInterpretedAndCodegen(Greatest, dt, 2)
+    }
+  }
 }

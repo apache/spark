@@ -22,6 +22,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, JoinedRow}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * :: DeveloperApi ::
@@ -34,19 +35,37 @@ case class CartesianProduct(
   override def output: Seq[Attribute] = left.output ++ right.output
 
   private val (small, big) = buildSide match {
-    case BuildRight => (left, right)
-    case BuildLeft => (right, left)
+    case BuildRight => (right, left)
+    case BuildLeft => (left, right)
   }
 
+  override private[sql] lazy val metrics = Map(
+    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
+    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
   protected override def doExecute(): RDD[InternalRow] = {
-    val leftResults = small.execute().map(_.copy())
-    val rightResults = big.execute().map(_.copy())
+    val numLeftRows = longMetric("numLeftRows")
+    val numRightRows = longMetric("numRightRows")
+    val numOutputRows = longMetric("numOutputRows")
+
+    val leftResults = small.execute().map { row =>
+      numLeftRows += 1
+      row.copy()
+    }
+    val rightResults = big.execute().map { row =>
+      numRightRows += 1
+      row.copy()
+    }
 
     leftResults.cartesian(rightResults).mapPartitions { iter =>
       val joinedRow = new JoinedRow
-      buildSide match {
-        case BuildRight => iter.map(r => joinedRow(r._1, r._2))
-        case BuildLeft => iter.map(r => joinedRow(r._2, r._1))
+      iter.map { r =>
+        numOutputRows += 1
+        buildSide match {
+          case BuildLeft => joinedRow(r._1, r._2)
+          case BuildRight => joinedRow(r._2, r._1)
+        }
       }
     }
   }

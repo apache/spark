@@ -26,6 +26,7 @@ import org.scalatest.mock.MockitoSugar.mock
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.HashingTF
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.sql.DataFrame
 
 class PipelineSuite extends SparkFunSuite {
@@ -64,6 +65,8 @@ class PipelineSuite extends SparkFunSuite {
     val pipeline = new Pipeline()
       .setStages(Array(estimator0, transformer1, estimator2, transformer3))
     val pipelineModel = pipeline.fit(dataset0)
+
+    MLTestingUtils.checkCopy(pipelineModel)
 
     assert(pipelineModel.stages.length === 4)
     assert(pipelineModel.stages(0).eq(model0))

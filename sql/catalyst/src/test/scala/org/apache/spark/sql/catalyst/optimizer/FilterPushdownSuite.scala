@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
-import org.apache.spark.sql.catalyst.expressions.{SortOrder, Ascending, Count, Explode}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{LeftSemi, PlanTest, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.rules._
@@ -142,6 +142,49 @@ class FilterPushdownSuite extends PlanTest {
         .where('a + 'b === 1)
         .select('a + 'b as 'e)
         .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("nondeterministic: can't push down filter through project") {
+    val originalQuery = testRelation
+      .select(Rand(10).as('rand), 'a)
+      .where('rand > 5 || 'a > 5)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    comparePlans(optimized, originalQuery)
+  }
+
+  test("nondeterministic: push down part of filter through project") {
+    val originalQuery = testRelation
+      .select(Rand(10).as('rand), 'a)
+      .where('rand > 5 && 'a > 5)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    val correctAnswer = testRelation
+      .where('a > 5)
+      .select(Rand(10).as('rand), 'a)
+      .where('rand > 5)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("nondeterministic: push down filter through project") {
+    val originalQuery = testRelation
+      .select(Rand(10).as('rand), 'a)
+      .where('a > 5 && 'a < 10)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer = testRelation
+      .where('a > 5 && 'a < 10)
+      .select(Rand(10).as('rand), 'a)
+      .analyze
 
     comparePlans(optimized, correctAnswer)
   }

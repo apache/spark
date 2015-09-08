@@ -152,7 +152,7 @@ You can optionally configure the cluster further by setting environment variable
   </tr>
   <tr>
     <td><code>SPARK_DAEMON_MEMORY</code></td>
-    <td>Memory to allocate to the Spark master and worker daemons themselves (default: 512m).</td>
+    <td>Memory to allocate to the Spark master and worker daemons themselves (default: 1g).</td>
   </tr>
   <tr>
     <td><code>SPARK_DAEMON_JAVA_OPTS</code></td>

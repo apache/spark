@@ -39,14 +39,16 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
     val content =
-      generateBasicStats() ++
-      <br/> ++
-      <h4>
-        {listener.onlineSessionNum} session(s) are online,
-        running {listener.totalRunning} SQL statement(s)
-      </h4> ++
-      generateSessionStatsTable() ++
-      generateSQLStatsTable()
+      listener.synchronized { // make sure all parts in this page are consistent
+        generateBasicStats() ++
+        <br/> ++
+        <h4>
+        {listener.getOnlineSessionNum} session(s) are online,
+        running {listener.getTotalRunning} SQL statement(s)
+        </h4> ++
+        generateSessionStatsTable() ++
+        generateSQLStatsTable()
+      }
     UIUtils.headerSparkPage("JDBC/ODBC Server", content, parent, Some(5000))
   }
 
@@ -65,11 +67,11 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 
   /** Generate stats of batch statements of the thrift server program */
   private def generateSQLStatsTable(): Seq[Node] = {
-    val numStatement = listener.executionList.size
+    val numStatement = listener.getExecutionList.size
     val table = if (numStatement > 0) {
       val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Duration",
         "Statement", "State", "Detail")
-      val dataRows = listener.executionList.values
+      val dataRows = listener.getExecutionList
 
       def generateDataRow(info: ExecutionInfo): Seq[Node] = {
         val jobLink = info.jobId.map { id: String =>
@@ -136,15 +138,15 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 
   /** Generate stats of batch sessions of the thrift server program */
   private def generateSessionStatsTable(): Seq[Node] = {
-    val numBatches = listener.sessionList.size
+    val sessionList = listener.getSessionList
+    val numBatches = sessionList.size
     val table = if (numBatches > 0) {
-      val dataRows =
-        listener.sessionList.values
+      val dataRows = sessionList
       val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",
         "Total Execute")
       def generateDataRow(session: SessionInfo): Seq[Node] = {
-        val sessionLink = "%s/sql/session?id=%s"
-          .format(UIUtils.prependBaseUri(parent.basePath), session.sessionId)
+        val sessionLink = "%s/%s/session?id=%s"
+          .format(UIUtils.prependBaseUri(parent.basePath), parent.prefix, session.sessionId)
         <tr>
           <td> {session.userName} </td>
           <td> {session.ip} </td>

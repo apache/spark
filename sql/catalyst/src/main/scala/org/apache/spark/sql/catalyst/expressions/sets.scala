@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -52,7 +52,7 @@ private[sql] class OpenHashSetUDT(
 /**
  * Creates a new set of the specified type
  */
-case class NewSet(elementType: DataType) extends LeafExpression {
+case class NewSet(elementType: DataType) extends LeafExpression with CodegenFallback {
 
   override def nullable: Boolean = false
 
@@ -82,7 +82,8 @@ case class NewSet(elementType: DataType) extends LeafExpression {
  * Note: this expression is internal and created only by the GeneratedAggregate,
  * we don't need to do type check for it.
  */
-case class AddItemToSet(item: Expression, set: Expression) extends Expression {
+case class AddItemToSet(item: Expression, set: Expression)
+  extends Expression with CodegenFallback {
 
   override def children: Seq[Expression] = item :: set :: Nil
 
@@ -134,7 +135,8 @@ case class AddItemToSet(item: Expression, set: Expression) extends Expression {
  * Note: this expression is internal and created only by the GeneratedAggregate,
  * we don't need to do type check for it.
  */
-case class CombineSets(left: Expression, right: Expression) extends BinaryExpression {
+case class CombineSets(left: Expression, right: Expression)
+  extends BinaryExpression with CodegenFallback {
 
   override def nullable: Boolean = left.nullable
   override def dataType: DataType = left.dataType
@@ -181,7 +183,7 @@ case class CombineSets(left: Expression, right: Expression) extends BinaryExpres
  * Note: this expression is internal and created only by the GeneratedAggregate,
  * we don't need to do type check for it.
  */
-case class CountSet(child: Expression) extends UnaryExpression {
+case class CountSet(child: Expression) extends UnaryExpression with CodegenFallback {
 
   override def dataType: DataType = LongType
 

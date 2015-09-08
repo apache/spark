@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.orc
 
 import java.util.Properties
 
+import scala.collection.JavaConverters._
+
 import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -32,22 +34,23 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveMetastoreTypes, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.SerializableConfiguration
 
-/* Implicit conversions */
-import scala.collection.JavaConversions._
+private[sql] class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
-private[sql] class DefaultSource extends HadoopFsRelationProvider {
-  def createRelation(
+  override def shortName(): String = "orc"
+
+  override def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
       dataSchema: Option[StructType],
@@ -75,7 +78,8 @@ private[orc] class OrcOutputWriter(
     }.mkString(":"))
 
     val serde = new OrcSerde
-    serde.initialize(context.getConfiguration, table)
+    val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+    serde.initialize(configuration, table)
     serde
   }
 
@@ -94,9 +98,11 @@ private[orc] class OrcOutputWriter(
   private val reusableOutputBuffer = new Array[Any](dataSchema.length)
 
   // Used to convert Catalyst values into Hadoop `Writable`s.
-  private val wrappers = structOI.getAllStructFieldRefs.map { ref =>
-    wrapperFor(ref.getFieldObjectInspector)
-  }.toArray
+  private val wrappers = structOI.getAllStructFieldRefs.asScala
+    .zip(dataSchema.fields.map(_.dataType))
+    .map { case (ref, dt) =>
+      wrapperFor(ref.getFieldObjectInspector, dt)
+    }.toArray
 
   // `OrcRecordWriter.close()` creates an empty file if no rows are written at all.  We use this
   // flag to decide whether `OrcRecordWriter.close()` needs to be called.
@@ -105,9 +111,10 @@ private[orc] class OrcOutputWriter(
   private lazy val recordWriter: RecordWriter[NullWritable, Writable] = {
     recordWriterInstantiated = true
 
-    val conf = context.getConfiguration
+    val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
     val uniqueWriteJobId = conf.get("spark.sql.sources.writeJobUUID")
-    val partition = context.getTaskAttemptID.getTaskID.getId
+    val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
+    val partition = taskAttemptId.getTaskID.getId
     val filename = f"part-r-$partition%05d-$uniqueWriteJobId.orc"
 
     new OrcOutputFormat().getRecordWriter(
@@ -118,10 +125,12 @@ private[orc] class OrcOutputWriter(
     ).asInstanceOf[RecordWriter[NullWritable, Writable]]
   }
 
-  override def write(row: Row): Unit = {
+  override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
+
+  override protected[sql] def writeInternal(row: InternalRow): Unit = {
     var i = 0
-    while (i < row.length) {
-      reusableOutputBuffer(i) = wrappers(i)(row(i))
+    while (i < row.numFields) {
+      reusableOutputBuffer(i) = wrappers(i)(row.get(i, dataSchema(i).dataType))
       i += 1
     }
 
@@ -137,7 +146,6 @@ private[orc] class OrcOutputWriter(
   }
 }
 
-@DeveloperApi
 private[sql] class OrcRelation(
     override val paths: Array[String],
     maybeDataSchema: Option[StructType],
@@ -191,7 +199,7 @@ private[sql] class OrcRelation(
       filters: Array[Filter],
       inputPaths: Array[FileStatus]): RDD[Row] = {
     val output = StructType(requiredColumns.map(dataSchema(_))).toAttributes
-    OrcTableScan(output, this, filters, inputPaths).execute().map(_.asInstanceOf[Row])
+    OrcTableScan(output, this, filters, inputPaths).execute().asInstanceOf[RDD[Row]]
   }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
@@ -289,9 +297,11 @@ private[orc] case class OrcTableScan(
     // Sets requested columns
     addColumnIds(attributes, relation, conf)
 
-    if (inputPaths.nonEmpty) {
-      FileInputFormat.setInputPaths(job, inputPaths.map(_.getPath): _*)
+    if (inputPaths.isEmpty) {
+      // the input path probably be pruned, return an empty RDD.
+      return sqlContext.sparkContext.emptyRDD[InternalRow]
     }
+    FileInputFormat.setInputPaths(job, inputPaths.map(_.getPath): _*)
 
     val inputFormatClass =
       classOf[OrcInputFormat]

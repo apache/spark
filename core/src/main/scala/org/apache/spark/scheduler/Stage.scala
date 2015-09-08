@@ -46,7 +46,7 @@ import org.apache.spark.util.CallSite
  * be updated for each attempt.
  *
  */
-private[spark] abstract class Stage(
+private[scheduler] abstract class Stage(
     val id: Int,
     val rdd: RDD[_],
     val numTasks: Int,
@@ -68,6 +68,22 @@ private[spark] abstract class Stage(
   val name = callSite.shortForm
   val details = callSite.longForm
 
+  private var _internalAccumulators: Seq[Accumulator[Long]] = Seq.empty
+
+  /** Internal accumulators shared across all tasks in this stage. */
+  def internalAccumulators: Seq[Accumulator[Long]] = _internalAccumulators
+
+  /**
+   * Re-initialize the internal accumulators associated with this stage.
+   *
+   * This is called every time the stage is submitted, *except* when a subset of tasks
+   * belonging to this stage has already finished. Otherwise, reinitializing the internal
+   * accumulators here again will override partial values from the finished tasks.
+   */
+  def resetInternalAccumulators(): Unit = {
+    _internalAccumulators = InternalAccumulator.create(rdd.sparkContext)
+  }
+
   /**
    * Pointer to the [StageInfo] object for the most recent attempt. This needs to be initialized
    * here, before any attempts have actually been created, because the DAGScheduler uses this
@@ -76,9 +92,35 @@ private[spark] abstract class Stage(
    */
   private var _latestInfo: StageInfo = StageInfo.fromStage(this, nextAttemptId)
 
+  /**
+   * Set of stage attempt IDs that have failed with a FetchFailure. We keep track of these
+   * failures in order to avoid endless retries if a stage keeps failing with a FetchFailure.
+   * We keep track of each attempt ID that has failed to avoid recording duplicate failures if
+   * multiple tasks from the same stage attempt fail (SPARK-5945).
+   */
+  private val fetchFailedAttemptIds = new HashSet[Int]
+
+  private[scheduler] def clearFailures() : Unit = {
+    fetchFailedAttemptIds.clear()
+  }
+
+  /**
+   * Check whether we should abort the failedStage due to multiple consecutive fetch failures.
+   *
+   * This method updates the running set of failed stage attempts and returns
+   * true if the number of failures exceeds the allowable number of failures.
+   */
+  private[scheduler] def failedOnFetchAndShouldAbort(stageAttemptId: Int): Boolean = {
+    fetchFailedAttemptIds.add(stageAttemptId)
+    fetchFailedAttemptIds.size >= Stage.MAX_CONSECUTIVE_FETCH_FAILURES
+  }
+
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
-  def makeNewStageAttempt(numPartitionsToCompute: Int): Unit = {
-    _latestInfo = StageInfo.fromStage(this, nextAttemptId, Some(numPartitionsToCompute))
+  def makeNewStageAttempt(
+      numPartitionsToCompute: Int,
+      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty): Unit = {
+    _latestInfo = StageInfo.fromStage(
+      this, nextAttemptId, Some(numPartitionsToCompute), taskLocalityPreferences)
     nextAttemptId += 1
   }
 
@@ -90,4 +132,9 @@ private[spark] abstract class Stage(
     case stage: Stage => stage != null && stage.id == id
     case _ => false
   }
+}
+
+private[scheduler] object Stage {
+  // The number of consecutive failures allowed before a stage is aborted
+  val MAX_CONSECUTIVE_FETCH_FAILURES = 4
 }

@@ -31,7 +31,6 @@ which can help detect bugs that only exist when we run in a distributed context.
 val conf = new SparkConf()
              .setMaster("local[2]")
              .setAppName("CountingSheep")
-             .set("spark.executor.memory", "1g")
 val sc = new SparkContext(conf)
 {% endhighlight %}
 
@@ -84,7 +83,7 @@ Running `./bin/spark-submit --help` will show the entire list of these options.
 each line consists of a key and a value separated by whitespace. For example:
 
     spark.master            spark://5.6.7.8:7077
-    spark.executor.memory   512m
+    spark.executor.memory   4g
     spark.eventLog.enabled  true
     spark.serializer        org.apache.spark.serializer.KryoSerializer
 
@@ -150,10 +149,9 @@ of the most common options to set are:
 </tr>
 <tr>
   <td><code>spark.executor.memory</code></td>
-  <td>512m</td>
+  <td>1g</td>
   <td>
-    Amount of memory to use per executor process, in the same format as JVM memory strings
-    (e.g. <code>512m</code>, <code>2g</code>).
+    Amount of memory to use per executor process (e.g. <code>2g</code>, <code>8g</code>).
   </td>
 </tr>
 <tr>
@@ -205,7 +203,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.driver.extraClassPath</code></td>
   <td>(none)</td>
   <td>
-    Extra classpath entries to append to the classpath of the driver.
+    Extra classpath entries to prepend to the classpath of the driver.
 
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
@@ -252,7 +250,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.executor.extraClassPath</code></td>
   <td>(none)</td>
   <td>
-    Extra classpath entries to append to the classpath of executors. This exists primarily for 
+    Extra classpath entries to prepend to the classpath of executors. This exists primarily for 
     backwards-compatibility with older versions of Spark. Users typically should not need to set 
     this option.
   </td>
@@ -385,16 +383,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.blockTransferService</code></td>
-  <td>netty</td>
-  <td>
-    Implementation to use for transferring shuffle and cached blocks between executors. There
-    are two implementations available: <code>netty</code> and <code>nio</code>. Netty-based
-    block transfer is intended to be simpler but equally efficient and is the default option
-    starting in 1.2.
-  </td>
-</tr>
-<tr>
   <td><code>spark.shuffle.compress</code></td>
   <td>true</td>
   <td>
@@ -473,6 +461,25 @@ Apart from these, the following properties are also available, and may be useful
     all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
     begin to spill to disk. If spills are often, consider increasing this value at the expense of
     <code>spark.storage.memoryFraction</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enables the external shuffle service. This service preserves the shuffle files written by 
+    executors so the executors can be safely removed. This must be enabled if 
+    <code>spark.dynamicAllocation.enabled</code> is "true". The external shuffle service
+    must be set up in order to enable it. See
+    <a href="job-scheduling.html#configuration-and-setup">dynamic allocation 
+    configuration and setup documentation</a> for more information.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.port</code></td>
+  <td>7337</td>
+  <td>
+    Port on which the external shuffle service will run.
   </td>
 </tr>
 <tr>
@@ -557,6 +564,20 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How many stages the Spark UI and status APIs remember before garbage
     collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.ui.retainedExecutors</code></td>
+  <td>1000</td>
+  <td>
+    How many finished executors the Spark UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.ui.retainedDrivers</code></td>
+  <td>1000</td>
+  <td>
+    How many finished drivers the Spark UI and status APIs remember before garbage collecting.
   </td>
 </tr>
 </table>
@@ -875,22 +896,12 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.akka.failure-detector.threshold</code></td>
-  <td>300.0</td>
-  <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
-     enabled again, if you plan to use this feature (Not recommended). This maps to akka's
-     `akka.remote.transport-failure-detector.threshold`. Tune this in combination of
-     `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
-  </td>
-</tr>
-<tr>
   <td><code>spark.akka.frameSize</code></td>
-  <td>10</td>
+  <td>128</td>
   <td>
-    Maximum message size to allow in "control plane" communication (for serialized tasks and task
-    results), in MB. Increase this if your tasks need to send back large results to the driver
-    (e.g. using <code>collect()</code> on a large dataset).
+    Maximum message size to allow in "control plane" communication; generally only applies to map
+    output size information sent between executors and the driver. Increase this if you are running
+    jobs with many thousands of map and reduce tasks and see messages about the frame size.
   </td>
 </tr>
 <tr>
@@ -993,7 +1004,11 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.port.maxRetries</code></td>
   <td>16</td>
   <td>
-    Default maximum number of retries when binding to a port before giving up.
+    Maximum number of retries when binding to a port before giving up.
+    When a port is given a specific value (non 0), each subsequent retry will
+    increment the port used in the previous attempt by 1 before retrying. This 
+    essentially allows it to try a range of ports from the start port specified 
+    to port + maxRetries.
   </td>
 </tr>
 <tr>
@@ -1048,15 +1063,6 @@ Apart from these, the following properties are also available, and may be useful
     across the cluster (not from each machine). If not set, the default will be
     <code>spark.deploy.defaultCores</code> on Spark's standalone cluster manager, or
     infinite (all available cores) on Mesos.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.localExecution.enabled</code></td>
-  <td>false</td>
-  <td>
-    Enables Spark to run certain jobs, such as first() or take() on the driver, without sending
-    tasks to the cluster. This can make certain jobs execute very quickly, but may require
-    shipping a whole partition of data to the driver.
   </td>
 </tr>
 <tr>
@@ -1273,7 +1279,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma separated list of users/administrators that have view and modify access to all Spark jobs.
     This can be used if you run on a shared cluster and have a set of administrators or devs who
-    help debug when things work.
+    help debug when things work. Putting a "*" in the list means any user can have the priviledge
+    of admin.
   </td>
 </tr>
 <tr>
@@ -1314,7 +1321,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>Empty</td>
   <td>
     Comma separated list of users that have modify access to the Spark job. By default only the
-    user that started the Spark job has access to modify it (kill it for example).
+    user that started the Spark job has access to modify it (kill it for example). Putting a "*" in
+    the list means any user can have access to modify it.
   </td>
 </tr>
 <tr>
@@ -1336,7 +1344,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>Empty</td>
   <td>
     Comma separated list of users that have view access to the Spark web ui. By default only the
-    user that started the Spark job has view access.
+    user that started the Spark job has view access. Putting a "*" in the list means any user can
+    have view access to this Spark job.
   </td>
 </tr>
 </table>
@@ -1538,7 +1547,11 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>PYSPARK_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark.</td>
+    <td>Python binary executable to use for PySpark in both driver and workers (default is `python`).</td>
+  </tr>
+  <tr>
+    <td><code>PYSPARK_DRIVER_PYTHON</code></td>
+    <td>Python binary executable to use for PySpark in driver only (default is PYSPARK_PYTHON).</td>
   </tr>
   <tr>
     <td><code>SPARK_LOCAL_IP</code></td>

@@ -22,7 +22,7 @@ import java.text.SimpleDateFormat
 import java.util.{Date, HashMap => JHashMap}
 
 import scala.collection.{Map, mutable}
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 import scala.util.DynamicVariable
@@ -312,14 +312,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     } : Iterator[JHashMap[K, V]]
 
     val mergeMaps = (m1: JHashMap[K, V], m2: JHashMap[K, V]) => {
-      m2.foreach { pair =>
+      m2.asScala.foreach { pair =>
         val old = m1.get(pair._1)
         m1.put(pair._1, if (old == null) pair._2 else cleanedF(old, pair._2))
       }
       m1
     } : JHashMap[K, V]
 
-    self.mapPartitions(reducePartition).reduce(mergeMaps)
+    self.mapPartitions(reducePartition).reduce(mergeMaps).asScala
   }
 
   /** Alias for reduceByKeyLocally */
@@ -881,7 +881,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           }
           buf
         } : Seq[V]
-        val res = self.context.runJob(self, process, Array(index), false)
+        val res = self.context.runJob(self, process, Array(index))
         res(0)
       case None =>
         self.filter(_._1 == key).map(_._2).collect()

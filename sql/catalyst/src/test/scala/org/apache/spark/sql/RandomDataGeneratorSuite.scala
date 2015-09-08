@@ -32,7 +32,7 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
    */
   def testRandomDataGeneration(dataType: DataType, nullable: Boolean = true): Unit = {
     val toCatalyst = CatalystTypeConverters.createToCatalystConverter(dataType)
-    val generator = RandomDataGenerator.forType(dataType, nullable).getOrElse {
+    val generator = RandomDataGenerator.forType(dataType, nullable, Some(33)).getOrElse {
       fail(s"Random data generator was not defined for $dataType")
     }
     if (nullable) {
@@ -50,9 +50,7 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
   for (
     dataType <- DataTypeTestUtils.atomicTypes;
     nullable <- Seq(true, false)
-    if !dataType.isInstanceOf[DecimalType] ||
-      dataType.asInstanceOf[DecimalType].precisionInfo.isEmpty
-  ) {
+    if !dataType.isInstanceOf[DecimalType]) {
     test(s"$dataType (nullable=$nullable)") {
       testRandomDataGeneration(dataType)
     }

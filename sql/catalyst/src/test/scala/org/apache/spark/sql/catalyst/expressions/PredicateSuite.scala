@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.immutable.HashSet
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{Decimal, IntegerType, BooleanType}
+import org.apache.spark.sql.RandomDataGenerator
+import org.apache.spark.sql.types._
 
 
 class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -72,6 +72,16 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     notTrueTable.foreach { case (v, answer) =>
       checkEvaluation(Not(Literal.create(v, BooleanType)), answer)
     }
+    checkConsistencyBetweenInterpretedAndCodegen(Not, BooleanType)
+  }
+
+  test("AND, OR, EqualTo, EqualNullSafe consistency check") {
+    checkConsistencyBetweenInterpretedAndCodegen(And, BooleanType, BooleanType)
+    checkConsistencyBetweenInterpretedAndCodegen(Or, BooleanType, BooleanType)
+    DataTypeTestUtils.propertyCheckSupported.foreach { dt =>
+      checkConsistencyBetweenInterpretedAndCodegen(EqualTo, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(EqualNullSafe, dt, dt)
+    }
   }
 
   booleanLogicTest("AND", And,
@@ -108,12 +118,51 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       (null, null, null) :: Nil)
 
   test("IN") {
+    checkEvaluation(In(Literal.create(null, IntegerType), Seq(Literal(1), Literal(2))), null)
+    checkEvaluation(In(Literal.create(null, IntegerType), Seq(Literal.create(null, IntegerType))),
+      null)
+    checkEvaluation(In(Literal(1), Seq(Literal.create(null, IntegerType))), null)
+    checkEvaluation(In(Literal(1), Seq(Literal(1), Literal.create(null, IntegerType))), true)
+    checkEvaluation(In(Literal(2), Seq(Literal(1), Literal.create(null, IntegerType))), null)
     checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))), true)
     checkEvaluation(In(Literal(2), Seq(Literal(1), Literal(2))), true)
     checkEvaluation(In(Literal(3), Seq(Literal(1), Literal(2))), false)
     checkEvaluation(
       And(In(Literal(1), Seq(Literal(1), Literal(2))), In(Literal(2), Seq(Literal(1), Literal(2)))),
       true)
+
+    val ns = Literal.create(null, StringType)
+    checkEvaluation(In(ns, Seq(Literal("1"), Literal("2"))), null)
+    checkEvaluation(In(ns, Seq(ns)), null)
+    checkEvaluation(In(Literal("a"), Seq(ns)), null)
+    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("^Ba*n"), ns)), true)
+    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^Ba*n"))), true)
+    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^n"))), false)
+
+    val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
+      LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
+    primitiveTypes.map { t =>
+      val dataGen = RandomDataGenerator.forType(t, nullable = true).get
+      val inputData = Seq.fill(10) {
+        val value = dataGen.apply()
+        value match {
+          case d: Double if d.isNaN => 0.0d
+          case f: Float if f.isNaN => 0.0f
+          case _ => value
+        }
+      }
+      val input = inputData.map(Literal.create(_, t))
+      val expected = if (inputData(0) == null) {
+        null
+      } else if (inputData.slice(1, 10).contains(inputData(0))) {
+        true
+      } else if (inputData.slice(1, 10).contains(null)) {
+        null
+      } else {
+        false
+      }
+      checkEvaluation(In(input(0), input.slice(1, 10)), expected)
+    }
   }
 
   test("INSET") {
@@ -126,63 +175,100 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(InSet(one, hS), true)
     checkEvaluation(InSet(two, hS), true)
     checkEvaluation(InSet(two, nS), true)
-    checkEvaluation(InSet(nl, nS), true)
     checkEvaluation(InSet(three, hS), false)
-    checkEvaluation(InSet(three, nS), false)
-    checkEvaluation(And(InSet(one, hS), InSet(two, hS)), true)
-  }
+    checkEvaluation(InSet(three, nS), null)
+    checkEvaluation(InSet(nl, hS), null)
+    checkEvaluation(InSet(nl, nS), null)
 
-  private val smallValues = Seq(1, Decimal(1), Array(1.toByte), "a").map(Literal(_))
-  private val largeValues = Seq(2, Decimal(2), Array(2.toByte), "b").map(Literal(_))
-
-  private val equalValues1 = smallValues
-  private val equalValues2 = Seq(1, Decimal(1), Array(1.toByte), "a").map(Literal(_))
-
-  test("BinaryComparison: <") {
-    for (i <- 0 until smallValues.length) {
-      checkEvaluation(smallValues(i) < largeValues(i), true)
-      checkEvaluation(equalValues1(i) < equalValues2(i), false)
-      checkEvaluation(largeValues(i) < smallValues(i), false)
+    val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
+      LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
+    primitiveTypes.map { t =>
+      val dataGen = RandomDataGenerator.forType(t, nullable = true).get
+      val inputData = Seq.fill(10) {
+        val value = dataGen.apply()
+        value match {
+          case d: Double if d.isNaN => 0.0d
+          case f: Float if f.isNaN => 0.0f
+          case _ => value
+        }
+      }
+      val input = inputData.map(Literal(_))
+      val expected = if (inputData(0) == null) {
+        null
+      } else if (inputData.slice(1, 10).contains(inputData(0))) {
+        true
+      } else if (inputData.slice(1, 10).contains(null)) {
+        null
+      } else {
+        false
+      }
+      checkEvaluation(InSet(input(0), inputData.slice(1, 10).toSet), expected)
     }
   }
 
-  test("BinaryComparison: <=") {
-    for (i <- 0 until smallValues.length) {
-      checkEvaluation(smallValues(i) <= largeValues(i), true)
-      checkEvaluation(equalValues1(i) <= equalValues2(i), true)
-      checkEvaluation(largeValues(i) <= smallValues(i), false)
+  private val smallValues = Seq(1, Decimal(1), Array(1.toByte), "a", 0f, 0d, false).map(Literal(_))
+  private val largeValues =
+    Seq(2, Decimal(2), Array(2.toByte), "b", Float.NaN, Double.NaN, true).map(Literal(_))
+
+  private val equalValues1 =
+    Seq(1, Decimal(1), Array(1.toByte), "a", Float.NaN, Double.NaN, true).map(Literal(_))
+  private val equalValues2 =
+    Seq(1, Decimal(1), Array(1.toByte), "a", Float.NaN, Double.NaN, true).map(Literal(_))
+
+  test("BinaryComparison consistency check") {
+    DataTypeTestUtils.ordered.foreach { dt =>
+      checkConsistencyBetweenInterpretedAndCodegen(LessThan, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(LessThanOrEqual, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(GreaterThan, dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegen(GreaterThanOrEqual, dt, dt)
     }
   }
 
-  test("BinaryComparison: >") {
+  test("BinaryComparison: lessThan") {
     for (i <- 0 until smallValues.length) {
-      checkEvaluation(smallValues(i) > largeValues(i), false)
-      checkEvaluation(equalValues1(i) > equalValues2(i), false)
-      checkEvaluation(largeValues(i) > smallValues(i), true)
+      checkEvaluation(LessThan(smallValues(i), largeValues(i)), true)
+      checkEvaluation(LessThan(equalValues1(i), equalValues2(i)), false)
+      checkEvaluation(LessThan(largeValues(i), smallValues(i)), false)
     }
   }
 
-  test("BinaryComparison: >=") {
+  test("BinaryComparison: LessThanOrEqual") {
     for (i <- 0 until smallValues.length) {
-      checkEvaluation(smallValues(i) >= largeValues(i), false)
-      checkEvaluation(equalValues1(i) >= equalValues2(i), true)
-      checkEvaluation(largeValues(i) >= smallValues(i), true)
+      checkEvaluation(LessThanOrEqual(smallValues(i), largeValues(i)), true)
+      checkEvaluation(LessThanOrEqual(equalValues1(i), equalValues2(i)), true)
+      checkEvaluation(LessThanOrEqual(largeValues(i), smallValues(i)), false)
     }
   }
 
-  test("BinaryComparison: ===") {
+  test("BinaryComparison: GreaterThan") {
     for (i <- 0 until smallValues.length) {
-      checkEvaluation(smallValues(i) === largeValues(i), false)
-      checkEvaluation(equalValues1(i) === equalValues2(i), true)
-      checkEvaluation(largeValues(i) === smallValues(i), false)
+      checkEvaluation(GreaterThan(smallValues(i), largeValues(i)), false)
+      checkEvaluation(GreaterThan(equalValues1(i), equalValues2(i)), false)
+      checkEvaluation(GreaterThan(largeValues(i), smallValues(i)), true)
     }
   }
 
-  test("BinaryComparison: <=>") {
+  test("BinaryComparison: GreaterThanOrEqual") {
     for (i <- 0 until smallValues.length) {
-      checkEvaluation(smallValues(i) <=> largeValues(i), false)
-      checkEvaluation(equalValues1(i) <=> equalValues2(i), true)
-      checkEvaluation(largeValues(i) <=> smallValues(i), false)
+      checkEvaluation(GreaterThanOrEqual(smallValues(i), largeValues(i)), false)
+      checkEvaluation(GreaterThanOrEqual(equalValues1(i), equalValues2(i)), true)
+      checkEvaluation(GreaterThanOrEqual(largeValues(i), smallValues(i)), true)
+    }
+  }
+
+  test("BinaryComparison: EqualTo") {
+    for (i <- 0 until smallValues.length) {
+      checkEvaluation(EqualTo(smallValues(i), largeValues(i)), false)
+      checkEvaluation(EqualTo(equalValues1(i), equalValues2(i)), true)
+      checkEvaluation(EqualTo(largeValues(i), smallValues(i)), false)
+    }
+  }
+
+  test("BinaryComparison: EqualNullSafe") {
+    for (i <- 0 until smallValues.length) {
+      checkEvaluation(EqualNullSafe(smallValues(i), largeValues(i)), false)
+      checkEvaluation(EqualNullSafe(equalValues1(i), equalValues2(i)), true)
+      checkEvaluation(EqualNullSafe(largeValues(i), smallValues(i)), false)
     }
   }
 
@@ -202,8 +288,8 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     nullTest(GreaterThanOrEqual)
     nullTest(EqualTo)
 
-    checkEvaluation(normalInt <=> nullInt, false)
-    checkEvaluation(nullInt <=> normalInt, false)
-    checkEvaluation(nullInt <=> nullInt, true)
+    checkEvaluation(EqualNullSafe(normalInt, nullInt), false)
+    checkEvaluation(EqualNullSafe(nullInt, normalInt), false)
+    checkEvaluation(EqualNullSafe(nullInt, nullInt), true)
   }
 }
