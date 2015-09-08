@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.{TestSQLContext, SharedSQLContext}
+import org.apache.spark.sql.test.SharedSQLContext
 
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
@@ -37,7 +37,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     // Clear the conf.
     sqlContext.conf.clear()
     // After clear, only overrideConfs used by unit test should be in the SQLConf.
-    assert(sqlContext.getAllConfs === sqlContext.defaultOverrides().size)
+    assert(sqlContext.getAllConfs === sqlContext.defaultOverrides())
 
     sqlContext.setConf(testKey, testVal)
     assert(sqlContext.getConf(testKey) === testVal)

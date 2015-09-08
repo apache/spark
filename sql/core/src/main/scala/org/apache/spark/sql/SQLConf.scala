@@ -586,8 +586,8 @@ private[sql] class SQLConf(val config: Map[String, String] = Map.empty)
   }
 
   private def getValue(key: String): Option[String] = {
-    val conf = config.get(key)
-    if (conf.isEmpty) Option(settings.get(key)) else conf
+    val conf = Option(settings.get(key))
+    if (!conf.isDefined) config.get(key) else conf
   }
 
   /**
@@ -608,7 +608,7 @@ private[sql] class SQLConf(val config: Map[String, String] = Map.empty)
    * This creates a new copy of the config properties in the form of a Map.
    */
   def getAllConfs: immutable.Map[String, String] =
-    settings.synchronized { settings.asScala.toMap ++ config }
+    settings.synchronized { config ++ settings.asScala.toMap }
 
   /**
    * Return all the configuration definitions that have been defined in [[SQLConf]]. Each
