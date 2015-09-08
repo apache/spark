@@ -368,11 +368,11 @@ private[ann] class SigmoidFunction extends ActivationFunction {
   override def squared(output: BDM[Double], target: BDM[Double], result: BDM[Double]): Double = {
     ActivationFunction(output, target, result, OutputMinusTarget)
     val e = (Bsum(result :* result) / 2) / output.cols
-    ActivationFunction(result, output, result, m2)
+    ActivationFunction(result, output, result, ResultTimesOutputMinusOutputSquared)
     e
   }
 
-  private object m2 extends UFunc with MappingUFunc {
+  private object ResultTimesOutputMinusOutputSquared extends UFunc with MappingUFunc {
     implicit val implDoubleDouble: Impl2[Double, Double, Double] =
       new Impl2[Double, Double, Double] {
         def apply(x: Double, o: Double): Double = x * (o - o * o)
