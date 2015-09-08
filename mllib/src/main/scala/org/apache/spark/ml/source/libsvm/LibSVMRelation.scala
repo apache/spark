@@ -64,6 +64,10 @@ private[ml] class LibSVMRelation(val path: String, val numFeatures: Int, val vec
 
 }
 
+/**
+ * This is used for creating DataFrame from LibSVM format file.
+ * The LibSVM file path must be specified to DefaultSource.
+ */
 class DefaultSource extends RelationProvider with DataSourceRegister {
 
   override def shortName(): String = "libsvm"
