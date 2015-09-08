@@ -119,13 +119,12 @@ object RandomForestClassifier {
  * features.
  * @param _trees  Decision trees in the ensemble.
  *               Warning: These have null parents.
- * @param numFeatures  Number of features used by this model
  */
 @Experimental
 final class RandomForestClassificationModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel],
-    val numFeatures: Int,
+    override val numFeatures: Int,
     override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, RandomForestClassificationModel]
   with TreeEnsembleModel with Serializable {

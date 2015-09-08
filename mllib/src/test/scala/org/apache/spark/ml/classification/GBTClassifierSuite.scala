@@ -59,7 +59,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("params") {
     ParamsSuite.checkParams(new GBTClassifier)
     val model = new GBTClassificationModel("gbtc",
-      Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0, null))),
+      Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0, null), 1)),
       Array(1.0))
     ParamsSuite.checkParams(model)
   }
@@ -166,5 +166,8 @@ private object GBTClassifierSuite {
     val oldModelAsNew = GBTClassificationModel.fromOld(
       oldModel, newModel.parent.asInstanceOf[GBTClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
+    // numFeatures can't be inferred since GTBClassifier uses fromOld method to construct trees.
+    // TODO: when GBT implementation has been ported to ML, update this check
+    assert(newModel.numFeatures == -1)
   }
 }

@@ -115,7 +115,7 @@ object RandomForestRegressor {
 final class RandomForestRegressionModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
-    val numFeatures: Int)
+    override val numFeatures: Int)
   extends PredictionModel[Vector, RandomForestRegressionModel]
   with TreeEnsembleModel with Serializable {
 

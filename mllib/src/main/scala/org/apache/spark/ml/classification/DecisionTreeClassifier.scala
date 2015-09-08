@@ -74,6 +74,7 @@ final class DecisionTreeClassifier(override val uid: String)
         // TODO: Automatically index labels: SPARK-7126
     }
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+    val numFeatures = oldDataset.first().features.size
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = 0L, parentUID = Some(uid))
@@ -107,6 +108,7 @@ object DecisionTreeClassifier {
 final class DecisionTreeClassificationModel private[ml] (
     override val uid: String,
     override val rootNode: Node,
+    override val numFeatures: Int,
     override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, DecisionTreeClassificationModel]
   with DecisionTreeModel with Serializable {
@@ -118,8 +120,8 @@ final class DecisionTreeClassificationModel private[ml] (
    * Construct a decision tree classification model.
    * @param rootNode  Root node of tree, with other nodes attached.
    */
-  private[ml] def this(rootNode: Node, numClasses: Int) =
-    this(Identifiable.randomUID("dtc"), rootNode, numClasses)
+  private[ml] def this(rootNode: Node, numFeatures: Int, numClasses: Int) =
+    this(Identifiable.randomUID("dtc"), rootNode, numFeatures, numClasses)
 
   override protected def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
@@ -141,7 +143,7 @@ final class DecisionTreeClassificationModel private[ml] (
   }
 
   override def copy(extra: ParamMap): DecisionTreeClassificationModel = {
-    copyValues(new DecisionTreeClassificationModel(uid, rootNode, numClasses), extra)
+    copyValues(new DecisionTreeClassificationModel(uid, rootNode, numFeatures, numClasses), extra)
       .setParent(parent)
   }
 
@@ -167,6 +169,6 @@ private[ml] object DecisionTreeClassificationModel {
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtc")
-    new DecisionTreeClassificationModel(uid, rootNode, -1)
+    new DecisionTreeClassificationModel(uid, rootNode, -1, -1)
   }
 }

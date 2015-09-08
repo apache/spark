@@ -96,7 +96,8 @@ object DecisionTreeRegressor {
 @Experimental
 final class DecisionTreeRegressionModel private[ml] (
     override val uid: String,
-    override val rootNode: Node)
+    override val rootNode: Node,
+    override val numFeatures: Int)
   extends PredictionModel[Vector, DecisionTreeRegressionModel]
   with DecisionTreeModel with Serializable {
 
@@ -107,14 +108,15 @@ final class DecisionTreeRegressionModel private[ml] (
    * Construct a decision tree regression model.
    * @param rootNode  Root node of tree, with other nodes attached.
    */
-  private[ml] def this(rootNode: Node) = this(Identifiable.randomUID("dtr"), rootNode)
+  private[ml] def this(rootNode: Node, numFeatures: Int) =
+    this(Identifiable.randomUID("dtr"), rootNode, numFeatures)
 
   override protected def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
   }
 
   override def copy(extra: ParamMap): DecisionTreeRegressionModel = {
-    copyValues(new DecisionTreeRegressionModel(uid, rootNode), extra).setParent(parent)
+    copyValues(new DecisionTreeRegressionModel(uid, rootNode, numFeatures), extra).setParent(parent)
   }
 
   override def toString: String = {
@@ -139,6 +141,6 @@ private[ml] object DecisionTreeRegressionModel {
         s" DecisionTreeRegressionModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtr")
-    new DecisionTreeRegressionModel(uid, rootNode)
+    new DecisionTreeRegressionModel(uid, rootNode, -1)
   }
 }

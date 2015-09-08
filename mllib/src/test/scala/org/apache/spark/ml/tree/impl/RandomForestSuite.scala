@@ -76,8 +76,9 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     testNode(grandParent, Map(0 -> feature0importance, 1 -> feature1importance))
 
     // Forest consisting of (full tree) + (internal node with 2 leafs)
+    // TODO: check numFeatures assignment
     val trees = Array(parent, grandParent).map { root =>
-      new DecisionTreeClassificationModel(root, numClasses = 3).asInstanceOf[DecisionTreeModel]
+      new DecisionTreeClassificationModel(root, numFeatures = 2, numClasses = 3).asInstanceOf[DecisionTreeModel]
     }
     val importances: Vector = RandomForest.featureImportances(trees, 2)
     val tree2norm = feature0importance + feature1importance

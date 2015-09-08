@@ -145,6 +145,9 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
   /** @group setParam */
   def setPredictionCol(value: String): M = set(predictionCol, value).asInstanceOf[M]
 
+  /** Number of features the model was trained on*/
+  def numFeatures: Int
+
   /**
    * Returns the SQL DataType corresponding to the FeaturesType type parameter.
    *

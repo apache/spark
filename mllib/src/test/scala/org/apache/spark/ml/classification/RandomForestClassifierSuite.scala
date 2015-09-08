@@ -68,7 +68,7 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
   test("params") {
     ParamsSuite.checkParams(new RandomForestClassifier)
     val model = new RandomForestClassificationModel("rfc",
-      Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 2)), 2, 2)
+      Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 1, 2)), 2, 2)
     ParamsSuite.checkParams(model)
   }
 
@@ -220,6 +220,7 @@ private object RandomForestClassifierSuite {
       rf: RandomForestClassifier,
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): Unit = {
+    val numFeatures = data.first().features.size
     val oldStrategy =
       rf.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, rf.getOldImpurity)
     val oldModel = OldRandomForest.trainClassifier(
@@ -234,5 +235,6 @@ private object RandomForestClassifierSuite {
     assert(newModel.hasParent)
     assert(!newModel.trees.head.asInstanceOf[DecisionTreeClassificationModel].hasParent)
     assert(newModel.numClasses == numClasses)
+    assert(newModel.numFeatures == numFeatures)
   }
 }

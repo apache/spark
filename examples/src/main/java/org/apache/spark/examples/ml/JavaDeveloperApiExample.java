@@ -219,6 +219,8 @@ class MyJavaLogisticRegressionModel
    */
   public int numClasses() { return 2; }
 
+  public int numFeatures() { return weights_.size(); }
+
   /**
    * Create a copy of the model.
    * The copy is shallow, except for the embedded paramMap, which gets a deep copy.

@@ -165,6 +165,8 @@ final class GBTRegressionModel(
   require(_trees.length == _treeWeights.length, "GBTRegressionModel given trees, treeWeights of" +
     s" non-matching lengths (${_trees.length}, ${_treeWeights.length}, respectively).")
 
+  override val numFeatures: Int = _trees.head.numFeatures
+
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   override def treeWeights: Array[Double] = _treeWeights

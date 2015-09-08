@@ -22,8 +22,8 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.MLTestingUtils
-import org.apache.spark.mllib.linalg.{DenseVector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.{Vector, DenseVector, Vectors}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
@@ -87,6 +87,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.getPredictionCol === "prediction")
     assert(model.intercept !== 0.0)
     assert(model.hasParent)
+    val datasetFeatureSize = dataset.rdd.first() match {
+      case Row(label: Double, features: Vector) => features.size
+    }
+    assert(model.numFeatures == datasetFeatureSize)
   }
 
   test("linear regression with intercept without regularization") {
