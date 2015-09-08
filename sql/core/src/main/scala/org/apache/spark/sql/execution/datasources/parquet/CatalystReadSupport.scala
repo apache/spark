@@ -127,6 +127,8 @@ private[parquet] object CatalystReadSupport {
         clipParquetGroup(parquetType.asGroupType(), t)
 
       case _ =>
+        // UDTs and primitive types are not clipped.  For UDTs, a clipped version might not be able
+        // to be mapped to desired user-space types.  So UDTs shouldn't participate schema merging.
         parquetType
     }
   }
