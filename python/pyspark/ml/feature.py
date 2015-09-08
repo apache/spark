@@ -33,6 +33,7 @@ __all__ = ['Binarizer', 'Bucketizer', 'CountVectorizer', 'CountVectorizerModel',
            'Tokenizer', 'VectorAssembler', 'VectorIndexer', 'Word2Vec', 'Word2VecModel',
            'PCA', 'PCAModel', 'RFormula', 'RFormulaModel', 'StopWordsRemover']
 
+
 @inherit_doc
 class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
     """
