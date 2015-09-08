@@ -765,7 +765,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   }
 
   test("test script transform script input and output format") {
-    println("Current dir: " + new File(".").getCanonicalPath)
     val data = (1 to 5).map { i => (i, i) }
     data.toDF("a", "b").registerTempTable("test")
     checkAnswer(
