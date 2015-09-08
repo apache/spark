@@ -32,6 +32,10 @@ from pyspark.serializers import write_with_length, write_int, read_long, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer
 from pyspark import shuffle
 
+class PySparkMode(object):
+    RDD = 0
+    UDF = 1
+
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
@@ -101,14 +105,41 @@ def main(infile, outfile):
         func, profiler, deserializer, serializer = command
         init_time = time.time()
 
-        def process():
-            iterator = deserializer.load_stream(infile)
-            serializer.dump_stream(func(split_index, iterator), outfile)
+        pyspark_mode = read_int(infile)
 
-        if profiler:
-            profiler.profile(process)
+        if pyspark_mode == PySparkMode.RDD:
+            def process():
+                iterator = deserializer.load_stream(infile)
+                serializer.dump_stream(func(split_index, iterator), outfile)
+
+            if profiler:
+                profiler.profile(process)
+            else:
+                process()
+        elif pyspark_mode == PySparkMode.UDF:
+            pickle_serializer = PickleSerializer()
+
+            batch_length = read_int(infile)
+
+            while batch_length != SpecialLengths.END_OF_DATA_SECTION:
+                batch_bytes = infile.read(batch_length)
+                batch_objs = pickle_serializer.loads(batch_bytes)
+
+                udf_result_objs = list(func(split_index, iter(batch_objs)))
+                pickled_bytes = pickle_serializer.dumps(udf_result_objs)
+                write_int(len(pickled_bytes), outfile)
+
+                if sys.version_info[0:2] <= (2, 6):
+                    outfile.write(str(pickled_bytes))
+                else:
+                    outfile.write(pickled_bytes)
+
+                outfile.flush()
+
+                batch_length = read_int(infile)
         else:
-            process()
+            raise Exception("Unknown pyspark mode: {}".format(pyspark_mode))
+
     except Exception:
         try:
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
