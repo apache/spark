@@ -288,9 +288,10 @@ private[ann] object ActivationFunction {
 private[ann] class SoftmaxFunction extends ActivationFunction {
   override def eval(x: BDM[Double], y: BDM[Double]): Unit = {
     (0 until x.cols).foreach { j =>
-      // find max value to scale and prevent overflow during exp
+      // subtract max value to prevent overflow during exp
+      // does not affect correctness since we normalize right after
       val maxVal = Bmax(x(::, j))
-      y(::, j) := x(::, j).map { xVal => Math.exp(xVal) - maxVal }
+      y(::, j) := breeze.numerics.exp(x(::, j) - maxVal)
       y(::, j) :/= Bsum(y(::, j))
     }
   }
@@ -819,34 +820,42 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Sets the updater.
-   * @param updater updater
+   * @param value updater
    * @return trainer
    */
-  def setUpdater(updater: Updater): FeedForwardTrainer = {
-    _updater = updater
-    optimizer match {
-      case lbfgs: LBFGS => lbfgs.setUpdater(updater)
-      case sgd: GradientDescent => sgd.setUpdater(updater)
-      case other => throw new UnsupportedOperationException(
-        s"Only LBFGS and GradientDescent are supported but got ${other.getClass}.")
-    }
+  def setUpdater(value: Updater): FeedForwardTrainer = {
+    _updater = value
+    updateUpdater(value)
     this
   }
 
   /**
    * Sets the gradient.
-   * @param gradient gradient
+   * @param value gradient
    * @return trainer
    */
-  def setGradient(gradient: Gradient): FeedForwardTrainer = {
-    _gradient = gradient
+  def setGradient(value: Gradient): FeedForwardTrainer = {
+    _gradient = value
+    updateGradient(value)
+    this
+  }
+
+  private[this] def updateGradient(gradient: Gradient): Unit = {
     optimizer match {
       case lbfgs: LBFGS => lbfgs.setGradient(gradient)
       case sgd: GradientDescent => sgd.setGradient(gradient)
       case other => throw new UnsupportedOperationException(
         s"Only LBFGS and GradientDescent are supported but got ${other.getClass}.")
     }
-    this
+  }
+
+  private[this] def updateUpdater(updater: Updater): Unit = {
+    optimizer match {
+      case lbfgs: LBFGS => lbfgs.setUpdater(updater)
+      case sgd: GradientDescent => sgd.setUpdater(updater)
+      case other => throw new UnsupportedOperationException(
+        s"Only LBFGS and GradientDescent are supported but got ${other.getClass}.")
+    }
   }
 
   /**
