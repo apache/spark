@@ -26,9 +26,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Redirects lines read from a given input stream to a j.u.l.Logger (at INFO level). The Logger
- * instance will have the name of this class followed by the name of the thread created to do
- * redirection.
+ * Redirects lines read from a given input stream to a j.u.l.Logger (at INFO level).
  */
 class OutputRedirector {
 
@@ -47,7 +45,7 @@ class OutputRedirector {
         redirect();
       }
     });
-    this.sink = Logger.getLogger(getClass().getName() + "." + thread.getName());
+    this.sink = Logger.getLogger(getClass().getName());
     thread.start();
   }
 
@@ -56,7 +54,7 @@ class OutputRedirector {
       String line;
       while ((line = reader.readLine()) != null) {
         if (active) {
-          sink.info(line.trim());
+          sink.info(line.replaceFirst("\\s*$", ""));
         }
       }
     } catch (IOException e) {

@@ -31,7 +31,7 @@ class ChildProcAppHandle implements SparkAppHandle {
 
   private static final Logger LOG = Logger.getLogger(ChildProcAppHandle.class.getName());
   private static final ThreadFactory REDIRECTOR_FACTORY =
-    new NamedThreadFactory("ChildProcOutputRedirector-%d");
+    new NamedThreadFactory("launcher-proc-%d");
 
   private final String secret;
   private final LauncherServer server;

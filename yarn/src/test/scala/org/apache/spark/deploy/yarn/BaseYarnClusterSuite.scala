@@ -22,15 +22,18 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
 import org.scalatest.{BeforeAndAfterAll, Matchers}
+import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
-import org.apache.spark.launcher.TestClasspathBuilder
+import org.apache.spark.launcher._
 import org.apache.spark.util.Utils
 
 abstract class BaseYarnClusterSuite
@@ -121,34 +124,47 @@ abstract class BaseYarnClusterSuite
       clientMode: Boolean,
       klass: String,
       appArgs: Seq[String] = Nil,
-      sparkArgs: Seq[String] = Nil,
+      sparkArgs: Seq[(String,String)] = Nil,
       extraClassPath: Seq[String] = Nil,
       extraJars: Seq[String] = Nil,
       extraConf: Map[String, String] = Map(),
-      extraEnv: Map[String, String] = Map()): Unit = {
+      extraEnv: Map[String, String] = Map()): SparkAppHandle.State = {
     val master = if (clientMode) "yarn-client" else "yarn-cluster"
     val propsFile = createConfFile(extraClassPath = extraClassPath, extraConf = extraConf)
+    val env = Map("YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath()) ++ extraEnv
 
-    val extraJarArgs = if (extraJars.nonEmpty) Seq("--jars", extraJars.mkString(",")) else Nil
-    val mainArgs =
-      if (klass.endsWith(".py")) {
-        Seq(klass)
+    val launcher = new SparkLauncher(env.asJava)
+    if (klass.endsWith(".py")) {
+      launcher.setAppResource(klass)
+    } else {
+      launcher.setMainClass(klass)
+      launcher.setAppResource(fakeSparkJar.getAbsolutePath())
+    }
+    launcher.setSparkHome(sys.props("spark.test.home"))
+      .setMaster(master)
+      .setConf("spark.executor.instances", "1")
+      .setPropertiesFile(propsFile)
+      .addAppArgs(appArgs.toArray: _*)
+
+    sparkArgs.foreach { case (name, value) =>
+      if (value != null) {
+        launcher.addSparkArg(name, value)
       } else {
-        Seq("--class", klass, fakeSparkJar.getAbsolutePath())
+        launcher.addSparkArg(name)
       }
-    val argv =
-      Seq(
-        new File(sys.props("spark.test.home"), "bin/spark-submit").getAbsolutePath(),
-        "--master", master,
-        "--num-executors", "1",
-        "--properties-file", propsFile) ++
-      extraJarArgs ++
-      sparkArgs ++
-      mainArgs ++
-      appArgs
+    }
+    extraJars.foreach(launcher.addJar)
 
-    Utils.executeAndGetOutput(argv,
-      extraEnvironment = Map("YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath()) ++ extraEnv)
+    val handle = launcher.startApplication()
+    try {
+      eventually(timeout(2 minutes), interval(1 second)) {
+        assert(handle.getState().isFinal())
+      }
+    } finally {
+      handle.kill()
+    }
+
+    handle.getState()
   }
 
   /**
@@ -157,11 +173,15 @@ abstract class BaseYarnClusterSuite
    * the tests enforce that something is written to a file after everything is ok to indicate
    * that the job succeeded.
    */
-  protected def checkResult(result: File): Unit = {
-    checkResult(result, "success")
+  protected def checkResult(finalState: SparkAppHandle.State, result: File): Unit = {
+    checkResult(finalState, result, "success")
   }
 
-  protected def checkResult(result: File, expected: String): Unit = {
+  protected def checkResult(
+      finalState: SparkAppHandle.State,
+      result: File,
+      expected: String): Unit = {
+    finalState should be (SparkAppHandle.State.FINISHED)
     val resultString = Files.toString(result, UTF_8)
     resultString should be (expected)
   }

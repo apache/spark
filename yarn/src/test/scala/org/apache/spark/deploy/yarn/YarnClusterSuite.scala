@@ -84,10 +84,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
   test("run Spark in yarn-cluster mode unsuccessfully") {
     // Don't provide arguments so the driver will fail.
-    val exception = intercept[SparkException] {
-      runSpark(false, mainClassName(YarnClusterDriver.getClass))
-      fail("Spark application should have failed.")
-    }
+    val finalState = runSpark(false, mainClassName(YarnClusterDriver.getClass))
+    finalState should be (SparkAppHandle.State.FAILED)
   }
 
   test("run Python application in yarn-client mode") {
@@ -139,9 +137,9 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
   private def testBasicYarnApp(clientMode: Boolean): Unit = {
     val result = File.createTempFile("result", null, tempDir)
-    runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
+    val finalState = runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
       appArgs = Seq(result.getAbsolutePath()))
-    checkResult(result)
+    checkResult(finalState, result)
   }
 
   private def testPySpark(clientMode: Boolean): Unit = {
@@ -176,11 +174,11 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val pyFiles = Seq(pyModule.getAbsolutePath(), mod2Archive.getPath()).mkString(",")
     val result = File.createTempFile("result", null, tempDir)
 
-    runSpark(clientMode, primaryPyFile.getAbsolutePath(),
-      sparkArgs = Seq("--py-files", pyFiles),
+    val finalState = runSpark(clientMode, primaryPyFile.getAbsolutePath(),
+      sparkArgs = Seq("--py-files" -> pyFiles),
       appArgs = Seq(result.getAbsolutePath()),
       extraEnv = extraEnv)
-    checkResult(result)
+    checkResult(finalState, result)
   }
 
   private def testUseClassPathFirst(clientMode: Boolean): Unit = {
@@ -189,15 +187,15 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val userJar = TestUtils.createJarWithFiles(Map("test.resource" -> "OVERRIDDEN"), tempDir)
     val driverResult = File.createTempFile("driver", null, tempDir)
     val executorResult = File.createTempFile("executor", null, tempDir)
-    runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
+    val finalState = runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
       appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath()),
       extraClassPath = Seq(originalJar.getPath()),
       extraJars = Seq("local:" + userJar.getPath()),
       extraConf = Map(
         "spark.driver.userClassPathFirst" -> "true",
         "spark.executor.userClassPathFirst" -> "true"))
-    checkResult(driverResult, "OVERRIDDEN")
-    checkResult(executorResult, "OVERRIDDEN")
+    checkResult(finalState, driverResult, "OVERRIDDEN")
+    checkResult(finalState, executorResult, "OVERRIDDEN")
   }
 
 }
@@ -244,8 +242,8 @@ private object YarnClusterDriver extends Logging with Matchers {
       data should be (Set(1, 2, 3, 4))
       result = "success"
     } finally {
-      sc.stop()
       Files.write(result, status, UTF_8)
+      sc.stop()
     }
 
     // verify log urls are present
