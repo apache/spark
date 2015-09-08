@@ -188,16 +188,18 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
 
     # a placeholder to make it appear in the generated doc
     vocabSize = Param(Params._dummy(), "vocabSize", "max size of the vocabulary")
-    minDF = Param(Params._dummy(), "minDF", "Specifies the minimum number of different documents"
-                  " a term must appear in to be included in the vocabulary. If this is an integer"
-                  " >= 1, this specifies the number of documents the term must appear in; if this"
-                  " is a double in [0,1), then this specifies the fraction of documents.")
+    minDF = Param(Params._dummy(), "minDF",
+                  "Specifies the minimum number of different documents a term must appear in " +
+                  "to be included in the vocabulary. If this is an integer >= 1, this specifies " +
+                  "the number of documents the term must appear in; if this is a double in " +
+                  "[0,1), then this specifies the fraction of documents.")
 
-    minTF = Param(Params._dummy(), "minTF", "Filter to ignore rare words in a document. For each"
-                  " document, terms with frequency/count less than the given threshold are ignored"
-                  ". If this is an integer >= 1, then this specifies a count (of times the term "
-                  "must appear in the document); if this is a double in [0,1), then this specifies"
-                  " a fraction (out of the document's token count). Note that the parameter is "
+    minTF = Param(Params._dummy(), "minTF",
+                  "Filter to ignore rare words in a document. For each document, terms with " +
+                  "frequency/count less than the given threshold are ignored. If this is an " +
+                  "integer >= 1, then this specifies a count (of times the term must appear in" +
+                  " the document); if this is a double in [0,1), then this specifies a " +
+                  "fraction (out of the document's token count). Note that the parameter is " +
                   "only used in transform of CountVectorizerModel and does not affect fitting.")
 
     @keyword_only
@@ -208,15 +210,19 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         super(CountVectorizer, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.CountVectorizer", self.uid)
-        self.minDF = Param(self, "minDF", "Specifies the minimum number of different documents"
-                  " a term must appear in to be included in the vocabulary. If this is an integer"
-                  " >= 1, this specifies the number of documents the term must appear in; if this"
-                  " is a double in [0,1), then this specifies the fraction of documents.")
-        self.minTF = Param(self, "minTF", "Filter to ignore rare words in a document. For each"
-                  " document, terms with frequency/count less than the given threshold are ignored"
-                  ". If this is an integer >= 1, then this specifies a count (of times the term "
-                  "must appear in the document); if this is a double in [0,1), then this specifies"
-                  " a fraction (out of the document's token count). Note that the parameter is "
+        self.minDF = \
+            Param(self, "minDF",
+                  "Specifies the minimum number of different documents a term must appear in " +
+                  "to be included in the vocabulary. If this is an integer >= 1, this specifies " +
+                  "the number of documents the term must appear in; if this is a double in " +
+                  "[0,1), then this specifies the fraction of documents.")
+        self.minTF = \
+            Param(self, "minTF",
+                  "Filter to ignore rare words in a document. For each document, terms with " +
+                  "frequency/count less than the given threshold are ignored. If this is an " +
+                  "integer >= 1, then this specifies a count (of times the term must appear in" +
+                  " the document); if this is a double in [0,1), then this specifies a " +
+                  "fraction (out of the document's token count). Note that the parameter is " +
                   "only used in transform of CountVectorizerModel and does not affect fitting.")
         self.vocabSize = Param(self, "vocabSize", "max size of the vocabulary")
         self._setDefault(minDF=1.0, minTF=1.0, vocabSize=1 << 18)
@@ -224,9 +230,9 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, minDF=1, minTF=1, vocabSize=1<<18, inputCol=None, outputCol=None):
+    def setParams(self, minDF=1, minTF=1, vocabSize=1 << 18, inputCol=None, outputCol=None):
         """
-        setParams(self, minDF=1, minTF=1, vocabSize=1<<18, inputCol=None, outputCol=None)
+        setParams(self, minDF=1, minTF=1, vocabSize=1 << 18, inputCol=None, outputCol=None)
         Sets params for this CountVectorizer.
         """
         kwargs = self.setParams._input_kwargs
@@ -286,6 +292,7 @@ class CountVectorizerModel(JavaModel):
         An Array over terms. Only the terms in the vocabulary will be counted.
         """
         return self._call_java("vocabulary")
+
 
 @inherit_doc
 class DCT(JavaTransformer, HasInputCol, HasOutputCol):
