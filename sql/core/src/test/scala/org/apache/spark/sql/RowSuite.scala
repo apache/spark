@@ -57,7 +57,7 @@ class RowSuite extends SparkFunSuite with SharedSQLContext {
 
   test("serialize w/ kryo") {
     val row = Seq((1, Seq(1), Map(1 -> 1), BigDecimal(1))).toDF().first()
-    val serializer = new SparkSqlSerializer(ctx.sparkContext.getConf)
+    val serializer = new SparkSqlSerializer(sparkContext.getConf)
     val instance = serializer.newInstance()
     val ser = instance.serialize(row)
     val de = instance.deserialize(ser).asInstanceOf[Row]

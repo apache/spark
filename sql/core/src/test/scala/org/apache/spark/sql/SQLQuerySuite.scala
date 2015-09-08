@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestData._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 import org.apache.spark.sql.types._
 
 /** A SQL Dialect for testing purpose, and it can not be nested type */
@@ -147,14 +147,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SQL Dialect Switching to a new SQL parser") {
-    val newContext = new SQLContext(sqlContext.sparkContext)
+    val newContext = new SQLContext(sparkContext)
     newContext.setConf("spark.sql.dialect", classOf[MyDialect].getCanonicalName())
     assert(newContext.getSQLDialect().getClass === classOf[MyDialect])
     assert(newContext.sql("SELECT 1").collect() === Array(Row(1)))
   }
 
   test("SQL Dialect Switch to an invalid parser with alias") {
-    val newContext = new SQLContext(sqlContext.sparkContext)
+    val newContext = new SQLContext(sparkContext)
     newContext.sql("SET spark.sql.dialect=MyTestClass")
     intercept[DialectException] {
       newContext.sql("SELECT 1")
@@ -196,7 +196,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("grouping on nested fields") {
-    sqlContext.read.json(sqlContext.sparkContext.parallelize(
+    sqlContext.read.json(sparkContext.parallelize(
       """{"nested": {"attribute": 1}, "value": 2}""" :: Nil))
      .registerTempTable("rows")
 
@@ -215,7 +215,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-6201 IN type conversion") {
     sqlContext.read.json(
-      sqlContext.sparkContext.parallelize(
+      sparkContext.parallelize(
         Seq("{\"a\": \"1\"}}", "{\"a\": \"2\"}}", "{\"a\": \"3\"}}")))
       .registerTempTable("d")
 
@@ -991,21 +991,30 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val nonexistentKey = "nonexistent"
 
     // "set" itself returns all config variables currently specified in SQLConf.
-    assert(sql("SET").collect().size == 0)
+    assert(sql("SET").collect().size === TestSQLContext.overrideConfs.size)
+    sql("SET").collect().foreach { row =>
+      val key = row.getString(0)
+      val value = row.getString(1)
+      assert(
+        TestSQLContext.overrideConfs.contains(key),
+        s"$key should exist in SQLConf.")
+      assert(
+        TestSQLContext.overrideConfs(key) === value,
+        s"The value of $key should be ${TestSQLContext.overrideConfs(key)} instead of $value.")
+    }
+    val overrideConfs = sql("SET").collect()
 
     // "set key=val"
     sql(s"SET $testKey=$testVal")
     checkAnswer(
       sql("SET"),
-      Row(testKey, testVal)
+      overrideConfs ++ Seq(Row(testKey, testVal))
     )
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
     checkAnswer(
       sql("set"),
-      Seq(
-        Row(testKey, testVal),
-        Row(testKey + testKey, testVal + testVal))
+      overrideConfs ++ Seq(Row(testKey, testVal), Row(testKey + testKey, testVal + testVal))
     )
 
     // "set key"
@@ -1342,7 +1351,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-3483 Special chars in column names") {
-    val data = sqlContext.sparkContext.parallelize(
+    val data = sparkContext.parallelize(
       Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
     sqlContext.read.json(data).registerTempTable("records")
     sql("SELECT `key?number1`, `key.number2` FROM records")
@@ -1385,13 +1394,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-4322 Grouping field with struct field as sub expression") {
-    sqlContext.read.json(sqlContext.sparkContext.makeRDD("""{"a": {"b": [{"c": 1}]}}""" :: Nil))
+    sqlContext.read.json(sparkContext.makeRDD("""{"a": {"b": [{"c": 1}]}}""" :: Nil))
       .registerTempTable("data")
     checkAnswer(sql("SELECT a.b[0].c FROM data GROUP BY a.b[0].c"), Row(1))
     sqlContext.dropTempTable("data")
 
     sqlContext.read.json(
-      sqlContext.sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("data")
+      sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("data")
     checkAnswer(sql("SELECT a.b + 1 FROM data GROUP BY a.b + 1"), Row(2))
     sqlContext.dropTempTable("data")
   }
@@ -1412,10 +1421,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("Supporting relational operator '<=>' in Spark SQL") {
     val nullCheckData1 = TestData(1, "1") :: TestData(2, null) :: Nil
-    val rdd1 = sqlContext.sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
+    val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
     rdd1.toDF().registerTempTable("nulldata1")
     val nullCheckData2 = TestData(1, "1") :: TestData(2, null) :: Nil
-    val rdd2 = sqlContext.sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
+    val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
     rdd2.toDF().registerTempTable("nulldata2")
     checkAnswer(sql("SELECT nulldata1.key FROM nulldata1 join " +
       "nulldata2 on nulldata1.value <=> nulldata2.value"),
@@ -1424,7 +1433,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("Multi-column COUNT(DISTINCT ...)") {
     val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
-    val rdd = sqlContext.sparkContext.parallelize((0 to 1).map(i => data(i)))
+    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
     rdd.toDF().registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), Row(2))
   }
@@ -1432,14 +1441,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-4699 case sensitivity SQL query") {
     sqlContext.setConf(SQLConf.CASE_SENSITIVE, false)
     val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
-    val rdd = sqlContext.sparkContext.parallelize((0 to 1).map(i => data(i)))
+    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
     rdd.toDF().registerTempTable("testTable1")
     checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
     sqlContext.setConf(SQLConf.CASE_SENSITIVE, true)
   }
 
   test("SPARK-6145: ORDER BY test for nested fields") {
-    sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+    sqlContext.read.json(sparkContext.makeRDD(
         """{"a": {"b": 1, "a": {"a": 1}}, "c": [{"d": 1}]}""" :: Nil))
       .registerTempTable("nestedOrder")
 
@@ -1452,14 +1461,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-6145: special cases") {
-    sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+    sqlContext.read.json(sparkContext.makeRDD(
       """{"a": {"b": [1]}, "b": [{"a": 1}], "_c0": {"a": 1}}""" :: Nil)).registerTempTable("t")
     checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY _c0.a"), Row(1))
     checkAnswer(sql("SELECT b[0].a FROM t ORDER BY _c0.a"), Row(1))
   }
 
   test("SPARK-6898: complete support for special chars in column names") {
-    sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+    sqlContext.read.json(sparkContext.makeRDD(
       """{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""" :: Nil))
       .registerTempTable("t")
 
@@ -1543,7 +1552,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-7067: order by queries for complex ExtractValue chain") {
     withTempTable("t") {
-      sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+      sqlContext.read.json(sparkContext.makeRDD(
         """{"a": {"b": [{"c": 1}]}, "b": [{"d": 1}]}""" :: Nil)).registerTempTable("t")
       checkAnswer(sql("SELECT a.b FROM t ORDER BY b[0].d"), Row(Seq(Row(1))))
     }
@@ -1610,8 +1619,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("aggregation with codegen updates peak execution memory") {
     withSQLConf((SQLConf.CODEGEN_ENABLED.key, "true")) {
-      val sc = sqlContext.sparkContext
-      AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "aggregation with codegen") {
+      AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "aggregation with codegen") {
         testCodeGen(
           "SELECT key, count(value) FROM testData GROUP BY key",
           (1 to 100).map(i => Row(i, 1)))
@@ -1670,8 +1678,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("external sorting updates peak execution memory") {
     withSQLConf((SQLConf.EXTERNAL_SORT.key, "true")) {
-      val sc = sqlContext.sparkContext
-      AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "external sort") {
+      AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "external sort") {
         sortTest()
       }
     }
@@ -1679,7 +1686,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-9511: error with table starting with number") {
     withTempTable("1one") {
-      sqlContext.sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
+      sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
         .toDF("num", "str")
         .registerTempTable("1one")
       checkAnswer(sql("select count(num) from 1one"), Row(10))
@@ -1690,7 +1697,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       val df =
-        sqlContext.sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+        sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
       df
         .write
         .format("parquet")
