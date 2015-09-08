@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.File
 import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConverters._
