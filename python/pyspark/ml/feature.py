@@ -211,7 +211,7 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         super(CountVectorizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizer",
                                             self.uid)
-        minTF = Param(
+        self.minTF = Param(
             self, "minTF", "Filter to ignore rare words in" +
             " a document. For each document, terms with frequency/count less than the given" +
             " threshold are ignored. If this is an integer >= 1, then this specifies a count (of" +
@@ -219,13 +219,13 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
             "this specifies a fraction (out of the document's token count). Note that the " +
             "parameter is only used in transform of CountVectorizerModel and does not affect" +
             "fitting. Default 1.0")
-        minDF = Param(
+        self.minDF = Param(
             self, "minDF", "Specifies the minimum number of" +
             " different documents a term must appear in to be included in the vocabulary." +
             " If this is an integer >= 1, this specifies the number of documents the term must" +
             " appear in; if this is a double in [0,1), then this specifies the fraction of " +
             "documents. Default 1.0")
-        vocabSize = Param(
+        self.vocabSize = Param(
             self, "vocabSize", "max size of the vocabulary. Default 2**18.")
         self._setDefault(minTF=1.0)
         self._setDefault(minDF=1.0)
