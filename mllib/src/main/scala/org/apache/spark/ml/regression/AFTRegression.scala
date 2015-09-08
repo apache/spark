@@ -146,6 +146,12 @@ class AFTRegression(override val uid: String)
     val optimizer = new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
 
     val numFeatures = dataset.select($(featuresCol)).take(1)(0).getAs[Vector](0).size
+    /*
+       The weights vector has three parts:
+       the first element: Double, log(sigma), the log of scale parameter
+       the second element: Double, intercept of the beta parameter
+       the third to the end elements: Doubles, weights vector of the beta parameter
+     */
     val initialWeights = new DenseVector(Array.fill(numFeatures + 2)(1.0))
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
@@ -172,7 +178,7 @@ class AFTRegression(override val uid: String)
 
     val realWeights = Vectors.dense(weights.slice(2, weights.length))
     val intercept = weights(1)
-    val scale = weights(0)
+    val scale = math.exp(weights(0))
     val model = new AFTRegressionModel(uid, realWeights, intercept, scale)
     copyValues(model.setParent(this))
   }
@@ -234,16 +240,17 @@ private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
   extends Serializable {
 
   private val beta = weights.slice(1, weights.length)
-  private val sigma = weights(0)
+  private val sigma = math.exp(weights(0))
 
   private var totalCnt: Long = 0L
   private var lossSum = 0.0
   private var gradientBetaSum = BDV.zeros[Double](beta.length)
-  private var gradientSigmaSum = 0.0
+  private var gradientLogSigmaSum = 0.0
 
   def count: Long = totalCnt
   def loss: Double = if (totalCnt == 0) 1.0 else lossSum / totalCnt
-  def gradient: BDV[Double] = BDV.vertcat(BDV(Array(gradientSigmaSum / totalCnt.toDouble)),
+  // Here we optimize loss function over beta and log(sigma)
+  def gradient: BDV[Double] = BDV.vertcat(BDV(Array(gradientLogSigmaSum / totalCnt.toDouble)),
     gradientBetaSum/totalCnt.toDouble)
 
   def add(data: (Vector, Double, Double)): this.type = {
@@ -265,7 +272,7 @@ private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
       s"AFTAggregator loss sum is infinity. Error for unknown reason.")
 
     gradientBetaSum += xi * (delta - math.exp(epsilon)) / sigma
-    gradientSigmaSum += (delta + (delta - math.exp(epsilon)) * epsilon) / sigma
+    gradientLogSigmaSum += delta + (delta - math.exp(epsilon)) * epsilon
 
     totalCnt += 1
     this
@@ -277,7 +284,7 @@ private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
       lossSum += other.lossSum
 
       gradientBetaSum += other.gradientBetaSum
-      gradientSigmaSum += other.gradientSigmaSum
+      gradientLogSigmaSum += other.gradientLogSigmaSum
     }
     this
   }
