@@ -1314,6 +1314,36 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     expectedSchema = "message root {}")
 
   testSchemaClipping(
+    "disjoint field sets",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    required int32 f00;
+        |    required int64 f01;
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema =
+      new StructType()
+        .add(
+          "f0",
+          new StructType()
+            .add("f02", FloatType, nullable = true)
+            .add("f03", DoubleType, nullable = true),
+          nullable = true),
+
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    optional float f02;
+        |    optional double f03;
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
     "parquet-avro style map",
 
     parquetSchema =
