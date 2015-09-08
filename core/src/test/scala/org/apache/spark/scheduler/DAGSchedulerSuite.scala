@@ -1325,6 +1325,11 @@ class DAGSchedulerSuite
     assertDataStructuresEmpty()
   }
 
+  def checkJobProperties(taskSet: TaskSet, expected: String): Unit = {
+    assert(taskSet.properties != null)
+    assert(taskSet.properties.getProperty("testProperty") === expected)
+  }
+
   /**
    * Makes sure that tasks for a stage used by multiple jobs are submitted with the properties of a
    * later, active job if they were previously run under a job that is no longer active
@@ -1341,10 +1346,10 @@ class DAGSchedulerSuite
     job1Properties.setProperty("testProperty", "job1")
     job2Properties.setProperty("testProperty", "job2")
 
-    // run both job 1 & 2, referencing the same stage, then cancel job1
-    // Note that we have to submit job2 before we cancel job1, to have them actually share
-    // *Stages*, and not just shuffle dependencies, due to skipped stages.  (at least until
-    // we address SPARK-10193)
+    // Run jobs 1 & 2, both referencing the same stage, then cancel job1.
+    // Note that we have to submit job2 before we cancel job1 to have them actually share
+    // *Stages*, and not just shuffle dependencies, due to skipped stages (at least until
+    // we address SPARK-10193.)
     val jobId1 = submit(finalRdd1, Array(0), properties = job1Properties)
     val jobId2 = submit(finalRdd2, Array(0), properties = job2Properties)
     assert(scheduler.activeJobs.nonEmpty)
@@ -1359,18 +1364,19 @@ class DAGSchedulerSuite
     val testProperty2 = scheduler.jobIdToActiveJob(jobId2).properties.getProperty("testProperty")
     assert(testProperty1 != testProperty2)
     assert(taskSets(0).properties != null)
-    // NB: this is next assert isn't necessarily the "desired" behavior, its more so to just document
-    // the current behavior.  We've already submitted the task set for stage 0 based on job1 --
-    // even though we have cancelled that job, and now we're running it b/c of job2, we haven't
-    // updated its properties.  It might be desirable to have this actually change to "job2"
+    // NB: This next assert isn't necessarily the "desired" behavior; it's just to document
+    // the current behavior.  We've already submitted the TaskSet for stage 0 based on job1, but
+    // even though we have cancelled that job and are now running it because of job2, we haven't
+    // updated the TaskSet's properties.  Changing the properties to "job2" is likely the more
+    // correct behavior.
     assert(taskSets(0).properties.getProperty("testProperty") === "job1")
     complete(taskSets(0), Seq((Success, makeMapStatus("hostA", 1))))
 
-    // the next two asserts the key checks for SPARK-6880 -- they make sure that the stage which
-    // was shared by both jobs, but never submitted any tasks for the first job, takes the props
-    // of the second job
-    assert(taskSets(1).properties != null)
-    assert(taskSets(1).properties.getProperty("testProperty") === "job2")
+    // The next check is the key for SPARK-6880.  For the stage which was shared by both job1 and
+    // job2 but never had any tasks submitted for job1, the properties of job2 are now used to run
+    // the stage.
+    checkJobProperties(taskSets(1), "job2")
+
     complete(taskSets(1), Seq((Success, makeMapStatus("hostA", 1))))
     assert(taskSets(2).properties != null)
     complete(taskSets(2), Seq((Success, 42)))
@@ -1403,10 +1409,10 @@ class DAGSchedulerSuite
       assert(taskSet.properties.getProperty("testProperty") === expected)
     }
 
-    // run both job 1 & 2, referencing the same stage, then cancel job1
-    // Note that we have to submit job2 before we cancel job1, to have them actually share
-    // *Stages*, and not just shuffle dependencies, due to skipped stages.  (at least until
-    // we address SPARK-10193)
+    // Run jobs 1 & 2, both referencing the same stage, then cancel job1.
+    // Note that we have to submit job2 before we cancel job1 to have them actually share
+    // *Stages*, and not just shuffle dependencies, due to skipped stages (at least until
+    // we address SPARK-10193.)
     val jobId1 = submit(finalRdd1, Array(0), properties = job1Properties)
     val jobId2 = submit(finalRdd2, Array(0), properties = job2Properties)
     assert(scheduler.activeJobs.nonEmpty)
@@ -1424,10 +1430,11 @@ class DAGSchedulerSuite
     assert(scheduler.activeJobs.nonEmpty)
     val testProperty2 = scheduler.jobIdToActiveJob(jobId2).properties.getProperty("testProperty")
     assert(testProperty1 != testProperty2)
-    // NB: this is next assert isn't necessarily the "desired" behavior, its more so to just document
-    // the current behavior.  We've already submitted the task set for stage 0 based on job1 --
-    // even though we have cancelled that job, and now we're running it b/c of job2, we haven't
-    // updated its properties.  It might be desirable to have this actually change to "job2"
+    // NB: This next assert isn't necessarily the "desired" behavior; it's just to document
+    // the current behavior.  We've already submitted the TaskSet for stage 0 based on job1, but
+    // even though we have cancelled that job and are now running it because of job2, we haven't
+    // updated the TaskSet's properties.  Changing the properties to "job2" is likely the more
+    // correct behavior.
     checkJobProperties(taskSets(1), "job1")
 
     // lets say there is a fetch failure in this task set, which makes us go back and
@@ -1441,7 +1448,7 @@ class DAGSchedulerSuite
     assert(taskSets(2).stageAttemptId === 1)
     checkJobProperties(taskSets(2), "job2")
 
-    // run the rest of the stages normally, checking they have the right properties
+    // run the rest of the stages normally, checking that they have the correct properties
     complete(taskSets(2), Seq((Success, makeMapStatus("hostA", 1))))
     checkJobProperties(taskSets(3), "job2")
     complete(taskSets(3), Seq((Success, makeMapStatus("hostA", 1))))
