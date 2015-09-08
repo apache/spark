@@ -21,9 +21,10 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.util.Loader
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /**
  * Helper methods for import/export of GLM regression models.
@@ -33,9 +34,6 @@ private[regression] object GLMRegressionModel {
   object SaveLoadV1_0 {
 
     def thisFormatVersion: String = "1.0"
-
-    /** Model data for model import/export */
-    case class Data(weights: Vector, intercept: Double)
 
     /**
      * Helper method for saving GLM regression model metadata and data.
@@ -48,7 +46,6 @@ private[regression] object GLMRegressionModel {
         weights: Vector,
         intercept: Double): Unit = {
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -57,11 +54,13 @@ private[regression] object GLMRegressionModel {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
-      val data = Data(weights, intercept)
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
-      // TODO: repartition with 1 partition after SPARK-5532 gets fixed
-      dataRDD.write.parquet(Loader.dataPath(path))
+      val dataRDD = sc.parallelize(Seq(Row(weights, intercept)), 1)
+      sqlContext.createDataFrame(dataRDD, schema).write.parquet(Loader.dataPath(path))
     }
+
+    private val schema = StructType(
+      Seq(StructField("weights", new VectorUDT, nullable = false),
+      StructField("intercept", DoubleType, nullable = false)))
 
     /**
      * Helper method for loading GLM regression model data.
@@ -69,7 +68,11 @@ private[regression] object GLMRegressionModel {
      * @param numFeatures  Number of features, to be checked against loaded data.
      *                     The length of the weights vector should equal numFeatures.
      */
-    def loadData(sc: SparkContext, path: String, modelClass: String, numFeatures: Int): Data = {
+    def loadData(
+        sc: SparkContext,
+        path: String,
+        modelClass: String,
+        numFeatures: Int): Tuple2[Vector, Double] = {
       val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
       val dataRDD = sqlContext.read.parquet(datapath)
@@ -81,7 +84,7 @@ private[regression] object GLMRegressionModel {
         case Row(weights: Vector, intercept: Double) =>
           assert(weights.size == numFeatures, s"Expected $numFeatures features, but" +
             s" found ${weights.size} features when loading $modelClass weights from $datapath")
-          Data(weights, intercept)
+          (weights, intercept)
       }
     }
   }

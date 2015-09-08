@@ -34,7 +34,8 @@ import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /**
  * :: Experimental ::
@@ -179,9 +180,6 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
     /** Hard-code class name string in case it changes in the future */
     def thisClassName: String = "org.apache.spark.mllib.regression.IsotonicRegressionModel"
 
-    /** Model data for model import/export */
-    case class Data(boundary: Double, prediction: Double)
-
     def save(
         sc: SparkContext,
         path: String,
@@ -195,16 +193,21 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
           ("isotonic" -> isotonic)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
-      sqlContext.createDataFrame(
-        boundaries.toSeq.zip(predictions).map { case (b, p) => Data(b, p) }
-      ).write.parquet(dataPath(path))
+      val dataArray = boundaries.toSeq.zip(predictions).map { case (b, p) => Row(b, p) }
+      val dataRDD: RDD[Row] = sc.parallelize(dataArray, 1)
+
+      sqlContext.createDataFrame(dataRDD, schema).write.parquet(dataPath(path))
     }
+
+    private val schema = StructType(
+      Seq(StructField("boundary", DoubleType, nullable = false),
+      StructField("prediction", DoubleType, nullable = true)))
 
     def load(sc: SparkContext, path: String): (Array[Double], Array[Double]) = {
       val sqlContext = new SQLContext(sc)
       val dataRDD = sqlContext.read.parquet(dataPath(path))
 
-      checkSchema[Data](dataRDD.schema)
+      checkSchema(schema, dataRDD.schema)
       val dataArray = dataRDD.select("boundary", "prediction").collect()
       val (boundaries, predictions) = dataArray.map { x =>
         (x.getDouble(0), x.getDouble(1))

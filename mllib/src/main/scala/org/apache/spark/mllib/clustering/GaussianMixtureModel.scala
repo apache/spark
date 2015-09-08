@@ -26,11 +26,12 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.linalg.{Vector, Matrices, Matrix}
+import org.apache.spark.mllib.linalg.{Matrix, MatrixUDT, Vector, VectorUDT}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.{MLUtils, Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SQLContext, Row}
+import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /**
  * :: Experimental ::
@@ -137,8 +138,6 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
 
   private object SaveLoadV1_0 {
 
-    case class Data(weight: Double, mu: Vector, sigma: Matrix)
-
     val formatVersionV1_0 = "1.0"
 
     val classNameV1_0 = "org.apache.spark.mllib.clustering.GaussianMixtureModel"
@@ -150,7 +149,6 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
         gaussians: Array[MultivariateGaussian]): Unit = {
 
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
 
       // Create JSON metadata.
       val metadata = compact(render
@@ -159,19 +157,25 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
 
       // Create Parquet data.
       val dataArray = Array.tabulate(weights.length) { i =>
-        Data(weights(i), gaussians(i).mu, gaussians(i).sigma)
+        Row(weights(i), gaussians(i).mu, gaussians(i).sigma)
       }
-      sc.parallelize(dataArray, 1).toDF().write.parquet(Loader.dataPath(path))
+      val dataRDD: RDD[Row] = sc.parallelize(dataArray, 1)
+      sqlContext.createDataFrame(dataRDD, schema).write.parquet(Loader.dataPath(path))
     }
+
+    private val schema = StructType(
+      Seq(StructField("weight", DoubleType, nullable = false),
+      StructField("mu", new VectorUDT, nullable = false),
+      StructField("sigma", new MatrixUDT, nullable = false)))
 
     def load(sc: SparkContext, path: String): GaussianMixtureModel = {
       val dataPath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
       val dataFrame = sqlContext.read.parquet(dataPath)
-      val dataArray = dataFrame.select("weight", "mu", "sigma").collect()
-
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
-      Loader.checkSchema[Data](dataFrame.schema)
+      Loader.checkSchema(schema, dataFrame.schema)
+
+      val dataArray = dataFrame.select("weight", "mu", "sigma").collect()
 
       val (weights, gaussians) = dataArray.map {
         case Row(weight: Double, mu: Vector, sigma: Matrix) =>

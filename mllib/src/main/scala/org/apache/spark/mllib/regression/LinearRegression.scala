@@ -66,8 +66,9 @@ object LinearRegressionModel extends Loader[LinearRegressionModel] {
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>
         val numFeatures = RegressionModel.getNumFeatures(metadata)
-        val data = GLMRegressionModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0, numFeatures)
-        new LinearRegressionModel(data.weights, data.intercept)
+        val (weights, intercept) = GLMRegressionModel.SaveLoadV1_0
+          .loadData(sc, path, classNameV1_0, numFeatures)
+        new LinearRegressionModel(weights, intercept)
       case _ => throw new Exception(
         s"LinearRegressionModel.load did not recognize model with (className, format version):" +
         s"($loadedClassName, $version).  Supported:\n" +

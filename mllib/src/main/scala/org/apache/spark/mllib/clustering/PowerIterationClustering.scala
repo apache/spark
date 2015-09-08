@@ -31,6 +31,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 
 /**
  * :: Experimental ::
@@ -74,15 +75,18 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
     @Since("1.4.0")
     def save(sc: SparkContext, model: PowerIterationClusteringModel, path: String): Unit = {
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
 
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("k" -> model.k)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
-      val dataRDD = model.assignments.toDF()
-      dataRDD.write.parquet(Loader.dataPath(path))
+      val dataRDD = model.assignments.map(a => Row(a.id, a.cluster))
+      sqlContext.createDataFrame(dataRDD, schema).write.parquet(Loader.dataPath(path))
     }
+
+    private val schema = StructType(
+      Seq(StructField("id", LongType, nullable = false),
+      StructField("cluster", IntegerType, nullable = true)))
 
     @Since("1.4.0")
     def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {
@@ -95,7 +99,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
 
       val k = (metadata \ "k").extract[Int]
       val assignments = sqlContext.read.parquet(Loader.dataPath(path))
-      Loader.checkSchema[PowerIterationClustering.Assignment](assignments.schema)
+      Loader.checkSchema(schema, assignments.schema)
 
       val assignmentsRDD = assignments.map {
         case Row(id: Long, cluster: Int) => PowerIterationClustering.Assignment(id, cluster)

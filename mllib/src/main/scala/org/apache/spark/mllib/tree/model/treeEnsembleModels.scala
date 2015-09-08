@@ -414,7 +414,6 @@ private[tree] object TreeEnsembleModel extends Logging {
 
     def save(sc: SparkContext, path: String, model: TreeEnsembleModel, className: String): Unit = {
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
 
       // SPARK-6120: We do a hacky check here so users understand why save() is failing
       //             when they run the ML guide example.
@@ -449,9 +448,11 @@ private[tree] object TreeEnsembleModel extends Logging {
 
       // Create Parquet data.
       val dataRDD = sc.parallelize(model.trees.zipWithIndex).flatMap { case (tree, treeId) =>
-        tree.topNode.subtreeIterator.toSeq.map(node => NodeData(treeId, node))
-      }.toDF()
-      dataRDD.write.parquet(Loader.dataPath(path))
+        tree.topNode.subtreeIterator.toSeq.map(node =>
+          DecisionTreeModel.SaveLoadV1_0.convertNodeDataToRow(NodeData(treeId, node)))
+      }
+      sqlContext.createDataFrame(dataRDD, DecisionTreeModel.SaveLoadV1_0.nodeDataSchema)
+        .write.parquet(Loader.dataPath(path))
     }
 
     /**

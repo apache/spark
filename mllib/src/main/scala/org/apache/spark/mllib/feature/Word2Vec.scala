@@ -31,15 +31,15 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.linalg.{Vector, Vectors, DenseMatrix, BLAS, DenseVector}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.sql.{SQLContext, Row}
+import org.apache.spark.sql.types.{ArrayType, FloatType, StringType, StructField, StructType}
 
 /**
  *  Entry in vocabulary
@@ -584,8 +584,6 @@ object Word2VecModel extends Loader[Word2VecModel] {
 
     val classNameV1_0 = "org.apache.spark.mllib.feature.Word2VecModel"
 
-    case class Data(word: String, vector: Array[Float])
-
     def load(sc: SparkContext, path: String): Word2VecModel = {
       val dataPath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
@@ -594,7 +592,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
       val dataArray = dataFrame.select("word", "vector").collect()
 
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
-      Loader.checkSchema[Data](dataFrame.schema)
+      Loader.checkSchema(schema, dataFrame.schema)
 
       val word2VecMap = dataArray.map(i => (i.getString(0), i.getSeq[Float](1).toArray)).toMap
       new Word2VecModel(word2VecMap)
@@ -603,7 +601,6 @@ object Word2VecModel extends Loader[Word2VecModel] {
     def save(sc: SparkContext, path: String, model: Map[String, Array[Float]]): Unit = {
 
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
 
       val vectorSize = model.values.head.size
       val numWords = model.size
@@ -612,10 +609,14 @@ object Word2VecModel extends Loader[Word2VecModel] {
          ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
-      val dataArray = model.toSeq.map { case (w, v) => Data(w, v) }
-      sc.parallelize(dataArray.toSeq, 1).toDF().write.parquet(Loader.dataPath(path))
+      val dataRDD = sc.parallelize(model.toSeq.map { case (w, v) => Row(w, v) }, 1)
+      sqlContext.createDataFrame(dataRDD, schema).write.parquet(Loader.dataPath(path))
     }
   }
+
+  private val schema = StructType(
+    Seq(StructField("word", StringType, nullable = false),
+    StructField("vector", ArrayType(FloatType, containsNull = false), nullable = false)))
 
   @Since("1.4.0")
   override def load(sc: SparkContext, path: String): Word2VecModel = {

@@ -28,10 +28,11 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
 import org.apache.spark.graphx.{Edge, EdgeContext, Graph, VertexId}
-import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StructField, StructType}
 import org.apache.spark.util.BoundedPriorityQueue
 
 /**
@@ -394,10 +395,6 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
 
     val thisClassName = "org.apache.spark.mllib.clustering.LocalLDAModel"
 
-    // Store the distribution of terms of each topic and the column index in topicsMatrix
-    // as a Row in data.
-    case class Data(topic: Vector, index: Int)
-
     def save(
         sc: SparkContext,
         path: String,
@@ -406,7 +403,6 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
         topicConcentration: Double,
         gammaShape: Double): Unit = {
       val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
 
       val k = topicsMatrix.numCols
       val metadata = compact(render
@@ -419,10 +415,15 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
 
       val topicsDenseMatrix = topicsMatrix.toBreeze.toDenseMatrix
       val topics = Range(0, k).map { topicInd =>
-        Data(Vectors.dense((topicsDenseMatrix(::, topicInd).toArray)), topicInd)
+        Row(Vectors.dense((topicsDenseMatrix(::, topicInd).toArray)), topicInd)
       }.toSeq
-      sc.parallelize(topics, 1).toDF().write.parquet(Loader.dataPath(path))
+      val dataRDD = sc.parallelize(topics, 1)
+      sqlContext.createDataFrame(dataRDD, schema).write.parquet(Loader.dataPath(path))
     }
+
+    private val schema = StructType(
+      Seq(StructField("topic", new VectorUDT, nullable = false),
+      StructField("index", IntegerType, nullable = false)))
 
     def load(
         sc: SparkContext,
@@ -434,7 +435,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
       val sqlContext = SQLContext.getOrCreate(sc)
       val dataFrame = sqlContext.read.parquet(dataPath)
 
-      Loader.checkSchema[Data](dataFrame.schema)
+      Loader.checkSchema(schema, dataFrame.schema)
       val topics = dataFrame.collect()
       val vocabSize = topics(0).getAs[Vector](0).size
       val k = topics.length
@@ -781,7 +782,6 @@ class DistributedLDAModel private[clustering] (
   }
 }
 
-
 @Experimental
 @Since("1.5.0")
 object DistributedLDAModel extends Loader[DistributedLDAModel] {
@@ -791,15 +791,6 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
     val thisFormatVersion = "1.0"
 
     val thisClassName = "org.apache.spark.mllib.clustering.DistributedLDAModel"
-
-    // Store globalTopicTotals as a Vector.
-    case class Data(globalTopicTotals: Vector)
-
-    // Store each term and document vertex with an id and the topicWeights.
-    case class VertexData(id: Long, topicWeights: Vector)
-
-    // Store each edge with the source id, destination id and tokenCounts.
-    case class EdgeData(srcId: Long, dstId: Long, tokenCounts: Double)
 
     def save(
         sc: SparkContext,
@@ -813,7 +804,6 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
         iterationTimes: Array[Double],
         gammaShape: Double): Unit = {
       val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
 
       val metadata = compact(render
         (("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
@@ -825,19 +815,33 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val newPath = new Path(Loader.dataPath(path), "globalTopicTotals").toUri.toString
-      sc.parallelize(Seq(Data(Vectors.fromBreeze(globalTopicTotals)))).toDF()
-        .write.parquet(newPath)
+      val dataRDD = sc.parallelize(Seq(Row(Vectors.fromBreeze(globalTopicTotals))))
+      sqlContext.createDataFrame(dataRDD, dataSchema).write.parquet(newPath)
 
       val verticesPath = new Path(Loader.dataPath(path), "topicCounts").toUri.toString
-      graph.vertices.map { case (ind, vertex) =>
-        VertexData(ind, Vectors.fromBreeze(vertex))
-      }.toDF().write.parquet(verticesPath)
+      val vertexDataRDD = graph.vertices.map { case (ind, vertex) =>
+        Row(ind, Vectors.fromBreeze(vertex))
+      }
+      sqlContext.createDataFrame(vertexDataRDD, vertexDataSchema).write.parquet(verticesPath)
 
       val edgesPath = new Path(Loader.dataPath(path), "tokenCounts").toUri.toString
-      graph.edges.map { case Edge(srcId, dstId, prop) =>
-        EdgeData(srcId, dstId, prop)
-      }.toDF().write.parquet(edgesPath)
+      val edgeDataRDD = graph.edges.map { case Edge(srcId, dstId, prop) =>
+        Row(srcId, dstId, prop)
+      }
+      sqlContext.createDataFrame(edgeDataRDD, edgeDataSchema).write.parquet(edgesPath)
     }
+
+    private val dataSchema = StructType(
+      Seq(StructField("globalTopicTotals", new VectorUDT, nullable = false)))
+
+    private val vertexDataSchema = StructType(
+      Seq(StructField("id", LongType, nullable = false),
+      StructField("topicWeights", new VectorUDT, nullable = false)))
+
+    private val edgeDataSchema = StructType(
+      Seq(StructField("srcId", LongType, nullable = false),
+      StructField("dstId", LongType, nullable = false),
+      StructField("tokenCounts", DoubleType, nullable = false)))
 
     def load(
         sc: SparkContext,
@@ -855,9 +859,9 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       val vertexDataFrame = sqlContext.read.parquet(vertexDataPath)
       val edgeDataFrame = sqlContext.read.parquet(edgeDataPath)
 
-      Loader.checkSchema[Data](dataFrame.schema)
-      Loader.checkSchema[VertexData](vertexDataFrame.schema)
-      Loader.checkSchema[EdgeData](edgeDataFrame.schema)
+      Loader.checkSchema(dataSchema, dataFrame.schema)
+      Loader.checkSchema(vertexDataSchema, vertexDataFrame.schema)
+      Loader.checkSchema(edgeDataSchema, edgeDataFrame.schema)
       val globalTopicTotals: LDA.TopicCounts =
         dataFrame.first().getAs[Vector](0).toBreeze.toDenseVector
       val vertices: RDD[(VertexId, LDA.TopicCounts)] = vertexDataFrame.map {

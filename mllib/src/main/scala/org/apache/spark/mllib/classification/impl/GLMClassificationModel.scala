@@ -21,9 +21,10 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.util.Loader
 import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /**
  * Helper class for import/export of GLM classification models.
@@ -33,9 +34,6 @@ private[classification] object GLMClassificationModel {
   object SaveLoadV1_0 {
 
     def thisFormatVersion: String = "1.0"
-
-    /** Model data for import/export */
-    case class Data(weights: Vector, intercept: Double, threshold: Option[Double])
 
     /**
      * Helper method for saving GLM classification model metadata and data.
@@ -52,7 +50,6 @@ private[classification] object GLMClassificationModel {
         intercept: Double,
         threshold: Option[Double]): Unit = {
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -61,9 +58,14 @@ private[classification] object GLMClassificationModel {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
-      val data = Data(weights, intercept, threshold)
-      sc.parallelize(Seq(data), 1).toDF().write.parquet(Loader.dataPath(path))
+      val dataRDD = sc.parallelize(Seq(Row(weights, intercept, threshold.getOrElse(null))), 1)
+      sqlContext.createDataFrame(dataRDD, schema).write.parquet(Loader.dataPath(path))
     }
+
+    private val schema = StructType(
+      Seq(StructField("weights", new VectorUDT, nullable = false),
+      StructField("intercept", DoubleType, nullable = false),
+      StructField("threshold", DoubleType, nullable = true)))
 
     /**
      * Helper method for loading GLM classification model data.
@@ -72,7 +74,10 @@ private[classification] object GLMClassificationModel {
      *
      * @param modelClass  String name for model class (used for error messages)
      */
-    def loadData(sc: SparkContext, path: String, modelClass: String): Data = {
+    def loadData(
+        sc: SparkContext,
+        path: String,
+        modelClass: String): Tuple3[Vector, Double, Option[Double]] = {
       val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
       val dataRDD = sqlContext.read.parquet(datapath)
@@ -89,7 +94,7 @@ private[classification] object GLMClassificationModel {
       } else {
         Some(data.getDouble(2))
       }
-      Data(weights, intercept, threshold)
+      (weights, intercept, threshold)
     }
   }
 

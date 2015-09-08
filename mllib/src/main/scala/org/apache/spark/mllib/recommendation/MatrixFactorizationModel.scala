@@ -37,6 +37,7 @@ import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, StructField, StructType}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -354,13 +355,20 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
     def save(model: MatrixFactorizationModel, path: String): Unit = {
       val sc = model.userFeatures.sparkContext
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("rank" -> model.rank)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
-      model.userFeatures.toDF("id", "features").write.parquet(userPath(path))
-      model.productFeatures.toDF("id", "features").write.parquet(productPath(path))
+
+      val userFeatureRDD = model.userFeatures.map(uf => Row(uf._1, uf._2))
+      val productFeatureRDD = model.productFeatures.map(pf => Row(pf._1, pf._2))
+
+      sqlContext.createDataFrame(userFeatureRDD, schema).write.parquet(userPath(path))
+      sqlContext.createDataFrame(productFeatureRDD, schema).write.parquet(productPath(path))
     }
+
+    private val schema = StructType(
+      Seq(StructField("id", IntegerType, nullable = false),
+      StructField("features", ArrayType(DoubleType, containsNull = false), nullable = false)))
 
     def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
       implicit val formats = DefaultFormats

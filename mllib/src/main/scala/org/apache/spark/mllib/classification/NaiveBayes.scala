@@ -30,7 +30,8 @@ import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, SparseVect
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, StringType, StructField, StructType}
 
 /**
  * Model for Naive Bayes Classifiers.
@@ -165,8 +166,7 @@ class NaiveBayesModel private[spark] (
 
   @Since("1.3.0")
   override def save(sc: SparkContext, path: String): Unit = {
-    val data = NaiveBayesModel.SaveLoadV2_0.Data(labels, pi, theta, modelType)
-    NaiveBayesModel.SaveLoadV2_0.save(sc, path, data)
+    NaiveBayesModel.SaveLoadV2_0.save(sc, path, labels, pi, theta, modelType)
   }
 
   override protected def formatVersion: String = "2.0"
@@ -184,27 +184,32 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
     /** Hard-code class name string in case it changes in the future */
     def thisClassName: String = "org.apache.spark.mllib.classification.NaiveBayesModel"
 
-    /** Model data for model import/export */
-    case class Data(
+    def save(
+        sc: SparkContext,
+        path: String,
         labels: Array[Double],
         pi: Array[Double],
         theta: Array[Array[Double]],
-        modelType: String)
-
-    def save(sc: SparkContext, path: String, data: Data): Unit = {
+        modelType: String): Unit = {
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
 
       // Create JSON metadata.
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
-          ("numFeatures" -> data.theta(0).length) ~ ("numClasses" -> data.pi.length)))
+          ("numFeatures" -> theta(0).length) ~ ("numClasses" -> pi.length)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
-      dataRDD.write.parquet(dataPath(path))
+      val dataRDD = sc.parallelize(Seq(Row(labels, pi, theta, modelType)), 1)
+      sqlContext.createDataFrame(dataRDD, schema).write.parquet(dataPath(path))
     }
+
+    private val schema = StructType(
+      Seq(StructField("labels", ArrayType(DoubleType, containsNull = false), nullable = false),
+      StructField("pi", ArrayType(DoubleType, containsNull = false), nullable = false),
+      StructField("theta", ArrayType(
+        ArrayType(DoubleType, containsNull = false), containsNull = false), nullable = false),
+      StructField("modelType", StringType, nullable = false)))
 
     @Since("1.3.0")
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
@@ -212,7 +217,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       // Load Parquet data.
       val dataRDD = sqlContext.read.parquet(dataPath(path))
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
-      checkSchema[Data](dataRDD.schema)
+      checkSchema(schema, dataRDD.schema)
       val dataArray = dataRDD.select("labels", "pi", "theta", "modelType").take(1)
       assert(dataArray.length == 1, s"Unable to load NaiveBayesModel data from: ${dataPath(path)}")
       val data = dataArray(0)
@@ -232,33 +237,37 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
     /** Hard-code class name string in case it changes in the future */
     def thisClassName: String = "org.apache.spark.mllib.classification.NaiveBayesModel"
 
-    /** Model data for model import/export */
-    case class Data(
+    def save(
+        sc: SparkContext,
+        path: String,
         labels: Array[Double],
         pi: Array[Double],
-        theta: Array[Array[Double]])
-
-    def save(sc: SparkContext, path: String, data: Data): Unit = {
+        theta: Array[Array[Double]]): Unit = {
       val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
 
       // Create JSON metadata.
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
-          ("numFeatures" -> data.theta(0).length) ~ ("numClasses" -> data.pi.length)))
+          ("numFeatures" -> theta(0).length) ~ ("numClasses" -> pi.length)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
-      dataRDD.write.parquet(dataPath(path))
+      val dataRDD = sc.parallelize(Seq(Row(labels, pi, theta)), 1)
+      sqlContext.createDataFrame(dataRDD, schema).write.parquet(dataPath(path))
     }
+
+    private val schema = StructType(
+      Seq(StructField("labels", ArrayType(DoubleType, containsNull = false), nullable = false),
+      StructField("pi", ArrayType(DoubleType, containsNull = false), nullable = false),
+      StructField("theta", ArrayType(
+          ArrayType(DoubleType, containsNull = false), containsNull = false), nullable = false)))
 
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
       val sqlContext = new SQLContext(sc)
       // Load Parquet data.
       val dataRDD = sqlContext.read.parquet(dataPath(path))
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
-      checkSchema[Data](dataRDD.schema)
+      checkSchema(schema, dataRDD.schema)
       val dataArray = dataRDD.select("labels", "pi", "theta").take(1)
       assert(dataArray.length == 1, s"Unable to load NaiveBayesModel data from: ${dataPath(path)}")
       val data = dataArray(0)
