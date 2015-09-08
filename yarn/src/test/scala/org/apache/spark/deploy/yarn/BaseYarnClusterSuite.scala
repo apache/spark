@@ -124,7 +124,7 @@ abstract class BaseYarnClusterSuite
       clientMode: Boolean,
       klass: String,
       appArgs: Seq[String] = Nil,
-      sparkArgs: Seq[(String,String)] = Nil,
+      sparkArgs: Seq[(String, String)] = Nil,
       extraClassPath: Seq[String] = Nil,
       extraJars: Seq[String] = Nil,
       extraConf: Map[String, String] = Map(),

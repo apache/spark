@@ -358,6 +358,12 @@ public class SparkLauncher {
    * <p/>
    * This method returns a handle that provides information about the running application and can
    * be used to do basic interaction with it.
+   * <p/>
+   * The returned handle assumes that the application will instantiate a single SparkContext
+   * during its lifetime. Once that context reports a final state (one that indicates the
+   * SparkContext has stopped), the handle will not perform new state transitions, so anything
+   * that happens after that cannot be monitored. If the underlying application is launched as
+   * a child process, {@link SparkAppHandle#kill()} can still be used to kill the child process.
    *
    * @since 1.6.0
    * @param listeners Listeners to add to the handle before the app is launched.

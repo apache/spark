@@ -100,10 +100,10 @@ class ChildProcAppHandle implements SparkAppHandle {
   public synchronized void kill() {
     if (!disposed) {
       disconnect();
-      if (childProc != null) {
-        childProc.destroy();
-        childProc = null;
-      }
+    }
+    if (childProc != null) {
+      childProc.destroy();
+      childProc = null;
     }
   }
 
