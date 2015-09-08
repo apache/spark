@@ -172,10 +172,11 @@ class LauncherServer implements Closeable {
         timeoutTimer.cancel();
         server.close();
         synchronized (clients) {
-          for (ServerConnection client : clients) {
+          List<ServerConnection> copy = new ArrayList<>(clients);
+          clients.clear();
+          for (ServerConnection client : copy) {
             client.close();
           }
-          clients.clear();
         }
       }
     }
@@ -197,9 +198,10 @@ class LauncherServer implements Closeable {
       if (refCount.decrementAndGet() == 0) {
         try {
           close();
-          serverInstance = null;
         } catch (IOException ioe) {
           // no-op.
+        } finally {
+          serverInstance = null;
         }
       }
     }
@@ -325,8 +327,13 @@ class LauncherServer implements Closeable {
 
     @Override
     public void close() throws IOException {
+      synchronized (clients) {
+        clients.remove(this);
+      }
       super.close();
-      handle.disconnect();
+      if (handle != null) {
+        handle.disconnect();
+      }
     }
 
   }

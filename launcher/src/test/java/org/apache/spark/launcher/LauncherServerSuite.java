@@ -43,13 +43,13 @@ public class LauncherServerSuite extends BaseSuite {
       handle1 = LauncherServer.newAppHandle();
       handle2 = LauncherServer.newAppHandle();
       LauncherServer server1 = handle1.getServer();
-      assertEquals(server1, handle2.getServer());
+      assertSame(server1, handle2.getServer());
 
       handle1.kill();
       handle2.kill();
 
       handle3 = LauncherServer.newAppHandle();
-      assertFalse(server1.equals(handle3.getServer()));
+      assertNotSame(server1, handle3.getServer());
 
       handle3.kill();
 
@@ -116,6 +116,35 @@ public class LauncherServerSuite extends BaseSuite {
       kill(handle);
       close(client);
       client.clientThread.join();
+    }
+  }
+
+  @Test
+  public void testTimeout() throws Exception {
+    final long TEST_TIMEOUT = 10L;
+
+    ChildProcAppHandle handle = null;
+    TestClient client = null;
+    try {
+      SparkLauncher.setConfig(SparkLauncher.CHILD_CONNECTION_TIMEOUT, String.valueOf(TEST_TIMEOUT));
+
+      handle = LauncherServer.newAppHandle();
+
+      Socket s = new Socket(InetAddress.getLoopbackAddress(),
+        LauncherServer.getServerInstance().getPort());
+      client = new TestClient(s);
+
+      Thread.sleep(TEST_TIMEOUT * 10);
+      try {
+        client.send(new Hello(handle.getSecret(), "1.4.0"));
+        fail("Expected exception caused by connection timeout.");
+      } catch (IllegalStateException e) {
+        // Expected.
+      }
+    } finally {
+      SparkLauncher.launcherConfig.remove(SparkLauncher.CHILD_CONNECTION_TIMEOUT);
+      kill(handle);
+      close(client);
     }
   }
 

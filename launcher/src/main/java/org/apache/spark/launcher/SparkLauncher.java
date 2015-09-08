@@ -71,6 +71,10 @@ public class SparkLauncher {
    * Set a configuration value for the launcher library. These config values do not affect the
    * launched application, but rather the behavior of the launcher library itself when managing
    * applications.
+   *
+   * @since 1.6.0
+   * @param name Config name.
+   * @param value Config value.
    */
   public static void setConfig(String name, String value) {
     launcherConfig.put(name, value);
