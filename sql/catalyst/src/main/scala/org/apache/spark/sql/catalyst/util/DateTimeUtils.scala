@@ -59,9 +59,15 @@ object DateTimeUtils {
 
   // Constants defining the allowed ranges for timestampts that fit in parquet files. Mostly
   // used by tests to avoid duplication.
-  private[spark] final val MIN_TIMESTAMP: Long =
-    -(DateTimeUtils.JULIAN_DAY_OF_EPOCH * DateTimeUtils.SECONDS_PER_DAY * 1000)
-  private[spark] final val MAX_TIMESTAMP: Long = java.lang.Long.MAX_VALUE / 1000
+  //
+  // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
+  // for "0001-01-01 00:00:00.000000". We need to find a
+  // number that is greater or equals to this number as a valid timestamp value.
+  //
+  // 253402329599999L is the the number of milliseconds since
+  // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
+  private[spark] final val MIN_TIMESTAMP: Long = -62135740800000L
+  private[spark] final val MAX_TIMESTAMP: Long = 253402329599999L
 
   // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
   private val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {

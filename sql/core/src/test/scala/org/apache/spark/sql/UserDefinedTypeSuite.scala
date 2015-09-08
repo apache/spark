@@ -90,7 +90,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext {
   }
 
   test("UDTs and UDFs") {
-    ctx.udf.register("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
+    sqlContext.udf.register("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
     pointsRDD.registerTempTable("points")
     checkAnswer(
       sql("SELECT testType(features) from points"),
@@ -148,8 +148,8 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext {
       StructField("vec", new MyDenseVectorUDT, false)
     ))
 
-    val stringRDD = ctx.sparkContext.parallelize(data)
-    val jsonRDD = ctx.read.schema(schema).json(stringRDD)
+    val stringRDD = sparkContext.parallelize(data)
+    val jsonRDD = sqlContext.read.schema(schema).json(stringRDD)
     checkAnswer(
       jsonRDD,
       Row(1, new MyDenseVector(Array(1.1, 2.2, 3.3, 4.4))) ::

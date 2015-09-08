@@ -23,6 +23,8 @@ import java.math.MathContext
 
 import scala.util.Random
 
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -85,6 +87,7 @@ object RandomDataGenerator {
    * random data generator is defined for that data type. The generated values will use an external
    * representation of the data type; for example, the random generator for [[DateType]] will return
    * instances of [[java.sql.Date]] and the generator for [[StructType]] will return a [[Row]].
+   * For a [[UserDefinedType]] for a class X, an instance of class X is returned.
    *
    * @param dataType the type to generate values for
    * @param nullable whether null values should be generated
@@ -109,7 +112,8 @@ object RandomDataGenerator {
       case DateType => Some(() => new java.sql.Date(rand.nextInt()))
       case TimestampType => Some { () =>
         val range = DateTimeUtils.MAX_TIMESTAMP - DateTimeUtils.MIN_TIMESTAMP
-        new java.sql.Timestamp((range * rand.nextDouble()).toLong + DateTimeUtils.MIN_TIMESTAMP)
+        val milliseconds = (range * rand.nextDouble()).toLong + DateTimeUtils.MIN_TIMESTAMP
+        DateTimeUtils.toJavaTimestamp(milliseconds * 1000)
       }
       case CalendarIntervalType => Some(() => {
         val months = rand.nextInt(1000)
@@ -159,6 +163,27 @@ object RandomDataGenerator {
         if (maybeFieldGenerators.forall(_.isDefined)) {
           val fieldGenerators: Seq[() => Any] = maybeFieldGenerators.map(_.get)
           Some(() => Row.fromSeq(fieldGenerators.map(_.apply())))
+        } else {
+          None
+        }
+      }
+      case udt: UserDefinedType[_] => {
+        val maybeSqlTypeGenerator = forType(udt.sqlType, nullable, seed)
+        // Because random data generator at here returns scala value, we need to
+        // convert it to catalyst value to call udt's deserialize.
+        val toCatalystType = CatalystTypeConverters.createToCatalystConverter(udt.sqlType)
+
+        if (maybeSqlTypeGenerator.isDefined) {
+          val sqlTypeGenerator = maybeSqlTypeGenerator.get
+          val generator = () => {
+            val generatedScalaValue = sqlTypeGenerator.apply()
+            if (generatedScalaValue == null) {
+              null
+            } else {
+              udt.deserialize(toCatalystType(generatedScalaValue))
+            }
+          }
+          Some(generator)
         } else {
           None
         }

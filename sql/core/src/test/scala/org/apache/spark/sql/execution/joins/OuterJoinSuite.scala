@@ -28,8 +28,8 @@ import org.apache.spark.sql.types.{IntegerType, DoubleType, StructType}
 
 class OuterJoinSuite extends SparkPlanTest with SharedSQLContext {
 
-  private lazy val left = ctx.createDataFrame(
-    ctx.sparkContext.parallelize(Seq(
+  private lazy val left = sqlContext.createDataFrame(
+    sparkContext.parallelize(Seq(
       Row(1, 2.0),
       Row(2, 100.0),
       Row(2, 1.0), // This row is duplicated to ensure that we will have multiple buffered matches
@@ -40,8 +40,8 @@ class OuterJoinSuite extends SparkPlanTest with SharedSQLContext {
       Row(null, null)
     )), new StructType().add("a", IntegerType).add("b", DoubleType))
 
-  private lazy val right = ctx.createDataFrame(
-    ctx.sparkContext.parallelize(Seq(
+  private lazy val right = sqlContext.createDataFrame(
+    sparkContext.parallelize(Seq(
       Row(0, 0.0),
       Row(2, 3.0), // This row is duplicated to ensure that we will have multiple buffered matches
       Row(2, -1.0),

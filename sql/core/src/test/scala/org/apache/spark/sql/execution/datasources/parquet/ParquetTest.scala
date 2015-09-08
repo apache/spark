@@ -33,7 +33,6 @@ import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
  * Especially, `Tuple1.apply` can be used to easily wrap a single type/value.
  */
 private[sql] trait ParquetTest extends SQLTestUtils {
-  protected def _sqlContext: SQLContext
 
   /**
    * Writes `data` to a Parquet file, which is then passed to `f` and will be deleted after `f`
@@ -43,7 +42,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       (data: Seq[T])
       (f: String => Unit): Unit = {
     withTempPath { file =>
-      _sqlContext.createDataFrame(data).write.parquet(file.getCanonicalPath)
+      sqlContext.createDataFrame(data).write.parquet(file.getCanonicalPath)
       f(file.getCanonicalPath)
     }
   }
@@ -55,7 +54,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
   protected def withParquetDataFrame[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: DataFrame => Unit): Unit = {
-    withParquetFile(data)(path => f(_sqlContext.read.parquet(path)))
+    withParquetFile(data)(path => f(sqlContext.read.parquet(path)))
   }
 
   /**
@@ -67,14 +66,14 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       (data: Seq[T], tableName: String)
       (f: => Unit): Unit = {
     withParquetDataFrame(data) { df =>
-      _sqlContext.registerDataFrameAsTable(df, tableName)
+      sqlContext.registerDataFrameAsTable(df, tableName)
       withTempTable(tableName)(f)
     }
   }
 
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = {
-    _sqlContext.createDataFrame(data).write.mode(SaveMode.Overwrite).parquet(path.getCanonicalPath)
+    sqlContext.createDataFrame(data).write.mode(SaveMode.Overwrite).parquet(path.getCanonicalPath)
   }
 
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](

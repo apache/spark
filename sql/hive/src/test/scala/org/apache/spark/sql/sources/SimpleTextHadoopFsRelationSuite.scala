@@ -20,12 +20,27 @@ package org.apache.spark.sql.sources
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
   override val dataSourceName: String = classOf[SimpleTextSource].getCanonicalName
 
-  import sqlContext._
+  // We have a very limited number of supported types at here since it is just for a
+  // test relation and we do very basic testing at here.
+  override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
+    case _: BinaryType => false
+    // We are using random data generator and the generated strings are not really valid string.
+    case _: StringType => false
+    case _: BooleanType => false // see https://issues.apache.org/jira/browse/SPARK-10442
+    case _: CalendarIntervalType => false
+    case _: DateType => false
+    case _: TimestampType => false
+    case _: ArrayType => false
+    case _: MapType => false
+    case _: StructType => false
+    case _: UserDefinedType[_] => false
+    case _ => true
+  }
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
@@ -44,7 +59,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        read.format(dataSourceName)
+        hiveContext.read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
     }
