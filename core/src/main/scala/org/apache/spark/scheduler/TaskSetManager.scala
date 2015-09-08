@@ -68,12 +68,6 @@ private[spark] class TaskSetManager(
   private val EXECUTOR_TASK_BLACKLIST_TIMEOUT =
     conf.getLong("spark.scheduler.executorTaskBlacklistTime", 0L)
 
-  /**
-   * Check if hostname is set by user manually by setting SPARK_LOCAL_HOSTNAME
-   * env variable, returns None if it's not set manually.
-   */
-  private def sparkLocalHostname: Option[String] = sys.env.get("SPARK_LOCAL_HOSTNAME")
-
   // Quantile of tasks at which to start speculation
   val SPECULATION_QUANTILE = conf.getDouble("spark.speculation.quantile", 0.75)
   val SPECULATION_MULTIPLIER = conf.getDouble("spark.speculation.multiplier", 1.5)
@@ -197,15 +191,11 @@ private[spark] class TaskSetManager(
     }
 
     for (loc <- tasks(index).preferredLocations) {
-
-      val locHost: String = if ( sparkLocalHostname != None ) loc.host
-        else InetAddress.getByName(loc.host).getHostAddress
-
       loc match {
         case e: ExecutorCacheTaskLocation =>
           addTo(pendingTasksForExecutor.getOrElseUpdate(e.executorId, new ArrayBuffer))
         case e: HDFSCacheTaskLocation => {
-          val exe = sched.getExecutorsAliveOnHost(locHost)
+          val exe = sched.getExecutorsAliveOnHost(loc.host)
           exe match {
             case Some(set) => {
               for (e <- set) {
@@ -220,8 +210,8 @@ private[spark] class TaskSetManager(
         }
         case _ => Unit
       }
-      addTo(pendingTasksForHost.getOrElseUpdate(locHost, new ArrayBuffer))
-      for (rack <- sched.getRackForHost(locHost)) {
+      addTo(pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer))
+      for (rack <- sched.getRackForHost(loc.host)) {
         addTo(pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer))
       }
     }
@@ -333,12 +323,7 @@ private[spark] class TaskSetManager(
       // Check for node-local tasks
       if (TaskLocality.isAllowed(locality, TaskLocality.NODE_LOCAL)) {
         for (index <- speculatableTasks if canRunOnHost(index)) {
-          val locations = if ( sparkLocalHostname != None ) {
-            tasks(index).preferredLocations.map(_.host)
-          } else { tasks(index).preferredLocations.map(_.host).map(
-            h =>
-              InetAddress.getByName(h).getHostAddress
-          ) }
+          val locations = tasks(index).preferredLocations.map(_.host)
           if (locations.contains(host)) {
             speculatableTasks -= index
             return Some((index, TaskLocality.NODE_LOCAL))

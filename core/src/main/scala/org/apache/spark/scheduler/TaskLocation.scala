@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import java.net.InetAddress
+
 /**
  * A location where a task should run. This can either be a host or a (host, executorID) pair.
  * In the latter case, we will prefer to launch the task on that executorID, but our next level
@@ -35,16 +37,26 @@ case class ExecutorCacheTaskLocation(override val host: String, executorId: Stri
 
 /**
  * A location on a host.
+ * The host names will be resolved to IP address in case SPARK_LOCAL_HOSTNAME is unset
  */
 private [spark] case class HostTaskLocation(override val host: String) extends TaskLocation {
-  override def toString: String = host
+  override def toString: String = if ( sys.env.get("SPARK_LOCAL_HOSTNAME") == None ) {
+    InetAddress.getByName(host).getHostAddress
+  } else {
+    host
+  }
 }
 
 /**
  * A location on a host that is cached by HDFS.
+ * The host names will be resolved to IP address in case SPARK_LOCAL_HOSTNAME is unset
  */
 private [spark] case class HDFSCacheTaskLocation(override val host: String) extends TaskLocation {
-  override def toString: String = TaskLocation.inMemoryLocationTag + host
+  override def toString: String = if ( sys.env.get("SPARK_LOCAL_HOSTNAME") == None ) {
+    TaskLocation.inMemoryLocationTag + InetAddress.getByName(host).getHostAddress
+  } else {
+    TaskLocation.inMemoryLocationTag + host
+  }
 }
 
 private[spark] object TaskLocation {
