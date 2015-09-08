@@ -289,9 +289,9 @@ private[ann] class SoftmaxFunction extends ActivationFunction {
   override def eval(x: BDM[Double], y: BDM[Double]): Unit = {
     (0 until x.cols).foreach { j =>
       // find max value to scale and prevent overflow during exp
-      val maxVal = Bmax(x(::,j))
-      y(::,j) := x(::,j).map { xVal => Math.exp(xVal) - maxVal }
-      y(::,j) :/= Bsum(y(::,j))
+      val maxVal = Bmax(x(::, j))
+      y(::, j) := x(::, j).map { xVal => Math.exp(xVal) - maxVal }
+      y(::, j) :/= Bsum(y(::, j))
     }
   }
 
@@ -299,11 +299,11 @@ private[ann] class SoftmaxFunction extends ActivationFunction {
       output: BDM[Double],
       target: BDM[Double],
       result: BDM[Double]): Double = {
-    ActivationFunction(output, target, result, m)
+    ActivationFunction(output, target, result, OutputMinusTarget)
     -Bsum( target :* Blog(output)) / output.cols
   }
 
-  private object m extends UFunc with MappingUFunc {
+  private object OutputMinusTarget extends UFunc with MappingUFunc {
     implicit val implDoubleDouble: Impl2[Double, Double, Double] =
       new Impl2[Double, Double, Double] {
         def apply(o: Double, t: Double): Double = o - t
@@ -311,10 +311,10 @@ private[ann] class SoftmaxFunction extends ActivationFunction {
   }
 
   override def derivative(x: BDM[Double], y: BDM[Double]): Unit = {
-    ActivationFunction(x, y, sd)
+    ActivationFunction(x, y, SoftmaxDerivative)
   }
 
-  private object sd extends UFunc with MappingUFunc {
+  private object SoftmaxDerivative extends UFunc with MappingUFunc {
     implicit val implDouble: Impl[Double, Double] = new Impl[Double, Double] {
       def apply(z: Double) = (1 - z) * z
     }
@@ -330,10 +330,10 @@ private[ann] class SoftmaxFunction extends ActivationFunction {
  */
 private[ann] class SigmoidFunction extends ActivationFunction {
   override def eval(x: BDM[Double], y: BDM[Double]): Unit = {
-    ActivationFunction(x, y, s)
+    ActivationFunction(x, y, Sigmoid)
   }
 
-  private object s extends UFunc with MappingUFunc {
+  private object Sigmoid extends UFunc with MappingUFunc {
     implicit val implDouble: Impl[Double, Double] = new Impl[Double, Double] {
       def apply(z: Double): Double = Bsigmoid(z)
     }
@@ -343,11 +343,11 @@ private[ann] class SigmoidFunction extends ActivationFunction {
       output: BDM[Double],
       target: BDM[Double],
       result: BDM[Double]): Double = {
-    ActivationFunction(output, target, result, m)
+    ActivationFunction(output, target, result, OutputMinusTarget)
     -Bsum(target :* Blog(output)) / output.cols
   }
 
-  private object m extends UFunc with MappingUFunc {
+  private object OutputMinusTarget extends UFunc with MappingUFunc {
     implicit val implDoubleDouble: Impl2[Double, Double, Double] =
       new Impl2[Double, Double, Double] {
         def apply(o: Double, t: Double): Double = o - t
@@ -355,10 +355,10 @@ private[ann] class SigmoidFunction extends ActivationFunction {
   }
 
   override def derivative(x: BDM[Double], y: BDM[Double]): Unit = {
-    ActivationFunction(x, y, sd)
+    ActivationFunction(x, y, SigmoidDerivative)
   }
 
-  private object sd extends UFunc with MappingUFunc {
+  private object SigmoidDerivative extends UFunc with MappingUFunc {
     implicit val implDouble: Impl[Double, Double] =
       new Impl[Double, Double] {
         def apply(z: Double) = (1 - z) * z
@@ -366,7 +366,7 @@ private[ann] class SigmoidFunction extends ActivationFunction {
   }
 
   override def squared(output: BDM[Double], target: BDM[Double], result: BDM[Double]): Double = {
-    ActivationFunction(output, target, result, m)
+    ActivationFunction(output, target, result, OutputMinusTarget)
     val e = (Bsum(result :* result) / 2) / output.cols
     ActivationFunction(result, output, result, m2)
     e
