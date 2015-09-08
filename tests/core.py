@@ -313,6 +313,18 @@ class CoreTest(unittest.TestCase):
             t.run,
             start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+    def test_python_op(self):
+        def test_py_op(templates_dict, ds, **kwargs):
+            if not templates_dict['ds'] == ds:
+                raise Exception("failure")
+        t = operators.PythonOperator(
+            task_id='test_py_op',
+            provide_context=True,
+            python_callable=test_py_op,
+            templates_dict={'ds': "{{ ds }}"},
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
     def test_import_examples(self):
         self.assertEqual(len(self.dagbag.dags), NUM_EXAMPLE_DAGS)
 
