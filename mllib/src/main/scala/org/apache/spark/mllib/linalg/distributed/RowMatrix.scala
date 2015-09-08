@@ -678,6 +678,7 @@ object RowMatrix {
    *
    * @param U the upper triangular part of the matrix packed in an array (column major)
    */
+  // TODO: SPARK-10491 - move this method to linalg.BLAS
   private[spark] def dspr(alpha: Double, v: Vector, U: Array[Double]): Unit = {
     // TODO: Find a better home (breeze?) for this method.
     val n = v.size

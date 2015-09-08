@@ -66,7 +66,7 @@ private[ml] class WeightedLeastSquares(
 
   require(regParam >= 0.0, s"regParam cannot be negative: $regParam")
   if (regParam == 0.0) {
-    logWarning("regParam is zero, which might cause numerical instability and overfit.")
+    logWarning("regParam is zero, which might cause numerical instability and overfitting.")
   }
 
   /**
@@ -129,6 +129,7 @@ private[ml] class WeightedLeastSquares(
    * @param bx right-hand side
    * @return the solution vector
    */
+  // TODO: SPARK-10490 - consolidate this and the Cholesky solver in ALS
   private def choleskySolve(A: Array[Double], bx: DenseVector): DenseVector = {
     val k = bx.size
     val info = new intW(0)
@@ -216,7 +217,7 @@ private[ml] object WeightedLeastSquares {
         if (!initialized) {
           init(other.k)
         }
-        assert(k == other.k)
+        assert(k == other.k, s"dimension mismatch: this.k = $k but other.k = ${other.k}")
         count += other.count
         wSum += other.wSum
         wwSum += other.wwSum

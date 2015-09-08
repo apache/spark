@@ -33,9 +33,9 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
     /*
        R code:
 
-A <- matrix(c(0, 1, 2, 3, 5, 7, 11, 13), 4, 2)
-b <- c(17, 19, 23, 29)
-w <- c(1, 2, 3, 4)
+       A <- matrix(c(0, 1, 2, 3, 5, 7, 11, 13), 4, 2)
+       b <- c(17, 19, 23, 29)
+       w <- c(1, 2, 3, 4)
      */
     instances = sc.parallelize(Seq(
       Instance(1.0, Vectors.dense(0.0, 5.0).toSparse, 17.0),
@@ -49,14 +49,14 @@ w <- c(1, 2, 3, 4)
     /*
        R code:
 
-df <- as.data.frame(cbind(A, b))
-for (formula in c(b ~ . -1, b ~ .)) {
-  model <- lm(formula, data=df, weights=w)
-  print(as.vector(coef(model)))
-}
+       df <- as.data.frame(cbind(A, b))
+       for (formula in c(b ~ . -1, b ~ .)) {
+         model <- lm(formula, data=df, weights=w)
+         print(as.vector(coef(model)))
+       }
 
-[1] -3.727121  3.009983
-[1] 18.08  6.08 -0.60
+       [1] -3.727121  3.009983
+       [1] 18.08  6.08 -0.60
      */
 
     val expected = Seq(
@@ -78,30 +78,30 @@ for (formula in c(b ~ . -1, b ~ .)) {
     /*
        R code:
 
-library(glmnet)
+       library(glmnet)
 
-for (intercept in c(FALSE, TRUE)) {
-  for (lambda in c(0.0, 0.1, 1.0)) {
-    for (standardize in c(FALSE, TRUE)) {
-      model <- glmnet(A, b, weights=w, intercept=intercept, lambda=lambda, standardize=standardize,
-                      alpha=0, thresh=1E-14)
-      print(as.vector(coef(model)))
-    }
-  }
-}
+       for (intercept in c(FALSE, TRUE)) {
+         for (lambda in c(0.0, 0.1, 1.0)) {
+           for (standardize in c(FALSE, TRUE)) {
+             model <- glmnet(A, b, weights=w, intercept=intercept, lambda=lambda,
+                             standardize=standardize, alpha=0, thresh=1E-14)
+             print(as.vector(coef(model)))
+           }
+         }
+       }
 
-[1]  0.000000 -3.727117  3.009982
-[1]  0.000000 -3.727117  3.009982
-[1]  0.000000 -3.307532  2.924206
-[1]  0.000000 -2.914790  2.840627
-[1]  0.000000 -1.526575  2.558158
-[1] 0.00000000 0.06984238 2.20488344
-[1] 18.0799727  6.0799832 -0.5999941
-[1] 18.0799727  6.0799832 -0.5999941
-[1] 13.5356178  3.2714044  0.3770744
-[1] 14.064629  3.565802  0.269593
-[1] 10.1238013  0.9708569  1.1475466
-[1] 13.1860638  2.1761382  0.6213134
+       [1]  0.000000 -3.727117  3.009982
+       [1]  0.000000 -3.727117  3.009982
+       [1]  0.000000 -3.307532  2.924206
+       [1]  0.000000 -2.914790  2.840627
+       [1]  0.000000 -1.526575  2.558158
+       [1] 0.00000000 0.06984238 2.20488344
+       [1] 18.0799727  6.0799832 -0.5999941
+       [1] 18.0799727  6.0799832 -0.5999941
+       [1] 13.5356178  3.2714044  0.3770744
+       [1] 14.064629  3.565802  0.269593
+       [1] 10.1238013  0.9708569  1.1475466
+       [1] 13.1860638  2.1761382  0.6213134
      */
 
     val expected = Seq(
