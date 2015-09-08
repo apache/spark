@@ -97,6 +97,10 @@ private[spark] class Client(
 
   private var appId: ApplicationId = null
 
+  def reportLauncherState(state: SparkAppHandle.State): Unit = {
+    launcherBackend.setState(state)
+  }
+
   def stop(): Unit = {
     launcherBackend.close()
     yarnClient.stop()
@@ -126,7 +130,7 @@ private[spark] class Client(
       val newApp = yarnClient.createApplication()
       val newAppResponse = newApp.getNewApplicationResponse()
       appId = newAppResponse.getApplicationId()
-      launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
+      reportLauncherState(SparkAppHandle.State.SUBMITTED)
       launcherBackend.setAppId(appId.toString())
 
       // Verify whether the cluster has enough resources for our AM
@@ -895,13 +899,13 @@ private[spark] class Client(
       if (lastState != state) {
         state match {
           case YarnApplicationState.RUNNING =>
-            launcherBackend.setState(SparkAppHandle.State.RUNNING)
+            reportLauncherState(SparkAppHandle.State.RUNNING)
           case YarnApplicationState.FINISHED =>
-            launcherBackend.setState(SparkAppHandle.State.FINISHED)
+            reportLauncherState(SparkAppHandle.State.FINISHED)
           case YarnApplicationState.FAILED =>
-            launcherBackend.setState(SparkAppHandle.State.FAILED)
+            reportLauncherState(SparkAppHandle.State.FAILED)
           case YarnApplicationState.KILLED =>
-            launcherBackend.setState(SparkAppHandle.State.KILLED)
+            reportLauncherState(SparkAppHandle.State.KILLED)
           case _ =>
         }
       }
