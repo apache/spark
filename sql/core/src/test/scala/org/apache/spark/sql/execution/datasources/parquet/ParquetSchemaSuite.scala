@@ -1426,4 +1426,46 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |  }
         |}
       """.stripMargin)
+
+  testSchemaClipping(
+    "standard map with complex key",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group key_value {
+        |      required group key {
+        |        required int32 value_f0;
+        |        required int64 value_f1;
+        |      }
+        |      required int32 value;
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val keyType =
+        new StructType()
+          .add("value_f1", LongType, nullable = false)
+          .add("value_f2", DoubleType, nullable = false)
+
+      val f0Type = MapType(keyType, IntegerType, valueContainsNull = false)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group key_value {
+        |      required group key {
+        |        required int64 value_f1;
+        |        required double value_f2;
+        |      }
+        |      required int32 value;
+        |    }
+        |  }
+        |}
+      """.stripMargin)
 }
