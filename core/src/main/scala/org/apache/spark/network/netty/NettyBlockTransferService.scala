@@ -149,7 +149,11 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
   }
 
   override def close(): Unit = {
-    server.close()
-    clientFactory.close()
+    if (server != null) {
+      server.close()
+    }
+    if (clientFactory != null) {
+      clientFactory.close()
+    }
   }
 }
