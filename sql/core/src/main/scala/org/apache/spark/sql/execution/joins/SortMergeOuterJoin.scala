@@ -362,7 +362,8 @@ private class SortMergeFullOuterJoinScanner(
   }
 
   /**
-   * Consume rows from both iterators until their keys are different from the provided matchingKey.
+   * Populate the left and right buffers with rows matching the provided key.
+   * This consumes rows from both iterators until their keys are different from the matching key.
    */
   private def findMatchingRows(matchingKey: InternalRow): Unit = {
     leftMatches.clear()
@@ -392,40 +393,48 @@ private class SortMergeFullOuterJoinScanner(
   }
 
   /**
-   * Scan for next matching rows in buffers of both sides.
-   * @return true if next row(s) are found and false otherwise.
+   * Scan the left and right buffers for the next valid match.
+   *
+   * Note: this method mutates `joinedRow` to point to the latest matching rows in the buffers.
+   * If a left row has no valid matches on the right, or a right row has no valid matches on the
+   * left, then the row is joined with the null row and the result is considered a valid match.
+   *
+   * @return true if a valid match is found, false otherwise.
    */
   private def scanNextInBuffered(): Boolean = {
     while (leftIndex < leftMatches.size) {
-      while (rightIndex < rightMatches.size
-        && !boundCondition(joinedRow(leftMatches(leftIndex), rightMatches(rightIndex)))) {
+      while (rightIndex < rightMatches.size) {
+        joinedRow(leftMatches(leftIndex), rightMatches(rightIndex))
+        if (boundCondition(joinedRow)) {
+          leftMatched.set(leftIndex)
+          rightMatched.set(rightIndex)
+          rightIndex += 1
+          return true
+        }
         rightIndex += 1
       }
-      if (rightIndex < rightMatches.size) {
-        // matched with condition
-        leftMatched.set(leftIndex)
-        rightMatched.set(rightIndex)
-        rightIndex += 1
+      rightIndex = 0
+      if (!leftMatched.get(leftIndex)) {
+        // the left row has never matched any right row, join it with null row
+        joinedRow(leftMatches(leftIndex), rightNullRow)
+        leftIndex += 1
         return true
       }
       leftIndex += 1
-      rightIndex = 0
-      if (!leftMatched.get(leftIndex - 1)) {
-        joinedRow(leftMatches(leftIndex - 1), rightNullRow)
-        return true
-      }
     }
 
-    while (rightIndex < rightMatches.size && rightMatched.get(rightIndex)) {
+    while (rightIndex < rightMatches.size) {
+      if (!rightMatched.get(rightIndex)) {
+        // the right row has never matched any left row, join it with null row
+        joinedRow(leftNullRow, rightMatches(rightIndex))
+        rightIndex += 1
+        return true
+      }
       rightIndex += 1
     }
-    if (rightIndex < rightMatches.size) {
-      joinedRow(leftNullRow, rightMatches(rightIndex))
-      rightIndex += 1
-      true
-    } else {
-      false
-    }
+
+    // There are no more valid matches in the left and right buffers
+    false
   }
 
   // --- Public methods --------------------------------------------------------------------------
@@ -433,26 +442,24 @@ private class SortMergeFullOuterJoinScanner(
   def getJoinedRow(): JoinedRow = joinedRow
 
   def advanceNext(): Boolean = {
-    // We already buffered some matching rows, use them directly
+    // If we already buffered some matching rows, use them directly
     if (leftIndex <= leftMatches.size || rightIndex <= rightMatches.size) {
       if (scanNextInBuffered()) {
         return true
       }
     }
 
-    // Both left and right iterators have rows and they can be compared
     if (leftRow != null && (leftRowKey.anyNull || rightRow == null)) {
-      // Only consume row(s) from left iterator
       joinedRow(leftRow.copy(), rightNullRow)
       advancedLeft()
       true
     } else if (rightRow != null && (rightRowKey.anyNull || leftRow == null)) {
-      // Only consume row(s) from right iterator
       joinedRow(leftNullRow, rightRow.copy())
       advancedRight()
       true
     } else if (leftRow != null && rightRow != null) {
-      // find matching rows from both sides
+      // Both rows are present and neither have null values,
+      // so we populate the buffers with rows matching the next key
       val comp = keyOrdering.compare(leftRowKey, rightRowKey)
       if (comp <= 0) {
         findMatchingRows(leftRowKey.copy())
