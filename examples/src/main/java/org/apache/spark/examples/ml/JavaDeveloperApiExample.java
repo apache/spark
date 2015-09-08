@@ -219,6 +219,9 @@ class MyJavaLogisticRegressionModel
    */
   public int numClasses() { return 2; }
 
+  /**
+   * Number of features the model was trained on.
+   */
   public int numFeatures() { return weights_.size(); }
 
   /**

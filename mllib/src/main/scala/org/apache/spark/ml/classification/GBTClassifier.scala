@@ -167,15 +167,14 @@ object GBTClassifier {
 final class GBTClassificationModel(
     override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
-    private val _treeWeights: Array[Double])
+    private val _treeWeights: Array[Double],
+    override val numFeatures: Int)
   extends PredictionModel[Vector, GBTClassificationModel]
   with TreeEnsembleModel with Serializable {
 
   require(numTrees > 0, "GBTClassificationModel requires at least 1 tree.")
   require(_trees.length == _treeWeights.length, "GBTClassificationModel given trees, treeWeights" +
     s" of non-matching lengths (${_trees.length}, ${_treeWeights.length}, respectively).")
-
-  override val numFeatures: Int = _trees.head.numFeatures
 
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
@@ -198,7 +197,7 @@ final class GBTClassificationModel(
   }
 
   override def copy(extra: ParamMap): GBTClassificationModel = {
-    copyValues(new GBTClassificationModel(uid, _trees, _treeWeights), extra).setParent(parent)
+    copyValues(new GBTClassificationModel(uid, _trees, _treeWeights, numFeatures), extra).setParent(parent)
   }
 
   override def toString: String = {
@@ -225,6 +224,6 @@ private[ml] object GBTClassificationModel {
       DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("gbtc")
-    new GBTClassificationModel(parent.uid, newTrees, oldModel.treeWeights)
+    new GBTClassificationModel(parent.uid, newTrees, oldModel.treeWeights, -1)
   }
 }

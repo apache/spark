@@ -74,7 +74,6 @@ final class DecisionTreeClassifier(override val uid: String)
         // TODO: Automatically index labels: SPARK-7126
     }
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
-    val numFeatures = oldDataset.first().features.size
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = 0L, parentUID = Some(uid))
@@ -169,6 +168,7 @@ private[ml] object DecisionTreeClassificationModel {
         s" DecisionTreeClassificationModel (new API).  Algo is: ${oldModel.algo}")
     val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtc")
+    // Can't infer number of features from old model, so default to -1
     new DecisionTreeClassificationModel(uid, rootNode, -1, -1)
   }
 }

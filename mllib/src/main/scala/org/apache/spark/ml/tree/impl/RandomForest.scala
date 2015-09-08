@@ -179,7 +179,7 @@ private[ml] object RandomForest extends Logging {
       }
     }
 
-    val numFeatures = input.first().features.size
+    val numFeatures = metadata.numFeaturesPerNode
 
     parentUID match {
       case Some(uid) =>

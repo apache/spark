@@ -176,6 +176,7 @@ private object GBTRegressorSuite {
     val oldModelAsNew = GBTRegressionModel.fromOld(
       oldModel, newModel.parent.asInstanceOf[GBTRegressor], categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
+    // TODO: update this check when GBTs have been moved to ML package
     assert(newModel.numFeatures == -1)
   }
 }
