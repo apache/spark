@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 
-
 case class FilterNode(condition: Expression, child: LocalNode) extends UnaryLocalNode {
 
   private[this] var predicate: (InternalRow) => Boolean = _

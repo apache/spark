@@ -37,7 +37,7 @@ class SortBasedAggregationIterator(
     completeAggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+    codegenEnabled: Boolean,
     outputsUnsafeRows: Boolean,
     numInputRows: LongSQLMetric,
     numOutputRows: LongSQLMetric)
@@ -50,7 +50,7 @@ class SortBasedAggregationIterator(
     completeAggregateAttributes,
     initialInputBufferOffset,
     resultExpressions,
-    newMutableProjection,
+    codegenEnabled,
     outputsUnsafeRows) {
 
   override protected def newBuffer: MutableRow = {
@@ -181,8 +181,7 @@ object SortBasedAggregationIterator {
       completeAggregateAttributes: Seq[Attribute],
       initialInputBufferOffset: Int,
       resultExpressions: Seq[NamedExpression],
-      newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-      newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
+      codegenEnabled: Boolean,
       inputAttributes: Seq[Attribute],
       inputIter: Iterator[InternalRow],
       outputsUnsafeRows: Boolean,
@@ -194,7 +193,7 @@ object SortBasedAggregationIterator {
         inputAttributes,
         inputIter).asInstanceOf[KVIterator[InternalRow, InternalRow]]
     } else {
-      AggregationIterator.kvIterator(groupingExprs, newProjection, inputAttributes, inputIter)
+      AggregationIterator.kvIterator(groupingExprs, codegenEnabled, inputAttributes, inputIter)
     }
 
     new SortBasedAggregationIterator(
@@ -207,7 +206,7 @@ object SortBasedAggregationIterator {
       completeAggregateAttributes,
       initialInputBufferOffset,
       resultExpressions,
-      newMutableProjection,
+      codegenEnabled,
       outputsUnsafeRows,
       numInputRows,
       numOutputRows)

@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.execution.CommonOperatorGenerator
 import org.apache.spark.unsafe.KVIterator
 
 import scala.collection.mutable.ArrayBuffer
 
 /**
- * The base class of [[SortBasedAggregationIterator]] and [[UnsafeHybridAggregationIterator]].
+ * The base class of [[SortBasedAggregationIterator]].
  * It mainly contains two parts:
  * 1. It initializes aggregate functions.
  * 2. It creates two functions, `processRow` and `generateOutput` based on [[AggregateMode]] of
@@ -42,9 +42,9 @@ abstract class AggregationIterator(
     completeAggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+    protected val codegenEnabled: Boolean,
     outputsUnsafeRows: Boolean)
-  extends Iterator[InternalRow] with Logging {
+  extends Iterator[InternalRow] with CommonOperatorGenerator {
 
   ///////////////////////////////////////////////////////////////////////////
   // Initializing functions.
@@ -410,10 +410,12 @@ abstract class AggregationIterator(
 object AggregationIterator {
   def kvIterator(
     groupingExpressions: Seq[NamedExpression],
-    newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
+    _codegenEnabled: Boolean,
     inputAttributes: Seq[Attribute],
     inputIter: Iterator[InternalRow]): KVIterator[InternalRow, InternalRow] = {
-    new KVIterator[InternalRow, InternalRow] {
+    new KVIterator[InternalRow, InternalRow] with CommonOperatorGenerator {
+      protected val codegenEnabled = _codegenEnabled
+
       private[this] val groupingKeyGenerator = newProjection(groupingExpressions, inputAttributes)
 
       private[this] var groupingKey: InternalRow = _

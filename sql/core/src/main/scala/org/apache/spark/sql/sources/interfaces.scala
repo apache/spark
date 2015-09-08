@@ -31,7 +31,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
+import org.apache.spark.sql.execution.{CommonOperatorGenerator, FileRelation, RDDConversions}
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, PartitionSpec, Partition}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql._
@@ -406,7 +406,7 @@ abstract class OutputWriter {
  */
 @Experimental
 abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec])
-  extends BaseRelation with FileRelation with Logging {
+  extends BaseRelation with FileRelation with CommonOperatorGenerator {
 
   override def toString: String = getClass.getSimpleName + paths.mkString("[", ",", "]")
 
@@ -414,7 +414,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 
-  private val codegenEnabled = sqlContext.conf.codegenEnabled
+  override protected val codegenEnabled = sqlContext.conf.codegenEnabled
 
   private var _partitionSpec: PartitionSpec = _
 
@@ -646,13 +646,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         rdd.asInstanceOf[RDD[InternalRow]]
       }
 
+    val buildProjection = newMutableProjection(requiredOutput, dataSchema.toAttributes)
     converted.mapPartitions { rows =>
-      val buildProjection = if (codegenEnabled) {
-        GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
-      } else {
-        () => new InterpretedMutableProjection(requiredOutput, dataSchema.toAttributes)
-      }
-
       val projectedRows = {
         val mutableProjection = buildProjection()
         rows.map(r => mutableProjection(r))
