@@ -254,6 +254,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
   }
 
+  // This test case is ignored because of parquet-mr bug PARQUET-370
   ignore("SPARK-10301 requested schema clipping - schemas with disjoint sets of fields") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
