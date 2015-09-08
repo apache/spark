@@ -193,19 +193,21 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         " threshold are ignored. If this is an integer >= 1, then this specifies a count (of" +
         " times the term must appear in the document); if this is a double in [0,1), then this " +
         "specifies a fraction (out of the document's token count). Note that the parameter is " +
-        "only used in transform of CountVectorizerModel and does not affect fitting.")
+        "only used in transform of CountVectorizerModel and does not affect fitting.",
+        1.0)
     minDF = Param(
         Params._dummy(), "minDF", "Specifies the minimum number of" +
         " different documents a term must appear in to be included in the vocabulary." +
         " If this is an integer >= 1, this specifies the number of documents the term must" +
-        " appear in; if this is a double in [0,1), then this specifies the fraction of documents.")
+        " appear in; if this is a double in [0,1), then this specifies the fraction of documents.",
+        1.0)
     vocabSize = Param(
-        Params._dummy(), "vocabSize", "max size of the vocabulary")
+        Params._dummy(), "vocabSize", "max size of the vocabulary", 2**18)
 
     @keyword_only
-    def __init__(self, minTF=None, minDF=None, vocabSize=None, inputCol=None, outputCol=None):
+    def __init__(self, minTF=1.0, minDF=1.0, vocabSize=2**18, inputCol=None, outputCol=None):
         """
-        __init__(self, minTF=None, minDF=None, vocabSize=None, inputCol=None, outputCol=None)
+        __init__(self, minTF=1.0, minDF=1.0, vocabSize=2**18, inputCol=None, outputCol=None)
         """
         super(CountVectorizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizer",
@@ -217,22 +219,25 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
             " times the term must appear in the document); if this is a double in [0,1), then " +
             "this specifies a fraction (out of the document's token count). Note that the " +
             "parameter is only used in transform of CountVectorizerModel and does not affect" +
-            "fitting.")
+            "fitting.", 1.0)
         minDF = Param(
             self, "minDF", "Specifies the minimum number of" +
             " different documents a term must appear in to be included in the vocabulary." +
             " If this is an integer >= 1, this specifies the number of documents the term must" +
             " appear in; if this is a double in [0,1), then this specifies the fraction of " +
-            "documents.")
+            "documents.", 1.0)
         vocabSize = Param(
-            self, "vocabSize", "max size of the vocabulary")
+            self, "vocabSize", "max size of the vocabulary", 2**18)
+        self._setDefault(minTF=1.0)
+        self._setDefault(minDF=1.0)
+        self._setDefault(vocabSize=2**18)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
-    def setParams(self, minTF=None, minDF=None, vocabSize=None, inputCol=None, outputCol=None):
+    def setParams(self, minTF=1.0, minDF=1.0, vocabSize=2**18, inputCol=None, outputCol=None):
         """
-        setParams(self, minTF=None, minDF=None, vocabSize=None, inputCol=None, outputCol=None)
+        setParams(self, minTF=1.0, minDF=1.0, vocabSize=2**18, inputCol=None, outputCol=None)
         Set the params for the CountVectorizer
         """
         kwargs = self.setParams._input_kwargs
