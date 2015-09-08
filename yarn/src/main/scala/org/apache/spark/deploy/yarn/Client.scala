@@ -1045,7 +1045,8 @@ object Client extends Logging {
           s"in favor of the $CONF_SPARK_JAR configuration variable.")
       System.getenv(ENV_SPARK_JAR)
     } else {
-      SparkContext.jarOfClass(this.getClass).head
+      SparkContext.jarOfClass(this.getClass).getOrElse(throw new SparkException("Could not find jar with spark-yarn related code, " +
+        "Make sure SPARK_PREPEND_CLASSES is not set"))
     }
   }
 
