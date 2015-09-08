@@ -342,9 +342,9 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-10327 Cache Table is not working while subquery has alias in its project list") {
-    ctx.sparkContext.parallelize((1, 1) :: (2, 2) :: Nil)
+    sparkContext.parallelize((1, 1) :: (2, 2) :: Nil)
       .toDF("key", "value").selectExpr("key", "value", "key+1").registerTempTable("abc")
-    ctx.cacheTable("abc")
+    sqlContext.cacheTable("abc")
 
     val sparkPlan = sql(
       """select a.key, b.key, c.key from
