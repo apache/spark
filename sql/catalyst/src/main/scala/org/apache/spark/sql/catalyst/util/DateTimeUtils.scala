@@ -57,11 +57,12 @@ object DateTimeUtils {
 
   @transient lazy val defaultTimeZone = TimeZone.getDefault
 
-  // Constants defining the allowed ranges for timestampts that fit in parquet files. Mostly
-  // used by tests to avoid duplication.
+  // Constants defining the allowed ranges for timestamps that can be parsed by java.sql.Timestamp.
+  // Limits are calculated based on UTC.
   private[spark] final val MIN_TIMESTAMP: Long =
-    -(DateTimeUtils.JULIAN_DAY_OF_EPOCH * DateTimeUtils.SECONDS_PER_DAY * 1000)
-  private[spark] final val MAX_TIMESTAMP: Long = java.lang.Long.MAX_VALUE / 1000
+    Timestamp.valueOf("0001-01-01 00:00:00").getTime() + defaultTimeZone.getRawOffset()
+  private[spark] final val MAX_TIMESTAMP: Long =
+    Timestamp.valueOf("9999-12-31 23:59:59.999999").getTime() + defaultTimeZone.getRawOffset()
 
   // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
   private val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {
