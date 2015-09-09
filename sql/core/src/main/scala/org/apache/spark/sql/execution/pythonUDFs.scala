@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import java.io.OutputStream
 import java.util.{List => JList, Map => JMap}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import net.razorvine.pickle._
 
@@ -196,14 +196,15 @@ object EvaluatePython {
     case (c, BinaryType) if c.getClass.isArray && c.getClass.getComponentType.getName == "byte" => c
 
     case (c: java.util.List[_], ArrayType(elementType, _)) =>
-      new GenericArrayData(c.map { e => fromJava(e, elementType)}.toArray)
+      new GenericArrayData(c.asScala.map { e => fromJava(e, elementType)}.toArray)
 
     case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
       new GenericArrayData(c.asInstanceOf[Array[_]].map(e => fromJava(e, elementType)))
 
     case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) =>
-      val keys = c.keysIterator.map(fromJava(_, keyType)).toArray
-      val values = c.valuesIterator.map(fromJava(_, valueType)).toArray
+      val keyValues = c.asScala.toSeq
+      val keys = keyValues.map(kv => fromJava(kv._1, keyType)).toArray
+      val values = keyValues.map(kv => fromJava(kv._2, valueType)).toArray
       ArrayBasedMapData(keys, values)
 
     case (c, StructType(fields)) if c.getClass.isArray =>
@@ -367,7 +368,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
       val pickle = new Unpickler
       iter.flatMap { pickedResult =>
         val unpickledBatch = pickle.loads(pickedResult)
-        unpickledBatch.asInstanceOf[java.util.ArrayList[Any]]
+        unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
       }
     }.mapPartitions { iter =>
       val row = new GenericMutableRow(1)

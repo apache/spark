@@ -18,13 +18,12 @@
 package org.apache.spark.mllib.fpm;
 
 import java.io.Serializable;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import com.google.common.collect.Lists;
 import static org.junit.Assert.*;
 
 import org.apache.spark.api.java.JavaRDD;
@@ -48,13 +47,13 @@ public class JavaFPGrowthSuite implements Serializable {
   public void runFPGrowth() {
 
     @SuppressWarnings("unchecked")
-    JavaRDD<ArrayList<String>> rdd = sc.parallelize(Lists.newArrayList(
-      Lists.newArrayList("r z h k p".split(" ")),
-      Lists.newArrayList("z y x w v u t s".split(" ")),
-      Lists.newArrayList("s x o n r".split(" ")),
-      Lists.newArrayList("x z y m t s q e".split(" ")),
-      Lists.newArrayList("z".split(" ")),
-      Lists.newArrayList("x z y r q t p".split(" "))), 2);
+    JavaRDD<List<String>> rdd = sc.parallelize(Arrays.asList(
+      Arrays.asList("r z h k p".split(" ")),
+      Arrays.asList("z y x w v u t s".split(" ")),
+      Arrays.asList("s x o n r".split(" ")),
+      Arrays.asList("x z y m t s q e".split(" ")),
+      Arrays.asList("z".split(" ")),
+      Arrays.asList("x z y r q t p".split(" "))), 2);
 
     FPGrowthModel<String> model = new FPGrowth()
       .setMinSupport(0.5)

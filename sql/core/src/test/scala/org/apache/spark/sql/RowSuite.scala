@@ -57,7 +57,7 @@ class RowSuite extends SparkFunSuite with SharedSQLContext {
 
   test("serialize w/ kryo") {
     val row = Seq((1, Seq(1), Map(1 -> 1), BigDecimal(1))).toDF().first()
-    val serializer = new SparkSqlSerializer(ctx.sparkContext.getConf)
+    val serializer = new SparkSqlSerializer(sparkContext.getConf)
     val instance = serializer.newInstance()
     val ser = instance.serialize(row)
     val de = instance.deserialize(ser).asInstanceOf[Row]
@@ -84,5 +84,14 @@ class RowSuite extends SparkFunSuite with SharedSQLContext {
     val r1 = Row(Double.NaN)
     val r2 = Row(Double.NaN)
     assert(r1 === r2)
+  }
+
+  test("equals and hashCode") {
+    val r1 = Row("Hello")
+    val r2 = Row("Hello")
+    assert(r1 === r2)
+    assert(r1.hashCode() === r2.hashCode())
+    val r3 = Row("World")
+    assert(r3.hashCode() != r1.hashCode())
   }
 }
