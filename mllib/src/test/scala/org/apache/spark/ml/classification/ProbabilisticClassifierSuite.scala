@@ -46,7 +46,8 @@ class ProbabilisticClassifierSuite extends SparkFunSuite {
 
   test("test thresholding") {
     val thresholds = Array(0.5, 0.2)
-    val testModel = new TestProbabilisticClassificationModel("myuid", 2, 2).setThresholds(thresholds)
+    val testModel = new TestProbabilisticClassificationModel("myuid", 2, 2)
+      .setThresholds(thresholds)
     assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 1.0))) === 1.0)
     assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 0.2))) === 0.0)
   }
