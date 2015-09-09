@@ -70,7 +70,7 @@ case class CartesianProduct(
         case BuildRight =>
           iter.map { r =>
             numOutputRows += 1
-            joinedRow(r._1, r._2)
+            joinedRow(r._2, r._1)
           }
       }
     }
