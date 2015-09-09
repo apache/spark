@@ -21,9 +21,8 @@ import java.beans.Introspector
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.immutable
-import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
@@ -41,9 +40,9 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
@@ -73,6 +72,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @return Spark SQL configuration
    */
   protected[sql] def conf = currentSession().conf
+
+  // `listener` should be only used in the driver
+  @transient private[sql] val listener = new SQLListener(this)
+  sparkContext.addSparkListener(listener)
+  sparkContext.ui.foreach(new SQLTab(this, _))
 
   /**
    * Set Spark SQL configuration properties.
@@ -221,7 +225,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     conf.setConf(properties)
     // After we have populated SQLConf, we call setConf to populate other confs in the subclass
     // (e.g. hiveconf in HiveContext).
-    properties.foreach {
+    properties.asScala.foreach {
       case (key, value) => setConf(key, value)
     }
   }
@@ -285,9 +289,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   val udf: UDFRegistration = new UDFRegistration(this)
 
-  @transient
-  val udaf: UDAFRegistration = new UDAFRegistration(this)
-
   /**
    * Returns true if the table is currently cached in-memory.
    * @group cachemgmt
@@ -331,101 +332,25 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @since 1.3.0
    */
   @Experimental
-  object implicits extends Serializable {
-    // scalastyle:on
+  object implicits extends SQLImplicits with Serializable {
+    protected override def _sqlContext: SQLContext = self
 
     /**
      * Converts $"col name" into an [[Column]].
      * @since 1.3.0
      */
+    // This must live here to preserve binary compatibility with Spark < 1.5.
     implicit class StringToColumn(val sc: StringContext) {
       def $(args: Any*): ColumnName = {
-        new ColumnName(sc.s(args : _*))
+        new ColumnName(sc.s(args: _*))
       }
-    }
-
-    /**
-     * An implicit conversion that turns a Scala `Symbol` into a [[Column]].
-     * @since 1.3.0
-     */
-    implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
-
-    /**
-     * Creates a DataFrame from an RDD of case classes or tuples.
-     * @since 1.3.0
-     */
-    implicit def rddToDataFrameHolder[A <: Product : TypeTag](rdd: RDD[A]): DataFrameHolder = {
-      DataFrameHolder(self.createDataFrame(rdd))
-    }
-
-    /**
-     * Creates a DataFrame from a local Seq of Product.
-     * @since 1.3.0
-     */
-    implicit def localSeqToDataFrameHolder[A <: Product : TypeTag](data: Seq[A]): DataFrameHolder =
-    {
-      DataFrameHolder(self.createDataFrame(data))
-    }
-
-    // Do NOT add more implicit conversions. They are likely to break source compatibility by
-    // making existing implicit conversions ambiguous. In particular, RDD[Double] is dangerous
-    // because of [[DoubleRDDFunctions]].
-
-    /**
-     * Creates a single column DataFrame from an RDD[Int].
-     * @since 1.3.0
-     */
-    implicit def intRddToDataFrameHolder(data: RDD[Int]): DataFrameHolder = {
-      val dataType = IntegerType
-      val rows = data.mapPartitions { iter =>
-        val row = new SpecificMutableRow(dataType :: Nil)
-        iter.map { v =>
-          row.setInt(0, v)
-          row: InternalRow
-        }
-      }
-      DataFrameHolder(
-        self.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
-    }
-
-    /**
-     * Creates a single column DataFrame from an RDD[Long].
-     * @since 1.3.0
-     */
-    implicit def longRddToDataFrameHolder(data: RDD[Long]): DataFrameHolder = {
-      val dataType = LongType
-      val rows = data.mapPartitions { iter =>
-        val row = new SpecificMutableRow(dataType :: Nil)
-        iter.map { v =>
-          row.setLong(0, v)
-          row: InternalRow
-        }
-      }
-      DataFrameHolder(
-        self.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
-    }
-
-    /**
-     * Creates a single column DataFrame from an RDD[String].
-     * @since 1.3.0
-     */
-    implicit def stringRddToDataFrameHolder(data: RDD[String]): DataFrameHolder = {
-      val dataType = StringType
-      val rows = data.mapPartitions { iter =>
-        val row = new SpecificMutableRow(dataType :: Nil)
-        iter.map { v =>
-          row.update(0, UTF8String.fromString(v))
-          row: InternalRow
-        }
-      }
-      DataFrameHolder(
-        self.internalCreateDataFrame(rows, StructType(StructField("_1", dataType) :: Nil)))
     }
   }
+  // scalastyle:on
 
   /**
    * :: Experimental ::
-   * Creates a DataFrame from an RDD of case classes.
+   * Creates a DataFrame from an RDD of Product (e.g. case classes, tuples).
    *
    * @group dataframes
    * @since 1.3.0
@@ -642,7 +567,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       tableName: String,
       source: String,
       options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, options.toMap)
+    createExternalTable(tableName, source, options.asScala.toMap)
   }
 
   /**
@@ -659,9 +584,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
+    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
-        tableName,
+        tableIdent,
         userSpecifiedSchema = None,
         source,
         temporary = false,
@@ -669,7 +595,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         allowExisting = false,
         managedIfNoPath = false)
     executePlan(cmd).toRdd
-    table(tableName)
+    table(tableIdent)
   }
 
   /**
@@ -686,7 +612,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       source: String,
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, schema, options.toMap)
+    createExternalTable(tableName, source, schema, options.asScala.toMap)
   }
 
   /**
@@ -704,9 +630,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
+    val tableIdent = new SqlParser().parseTableIdentifier(tableName)
     val cmd =
       CreateTableUsing(
-        tableName,
+        tableIdent,
         userSpecifiedSchema = Some(schema),
         source,
         temporary = false,
@@ -714,7 +641,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
         allowExisting = false,
         managedIfNoPath = false)
     executePlan(cmd).toRdd
-    table(tableName)
+    table(tableIdent)
   }
 
   /**
@@ -798,8 +725,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group ddl_ops
    * @since 1.3.0
    */
-  def table(tableName: String): DataFrame =
-    DataFrame(this, catalog.lookupRelation(Seq(tableName)))
+  def table(tableName: String): DataFrame = {
+    table(new SqlParser().parseTableIdentifier(tableName))
+  }
+
+  private def table(tableIdent: TableIdentifier): DataFrame = {
+    DataFrame(this, catalog.lookupRelation(tableIdent.toSeq))
+  }
 
   /**
    * Returns a [[DataFrame]] containing names of existing tables in the current database.
@@ -868,9 +800,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
       HashAggregation ::
       Aggregation ::
       LeftSemiJoin ::
-      HashJoin ::
+      EquiJoinSelection ::
       InMemoryScans ::
-      ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
       BroadcastNestedLoopJoin :: Nil)
@@ -1007,9 +938,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
       def output =
         analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}").mkString(", ")
 
-      // TODO previously will output RDD details by run (${stringOrError(toRdd.toDebugString)})
-      // however, the `toRdd` will cause the real execution, which is not what we want.
-      // We need to think about how to avoid the side effect.
       s"""== Parsed Logical Plan ==
          |${stringOrError(logical)}
          |== Analyzed Logical Plan ==
@@ -1020,7 +948,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |== Physical Plan ==
          |${stringOrError(executedPlan)}
          |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
-         |== RDD ==
       """.stripMargin.trim
     }
   }
@@ -1115,11 +1042,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def parquetFile(paths: String*): DataFrame = {
     if (paths.isEmpty) {
       emptyDataFrame
-    } else if (conf.parquetUseDataSourceApi) {
-      read.parquet(paths : _*)
     } else {
-      DataFrame(this, parquet.ParquetRelation(
-        paths.mkString(","), Some(sparkContext.hadoopConfiguration), this))
+      read.parquet(paths : _*)
     }
   }
 

@@ -20,6 +20,7 @@ package org.apache.spark.streaming.kinesis
 import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Random, Success, Try}
@@ -36,16 +37,10 @@ import org.apache.spark.Logging
 /**
  * Shared utility methods for performing Kinesis tests that actually transfer data
  */
-private class KinesisTestUtils(
-    val endpointUrl: String = "https://kinesis.us-west-2.amazonaws.com",
-    _regionName: String = "") extends Logging {
+private[kinesis] class KinesisTestUtils extends Logging {
 
-  val regionName = if (_regionName.length == 0) {
-    RegionUtils.getRegionByEndpoint(endpointUrl).getName()
-  } else {
-    RegionUtils.getRegion(_regionName).getName()
-  }
-
+  val endpointUrl = KinesisTestUtils.endpointUrl
+  val regionName = RegionUtils.getRegionByEndpoint(endpointUrl).getName()
   val streamShardCount = 2
 
   private val createStreamTimeoutSeconds = 300
@@ -53,6 +48,8 @@ private class KinesisTestUtils(
 
   @volatile
   private var streamCreated = false
+
+  @volatile
   private var _streamName: String = _
 
   private lazy val kinesisClient = {
@@ -73,11 +70,11 @@ private class KinesisTestUtils(
   }
 
   def createStream(): Unit = {
-    logInfo("Creating stream")
     require(!streamCreated, "Stream already created")
     _streamName = findNonExistentStreamName()
 
     // Create a stream. The number of shards determines the provisioned throughput.
+    logInfo(s"Creating stream ${_streamName}")
     val createStreamRequest = new CreateStreamRequest()
     createStreamRequest.setStreamName(_streamName)
     createStreamRequest.setShardCount(2)
@@ -86,7 +83,7 @@ private class KinesisTestUtils(
     // The stream is now being created. Wait for it to become active.
     waitForStreamToBeActive(_streamName)
     streamCreated = true
-    logInfo("Created stream")
+    logInfo(s"Created stream ${_streamName}")
   }
 
   /**
@@ -115,21 +112,16 @@ private class KinesisTestUtils(
     shardIdToSeqNumbers.toMap
   }
 
-  def describeStream(streamNameToDescribe: String = streamName): Option[StreamDescription] = {
-    try {
-      val describeStreamRequest = new DescribeStreamRequest().withStreamName(streamNameToDescribe)
-      val desc = kinesisClient.describeStream(describeStreamRequest).getStreamDescription()
-      Some(desc)
-    } catch {
-      case rnfe: ResourceNotFoundException =>
-        None
-    }
+  /**
+   * Expose a Python friendly API.
+   */
+  def pushData(testData: java.util.List[Int]): Unit = {
+    pushData(testData.asScala)
   }
 
   def deleteStream(): Unit = {
     try {
-      if (describeStream().nonEmpty) {
-        val deleteStreamRequest = new DeleteStreamRequest()
+      if (streamCreated) {
         kinesisClient.deleteStream(streamName)
       }
     } catch {
@@ -146,6 +138,17 @@ private class KinesisTestUtils(
     } catch {
       case e: Exception =>
         logWarning(s"Could not delete DynamoDB table $tableName")
+    }
+  }
+
+  private def describeStream(streamNameToDescribe: String): Option[StreamDescription] = {
+    try {
+      val describeStreamRequest = new DescribeStreamRequest().withStreamName(streamNameToDescribe)
+      val desc = kinesisClient.describeStream(describeStreamRequest).getStreamDescription()
+      Some(desc)
+    } catch {
+      case rnfe: ResourceNotFoundException =>
+        None
     }
   }
 
@@ -177,9 +180,38 @@ private class KinesisTestUtils(
 
 private[kinesis] object KinesisTestUtils {
 
-  val envVarName = "RUN_KINESIS_TESTS"
+  val envVarNameForEnablingTests = "ENABLE_KINESIS_TESTS"
+  val endVarNameForEndpoint = "KINESIS_TEST_ENDPOINT_URL"
+  val defaultEndpointUrl = "https://kinesis.us-west-2.amazonaws.com"
 
-  val shouldRunTests = sys.env.get(envVarName) == Some("1")
+  lazy val shouldRunTests = {
+    val isEnvSet = sys.env.get(envVarNameForEnablingTests) == Some("1")
+    if (isEnvSet) {
+      // scalastyle:off println
+      // Print this so that they are easily visible on the console and not hidden in the log4j logs.
+      println(
+        s"""
+          |Kinesis tests that actually send data has been enabled by setting the environment
+          |variable $envVarNameForEnablingTests to 1. This will create Kinesis Streams and
+          |DynamoDB tables in AWS. Please be aware that this may incur some AWS costs.
+          |By default, the tests use the endpoint URL $defaultEndpointUrl to create Kinesis streams.
+          |To change this endpoint URL to a different region, you can set the environment variable
+          |$endVarNameForEndpoint to the desired endpoint URL
+          |(e.g. $endVarNameForEndpoint="https://kinesis.us-west-2.amazonaws.com").
+        """.stripMargin)
+      // scalastyle:on println
+    }
+    isEnvSet
+  }
+
+  lazy val endpointUrl = {
+    val url = sys.env.getOrElse(endVarNameForEndpoint, defaultEndpointUrl)
+    // scalastyle:off println
+    // Print this so that they are easily visible on the console and not hidden in the log4j logs.
+    println(s"Using endpoint URL $url for creating Kinesis streams for tests.")
+    // scalastyle:on println
+    url
+  }
 
   def isAWSCredentialsPresent: Boolean = {
     Try { new DefaultAWSCredentialsProviderChain().getCredentials() }.isSuccess
@@ -191,7 +223,13 @@ private[kinesis] object KinesisTestUtils {
     Try { new DefaultAWSCredentialsProviderChain().getCredentials() } match {
       case Success(cred) => cred
       case Failure(e) =>
-        throw new Exception("Kinesis tests enabled, but could get not AWS credentials")
+        throw new Exception(
+          s"""
+             |Kinesis tests enabled using environment variable $envVarNameForEnablingTests
+             |but could not find AWS credentials. Please follow instructions in AWS documentation
+             |to set the credentials in your system such that the DefaultAWSCredentialsProviderChain
+             |can find the credentials.
+           """.stripMargin)
     }
   }
 }

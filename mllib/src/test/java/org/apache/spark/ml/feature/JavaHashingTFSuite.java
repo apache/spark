@@ -17,7 +17,8 @@
 
 package org.apache.spark.ml.feature;
 
-import com.google.common.collect.Lists;
+import java.util.Arrays;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -54,7 +55,7 @@ public class JavaHashingTFSuite {
 
   @Test
   public void hashingTF() {
-    JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
       RowFactory.create(0.0, "Hi I heard about Spark"),
       RowFactory.create(0.0, "I wish Java could use case classes"),
       RowFactory.create(1.0, "Logistic regression models are neat")

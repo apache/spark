@@ -350,7 +350,26 @@ class CloudPickler(Pickler):
             if new_override:
                 d['__new__'] = obj.__new__
 
-            self.save_reduce(typ, (obj.__name__, obj.__bases__, d), obj=obj)
+            self.save(_load_class)
+            self.save_reduce(typ, (obj.__name__, obj.__bases__, {"__doc__": obj.__doc__}), obj=obj)
+            d.pop('__doc__', None)
+            # handle property and staticmethod
+            dd = {}
+            for k, v in d.items():
+                if isinstance(v, property):
+                    k = ('property', k)
+                    v = (v.fget, v.fset, v.fdel, v.__doc__)
+                elif isinstance(v, staticmethod) and hasattr(v, '__func__'):
+                    k = ('staticmethod', k)
+                    v = v.__func__
+                elif isinstance(v, classmethod) and hasattr(v, '__func__'):
+                    k = ('classmethod', k)
+                    v = v.__func__
+                dd[k] = v
+            self.save(dd)
+            self.write(pickle.TUPLE2)
+            self.write(pickle.REDUCE)
+
         else:
             raise pickle.PicklingError("Can't pickle %r" % obj)
 
@@ -706,6 +725,23 @@ def _make_skel_func(code, closures, base_globals = None):
 
     return types.FunctionType(code, base_globals,
                               None, None, closure)
+
+
+def _load_class(cls, d):
+    """
+    Loads additional properties into class `cls`.
+    """
+    for k, v in d.items():
+        if isinstance(k, tuple):
+            typ, k = k
+            if typ == 'property':
+                v = property(*v)
+            elif typ == 'staticmethod':
+                v = staticmethod(v)
+            elif typ == 'classmethod':
+                v = classmethod(v)
+        setattr(cls, k, v)
+    return cls
 
 
 """Constructors for 3rd party libraries

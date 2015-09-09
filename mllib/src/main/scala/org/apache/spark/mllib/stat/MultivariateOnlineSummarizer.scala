@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.stat
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
@@ -34,6 +34,7 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
  * Zero elements (including explicit zero values) are skipped when calling add(),
  * to have time complexity O(nnz) instead of O(n) for each column.
  */
+@Since("1.1.0")
 @DeveloperApi
 class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with Serializable {
 
@@ -53,6 +54,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    * @param sample The sample in dense/sparse vector format to be added into this summarizer.
    * @return This MultivariateOnlineSummarizer object.
    */
+  @Since("1.1.0")
   def add(sample: Vector): this.type = {
     if (n == 0) {
       require(sample.size > 0, s"Vector should have dimension larger than zero.")
@@ -108,6 +110,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    * @param other The other MultivariateOnlineSummarizer to be merged.
    * @return This MultivariateOnlineSummarizer object.
    */
+  @Since("1.1.0")
   def merge(other: MultivariateOnlineSummarizer): this.type = {
     if (this.totalCnt != 0 && other.totalCnt != 0) {
       require(n == other.n, s"Dimensions mismatch when merging with another summarizer. " +
@@ -149,6 +152,11 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     this
   }
 
+  /**
+   * Sample mean of each dimension.
+   *
+   */
+  @Since("1.1.0")
   override def mean: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
@@ -161,6 +169,11 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     Vectors.dense(realMean)
   }
 
+  /**
+   * Sample variance of each dimension.
+   *
+   */
+  @Since("1.1.0")
   override def variance: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
@@ -183,14 +196,29 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     Vectors.dense(realVariance)
   }
 
+  /**
+   * Sample size.
+   *
+   */
+  @Since("1.1.0")
   override def count: Long = totalCnt
 
+  /**
+   * Number of nonzero elements in each dimension.
+   *
+   */
+  @Since("1.1.0")
   override def numNonzeros: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
     Vectors.dense(nnz)
   }
 
+  /**
+   * Maximum value of each dimension.
+   *
+   */
+  @Since("1.1.0")
   override def max: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
@@ -202,6 +230,11 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     Vectors.dense(currMax)
   }
 
+  /**
+   * Minimum value of each dimension.
+   *
+   */
+  @Since("1.1.0")
   override def min: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
@@ -213,6 +246,11 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     Vectors.dense(currMin)
   }
 
+  /**
+   * L2 (Euclidian) norm of each dimension.
+   *
+   */
+  @Since("1.2.0")
   override def normL2: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 
@@ -227,6 +265,11 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     Vectors.dense(realMagnitude)
   }
 
+  /**
+   * L1 norm of each dimension.
+   *
+   */
+  @Since("1.2.0")
   override def normL1: Vector = {
     require(totalCnt > 0, s"Nothing has been added to this summarizer.")
 

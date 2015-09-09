@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.metric.LongSQLMetric
 
 
 trait HashSemiJoin {
@@ -32,60 +33,87 @@ trait HashSemiJoin {
 
   override def output: Seq[Attribute] = left.output
 
-  @transient protected lazy val rightKeyGenerator: Projection =
-    newProjection(rightKeys, right.output)
+  protected[this] def supportUnsafe: Boolean = {
+    (self.codegenEnabled && self.unsafeEnabled
+      && UnsafeProjection.canSupport(leftKeys)
+      && UnsafeProjection.canSupport(rightKeys)
+      && UnsafeProjection.canSupport(left.schema)
+      && UnsafeProjection.canSupport(right.schema))
+  }
 
-  @transient protected lazy val leftKeyGenerator: () => MutableProjection =
-    newMutableProjection(leftKeys, left.output)
+  override def outputsUnsafeRows: Boolean = supportUnsafe
+  override def canProcessUnsafeRows: Boolean = supportUnsafe
+  override def canProcessSafeRows: Boolean = !supportUnsafe
+
+  protected def leftKeyGenerator: Projection =
+    if (supportUnsafe) {
+      UnsafeProjection.create(leftKeys, left.output)
+    } else {
+      newMutableProjection(leftKeys, left.output)()
+    }
+
+  protected def rightKeyGenerator: Projection =
+    if (supportUnsafe) {
+      UnsafeProjection.create(rightKeys, right.output)
+    } else {
+      newMutableProjection(rightKeys, right.output)()
+    }
 
   @transient private lazy val boundCondition =
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
   protected def buildKeyHashSet(
-      buildIter: Iterator[InternalRow],
-      copy: Boolean): java.util.Set[InternalRow] = {
+      buildIter: Iterator[InternalRow], numBuildRows: LongSQLMetric): java.util.Set[InternalRow] = {
     val hashSet = new java.util.HashSet[InternalRow]()
-    var currentRow: InternalRow = null
 
     // Create a Hash set of buildKeys
+    val rightKey = rightKeyGenerator
     while (buildIter.hasNext) {
-      currentRow = buildIter.next()
-      val rowKey = rightKeyGenerator(currentRow)
+      val currentRow = buildIter.next()
+      numBuildRows += 1
+      val rowKey = rightKey(currentRow)
       if (!rowKey.anyNull) {
         val keyExists = hashSet.contains(rowKey)
         if (!keyExists) {
-          if (copy) {
-            hashSet.add(rowKey.copy())
-          } else {
-            // rowKey may be not serializable (from codegen)
-            hashSet.add(rowKey)
-          }
+          hashSet.add(rowKey.copy())
         }
       }
     }
+
     hashSet
   }
 
   protected def hashSemiJoin(
-      streamIter: Iterator[InternalRow],
-      hashedRelation: HashedRelation): Iterator[InternalRow] = {
-    val joinKeys = leftKeyGenerator()
-    val joinedRow = new JoinedRow
+    streamIter: Iterator[InternalRow],
+    numStreamRows: LongSQLMetric,
+    hashSet: java.util.Set[InternalRow],
+    numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
+    val joinKeys = leftKeyGenerator
     streamIter.filter(current => {
-      lazy val rowBuffer = hashedRelation.get(joinKeys.currentValue)
-      !joinKeys(current).anyNull && rowBuffer != null && rowBuffer.exists {
-        (build: InternalRow) => boundCondition(joinedRow(current, build))
-      }
+      numStreamRows += 1
+      val key = joinKeys(current)
+      val r = !key.anyNull && hashSet.contains(key)
+      if (r) numOutputRows += 1
+      r
     })
   }
 
   protected def hashSemiJoin(
       streamIter: Iterator[InternalRow],
-      hashSet: java.util.Set[InternalRow]): Iterator[InternalRow] = {
-    val joinKeys = leftKeyGenerator()
+      numStreamRows: LongSQLMetric,
+      hashedRelation: HashedRelation,
+      numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
+    val joinKeys = leftKeyGenerator
     val joinedRow = new JoinedRow
-    streamIter.filter(current => {
-      !joinKeys(current.copy()).anyNull && hashSet.contains(joinKeys.currentValue)
-    })
+    streamIter.filter { current =>
+      numStreamRows += 1
+      val key = joinKeys(current)
+      lazy val rowBuffer = hashedRelation.get(key)
+      val r = !key.anyNull && rowBuffer != null && rowBuffer.exists {
+        (row: InternalRow) => boundCondition(joinedRow(current, row))
+      }
+      if (r) numOutputRows += 1
+      r
+    }
   }
 }

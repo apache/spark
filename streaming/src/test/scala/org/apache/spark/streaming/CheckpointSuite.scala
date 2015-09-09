@@ -19,7 +19,7 @@ package org.apache.spark.streaming
 
 import java.io.File
 
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
+import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.reflect.ClassTag
 
 import com.google.common.base.Charsets
@@ -30,8 +30,10 @@ import org.apache.hadoop.io.{IntWritable, Text}
 import org.apache.hadoop.mapred.TextOutputFormat
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.streaming.dstream.{DStream, FileInputDStream}
+import org.apache.spark.streaming.scheduler.{ConstantEstimator, RateTestInputDStream, RateTestReceiver}
 import org.apache.spark.util.{Clock, ManualClock, Utils}
 
 /**
@@ -389,6 +391,30 @@ class CheckpointSuite extends TestSuiteBase {
         .map(t => (t._1, t._2))
     }
     testCheckpointedOperation(input, operation, output, 7)
+  }
+
+  test("recovery maintains rate controller") {
+    ssc = new StreamingContext(conf, batchDuration)
+    ssc.checkpoint(checkpointDir)
+
+    val dstream = new RateTestInputDStream(ssc) {
+      override val rateController =
+        Some(new ReceiverRateController(id, new ConstantEstimator(200)))
+    }
+
+    val output = new TestOutputStreamWithPartitions(dstream.checkpoint(batchDuration * 2))
+    output.register()
+    runStreams(ssc, 5, 5)
+
+    ssc = new StreamingContext(checkpointDir)
+    ssc.start()
+    val outputNew = advanceTimeWithRealDelay(ssc, 2)
+
+    eventually(timeout(10.seconds)) {
+      assert(RateTestReceiver.getActive().nonEmpty)
+      assert(RateTestReceiver.getActive().get.getDefaultBlockGeneratorRateLimit() === 200)
+    }
+    ssc.stop()
   }
 
   // This tests whether file input stream remembers what files were seen before

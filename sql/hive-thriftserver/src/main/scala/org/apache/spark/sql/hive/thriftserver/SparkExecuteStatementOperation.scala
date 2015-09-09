@@ -20,9 +20,9 @@ package org.apache.spark.sql.hive.thriftserver
 import java.security.PrivilegedExceptionAction
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.RejectedExecutionException
-import java.util.{Map => JMap, UUID}
+import java.util.{Arrays, Map => JMap, UUID}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
 import scala.util.control.NonFatal
 
@@ -32,8 +32,7 @@ import org.apache.hive.service.cli._
 import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.shims.ShimLoader
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
@@ -127,13 +126,13 @@ private[hive] class SparkExecuteStatementOperation(
 
   def getResultSetSchema: TableSchema = {
     if (result == null || result.queryExecution.analyzed.output.size == 0) {
-      new TableSchema(new FieldSchema("Result", "string", "") :: Nil)
+      new TableSchema(Arrays.asList(new FieldSchema("Result", "string", "")))
     } else {
       logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
       val schema = result.queryExecution.analyzed.output.map { attr =>
         new FieldSchema(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), "")
       }
-      new TableSchema(schema)
+      new TableSchema(schema.asJava)
     }
   }
 
@@ -146,7 +145,7 @@ private[hive] class SparkExecuteStatementOperation(
     } else {
       val parentSessionState = SessionState.get()
       val hiveConf = getConfigForOperation()
-      val sparkServiceUGI = ShimLoader.getHadoopShims.getUGIForConf(hiveConf)
+      val sparkServiceUGI = Utils.getUGI()
       val sessionHive = getCurrentHive()
       val currentSqlSession = hiveContext.currentSession
 
@@ -160,6 +159,12 @@ private[hive] class SparkExecuteStatementOperation(
 
               // User information is part of the metastore client member in Hive
               hiveContext.setSession(currentSqlSession)
+              // Always use the latest class loader provided by executionHive's state.
+              val executionHiveClassLoader =
+                hiveContext.executionHive.state.getConf.getClassLoader
+              sessionHive.getConf.setClassLoader(executionHiveClassLoader)
+              parentSessionState.getConf.setClassLoader(executionHiveClassLoader)
+
               Hive.set(sessionHive)
               SessionState.setCurrentSessionState(parentSessionState)
               try {
@@ -174,7 +179,7 @@ private[hive] class SparkExecuteStatementOperation(
           }
 
           try {
-            ShimLoader.getHadoopShims().doAs(sparkServiceUGI, doAsAction)
+            sparkServiceUGI.doAs(doAsAction)
           } catch {
             case e: Exception =>
               setOperationException(new HiveSQLException(e))
@@ -201,7 +206,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  private def runInternal(): Unit = {
+  override def runInternal(): Unit = {
     statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)
@@ -293,7 +298,7 @@ private[hive] class SparkExecuteStatementOperation(
       sqlOperationConf = new HiveConf(sqlOperationConf)
 
       // apply overlay query specific settings, if any
-      getConfOverlay().foreach { case (k, v) =>
+      getConfOverlay().asScala.foreach { case (k, v) =>
         try {
           sqlOperationConf.verifyAndSet(k, v)
         } catch {

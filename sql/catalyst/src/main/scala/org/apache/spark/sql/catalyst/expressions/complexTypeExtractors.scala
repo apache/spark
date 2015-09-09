@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.Map
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -41,7 +39,7 @@ object ExtractValue {
    *    Struct      |   Literal String   |        GetStructField
    * Array[Struct]  |   Literal String   |     GetArrayStructFields
    *    Array       |   Integral type    |         GetArrayItem
-   *     Map        |      Any type      |         GetMapValue
+   *     Map        |   map key type     |         GetMapValue
    */
   def apply(
       child: Expression,
@@ -57,20 +55,17 @@ object ExtractValue {
       case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
-        GetArrayStructFields(child, fields(ordinal).copy(name = fieldName), ordinal, containsNull)
+        GetArrayStructFields(child, fields(ordinal).copy(name = fieldName),
+          ordinal, fields.length, containsNull)
 
-      case (_: ArrayType, _) if extraction.dataType.isInstanceOf[IntegralType] =>
-        GetArrayItem(child, extraction)
+      case (_: ArrayType, _) => GetArrayItem(child, extraction)
 
-      case (_: MapType, _) =>
-        GetMapValue(child, extraction)
+      case (MapType(kt, _, _), _) => GetMapValue(child, extraction)
 
       case (otherType, _) =>
         val errorMsg = otherType match {
-          case StructType(_) | ArrayType(StructType(_), _) =>
+          case StructType(_) =>
             s"Field name should be String Literal, but it's $extraction"
-          case _: ArrayType =>
-            s"Array index should be integral type, but it's ${extraction.dataType}"
           case other =>
             s"Can't extract value from $child"
         }
@@ -110,7 +105,7 @@ case class GetStructField(child: Expression, field: StructField, ordinal: Int)
   override def toString: String = s"$child.${field.name}"
 
   protected override def nullSafeEval(input: Any): Any =
-    input.asInstanceOf[InternalRow](ordinal)
+    input.asInstanceOf[InternalRow].get(ordinal, field.dataType)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, eval => {
@@ -118,7 +113,7 @@ case class GetStructField(child: Expression, field: StructField, ordinal: Int)
         if ($eval.isNullAt($ordinal)) {
           ${ev.isNull} = true;
         } else {
-          ${ev.primitive} = ${ctx.getColumn(eval, dataType, ordinal)};
+          ${ev.primitive} = ${ctx.getValue(eval, dataType, ordinal.toString)};
         }
       """
     })
@@ -134,6 +129,7 @@ case class GetArrayStructFields(
     child: Expression,
     field: StructField,
     ordinal: Int,
+    numFields: Int,
     containsNull: Boolean) extends UnaryExpression {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
@@ -141,26 +137,45 @@ case class GetArrayStructFields(
   override def toString: String = s"$child.${field.name}"
 
   protected override def nullSafeEval(input: Any): Any = {
-    input.asInstanceOf[Seq[InternalRow]].map { row =>
-      if (row == null) null else row(ordinal)
+    val array = input.asInstanceOf[ArrayData]
+    val length = array.numElements()
+    val result = new Array[Any](length)
+    var i = 0
+    while (i < length) {
+      if (array.isNullAt(i)) {
+        result(i) = null
+      } else {
+        val row = array.getStruct(i, numFields)
+        if (row.isNullAt(ordinal)) {
+          result(i) = null
+        } else {
+          result(i) = row.get(ordinal, field.dataType)
+        }
+      }
+      i += 1
     }
+    new GenericArrayData(result)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val arraySeqClass = "scala.collection.mutable.ArraySeq"
-    // TODO: consider using Array[_] for ArrayType child to avoid
-    // boxing of primitives
+    val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, eval => {
       s"""
-        final int n = $eval.size();
-        final $arraySeqClass<Object> values = new $arraySeqClass<Object>(n);
+        final int n = $eval.numElements();
+        final Object[] values = new Object[n];
         for (int j = 0; j < n; j++) {
-          InternalRow row = (InternalRow) $eval.apply(j);
-          if (row != null && !row.isNullAt($ordinal)) {
-            values.update(j, ${ctx.getColumn("row", field.dataType, ordinal)});
+          if ($eval.isNullAt(j)) {
+            values[j] = null;
+          } else {
+            final InternalRow row = $eval.getStruct(j, $numFields);
+            if (row.isNullAt($ordinal)) {
+              values[j] = null;
+            } else {
+              values[j] = ${ctx.getValue("row", field.dataType, ordinal.toString)};
+            }
           }
         }
-        ${ev.primitive} = (${ctx.javaType(dataType)}) values;
+        ${ev.primitive} = new $arrayClass(values);
       """
     })
   }
@@ -169,9 +184,13 @@ case class GetArrayStructFields(
 /**
  * Returns the field at `ordinal` in the Array `child`.
  *
- * No need to do type checking since it is handled by [[ExtractValue]].
+ * We need to do type checking here as `ordinal` expression maybe unresolved.
  */
-case class GetArrayItem(child: Expression, ordinal: Expression) extends BinaryExpression {
+case class GetArrayItem(child: Expression, ordinal: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
 
   override def toString: String = s"$child[$ordinal]"
 
@@ -184,25 +203,23 @@ case class GetArrayItem(child: Expression, ordinal: Expression) extends BinaryEx
   override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType
 
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
-    // TODO: consider using Array[_] for ArrayType child to avoid
-    // boxing of primitives
-    val baseValue = value.asInstanceOf[Seq[_]]
+    val baseValue = value.asInstanceOf[ArrayData]
     val index = ordinal.asInstanceOf[Number].intValue()
-    if (index >= baseValue.size || index < 0) {
+    if (index >= baseValue.numElements() || index < 0) {
       null
     } else {
-      baseValue(index)
+      baseValue.get(index, dataType)
     }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
-        final int index = (int)$eval2;
-        if (index >= $eval1.size() || index < 0) {
+        final int index = (int) $eval2;
+        if (index >= $eval1.numElements() || index < 0) {
           ${ev.isNull} = true;
         } else {
-          ${ev.primitive} = (${ctx.boxedType(dataType)})$eval1.apply(index);
+          ${ev.primitive} = ${ctx.getValue(eval1, dataType, "index")};
         }
       """
     })
@@ -212,9 +229,15 @@ case class GetArrayItem(child: Expression, ordinal: Expression) extends BinaryEx
 /**
  * Returns the value of key `key` in Map `child`.
  *
- * No need to do type checking since it is handled by [[ExtractValue]].
+ * We need to do type checking here as `key` expression maybe unresolved.
  */
-case class GetMapValue(child: Expression, key: Expression) extends BinaryExpression {
+case class GetMapValue(child: Expression, key: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  private def keyType = child.dataType.asInstanceOf[MapType].keyType
+
+  // We have done type checking for child in `ExtractValue`, so only need to check the `key`.
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, keyType)
 
   override def toString: String = s"$child[$key]"
 
@@ -226,16 +249,53 @@ case class GetMapValue(child: Expression, key: Expression) extends BinaryExpress
 
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
 
+  // todo: current search is O(n), improve it.
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
-    val baseValue = value.asInstanceOf[Map[Any, _]]
-    baseValue.get(ordinal).orNull
+    val map = value.asInstanceOf[MapData]
+    val length = map.numElements()
+    val keys = map.keyArray()
+
+    var i = 0
+    var found = false
+    while (i < length && !found) {
+      if (keys.get(i, keyType) == ordinal) {
+        found = true
+      } else {
+        i += 1
+      }
+    }
+
+    if (!found) {
+      null
+    } else {
+      map.valueArray().get(i, dataType)
+    }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val index = ctx.freshName("index")
+    val length = ctx.freshName("length")
+    val keys = ctx.freshName("keys")
+    val found = ctx.freshName("found")
+    val key = ctx.freshName("key")
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
-        if ($eval1.contains($eval2)) {
-          ${ev.primitive} = (${ctx.boxedType(dataType)})$eval1.apply($eval2);
+        final int $length = $eval1.numElements();
+        final ArrayData $keys = $eval1.keyArray();
+
+        int $index = 0;
+        boolean $found = false;
+        while ($index < $length && !$found) {
+          final ${ctx.javaType(keyType)} $key = ${ctx.getValue(keys, keyType, index)};
+          if (${ctx.genEqual(keyType, key, eval2)}) {
+            $found = true;
+          } else {
+            $index++;
+          }
+        }
+
+        if ($found) {
+          ${ev.primitive} = ${ctx.getValue(eval1 + ".valueArray()", dataType, index)};
         } else {
           ${ev.isNull} = true;
         }

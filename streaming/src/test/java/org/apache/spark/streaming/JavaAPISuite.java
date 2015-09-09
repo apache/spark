@@ -1735,6 +1735,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   @SuppressWarnings("unchecked")
   @Test
   public void testContextGetOrCreate() throws InterruptedException {
+    ssc.stop();
 
     final SparkConf conf = new SparkConf()
         .setMaster("local[2]")

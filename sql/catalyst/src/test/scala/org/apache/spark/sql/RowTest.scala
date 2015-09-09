@@ -83,15 +83,5 @@ class RowTest extends FunSpec with Matchers {
     it("equality check for internal rows") {
       internalRow shouldEqual internalRow2
     }
-
-    it("throws an exception when check equality between external and internal rows") {
-      def assertError(f: => Unit): Unit = {
-        val e = intercept[UnsupportedOperationException](f)
-        e.getMessage.contains("cannot check equality between external and internal rows")
-      }
-
-      assertError(internalRow.equals(externalRow))
-      assertError(externalRow.equals(internalRow))
-    }
   }
 }

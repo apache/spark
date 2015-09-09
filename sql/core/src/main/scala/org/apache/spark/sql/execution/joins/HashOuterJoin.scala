@@ -22,9 +22,9 @@ import java.util.{HashMap => JavaHashMap}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.util.collection.CompactBuffer
 
 @DeveloperApi
@@ -38,14 +38,6 @@ trait HashOuterJoin {
   val left: SparkPlan
   val right: SparkPlan
 
-override def outputPartitioning: Partitioning = joinType match {
-    case LeftOuter => left.outputPartitioning
-    case RightOuter => right.outputPartitioning
-    case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
-    case x =>
-      throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
-  }
-
   override def output: Seq[Attribute] = {
     joinType match {
       case LeftOuter =>
@@ -56,6 +48,55 @@ override def outputPartitioning: Partitioning = joinType match {
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
       case x =>
         throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
+    }
+  }
+
+  protected[this] lazy val (buildPlan, streamedPlan) = joinType match {
+    case RightOuter => (left, right)
+    case LeftOuter => (right, left)
+    case x =>
+      throw new IllegalArgumentException(
+        s"HashOuterJoin should not take $x as the JoinType")
+  }
+
+  protected[this] lazy val (buildKeys, streamedKeys) = joinType match {
+    case RightOuter => (leftKeys, rightKeys)
+    case LeftOuter => (rightKeys, leftKeys)
+    case x =>
+      throw new IllegalArgumentException(
+        s"HashOuterJoin should not take $x as the JoinType")
+  }
+
+  protected[this] def isUnsafeMode: Boolean = {
+    (self.codegenEnabled && self.unsafeEnabled && joinType != FullOuter
+      && UnsafeProjection.canSupport(buildKeys)
+      && UnsafeProjection.canSupport(self.schema))
+  }
+
+  override def outputsUnsafeRows: Boolean = isUnsafeMode
+  override def canProcessUnsafeRows: Boolean = isUnsafeMode
+  override def canProcessSafeRows: Boolean = !isUnsafeMode
+
+  protected def buildKeyGenerator: Projection =
+    if (isUnsafeMode) {
+      UnsafeProjection.create(buildKeys, buildPlan.output)
+    } else {
+      newMutableProjection(buildKeys, buildPlan.output)()
+    }
+
+  protected[this] def streamedKeyGenerator: Projection = {
+    if (isUnsafeMode) {
+      UnsafeProjection.create(streamedKeys, streamedPlan.output)
+    } else {
+      newProjection(streamedKeys, streamedPlan.output)
+    }
+  }
+
+  protected[this] def resultProjection: InternalRow => InternalRow = {
+    if (isUnsafeMode) {
+      UnsafeProjection.create(self.schema)
+    } else {
+      identity[InternalRow]
     }
   }
 
@@ -73,19 +114,30 @@ override def outputPartitioning: Partitioning = joinType match {
   protected[this] def leftOuterIterator(
       key: InternalRow,
       joinedRow: JoinedRow,
-      rightIter: Iterable[InternalRow]): Iterator[InternalRow] = {
+      rightIter: Iterable[InternalRow],
+      resultProjection: InternalRow => InternalRow,
+      numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
       if (!key.anyNull) {
-        val temp = rightIter.collect {
-          case r if boundCondition(joinedRow.withRight(r)) => joinedRow.copy()
+        val temp = if (rightIter != null) {
+          rightIter.collect {
+            case r if boundCondition(joinedRow.withRight(r)) => {
+              numOutputRows += 1
+              resultProjection(joinedRow).copy()
+            }
+          }
+        } else {
+          List.empty
         }
         if (temp.isEmpty) {
-          joinedRow.withRight(rightNullRow).copy :: Nil
+          numOutputRows += 1
+          resultProjection(joinedRow.withRight(rightNullRow)) :: Nil
         } else {
           temp
         }
       } else {
-        joinedRow.withRight(rightNullRow).copy :: Nil
+        numOutputRows += 1
+        resultProjection(joinedRow.withRight(rightNullRow)) :: Nil
       }
     }
     ret.iterator
@@ -94,20 +146,30 @@ override def outputPartitioning: Partitioning = joinType match {
   protected[this] def rightOuterIterator(
       key: InternalRow,
       leftIter: Iterable[InternalRow],
-      joinedRow: JoinedRow): Iterator[InternalRow] = {
+      joinedRow: JoinedRow,
+      resultProjection: InternalRow => InternalRow,
+      numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
       if (!key.anyNull) {
-        val temp = leftIter.collect {
-          case l if boundCondition(joinedRow.withLeft(l)) =>
-            joinedRow.copy()
+        val temp = if (leftIter != null) {
+          leftIter.collect {
+            case l if boundCondition(joinedRow.withLeft(l)) => {
+              numOutputRows += 1
+              resultProjection(joinedRow).copy()
+            }
+          }
+        } else {
+          List.empty
         }
         if (temp.isEmpty) {
-          joinedRow.withLeft(leftNullRow).copy :: Nil
+          numOutputRows += 1
+          resultProjection(joinedRow.withLeft(leftNullRow)) :: Nil
         } else {
           temp
         }
       } else {
-        joinedRow.withLeft(leftNullRow).copy :: Nil
+        numOutputRows += 1
+        resultProjection(joinedRow.withLeft(leftNullRow)) :: Nil
       }
     }
     ret.iterator
@@ -115,7 +177,7 @@ override def outputPartitioning: Partitioning = joinType match {
 
   protected[this] def fullOuterIterator(
       key: InternalRow, leftIter: Iterable[InternalRow], rightIter: Iterable[InternalRow],
-      joinedRow: JoinedRow): Iterator[InternalRow] = {
+      joinedRow: JoinedRow, numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
     if (!key.anyNull) {
       // Store the positions of records in right, if one of its associated row satisfy
       // the join condition.
@@ -128,6 +190,7 @@ override def outputPartitioning: Partitioning = joinType match {
           //    append them directly
 
           case (r, idx) if boundCondition(joinedRow.withRight(r)) =>
+            numOutputRows += 1
             matched = true
             // if the row satisfy the join condition, add its index into the matched set
             rightMatchedSet.add(idx)
@@ -140,6 +203,7 @@ override def outputPartitioning: Partitioning = joinType match {
           // as we don't know whether we need to append it until finish iterating all
           // of the records in right side.
           // If we didn't get any proper row, then append a single row with empty right.
+          numOutputRows += 1
           joinedRow.withRight(rightNullRow).copy()
         })
       } ++ rightIter.zipWithIndex.collect {
@@ -148,23 +212,29 @@ override def outputPartitioning: Partitioning = joinType match {
         // Re-visiting the records in right, and append additional row with empty left, if its not
         // in the matched set.
         case (r, idx) if !rightMatchedSet.contains(idx) =>
+          numOutputRows += 1
           joinedRow(leftNullRow, r).copy()
       }
     } else {
       leftIter.iterator.map[InternalRow] { l =>
+        numOutputRows += 1
         joinedRow(l, rightNullRow).copy()
       } ++ rightIter.iterator.map[InternalRow] { r =>
+        numOutputRows += 1
         joinedRow(leftNullRow, r).copy()
       }
     }
   }
 
+  // This is only used by FullOuter
   protected[this] def buildHashTable(
       iter: Iterator[InternalRow],
+      numIterRows: LongSQLMetric,
       keyGenerator: Projection): JavaHashMap[InternalRow, CompactBuffer[InternalRow]] = {
     val hashTable = new JavaHashMap[InternalRow, CompactBuffer[InternalRow]]()
     while (iter.hasNext) {
       val currentRow = iter.next()
+      numIterRows += 1
       val rowKey = keyGenerator(currentRow)
 
       var existingMatchList = hashTable.get(rowKey)

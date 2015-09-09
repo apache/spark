@@ -19,18 +19,20 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, Partition}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.execution.datasources.{ResolvedDataSource, LogicalRelation}
-import org.apache.spark.sql.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.json.JSONRelation
-import org.apache.spark.sql.parquet.ParquetRelation2
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.json.JSONRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.{Logging, Partition}
 
 /**
  * :: Experimental ::
@@ -90,7 +92,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def options(options: java.util.Map[String, String]): DataFrameReader = {
-    this.options(scala.collection.JavaConversions.mapAsScalaMap(options))
+    this.options(options.asScala)
     this
   }
 
@@ -197,7 +199,13 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       table: String,
       parts: Array[Partition],
       connectionProperties: Properties): DataFrame = {
-    val relation = JDBCRelation(url, table, parts, connectionProperties)(sqlContext)
+    val props = new Properties()
+    extraOptions.foreach { case (key, value) =>
+      props.put(key, value)
+    }
+    // connectionProperties should override settings in extraOptions
+    props.putAll(connectionProperties)
+    val relation = JDBCRelation(url, table, parts, props)(sqlContext)
     sqlContext.baseRelationToDataFrame(relation)
   }
 
@@ -237,7 +245,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   def json(jsonRDD: RDD[String]): DataFrame = {
     val samplingRatio = extraOptions.getOrElse("samplingRatio", "1.0").toDouble
     sqlContext.baseRelationToDataFrame(
-      new JSONRelation(() => jsonRDD, None, samplingRatio, userSpecifiedSchema)(sqlContext))
+      new JSONRelation(Some(jsonRDD), samplingRatio, userSpecifiedSchema, None, None)(sqlContext))
   }
 
   /**
@@ -259,8 +267,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       }.toArray
 
       sqlContext.baseRelationToDataFrame(
-        new ParquetRelation2(
-          globbedPaths.map(_.toString), None, None, extraOptions.toMap)(sqlContext))
+        new ParquetRelation(
+          globbedPaths.map(_.toString), userSpecifiedSchema, None, extraOptions.toMap)(sqlContext))
     }
   }
 
