@@ -941,4 +941,531 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  optional fixed_len_byte_array(8) f1 (DECIMAL(18, 3));
       |}
     """.stripMargin)
+
+  private def testSchemaClipping(
+      testName: String,
+      parquetSchema: String,
+      catalystSchema: StructType,
+      expectedSchema: String): Unit = {
+    test(s"Clipping - $testName") {
+      val expected = MessageTypeParser.parseMessageType(expectedSchema)
+      val actual = CatalystReadSupport.clipParquetSchema(
+        MessageTypeParser.parseMessageType(parquetSchema), catalystSchema)
+
+      try {
+        expected.checkContains(actual)
+        actual.checkContains(expected)
+      } catch { case cause: Throwable =>
+        fail(
+          s"""Expected clipped schema:
+             |$expected
+             |Actual clipped schema:
+             |$actual
+          """.stripMargin,
+          cause)
+      }
+    }
+  }
+
+  testSchemaClipping(
+    "simple nested struct",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    optional int32 f00;
+        |    optional int32 f01;
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val f0Type = new StructType().add("f00", IntegerType, nullable = true)
+      new StructType()
+        .add("f0", f0Type, nullable = false)
+        .add("f1", IntegerType, nullable = true)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    optional int32 f00;
+        |  }
+        |  optional int32 f1;
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "parquet-protobuf style array",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    repeated binary f00 (UTF8);
+        |    repeated group f01 {
+        |      optional int32 f010;
+        |      optional double f011;
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val f00Type = ArrayType(StringType, containsNull = false)
+      val f01Type = ArrayType(
+        new StructType()
+          .add("f011", DoubleType, nullable = true),
+        containsNull = false)
+
+      val f0Type = new StructType()
+        .add("f00", f00Type, nullable = false)
+        .add("f01", f01Type, nullable = false)
+      val f1Type = ArrayType(IntegerType, containsNull = true)
+
+      new StructType()
+        .add("f0", f0Type, nullable = false)
+        .add("f1", f1Type, nullable = true)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    repeated binary f00 (UTF8);
+        |    repeated group f01 {
+        |      optional double f011;
+        |    }
+        |  }
+        |
+        |  optional group f1 (LIST) {
+        |    repeated group list {
+        |      optional int32 element;
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "parquet-thrift style array",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated binary f00_tuple (UTF8);
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group f01_tuple {
+        |        optional int32 f010;
+        |        optional double f011;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val f01ElementType = new StructType()
+        .add("f011", DoubleType, nullable = true)
+        .add("f012", LongType, nullable = true)
+
+      val f0Type = new StructType()
+        .add("f00", ArrayType(StringType, containsNull = false), nullable = true)
+        .add("f01", ArrayType(f01ElementType, containsNull = false), nullable = true)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated binary f00_tuple (UTF8);
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group f01_tuple {
+        |        optional double f011;
+        |        optional int64 f012;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "parquet-avro style array",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated binary array (UTF8);
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group array {
+        |        optional int32 f010;
+        |        optional double f011;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val f01ElementType = new StructType()
+        .add("f011", DoubleType, nullable = true)
+        .add("f012", LongType, nullable = true)
+
+      val f0Type = new StructType()
+        .add("f00", ArrayType(StringType, containsNull = false), nullable = true)
+        .add("f01", ArrayType(f01ElementType, containsNull = false), nullable = true)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated binary array (UTF8);
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group array {
+        |        optional double f011;
+        |        optional int64 f012;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "parquet-hive style array",
+
+    parquetSchema =
+      """message root {
+        |  optional group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated group bag {
+        |        optional binary array_element;
+        |      }
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group bag {
+        |        optional group array_element {
+        |          optional int32 f010;
+        |          optional double f011;
+        |        }
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val f01ElementType = new StructType()
+        .add("f011", DoubleType, nullable = true)
+        .add("f012", LongType, nullable = true)
+
+      val f0Type = new StructType()
+        .add("f00", ArrayType(StringType, containsNull = true), nullable = true)
+        .add("f01", ArrayType(f01ElementType, containsNull = true), nullable = true)
+
+      new StructType().add("f0", f0Type, nullable = true)
+    },
+
+    expectedSchema =
+      """message root {
+        |  optional group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated group bag {
+        |        optional binary array_element;
+        |      }
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group bag {
+        |        optional group array_element {
+        |          optional double f011;
+        |          optional int64 f012;
+        |        }
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "2-level list of required struct",
+
+    parquetSchema =
+      s"""message root {
+         |  required group f0 {
+         |    required group f00 (LIST) {
+         |      repeated group element {
+         |        required int32 f000;
+         |        optional int64 f001;
+         |      }
+         |    }
+         |  }
+         |}
+       """.stripMargin,
+
+    catalystSchema = {
+      val f00ElementType =
+        new StructType()
+          .add("f001", LongType, nullable = true)
+          .add("f002", DoubleType, nullable = false)
+
+      val f00Type = ArrayType(f00ElementType, containsNull = false)
+      val f0Type = new StructType().add("f00", f00Type, nullable = false)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      s"""message root {
+         |  required group f0 {
+         |    required group f00 (LIST) {
+         |      repeated group element {
+         |        optional int64 f001;
+         |        required double f002;
+         |      }
+         |    }
+         |  }
+         |}
+       """.stripMargin)
+
+  testSchemaClipping(
+    "standard array",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated group list {
+        |        required binary element (UTF8);
+        |      }
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group list {
+        |        required group element {
+        |          optional int32 f010;
+        |          optional double f011;
+        |        }
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val f01ElementType = new StructType()
+        .add("f011", DoubleType, nullable = true)
+        .add("f012", LongType, nullable = true)
+
+      val f0Type = new StructType()
+        .add("f00", ArrayType(StringType, containsNull = false), nullable = true)
+        .add("f01", ArrayType(f01ElementType, containsNull = false), nullable = true)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    optional group f00 (LIST) {
+        |      repeated group list {
+        |        required binary element (UTF8);
+        |      }
+        |    }
+        |
+        |    optional group f01 (LIST) {
+        |      repeated group list {
+        |        required group element {
+        |          optional double f011;
+        |          optional int64 f012;
+        |        }
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "empty requested schema",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    required int32 f00;
+        |    required int64 f01;
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = new StructType(),
+
+    expectedSchema = "message root {}")
+
+  testSchemaClipping(
+    "disjoint field sets",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 {
+        |    required int32 f00;
+        |    required int64 f01;
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema =
+      new StructType()
+        .add(
+          "f0",
+          new StructType()
+            .add("f02", FloatType, nullable = true)
+            .add("f03", DoubleType, nullable = true),
+          nullable = true),
+
+    expectedSchema =
+      """message root {
+        |  required group f0 {
+        |    optional float f02;
+        |    optional double f03;
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "parquet-avro style map",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group map (MAP_KEY_VALUE) {
+        |      required int32 key;
+        |      required group value {
+        |        required int32 value_f0;
+        |        required int64 value_f1;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val valueType =
+        new StructType()
+          .add("value_f1", LongType, nullable = false)
+          .add("value_f2", DoubleType, nullable = false)
+
+      val f0Type = MapType(IntegerType, valueType, valueContainsNull = false)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group map (MAP_KEY_VALUE) {
+        |      required int32 key;
+        |      required group value {
+        |        required int64 value_f1;
+        |        required double value_f2;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "standard map",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group key_value {
+        |      required int32 key;
+        |      required group value {
+        |        required int32 value_f0;
+        |        required int64 value_f1;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val valueType =
+        new StructType()
+          .add("value_f1", LongType, nullable = false)
+          .add("value_f2", DoubleType, nullable = false)
+
+      val f0Type = MapType(IntegerType, valueType, valueContainsNull = false)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group key_value {
+        |      required int32 key;
+        |      required group value {
+        |        required int64 value_f1;
+        |        required double value_f2;
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "standard map with complex key",
+
+    parquetSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group key_value {
+        |      required group key {
+        |        required int32 value_f0;
+        |        required int64 value_f1;
+        |      }
+        |      required int32 value;
+        |    }
+        |  }
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val keyType =
+        new StructType()
+          .add("value_f1", LongType, nullable = false)
+          .add("value_f2", DoubleType, nullable = false)
+
+      val f0Type = MapType(keyType, IntegerType, valueContainsNull = false)
+
+      new StructType().add("f0", f0Type, nullable = false)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group f0 (MAP) {
+        |    repeated group key_value {
+        |      required group key {
+        |        required int64 value_f1;
+        |        required double value_f2;
+        |      }
+        |      required int32 value;
+        |    }
+        |  }
+        |}
+      """.stripMargin)
 }
