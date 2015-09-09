@@ -1102,13 +1102,6 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
         """
         return self.getOrDefault(self.caseSensitive)
 
-    @property
-    def labels(self):
-        """
-        Ordered list of labels, corresponding to indices to be assigned.
-        """
-        return self._call_java("labels")
-
 
 @inherit_doc
 @ignore_unicode_prefix
