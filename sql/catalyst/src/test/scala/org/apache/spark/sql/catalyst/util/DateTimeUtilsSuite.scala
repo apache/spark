@@ -435,11 +435,14 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       }
     }
 
-    // Make sure calculated nanos are positive, since that's what the Hive/Impala timestamp
-    // spec expects.
+    // Make sure calculated nanos are positive, since that's what the Hive/Impala timestamp spec
+    // expects. Also make sure it's less than 999999999 (the limit imposed by java.sql.Timestamp).
     val julianDay = -(JULIAN_DAY_OF_EPOCH * SECONDS_PER_DAY * MICROS_PER_SECOND)
-    val (_, nanos) = toJulianDay(julianDay + 1)
+    val nextDay = julianDay + SECONDS_PER_DAY * MICROS_PER_SECOND
+    val (day, nanos) = toJulianDay(nextDay + 1)
+    assert(day === 1)
     assert(nanos >= 0)
+    assert(nanos <= 999999999)
   }
 
 }

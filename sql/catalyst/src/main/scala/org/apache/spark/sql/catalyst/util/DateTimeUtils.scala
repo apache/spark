@@ -202,16 +202,19 @@ object DateTimeUtils {
    * Returns Julian day and nanoseconds in a day from the number of microseconds
    */
   def toJulianDay(us: SQLTimestamp): (Int, Long) = {
-    val seconds = us / MICROS_PER_SECOND
-    var day = seconds / SECONDS_PER_DAY + JULIAN_DAY_OF_EPOCH
-    var secondsInDay = seconds % SECONDS_PER_DAY
-    var nanos = (us % MICROS_PER_SECOND) * 1000L
-    if (us < 0) {
-      day -= 1
-      secondsInDay += SECONDS_PER_DAY
-      nanos += (SECONDS_PER_DAY * MICROS_PER_SECOND * 1000L)
+    if (us >= 0) {
+      val seconds = us / MICROS_PER_SECOND
+      var day = seconds / SECONDS_PER_DAY + JULIAN_DAY_OF_EPOCH
+      var secondsInDay = seconds % SECONDS_PER_DAY
+      var nanos = (us % MICROS_PER_SECOND) * 1000L
+      (day.toInt, secondsInDay * NANOS_PER_SECOND + nanos)
+    } else {
+      val usPerDay = MICROS_PER_SECOND * SECONDS_PER_DAY
+      val usFromJulianEpoch = us + JULIAN_DAY_OF_EPOCH * usPerDay
+      val day = usFromJulianEpoch / usPerDay
+      val micros = usFromJulianEpoch % usPerDay
+      (day.toInt, micros * 1000L)
     }
-    (day.toInt, secondsInDay * NANOS_PER_SECOND + nanos)
   }
 
   /**
