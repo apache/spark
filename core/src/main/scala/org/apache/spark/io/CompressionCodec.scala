@@ -18,6 +18,7 @@
 package org.apache.spark.io
 
 import java.io.{IOException, InputStream, OutputStream}
+import java.lang.reflect.InvocationTargetException
 
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
@@ -68,6 +69,7 @@ private[spark] object CompressionCodec {
     } catch {
       case e: ClassNotFoundException => None
       case e: IllegalArgumentException => None
+      case e: InvocationTargetException => None
     }
     codec.getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] is not available. " +
       s"Consider setting $configKey=$FALLBACK_COMPRESSION_CODEC"))
