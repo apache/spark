@@ -66,7 +66,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(v == Vectors.dense(1.0, 0.0, 2.0, 0.0, 3.0, 0.0))
   }
 
-  test("select long vector with specifying the number of features") {
+  test("select a vector with specifying the longer dimension") {
     val df = sqlContext.read.option("numFeatures", "100").format("libsvm")
       .load(path)
     val row1 = df.first()
