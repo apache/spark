@@ -19,13 +19,14 @@ package org.apache.spark.rpc.netty
 
 import scala.concurrent.Promise
 
+import org.apache.spark.Logging
 import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
 
 private[netty] abstract class NettyRpcCallContext(
     endpointRef: NettyRpcEndpointRef,
     override val senderAddress: RpcAddress,
-    needReply: Boolean) extends RpcCallContext{
+    needReply: Boolean) extends RpcCallContext with Logging {
 
   protected def send(message: Any): Unit
 
@@ -42,8 +43,9 @@ private[netty] abstract class NettyRpcCallContext(
     if (needReply) {
       send(AskResponse(endpointRef, RpcFailure(e)))
     } else {
+      logError(e.getMessage, e)
       throw new IllegalStateException(
-        "Cannot send reply to the sender because the sender won't handle it", e)
+        "Cannot send reply to the sender because the sender won't handle it")
     }
   }
 
@@ -62,6 +64,7 @@ private[netty] class LocalNettyRpcCallContext(
     senderAddress: RpcAddress,
     needReply: Boolean,
     p: Promise[Any]) extends NettyRpcCallContext(endpointRef, senderAddress, needReply) {
+
   override protected def send(message: Any): Unit = {
     p.success(message)
   }

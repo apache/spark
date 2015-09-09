@@ -180,7 +180,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     val stopLatch = new CountDownLatch(1)
     val calledMethods = mutable.ArrayBuffer[String]()
 
-    val endpoint = new ThreadSafeRpcEndpoint {
+    val endpoint = new RpcEndpoint {
       override val rpcEnv = env
 
       override def onStart(): Unit = {
@@ -204,7 +204,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("onError: error in onStart") {
     @volatile var e: Throwable = null
-    env.setupEndpoint("onError-onStart", new ThreadSafeRpcEndpoint {
+    env.setupEndpoint("onError-onStart", new RpcEndpoint {
       override val rpcEnv = env
 
       override def onStart(): Unit = {
@@ -227,7 +227,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("onError: error in onStop") {
     @volatile var e: Throwable = null
-    val endpointRef = env.setupEndpoint("onError-onStop", new ThreadSafeRpcEndpoint {
+    val endpointRef = env.setupEndpoint("onError-onStop", new RpcEndpoint {
       override val rpcEnv = env
 
       override def receive: PartialFunction[Any, Unit] = {
@@ -274,7 +274,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("self: call in onStart") {
     @volatile var callSelfSuccessfully = false
 
-    env.setupEndpoint("self-onStart", new ThreadSafeRpcEndpoint {
+    env.setupEndpoint("self-onStart", new RpcEndpoint {
       override val rpcEnv = env
 
       override def onStart(): Unit = {
@@ -318,7 +318,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("self: call in onStop") {
     @volatile var selfOption: Option[RpcEndpointRef] = null
 
-    val endpointRef = env.setupEndpoint("self-onStop", new ThreadSafeRpcEndpoint {
+    val endpointRef = env.setupEndpoint("self-onStop", new RpcEndpoint {
       override val rpcEnv = env
 
       override def receive: PartialFunction[Any, Unit] = {
@@ -374,7 +374,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("stop(RpcEndpointRef) reentrant") {
     @volatile var onStopCount = 0
-    val endpointRef = env.setupEndpoint("stop-reentrant", new ThreadSafeRpcEndpoint {
+    val endpointRef = env.setupEndpoint("stop-reentrant", new RpcEndpoint {
       override val rpcEnv = env
 
       override def receive: PartialFunction[Any, Unit] = {

@@ -17,7 +17,7 @@
 
 package org.apache.spark.rpc.netty
 
-import java.util.concurrent.{TimeUnit, Executors, LinkedBlockingQueue, ConcurrentHashMap}
+import java.util.concurrent.{TimeUnit, LinkedBlockingQueue, ConcurrentHashMap}
 
 import org.apache.spark.network.client.RpcResponseCallback
 
@@ -31,9 +31,6 @@ import org.apache.spark.util.ThreadUtils
 private class RpcEndpointPair(val endpoint: RpcEndpoint, val endpointRef: NettyRpcEndpointRef)
 
 private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
-
-  // the inboxes that are not being used
-  private val idleInboxes = new ConcurrentHashMap[RpcEndpoint, Inbox]()
 
   private val endpointToInbox = new ConcurrentHashMap[RpcEndpoint, Inbox]()
 
@@ -54,14 +51,8 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
       throw new IllegalArgumentException(s"There is already an RpcEndpoint called $name")
     }
     endpointToEndpointRef.put(endpoint, endpointRef)
-    val inbox =
-      if (endpoint.isInstanceOf[ThreadSafeRpcEndpoint]) {
-        new ThreadSafeInbox(endpointRef, endpoint.asInstanceOf[ThreadSafeRpcEndpoint])
-      } else {
-        new ConcurrentInbox(endpointRef, endpoint)
-      }
+    val inbox = new Inbox(endpointRef, endpoint)
     endpointToInbox.put(endpoint, inbox)
-    idleInboxes.put(endpoint, inbox)
     afterUpdateInbox(inbox)
     endpointRef
   }
@@ -74,7 +65,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
   def unregisterRpcEndpoint(name: String): Unit = {
     val endpointPair = nameToEndpoint.remove(name)
     if (endpointPair != null) {
-      val inbox = endpointToInbox.remove(endpointPair.endpoint)
+      val inbox = endpointToInbox.get(endpointPair.endpoint)
       if (inbox != null) {
         inbox.stop()
         afterUpdateInbox(inbox)
@@ -109,8 +100,11 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
             nettyEnv, inbox.endpointRef, callback, message.senderAddress, message.needReply)
         postMessageToInbox(inbox,
           ContentMessage(message.senderAddress, message.content, message.needReply, rpcCallContext))
+        return
       }
     }
+    callback.onFailure(
+      new SparkException(s"Could not find ${message.receiver.name} or it has been stopped"))
   }
 
   def postMessage(message: RequestMessage, p: Promise[Any]): Unit = {
@@ -123,8 +117,11 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
             inbox.endpointRef, message.senderAddress, message.needReply, p)
         postMessageToInbox(inbox,
           ContentMessage(message.senderAddress, message.content, message.needReply, rpcCallContext))
+        return
       }
     }
+    p.tryFailure(
+      new SparkException(s"Could not find ${message.receiver.name} or it has been stopped"))
   }
 
   private def postMessageToInbox(inbox: Inbox, message: InboxMessage): Unit = {
@@ -134,10 +131,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
 
   private def afterUpdateInbox(inbox: Inbox): Unit = {
     // Do some work to trigger processing messages in the inbox
-    val endpoint = inbox.endpoint
-    // Replacing unsuccessfully means someone is processing it
-    idleInboxes.replace(endpoint, inbox, inbox)
-    receivers.put(endpoint)
+    receivers.put(inbox.endpoint)
   }
 
   private[netty] class MessageLoop extends Runnable {
@@ -146,24 +140,14 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
         while (!stopped) {
           try {
             val endpoint = receivers.take()
-            val inbox =
-              if (endpoint.isInstanceOf[ThreadSafeRpcEndpoint]) {
-                idleInboxes.remove(endpoint)
-              } else {
-                idleInboxes.get(endpoint)
-              }
+            val inbox = endpointToInbox.get(endpoint)
             if (inbox != null) {
               val inboxStopped = inbox.process(Dispatcher.this)
-              if (!inboxStopped) {
-                idleInboxes.put(endpoint, inbox)
-                if (!inbox.isEmpty) {
-                  receivers.add(endpoint)
-                }
-              } else {
-                idleInboxes.remove(endpoint)
+              if (inboxStopped) {
+                endpointToInbox.remove(endpoint)
               }
             } else {
-              // other thread is processing endpoint's Inbox
+              // The endpoint has been stopped
             }
           } catch {
             case NonFatal(e) => logError(e.getMessage, e)
@@ -179,6 +163,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     Runtime.getRuntime.availableProcessors())
 
   private val executor = ThreadUtils.newDaemonFixedThreadPool(parallelism, "dispatcher-event-loop")
+
   (0 until parallelism) foreach { _ =>
     executor.execute(new MessageLoop)
   }
