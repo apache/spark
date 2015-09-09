@@ -40,6 +40,7 @@ $(function (){
             + tooltip + '</span></span>'
     }
 
+
     var sidebarLinkMap = buildSidebarLinkMap();
 
     $('dl.class, dl.function').each(function (i,dl)  {
