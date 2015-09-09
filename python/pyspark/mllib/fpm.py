@@ -19,7 +19,7 @@ import numpy
 from numpy import array
 from collections import namedtuple
 
-from pyspark import SparkContext
+from pyspark import SparkContext, since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, inherit_doc
 
@@ -43,6 +43,7 @@ class FPGrowthModel(JavaModelWrapper):
     [FreqItemset(items=[u'a'], freq=4), FreqItemset(items=[u'c'], freq=3), ...
     """
 
+    @since("1.4.0")
     def freqItemsets(self):
         """
         Returns the frequent itemsets of this model.
@@ -58,6 +59,7 @@ class FPGrowth(object):
     """
 
     @classmethod
+    @since("1.4.0")
     def train(cls, data, minSupport=0.3, numPartitions=-1):
         """
         Computes an FP-Growth model that contains frequent itemsets.
