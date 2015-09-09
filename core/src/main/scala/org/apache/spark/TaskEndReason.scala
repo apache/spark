@@ -215,3 +215,14 @@ case class ExecutorLostFailure(execId: String) extends TaskFailedReason {
 case object UnknownReason extends TaskFailedReason {
   override def toErrorString: String = "UnknownReason"
 }
+
+/**
+ * :: DeveloperApi ::
+ * Task was failed because the executor exit.
+ */
+@DeveloperApi
+case class ExecutorExitFailure(
+    exitCode: Option[Int],
+    metrics: Option[TaskMetrics]) extends TaskFailedReason {
+  override def toErrorString: String = "ExecutorExitFailure (executor exit)"
+}

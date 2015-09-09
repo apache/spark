@@ -305,21 +305,26 @@ private[spark] class Executor(
               m
             }
           }
-          val serializedTaskEndReason = {
-            try {
-              ser.serialize(new ExceptionFailure(t, metrics))
-            } catch {
-              case _: NotSerializableException =>
-                // t is not serializable so just send the stacktrace
-                ser.serialize(new ExceptionFailure(t, metrics, false))
+          if (ShutdownHookManager.inShutdown()) {
+            val reason = ExecutorExitFailure(None, metrics)
+            execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
+          } else {
+            val serializedTaskEndReason = {
+              try {
+                ser.serialize(new ExceptionFailure(t, metrics))
+              } catch {
+                case _: NotSerializableException =>
+                  // t is not serializable so just send the stacktrace
+                  ser.serialize(new ExceptionFailure(t, metrics, false))
+              }
             }
-          }
-          execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)
+            execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)
 
-          // Don't forcibly exit unless the exception was inherently fatal, to avoid
-          // stopping other tasks unnecessarily.
-          if (Utils.isFatalError(t)) {
-            SparkUncaughtExceptionHandler.uncaughtException(t)
+            // Don't forcibly exit unless the exception was inherently fatal, to avoid
+            // stopping other tasks unnecessarily.
+            if (Utils.isFatalError(t)) {
+              SparkUncaughtExceptionHandler.uncaughtException(t)
+            }
           }
 
       } finally {
