@@ -388,6 +388,8 @@ class Connection(Base):
                 return hooks.JdbcHook(jdbc_conn_id=self.conn_id)
             elif self.conn_type == 'mssql':
                 return hooks.MsSqlHook(mssql_conn_id=self.conn_id)
+            elif self.conn_type == 'oracle':
+                return hooks.OracleHook(oracle_conn_id=self.conn_id)
         except:
             return None
 
