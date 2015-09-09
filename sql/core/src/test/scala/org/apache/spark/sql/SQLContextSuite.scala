@@ -24,7 +24,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSQLContext {
 
   override def afterAll(): Unit = {
     try {
-      SQLContext.setLastInstantiatedContext(ctx)
+      SQLContext.setLastInstantiatedContext(sqlContext)
     } finally {
       super.afterAll()
     }
@@ -32,18 +32,18 @@ class SQLContextSuite extends SparkFunSuite with SharedSQLContext {
 
   test("getOrCreate instantiates SQLContext") {
     SQLContext.clearLastInstantiatedContext()
-    val sqlContext = SQLContext.getOrCreate(ctx.sparkContext)
+    val sqlContext = SQLContext.getOrCreate(sparkContext)
     assert(sqlContext != null, "SQLContext.getOrCreate returned null")
-    assert(SQLContext.getOrCreate(ctx.sparkContext).eq(sqlContext),
+    assert(SQLContext.getOrCreate(sparkContext).eq(sqlContext),
       "SQLContext created by SQLContext.getOrCreate not returned by SQLContext.getOrCreate")
   }
 
   test("getOrCreate gets last explicitly instantiated SQLContext") {
     SQLContext.clearLastInstantiatedContext()
-    val sqlContext = new SQLContext(ctx.sparkContext)
-    assert(SQLContext.getOrCreate(ctx.sparkContext) != null,
+    val sqlContext = new SQLContext(sparkContext)
+    assert(SQLContext.getOrCreate(sparkContext) != null,
       "SQLContext.getOrCreate after explicitly created SQLContext returned null")
-    assert(SQLContext.getOrCreate(ctx.sparkContext).eq(sqlContext),
+    assert(SQLContext.getOrCreate(sparkContext).eq(sqlContext),
       "SQLContext.getOrCreate after explicitly created SQLContext did not return the context")
   }
 }

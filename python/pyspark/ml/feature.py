@@ -27,15 +27,18 @@ from pyspark.mllib.common import inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 
 __all__ = ['Binarizer', 'Bucketizer', 'DCT', 'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel',
-           'NGram', 'Normalizer', 'OneHotEncoder', 'PolynomialExpansion', 'RegexTokenizer',
-           'SQLTransformer', 'StandardScaler', 'StandardScalerModel', 'StringIndexer',
-           'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer', 'Word2Vec',
-           'Word2VecModel', 'PCA', 'PCAModel', 'RFormula', 'RFormulaModel', 'StopWordsRemover']
+           'IndexToString', 'NGram', 'Normalizer', 'OneHotEncoder', 'PolynomialExpansion',
+           'RegexTokenizer', 'SQLTransformer', 'StandardScaler', 'StandardScalerModel',
+           'StringIndexer', 'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer',
+           'Word2Vec', 'Word2VecModel', 'PCA', 'PCAModel', 'RFormula', 'RFormulaModel',
+           'StopWordsRemover']
 
 
 @inherit_doc
 class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     Binarize a column of continuous features given a threshold.
 
     >>> df = sqlContext.createDataFrame([(0.5,)], ["values"])
@@ -92,6 +95,8 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
 @inherit_doc
 class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     Maps a column of continuous features to a column of feature buckets.
 
     >>> df = sqlContext.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
@@ -169,6 +174,8 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
 @inherit_doc
 class DCT(JavaTransformer, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     A feature transformer that takes the 1D discrete cosine transform
     of a real vector. No zero padding is performed on the input vector.
     It returns a real vector of the same length representing the DCT.
@@ -232,6 +239,8 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol):
 @inherit_doc
 class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     Outputs the Hadamard product (i.e., the element-wise product) of each input vector
     with a provided "weight" vector. In other words, it scales each column of the dataset
     by a scalar multiplier.
@@ -289,6 +298,8 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
 @inherit_doc
 class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
     """
+    .. note:: Experimental
+
     Maps a sequence of terms to their term frequencies using the
     hashing trick.
 
@@ -327,6 +338,8 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
 @inherit_doc
 class IDF(JavaEstimator, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     Compute the Inverse Document Frequency (IDF) given a collection of documents.
 
     >>> from pyspark.mllib.linalg import DenseVector
@@ -387,6 +400,8 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
 
 class IDFModel(JavaModel):
     """
+    .. note:: Experimental
+
     Model fitted by IDF.
     """
 
@@ -395,6 +410,8 @@ class IDFModel(JavaModel):
 @ignore_unicode_prefix
 class NGram(JavaTransformer, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     A feature transformer that converts the input array of strings into an array of n-grams. Null
     values in the input array are ignored.
     It returns an array of n-grams where each n-gram is represented by a space-separated string of
@@ -463,6 +480,8 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol):
 @inherit_doc
 class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
      Normalize a vector to have unit norm using the given p-norm.
 
     >>> from pyspark.mllib.linalg import Vectors
@@ -519,6 +538,8 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
 @inherit_doc
 class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     A one-hot encoder that maps a column of category indices to a
     column of binary vectors, with at most a single one-value per row
     that indicates the input category index.
@@ -591,6 +612,8 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
 @inherit_doc
 class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     Perform feature expansion in a polynomial space. As said in wikipedia of Polynomial Expansion,
     which is available at `http://en.wikipedia.org/wiki/Polynomial_expansion`, "In mathematics, an
     expansion of a product of sums expresses it as a sum of products by using the fact that
@@ -649,6 +672,8 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
 @ignore_unicode_prefix
 class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     A regex based tokenizer that extracts tokens either by using the
     provided regex pattern (in Java dialect) to split the text
     (default) or repeatedly matching the regex (if gaps is false).
@@ -746,6 +771,8 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
 @inherit_doc
 class SQLTransformer(JavaTransformer):
     """
+    .. note:: Experimental
+
     Implements the transforms which are defined by SQL statement.
     Currently we only support SQL syntax like 'SELECT ... FROM __THIS__'
     where '__THIS__' represents the underlying table of the input dataset.
@@ -797,6 +824,8 @@ class SQLTransformer(JavaTransformer):
 @inherit_doc
 class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     Standardizes features by removing the mean and scaling to unit variance using column summary
     statistics on the samples in the training set.
 
@@ -870,6 +899,8 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
 
 class StandardScalerModel(JavaModel):
     """
+    .. note:: Experimental
+
     Model fitted by StandardScaler.
     """
 
@@ -891,6 +922,8 @@ class StandardScalerModel(JavaModel):
 @inherit_doc
 class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     A label indexer that maps a string column of labels to an ML column of label indices.
     If the input column is numeric, we cast it to string and index the string values.
     The indices are in [0, numLabels), ordered by label frequencies.
@@ -902,6 +935,11 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)]
+    >>> inverter = IndexToString(inputCol="indexed", outputCol="label2", labels=model.labels())
+    >>> itd = inverter.transform(td)
+    >>> sorted(set([(i[0], str(i[1])) for i in itd.select(itd.id, itd.label2).collect()]),
+    ...     key=lambda x: x[0])
+    [(0, 'a'), (1, 'b'), (2, 'c'), (3, 'a'), (4, 'a'), (5, 'c')]
     """
 
     @keyword_only
@@ -929,8 +967,70 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol):
 
 class StringIndexerModel(JavaModel):
     """
+    .. note:: Experimental
+
     Model fitted by StringIndexer.
     """
+    @property
+    def labels(self):
+        """
+        Ordered list of labels, corresponding to indices to be assigned.
+        """
+        return self._java_obj.labels
+
+
+@inherit_doc
+class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
+    """
+    .. note:: Experimental
+
+    A :py:class:`Transformer` that maps a column of string indices back to a new column of
+    corresponding string values using either the ML attributes of the input column, or if
+    provided using the labels supplied by the user.
+    All original columns are kept during transformation.
+    See L{StringIndexer} for converting strings into indices.
+    """
+
+    # a placeholder to make the labels show up in generated doc
+    labels = Param(Params._dummy(), "labels",
+                   "Optional array of labels to be provided by the user, if not supplied or " +
+                   "empty, column metadata is read for labels")
+
+    @keyword_only
+    def __init__(self, inputCol=None, outputCol=None, labels=None):
+        """
+        __init__(self, inputCol=None, outputCol=None, labels=None)
+        """
+        super(IndexToString, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IndexToString",
+                                            self.uid)
+        self.labels = Param(self, "labels",
+                            "Optional array of labels to be provided by the user, if not " +
+                            "supplied or empty, column metadata is read for labels")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, inputCol=None, outputCol=None, labels=None):
+        """
+        setParams(self, inputCol=None, outputCol=None, labels=None)
+        Sets params for this IndexToString.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setLabels(self, value):
+        """
+        Sets the value of :py:attr:`labels`.
+        """
+        self._paramMap[self.labels] = value
+        return self
+
+    def getLabels(self):
+        """
+        Gets the value of :py:attr:`labels` or its default value.
+        """
+        return self.getOrDefault(self.labels)
 
 
 class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
@@ -1006,6 +1106,8 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
 @ignore_unicode_prefix
 class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     A tokenizer that converts the input string to lowercase and then
     splits it by white spaces.
 
@@ -1051,6 +1153,8 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
 @inherit_doc
 class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol):
     """
+    .. note:: Experimental
+
     A feature transformer that merges multiple columns into a vector column.
 
     >>> df = sqlContext.createDataFrame([(1, 0, 3)], ["a", "b", "c"])
@@ -1087,6 +1191,8 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol):
 @inherit_doc
 class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     Class for indexing categorical feature columns in a dataset of [[Vector]].
 
     This has 2 usage modes:
@@ -1186,6 +1292,8 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
 
 class VectorIndexerModel(JavaModel):
     """
+    .. note:: Experimental
+
     Model fitted by VectorIndexer.
     """
 
@@ -1194,6 +1302,8 @@ class VectorIndexerModel(JavaModel):
 @ignore_unicode_prefix
 class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     Word2Vec trains a model of `Map(String, Vector)`, i.e. transforms a word into a code for further
     natural language processing or machine learning process.
 
@@ -1307,6 +1417,8 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
 
 class Word2VecModel(JavaModel):
     """
+    .. note:: Experimental
+
     Model fitted by Word2Vec.
     """
 
@@ -1332,6 +1444,8 @@ class Word2VecModel(JavaModel):
 @inherit_doc
 class PCA(JavaEstimator, HasInputCol, HasOutputCol):
     """
+    .. note:: Experimental
+
     PCA trains a model to project vectors to a low-dimensional space using PCA.
 
     >>> from pyspark.mllib.linalg import Vectors
@@ -1387,6 +1501,8 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
 
 class PCAModel(JavaModel):
     """
+    .. note:: Experimental
+
     Model fitted by PCA.
     """
 
@@ -1470,6 +1586,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol):
 
 class RFormulaModel(JavaModel):
     """
+    .. note:: Experimental
+
     Model fitted by :py:class:`RFormula`.
     """
 
