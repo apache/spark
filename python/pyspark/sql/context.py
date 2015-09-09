@@ -26,9 +26,9 @@ else:
 
 from py4j.protocol import Py4JError
 
+from pyspark import since
 from pyspark.rdd import RDD, _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
-from pyspark.sql import since
 from pyspark.sql.types import Row, StringType, StructType, _verify_type, \
     _infer_schema, _has_nulltype, _merge_type, _create_converter
 from pyspark.sql.dataframe import DataFrame

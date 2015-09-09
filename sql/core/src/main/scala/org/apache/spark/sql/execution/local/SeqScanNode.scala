@@ -41,7 +41,7 @@ case class SeqScanNode(output: Seq[Attribute], data: Seq[InternalRow]) extends L
     }
   }
 
-  override def get(): InternalRow = currentRow
+  override def fetch(): InternalRow = currentRow
 
   override def close(): Unit = {
     // Do nothing

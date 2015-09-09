@@ -17,17 +17,14 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.{SQLContext, QueryTest}
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 /**
  * A set of tests that validates support for Hive Explain command.
  */
-class HiveExplainSuite extends QueryTest with SQLTestUtils {
-  override def _sqlContext: SQLContext = TestHive
-  private val sqlContext = _sqlContext
+class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("explain extended command") {
     checkExistence(sql(" explain   select * from src where key=123 "), true,
@@ -83,7 +80,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils {
   test("SPARK-6212: The EXPLAIN output of CTAS only shows the analyzed plan") {
     withTempTable("jt") {
       val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
-      read.json(rdd).registerTempTable("jt")
+      hiveContext.read.json(rdd).registerTempTable("jt")
       val outputs = sql(
         s"""
            |EXPLAIN EXTENDED

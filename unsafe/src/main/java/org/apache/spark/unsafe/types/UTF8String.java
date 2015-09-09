@@ -90,11 +90,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable 
    * Creates an UTF8String from given address (base and offset) and length.
    */
   public static UTF8String fromAddress(Object base, long offset, int numBytes) {
-    if (base != null) {
-      return new UTF8String(base, offset, numBytes);
-    } else {
-      return null;
-    }
+    return new UTF8String(base, offset, numBytes);
   }
 
   /**
