@@ -42,6 +42,7 @@ object DateTimeUtils {
   final val JULIAN_DAY_OF_EPOCH = 2440588
   final val SECONDS_PER_DAY = 60 * 60 * 24L
   final val MICROS_PER_SECOND = 1000L * 1000L
+  final val MICROS_PER_DAY = MICROS_PER_SECOND * SECONDS_PER_DAY
   final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
 
   final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
@@ -204,19 +205,10 @@ object DateTimeUtils {
    * Returns Julian day and nanoseconds in a day from the number of microseconds
    */
   def toJulianDay(us: SQLTimestamp): (Int, Long) = {
-    if (us >= 0) {
-      val seconds = us / MICROS_PER_SECOND
-      var day = seconds / SECONDS_PER_DAY + JULIAN_DAY_OF_EPOCH
-      var secondsInDay = seconds % SECONDS_PER_DAY
-      var nanos = (us % MICROS_PER_SECOND) * 1000L
-      (day.toInt, secondsInDay * NANOS_PER_SECOND + nanos)
-    } else {
-      val usPerDay = MICROS_PER_SECOND * SECONDS_PER_DAY
-      val usFromJulianEpoch = us + JULIAN_DAY_OF_EPOCH * usPerDay
-      val day = usFromJulianEpoch / usPerDay
-      val micros = usFromJulianEpoch % usPerDay
-      (day.toInt, micros * 1000L)
-    }
+    val usFromJulianEpoch = us + JULIAN_DAY_OF_EPOCH * MICROS_PER_DAY
+    val day = usFromJulianEpoch / MICROS_PER_DAY
+    val micros = usFromJulianEpoch % MICROS_PER_DAY
+    (day.toInt, micros * 1000L)
   }
 
   /**
