@@ -954,6 +954,10 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> model = indexer.fit(df)
     >>> model.transform(df).head().indexed
     DenseVector([1.0, 0.0])
+    >>> model.numFeatures
+    2
+    >>> model.categoryMaps
+    {0: {0.0: 0, -1.0: 1}}
     >>> indexer.setParams(outputCol="test").fit(df).transform(df).collect()[1].test
     DenseVector([0.0, 1.0])
     >>> params = {indexer.maxCategories: 3, indexer.outputCol: "vector"}
