@@ -195,6 +195,14 @@ class LogNormalGenerator @Since("1.3.0") (
   override def copy(): LogNormalGenerator = new LogNormalGenerator(mean, std)
 }
 
+/**
+ * :: DeveloperApi ::
+ * Generates i.i.d. samples from the Weibull distribution with the
+ * given shape and scale parameter.
+ *
+ * @param alpha shape parameter for the Weibull distribution.
+ * @param beta scale parameter for the Weibull distribution.
+ */
 @DeveloperApi
 class WeibullGenerator(
     val alpha: Double,
