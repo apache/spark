@@ -117,14 +117,18 @@ private[parquet] object CatalystReadSupport {
         // Only clips array types with nested type as element type.
         clipParquetListType(parquetType.asGroupType(), t.elementType)
 
-      case t: MapType if !isPrimitiveCatalystType(t.valueType) =>
-        // Only clips map types with nested type as value type.
+      case t: MapType
+        if !isPrimitiveCatalystType(t.keyType) ||
+           !isPrimitiveCatalystType(t.valueType) =>
+        // Only clips map types with nested key type or value type
         clipParquetMapType(parquetType.asGroupType(), t.keyType, t.valueType)
 
       case t: StructType =>
         clipParquetGroup(parquetType.asGroupType(), t)
 
       case _ =>
+        // UDTs and primitive types are not clipped.  For UDTs, a clipped version might not be able
+        // to be mapped to desired user-space types.  So UDTs shouldn't participate schema merging.
         parquetType
     }
   }
@@ -204,14 +208,14 @@ private[parquet] object CatalystReadSupport {
   }
 
   /**
-   * Clips a Parquet [[GroupType]] which corresponds to a Catalyst [[MapType]].  The value type
-   * of the [[MapType]] should also be a nested type, namely an [[ArrayType]], a [[MapType]], or a
-   * [[StructType]].  Note that key type of any [[MapType]] is always a primitive type.
+   * Clips a Parquet [[GroupType]] which corresponds to a Catalyst [[MapType]].  Either key type or
+   * value type of the [[MapType]] must be a nested type, namely an [[ArrayType]], a [[MapType]], or
+   * a [[StructType]].
    */
   private def clipParquetMapType(
       parquetMap: GroupType, keyType: DataType, valueType: DataType): GroupType = {
-    // Precondition of this method, should only be called for maps with nested value types.
-    assert(!isPrimitiveCatalystType(valueType))
+    // Precondition of this method, only handles maps with nested key types or value types.
+    assert(!isPrimitiveCatalystType(keyType) || !isPrimitiveCatalystType(valueType))
 
     val repeatedGroup = parquetMap.getType(0).asGroupType()
     val parquetKeyType = repeatedGroup.getType(0)
@@ -221,7 +225,7 @@ private[parquet] object CatalystReadSupport {
       Types
         .repeatedGroup()
         .as(repeatedGroup.getOriginalType)
-        .addField(parquetKeyType)
+        .addField(clipParquetType(parquetKeyType, keyType))
         .addField(clipParquetType(parquetValueType, valueType))
         .named(repeatedGroup.getName)
 
