@@ -37,10 +37,11 @@ case class ExecutorCacheTaskLocation(override val host: String, executorId: Stri
 
 /**
  * A location on a host.
- * The host names will be resolved to IP address in case SPARK_LOCAL_HOSTNAME is unset
+ * The host names will be resolved to IP addresses in case SPARK_LOCAL_HOSTNAME is unset
+ * to fix the task locality levels always being 'ANY' issue mentioned in SPARK-10149.
  */
 private [spark] case class HostTaskLocation(override val host: String) extends TaskLocation {
-  override def toString: String = if ( sys.env.get("SPARK_LOCAL_HOSTNAME") == None ) {
+  override def toString: String = if ( TaskLocation.sparkLocalHostname == None ) {
     InetAddress.getByName(host).getHostAddress
   } else {
     host
@@ -49,10 +50,11 @@ private [spark] case class HostTaskLocation(override val host: String) extends T
 
 /**
  * A location on a host that is cached by HDFS.
- * The host names will be resolved to IP address in case SPARK_LOCAL_HOSTNAME is unset
+ * The host names will be resolved to IP addresses in case SPARK_LOCAL_HOSTNAME is unset
+ * to fix the task locality levels always being 'ANY' issue mentioned in SPARK-10149.
  */
 private [spark] case class HDFSCacheTaskLocation(override val host: String) extends TaskLocation {
-  override def toString: String = if ( sys.env.get("SPARK_LOCAL_HOSTNAME") == None ) {
+  override def toString: String = if ( TaskLocation.sparkLocalHostname == None ) {
     TaskLocation.inMemoryLocationTag + InetAddress.getByName(host).getHostAddress
   } else {
     TaskLocation.inMemoryLocationTag + host
@@ -64,6 +66,10 @@ private[spark] object TaskLocation {
   // underscores, which are not legal characters in hostnames, there should be no potential for
   // confusion.  See  RFC 952 and RFC 1123 for information about the format of hostnames.
   val inMemoryLocationTag = "hdfs_cache_"
+
+  // Check if SPARK_LOCAL_HOSTNAME is set. If not set, host names for task locations will be
+  // resolved to IP addresses to fix the issue mentioned in SPARK-10149.
+  def sparkLocalHostname: Option[String] = sys.env.get("SPARK_LOCAL_HOSTNAME")
 
   def apply(host: String, executorId: String): TaskLocation = {
     new ExecutorCacheTaskLocation(host, executorId)
