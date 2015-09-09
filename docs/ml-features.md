@@ -528,7 +528,7 @@ sentenceData = sqlContext.createDataFrame([
 ], ["label", "raw"])
 
 remover = StopWordsRemover(inputCol="raw", outputCol="filtered")
-filtered = remover.transform(sentenceData).show()
+remover.transform(sentenceData).show(truncate=False)
 {% endhighlight %}
 </div>
 </div>
