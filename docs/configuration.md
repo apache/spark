@@ -1434,6 +1434,19 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td><code>spark.streaming.backpressure.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enables or disables Spark Streaming's internal backpressure mechanism (since 1.5).
+    This enables the Spark Streaming to control the receiving rate based on the 
+    current batch scheduling delays and processing times so that the system receives
+    only as fast as the system can process. Internally, this dynamically sets the 
+    maximum receiving rate of receivers. This rate is upper bounded by the values
+    `spark.streaming.receiver.maxRate` and `spark.streaming.kafka.maxRatePerPartition`
+    if they are set (see below).
+  </td>
+</tr>
+<tr>
   <td><code>spark.streaming.blockInterval</code></td>
   <td>200ms</td>
   <td>

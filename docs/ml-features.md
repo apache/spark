@@ -512,6 +512,25 @@ DataFrame dataset = jsql.createDataFrame(rdd, schema);
 remover.transform(dataset).show();
 {% endhighlight %}
 </div>
+
+<div data-lang="python" markdown="1">
+[`StopWordsRemover`](api/python/pyspark.ml.html#pyspark.ml.feature.StopWordsRemover)
+takes an input column name, an output column name, a list of stop words,
+and a boolean indicating if the matches should be case sensitive (false
+by default).
+
+{% highlight python %}
+from pyspark.ml.feature import StopWordsRemover
+
+sentenceData = sqlContext.createDataFrame([
+  (0, ["I", "saw", "the", "red", "baloon"]),
+  (1, ["Mary", "had", "a", "little", "lamb"])
+], ["label", "raw"])
+
+remover = StopWordsRemover(inputCol="raw", outputCol="filtered")
+remover.transform(sentenceData).show(truncate=False)
+{% endhighlight %}
+</div>
 </div>
 
 ## $n$-gram

@@ -22,6 +22,8 @@ import java.io.File
 import scala.language.postfixOps
 import scala.util.Random
 
+import org.scalatest.Matchers._
+
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -894,5 +896,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .agg(max('j).as("aggOrdering"))
       .orderBy(sum('j))
     checkAnswer(query, Row(1, 2))
+  }
+
+  test("SPARK-10316: respect non-deterministic expressions in PhysicalOperation") {
+    val input = sqlContext.read.json(sqlContext.sparkContext.makeRDD(
+      (1 to 10).map(i => s"""{"id": $i}""")))
+
+    val df = input.select($"id", rand(0).as('r))
+    df.as("a").join(df.filter($"r" < 0.5).as("b"), $"a.id" === $"b.id").collect().foreach { row =>
+      assert(row.getDouble(1) - row.getDouble(3) === 0.0 +- 0.001)
+    }
   }
 }
