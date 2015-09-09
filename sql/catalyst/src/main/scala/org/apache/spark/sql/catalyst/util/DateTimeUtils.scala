@@ -147,6 +147,8 @@ object DateTimeUtils {
    * Returns the number of days since epoch from from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
+    require(date.getTime() <= MAX_TIMESTAMP && date.getTime() >= MIN_TIMESTAMP,
+      s"Timestamp exceeds allowed range.")
     millisToDays(date.getTime)
   }
 
@@ -180,8 +182,8 @@ object DateTimeUtils {
    */
   def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
     if (t != null) {
-      require(t.getTime() <= JLong.MAX_VALUE / 1000 && t.getTime() >= JLong.MIN_VALUE / 1000,
-        s"Timestamp exceeds allowed range (${t.getTime()}).")
+      require(t.getTime() <= MAX_TIMESTAMP && t.getTime() >= MIN_TIMESTAMP,
+        s"Timestamp exceeds allowed range.")
       t.getTime() * 1000L + (t.getNanos().toLong / 1000) % 1000L
     } else {
       0L
