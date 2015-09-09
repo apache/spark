@@ -20,7 +20,29 @@
 # This script loads spark-env.sh if it exists, and ensures it is only loaded once.
 # spark-env.sh is loaded from SPARK_CONF_DIR if set, or within SPARK_HOME's
 # conf/ subdirectory.
-FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
+realpath () {
+(
+  TARGET_FILE="$1"
+
+  cd "$(dirname "$TARGET_FILE")"
+  TARGET_FILE="$(basename "$TARGET_FILE")"
+
+  COUNT=0
+  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
+  do
+      TARGET_FILE="$(readlink "$TARGET_FILE")"
+      cd $(dirname "$TARGET_FILE")
+      TARGET_FILE="$(basename $TARGET_FILE)"
+      COUNT=$(($COUNT + 1))
+  done
+
+  echo "$(pwd -P)/"$TARGET_FILE""
+)
+}
+
+# Figure out where Spark is installed
+DIR="$(dirname "$(realpath "$0")")"
+FWDIR="$(cd "$DIR/.."; pwd)"
 
 if [ -z "$SPARK_ENV_LOADED" ]; then
   export SPARK_ENV_LOADED=1

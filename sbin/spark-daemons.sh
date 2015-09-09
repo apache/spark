@@ -27,15 +27,9 @@ if [ $# -le 1 ]; then
   exit 1
 fi
 
-# Figure out where Spark is installed
-SOURCE=$0
-while [ -h "$SOURCE" ]
-do
-    SOURCE="$(readlink "$SOURCE")"
-    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
-done
-export SPARK_HOME="$(cd `dirname $SOURCE`/..; pwd)"
+sbin=`dirname "$0"`
+sbin=`cd "$sbin"; pwd`
 
-. "$SPARK_HOME/sbin/spark-config.sh"
+. "$sbin/spark-config.sh"
 
-exec "$SPARK_HOME/sbin/slaves.sh" cd "$SPARK_HOME" \; "$SPARK_HOME/sbin/spark-daemon.sh" "$@"
+exec "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/spark-daemon.sh" "$@"

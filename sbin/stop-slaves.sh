@@ -17,21 +17,16 @@
 # limitations under the License.
 #
 
-# Figure out where Spark is installed
-SOURCE=$0
-while [ -h "$SOURCE" ]
-do
-    SOURCE="$(readlink "$SOURCE")"
-    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
-done
-export SPARK_HOME="$(cd `dirname $SOURCE`/..; pwd)"
+sbin="`dirname "$0"`"
+sbin="`cd "$sbin"; pwd`"
 
-. "$SPARK_HOME/sbin/spark-config.sh"
-. "$SPARK_HOME/bin/load-spark-env.sh"
+. "$sbin/spark-config.sh"
+
+. "$SPARK_PREFIX/bin/load-spark-env.sh"
 
 # do before the below calls as they exec
-if [ -e "$SPARK_HOME/tachyon/bin/tachyon" ]; then
-  "$SPARK_HOME/sbin/slaves.sh" cd "$SPARK_HOME" \; "$SPARK_HOME"/tachyon/bin/tachyon killAll tachyon.worker.Worker
+if [ -e "$sbin"/../tachyon/bin/tachyon ]; then
+  "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/../tachyon/bin/tachyon killAll tachyon.worker.Worker
 fi
 
 "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/stop-slave.sh

@@ -23,14 +23,29 @@
 # Enter posix mode for bash
 set -o posix
 
+realpath () {
+(
+  TARGET_FILE="$1"
+
+  cd "$(dirname "$TARGET_FILE")"
+  TARGET_FILE="$(basename "$TARGET_FILE")"
+
+  COUNT=0
+  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
+  do
+      TARGET_FILE="$(readlink "$TARGET_FILE")"
+      cd $(dirname "$TARGET_FILE")
+      TARGET_FILE="$(basename $TARGET_FILE)"
+      COUNT=$(($COUNT + 1))
+  done
+
+  echo "$(pwd -P)/"$TARGET_FILE""
+)
+}
+
 # Figure out where Spark is installed
-SOURCE=$0
-while [ -h "$SOURCE" ]
-do
-    SOURCE="$(readlink "$SOURCE")"
-    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
-done
-FWDIR="$(cd `dirname $SOURCE`/..; pwd)"
+DIR="$(dirname "$(realpath "$0")")"
+FWDIR="$(cd "$DIR/.."; pwd)"
 
 CLASS="org.apache.hive.beeline.BeeLine"
 exec "$FWDIR/bin/spark-class" $CLASS "$@"

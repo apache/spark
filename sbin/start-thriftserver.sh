@@ -24,13 +24,7 @@
 set -o posix
 
 # Figure out where Spark is installed
-SOURCE=$0
-while [ -h "$SOURCE" ]
-do
-    SOURCE="$(readlink "$SOURCE")"
-    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
-done
-export SPARK_HOME="$(cd `dirname $SOURCE`/..; pwd)"
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 # NOTE: This exact class name is matched downstream by SparkSubmit.
 # Any changes need to be reflected there.
