@@ -26,10 +26,8 @@ import org.apache.spark.sql.execution.datasources.DDLException
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
-
 class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
   protected override lazy val sql = caseInsensitiveContext.sql _
-  private lazy val sparkContext = caseInsensitiveContext.sparkContext
   private var path: File = null
 
   override def beforeAll(): Unit = {

@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.sources
 
-import java.sql.Date
-
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -30,17 +28,17 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 
-abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
-  override def _sqlContext: SQLContext = TestHive
-  protected val sqlContext = _sqlContext
+abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import sqlContext.implicits._
 
   val dataSourceName: String
+
+  protected def supportsDataType(dataType: DataType): Boolean = true
 
   val dataSchema =
     StructType(
@@ -99,6 +97,83 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
             |ON l.a = r.a AND l.p1 = r.p1 AND l.p2 = r.p2
           """.stripMargin),
         for (i <- 1 to 3; p1 <- 1 to 2; p2 <- Seq("foo", "bar")) yield Row(i, s"val_$i", p1, p2))
+    }
+  }
+
+  test("test all data types") {
+    withTempPath { file =>
+      // Create the schema.
+      val struct =
+        StructType(
+          StructField("f1", FloatType, true) ::
+            StructField("f2", ArrayType(BooleanType), true) :: Nil)
+      // TODO: add CalendarIntervalType to here once we can save it out.
+      val dataTypes =
+        Seq(
+          StringType, BinaryType, NullType, BooleanType,
+          ByteType, ShortType, IntegerType, LongType,
+          FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
+          DateType, TimestampType,
+          ArrayType(IntegerType), MapType(StringType, LongType), struct,
+          new MyDenseVectorUDT())
+      val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
+        StructField(s"col$index", dataType, nullable = true)
+      }
+      val schema = StructType(fields)
+
+      // Generate data at the driver side. We need to materialize the data first and then
+      // create RDD.
+      val maybeDataGenerator =
+        RandomDataGenerator.forType(
+          dataType = schema,
+          nullable = true,
+          seed = Some(System.nanoTime()))
+      val dataGenerator =
+        maybeDataGenerator
+          .getOrElse(fail(s"Failed to create data generator for schema $schema"))
+      val data = (1 to 10).map { i =>
+        dataGenerator.apply() match {
+          case row: Row => row
+          case null => Row.fromSeq(Seq.fill(schema.length)(null))
+          case other =>
+            fail(s"Row or null is expected to be generated, " +
+              s"but a ${other.getClass.getCanonicalName} is generated.")
+        }
+      }
+
+      // Create a DF for the schema with random data.
+      val rdd = sqlContext.sparkContext.parallelize(data, 10)
+      val df = sqlContext.createDataFrame(rdd, schema)
+
+      // All columns that have supported data types of this source.
+      val supportedColumns = schema.fields.collect {
+        case StructField(name, dataType, _, _) if supportsDataType(dataType) => name
+      }
+      val selectedColumns = util.Random.shuffle(supportedColumns.toSeq)
+
+      val dfToBeSaved = df.selectExpr(selectedColumns: _*)
+
+      // Save the data out.
+      dfToBeSaved
+        .write
+        .format(dataSourceName)
+        .option("dataSchema", dfToBeSaved.schema.json) // This option is just used by tests.
+        .save(file.getCanonicalPath)
+
+      val loadedDF =
+        sqlContext
+          .read
+          .format(dataSourceName)
+          .schema(dfToBeSaved.schema)
+          .option("dataSchema", dfToBeSaved.schema.json) // This option is just used by tests.
+          .load(file.getCanonicalPath)
+          .selectExpr(selectedColumns: _*)
+
+      // Read the data back.
+      checkAnswer(
+        loadedDF,
+        dfToBeSaved
+      )
     }
   }
 
@@ -506,17 +581,17 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-8578 specified custom output committer will not be used to append data") {
-    val clonedConf = new Configuration(configuration)
+    val clonedConf = new Configuration(hadoopConfiguration)
     try {
       val df = sqlContext.range(1, 10).toDF("i")
       withTempPath { dir =>
         df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
-        configuration.set(
+        hadoopConfiguration.set(
           SQLConf.OUTPUT_COMMITTER_CLASS.key,
           classOf[AlwaysFailOutputCommitter].getName)
         // Since Parquet has its own output committer setting, also set it
         // to AlwaysFailParquetOutputCommitter at here.
-        configuration.set("spark.sql.parquet.output.committer.class",
+        hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
           classOf[AlwaysFailParquetOutputCommitter].getName)
         // Because there data already exists,
         // this append should succeed because we will use the output committer associated
@@ -535,12 +610,12 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         }
       }
       withTempPath { dir =>
-        configuration.set(
+        hadoopConfiguration.set(
           SQLConf.OUTPUT_COMMITTER_CLASS.key,
           classOf[AlwaysFailOutputCommitter].getName)
         // Since Parquet has its own output committer setting, also set it
         // to AlwaysFailParquetOutputCommitter at here.
-        configuration.set("spark.sql.parquet.output.committer.class",
+        hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
           classOf[AlwaysFailParquetOutputCommitter].getName)
         // Because there is no existing data,
         // this append will fail because AlwaysFailOutputCommitter is used when we do append
@@ -551,8 +626,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       }
     } finally {
       // Hadoop 1 doesn't have `Configuration.unset`
-      configuration.clear()
-      clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+      hadoopConfiguration.clear()
+      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
     }
   }
 
@@ -568,6 +643,40 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
     }
     intercept[AnalysisException] {
       df.write.format(dataSourceName).partitionBy("c", "d", "e").saveAsTable("t")
+    }
+  }
+
+  test("SPARK-9899 Disable customized output committer when speculation is on") {
+    val clonedConf = new Configuration(hadoopConfiguration)
+    val speculationEnabled =
+      sqlContext.sparkContext.conf.getBoolean("spark.speculation", defaultValue = false)
+
+    try {
+      withTempPath { dir =>
+        // Enables task speculation
+        sqlContext.sparkContext.conf.set("spark.speculation", "true")
+
+        // Uses a customized output committer which always fails
+        hadoopConfiguration.set(
+          SQLConf.OUTPUT_COMMITTER_CLASS.key,
+          classOf[AlwaysFailOutputCommitter].getName)
+
+        // Code below shouldn't throw since customized output committer should be disabled.
+        val df = sqlContext.range(10).coalesce(1)
+        df.write.format(dataSourceName).save(dir.getCanonicalPath)
+        checkAnswer(
+          sqlContext
+            .read
+            .format(dataSourceName)
+            .option("dataSchema", df.schema.json)
+            .load(dir.getCanonicalPath),
+          df)
+      }
+    } finally {
+      // Hadoop 1 doesn't have `Configuration.unset`
+      hadoopConfiguration.clear()
+      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
+      sqlContext.sparkContext.conf.set("spark.speculation", speculationEnabled.toString)
     }
   }
 }

@@ -104,7 +104,7 @@ case class TungstenAggregate(
         } else {
           // This is a grouped aggregate and the input iterator is empty,
           // so return an empty iterator.
-          Iterator[UnsafeRow]()
+          Iterator.empty
         }
       } else {
         aggregationIterator.start(parentIterator)

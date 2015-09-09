@@ -60,7 +60,7 @@ public class TaskMemoryManager {
 
   /**
    * Maximum supported data page size (in bytes). In principle, the maximum addressable page size is
-   * (1L << OFFSET_BITS) bytes, which is 2+ petabytes. However, the on-heap allocator's maximum page
+   * (1L &lt;&lt; OFFSET_BITS) bytes, which is 2+ petabytes. However, the on-heap allocator's maximum page
    * size is limited by the maximum amount of data that can be stored in a  long[] array, which is
    * (2^32 - 1) * 8 bytes (or 16 gigabytes). Therefore, we cap this at 16 gigabytes.
    */

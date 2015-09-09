@@ -80,9 +80,9 @@ class DDLParser(parseQuery: String => LogicalPlan)
    */
   protected lazy val createTable: Parser[LogicalPlan] = {
     // TODO: Support database.table.
-    (CREATE ~> TEMPORARY.? <~ TABLE) ~ (IF ~> NOT <~ EXISTS).? ~ ident ~
+    (CREATE ~> TEMPORARY.? <~ TABLE) ~ (IF ~> NOT <~ EXISTS).? ~ tableIdentifier ~
       tableCols.? ~ (USING ~> className) ~ (OPTIONS ~> options).? ~ (AS ~> restInput).? ^^ {
-      case temp ~ allowExisting ~ tableName ~ columns ~ provider ~ opts ~ query =>
+      case temp ~ allowExisting ~ tableIdent ~ columns ~ provider ~ opts ~ query =>
         if (temp.isDefined && allowExisting.isDefined) {
           throw new DDLException(
             "a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause.")
@@ -104,7 +104,7 @@ class DDLParser(parseQuery: String => LogicalPlan)
           }
 
           val queryPlan = parseQuery(query.get)
-          CreateTableUsingAsSelect(tableName,
+          CreateTableUsingAsSelect(tableIdent,
             provider,
             temp.isDefined,
             Array.empty[String],
@@ -114,7 +114,7 @@ class DDLParser(parseQuery: String => LogicalPlan)
         } else {
           val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
           CreateTableUsing(
-            tableName,
+            tableIdent,
             userSpecifiedSchema,
             provider,
             temp.isDefined,
@@ -125,6 +125,12 @@ class DDLParser(parseQuery: String => LogicalPlan)
     }
   }
 
+  // This is the same as tableIdentifier in SqlParser.
+  protected lazy val tableIdentifier: Parser[TableIdentifier] =
+    (ident <~ ".").? ~ ident ^^ {
+      case maybeDbName ~ tableName => TableIdentifier(tableName, maybeDbName)
+    }
+
   protected lazy val tableCols: Parser[Seq[StructField]] = "(" ~> repsep(column, ",") <~ ")"
 
   /*
@@ -132,21 +138,15 @@ class DDLParser(parseQuery: String => LogicalPlan)
    * This will display all columns of table `avroTable` includes column_name,column_type,comment
    */
   protected lazy val describeTable: Parser[LogicalPlan] =
-    (DESCRIBE ~> opt(EXTENDED)) ~ (ident <~ ".").? ~ ident  ^^ {
-      case e ~ db ~ tbl =>
-        val tblIdentifier = db match {
-          case Some(dbName) =>
-            Seq(dbName, tbl)
-          case None =>
-            Seq(tbl)
-        }
-        DescribeCommand(UnresolvedRelation(tblIdentifier, None), e.isDefined)
+    (DESCRIBE ~> opt(EXTENDED)) ~ tableIdentifier ^^ {
+      case e ~ tableIdent =>
+        DescribeCommand(UnresolvedRelation(tableIdent.toSeq, None), e.isDefined)
     }
 
   protected lazy val refreshTable: Parser[LogicalPlan] =
-    REFRESH ~> TABLE ~> (ident <~ ".").? ~ ident ^^ {
-      case maybeDatabaseName ~ tableName =>
-        RefreshTable(TableIdentifier(tableName, maybeDatabaseName))
+    REFRESH ~> TABLE ~> tableIdentifier ^^ {
+      case tableIndet =>
+        RefreshTable(tableIndet)
     }
 
   protected lazy val options: Parser[Map[String, String]] =

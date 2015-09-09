@@ -302,10 +302,10 @@ class SparkContext(object):
         """
         A unique identifier for the Spark application.
         Its format depends on the scheduler implementation.
-        (i.e.
-            in case of local spark app something like 'local-1433865536131'
-            in case of YARN something like 'application_1433865536131_34483'
-        )
+
+        * in case of local spark app something like 'local-1433865536131'
+        * in case of YARN something like 'application_1433865536131_34483'
+
         >>> sc.applicationId  # doctest: +ELLIPSIS
         u'local-...'
         """

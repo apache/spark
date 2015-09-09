@@ -24,10 +24,9 @@ import sys
 if sys.version < "3":
     from itertools import imap as map
 
-from pyspark import SparkContext
+from pyspark import since, SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.sql import since
 from pyspark.sql.types import StringType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 
@@ -531,7 +530,7 @@ def lead(col, count=1, default=None):
 def ntile(n):
     """
     Window function: returns the ntile group id (from 1 to `n` inclusive)
-    in an ordered window partition. Fow example, if `n` is 4, the first
+    in an ordered window partition. For example, if `n` is 4, the first
     quarter of the rows will get value 1, the second quarter will get 2,
     the third quarter will get 3, and the last quarter will get 4.
 

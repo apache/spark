@@ -18,9 +18,10 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.sql.Timestamp
+import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
-import scala.sys.process.{Process, ProcessLogger}
 
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Timeouts
@@ -28,8 +29,9 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{SQLContext, QueryTest}
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
+import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.sql.types.DecimalType
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
@@ -39,6 +41,8 @@ import org.apache.spark.util.{ResetSystemProperties, Utils}
 class HiveSparkSubmitSuite
   extends SparkFunSuite
   with Matchers
+  // This test suite sometimes gets extremely slow out of unknown reason on Jenkins.  Here we
+  // add a timestamp to provide more diagnosis information.
   with ResetSystemProperties
   with Timeouts {
 
@@ -110,28 +114,44 @@ class HiveSparkSubmitSuite
     val history = ArrayBuffer.empty[String]
     val commands = Seq("./bin/spark-submit") ++ args
     val commandLine = commands.mkString("'", "' '", "'")
-    val process = Process(
-      commands,
-      new File(sparkHome),
-      "SPARK_TESTING" -> "1",
-      "SPARK_HOME" -> sparkHome
-    ).run(ProcessLogger(
+
+    val builder = new ProcessBuilder(commands: _*).directory(new File(sparkHome))
+    val env = builder.environment()
+    env.put("SPARK_TESTING", "1")
+    env.put("SPARK_HOME", sparkHome)
+
+    def captureOutput(source: String)(line: String): Unit = {
+      // This test suite has some weird behaviors when executed on Jenkins:
+      //
+      // 1. Sometimes it gets extremely slow out of unknown reason on Jenkins.  Here we add a
+      //    timestamp to provide more diagnosis information.
+      // 2. Log lines are not correctly redirected to unit-tests.log as expected, so here we print
+      //    them out for debugging purposes.
+      val logLine = s"${new Timestamp(new Date().getTime)} - $source> $line"
       // scalastyle:off println
-      (line: String) => { println(s"stdout> $line"); history += s"out> $line"},
-      (line: String) => { println(s"stderr> $line"); history += s"err> $line" }
+      println(logLine)
       // scalastyle:on println
-    ))
+      history += logLine
+    }
+
+    val process = builder.start()
+    new ProcessOutputCapturer(process.getInputStream, captureOutput("stdout")).start()
+    new ProcessOutputCapturer(process.getErrorStream, captureOutput("stderr")).start()
 
     try {
-      val exitCode = failAfter(180.seconds) { process.exitValue() }
+      val exitCode = failAfter(180.seconds) { process.waitFor() }
       if (exitCode != 0) {
         // include logs in output. Note that logging is async and may not have completed
         // at the time this exception is raised
         Thread.sleep(1000)
         val historyLog = history.mkString("\n")
-        fail(s"$commandLine returned with exit code $exitCode." +
-            s" See the log4j logs for more detail." +
-            s"\n$historyLog")
+        fail {
+          s"""spark-submit returned with exit code $exitCode.
+             |Command line: $commandLine
+             |
+             |$historyLog
+           """.stripMargin
+        }
       }
     } catch {
       case to: TestFailedDueToTimeoutException =>
@@ -153,6 +173,7 @@ object SparkSubmitClassLoaderTest extends Logging {
   def main(args: Array[String]) {
     Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
+    conf.set("spark.ui.enabled", "false")
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
     val df = hiveContext.createDataFrame((1 to 100).map(i => (i, i))).toDF("i", "j")
@@ -244,6 +265,7 @@ object SparkSQLConfTest extends Logging {
       // For this simple test, we do not really clone this object.
       override def clone: SparkConf = this
     }
+    conf.set("spark.ui.enabled", "false")
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
     // Run a simple command to make sure all lazy vals in hiveContext get instantiated.
@@ -252,18 +274,23 @@ object SparkSQLConfTest extends Logging {
   }
 }
 
-object SPARK_9757 extends QueryTest with Logging {
+object SPARK_9757 extends QueryTest {
+  import org.apache.spark.sql.functions._
+
+  protected var sqlContext: SQLContext = _
+
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
 
     val sparkContext = new SparkContext(
       new SparkConf()
         .set("spark.sql.hive.metastore.version", "0.13.1")
-        .set("spark.sql.hive.metastore.jars", "maven"))
+        .set("spark.sql.hive.metastore.jars", "maven")
+        .set("spark.ui.enabled", "false"))
 
     val hiveContext = new TestHiveContext(sparkContext)
+    sqlContext = hiveContext
     import hiveContext.implicits._
-    import org.apache.spark.sql.functions._
 
     val dir = Utils.createTempDir()
     dir.delete()

@@ -26,13 +26,13 @@ if sys.version >= '3':
 else:
     from itertools import imap as map
 
+from pyspark import since
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.sql import since
 from pyspark.sql.types import _parse_datatype_json_string
-from pyspark.sql.column import Column, _to_seq, _to_java_column
+from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.types import *
 
@@ -494,7 +494,7 @@ class DataFrame(object):
             if w < 0.0:
                 raise ValueError("Weights must be positive. Found weight value: %s" % w)
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
-        rdd_array = self._jdf.randomSplit(_to_seq(self.sql_ctx._sc, weights), long(seed))
+        rdd_array = self._jdf.randomSplit(_to_list(self.sql_ctx._sc, weights), long(seed))
         return [DataFrame(rdd, self.sql_ctx) for rdd in rdd_array]
 
     @property
@@ -1202,7 +1202,9 @@ class DataFrame(object):
     @ignore_unicode_prefix
     @since(1.3)
     def withColumn(self, colName, col):
-        """Returns a new :class:`DataFrame` by adding a column.
+        """
+        Returns a new :class:`DataFrame` by adding a column or replacing the
+        existing column that has the same name.
 
         :param colName: string, name of the new column.
         :param col: a :class:`Column` expression for the new column.
@@ -1210,7 +1212,8 @@ class DataFrame(object):
         >>> df.withColumn('age2', df.age + 2).collect()
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
         """
-        return self.select('*', col.alias(colName))
+        assert isinstance(col, Column), "col should be Column"
+        return DataFrame(self._jdf.withColumn(colName, col._jc), self.sql_ctx)
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -1223,10 +1226,7 @@ class DataFrame(object):
         >>> df.withColumnRenamed('age', 'age2').collect()
         [Row(age2=2, name=u'Alice'), Row(age2=5, name=u'Bob')]
         """
-        cols = [Column(_to_java_column(c)).alias(new)
-                if c == existing else c
-                for c in self.columns]
-        return self.select(*cols)
+        return DataFrame(self._jdf.withColumnRenamed(existing, new), self.sql_ctx)
 
     @since(1.4)
     @ignore_unicode_prefix
