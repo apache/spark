@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
+import org.apache.spark.sql.execution.joins.BuildSide
 import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{SQLContext, Strategy, execution}
@@ -267,32 +268,30 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   object CartesianProduct extends Strategy {
-    def createCartesianProduct(left: LogicalPlan, right: LogicalPlan): SparkPlan = {
-      // If plan can broadcast we use BroadcastNestedLoopJoin, as we know for inner join with true
-      // condition is same as Cartesian.
-      // For CartesianProduct we will use the small size plan as cartesian left rdd.
+    def getSmallSide(left: LogicalPlan, right: LogicalPlan): BuildSide = {
       if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
-        right match {
-          case CanBroadcast(right) => joins.BroadcastNestedLoopJoin(planLater(left),
-              planLater(right), joins.BuildRight, Inner, None)
-          case _ => execution.joins.CartesianProduct(planLater(left), planLater(right),
-            joins.BuildRight)
-        }
+        joins.BuildRight
       } else {
-        left match {
-          case CanBroadcast(left) => joins.BroadcastNestedLoopJoin(planLater(left),
-            planLater(right), joins.BuildLeft, Inner, None)
-          case _ => execution.joins.CartesianProduct(planLater(left), planLater(right),
-            joins.BuildLeft)
-        }
+        joins.BuildLeft
       }
     }
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      // If plan can broadcast we use BroadcastNestedLoopJoin, as we know for inner join with true
+      // condition is same as Cartesian.
+      case logical.Join(CanBroadcast(left), right, joinType, condition) =>
+        execution.joins.BroadcastNestedLoopJoin(
+          planLater(left), planLater(right), joins.BuildLeft, joinType, condition) :: Nil
+      case logical.Join(left, CanBroadcast(right), joinType, condition) =>
+        execution.joins.BroadcastNestedLoopJoin(
+          planLater(left), planLater(right), joins.BuildRight, joinType, condition) :: Nil
       case logical.Join(left, right, _, None) =>
-        createCartesianProduct(left, right) :: Nil
+        execution.joins.CartesianProduct(planLater(left), planLater(right),
+          getSmallSide(left, right)) :: Nil
       case logical.Join(left, right, Inner, Some(condition)) =>
-        execution.Filter(condition, createCartesianProduct(left, right)) :: Nil
+        execution.Filter(condition,
+          execution.joins.CartesianProduct(planLater(left), planLater(right),
+            getSmallSide(left, right))) :: Nil
       case _ => Nil
     }
   }

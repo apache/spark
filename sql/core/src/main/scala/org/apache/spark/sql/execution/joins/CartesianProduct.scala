@@ -34,11 +34,6 @@ case class CartesianProduct(
     buildSide: BuildSide) extends BinaryNode {
   override def output: Seq[Attribute] = left.output ++ right.output
 
-  private val (small, big) = buildSide match {
-    case BuildRight => (right, left)
-    case BuildLeft => (left, right)
-  }
-
   override private[sql] lazy val metrics = Map(
     "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
     "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
@@ -49,23 +44,34 @@ case class CartesianProduct(
     val numRightRows = longMetric("numRightRows")
     val numOutputRows = longMetric("numOutputRows")
 
-    val leftResults = small.execute().map { row =>
+    val leftResults = left.execute().map { row =>
       numLeftRows += 1
       row.copy()
     }
-    val rightResults = big.execute().map { row =>
+    val rightResults = right.execute().map { row =>
       numRightRows += 1
       row.copy()
     }
 
-    leftResults.cartesian(rightResults).mapPartitions { iter =>
+    val (smallResults, bigResults) = buildSide match {
+      case BuildRight => (rightResults, leftResults)
+      case BuildLeft => (leftResults, rightResults)
+    }
+
+    // Use the small size rdd as cartesian left rdd.
+    smallResults.cartesian(bigResults).mapPartitions { iter =>
       val joinedRow = new JoinedRow
-      iter.map { r =>
-        numOutputRows += 1
-        buildSide match {
-          case BuildLeft => joinedRow(r._1, r._2)
-          case BuildRight => joinedRow(r._2, r._1)
-        }
+      buildSide match {
+        case BuildLeft =>
+          iter.map { r =>
+            numOutputRows += 1
+            joinedRow(r._1, r._2)
+          }
+        case BuildRight =>
+          iter.map { r =>
+            numOutputRows += 1
+            joinedRow(r._1, r._2)
+          }
       }
     }
   }
