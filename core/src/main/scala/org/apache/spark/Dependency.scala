@@ -78,15 +78,13 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   override def rdd: RDD[Product2[K, V]] = _rdd.asInstanceOf[RDD[Product2[K, V]]]
 
-  /**
-   * The key, value and combiner classes are serialized so that shuffle manager
-   * implementation can use the information to build
-   */
-  val keyClassName: String = reflect.classTag[K].runtimeClass.getName
-  val valueClassName: String = reflect.classTag[V].runtimeClass.getName
+  private[spark] val keyClassName: String = reflect.classTag[K].runtimeClass.getName
+  private[spark] val valueClassName: String = reflect.classTag[V].runtimeClass.getName
   // Note: It's possible that the combiner class tag is null, if the combineByKey
   // methods in PairRDDFunctions are used instead of combineByKeyWithClassTag.
-  val combinerClassName: Option[String] = Option(reflect.classTag[C]).map(_.runtimeClass.getName)
+  private[spark] val combinerClassName: Option[String] =
+    Option(reflect.classTag[C]).map(_.runtimeClass.getName)
+
   val shuffleId: Int = _rdd.context.newShuffleId()
 
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
