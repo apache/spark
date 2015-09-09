@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.dstream
 
-import java.io.{NotSerializableException, ObjectOutputStream}
+import java.io.{NotSerializableException, ObjectInputStream, ObjectOutputStream}
 
 import scala.collection.mutable.{ArrayBuffer, Queue}
 import scala.reflect.ClassTag
@@ -37,8 +37,13 @@ class QueueInputDStream[T: ClassTag](
 
   override def stop() { }
 
+  private def readObject(in: ObjectInputStream): Unit = {
+    throw new NotSerializableException("queueStream doesn't support checkpointing. " +
+      "Please don't use queueStream when checkpointing is enabled.")
+  }
+
   private def writeObject(oos: ObjectOutputStream): Unit = {
-    throw new NotSerializableException("queueStream doesn't support checkpointing")
+    logWarning("queueStream doesn't support checkpointing")
   }
 
   override def compute(validTime: Time): Option[RDD[T]] = {

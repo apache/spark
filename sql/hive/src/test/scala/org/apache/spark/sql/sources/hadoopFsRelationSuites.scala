@@ -38,6 +38,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   val dataSourceName: String
 
+  protected def supportsDataType(dataType: DataType): Boolean = true
+
   val dataSchema =
     StructType(
       Seq(
@@ -95,6 +97,83 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             |ON l.a = r.a AND l.p1 = r.p1 AND l.p2 = r.p2
           """.stripMargin),
         for (i <- 1 to 3; p1 <- 1 to 2; p2 <- Seq("foo", "bar")) yield Row(i, s"val_$i", p1, p2))
+    }
+  }
+
+  test("test all data types") {
+    withTempPath { file =>
+      // Create the schema.
+      val struct =
+        StructType(
+          StructField("f1", FloatType, true) ::
+            StructField("f2", ArrayType(BooleanType), true) :: Nil)
+      // TODO: add CalendarIntervalType to here once we can save it out.
+      val dataTypes =
+        Seq(
+          StringType, BinaryType, NullType, BooleanType,
+          ByteType, ShortType, IntegerType, LongType,
+          FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
+          DateType, TimestampType,
+          ArrayType(IntegerType), MapType(StringType, LongType), struct,
+          new MyDenseVectorUDT())
+      val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
+        StructField(s"col$index", dataType, nullable = true)
+      }
+      val schema = StructType(fields)
+
+      // Generate data at the driver side. We need to materialize the data first and then
+      // create RDD.
+      val maybeDataGenerator =
+        RandomDataGenerator.forType(
+          dataType = schema,
+          nullable = true,
+          seed = Some(System.nanoTime()))
+      val dataGenerator =
+        maybeDataGenerator
+          .getOrElse(fail(s"Failed to create data generator for schema $schema"))
+      val data = (1 to 10).map { i =>
+        dataGenerator.apply() match {
+          case row: Row => row
+          case null => Row.fromSeq(Seq.fill(schema.length)(null))
+          case other =>
+            fail(s"Row or null is expected to be generated, " +
+              s"but a ${other.getClass.getCanonicalName} is generated.")
+        }
+      }
+
+      // Create a DF for the schema with random data.
+      val rdd = sqlContext.sparkContext.parallelize(data, 10)
+      val df = sqlContext.createDataFrame(rdd, schema)
+
+      // All columns that have supported data types of this source.
+      val supportedColumns = schema.fields.collect {
+        case StructField(name, dataType, _, _) if supportsDataType(dataType) => name
+      }
+      val selectedColumns = util.Random.shuffle(supportedColumns.toSeq)
+
+      val dfToBeSaved = df.selectExpr(selectedColumns: _*)
+
+      // Save the data out.
+      dfToBeSaved
+        .write
+        .format(dataSourceName)
+        .option("dataSchema", dfToBeSaved.schema.json) // This option is just used by tests.
+        .save(file.getCanonicalPath)
+
+      val loadedDF =
+        sqlContext
+          .read
+          .format(dataSourceName)
+          .schema(dfToBeSaved.schema)
+          .option("dataSchema", dfToBeSaved.schema.json) // This option is just used by tests.
+          .load(file.getCanonicalPath)
+          .selectExpr(selectedColumns: _*)
+
+      // Read the data back.
+      checkAnswer(
+        loadedDF,
+        dfToBeSaved
+      )
     }
   }
 
