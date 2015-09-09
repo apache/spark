@@ -18,7 +18,7 @@
 #
 
 # This script loads spark-env.sh if it exists, and ensures it is only loaded once.
-# spark-env.sh is loaded from SPARK_CONF_DIR if set, or within SPARK_HOME's
+# spark-env.sh is loaded from SPARK_CONF_DIR if set, or within the current directory's
 # conf/ subdirectory.
 realpath () {
 (
