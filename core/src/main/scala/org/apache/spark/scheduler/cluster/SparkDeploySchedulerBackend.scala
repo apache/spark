@@ -101,8 +101,8 @@ private[spark] class SparkDeploySchedulerBackend(
       (coresPerExecutor.get % scheduler.CPUS_PER_TASK) != 0)) {
       throw new SparkException(s"invalid configuration of " +
         s"spark.executor.cores(${coresPerExecutor.get}) and " +
-        s"spark.task.cpus(${scheduler.CPUS_PER_TASK}}), spark.executor.cores has to be no less " +
-        "than and folds of spark.task.cpus")
+        s"spark.task.cpus(${scheduler.CPUS_PER_TASK}}), spark.executor.cores cannot be less " +
+        "than spark.task.cpus and has to be divisible by it")
     }
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory,
       command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor,
